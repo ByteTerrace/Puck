@@ -236,12 +236,6 @@ public sealed partial class WorldCreationInstances {
                     length: packedSlots,
                     start: 0
                 );
-
-                transforms.Slice(
-                    length: previous.Length,
-                    start: rootSlot
-                ).CopyTo(destination: previous);
-
                 // A pose holds between its rated packs, except on the frame its slots change owner or the whole table is
                 // owed (WorldCreationInstances.Rates, whose one decision gives a placed creation only the held tier).
                 var mayHold = (
@@ -256,16 +250,33 @@ public sealed partial class WorldCreationInstances {
                     ForgetPhase(live: live);
                 }
 
-                if (mayHold && HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, radius: RateReach(live: live, placementScale: placementScale))) {
-                    CarryPose(
-                        deltaSeconds: deltaSeconds,
-                        live: live,
-                        packedSlots: packedSlots,
-                        rootPosition: rootPosition,
-                        rootRotation: rootRotation,
-                        rootSlot: rootSlot,
-                        transforms: transforms
-                    );
+                var holds = (mayHold && HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, radius: RateReach(live: live, placementScale: placementScale)));
+                // A held pose whose root has not moved moves no slot, so nothing is copied, carried or compared.
+                var (heldPosition, heldRotation) = (rootPosition, rootRotation);
+                var still = false;
+
+                if (holds) {
+                    (heldPosition, heldRotation) = FollowHeldRoot(deltaSeconds: deltaSeconds, live: live, rootPosition: rootPosition, rootRotation: rootRotation);
+                    still = HeldRootStill(root: in transforms[rootSlot], rootPosition: heldPosition, rootRotation: heldRotation);
+                }
+                if (!still) {
+                    transforms.Slice(
+                        length: previous.Length,
+                        start: rootSlot
+                    ).CopyTo(destination: previous);
+                }
+
+                if (holds) {
+                    if (!still) {
+                        CarryPose(
+                            live: live,
+                            packedSlots: packedSlots,
+                            rootPosition: heldPosition,
+                            rootRotation: heldRotation,
+                            rootSlot: rootSlot,
+                            transforms: transforms
+                        );
+                    }
                     live.RateSeconds += deltaSeconds;
                     live.RateOwed = true;
                     if (live.BodyIndex is not null) { m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesHeld); }
@@ -308,12 +319,12 @@ public sealed partial class WorldCreationInstances {
                 }
                 m_owners.Settle(
                     deltaSeconds: deltaSeconds,
-                    moved: moved.Commit(
+                    moved: (!still && moved.Commit(
                     previous: previous,
                     reseat: m_owners.Reseats(owner: index),
                     slots: transforms,
                     start: rootSlot
-                ),
+                )),
                     owner: index
                 );
             } else {

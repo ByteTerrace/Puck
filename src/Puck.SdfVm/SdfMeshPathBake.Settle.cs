@@ -11,12 +11,42 @@ public sealed partial class SdfMeshPathBake {
 
     // Watches every skinned dynamic group's members against the pose its mesh was baked at, and plans a group again at
     // its settled pose (SdfMeshSettle). A settle rebake that lands replaces its group's skinned mesh; one that meshes no
-    // surface hands the group back, which keeps its mesh until its pose moves again. Runs under the gate.
+    // surface hands the group back, which keeps its mesh until its pose moves again. Runs under the gate, over the groups
+    // whose geometry reads a slot besides their own alone (m_settleWatch), the only ones that drift or rebake.
+
+    // The indices, ascending, of the groups whose geometry reads a slot besides their own: every group Settle watches and
+    // every settle rebake, which keeps its slot. Rebuilt by Restart and kept by Replace, the only writers of m_groups.
+    private readonly List<int> m_settleWatch = [];
+    private readonly List<int> m_settleWatchScratch = [];
+
+    // Lists every group that can drift, after Restart planned the groups.
+    private void WatchSettles() {
+        m_settleWatch.Clear();
+        for (var index = 0; (index < m_groups.Count); index++) {
+            if (m_groups[index].ReadsOtherSlots) { m_settleWatch.Add(item: index); }
+        }
+    }
+    // Keeps the settle watch as Replace puts a group at an index.
+    private void WatchSettle(int index, Group group) {
+        var at = m_settleWatch.BinarySearch(item: index);
+
+        if (group.ReadsOtherSlots) {
+            if (at < 0) { m_settleWatch.Insert(index: ~at, item: index); }
+        } else if (at >= 0) {
+            m_settleWatch.RemoveAt(index: at);
+        }
+    }
     private void Settle(SdfFrame frame) {
+        if (m_settleWatch.Count == 0) { return; }
+
         var settles = Library.Settles;
         var inFlight = 0;
+        // Replace keeps the watch as it is for a group of the same slot, but a copy keeps the walk off it either way.
+        var watched = m_settleWatchScratch;
 
-        for (var index = 0; (index < m_groups.Count); index++) {
+        watched.Clear();
+        watched.AddRange(collection: m_settleWatch);
+        foreach (var index in watched) {
             var group = m_groups[index];
 
             if (group.Replaces is not { } replaced) { continue; }
@@ -42,7 +72,7 @@ public sealed partial class SdfMeshPathBake {
 
         var transforms = frame.DynamicTransforms;
 
-        for (var index = 0; (index < m_groups.Count); index++) {
+        foreach (var index in watched) {
             var group = m_groups[index];
 
             if (!group.Done || (group.Mesh is null) || !group.Dynamic || (group.Replaces is not null)) { continue; }

@@ -284,9 +284,10 @@ authoring none refuses by that facet's name. Separately, and unconditionally:
 a Motion-kind kit authoring no holds at all refuses by name outright,
 whatever operations its program selects — the hold list is the only
 spelling of a vertical channel, so even a kit with no vertical law of its
-own still authors one row of kind `None`. A world whose kit authors a
-`Medium` hold row with no medium lattice row (`state.world[].lattice.medium`)
-refuses at boot. A `BodyMotionOp` reading a further facet owes
+own still authors one row of kind `None`. A kit's `Medium` hold row is admitted
+in a world with no medium lattice row (`state.world[].field.medium`) and is never
+taken there, so an avatar carries its swim into every world it is worn in
+(`worlds/debug/avatars/moth-swim.puck`). A `BodyMotionOp` reading a further facet owes
 `RequiredMotionTuningFacets` and `SuppliedMotionTuningFacets` an entry —
 never a hunt.
 

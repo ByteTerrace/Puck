@@ -187,6 +187,26 @@ opposite the sun under a 1-nit sky and its stars, and the hall's exposure floor
 | Hold the sun | `world.row.set state day advance {"perSecondNumerator":0,"perSecondDenominator":1}` |
 | Run the day again | `world.row.set state day advance {"perSecondNumerator":1,"perSecondDenominator":1440}` |
 
+## Water
+
+A glacier on the north-west wall melts into a lake on the rim over three hours, the
+lake's falls feed the stream that runs to the pool, and the river drains into an aquifer
+under the floor that fills, gives water back and settles with the river
+([`water.puck`](water.puck) chooses the numbers of the standard's
+[hydrology](../standard/hydrology.puck); [`pool.puck`](pool.puck) is the basin and its
+medium; [`water-scenery.puck`](water-scenery.puck) places the falls, glacier, lake,
+stream, bridge and the gauge). The Moth swims where the pool has water, floating with her
+shoulders at the surface. The cycle's levers:
+
+| Do | Command |
+|---|---|
+| Go to the pool | `debug.go pool` |
+| Read the glacier (1 full, 0 gone), the river and the aquifer's gauge | `world.state glacier`, `world.state riverDepth`, `world.state aquiferFill` |
+| Put the glacier at half | `world.state.cell.set hydroClock $value 162000` (324000 ticks of melt is three hours at 30 Hz) |
+| Run the cycle faster | `water.speed 60` (the three hours in three minutes); `water.speed 1` is its own pace |
+| Read the conserved water | `world.fields`, each lattice row's `total` |
+| Restart the cycle | boot the world again: a reload keeps the lattice's water |
+
 ## Going places
 
 The [wind meadow](meadow.md), east of the hero studio, is reached with
@@ -230,6 +250,7 @@ case, `stage` when omitted:
 | `hero` | (48, 0, -48), the avatar studio | -Z |
 | `meadow` | (119.5, 0.04, -55.3), in the wind meadow east of the studio ([`meadow.md`](meadow.md)) | -Z |
 | `range` | (-100, 0, 118), the head of the rate range ([`range.md`](range.md)) | -Z, down the lane |
+| `pool` | (-43, 0.05, -12), the west path's end beside the pool's steps and its float gauge ([`water.puck`](water.puck), [`pool.puck`](pool.puck)) | -X, over the water |
 
 The chase camera keeps its world heading when a body is posed, so a place
 facing -Z frames from behind the body as the boot view does, and `gallery`

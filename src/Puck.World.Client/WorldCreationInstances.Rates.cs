@@ -272,9 +272,9 @@ public sealed partial class WorldCreationInstances {
         live.RateSlowest = SdfUpdateRateTiers.EveryFrameHertz;
         live.RateLead = 0f;
     }
-    // Carries a held registration's slots with its root: the root follows the body as a full pack would, and every
-    // other slot it packed rides the root's motion since the last frame rigidly.
-    private static void CarryPose(Span<DynamicTransform> transforms, Registration live, int rootSlot, int packedSlots, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation) {
+    // Advances a held registration's root as a full pack would: the root follows the body, through its dynamics when it
+    // declares them. Returns the root pose the held slots ride.
+    private static (Vector3 Position, Quaternion Rotation) FollowHeldRoot(Registration live, float deltaSeconds, Vector3 rootPosition, Quaternion rootRotation) {
         if (live.HasRootDynamics) {
             StepRootFollower(
                 deltaSeconds: deltaSeconds,
@@ -282,12 +282,21 @@ public sealed partial class WorldCreationInstances {
                 targetPosition: rootPosition,
                 targetRotation: rootRotation
             );
-            (rootPosition, rootRotation) = (live.FollowedPosition, live.FollowedOrientation);
         } else {
             live.FollowedPosition = rootPosition;
             live.FollowedOrientation = rootRotation;
         }
 
+        return (live.FollowedPosition, live.FollowedOrientation);
+    }
+    // Whether a held root stands exactly where its slot holds it. Carrying by that root is the identity, and computing
+    // the identity in float is not: a slot re-expressed through an unmoved root changes in its last bits on a quarter of
+    // slots every frame, so the carry is skipped rather than computed.
+    private static bool HeldRootStill(in DynamicTransform root, Vector3 rootPosition, Quaternion rootRotation) =>
+        (root.Position.Equals(other: rootPosition) && root.Orientation.Equals(other: rootRotation));
+    // Carries a held registration's slots with its root (FollowHeldRoot's pose): every other slot it packed rides the
+    // root's motion since the last frame rigidly.
+    private static void CarryPose(Span<DynamicTransform> transforms, Registration live, int rootSlot, int packedSlots, Vector3 rootPosition, Quaternion rootRotation) {
         var root = transforms[rootSlot];
         var turn = Quaternion.Normalize(value: (rootRotation * Quaternion.Conjugate(value: root.Orientation)));
 

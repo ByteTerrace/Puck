@@ -1,0 +1,34 @@
+// The valley's macro form, shared by the walls (valley.puck) and by what stands on them (water-site.puck's falls, glacier and
+// lake). A library: it emits no document.
+
+// Each sector's macro form: its bearing, where the floor plane cuts its main mass, how high that mass rises, the mass's
+// half-extents out from the centre and along the ring, and the seed of its relief.
+let valleySectors = [
+  { name: "north", compass: 0, foot: 230, peak: 380, radial: 280, across: 230, seed: 101 }
+  { name: "north-east", compass: 45, foot: 215, peak: 330, radial: 260, across: 220, seed: 102 }
+  { name: "east", compass: 90, foot: 225, peak: 300, radial: 270, across: 240, seed: 103 }
+  { name: "south-east", compass: 135, foot: 210, peak: 350, radial: 290, across: 220, seed: 104 }
+  { name: "south", compass: 180, foot: 220, peak: 430, radial: 300, across: 240, seed: 105 }
+  { name: "south-west", compass: 225, foot: 215, peak: 360, radial: 280, across: 230, seed: 106 }
+  { name: "west", compass: 270, foot: 220, peak: 300, radial: 260, across: 230, seed: 107 }
+  { name: "north-west", compass: 315, foot: 205, peak: 340, radial: 270, across: 220, seed: 108 }
+]
+
+// The fraction of each main mass's vertical half-extent below the floor plane (terrainMass's sink).
+let valleySink = 0.3
+
+// A sector's main mass in its own frame (author +Z out from the ring's centre), on its axis: the distance from the centre
+// of the wall's face at height y, from the mass's ellipse (exponent 2) as terrainMass places it. The face stands this far
+// out at the floor (the sector's foot) and leans back as it rises, to the mass's centre at the peak.
+function sectorFace(sector, y) = (sector.foot + sector.radial * squareRoot(1 - valleySink * valleySink)) -
+  sector.radial * squareRoot(
+    1 -
+      ((y + (sector.peak / (1 - valleySink)) * valleySink) / (sector.peak / (1 - valleySink))) *
+        ((y + (sector.peak / (1 - valleySink)) * valleySink) / (sector.peak / (1 - valleySink)))
+  )
+// The height of the same face at distance r from the centre, on the side facing it.
+function sectorHeight(sector, r) = (sector.peak / (1 - valleySink)) * squareRoot(
+  1 -
+    ((r - (sector.foot + sector.radial * squareRoot(1 - valleySink * valleySink))) / sector.radial) *
+      ((r - (sector.foot + sector.radial * squareRoot(1 - valleySink * valleySink))) / sector.radial)
+) - (sector.peak / (1 - valleySink)) * valleySink

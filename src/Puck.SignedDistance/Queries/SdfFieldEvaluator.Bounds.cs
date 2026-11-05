@@ -478,7 +478,7 @@ public sealed partial class SdfFieldEvaluator {
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static IntervalVector3 WarpBounds(in CompiledInstruction instruction, IntervalVector3 local, ref FixedInterval distanceScale) {
         if (instruction.Op == SdfOp.AxialProfile) {
-            var axis = (int)instruction.Shape;
+            var axis = ((int)instruction.Shape);
             var shrink = new FixedInterval(lower: FixedQ4816.Zero, upper: (FixedQ4816.One / FlareMinScale));
 
             distanceScale *= Point(value: instruction.Data1X);
@@ -511,7 +511,7 @@ public sealed partial class SdfFieldEvaluator {
     // Whether the box walk may skip an instance: every candidate interval it can join has its lower end at or past the
     // threshold, as its certificate proves, or, for an unscoped instance, each of its members' does.
     private bool BoxInstanceClears(in CullBound bound, in BoxQuery query, FixedQ4816 cheapReach, FixedQ4816 threshold) =>
-        (bound.Reach.Boxed && (
+        ((threshold.Value <= bound.SeedFloor) && bound.Reach.Boxed && (
             (cheapReach >= threshold) ||
             bound.Reach.BoxClears(query: in query, threshold: threshold.Value) ||
             (!bound.Scoped && (bound.MemberCount > 1) && MembersBoxClear(bound: in bound, query: in query, threshold: threshold.Value))));

@@ -25,6 +25,21 @@ let fallHold = {
   envelope: standardSink
 }
 
+// A swimming body's hold: the world's water at its cell, taken wherever a medium lattice (a `field` row carrying
+// `medium {}`) has water there and never in a world with none, so it leads a list ahead of the ground and the fall. A
+// body floats with its origin `equilibriumOffset` below the free surface; below that band the medium lifts it at
+// `idleDrift` (negative sinks it) and the MoveUp channel thrusts it, at `thrust` of the kit's move speed. `riseSpeed`
+// and `sinkSpeed` bound its vertical speed and `speed` its planar one, which rides the kit's own move speed when absent.
+function swimHold(idleDrift = 0.8, equilibriumOffset = 1.2, settleRate = 2, riseSpeed = 2.5, sinkSpeed = 2.5, thrust = 1, speed = null) = {
+  name: "swim"
+  bond: Medium
+  hold: None
+  medium { idleDrift: idleDrift, equilibriumOffset: equilibriumOffset, settleRate: settleRate }
+  envelope { riseSpeed: riseSpeed, sinkSpeed: sinkSpeed }
+  thrust: thrust
+  speed: speed
+}
+
 // A piece's hold in the air: it falls and settles under gravity wherever it is let go.
 let airHold = { name: "air", bond: Free, hold: Gravity, gravity: standardGravity, envelope: standardSink }
 

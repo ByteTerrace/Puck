@@ -1,0 +1,19 @@
+// Replay covers the water: a swimmer holds her buoyant depth in the pool's medium, and the melt clock and the flow lattice
+// it feeds continue identically (water.puck, pool.puck).
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "debug"
+import "stopped-machines"
+
+test "a swimmer floats under the pool's surface while the melt runs, and replays it" {
+  when {
+    seat1: body.pose -56 -2.3 -12 90 0 0 0
+    ticks 150
+  }
+  expect {
+    bodyPosition(body, 0, y) < -1.85
+    bodyPosition(body, 0, y) > -2.2
+    hydroClock > 100
+    fallsFlow > 0
+  }
+}

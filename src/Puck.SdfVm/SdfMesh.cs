@@ -56,6 +56,9 @@ public sealed partial record SdfMesh {
             );
         }
 
+        var low = new Vector3(value: float.PositiveInfinity);
+        var high = new Vector3(value: float.NegativeInfinity);
+
         foreach (var position in positions.Span) {
             if (!VectorFunctions.IsFinite(vector: position)) {
                 throw new ArgumentException(
@@ -63,6 +66,9 @@ public sealed partial record SdfMesh {
                     paramName: nameof(positions)
                 );
             }
+
+            low = Vector3.Min(value1: low, value2: position);
+            high = Vector3.Max(value1: high, value2: position);
         }
         foreach (var index in indices.Span) {
             if (index >= ((uint)positions.Length)) {
@@ -125,6 +131,8 @@ public sealed partial record SdfMesh {
         }
 
         Positions = positions;
+        PositionLow = low;
+        PositionHigh = high;
         Indices = indices;
         Normals = normals;
         TriangleMaterials = triangleMaterials;
@@ -147,6 +155,10 @@ public sealed partial record SdfMesh {
     public ReadOnlyMemory<Vector3> Normals { get; }
     /// <summary>Gets the object-space vertex positions.</summary>
     public ReadOnlyMemory<Vector3> Positions { get; }
+    /// <summary>Gets the least corner of the box the positions span, object space.</summary>
+    public Vector3 PositionLow { get; }
+    /// <summary>Gets the greatest corner of the box the positions span, object space.</summary>
+    public Vector3 PositionHigh { get; }
     /// <summary>Gets the triangle count.</summary>
     public int TriangleCount => (Indices.Length / 3);
     /// <summary>Gets one palette entry per triangle, added to its draw's material, or none.</summary>
@@ -194,21 +206,12 @@ public sealed partial record SdfMesh {
             }
 
             m_levels = value;
+            m_levelledTriangleCount = ((int)triangles);
         }
     }
     /// <summary>Gets the triangles every level holds together, the mesh's own first: the triangles its region words
     /// hold, numbered from zero in that order.</summary>
-    public int LevelledTriangleCount {
-        get {
-            var triangles = TriangleCount;
-
-            foreach (var level in m_levels) {
-                triangles += level.TriangleCount;
-            }
-
-            return triangles;
-        }
-    }
+    public int LevelledTriangleCount => ((m_levels.Count == 0) ? TriangleCount : m_levelledTriangleCount);
 
     /// <summary>Returns a level's range among this mesh's triangles, the base mesh first and coarser levels after it.</summary>
     /// <param name="level">Zero for the base mesh, one for its first coarser level; a level past the coarsest selects
@@ -229,6 +232,8 @@ public sealed partial record SdfMesh {
     }
 
     private readonly IReadOnlyList<SdfMeshLevel> m_levels = [];
+    // The mesh's and its levels' triangles together, set with the levels.
+    private readonly int m_levelledTriangleCount;
 
     private static void RequireAttribute(int count, int expected, string name, string per) {
         if ((count != 0) && (count != expected)) {

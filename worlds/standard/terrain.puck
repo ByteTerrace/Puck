@@ -34,6 +34,19 @@ template terrainMass(label, foot, peak, radial, across, offset = 0, sink = 0.3, 
   }
 }
 
+// A bowl cut into the masses composed before it (a lake's basin): an ellipsoid of half-extents `radii` centred `lateral` along
+// the ring and `radial` out from its centre at height `y`. A relieved creation collides as the surface it draws, carves
+// included, so a body walks the bowl's rim and its floor.
+template terrainBasin(label, lateral, radial, y, radii) {
+  shape Superellipsoid $"{label}" {
+    blend: Subtraction
+    exponent: 2
+    material: 0
+    position [lateral, y, radial]
+    scale: radii
+  }
+}
+
 // The floor plane's cut through a sector: everything composed before it is intersected with the slab from `below` under
 // the floor plane up to `top`, so the masses' buried halves neither bake nor size the sector's lattice. A detail shape:
 // contact keeps colliding each mass whole, and nothing stands under the floor.

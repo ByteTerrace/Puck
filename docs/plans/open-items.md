@@ -570,9 +570,9 @@ The custom no-GC runtime port stays later work, on the
 
 Owner: specialist (rendering) · high · Next: narrow `SdfMeshBakeClosure` to the
 code that decides mesh contents and key one store for both backends from the HLSL
-source closure of `MeshBake` and `MeshBakeMask`; then cut the crossing stage's
-`CloseSheets` and the collapse (`SdfMeshCollapse`), now the bake's largest CPU
-stages, toward the owner's bar: one minute at most per backend from an empty
+source closure of `MeshBake` and `MeshBakeMask`; then cut the collapse
+(`SdfMeshCollapse`), now the bake's largest CPU stage, and the bake frame's own
+cost, toward the owner's bar: one minute at most per backend from an empty
 store (AGENTS.md), and work proportional to change.
 
 - [high] Each backend still keeps its own store because `SdfMeshBakeIdentity`
@@ -584,11 +584,16 @@ store (AGENTS.md), and work proportional to change.
   equivalence, including compiler changes and skin/material/refinement behavior.
   The latest native forest legs have different aggregate triangle counts, so
   source equality alone is not proof of identical products or a halved cold cost.
-- The cold bake fails the one-minute bar on both backends by more than double.
-  Crossings (`CloseSheets`, `CrossingEdges`) and land
-  (`SdfMeshCollapse`) are about three quarters of its thread seconds, and Vulkan
-  spends fewer thread seconds yet takes longer, because its bake frames are
-  slower and the bake is bound by how often a frame admits work.
+- The cold bake fails the one-minute bar on both backends by about double. It
+  is bound twice over. The frame admits one dispatch of at most 2^21 samples, so
+  its 1.1 G samples need at least 530 frames, and a bake frame runs 120 ms or
+  more (produce plus about 40 ms of simulation), so the frame alone costs about
+  65 s. And the contour work saturates every processor: on a busy machine its
+  stages log about 1,500 thread seconds, the collapse
+  (`SdfMeshCollapse.Levels`) about 30% of the workers' CPU, the crossing stage
+  about 20% and the contour (`ExtractRefined`) about 12%. Both halves have to
+  fall: fewer frame costs while baking (or more samples a dispatch once the CPU
+  keeps up) and roughly half the contour CPU.
 - [high] A cold bake's private memory climbs far past the Deck tier's 10 GB
   within its first minute, and its allocation is a cost on the frame as well as
   on memory (the frame runs several times its budget with hundreds of
@@ -610,10 +615,14 @@ store (AGENTS.md), and work proportional to change.
   `--profile gc-verbose` in the same leg as the memory split above, then write
   each into storage its worker owns: one `float` buffer filled once, appends
   without the wrapper, and a projection workspace per worker.
-- Next cuts, largest first: `CloseSheets`' pair scan and face passes still read
-  `FineValue` (slot lookup and interpolation) for every magnitude they test;
-  `SdfMeshCollapse`'s passes re-cost every free place each pass; the answer
-  stage decodes on the workers.
+- Next cuts, largest first: `SdfMeshCollapse` (4.8 M tried collapses for a
+  valley sector's 0.89 M triangles, about 3.5 µs each; skipping places whose
+  neighbourhood no collapse changed saves only a quarter of the tries and no
+  time, so the cost is in the tries that run); the contour's `ExtractRefined`
+  measures every fine cell's corner signs a third time, where `CrossingEdges`
+  already lists the crossed fine cells (`m_crossedFineCells`); the frame thread's
+  `SdfWorldResidency.Capture` and the render graph's per-view recording while
+  hundreds of views stand.
 - [low] The audit counts a chunked mesh's seam edges as open edges: weld the
   joined query view's coincident seam vertices, or skip edges two chunks share,
   so a chunked group's open edges mean holes.
@@ -1031,6 +1040,62 @@ worlds in place is rewritten.
   mancala, hidden ranks and word spy, `experimental/src/Puck.World/Assets/worlds/games/`)
   and the combat yard's `arena.puck` district rules
   ([debug world content](#debug-world-content)).
+
+### Water
+
+Owner: debug-world content lane (rendering, puck-world, sdf-authoring) · ordinary ·
+Next: what the water as a forcing workload showed
+([C3 as built](debug-world-composition.md#c3-as-built)); each item is a system
+the water strained, measured, and not yet fixed.
+
+- [medium] A lattice row's look is one albedo (`WorldFieldEmitter.cs:363`,
+  `SdfMaterial(Albedo: …)`): the pool reads as a flat cyan fill, with none of the
+  roughness, reflection, depth colour or transparent shallows
+  [the art pack](../game/art/caldera-water-pack/README.md) asks for. The fix is an
+  authored material on the row's `field` trait (the palette vocabulary: roughness,
+  specular, coat, glass), through `WorldStateFieldTrait`, `WorldFieldRow`, the
+  validator and `puck schema`; the water then owns no look in C#.
+- [medium] The water's creations add 172 bake groups, 6.4 million level-0
+  triangles and 1.0 GB of the mesh region in use to the debug world (a World
+  without the water documents: 7,478 groups, 47.6 M triangles, 1.67 GB used; with
+  them 7,650, 54.0 M, 2.68 GB), while private memory stays near 12.5 GiB warm
+  either way. Each animated shape is a group of its own (`puck creation stats`
+  reports `stream-0` as 15 groups for 15 boxes), and the stream's 1.4 cm foam bars
+  and 5 cm brush edges bake at a millimetre cell
+  (`worlds/standard/water.puck`, `streamSegment`); which shape owns the triangles
+  is unmeasured (`puck mesh audit --prototype` selected no groups).
+- [medium] The debug world's compile validates 3.77 GB peak working set without
+  the water scenery and 4.78 GB with it (`puck compile worlds/debug/debug.puck
+  --validate`; each document alone is under 200 MB). The 1 GB is in the falls,
+  glacier, lake and bridge creations, not in the eight stream segments, the
+  hydrology rules or the lattices, so it grows with a creation's extent or kind
+  rather than its shape count; the validate stage that holds it is not yet found.
+- [medium] A lattice height column is solid under the field contact provider
+  (`FieldLattice.cs:1161` `ColumnHeight` unions every height row, a medium
+  included, through `WorldSolidField.cs:118`), so a medium world on that
+  provider would stand on its water; the analytic provider the debug world uses
+  ignores lattice columns. A medium row should be excluded from the solid.
+- [low] A lattice transform's row-referenced term is read, not consumed
+  (`FieldLattice.cs:1000`): the hydrology's melt hands water through a slot
+  (`hydroMeltStep`), so a rule firing that is refused (a gauge outside its
+  envelope did it) leaves the last value to be added every step, and the water
+  is no longer conserved. A transform that moves a store into a cell (`take`)
+  would make the hand-off exact; the hydrology's gauges are clamped meanwhile.
+- [low] A keyed list an imported fragment extends appends after the basis's rows
+  (`documents-composition.md` merge rules), so a hold that must lead the Moth's
+  list (the swim) is authored in her own document, where a fragment cannot
+  reach it. A `before` position on a keyed row would let a fragment order itself.
+- [low] `world.counters` has no lattice source: the chain's work shows only in
+  `world.budget`'s per-region cell visits, and the conserved quantity only in
+  `world.fields`' `total`.
+- [low] `world.reload` keeps a lattice's cell values while it resets state rows
+  (the melt clock restarts over a half-filled aquifer), and a `world.reset`
+  call dropped the operator attachment in one run; a reset that restores the
+  lattice from its paint is the lever a fast-forward needs.
+- [low] The glacier's lumps hinge into the wall but leave their crowns above the
+  crest at zero (`worlds/debug/water-scenery.puck`, `glacierLumps`), the falls
+  are one slab ribbon with no spray, and the lake outlet is not a modelled notch:
+  authoring work against the art pack.
 
 ### Author shaders
 
