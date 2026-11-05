@@ -47,7 +47,7 @@ function legMiddle(i) = [
 let bridgeLeg = 5
 
 prototypes {
-  fallsRibbon(id: "falls", profile: fallsProfile, width: 8, standoff: 8, foldRadians: 0.045)
+  fallsRibbon(id: "falls", profile: fallsProfile, width: 8, standoff: 8)
   glacierMass(id: "glacier", lumps: glacierLumps, origin: glacierOrigin)
   lakeSurface(id: "lake", radius: lakeSite.radius)
   for (leg, i) in streamLegs {
@@ -55,6 +55,10 @@ prototypes {
   }
   stoneBridge(id: "bridge")
   floatGauge(id: "reservoir-gauge", height: 3)
+  waterBasin(id: "plunge-basin", half: [10, 10], floorY: -2.4)
+  waterBasin(id: "reservoir-basin", half: [5, 6], floorY: -3.5, stepTops: [])
+  reservoirPavilion(id: "reservoir-pavilion")
+  impactSpray(id: "falls-spray")
 }
 
 placements {
@@ -90,8 +94,27 @@ placements {
   // The reservoir's float gauge beside the pool's steps, its ticks facing the path: the aquifer's fill read off the bank.
   placement "reservoir-gauge" {
     prototype: "reservoir-gauge"
-    position [poolHole[2] + 1.5, 0, poolCentre[1] - 5]
-    yawDegrees: 90
+    position [-35, -3.5, -18]
+    yawDegrees: 270
+  }
+  placement "plunge-basin" {
+    prototype: "plunge-basin"
+    position [-143, 0, 144]
+    solid
+  }
+  placement "falls-spray" {
+    prototype: "falls-spray"
+    position [-143, 1.5, 144]
+  }
+  placement "reservoir-basin" {
+    prototype: "reservoir-basin"
+    position [-39, 0, -18]
+    solid
+  }
+  placement "reservoir-pavilion" {
+    prototype: "reservoir-pavilion"
+    position [-39, 0, -18]
+    solid
   }
   placement "bridge" {
     prototype: "bridge"
@@ -100,3 +123,8 @@ placements {
     solid
   }
 }
+
+waterViews(views: [
+  { name: "plunge", rowName: "plungeWater", gauge: "poolLevel", hole: plungeHole, floorY: -2.4, initial: 1.65, maximumDepth: 2.35, heightScale: 1, cell: 1 }
+  { name: "reservoir", rowName: "reservoirWater", gauge: "aquiferFill", hole: reservoirHole, floorY: -3.5, initial: 0, maximumDepth: 1, heightScale: 3, cell: 1 }
+])

@@ -161,7 +161,7 @@ prototypes {
     paving: "#BC7F58",
     paths: lawnPaths,
     pathWidth: lawnPathWidth,
-    holes: [poolHole]
+    holes: [poolHole, plungeHole, reservoirHole]
   )
   broadleafTree(id: "lawn-oak-0")
   broadleafTree(id: "lawn-oak-1", height: 1.12, spread: 0.92, lean: 0.06)

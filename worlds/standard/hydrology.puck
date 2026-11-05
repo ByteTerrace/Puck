@@ -145,6 +145,7 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
       slot hydroRemaining = sourceCount * waterPerCell bounds(0.0..1000000.0)
       slot glacierLength = 1.0 bounds(0.0..1.0)
       slot meltStrength = 1.0 bounds(0.0..1.0)
+      slot meltVisible = 1.0 bounds(0.0..1.0)
       slot glacier = 1.0 bounds(0.0..1.0)
       slot lakeLevel = 0.0 bounds(0.0..4.0)
       slot fallsFlow = 0.0 bounds(0.0..4.0)
@@ -171,6 +172,7 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
     }
     hydroTarget = hydroClock < meltTicks ? maximum(0.0000152587890625, hydroTarget) : 0.0
     meltStrength = hydroClock < meltTicks ? meltStrength : 0.0
+    meltVisible = hydroClock < meltTicks ? 1.0 : 0.0
     hydroRate = minimum(1, rate * hydroSpeed)
   }
 

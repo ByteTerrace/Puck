@@ -15,8 +15,8 @@
 import "../standard/hydrology"
 // The gauges the pool reads and the scenery binds.
 exports {
-  bindings [glacier, glacierLength, meltStrength, lakeLevel, fallsFlow, riverDepth, aquiferFill]
-  reads [poolLevel]
+  bindings [glacier, glacierLength, meltStrength, meltVisible, lakeLevel, fallsFlow, riverDepth, aquiferFill]
+  reads [poolLevel, aquiferFill]
 }
 
 // The chain's numbers. A cell is a metre; the glacier holds 20 units of water, the aquifer ten cells at bed 0 under a river
