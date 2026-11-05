@@ -63,6 +63,7 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
         var meshes = new uint[Math.Max(1, layout.Words)];
         SdfMeshRegion.Write(draws, placements, layout, Enumerable.Repeat(1u, draws.Length).ToArray(), meshes);
         var hierarchy = scene.ExportGpu(placements);
+        if (!skipNode) { CompareLightBits(gpu, extension, scene, hierarchy, meshes, origins); }
         if (skipNode) { hierarchy[0] = hierarchy[hierarchy[0] + 6] >> SdfMeshProbeTrace.NodeCountBits; }
         var (result, identities) = Run(gpu, extension, hierarchy, meshes, origins);
         var expected = new uint[SdfMeshProbeDepth.HitWords];
@@ -129,6 +130,109 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
         output.WriteLine($"{extension}: {origins.Length * SdfMeshProbeDepth.HitCount} rays, {hits} hits, {backFaces} backs, {ties} ties, max error {maximumError:R} m, max bound {maximumBound:R} m.");
     }
 
+    // Exercise the production any-hit door through the relight kernel's actual directional-light bits.
+    // Miss-only cached hits suppress shading: each bit is solely an exact segment visibility query.
+    private void CompareLightBits(GpuDeviceServices gpu, string extension, SdfMeshIrradianceScene scene, uint[] hierarchy, uint[] meshes, Vector4[] origins) {
+        const int LightCount = 32;
+        const float Reach = 30;
+        var inputs = new uint[origins.Length * SdfMeshProbeRelight.InputWords];
+        var cache = new uint[origins.Length * SdfMeshProbeRelight.CacheWords];
+        var work = new uint[3 + origins.Length];
+        for (var probe = 0; probe < origins.Length; probe++) {
+            inputs[probe * SdfMeshProbeRelight.InputWords] = 1;
+            inputs[probe * SdfMeshProbeRelight.InputWords + 3] = (uint)probe;
+            work[3 + probe] = (uint)probe;
+            for (var ray = 0; ray < SdfMeshProbeDepth.HitCount; ray++) {
+                cache[probe * SdfMeshProbeRelight.CacheWords + 2 + 2 * ray] = 0x7f800000u;
+            }
+        }
+        var rows = new Vector4[SdfMeshProbeRelight.HeaderRows + SdfMeshProbeRelight.MaterialRows + LightCount * SdfMeshProbeRelight.LightRows];
+        rows[0] = new(1, LightCount, 0, Reach);
+        rows[9] = rows[10] = Vector4.One;
+        for (var light = 0; light < LightCount; light++) {
+            var row = SdfMeshProbeRelight.HeaderRows + SdfMeshProbeRelight.MaterialRows + light * SdfMeshProbeRelight.LightRows;
+            rows[row] = new(SdfMeshProbeDepth.RayDirections[light], 0);
+            rows[row + 3] = new(1, light, 1, 0);
+        }
+        using var owned = new GpuCreationScope();
+        var layout = SdfWorldInterfaces.ProbeRelightLayout;
+        var description = new GpuComputePipelineDescription(Bindings: [], Name: "sdf-probe-relight", PushConstantBinding: null,
+            Layout: layout.PipelineLayout(GpuShaderStage.Compute));
+        var module = owned.Own(gpu.ShaderModuleFactory.Create(stage: GpuShaderStage.Compute,
+            bytecode: File.ReadAllBytes(Path.Combine(SdfKernelSet.DefaultDirectory, "sdf-probe-relight.comp" + extension))));
+        var pipeline = owned.Own(gpu.PipelineFactory.Create(computeShaderModule: module, description: description, name: default));
+        var cacheBuffer = Host(cache);
+        var workBuffer = Host(work);
+        var payload = origins.Length * SdfMeshProbeRelight.ResultWords;
+        var resultReset = Host(new uint[payload + 1]);
+        var resultBuffer = owned.Own(gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: resultReset.SizeBytes, usage: GpuBufferUsage.Storage));
+        var buffers = new Dictionary<string, IGpuBuffer> {
+            [SdfKernelInterfaces.ProbeScene] = Host(hierarchy),
+            [SdfWorldPackage.MeshRegion] = Host(meshes),
+            [SdfKernelInterfaces.ProbeOrigins] = Host(origins),
+            [SdfKernelInterfaces.ProbeDirections] = Host(SdfMeshProbeDepth.RayDirections.ToArray().Select(static ray => new Vector4(ray, 0)).ToArray()),
+            [SdfKernelInterfaces.ProbeLighting] = Host(rows),
+            [SdfKernelInterfaces.ProbeInput] = Host(inputs),
+            [SdfWorldPackage.MeshIrradiance] = Host(new uint[1]),
+            [SdfKernelInterfaces.ProbeHitsWritten] = resultBuffer,
+            [SdfKernelInterfaces.ProbeWorkWritten] = owned.Own(gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: workBuffer.SizeBytes, usage: GpuBufferUsage.Storage)),
+            [SdfKernelInterfaces.ProbeWork] = workBuffer,
+            [SdfKernelInterfaces.ProbeCacheWritten] = owned.Own(gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: cacheBuffer.SizeBytes, usage: GpuBufferUsage.Storage)),
+            [SdfKernelInterfaces.ProbeCache] = cacheBuffer,
+        };
+        var pool = owned.Own(gpu.Bindings.CreatePool(name: default, sizes: GpuDescriptorPoolSizes.ForGroups(description.Layout!.Groups)), gpu.Bindings.DestroyPool);
+        var set = gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: pipeline.GroupLayoutHandles[(int)ShaderInterfaceGroup.Pass], name: default, poolHandle: pool);
+        foreach (var (name, buffer) in buffers) {
+            var resource = SdfKernelInterfaces.ResourceOf(layout, name);
+            gpu.Bindings.WriteBuffer(set, resource.Binding, buffer.BufferHandle, buffer.SizeBytes,
+                name is SdfKernelInterfaces.ProbeHitsWritten or SdfKernelInterfaces.ProbeWorkWritten or SdfKernelInterfaces.ProbeCacheWritten ? GpuBindingKind.ReadWriteBuffer : GpuBindingKind.ReadOnlyBuffer,
+                name is SdfKernelInterfaces.ProbeOrigins or SdfKernelInterfaces.ProbeDirections or SdfKernelInterfaces.ProbeLighting ? 16u : 4u);
+        }
+        var readback = owned.Own(gpu.BufferFactory.CreateReadback(name: default, sizeBytes: resultBuffer.SizeBytes));
+        var commands = owned.Own(gpu.CommandPoolFactory.Create(name: default));
+        var recorder = gpu.Recorder;
+        var command = commands.CommandBufferHandle;
+        recorder.BeginCommandBuffer(command);
+        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: resultBuffer.BufferHandle,
+            sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
+            destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+        recorder.CopyBuffer(command, resultReset.BufferHandle, resultBuffer.BufferHandle, resultReset.SizeBytes);
+        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: resultBuffer.BufferHandle,
+            sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
+            destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+        recorder.BindPipeline(commandBufferHandle: command, bindPoint: GpuBindPoint.Compute, pipelineHandle: pipeline.Handle);
+        recorder.BindDescriptorSet(commandBufferHandle: command, bindPoint: GpuBindPoint.Compute, descriptorSetHandle: set,
+            group: (uint)ShaderInterfaceGroup.Pass, pipelineLayoutHandle: pipeline.LayoutHandle);
+        recorder.Dispatch(command, (uint)origins.Length, 1, 1);
+        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: resultBuffer.BufferHandle,
+            sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
+            destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
+        recorder.CopyBuffer(command, resultBuffer.BufferHandle, readback.BufferHandle, resultBuffer.SizeBytes);
+        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: readback.BufferHandle,
+            sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
+            destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host);
+        recorder.EndCommandBuffer(command);
+        gpu.QueueSubmitter.SubmitAndWait([command]);
+        var result = new uint[payload + 1];
+        readback.Read(MemoryMarshal.AsBytes(result.AsSpan()));
+        Assert.Equal(0u, result[^1]);
+        for (var probe = 0; probe < origins.Length; probe++) {
+            var position = new Vector3(origins[probe].X, origins[probe].Y, origins[probe].Z);
+            for (var light = 0; light < LightCount; light++) {
+                var visible = (result[probe * SdfMeshProbeRelight.ResultWords + 36] & (1u << light)) != 0;
+                Assert.Equal(scene.Unblocked(position, SdfMeshProbeDepth.RayDirections[light], Reach), visible);
+            }
+        }
+        output.WriteLine($"{extension}: {origins.Length * LightCount} any-hit light bits match CPU visibility exactly; zero stack overflow.");
+
+        IGpuStorageBuffer Host<T>(T[] values) where T : unmanaged {
+            var buffer = owned.Own(gpu.BufferFactory.CreateHostVisible(name: default,
+                sizeBytes: (ulong)(values.Length * Marshal.SizeOf<T>()), usage: GpuBufferUsage.Storage));
+            buffer.Write<T>(values);
+            return buffer;
+        }
+    }
+
     private static (uint[] Hits, uint[] Identities) Run(GpuDeviceServices gpu, string extension, uint[] scene, uint[] meshes, Vector4[] origins) {
         var layout = SdfWorldInterfaces.ProbeTraceLayout;
         var description = new GpuComputePipelineDescription(Bindings: [], Name: "sdf-probe-trace", PushConstantBinding: null,
@@ -141,8 +245,9 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
         using var originBuffer = gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: (ulong)origins.Length * 16, usage: GpuBufferUsage.Storage);
         using var directionBuffer = gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: (ulong)SdfMeshProbeDepth.HitCount * 16, usage: GpuBufferUsage.Storage);
         var bytes = (ulong)(origins.Length * SdfMeshProbeDepth.HitWords * 4);
-        using var output = gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: bytes + 4, usage: GpuBufferUsage.Storage);
-        output.Write<uint>(new uint[(int)(bytes / 4) + 1]);
+        using var output = gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: bytes + 4, usage: GpuBufferUsage.Storage);
+        using var zero = gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: 4, usage: GpuBufferUsage.Storage);
+        zero.Write<uint>([0]);
         using var identities = gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: bytes, usage: GpuBufferUsage.Storage);
         using var readback = gpu.BufferFactory.CreateReadback(name: default, sizeBytes: 2 * bytes + 4);
         using var commands = gpu.CommandPoolFactory.Create(name: default);
@@ -165,6 +270,10 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
             recorder.BeginCommandBuffer(command);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: output.BufferHandle,
                 sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
+                destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+            recorder.CopyBuffer(command, zero.BufferHandle, output.BufferHandle, 4, destinationOffsetBytes: bytes);
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: output.BufferHandle,
+                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
                 destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: identities.BufferHandle,
                 sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,

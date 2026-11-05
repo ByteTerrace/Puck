@@ -15,6 +15,12 @@ backend. Runtime trace, relight, selection and exposure queries use
 backends. CPU `TraceHits` and `Relight` remain reference/diagnostic paths;
 placement still uses CPU nearest-surface and short clearance queries.
 
+The trace device law also dispatches the production relight kernel with
+miss-only cached hits and 32 shadowing directionals, isolating its any-hit
+light bits. Every bit must equal CPU `Unblocked`, including the empty scene;
+both that output and nearest-hit tracing assert zero overflow. Writable
+fixture buffers are device-local, with explicit upload/copy/readback ordering.
+
 Boolean visibility uses `sdfProbeOccluded` through the same `sdfProbeWalk` node
 and triangle tests as `sdfProbeIntersect`, returning at the first accepted
 triangle. `probeClear` uses that entry for shadows, light bits and the meter.

@@ -52,8 +52,8 @@ their commits hold the raw output. None is new in this round.
   for `HostStartKind.WindowedWorld`); no reading attributes those bytes yet. The volume's record table is 66 MiB at High, five payload copies
   330 MiB; the CPU cache read 329 MB after a tour.
 
-**What G1 has built** (branch `lane/codex-g1`, read only; its line numbers
-move as the branch does, so recheck them before acting on one). The
+**What G1 built** (the integrated starting point at `ada4c3034b`; its line
+numbers move, so recheck them before acting on one). The
 existing CPU hierarchy is exported without a second builder
 (`SdfMeshIrradianceScene.Gpu.cs:20-108`, `ExportGpu`, staged from the scene's
 own arrays) and traced by a compute kernel, one thread per ray, 144 rays of a
@@ -123,39 +123,16 @@ Each names the general mechanism it is an instance of (M1 to M4 are the
 
 ### 1. G1's traversal at its two cheap points
 
-The code. `probeClear` answers a boolean by running the closest-hit walk
-(`shade/sdf-probe-lighting.hlsli:28-30` calls `sdfProbeIntersect`), which keeps
-descending after the first hit to shorten `distance`. It serves the
-directional shadow ray at every hit (`:64`) and the probe's own light bits
-(`passes/sdf-probe-relight.comp.hlsl:62`). The CPU already has the boolean
-walk: `SdfMeshIrradianceScene.Unblocked` runs `Walk` with any-hit leaves whose
-`Visit` returning true ends the walk (`SdfMeshIrradianceScene.cs:341,358`).
-Every source with a shadow ray takes the early exit. Occluded rays are most of
-the sun's rays indoors, and an any-hit walk stops at the first triangle on the
-segment instead of proving it nearest, so the saving falls on the relight's
-largest ray class; the size is the step's measurement, not this memo's.
-
-The overflow. Both walks end silently when the stack fills: the CPU `Walk`
-returns at `top > stack.Length - 2` (`SdfMeshIrradianceScene.cs:381`, a
-64-entry stack at `:69`) and G1 copied it (`shade/sdf-probe-trace.hlsli:84,106`,
-`SDF_PROBE_STACK_DEPTH` 64 at `isa/sdf-render.hlsli:15` on the branch). An
-unfinished closest-hit walk returns whatever it found so far, often a miss,
-and a miss is sky: a leak through a wall, which Puck treats as a defect. A
-near-first depth-first walk holds at most one pending sibling per level, so a
-stack of 64 suffices for any hierarchy shallower than about 62 levels, and the
-binned builder has no depth bound (`MaxSplits` at `:633` bounds triangle
-splitting, not tree depth). Wicked ends silently too; Brixelizer's design
-answers it by making the budget's exhaustion hand the ray to a coarser
-representation, never a miss. Puck's form is cheaper still: the builder knows
-every hierarchy's depth, so the depth bound is enforced where the hierarchy is
-made and the walks need no fallback.
-
-The order. A trace batch takes probes in priority order (finest level and
-nearest first, `List`, `SdfMeshIrradiance.cs:1569`). Wicked sorts surfel rays
-by Morton code of origin before tracing because incoherent rays thrash the
-node cache; Puck's 144 rays of one probe already share an origin and a wave,
-so only the batch's probe order is left to sort, by Morton cell within a
-priority band.
+Implemented: boolean visibility enters the shared GPU walk through
+`sdfProbeOccluded`, matching CPU `Unblocked`'s any-hit leaves. The shared
+builder certifies both hierarchy depths and forces median splits before a
+stack can truncate a walk; overflow is counted. Work lists use Morton cell
+order within their priority bands. The
+[mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) owns
+the contracts and checks. The sources motivate these changes: any-hit stops
+at the first accepted shadow blocker, builder certification removes the silent
+overflow class, and nearby origins improve hierarchy locality. Their measured
+cost belongs to the implementation commits, not an estimate in this memo.
 
 ### 2. Light each surface sample once
 
@@ -195,19 +172,17 @@ probe, on the four-storey hall harness and the debug world's fixed poses.
 
 ### 3. Spend relights where light changes and views look
 
-`Work` lists relights oldest lighting first, finest level and nearest
-(`SdfMeshIrradiance.cs:1426-1520`). Under a moving sun every probe is stale at
-every version, so the 32 m and storey levels (36,864 of High's 73,728 probes)
-take half of every cycle although views read the finest level wherever it
-answers. Godot relights every Nth surface voxel per frame
+Under a moving sun every probe becomes stale at every version; previously
+the 32 m and storey levels took half of every cycle although views read the
+finest level wherever it answers. Godot relights every Nth surface voxel per frame
 (`gi.cpp:1293-1300`); Wicked gives far surfels a re-trace period up to 8 frames
 and cuts out-of-view probes to a tenth of their rays; RTXGI pauses a converged
-volume. Puck keeps exact relights and changes only the order: a per-level
-interleave and a view weight inside an age bound per level, so a coarse probe
-is relit within k cycles, never retired. The baffled-rooms and red-to-green
-laws (`SdfMeshIrradianceLawTests.Relight.cs`) are the guard that no probe
-retires on its own small change; the lockstep drain relights everything and is
-untouched.
+volume. Implemented: Puck keeps exact relights, interleaves levels and weights
+view demand and last change inside age bounds. Stable lighting takes full
+sweeps and overdue probes bypass the phase. The mesh-GI reference owns that
+selection contract and its budget diagnostics. The baffled-rooms and
+red-to-green laws guard against retiring probes on their own small changes;
+lockstep still relights every probe from no bounce.
 
 ### Considered and not taken
 
