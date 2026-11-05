@@ -354,9 +354,20 @@ public sealed class LatchAndTriggerLawTests {
                     Effects: [EvaluatorFixture.Add(row: "score", value: 100m)],
                     Gate: EvaluatorFixture.Compare(comparison: ExpressionOp.Equal, row: "third", value: 99m)
                 ),
+                new Rule(
+                    Name: RulesFixture.Name(value: "deadline"),
+                    Effects: [EvaluatorFixture.Add(row: "score", value: 1000m)],
+                    Gate: new ActionPredicate.All(Predicates: [
+                        EvaluatorFixture.Compare(comparison: ExpressionOp.GreaterOrEqual, row: RuleFacts.Tick, value: 4m),
+                        EvaluatorFixture.Compare(comparison: ExpressionOp.Equal, row: "flag", value: 1m),
+                    ])
+                ),
             ]);
             var trace = new List<string>();
+            var deadline = evaluator.ScheduleOf(latch: latch, rule: rules[^1]);
 
+            Assert.NotNull(@object: deadline.Deadline);
+            Assert.False(condition: deadline.Volatile);
             evaluator.SchedulingEnabled = scheduling;
             for (var tick = 0UL; (tick < 10UL); tick++) {
                 if (tick == 7UL) {

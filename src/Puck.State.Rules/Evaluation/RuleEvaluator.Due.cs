@@ -2,8 +2,6 @@ namespace Puck.State.Rules;
 
 public sealed partial class RuleEvaluator {
     private RuleDueList? m_dueList;
-    private readonly List<int> m_dueRows = [];
-    private readonly List<FactRead> m_dueFacts = [];
     private readonly List<int> m_dueLive = [];
 
     private Puck.Abstractions.Counting.WorkCount m_due;
@@ -41,6 +39,7 @@ public sealed partial class RuleEvaluator {
         }
 
         MarkTraced(list: list);
+        list.Wake(tick: m_host.Tick);
         list.Drain();
 
         var applied = false;
@@ -51,13 +50,16 @@ public sealed partial class RuleEvaluator {
             visited++;
             m_due.Increment();
             m_anyRerun = false;
+            m_minWake = ulong.MaxValue;
 
-            var moved = (list.IsBodySweep(index: index)
-                ? SweepBodies(index: index, list: list, stepTicks: stepTicks)
-                : (EvaluateRule(applied: out var ruleMoved, bindings: list.States[index], latch: latch, rule: rules[index], stepTicks: stepTicks) != RuleOutcome.Idle) | ruleMoved);
+            var whole = !list.IsBodySweep(index: index);
+            var moved = (whole
+                ? (EvaluateRule(applied: out var ruleMoved, bindings: list.States[index], latch: latch, rule: rules[index], stepTicks: stepTicks) != RuleOutcome.Idle) | ruleMoved
+                : SweepBodies(index: index, list: list, stepTicks: stepTicks, whole: out whole));
 
             applied |= moved;
             list.Settle(index: index, rerun: m_anyRerun);
+            list.RecordWake(index: index, wake: m_minWake, whole: whole);
             list.Drain();
         }
 
@@ -83,13 +85,15 @@ public sealed partial class RuleEvaluator {
     // One visit of a body sweep the list holds per body: every live body when the rule is due in full (a row or the
     // whole roster it reads moved, or its list was just built), otherwise only the bodies due. Each binding still
     // passes the version door, so a due body whose own facts did not move keeps its verdict.
-    private bool SweepBodies(int index, RuleDueList list, ulong stepTicks) {
+    private bool SweepBodies(int index, RuleDueList list, ulong stepTicks, out bool whole) {
         var rule = list.Rules[index];
         var state = list.States[index];
         var latch = list.Latch;
         var keys = m_host.Arena.Keys;
         var applied = false;
         var full = list.TakeFull(index: index);
+
+        whole = full;
 
         state.Spent.Visits++;
         m_dueLive.Clear();

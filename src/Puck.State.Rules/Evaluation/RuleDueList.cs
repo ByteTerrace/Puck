@@ -29,6 +29,7 @@ internal sealed class RuleDueList {
     private readonly ulong[] m_due;
     private readonly ulong[] m_visited;
     private readonly bool[] m_full;
+    private readonly ulong[] m_wake;
     private readonly ulong[]?[] m_bodies;
     private readonly ulong[]?[] m_live;
     private readonly int m_epoch;
@@ -58,6 +59,8 @@ internal sealed class RuleDueList {
         m_due = new ulong[((rules.Length + 63) >> 6)];
         m_visited = new ulong[m_due.Length];
         m_full = new bool[rules.Length];
+        m_wake = new ulong[rules.Length];
+        Array.Fill(array: m_wake, value: ulong.MaxValue);
         m_bodies = new ulong[]?[rules.Length];
         m_live = new ulong[]?[rules.Length];
 
@@ -162,6 +165,25 @@ internal sealed class RuleDueList {
 
         if (again) {
             SetDue(index: index);
+        }
+    }
+    /// <summary>Records the earliest deadline a visit's verdicts must be judged again at. A visit that judged or kept
+    /// every binding replaces the rule's wake; one that judged only some bodies keeps the earlier of the two, since
+    /// the bindings it passed over keep theirs.</summary>
+    public void RecordWake(int index, ulong wake, bool whole) {
+        if (m_kinds[index] == Kind.Always) {
+            return;
+        }
+        m_wake[index] = (whole ? wake : Math.Min(val1: m_wake[index], val2: wake));
+    }
+    /// <summary>Marks every rule whose earliest deadline has come due in full, so each of its bindings is judged
+    /// against the tick that may now open it.</summary>
+    public void Wake(ulong tick) {
+        for (var index = 0; (index < m_wake.Length); index++) {
+            if (m_wake[index] <= tick) {
+                m_wake[index] = ulong.MaxValue;
+                MarkFull(index: index);
+            }
         }
     }
     /// <summary>Counts the rules the walk did not visit into each one's <see cref="RuleLatch.RuleSpent.Elided"/>, and

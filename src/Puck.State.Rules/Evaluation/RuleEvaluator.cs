@@ -57,6 +57,8 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     private bool m_rerun;
     // Whether any evaluation since a due list's visit began must be judged again next tick.
     private bool m_anyRerun;
+    // The earliest deadline any verdict a due list's visit kept or captured must be judged again at.
+    private ulong m_minWake = ulong.MaxValue;
 
     private readonly List<int> m_bodyIndexScratch = [];
     private readonly List<CellKey> m_eachKeyScratch = [];
@@ -171,14 +173,17 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         m_readScratch.Clear();
 
         var needs = new RuleNeedsBuilder();
+        var deadline = RuleDeadline.Find(gate: rule.Gate);
 
         RuleDataflow.CollectJudgement(
+            deadline: deadline,
             facts: needs,
             reads: m_readScratch,
             rule: rule
         );
 
         var schedule = RuleSchedule.Build(
+            deadline: deadline,
             facts: needs.FacetFacts,
             iteratesBodies: rule.ForEachBodies,
             iterationRow: rule.ForEachOrdinal,
@@ -597,7 +602,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
     // What judging one binding decided: the gate's verdict, or that its bindings could not evaluate, and whether a fault
     // was raised while it ran.
-    private readonly record struct Judgement(bool Open, bool Decided, bool Faulted);
+    private readonly record struct Judgement(bool Open, bool Decided, bool Faulted, ulong WakeTick);
 
     // Runs the bindings, the live-row selection and the gate inside one fault scope of their own. Judging fires
     // nothing, so nothing in it can replace the arena, and the scope is entered and left on one scratch; the firing
@@ -614,7 +619,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
                 tick: tick,
                 trace: trace
             )) {
-                return new Judgement(Decided: false, Faulted: (scratch.RaisedFault != ExpressionFault.None), Open: false);
+                return new Judgement(Decided: false, Faulted: (scratch.RaisedFault != ExpressionFault.None), Open: false, WakeTick: 0UL);
             }
 
             // Every live row the rule spells must select a row, or this evaluation is simply not for these indices: the
@@ -630,10 +635,42 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             ));
             var faulted = (scratch.RaisedFault != ExpressionFault.None);
 
-            return new Judgement(Decided: !faulted, Faulted: faulted, Open: open);
+            return new Judgement(
+                Decided: !faulted,
+                Faulted: faulted,
+                Open: open,
+                WakeTick: ((!faulted && (schedule?.Deadline is { } deadline)) ? WakeTick(deadline: deadline, gate: rule.Gate, tick: tick) : ulong.MaxValue)
+            );
         } finally {
             _ = scratch.LeaveFaultScope(scope: faults);
         }
+    }
+    // The first tick a verdict judged now may no longer hold while every other read holds: never once the deadline has
+    // passed (the tick only grows), else the first tick its comparison holds. X is read in a scope of its own whose
+    // fault is its whole answer, since the gate may have closed before reading it; a fault, or a tick side that does
+    // not read as the deadline expects, gives tick 0, which no skip trusts.
+    private ulong WakeTick(RuleDeadline deadline, GateToken[] gate, ulong tick) {
+        var token = gate[deadline.Token];
+        var scratch = m_host.Scratch;
+        var scope = scratch.EnterFaultScope();
+        RuleFact x;
+        RuleFact now;
+
+        try {
+            _ = RuleEvaluation.TryReadSource(fact: out x, fault: out _, kind: token.ValueKind, reader: m_host, source: (deadline.TickOnLeft ? token.RightSource : token.LeftSource));
+            _ = RuleEvaluation.TryReadSource(fact: out now, fault: out _, kind: token.ValueKind, reader: m_host, source: (deadline.TickOnLeft ? token.LeftSource : token.RightSource));
+        } finally {
+            if (scratch.AnswerFaultScope(scope: scope) != ExpressionFault.None) {
+                x = RuleFact.Faulted(kind: token.ValueKind);
+            }
+        }
+        if (x.IsFaulted || (now.Value != unchecked(((long)tick) * deadline.Scale))) {
+            return 0UL;
+        }
+
+        var first = deadline.FirstHoldingTick(x: in x);
+
+        return ((tick >= first) ? ulong.MaxValue : first);
     }
 
     private RuleOutcome EvaluateOnceCore(CompiledRule rule, RuleLatch latch, RuleLatch.RuleState state, LatchKey binding, ulong stepTicks, out bool applied) {
@@ -668,19 +705,21 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             (!wasOpen || (rule.Mode == ActionTriggerMode.Edge)) &&
             (schedule is { Volatile: false } kept) &&
             ReferenceEquals(objA: scheduling.GateOwner, objB: kept) &&
+            (tick < scheduling.WakeTick) &&
             VersionsMatch(
             cached: scheduling.GateVersions,
             schedule: kept
         )
         ) {
-            // Nothing this rule reads has changed since its verdict was captured, and it reads nothing a version
-            // cannot see through: the verdict stands — closed, or an Edge already held, which fires nothing — so
-            // bindings and gate need not run at all.
+            // Nothing this rule reads has changed since its verdict was captured, it reads nothing a version cannot
+            // see through, and its deadline (if it has one) is still ahead: the verdict stands — closed, or an Edge
+            // already held, which fires nothing — so bindings and gate need not run at all.
             m_skips.Increment();
             state.Spent.Skips++;
             latch.Touch(schedule: scheduling);
             EndTrace(entry: trace);
             m_rerun = false;
+            m_minWake = Math.Min(val1: m_minWake, val2: scheduling.WakeTick);
 
             return RuleOutcome.Idle;
         }
@@ -724,6 +763,8 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
                 schedule: reads
             );
             scheduling.GateOwner = reads;
+            scheduling.WakeTick = judged.WakeTick;
+            m_minWake = Math.Min(val1: m_minWake, val2: judged.WakeTick);
         }
 
         // A Level gate that holds fires every tick it holds: the author's per-tick choice, judged again next tick.

@@ -46,7 +46,9 @@ public enum RuleVolatility : byte {
 /// <param name="IterationVersioned">Whether the rule's binding set is one these dependencies name: a rule evaluated
 /// once, a keyed-row sweep, or a body sweep over a versioned roster. A pool, zone or document-owned sweep is not, and
 /// a due list visits it every tick; its bindings' own skip is unaffected.</param>
-public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility Volatility, int[] UnprovenRows, string[] UnversionedFacts, int[] IterationRows, FactRead[] IterationFacts, bool IterationVersioned) {
+/// <param name="Deadline">The gate's deadline conjunct, whose tick read is the wake a closed verdict carries rather
+/// than a read that makes the schedule volatile, or <see langword="null"/>.</param>
+public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility Volatility, int[] UnprovenRows, string[] UnversionedFacts, int[] IterationRows, FactRead[] IterationFacts, bool IterationVersioned, RuleDeadline? Deadline = null) {
     /// <summary>Gets a value indicating whether versions alone cannot prove the reads unchanged.</summary>
     public bool Volatile => (Volatility != RuleVolatility.None);
     /// <summary>Gets how many versions one capture of the schedule holds: one per row, then one per fact.</summary>
@@ -64,8 +66,10 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
     /// <param name="iteratesBodies">Whether the rule sweeps the live bodies.</param>
     /// <param name="iterationVersioned">Whether the rule's binding set is one a version can name: no sweep, a keyed
     /// row, or the live bodies.</param>
+    /// <param name="deadline">The gate's deadline conjunct, whose tick side <paramref name="reads"/> and
+    /// <paramref name="needs"/> leave out, or <see langword="null"/>.</param>
     /// <returns>The schedule.</returns>
-    public static RuleSchedule Build(IReadOnlyList<CellAccess> reads, RuleNeeds needs, IReadOnlyList<ICompiledFact> facts, IStateReader reader, int iterationRow = -1, bool iteratesBodies = false, bool iterationVersioned = true) {
+    public static RuleSchedule Build(IReadOnlyList<CellAccess> reads, RuleNeeds needs, IReadOnlyList<ICompiledFact> facts, IStateReader reader, int iterationRow = -1, bool iteratesBodies = false, bool iterationVersioned = true, RuleDeadline? deadline = null) {
         ArgumentNullException.ThrowIfNull(argument: needs);
         ArgumentNullException.ThrowIfNull(argument: facts);
         ArgumentNullException.ThrowIfNull(argument: reader);
@@ -152,6 +156,7 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
         }
 
         return new RuleSchedule(
+            Deadline: deadline,
             Facts: [.. factReads.Distinct()],
             IterationFacts: [.. iterationFacts],
             IterationRows: [.. iterationRows],
@@ -189,6 +194,9 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
         }
         if (!IterationVersioned) {
             text.Append(value: "; sweeps a set no version names");
+        }
+        if (Deadline is { } deadline) {
+            text.Append(value: $"; wakes at its {RuleFacts.Tick} deadline (gate conjunct {deadline.Token})");
         }
         if (!Volatile) {
             return text.Append(value: "; versioned").ToString();

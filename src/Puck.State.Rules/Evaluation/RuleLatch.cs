@@ -98,6 +98,8 @@ public sealed class RuleLatch {
         public ulong Touched;
         public object? GateOwner;
         public ulong[] GateVersions = [];
+        // The first tick the captured verdict no longer holds by itself: its schedule's deadline, or never.
+        public ulong WakeTick = ulong.MaxValue;
         public BindingMemo?[]? Memos;
     }
 

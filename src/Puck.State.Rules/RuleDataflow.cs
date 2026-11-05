@@ -86,18 +86,25 @@ public static class RuleDataflow {
     /// <param name="rule">The compiled rule.</param>
     /// <param name="reads">The read set being collected.</param>
     /// <param name="facts">The needs being built, with every facet-bearing fact instance recorded.</param>
-    public static void CollectJudgement(CompiledRule rule, List<CellAccess> reads, RuleNeedsBuilder facts) {
+    /// <param name="deadline">The gate's deadline conjunct, whose tick side is the schedule's wake rather than a read,
+    /// or <see langword="null"/>.</param>
+    public static void CollectJudgement(CompiledRule rule, List<CellAccess> reads, RuleNeedsBuilder facts, RuleDeadline? deadline = null) {
         ArgumentNullException.ThrowIfNull(argument: rule);
         ArgumentNullException.ThrowIfNull(argument: reads);
         ArgumentNullException.ThrowIfNull(argument: facts);
 
-        foreach (var token in rule.Gate) {
-            token.LeftSource.CollectReads(into: reads);
-            token.RightSource.CollectReads(into: reads);
-            CollectOperandFacts(includeKeyDependencies: true, into: facts, operand: token.LeftSource.Operand);
-            CollectExpressionSchedulingFacts(into: facts, tokens: token.LeftSource.Expression);
-            CollectOperandFacts(includeKeyDependencies: true, into: facts, operand: token.RightSource.Operand);
-            CollectExpressionSchedulingFacts(into: facts, tokens: token.RightSource.Expression);
+        for (var index = 0; (index < rule.Gate.Length); index++) {
+            var token = rule.Gate[index];
+            var deadlineHere = ((deadline is not null) && (deadline.Token == index));
+
+            if (!deadlineHere || !deadline!.TickOnLeft) {
+                token.LeftSource.CollectReads(into: reads);
+                CollectSourceFacts(into: facts, source: token.LeftSource);
+            }
+            if (!deadlineHere || deadline!.TickOnLeft) {
+                token.RightSource.CollectReads(into: reads);
+                CollectSourceFacts(into: facts, source: token.RightSource);
+            }
         }
         foreach (var local in (rule.Locals ?? [])) {
             CollectExpression(into: reads, tokens: local.Expression);
@@ -107,6 +114,17 @@ public static class RuleDataflow {
             live.CollectReads(into: reads);
             live.CollectFacts(into: facts);
         }
+    }
+
+    /// <summary>Appends what one value source observes, its key indirections included: the walk a schedule is built
+    /// from.</summary>
+    /// <param name="source">The compiled value source.</param>
+    /// <param name="into">The needs being built.</param>
+    public static void CollectSourceFacts(in CompiledValueSource source, RuleNeedsBuilder into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        CollectOperandFacts(includeKeyDependencies: true, into: into, operand: source.Operand);
+        CollectExpressionSchedulingFacts(into: into, tokens: source.Expression);
     }
 
     private static void CollectExpressionFacts(CompiledExpressionToken[]? tokens, RuleNeedsBuilder into, bool includeKeyDependencies) {
