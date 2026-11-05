@@ -91,6 +91,13 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     /// <summary>Gets the triangles of the geometry the scene keeps for a later scene though no draw of its own uses it.</summary>
     public long TrianglesRetained { get; }
 
+    /// <summary>Gets the managed array payload of this scene's hierarchy, including retained geometry hierarchies.
+    /// Excludes object headers, dictionaries, mesh arrays shared with the bake, and temporary build workspace.</summary>
+    public long HierarchyBytes => m_nodes.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Node>() +
+        m_entries.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Entry>() +
+        m_instances.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Instance>() + Materials.LongLength * sizeof(int) +
+        m_geometries.Values.Sum(static geometry => geometry.HierarchyBytes) + m_retained.Sum(static entry => entry.Value.HierarchyBytes);
+
     // 28 bytes: the bounds, then one word holding the first index above the count's CountBits.
     private struct Node {
         private const int CountBits = SdfMeshProbeTrace.NodeCountBits;
@@ -567,6 +574,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     // triangle whose box is loose about it (a long thin one a merged polygon leaves, SdfMeshPlanarMerge) holds several
     // leaf positions, each bounded by a piece of it, so a ray tests it only where it passes near.
     private sealed class Geometry {
+        public long HierarchyBytes => Nodes.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Node>() +
+            (Triangles.LongLength + Braids.LongLength) * sizeof(int);
         public required int[] Braids { get; init; }
         public int Count => (Indices.Length / 3);
         public required ReadOnlyMemory<uint> Indices { get; init; }

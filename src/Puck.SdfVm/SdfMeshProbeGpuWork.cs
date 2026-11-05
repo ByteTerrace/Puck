@@ -179,10 +179,12 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         slot.Origins.Write<Vector4>(query.Origins);
         var command = recording.CommandBuffer;
         var copies = new GpuRegionCopyRecording(recording.Recorder, GpuStage.ComputeShader, () => command);
-        copies.Record(m_sceneRegion!, recording.Slot, handsToReaders: true);
-        if (relight) { copies.Record(m_feedback!, recording.Slot, handsToReaders: true); }
+        // TryTake admits one query until Complete observes its fence. These shared regions therefore need
+        // one upload slot; the service slots still independently own outputs and held readback tokens.
+        copies.Record(m_sceneRegion!, 0, handsToReaders: true);
+        if (relight) { copies.Record(m_feedback!, 0, handsToReaders: true); }
         copies.Finish();
-        Bind(SdfKernelInterfaces.ProbeScene, m_sceneRegion!.Buffer(recording.Slot), 4);
+        Bind(SdfKernelInterfaces.ProbeScene, m_sceneRegion!.Buffer(0), 4);
         Bind(SdfWorldPackage.MeshRegion, query.Meshes!, 4);
         Bind(SdfKernelInterfaces.ProbeOrigins, slot.Origins, 16);
         Bind(SdfKernelInterfaces.ProbeDirections, m_directions, 16);
@@ -194,7 +196,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             Write(ref slot.Lighting, MemoryMarshal.AsBytes(query.Lighting.AsSpan()));
             Bind(SdfKernelInterfaces.ProbeInput, slot.Input!, 4);
             Bind(SdfKernelInterfaces.ProbeLighting, slot.Lighting!, 16);
-            Bind(SdfWorldPackage.MeshIrradiance, m_feedback?.Buffer(recording.Slot) ?? m_tables.DummyBuffer, 4);
+            Bind(SdfWorldPackage.MeshIrradiance, m_feedback?.Buffer(0) ?? m_tables.DummyBuffer, 4);
             var workBytes = (ulong)(query.Origins.Length + 3) * 4;
             if (slot.Work is null || slot.Work.SizeBytes < workBytes) {
                 slot.Work?.Dispose();
@@ -325,6 +327,11 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             foreach (var slot in m_slots) { device += (slot.Hits?.SizeBytes ?? 0) + (slot.Identities?.SizeBytes ?? 0) + (slot.Work?.SizeBytes ?? 0); host += (slot.Origins?.SizeBytes ?? 0) + (slot.Input?.SizeBytes ?? 0) + (slot.Lighting?.SizeBytes ?? 0); }
             return new GpuMemoryBytes(DeviceLocal: device, HostVisible: host);
         }
+    }
+    internal string DescribeMemory() {
+        var scene = m_sceneRegion?.OwnedBytes ?? default;
+        var feedback = m_feedback?.OwnedBytes ?? default;
+        return FormattableString.Invariant($"trace-scene-device-bytes={scene.DeviceLocal} trace-scene-upload-bytes={scene.HostVisible} trace-scene-shadow-bytes={m_sceneRegion?.ShadowBytes ?? 0} trace-hits-device-bytes={m_hitCache?.SizeBytes ?? 0} trace-feedback-device-bytes={feedback.DeviceLocal} trace-feedback-upload-bytes={feedback.HostVisible} trace-feedback-shadow-bytes={m_feedback?.ShadowBytes ?? 0}");
     }
     public void Stop() {
         lock (m_gate) {

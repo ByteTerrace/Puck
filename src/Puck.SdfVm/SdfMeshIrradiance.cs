@@ -281,7 +281,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             count += level.Cache.Count;
         }
 
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"probe-cache-probes={count} probe-cache-capacity={capacity} probe-cache-table={table}B probe-cache-blocks={blocks}B probe-cache-bytes={(table + blocks)}B");
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"probe-cache-probes={count} probe-cache-capacity={capacity} probe-cache-table={table}B probe-cache-blocks={blocks}B probe-cache-bytes={(table + blocks)}B trace-scene-cpu-array-bytes={m_scene?.HierarchyBytes ?? 0} {GpuTrace?.DescribeMemory()}");
     }
 
     // The worker's candidates and a batch's results, kept across batches: one worker runs at a time.

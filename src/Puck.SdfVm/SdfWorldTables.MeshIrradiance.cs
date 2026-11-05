@@ -25,7 +25,7 @@ public sealed partial class SdfWorldTables {
     internal void PublishGpuMeshIrradiance(IGpuBuffer source, int wordCount, List<int> slots) {
         if (m_gpuMeshIrradiance is null || m_gpuMeshIrradiance.SizeBytes < (ulong)wordCount * 4) {
             if (m_gpuMeshIrradiance is not null) { Retire(m_gpuMeshIrradiance); }
-            m_gpuMeshIrradiance = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf("probe-publication"), sizeBytes: (ulong)MeshIrradianceBytes, usage: GpuBufferUsage.Storage);
+            m_gpuMeshIrradiance = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf("probe-publication"), sizeBytes: (ulong)wordCount * 4, usage: GpuBufferUsage.Storage);
             m_bindingRevision++;
         }
         m_gpuIrradianceSource = source;
