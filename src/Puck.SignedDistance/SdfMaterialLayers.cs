@@ -110,7 +110,7 @@ public static class SdfMaterialLayers {
                 !Positive(v: w.Reach) ||
                 !NonNegative(v: w.Scale) ||
                 !Unit(v: w.Floor) ||
-                (((uint)w.Lane) > 3u) ||
+                !SdfLanes.IsLane(lane: w.Lane) ||
                 (w.Under is { Count: > 2 }) ||
                 (((w.Edge > 0f) || (w.Lines > 0f) || (w.Noise > 0f)) && (w.Under is not { Count: > 0 })) ||
                 ((w.Settle > 0f) && (w.Deposit is null))

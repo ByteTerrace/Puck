@@ -23,7 +23,7 @@ void applyWeathering(float3 position, float3 normal, float upFacing, float curva
     float4 pattern = float4(material.underResponse[0].w, material.underResponse[1].w, material.depositResponse.zw);
     if (w.x + w.y + w.z + pattern.w <= 0.0) return;
     float4 controls = material.weatheringControls;
-    float amount = max(saturate(lanes[(uint)controls.w]), controls.z);
+    float amount = max(saturate(sdfLane(lanes, (uint)controls.w)), controls.z);
     if (amount <= 0.0) return;
     uint seed = asuint(controls.x);
     float3 frequency = controls.y * pattern.xyz;

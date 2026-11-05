@@ -152,10 +152,15 @@
 #define SDF_GLASS_DEPTH_DISTANCE_SCALE 32768.0
 #define SDF_GLASS_ABSORPTION_SCALE     65536.0
 
-// The flow layer's clock period in seconds (SdfFlow.ClockPeriodSeconds) and its control word (SdfProgram.FlowLaneMask, SdfProgram.FlowWorldFrame).
-#define SDF_FLOW_CLOCK_PERIOD 4096.0
-#define SDF_FLOW_LANE_MASK    0x000000FFu
-#define SDF_FLOW_WORLD_FRAME  0x00000100u
+// The flow layer's clock period in seconds (SdfFlow.ClockPeriodSeconds) and its control word (SdfProgram.FlowLaneMask, SdfProgram.FlowWorldFrame, SdfProgram.FlowCoverageLaneShift).
+#define SDF_FLOW_CLOCK_PERIOD        4096.0
+#define SDF_FLOW_LANE_MASK           0x000000FFu
+#define SDF_FLOW_WORLD_FRAME         0x00000100u
+#define SDF_FLOW_COVERAGE_LANE_SHIFT 16u
+
+// The render lanes (SdfLanes): a frame slot's lanes, then the world's (SdfWorldPackage.WorldLanes).
+#define SDF_FIRST_WORLD_LANE 4u
+#define SDF_LANE_COUNT       8u
 
 // The sky's environment map (SdfSkyEnvironment) and the volume table's capacity (SdfProgramBuilder.MaxVolumes).
 #define SDF_SKY_ENVIRONMENT_SIZE         64

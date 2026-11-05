@@ -79,8 +79,12 @@ let streamFlowLayer = {
   surface { color: "#F4F8F6", roughness: 0.55, metal: 0 }
   seed: 7
 }
-// A falls runs down every sheet at the sheet's own slope: only the velocity's part along a surface moves it.
+// A falls runs down every sheet at the sheet's own slope: only the velocity's part along a surface moves it. Its velocity
+// and pattern are in world space, so the flow runs down a sheet however the sheet turns. A world that binds a render lane
+// to its discharge thins the foam with it (`coverageLane`, a world lane from 4 to 7: `fallsFlowLayer with { coverageLane:
+// 4 }` under `render { lanes ["state.meltStrength"] }`).
 let fallsFlowLayer = {
+  frame: World
   velocity [0, -4, 0]
   scale: 0.5
   stretch: 6
@@ -130,9 +134,11 @@ template streamSegment(id, length, width = 4.5, overlap = 0.5, palette = waterPa
     }
   }
 }
-// A falls is a ribbon of still sheets down the wall's profile, its shading falling down each sheet (`flow`). The caller
-// supplies the endpoint visibility, which parks the ribbon when the falls runs dry.
-template fallsRibbon(id, profile, width = 8, standoff = 5, visible = "meltVisible", palette = waterPalette, flow = fallsFlowLayer) {
+// A falls is a ribbon of sheets down the wall's profile, its shading falling down each sheet (`flow`). Each sheet turns
+// about its own flow axis as the discharge `state.<gauge>` falls from one to zero, edge-on to the valley at zero, so the
+// falls narrows as it ebbs; the flow's foam thins with it where the world binds the flow's coverage to a lane. The caller
+// supplies the endpoint visibility, which parks the edge-on ribbon when the falls runs dry.
+template fallsRibbon(id, profile, width = 8, standoff = 5, gauge = "meltStrength", visible = "meltVisible", palette = waterPalette, flow = fallsFlowLayer) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -140,6 +146,7 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, visible = "meltVisibl
       palette [palette[0] with { flow: flow }]
       sizeBy: "visible"
       drivers [
+        { name: "fold", signal: $"state.{gauge}", cadence: -1, blendInSeconds: 0, blendOutSeconds: 0 }
         { name: "visible", signal: $"state.{visible}", cadence: 1, blendInSeconds: 0, blendOutSeconds: 0 }
       ]
       for j in range(0, length(profile) - 1) {
@@ -150,6 +157,16 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, visible = "meltVisibl
             (profile[j + 1][1] - profile[j][1]) * (profile[j + 1][1] - profile[j][1]) +
             (profile[j + 1][0] - profile[j][0]) * (profile[j + 1][0] - profile[j][0])) / 2]
           rotation [0 - halfTurnSine(fallsSlope(profile, j)), 0, 0, halfTurnCosine(fallsSlope(profile, j))]
+          swings [
+            {
+              driver: "fold"
+              pivot [0, (profile[j][1] + profile[j + 1][1]) / 2, (profile[j][0] + profile[j + 1][0]) / 2 - standoff]
+              axis [0, profile[j][1] - profile[j + 1][1], profile[j][0] - profile[j + 1][0]]
+              amplitude: 1.5707963267948966
+              phase: 1
+              wave: "linear"
+            }
+          ]
         }
       }
     }

@@ -75,10 +75,10 @@ public sealed partial class SdfProgramBuilder {
                 $"A material cel style must lie within the ranges render.toon admits; got {material.Toon}."
             );
         }
-        if (!SdfMaterial.IsEmissiveLane(lane: material.EmissiveLane)) {
+        if (!SdfLanes.IsLane(lane: material.EmissiveLane)) {
             throw new ArgumentOutOfRangeException(
                 nameof(material),
-                $"A material emissive lane must name a render lane in [0, 3]; got {material.EmissiveLane}."
+                $"A material emissive lane must name a render lane in [0, {(SdfLanes.Count - 1)}]; got {material.EmissiveLane}."
             );
         }
         if (!SdfMaterialLayers.IsValid(
