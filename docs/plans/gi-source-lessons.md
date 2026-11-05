@@ -301,9 +301,7 @@ bound. The lockstep drain bypasses the gate by listing every probe, as it
 does today. The guarantee stops at the budget: overload still lengthens every
 age, now in proportion to each level's interleave.
 
-**Steps and checks.** (1) The interleave. Check: under a moving sun, the
-finest level's median and oldest age in `world.budget` before and after; the
-relight laws (baffled rooms, red-to-green) pass unchanged. (2) The view
+**Steps and checks.** (2) The view
 weight from the residency's view cameras. Check: the age of probes inside the
 first view's frustum against the rest.
 

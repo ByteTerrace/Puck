@@ -1105,6 +1105,13 @@ Within each work priority and eight-cell distance band, probes run in Morton
 cell order to keep neighbouring origins together without changing their rays.
 The budget diagnostic samples median and oldest lighting age per level so a
 coarse window cannot hide the finest window's response time.
+Under changing lighting, the selection kernel interleaves coarse levels by a
+stable cell phase. A level's age bound scales the authored target by its
+interleave; reaching it forces eligibility and age relative to it takes
+priority. Geometry and publication work bypass the gate. Unchanged lighting
+takes whole bounce sweeps, and a lockstep drain always visits every cell from
+no bounce. These bounds describe demand under the budget, not guaranteed wall
+time when the device is overloaded.
 
 Software compute is the baseline on both backends; no ray-tracing hardware is
 required. The trace device law requires exact identities and discrete flags,
