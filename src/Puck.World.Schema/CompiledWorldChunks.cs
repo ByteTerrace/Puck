@@ -110,10 +110,21 @@ public sealed class CompiledWorldContext {
 /// </summary>
 public sealed class CompiledWorldChunks : IReadOnlyList<ICompiledWorldChunk> {
     private readonly ICompiledWorldChunk[] m_chunks;
+    private readonly Lazy<CodeClosure> m_code;
 
     private CompiledWorldChunks(ICompiledWorldChunk[] chunks) {
         m_chunks = chunks;
+        m_code = new Lazy<CodeClosure>(valueFactory: () => CodeClosure.Of(directory: AppContext.BaseDirectory,
+            roots: [.. m_chunks.Select(selector: static chunk => (chunk.GetType().Assembly.GetName().Name!, chunk.GetType().FullName!, (string?)null))],
+            stopTypes: new HashSet<string>(collection: [typeof(CompiledWorld).FullName!, typeof(CompiledWorldChunks).FullName!, typeof(CodeClosure).FullName!], comparer: StringComparer.Ordinal)));
     }
+
+    /// <summary>Gets the code and layouts deriving this registry's chunks. Each registered concrete producer is a
+    /// root, including its codec and input reader; adding a producer adds its code to the identity automatically.</summary>
+    public CodeClosure Code => m_code.Value;
+
+    /// <summary>Gets the deriving code identity, including hot-reload updates to types its closure reads.</summary>
+    public string EngineBuild => AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: $"{Code.Hash:x32}\n{Puck.Abstractions.CodeRevision.AppliedTo(reads: Code.Reads)}")).ToString();
 
     /// <summary>Gets the standard derivations: <see cref="DefinitionChunk"/>, <see cref="AssetChunk"/> and <see cref="CurvatureChunk"/>.</summary>
     public static CompiledWorldChunks Standard { get; } = new(chunks: [DefinitionChunk.Instance, AssetChunk.Instance, CurvatureChunk.Instance]);

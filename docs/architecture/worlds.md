@@ -158,7 +158,7 @@ definition hash names the boot's parsed definition:
 
 | Key | Holds |
 |---|---|
-| Engine build | The `sha256-64` pin over the module version id of every `Puck.*` assembly the document model's assembly reaches, so any change to code a derivation can run moves it. |
+| Engine build | The `sha256-64` pin over the registered chunk producers' normalized call graph and layouts (`CompiledWorldChunks.Code`, the shared `CodeClosure` walker), including applied updates to types the closure reads. Unrelated code in the same assembly preserves it. |
 | Catalog fingerprint | The composition fingerprint of the machine catalog the document composed under. |
 | Definition hash | The 64-bit content hash of the composed, undrawn definition's canonical JSON (`WorldDefinitionSerialization.Serialize`), the same `sha256-64` pin every other door computes over a definition. A `.puck` source and the document it compiles to key one compiled world. |
 | Instance identity | The instance the definition's draws were seeded for; the desktop boot and `puck compile` use `boot`. |

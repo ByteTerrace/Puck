@@ -5,6 +5,12 @@ description: "Maps Puck.World: .puck worlds, rules, grants, console verbs, exten
 
 # Puck.World
 
+`CompiledWorldChunks.Code` roots every registered concrete producer in the shared
+`Puck.Assets.CodeClosure` walker. Its `EngineBuild` keys compiled worlds, including
+custom chunks, and filters hot-reload updates to the types the closure reads.
+Keep container/cache transport outside the producer closure; a whole assembly MVID
+is not a derivation key. The mesh bake and generated machine images share this walker.
+
 A map of the World: where each part lives, the contracts that bite, and how to
 run it. Each project's README is the developer reference; the files under
 `references/` hold each subsystem's contracts. When this file and the code

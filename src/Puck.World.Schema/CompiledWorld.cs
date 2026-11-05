@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Text;
 using Puck.Assets;
 
 namespace Puck.World;
@@ -51,33 +50,11 @@ public static class CompiledWorld {
 
     private const int MaximumTextBytes = 4096;
 
-    private static readonly Lazy<(string Text, string Built, IReadOnlySet<string> Modules)> Build = new(valueFactory: ComputeEngineBuild);
-
     /// <summary>Gets the magic a compiled world's container opens with.</summary>
     public static ReadOnlySpan<byte> Magic => "PWLD"u8;
-    /// <summary>Gets the identity of the running engine build: the <c>sha256-64</c> pin over the module version id of
-    /// every <c>Puck.*</c> assembly the document model's assembly reaches and any hot-reload update applied to one of them
-    /// (<see cref="Puck.Abstractions.CodeRevision.AppliedTo"/>), so any change to code a derivation can run moves it.</summary>
-    public static string EngineBuild {
-        get {
-            var (text, built, modules) = Build.Value;
-            var applied = Puck.Abstractions.CodeRevision.AppliedToAssemblies(assemblies: modules);
-
-            return ((applied.Length == 0) ? built : AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: $"{text}applied:{applied}\n")).ToString());
-        }
-    }
-
-    private static (string Text, string Built, IReadOnlySet<string> Modules) ComputeEngineBuild() {
-        var text = new StringBuilder();
-        var reach = AssemblyReach.Of(root: typeof(WorldDefinition).Assembly);
-
-        foreach (var (name, assembly) in reach) {
-            _ = text.Append(value: name).Append(value: ':').Append(value: assembly.ManifestModule.ModuleVersionId.ToString(format: "N")).Append(value: '\n');
-        }
-
-        return (text.ToString(), AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: text.ToString())).ToString(), reach.Keys.ToHashSet(comparer: StringComparer.Ordinal));
-    }
-
+    /// <summary>Gets the identity of the standard chunks' deriving call graph, including applied code updates.
+    /// A custom chunk registry owns its own <see cref="CompiledWorldChunks.EngineBuild"/>.</summary>
+    public static string EngineBuild => CompiledWorldChunks.Standard.EngineBuild;
     /// <summary>Returns the file a compiled world of the document at <paramref name="documentPath"/> sits in beside
     /// it: <c>moth.puck</c> maps to <c>moth.puckb</c>, and <c>puck.world.json</c> to <c>puck.puckb</c>.</summary>
     /// <param name="documentPath">The document's <c>.puck</c> source or <c>.world.json</c> file.</param>
@@ -134,14 +111,15 @@ public static class CompiledWorld {
     /// <param name="instanceIdentity">The instance identity the draws are seeded for.</param>
     /// <param name="sourceHash">The content hash of the composed bytes <paramref name="authored"/> was parsed from, or
     /// <see langword="null"/> when there were none.</param>
+    /// <param name="chunks">The producers whose code keys the header, or the standard registry.</param>
     /// <returns>The header.</returns>
-    public static CompiledWorldHeader HeaderFor(WorldDefinition authored, string catalogFingerprint, string instanceIdentity, AssetContentHash? sourceHash = null) {
+    public static CompiledWorldHeader HeaderFor(WorldDefinition authored, string catalogFingerprint, string instanceIdentity, AssetContentHash? sourceHash = null, CompiledWorldChunks? chunks = null) {
         ArgumentNullException.ThrowIfNull(argument: authored);
 
         return new CompiledWorldHeader(
             CatalogFingerprint: catalogFingerprint,
             DefinitionHash: AssetContentHash.Compute(content: WorldDefinitionSerialization.Serialize(definition: authored)),
-            EngineBuild: EngineBuild,
+            EngineBuild: (chunks ?? CompiledWorldChunks.Standard).EngineBuild,
             InstanceIdentity: instanceIdentity,
             SourceHash: sourceHash
         );
@@ -191,7 +169,8 @@ public static class CompiledWorld {
                 authored: authored,
                 catalogFingerprint: catalogFingerprint,
                 instanceIdentity: instanceIdentity,
-                sourceHash: sourceHash
+                sourceHash: sourceHash,
+                chunks: chunks
             )
         );
         reason = string.Empty;

@@ -165,12 +165,11 @@ the compiled world their checkpoint names.
 A derived product is keyed by the code that makes it, computed by the running
 build and never recorded. The key is narrowed to the deriving call graph: the
 methods the derivation reaches, hashed from the running build, so an edit
-elsewhere in the same assembly does not move it. The compiled world's header
-keys the engine build today as the module version id of every `Puck.*` assembly
-reachable from `Puck.World.Schema` (`CompiledWorld.EngineBuild`, through
-`AssemblyReach.Of`), which re-derives every product on any reached edit; the
-narrowing replaces that key and gives each chunk the call-graph fingerprint of
-its own producer.
+elsewhere in the same assembly does not move it. `CompiledWorldChunks` roots each
+registered concrete producer, including its codec and input reader, in the shared
+`CodeClosure` walker. Its `EngineBuild` keys the header, so adding a custom producer
+includes that producer automatically. Applied metadata updates are filtered to the
+types the closure reads; an unrelated edit in the same assembly preserves the key.
 
 - **Shader packages.** `ShaderPackager.KeyOf` hashes the document's logical
   path, the pipeline's name, every closure file's pin, and each pass's

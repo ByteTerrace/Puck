@@ -190,7 +190,7 @@ public sealed class CompiledWorldRequest {
         var build = new CompiledWorldHeader(
             CatalogFingerprint: CatalogFingerprint,
             DefinitionHash: default,
-            EngineBuild: CompiledWorld.EngineBuild,
+            EngineBuild: m_cache.Chunks.EngineBuild,
             InstanceIdentity: instanceIdentity,
             SourceHash: sourceHash
         );
@@ -227,7 +227,7 @@ public sealed class CompiledWorldRequest {
                     return false;
                 }
             }
-            header = CompiledWorld.HeaderFor(authored: authored, catalogFingerprint: CatalogFingerprint, instanceIdentity: instanceIdentity, sourceHash: sourceHash);
+            header = CompiledWorld.HeaderFor(authored: authored, catalogFingerprint: CatalogFingerprint, instanceIdentity: instanceIdentity, sourceHash: sourceHash, chunks: m_cache.Chunks);
             match = candidates.FindIndex(match: entry => (entry.Header.DefinitionHash == header.DefinitionHash));
         }
 
@@ -325,7 +325,7 @@ public sealed class CompiledWorldRequest {
                 AtomicFile.WriteAllBytes(
                     bytes: CompiledWorld.Encode(
                         chunks: chunks,
-                        header: (header ?? CompiledWorld.HeaderFor(authored: context.Authored, catalogFingerprint: CatalogFingerprint, instanceIdentity: instanceIdentity, sourceHash: sourceHash))
+                        header: (header ?? CompiledWorld.HeaderFor(authored: context.Authored, catalogFingerprint: CatalogFingerprint, instanceIdentity: instanceIdentity, sourceHash: sourceHash, chunks: m_cache.Chunks))
                     ),
                     path: cached
                 );

@@ -296,7 +296,7 @@ internal sealed class BundledFirmwareStage : IPostStage<PostContext> {
             return PostStageOutcome.Fail(detail: refusalFailure);
         }
 
-        return PostStageOutcome.Pass(detail: (((((string)$"{models.Length} bundled images match their native generator and return private copies; every revision cold-boots a valid cartridge, fast-starts at its seeded entry with the same firmware identity, ") +
+        return PostStageOutcome.Pass(detail: (((((string)$"{models.Length} derived startup images return private copies; every revision cold-boots a valid cartridge, fast-starts at its seeded entry with the same firmware identity, ") +
             "and restores/forks visible mid-boot state byte-identically; handheld boot emits PCM while companion boot stays silent; ") +
             "the screen engine cold-boots by default and honors fast startup; external images execute without fallback, ") +
             "wrong-image snapshots refuse without mutation, and malformed startup inputs refuse"));

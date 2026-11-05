@@ -131,7 +131,7 @@ advancing while it runs; `CartridgeLimits.BlitCellCount` bounds its size.
 The Deck's original diagnostic programs use authored `.deck` selections, prepared by
 `DeckContentProvider` at boot. Their native `.nes` bytes live only in the derived cache;
 `puck cartridges deck --output <dir>` exports them. `DerivedBytes` uses the shared
-`CodeClosure` walker and `ContentAddressedStore`: generator code and explicit inputs key
+`CodeClosure` walker (also used by the mesh bake and `CompiledWorldChunks`) and `ContentAddressedStore`: generator code and explicit inputs key
 each product, corrupt or absent objects derive again, and stderr counts hits, misses and
 derivation milliseconds. Never restore a committed image comparison.
 

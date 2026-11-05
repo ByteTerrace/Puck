@@ -1677,7 +1677,7 @@ confirmed the AV1 item in the code; the rest are unconfirmed):
 2. `WorldCompileCache.ComputeCompilerIdentity` and `Trim`
    (`Puck.World.Transpiler/Composition/WorldCompileCache.cs:186`, `494`) repeat
    `AssemblyReach.Of` (`Puck.Assets/AssemblyReach.cs:18`),
-   `CompiledWorld.ComputeEngineBuild` and `CacheRetention.EnforceOnWrite`,
+   and `CacheRetention.EnforceOnWrite`,
    skipping `CacheRetention.Due`'s one-minute scan throttle on every cache
    write (S) `[low]`.
 3. Camera plane validation and L8/BGRA packing:
@@ -2030,9 +2030,8 @@ colliders report's only red findings left are the valley's relief
 
 ### Derived products are caches
 
-Owner: delivery lane with the machines lane · ordinary · Next: derive generated
-firmware on demand, narrow `CompiledWorld.EngineBuild` to the deriving call graph,
-and measure deriving the `wasm/*/dist` modules against edit-to-running.
+Owner: delivery lane with the machines lane · ordinary · Next: measure deriving
+the `wasm/*/dist` modules against edit-to-running.
 
 A derived product is a cache, never the truth
 ([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)):
@@ -2041,10 +2040,6 @@ it is never committed or compared by a gate. The owner's ruling on generated
 bytes: hand-authored bytes are source and stay committed; generated outputs are
 derived products, removed from git and built on demand.
 
-- A compiled world is keyed by every reachable assembly's MVID
-  (`src/Puck.World.Schema/CompiledWorld.cs:58-77`), against the decision that a
-  derived product's key covers the code that derives it. Narrow it to the deriving
-  call graph, as `SdfMeshBakeClosure` does for the bake.
 - Stop committing the built addon guests: the eleven `wasm/*/dist/*.wasm`
   modules are compiled from the Rust crates beside them, and a derived product
   is a cache ([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
