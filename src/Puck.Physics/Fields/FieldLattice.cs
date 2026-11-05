@@ -32,12 +32,13 @@ public interface IFieldLatticeHost {
     FixedQ4816 ReadScalar(StateHandle row, ulong tick);
     /// <summary>Adds to a scalar fixed-kind state row's slot cell, clamped to the row's declared envelope (a
     /// <see cref="FieldReactionInput.Flow"/> spill accumulator) — the host resolves and applies the clamp itself, so
-    /// this never refuses.</summary>
+    /// the caller debits only the accepted amount returned here.</summary>
     /// <param name="row">The compiled state row handle.</param>
     /// <param name="amount">The raw amount to add.</param>
     /// <param name="tick">The stepping tick.</param>
+    /// <returns>The accepted amount, between zero and the non-negative offered amount.</returns>
     [Replaces(root: typeof(StateArena))]
-    void AddScalar(StateHandle row, FixedQ4816 amount, ulong tick);
+    FixedQ4816 AddScalar(StateHandle row, FixedQ4816 amount, ulong tick);
 }
 /// <summary>A field lattice's own free surface at one column — a point on it and the lattice's own frame normal
 /// (always world +Y: the lattice carries no rotation of its own). A medium hold's law projects displacement along
@@ -893,7 +894,6 @@ public sealed class FieldLattice {
 
         var ownHeightScale = m_heightScale[field];
         var hasSpill = reaction.SpillRow.IsValid;
-        var spilled = Int128.Zero;
 
         FixedQ4816 FairShare(int donorCell) => FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(
             value: (((Int128)m_scratch[donorCell].Value - m_min[field].Value) / m_flowDirections)));
@@ -933,10 +933,15 @@ public sealed class FieldLattice {
         }
 
         void Spill(int cell) {
-            var flux = (FairShare(donorCell: cell) * rate).Value;
-
-            m_flowDelta[cell] -= flux;
-            spilled += flux;
+            var available = Int128.Max(0, (Int128)m_scratch[cell].Value + m_flowDelta[cell] - m_min[field].Value);
+            var offered = FixedQ4816.FromRawBits(FixedSaturate.ToInt64(Int128.Min(available, (FairShare(cell) * rate).Value)));
+            if (offered == FixedQ4816.Zero) { return; }
+            // The bounded destination commits first and returns its actual credit. Refused supply stays here.
+            var accepted = host.AddScalar(reaction.SpillRow, offered, tick);
+            if ((accepted < FixedQ4816.Zero) || (accepted > offered)) {
+                throw new InvalidOperationException("A scalar spill store accepted an amount outside its offer.");
+            }
+            m_flowDelta[cell] -= accepted.Value;
         }
 
         for (var z = 0; (z < m_depth); z++) {
@@ -1029,16 +1034,6 @@ public sealed class FieldLattice {
             );
         }
 
-        if (
-            hasSpill &&
-            (spilled != Int128.Zero)
-        ) {
-            host.AddScalar(
-                row: reaction.SpillRow,
-                amount: FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(value: spilled)),
-                tick: tick
-            );
-        }
     }
     private void StepTransform(FieldReactionInput.Transform reaction, IFieldLatticeHost host, ulong tick) {
         ProcessWork.Add(CellVisits, CellCount);

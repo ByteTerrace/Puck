@@ -1071,13 +1071,6 @@ the water strained, measured, and not yet fixed.
   appears able to retain stale baked geometry; reproduce that visible effect and
   make sampled content part of derived identity. The glass pool samples its live
   brick through the glass path. This is a source finding, not a measured visual failure.
-- [low] `FieldLattice.StepFlow` sends boundary spill through
-  `IFieldLatticeHost.AddScalar`, whose contract clamps at the scalar row's envelope
-  and cannot return unaccepted supply (`src/Puck.Physics/Fields/FieldLattice.cs:32`).
-  A full spill accumulator can discard quantity. The closed hydrology chain has
-  no spill row; extend the exact-transfer seam to bounded scalar stores before
-  using spill as conserved storage.
-
 - [medium] The water's creations add 172 bake groups, 6.4 million level-0
   triangles and 1.0 GB of the mesh region in use to the debug world (a World
   without the water documents: 7,478 groups, 47.6 M triangles, 1.67 GB used; with
