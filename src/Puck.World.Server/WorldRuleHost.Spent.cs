@@ -35,24 +35,25 @@ public sealed partial class WorldRuleHost {
 
         var ticks = m_ruleGateHeld.SpentTicks;
         var shown = Math.Min(val1: top, val2: lines.Count);
-        long visits = 0L, evaluations = 0L, skips = 0L, firings = 0L, work = 0L;
+        long visits = 0L, elided = 0L, evaluations = 0L, skips = 0L, firings = 0L, work = 0L;
 
         foreach (var line in lines) {
             visits += line.Spent.Visits;
             evaluations += line.Spent.Evaluations;
             skips += line.Spent.Skips;
             firings += line.Spent.Firings;
+            elided += line.Spent.Elided;
             work += line.Work;
         }
 
         var output = new List<string>(capacity: (shown + 1)) {
-            $"[world.budget.rules --spent: {ticks} tick(s), {lines.Count} line(s), showing {shown}; visits={visits} evaluations={evaluations} skips={skips} firings={firings} work={work} work/tick={PerTick(total: work, ticks: ticks)}]",
+            $"[world.budget.rules --spent: {ticks} tick(s), {lines.Count} line(s), showing {shown}; visits={visits} elided={elided} evaluations={evaluations} skips={skips} firings={firings} work={work} work/tick={PerTick(total: work, ticks: ticks)}]",
         };
 
         for (var index = 0; (index < shown); index++) {
             var line = lines[index];
 
-            output.Add(item: $"[world.budget.rules --spent {line.Name}{(line.IsInteraction ? " interaction" : string.Empty)} visits={line.Spent.Visits} evaluations={line.Spent.Evaluations} skips={line.Spent.Skips} firings={line.Spent.Firings} work={line.Work} work/tick={PerTick(total: line.Work, ticks: ticks)}; {line.Schedule.Describe(reader: this)}]");
+            output.Add(item: $"[world.budget.rules --spent {line.Name}{(line.IsInteraction ? " interaction" : string.Empty)} visits={line.Spent.Visits} elided={line.Spent.Elided} evaluations={line.Spent.Evaluations} skips={line.Spent.Skips} firings={line.Spent.Firings} work={line.Work} work/tick={PerTick(total: line.Work, ticks: ticks)}; {line.Schedule.Describe(reader: this)}]");
         }
 
         return output;

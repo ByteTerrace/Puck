@@ -73,7 +73,12 @@ public sealed class RuleNeeds {
 /// machinery: nothing on it runs on the tick path.</remarks>
 public sealed class RuleNeedsBuilder {
     private readonly List<FacetRef> m_facets = [];
+    private readonly List<ICompiledFact> m_facetFacts = [];
     private readonly List<int> m_hostOwnedRows = [];
+
+    /// <summary>Gets every fact added so far whose type names a facet, each instance once, in walk order: what a read
+    /// schedule asks its host to version (<see cref="IStateReader.TryScheduleFact"/>).</summary>
+    public IReadOnlyList<ICompiledFact> FacetFacts => m_facetFacts;
 
     private bool m_irreversible;
     private bool m_readsSearchPly;
@@ -102,6 +107,9 @@ public sealed class RuleNeedsBuilder {
         }
         if (fact.RequiredFacet is { } declared) {
             Add(facet: declared);
+            if (!m_facetFacts.Contains(item: fact)) {
+                m_facetFacts.Add(item: fact);
+            }
         }
         if (fact is IEffectNeeds effect) {
             AddEffectNeeds(needs: effect.Needs);
@@ -135,6 +143,7 @@ public sealed class RuleNeedsBuilder {
     /// <summary>Resets the builder for the next rule.</summary>
     public void Clear() {
         m_facets.Clear();
+        m_facetFacts.Clear();
         m_hostOwnedRows.Clear();
 
         m_irreversible = false;

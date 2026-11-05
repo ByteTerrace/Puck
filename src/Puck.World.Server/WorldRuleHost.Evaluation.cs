@@ -230,7 +230,7 @@ public sealed partial class WorldRuleHost {
         FreezeDecisionPerception(rules: m_rules);
         m_ruleGateHeld.CountTick();
 
-        var applied = m_evaluator.Evaluate(
+        var applied = m_evaluator.EvaluateDue(
             latch: m_ruleGateHeld,
             rules: m_ungroupedRules,
             stepTicks: stepTicks

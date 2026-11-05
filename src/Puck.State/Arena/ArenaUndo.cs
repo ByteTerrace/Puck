@@ -678,7 +678,7 @@ public sealed partial class StateArena {
                         }
                     }
                 }
-                m_rowVersions[changedRow]++;
+                BumpRowVersion(rowOrdinal: changedRow);
             }
         }
         for (var index = 0; (index < m_reindexCount); index++) {

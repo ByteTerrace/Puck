@@ -51,6 +51,9 @@ public sealed class RuleLatch {
         public long Skips { get; internal set; }
         /// <summary>Gets how many firings committed and moved the arena.</summary>
         public long Firings { get; internal set; }
+        /// <summary>Gets how many ticks a due list left the rule unvisited, because nothing it reads had moved and its
+        /// last verdict asked for nothing.</summary>
+        public long Elided { get; internal set; }
     }
 
     /// <summary>One rule name's share of the latch: its edge bits, which are simulation state, and the scheduler's
@@ -76,6 +79,7 @@ public sealed class RuleLatch {
         internal object? ScheduleRule;
         internal RuleSchedule? Schedule;
         internal RuleSchedule[] LocalSchedules = [];
+        internal int ScheduleEpoch;
 
         internal BindingSchedule Binding(LatchKey binding) {
             if (binding.Equals(other: LatchKey.None)) {
@@ -233,6 +237,7 @@ public sealed class RuleLatch {
     /// rule's emptied storage is still enumerated by name, so a latch that is hashed or checkpointed uses
     /// <see cref="Clear"/>.</remarks>
     public void Reset() {
+        SchedulerEpoch++;
         foreach (var state in m_byRule.Values) {
             state.Held.Clear();
             Forget(schedule: state.Once);
@@ -257,7 +262,13 @@ public sealed class RuleLatch {
         m_byRule.Clear();
         m_statesFor = null;
         SpentTicks = 0L;
+        SchedulerEpoch++;
     }
+
+    /// <summary>Gets a count that moves whenever the latch forgets scheduler observations (<see cref="Clear"/>,
+    /// <see cref="Reset"/>, <see cref="InvalidateScheduler"/>), and with them any verdict a due list relied on: a due
+    /// list that sees it move takes every rule as due.</summary>
+    public long SchedulerEpoch { get; private set; }
 
     // The states of the compiled family States last resolved, by compiled position. A family's array is replaced on
     // every recompile, so its identity names the resolution; Clear drops the states it holds and the cache with them.
@@ -286,6 +297,7 @@ public sealed class RuleLatch {
     /// begin again. The held bits describe rule semantics and survive; cached versions and lexical values belong
     /// to the retired arena.</remarks>
     public void InvalidateScheduler() {
+        SchedulerEpoch++;
         foreach (var state in m_byRule.Values) {
             Invalidate(schedule: state.Once);
             foreach (var schedule in state.Scheduling.Values) {
@@ -385,6 +397,7 @@ public sealed class RuleLatch {
         ArgumentNullException.ThrowIfNull(argument: name);
 
         Rule(name: name).Held[binding] = held;
+        SchedulerEpoch++;
     }
     /// <summary>Marks a binding as evaluated in the open sweep.</summary>
     /// <param name="state">The rule's state.</param>
@@ -396,6 +409,14 @@ public sealed class RuleLatch {
     }
 
     internal void Touch(BindingSchedule schedule) => schedule.Touched = m_sweep;
+    // Whether a binding was touched since the open sweep began.
+    internal bool TouchedInSweep(RuleState state, LatchKey binding) => Touched(state: state, binding: binding);
+    // Forgets one binding of a swept rule — its edge bit and its scheduler caches — exactly as EndSweep forgets a
+    // binding the sweep did not touch: what a partial sweep does for each binding it visits and leaves untouched.
+    internal void Forget(RuleState state, LatchKey binding) {
+        _ = state.Held.Remove(key: binding);
+        _ = state.Scheduling.Remove(key: binding);
+    }
 
     private bool Touched(RuleState state, LatchKey binding) => (binding.Equals(other: LatchKey.None)
         ? (state.Once?.Touched == m_sweep)

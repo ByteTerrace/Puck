@@ -28,6 +28,11 @@ public interface IRuleOwner {
     /// library's own iterate-or-once evaluation.</returns>
     [Replaces(root: typeof(StateArena))]
     bool TryEvaluateOwn(RuleEvaluator evaluator, CompiledRule rule, RuleLatch latch, ulong stepTicks, out bool applied);
+    /// <summary>Returns whether <see cref="TryEvaluateOwn"/> claims a rule: the same answer it gives for that rule on
+    /// every tick. A due list visits a claimed rule every tick, since only the host knows what it reads.</summary>
+    /// <param name="rule">The compiled rule.</param>
+    /// <returns><see langword="true"/> when the host evaluates the rule itself.</returns>
+    bool Owns(CompiledRule rule);
 }
 /// <summary>Evaluates compiled rules over a host: gates in document order, edge latching per binding, bindings
 /// computed before the gate, and one arena journal scope per firing. The evaluator is the evaluation in flight —
@@ -46,6 +51,12 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     private Puck.Abstractions.Counting.WorkCount m_evaluations;
     private Puck.Abstractions.Counting.WorkCount m_firings;
     private Puck.Abstractions.Counting.WorkCount m_skips;
+
+    // Whether the evaluation EvaluateOnceCore last ran must be judged again next tick whatever moves: a volatile
+    // schedule, a Level gate that held, a refusal, or a trace. A due list keeps such a binding due.
+    private bool m_rerun;
+    // Whether any evaluation since a due list's visit began must be judged again next tick.
+    private bool m_anyRerun;
 
     private readonly List<int> m_bodyIndexScratch = [];
     private readonly List<CellKey> m_eachKeyScratch = [];
@@ -102,6 +113,16 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
             return true;
         }
+        if (ReferenceEquals(objA: kind, objB: RuleWorkKinds.Due)) {
+            value = m_due.Value;
+
+            return true;
+        }
+        if (ReferenceEquals(objA: kind, objB: RuleWorkKinds.Elided)) {
+            value = m_elided.Value;
+
+            return true;
+        }
 
         value = 0L;
 
@@ -135,18 +156,34 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         return Schedule(rule: rule, state: latch.Rule(name: rule.Name));
     }
 
-    // A rule's and its locals' schedules are a function of the compiled rule and the layout, both of which outlive
-    // one tick, so they are derived once per compiled instance and held in the rule's latch state beside it.
+    // A rule's and its locals' schedules are a function of the compiled rule, the layout and what the host answers
+    // for its facts, all of which outlive one tick, so they are derived once per compiled instance and host fact
+    // epoch and held in the rule's latch state beside it.
     private RuleSchedule Schedule(CompiledRule rule, RuleLatch.RuleState state) {
-        if (ReferenceEquals(objA: state.ScheduleRule, objB: rule) && ReferenceEquals(objA: state.ScheduleEvaluator, objB: this)) {
+        if (
+            ReferenceEquals(objA: state.ScheduleRule, objB: rule) &&
+            ReferenceEquals(objA: state.ScheduleEvaluator, objB: this) &&
+            (state.ScheduleEpoch == m_host.FactScheduleEpoch)
+        ) {
             return state.Schedule!;
         }
 
         m_readScratch.Clear();
-        rule.CollectReads(into: m_readScratch);
+
+        var needs = new RuleNeedsBuilder();
+
+        RuleDataflow.CollectJudgement(
+            facts: needs,
+            reads: m_readScratch,
+            rule: rule
+        );
 
         var schedule = RuleSchedule.Build(
-            needs: rule.Needs,
+            facts: needs.FacetFacts,
+            iteratesBodies: rule.ForEachBodies,
+            iterationRow: rule.ForEachOrdinal,
+            iterationVersioned: ((rule.PoolForEach is null) && !rule.ForEachZones && (rule.Iteration is null)),
+            needs: needs.Build(),
             reader: m_host,
             reads: m_readScratch
         );
@@ -161,6 +198,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         state.LocalSchedules = localSchedules;
         state.ScheduleRule = rule;
         state.ScheduleEvaluator = this;
+        state.ScheduleEpoch = m_host.FactScheduleEpoch;
 
         return schedule;
     }
@@ -179,18 +217,21 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         );
 
         return RuleSchedule.Build(
+            facts: needs.FacetFacts,
             needs: needs.Build(),
             reader: m_host,
             reads: m_readScratch
         );
     }
-    // Whether every row a schedule reads reports the same version it did when the cache was captured. A mismatch, a
-    // volatile schedule, or a row the host cannot answer for all count as unproven, which is the safe default.
+    // The one door every elision and reuse passes: whether every dependency a schedule names — each row, then each
+    // host fact, read for the body bound now where the fact is read for $each — reports the version it did when the
+    // cache was captured. A volatile schedule, a mismatch, or a dependency the host cannot answer for all count as
+    // unproven, which is the safe default.
     private bool VersionsMatch(RuleSchedule schedule, ulong[]? cached) {
         if (
             schedule.Volatile ||
             (cached is null) ||
-            (cached.Length != schedule.Rows.Length)
+            (cached.Length != schedule.Dependencies)
         ) {
             return false;
         }
@@ -206,14 +247,20 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
                 return false;
             }
         }
+        for (var index = 0; (index < schedule.Facts.Length); index++) {
+            if (!TryFactVersion(fact: schedule.Facts[index], version: out var version) || (version != cached[(schedule.Rows.Length + index)])) {
+                return false;
+            }
+        }
 
         return true;
     }
-    // Overwrites a cached version array in place, reusing it when its length already matches the schedule's row
-    // count; a row the host cannot answer for is recorded as zero, which VersionsMatch never trusts on its own.
+    // Overwrites a cached version array in place, reusing it when its length already matches the schedule's
+    // dependency count; a dependency the host cannot answer for is recorded as zero, which VersionsMatch never trusts on
+    // its own.
     private void CaptureVersions(RuleSchedule schedule, ref ulong[] cache) {
-        if (cache.Length != schedule.Rows.Length) {
-            cache = new ulong[schedule.Rows.Length];
+        if (cache.Length != schedule.Dependencies) {
+            cache = new ulong[schedule.Dependencies];
         }
 
         for (var index = 0; (index < schedule.Rows.Length); index++) {
@@ -225,6 +272,21 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
                 : 0UL
             );
         }
+        for (var index = 0; (index < schedule.Facts.Length); index++) {
+            cache[(schedule.Rows.Length + index)] = (TryFactVersion(fact: schedule.Facts[index], version: out var version) ? version : 0UL);
+        }
+    }
+    // One fact's version for the evaluation in flight: a $each read resolves to the body the binding names now.
+    private bool TryFactVersion(FactRead fact, out ulong version) {
+        var body = ((fact.Body == FactRead.EachBody) ? m_host.BoundIndex(key: BoundKey.Each) : fact.Body);
+
+        if ((body < 0) && (body != FactRead.Whole)) {
+            version = 0UL;
+
+            return false;
+        }
+
+        return m_host.TryFactVersion(body: body, source: fact.Source, version: out version);
     }
     private bool RowsSelected(CompiledRule rule, List<string>? trace) {
         if (rule.Zones is not { References.Count: > 0 } zones) {
@@ -339,6 +401,8 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         var applied = false;
         var states = latch.States(rules: rules);
+
+        m_host.RefreshFacts();
 
         for (var index = 0; (index < rules.Length); index++) {
             _ = EvaluateRule(
@@ -527,6 +591,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         m_host.BeginRuleEvaluation();
         try { return EvaluateOnceCore(applied: out applied, binding: binding, state: state, latch: latch, rule: rule, stepTicks: stepTicks); } finally {
             m_host.EndRuleEvaluation();
+            m_anyRerun |= m_rerun;
         }
     }
 
@@ -577,6 +642,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         ArgumentNullException.ThrowIfNull(argument: rule);
 
         applied = false;
+        m_rerun = true;
         m_evaluations.Increment();
         state.Spent.Evaluations++;
 
@@ -599,20 +665,22 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         if (
             existed &&
-            !wasOpen &&
-            (schedule is { Volatile: false } closed) &&
-            ReferenceEquals(objA: scheduling.GateOwner, objB: closed) &&
+            (!wasOpen || (rule.Mode == ActionTriggerMode.Edge)) &&
+            (schedule is { Volatile: false } kept) &&
+            ReferenceEquals(objA: scheduling.GateOwner, objB: kept) &&
             VersionsMatch(
             cached: scheduling.GateVersions,
-            schedule: closed
+            schedule: kept
         )
         ) {
-            // Nothing this rule reads has changed since it last closed, and it reads no host or tick fact a version
-            // cannot see through — the verdict is still closed, so bindings and gate need not run at all.
+            // Nothing this rule reads has changed since its verdict was captured, and it reads nothing a version
+            // cannot see through: the verdict stands — closed, or an Edge already held, which fires nothing — so
+            // bindings and gate need not run at all.
             m_skips.Increment();
             state.Spent.Skips++;
             latch.Touch(schedule: scheduling);
             EndTrace(entry: trace);
+            m_rerun = false;
 
             return RuleOutcome.Idle;
         }
@@ -627,6 +695,9 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         );
 
         if (!judged.Decided) {
+            // A binding that could not evaluate refused (and was reported) this tick, so the next tick judges it again.
+            m_rerun = true;
+
             return HoldOnFault(faulted: judged.Faulted, latch: latch, scheduling: scheduling, trace: trace);
         }
 
@@ -643,15 +714,20 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         if (
             (schedule is { } reads) &&
-            !open
+            (!open || (rule.Mode == ActionTriggerMode.Edge))
         ) {
-            // The gate closed again: remember what its reads looked like, so an unchanged read next time skips.
+            // A verdict that fires nothing while its reads hold — closed, or an Edge that is held once it crosses —
+            // remembers what its reads looked like, so an unchanged read next time skips. A crossing's own firing may
+            // move what it read, and then the versions differ and the next tick judges again.
             CaptureVersions(
                 cache: ref scheduling.GateVersions,
                 schedule: reads
             );
             scheduling.GateOwner = reads;
         }
+
+        // A Level gate that holds fires every tick it holds: the author's per-tick choice, judged again next tick.
+        m_rerun = ((schedule is not { Volatile: false }) || (open && (rule.Mode != ActionTriggerMode.Edge)));
 
         var fires = (open && ((rule.Mode != ActionTriggerMode.Edge) || !wasOpen));
 

@@ -21,7 +21,7 @@ public sealed class RuleWorkCountLawTests {
 
         Assert.Equal(
             actual: source.WorkKinds.ToArray().Select(selector: static kind => kind.Name),
-            expected: ["state.rules.evaluations", "state.rules.skips", "state.rules.firings"]
+            expected: ["state.rules.evaluations", "state.rules.skips", "state.rules.firings", "state.rules.due", "state.rules.elided"]
         );
         Assert.False(condition: source.TryRead(kind: new WorkKind(name: "state.rules.other", unit: "count", workClass: WorkClass.Deterministic), value: out _));
     }

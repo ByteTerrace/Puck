@@ -25,6 +25,7 @@ public sealed partial class RuleEvaluator {
 
         var applied = false;
 
+        m_host.RefreshFacts();
         if ((m_host is IArenaUndoHost undoHost) && !ReferenceEquals(objA: m_configuredUndoGroups, objB: groups)) {
             List<ArenaUndoPlan>? plans = null;
 

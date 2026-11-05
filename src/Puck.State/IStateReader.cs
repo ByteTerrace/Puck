@@ -45,6 +45,51 @@ public interface IStateReader {
     ulong Tick { get; }
     /// <summary>Gets the hypothetical search ply; zero on a live host.</summary>
     int SearchPly => 0;
+    /// <summary>Gets a value indicating whether <see cref="SearchPly"/> never moves on this host, so a schedule may
+    /// treat a read of it as a constant. A host that judges hypothetical positions answers <see langword="false"/>,
+    /// the default.</summary>
+    bool SearchPlyIsFixed => false;
+    /// <summary>Gets a count the host moves whenever what <see cref="TryScheduleFact"/> answers for a fact could
+    /// change (a register file rebound to other rows), so a schedule derived under another count is derived again.</summary>
+    int FactScheduleEpoch => 0;
+
+    /// <summary>Names what one host fact depends on, when the host versions it: the arena rows the read resolves to,
+    /// and the host's own versioned sources it reads. A fact the host cannot name keeps every schedule that reads
+    /// it volatile, which is the default.</summary>
+    /// <param name="fact">The compiled fact a rule's judgement reads.</param>
+    /// <param name="rows">The arena row ordinals the read depends on, appended.</param>
+    /// <param name="facts">The host sources the read depends on, appended.</param>
+    /// <returns><see langword="true"/> when the host names every dependency the read can have.</returns>
+    bool TryScheduleFact(ICompiledFact fact, List<int> rows, List<FactRead> facts) => false;
+    /// <summary>Names the versioned source a sweep over the live bodies depends on: the roster, whose version moves
+    /// when a body joins or leaves.</summary>
+    /// <param name="facts">The host sources the roster depends on, appended.</param>
+    /// <returns><see langword="true"/> when the host versions its roster.</returns>
+    bool TryScheduleLiveBodies(List<FactRead> facts) => false;
+    /// <summary>Returns one host source's version for one body (or for the source as a whole): a counter that moves
+    /// whenever what the source answers for that body changes, read after <see cref="RefreshFacts"/>.</summary>
+    /// <param name="source">The host's source number.</param>
+    /// <param name="body">The body index, or <see cref="FactRead.Whole"/>.</param>
+    /// <param name="version">The version, when the host answers.</param>
+    /// <returns><see langword="true"/> when the host versions the source for that body.</returns>
+    bool TryFactVersion(int source, int body, out ulong version) {
+        version = 0UL;
+
+        return false;
+    }
+    /// <summary>Returns a host source's name for a read-back.</summary>
+    /// <param name="source">The host's source number.</param>
+    /// <returns>The name.</returns>
+    string DescribeFactSource(int source) => $"source {source}";
+    /// <summary>Brings every host source's version up to what the host's state answers now, recording each source and
+    /// body that moved for <see cref="DrainFactMoves"/>. The evaluator calls it before a family's walk and after a
+    /// firing that delivered an arm, the only work during rule evaluation that changes host state.</summary>
+    void RefreshFacts() { }
+    /// <summary>Hands every host source and body whose version moved since the last drain to the caller and forgets
+    /// them.</summary>
+    /// <param name="into">The moved sources, appended, each as the body it moved for or <see cref="FactRead.Whole"/>.</param>
+    /// <returns><see langword="true"/> when every source must be taken as moved (the host's sources were rebuilt).</returns>
+    bool DrainFactMoves(List<FactRead> into) => false;
     /// <summary>Gets the clocks and dynamics rows a live cell read is evaluated against. The default carries the
     /// tick pair alone, which is what a section declaring no dynamics row needs; a host whose document declares
     /// dynamics rows answers with them and with the simulation rate.</summary>

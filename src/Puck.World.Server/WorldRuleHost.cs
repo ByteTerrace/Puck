@@ -272,6 +272,8 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
 
         return false;
     }
+    /// <inheritdoc/>
+    bool IRuleOwner.Owns(CompiledRule rule) => (rule is CompiledWorldFactsRule { Decision: not null } or CompiledWorldFactsRule { Interaction: not null });
 
     /// <inheritdoc/>
     /// <remarks>A live body is one the population holds active, the same bodies <c>$population</c> counts.</remarks>
