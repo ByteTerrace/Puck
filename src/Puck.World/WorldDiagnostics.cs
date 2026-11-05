@@ -177,7 +177,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                                     });
                                 }
                                 var fieldMeshBudget = new WorldDiagnosticBudget(0, 0, budget.Numerical, hitError);
-                                var fieldAnswered = m_field.Probe(FixedVector3.FromVector3(value: drawn), out var fieldError, out _, out _);
+                                var fieldAnswered = m_field.Read(FixedVector3.FromVector3(value: drawn), out var fieldError, out _, out _);
 
                                 Count(comparison: "field-versus-baked-mesh", red: (fieldAnswered ? (Math.Abs(value: ((double)fieldError)) > fieldMeshBudget.Total) : null));
                                 if (!fieldAnswered) { Skip(reason: "authored field does not answer certified mesh witness"); meshFailed.Add(item: scope); }
@@ -243,7 +243,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                 var foot = support.BodyPoint;
 
                 if (!FixedSurfaceQuery.TryNearest([support.Collider], [], in foot, FixedQ4816.MaxValue, out var surface) ||
-                    !m_field.Probe(surface.Point, out var distance, out _, out var gradient)) {
+                    !m_field.Read(surface.Point, out var distance, out _, out var gradient)) {
                     Skip(reason: $"body:{index}: support surface query unavailable");
                     continue;
                 }
@@ -367,7 +367,9 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
         _ = WorldSolidField.TryBuild(definition, out m_field, out m_fieldRefusal);
     }
     // One boundary witness and what the authored field says there: buried in another collider (no reading taken), or the
-    // field's signed distance and outward normal, when it answers.
+    // field's signed reading (exact in sign, a lower bound on the distance to the authored surface) and outward normal,
+    // when it answers. A surface solve gives an upper bound instead, which at a crease of touching solids or inside a union
+    // of overlapping ones runs through other solids and is no measure of how far the authored solid reaches.
     private readonly record struct WitnessReading(Vector3 Point, bool Buried, bool Answered, FixedQ4816 Distance, FixedVector3 Gradient);
 
     // The readings of one colliders report as far as they are taken, one slot per collider, null until read. A reading is
@@ -384,7 +386,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
     private WitnessCache WitnessesFor(IReadOnlyList<WorldDiagnosticCollider> rows, WorldSolidField field) =>
         (m_witnesses = (((m_witnesses is { } kept) && ReferenceEquals(objA: kept.Rows, objB: rows) && ReferenceEquals(objA: kept.Field, objB: field)) ? kept : new WitnessCache(field: field, rows: rows)));
     // Reads each unread collider's boundary witnesses in parallel, stopping when the caller's answer is owed. The work (a
-    // buried test and a surface solve per witness) reads only the immutable colliders and field, and every collider's
+    // buried test and a field reading per witness) reads only the immutable colliders and field, and every collider's
     // readings land in their own slot, so the answers are the same as one after another. Half the processors serve it: a
     // diagnostic never takes the whole machine.
     private static void ReadWitnesses(WitnessCache cache, float?[] bounds, TextAnswerDeadline? deadline) {
@@ -413,8 +415,8 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
 
                     var point = points[witness];
 
-                    // A buried union boundary is not an effective outer collision surface: it is settled without the
-                    // field's surface solve, whose exit search from deep inside a solid is the costliest.
+                    // A buried union boundary is not an effective outer collision surface: it is settled before the field
+                    // is read.
                     if (InsideAnother(row, rows, bounds, point, numerical)) {
                         own[witness] = new WitnessReading(Answered: false, Buried: true, Distance: default, Gradient: default, Point: point);
 
@@ -422,7 +424,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                     }
 
                     var fixedPoint = FixedVector3.FromVector3(value: point);
-                    var answered = cache.Field.Probe(distance: out var distance, gradient: out var gradient, material: out _, position: in fixedPoint);
+                    var answered = cache.Field.Read(distance: out var distance, gradient: out var gradient, material: out _, position: in fixedPoint);
 
                     own[witness] = new WitnessReading(Answered: answered, Buried: false, Distance: distance, Gradient: gradient, Point: point);
                 }

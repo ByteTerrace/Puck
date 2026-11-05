@@ -44,6 +44,7 @@
     { "name": "traversal-falls", "line": "world.state traversalFalls", "parse": "cells", "leg": "headless", "compare": { "*": "exact" } },
     { "name": "chess-scope", "line": "replay.scope chess-demo", "parse": "words", "leg": "headless", "red": ["status == -1"], "compare": { "inputs": "exact" } },
     { "name": "rule-failures", "line": "world.rule.failures", "parse": "text", "recheck": true, "amber": ["text != [world.rule.failures: none]"], "compare": { "text": "exact" } },
+    { "name": "counters-physics", "line": "world.counters physics", "parse": "counters", "compare": { "*": "relative:0.5" } },
     { "name": "colliders", "line": "world.debug-view report colliders --json", "parse": "report", "timeoutSeconds": 120, "pending": "coverage.pending > 0", "maxAsks": 8, "red": ["findings.red > 0"], "amber": ["coverage.complete == false", "findings.unknown > 0"], "compare": { "findings.*": "exact", "comparisons.*": "exact", "coverage.tested": "exact" } },
     { "name": "contacts", "line": "world.debug-view report contacts --json", "parse": "report", "timeoutSeconds": 120, "red": ["findings.red > 0"], "amber": ["coverage.complete == false", "findings.unknown > 0"], "compare": { "findings.*": "exact", "coverage.tested": "exact" } },
     {
@@ -65,7 +66,6 @@
     },
     { "name": "counters-state", "line": "world.counters state", "parse": "counters", "compare": { "*": "relative:0.5" } },
     { "name": "counters-boot", "line": "world.counters world.boot", "parse": "counters", "compare": { "world.boot.loads": "exact", "world.boot.parses": "exact", "world.boot.validations": "exact", "world.boot.rule-compilations": "exact", "world.boot.neighbour-resolves": "exact", "world.boot.shape-builds": "exact", "world.boot.asset-loads": "exact" } },
-    { "name": "counters-physics", "line": "world.counters physics", "parse": "counters", "compare": { "*": "relative:0.5" } },
     { "name": "addons", "line": "world.addons", "parse": "text", "recheck": true, "metrics": { "watchdog.fuel": "watchdog ENABLED fuel-budget:\\d+ fuel-last-tick:(\\d+)", "companion.fuel": "companion ENABLED fuel-budget:\\d+ fuel-last-tick:(\\d+)", "dropped": "answers-dropped-total:(?<sum>\\d+)" }, "red": ["dropped > 0", "text ~ FAULTED", "text ~ DISABLED", "watchdog.fuel < 1"], "compare": { "watchdog.fuel": "relative:0.25", "companion.fuel": "relative:0.25" } },
     { "name": "frames", "line": "host.frames 300", "parse": "frames", "leg": "headless", "compare": { "simulate.p50": "none" } },
     { "name": "memory", "line": "host.memory collect", "parse": "pairs", "compare": { "ws": "relative:0.25", "private": "relative:0.25", "heap": "relative:0.25" } },
