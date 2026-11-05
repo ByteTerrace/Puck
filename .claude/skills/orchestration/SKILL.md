@@ -538,7 +538,10 @@ shared brief, findings or facts into the lane's worktree (`.claude/scratch/`)
 and the brief names workspace-relative paths only. A findings-only lane writes its file under
 `.claude/scratch/` and leaves it uncommitted: that directory is ignored, and a
 brief that says to commit it gets a force-add that the next merge carries into
-the tree. The lead reads the file from the lane's worktree. A headless run also ends when the agent
+the tree. The lead copies the file into the main checkout's `.claude/scratch/`
+before removing the lane's worktree: `git worktree remove` deletes ignored
+files without asking, and one research file was lost that way and recovered
+only from the lane's log. A headless run also ends when the agent
 goes idle waiting on a background task of its own (a background build), leaving
 its edits uncommitted, so a brief tells it to build and test in the foreground.
 A headless run can also stall with its process alive and its log empty, so the
