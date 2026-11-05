@@ -413,8 +413,10 @@ state. `views.layouts` maps normalized slots to joined seats, named cameras,
 or `views.graphs` instances (`instance`; a slot names at most one of `camera`
 and `instance`).
 An empty list uses the built-in one-to-four-seat ladder. Layout transition
-duration and the mid-transition render-scale dip (`transitionRenderScale`)
-remain authored on each layout; a view's durable render quality is the
+duration and the mid-transition render-scale dip (a layout's `transition`:
+`seconds` and `renderScale`, the same `WorldViewTransition` that
+`views.builtinTransition` carries for the built-in ladder) remain authored on
+each layout; a view's durable render quality is the
 `views.quality` rows (`WorldViewQuality`: a render view's `name`, or `*` for the
 player-view defaults, with `renderScale`, `renderScaleFloor` and `tier`; session
 pins have no document member). A layout whose

@@ -58,8 +58,10 @@ views {
         y: 0
       }
     ]
-    transitionRenderScale: 1
-    transitionSeconds: tickRate
+    transition {
+      renderScale: 1
+      seconds: tickRate
+    }
   }
 
   seatControl {

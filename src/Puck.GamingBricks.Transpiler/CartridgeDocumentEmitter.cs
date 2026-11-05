@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
@@ -290,8 +291,8 @@ public static class CartridgeDocumentEmitter {
         var section = Pluralize(identifier: block.Identifier);
 
         scope.CurrentPointer = ((name is null)
-            ? $"{pointer}/{block.Identifier}"
-            : $"{pointer}/{section}/{((target[section] as JsonArray)?.Count ?? 0)}"
+            ? DocumentJsonPointer.Child(name: block.Identifier, pointer: pointer)
+            : DocumentJsonPointer.Child(index: (target[section] as JsonArray)?.Count ?? 0, pointer: DocumentJsonPointer.Child(name: section, pointer: pointer))
         );
         scope.SourceMap?.Register(
             jsonPointer: scope.CurrentPointer,
@@ -551,7 +552,7 @@ public static class CartridgeDocumentEmitter {
                     );
 
                     scope.SourceMap?.Register(
-                        jsonPointer: $"{scope.CurrentPointer}/{property.Name}",
+                        jsonPointer: DocumentJsonPointer.Child(name: property.Name, pointer: scope.CurrentPointer),
                         span: property.Span
                     );
                     DocumentLowering.AssignOrExtend(
@@ -565,7 +566,7 @@ public static class CartridgeDocumentEmitter {
 
             case RuleBlockNode rule:
                 scope.SourceMap?.Register(
-                    jsonPointer: $"{scope.CurrentPointer}/rules/{((target["rules"] as JsonArray)?.Count ?? 0)}",
+                    jsonPointer: DocumentJsonPointer.Child(index: ((target["rules"] as JsonArray)?.Count ?? 0), pointer: DocumentJsonPointer.Child(name: "rules", pointer: scope.CurrentPointer)),
                     span: rule.Span
                 );
                 Append(

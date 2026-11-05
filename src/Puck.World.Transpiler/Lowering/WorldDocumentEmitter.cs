@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using Puck.Assets;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -302,7 +303,7 @@ public static partial class WorldDocumentEmitter {
                     var records = ((state["records"] as JsonArray) ?? new JsonArray());
 
                     state["records"] = records;
-                    records.Add(item: LowerRecordDeclaration(declaration: recordNode, pointer: ((scope.Annotations.TryGetValue(key: "WorldDocumentRoot", value: out var documentRoot) && ReferenceEquals(objA: target, objB: documentRoot)) ? $"/state/records/{records.Count}" : null), scope: scope, state: state));
+                    records.Add(item: LowerRecordDeclaration(declaration: recordNode, pointer: ((scope.Annotations.TryGetValue(key: "WorldDocumentRoot", value: out var documentRoot) && ReferenceEquals(objA: target, objB: documentRoot)) ? DocumentJsonPointer.Child(index: records.Count, pointer: "/state/records") : null), scope: scope, state: state));
                     break;
                 }
 
@@ -397,7 +398,7 @@ public static partial class WorldDocumentEmitter {
                         break;
                     }
 
-                    var childPointer = $"{scope.CurrentPointer}/{propNode.Name}";
+                    var childPointer = DocumentJsonPointer.Child(name: propNode.Name, pointer: scope.CurrentPointer);
                     var offset = ((target[propNode.Name] is JsonArray existing) ? existing.Count : 0);
 
                     scope.SourceMap?.Register(
@@ -440,7 +441,7 @@ public static partial class WorldDocumentEmitter {
                     ) {
                         for (var index = 0; (index < authored.Elements.Count); ++index) {
                             scope.SourceMap?.Register(
-                                jsonPointer: $"{childPointer}/{(offset + index)}",
+                                jsonPointer: DocumentJsonPointer.Child(index: offset + index, pointer: childPointer),
                                 span: authored.Elements[index].Span
                             );
                         }
@@ -513,7 +514,7 @@ public static partial class WorldDocumentEmitter {
                         target["requests"] = reqArr;
                     }
                     var reqIdx = reqArr.Count;
-                    var childPointer = $"{scope.CurrentPointer}/requests/{reqIdx}";
+                    var childPointer = DocumentJsonPointer.Child(index: reqIdx, pointer: DocumentJsonPointer.Child(name: "requests", pointer: scope.CurrentPointer));
 
                     scope.SourceMap?.Register(
                         jsonPointer: childPointer,
@@ -534,7 +535,7 @@ public static partial class WorldDocumentEmitter {
                         target["memoryWatches"] = watchArr;
                     }
                     var watchIdx = watchArr.Count;
-                    var childPointer = $"{scope.CurrentPointer}/memoryWatches/{watchIdx}";
+                    var childPointer = DocumentJsonPointer.Child(index: watchIdx, pointer: DocumentJsonPointer.Child(name: "memoryWatches", pointer: scope.CurrentPointer));
 
                     scope.SourceMap?.Register(
                         jsonPointer: childPointer,
@@ -623,7 +624,7 @@ public static partial class WorldDocumentEmitter {
 
         if (TryLowerCompositionEndpointBlock(block: block, parent: parent, scope: scope)) { return; }
 
-        var blockPointer = $"{scope.CurrentPointer}/{id}";
+        var blockPointer = DocumentJsonPointer.Child(name: id, pointer: scope.CurrentPointer);
 
         scope.SourceMap?.Register(
             jsonPointer: blockPointer,
@@ -764,7 +765,7 @@ public static partial class WorldDocumentEmitter {
             parent[member] = rows;
         }
 
-        var rowPointer = $"{scope.CurrentPointer}/{member}/{rows.Count}";
+        var rowPointer = DocumentJsonPointer.Child(index: rows.Count, pointer: DocumentJsonPointer.Child(name: member, pointer: scope.CurrentPointer));
 
         scope.SourceMap?.Register(
             jsonPointer: rowPointer,
@@ -1154,9 +1155,9 @@ public static partial class WorldDocumentEmitter {
         void Visit(JsonNode current, string pointer) {
             if (sourceMap?.TryGetOrigin(jsonPointer: pointer, origin: out var origin) == true) { spans[pointer] = origin; }
             if (current is JsonObject obj) {
-                foreach (var entry in obj) { if (entry.Value is not null) { Visit(current: entry.Value, pointer: $"{pointer}/{entry.Key}"); } }
+                foreach (var entry in obj) { if (entry.Value is not null) { Visit(current: entry.Value, pointer: DocumentJsonPointer.Child(name: entry.Key, pointer: pointer)); } }
             } else if (current is JsonArray array) {
-                for (var index = 0; (index < array.Count); index++) { if (array[index] is { } child) { Visit(current: child, pointer: $"{pointer}/{index}"); } }
+                for (var index = 0; (index < array.Count); index++) { if (array[index] is { } child) { Visit(current: child, pointer: DocumentJsonPointer.Child(index: index, pointer: pointer)); } }
             }
         }
     }
@@ -1170,25 +1171,25 @@ public static partial class WorldDocumentEmitter {
 
                     expandedArray.Remove(item: item);
                     targetArray.AppendNode(item: item);
-                    RegisterTree(node: item, sourcePointer: $"{pointer}/{entry.Key}/{sourceIndex}", targetPointer: $"{pointer}/{entry.Key}/{targetIndex}");
+                    RegisterTree(node: item, sourcePointer: DocumentJsonPointer.Child(index: sourceIndex, pointer: DocumentJsonPointer.Child(name: entry.Key, pointer: pointer)), targetPointer: DocumentJsonPointer.Child(index: targetIndex, pointer: DocumentJsonPointer.Child(name: entry.Key, pointer: pointer)));
                     sourceIndex++;
                 }
             } else if ((target[entry.Key] is JsonObject targetObject) && (entry.Value is JsonObject expandedObject)) {
-                MergeExpandedModule(targetObject, expandedObject, origin, scope, spans, $"{pointer}/{entry.Key}");
+                MergeExpandedModule(targetObject, expandedObject, origin, scope, spans, DocumentJsonPointer.Child(name: entry.Key, pointer: pointer));
             } else if (target.ContainsKey(propertyName: entry.Key)) {
                 scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: $"Expanded module writes document member '{entry.Key}' more than once.", span: origin.Span);
             } else {
                 target[entry.Key] = entry.Value?.DeepClone();
-                if (entry.Value is { } value) { RegisterTree(node: value, sourcePointer: $"{pointer}/{entry.Key}", targetPointer: $"{pointer}/{entry.Key}"); }
+                if (entry.Value is { } value) { RegisterTree(node: value, sourcePointer: DocumentJsonPointer.Child(name: entry.Key, pointer: pointer), targetPointer: DocumentJsonPointer.Child(name: entry.Key, pointer: pointer)); }
             }
         }
 
         void RegisterTree(JsonNode? node, string sourcePointer, string targetPointer) {
             if (spans.TryGetValue(key: sourcePointer, value: out var sourceOrigin)) { scope.SourceMap?.Register(jsonPointer: targetPointer, origin: sourceOrigin); }
             if (node is JsonObject obj) {
-                foreach (var child in obj) { RegisterTree(node: child.Value, sourcePointer: $"{sourcePointer}/{child.Key}", targetPointer: $"{targetPointer}/{child.Key}"); }
+                foreach (var child in obj) { RegisterTree(node: child.Value, sourcePointer: DocumentJsonPointer.Child(name: child.Key, pointer: sourcePointer), targetPointer: DocumentJsonPointer.Child(name: child.Key, pointer: targetPointer)); }
             } else if (node is JsonArray array) {
-                for (var index = 0; (index < array.Count); index++) { RegisterTree(node: array[index], sourcePointer: $"{sourcePointer}/{index}", targetPointer: $"{targetPointer}/{index}"); }
+                for (var index = 0; (index < array.Count); index++) { RegisterTree(node: array[index], sourcePointer: DocumentJsonPointer.Child(index: index, pointer: sourcePointer), targetPointer: DocumentJsonPointer.Child(index: index, pointer: targetPointer)); }
             }
         }
     }
@@ -1231,7 +1232,7 @@ public static partial class WorldDocumentEmitter {
                 );
             } else if (subId is "seatrig") {
                 scope.SourceMap?.Register(
-                    jsonPointer: $"{scope.CurrentPointer}/seatRig",
+                    jsonPointer: DocumentJsonPointer.Child(name: "seatRig", pointer: scope.CurrentPointer),
                     span: subBlock.Span
                 );
                 var seatRigObj = LowerBlockToObject(
@@ -1245,7 +1246,7 @@ public static partial class WorldDocumentEmitter {
                 viewsObj["seatRig"] = seatRigObj;
             } else if (subId is "seatcontrol") {
                 scope.SourceMap?.Register(
-                    jsonPointer: $"{scope.CurrentPointer}/seatControl",
+                    jsonPointer: DocumentJsonPointer.Child(name: "seatControl", pointer: scope.CurrentPointer),
                     span: subBlock.Span
                 );
                 viewsObj["seatControl"] = LowerBlockToObject(
@@ -1285,7 +1286,7 @@ public static partial class WorldDocumentEmitter {
             array = [];
             target[targetKey] = array;
         }
-        var rowPointer = $"{scope.CurrentPointer}/{targetKey}/{array.Count}";
+        var rowPointer = DocumentJsonPointer.Child(index: array.Count, pointer: DocumentJsonPointer.Child(name: targetKey, pointer: scope.CurrentPointer));
         var oldPointer = scope.CurrentPointer;
 
         scope.SourceMap?.Register(

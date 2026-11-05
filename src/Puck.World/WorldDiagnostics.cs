@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using Puck.Commands;
 using Puck.Maths;
 using Puck.Physics;
 using Puck.SdfVm;
@@ -16,6 +17,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
 
     private WorldDefinition? m_definition;
     private WorldSolidField? m_field;
+    private WitnessCache? m_witnesses;
 
     private string m_fieldRefusal = "not evaluated";
 
@@ -44,7 +46,14 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
 
     public WorldDiagnosticFinding? Find(string id) => m_reports.Values.SelectMany(selector: r => r.Findings).FirstOrDefault(predicate: f => (f.Id == id));
     public void Retain(WorldDiagnosticReport report) => m_reports[report.View] = report;
-    public WorldDiagnosticReport Report(string view) {
+    /// <summary>Evaluates a view on demand.</summary>
+    /// <param name="view">The view: <c>colliders</c> or <c>contacts</c>.</param>
+    /// <param name="deadline">When the caller's answer is owed, or <see langword="null"/> for a caller that waits for the
+    /// whole report. A colliders report whose witnesses are not all read by then answers a report that says how many
+    /// colliders remain, keeps what it has read, and finishes on a later call; the report it finally gives is the one
+    /// a single call would have.</param>
+    /// <returns>The report, retained as the view's latest only when it is whole.</returns>
+    public WorldDiagnosticReport Report(string view, TextAnswerDeadline? deadline = null) {
         var tick = (server.NextInputTick - 1);
         var snapshot = ++m_snapshot;
         var findings = new List<WorldDiagnosticFinding>();
@@ -91,7 +100,26 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
             } else if (m_field is null) {
                 Skip(reason: $"authored field unavailable: {m_fieldRefusal}");
             } else {
-                foreach (var row in server.Population.DiagnosticColliders) {
+                var rows = server.Population.DiagnosticColliders;
+                // Each collider's bounding radius, once: a witness beyond a neighbour's is neither inside it nor on its face.
+                var bounds = rows.Select(selector: static row => WorldDiagnosticGeometry.Bound(collider: row.Collider)).ToArray();
+
+                var cache = WitnessesFor(field: m_field, rows: rows);
+
+                ReadWitnesses(bounds: bounds, cache: cache, deadline: deadline);
+
+                if (cache.Pending > 0) {
+                    var reason = $"report unfinished: {cache.Pending} of {rows.Count} colliders still to read; ask again";
+                    var unfinished = new WorldDiagnosticCoverage(0, 0, new Dictionary<string, int> { [reason] = 1 }, false) { Pending = cache.Pending };
+
+                    return new WorldDiagnosticReport(snapshot, view, tick, [Unknown(reason: reason, subject: "coverage") with { Source = reason, Coverage = unfinished }], unfinished);
+                }
+
+                var readings = cache.Readings;
+
+                m_witnesses = null;
+                for (var rowIndex = 0; (rowIndex < rows.Count); rowIndex++) {
+                    var row = rows[rowIndex];
                     var budget = new WorldDiagnosticBudget(row.Margin, 0, WorldDiagnosticGeometry.Numerical(collider: row.Collider)) {
                         ConservativeInset = row.ConservativeInset,
                     };
@@ -99,21 +127,25 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                     var scope = $"{row.Stamp}|{source}";
 
                     evaluated.Add(item: scope);
-                    foreach (var point in WorldDiagnosticGeometry.SurfaceSamples(collider: row.Collider)) {
-                        eligible++;
-                        var fixedPoint = FixedVector3.FromVector3(value: point);
+                    foreach (var reading in readings[rowIndex]!) {
+                        var point = reading.Point;
 
-                        if (!m_field.Probe(distance: out var distance, gradient: out var gradient, material: out _, position: in fixedPoint)) {
+                        eligible++;
+                        if (reading.Buried) {
+                            tested++;
+                            continue;
+                        }
+                        if (!reading.Answered) {
                             Skip(reason: "field does not answer witness");
                             failed.Add(item: scope);
                             continue;
                         }
                         tested++;
-                        var observed = ((double)distance);
-                        var buried = InsideAnother(row, point, budget.Numerical);
+                        var gradient = reading.Gradient;
+                        var observed = ((double)reading.Distance);
 
-                        if (!buried) { Count(comparison: "collision-versus-authored-field", red: (WorldDiagnosticGeometry.ClassifyBoundary(budget: budget, separation: observed) is not (null or "known-approximation"))); }
-                        if (row.Opaque && !buried) {
+                        Count(comparison: "collision-versus-authored-field", red: (WorldDiagnosticGeometry.ClassifyBoundary(budget: budget, separation: observed) is not (null or "known-approximation")));
+                        if (row.Opaque) {
                             meshEvaluated.Add(item: scope);
                             var normal = gradient.ToVector3();
 
@@ -165,10 +197,6 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                             }
                         }
                         if (WorldDiagnosticGeometry.ClassifyBoundary(budget: budget, separation: observed) is not { } contradiction) {
-                            continue;
-                        }
-                        // Buried union boundaries are not effective outer collision surfaces.
-                        if (buried) {
                             continue;
                         }
                         findings.Add(item: new WorldDiagnosticFinding("", view, ((contradiction == "known-approximation") ? "amber" : "red"), source,
@@ -338,11 +366,89 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
 
         _ = WorldSolidField.TryBuild(definition, out m_field, out m_fieldRefusal);
     }
-    private bool InsideAnother(WorldDiagnosticCollider subject, Vector3 point, double epsilon) {
-        foreach (var other in server.Population.DiagnosticColliders) {
-            if (!ReferenceEquals(objA: subject, objB: other) &&
-                ((WorldDiagnosticGeometry.SignedDistance(collider: other.Collider, point: point) < -epsilon) ||
-                WorldDiagnosticGeometry.SharedInteriorFace(subject.Collider, other.Collider, point, epsilon))) {
+    // One boundary witness and what the authored field says there: buried in another collider (no reading taken), or the
+    // field's signed distance and outward normal, when it answers.
+    private readonly record struct WitnessReading(Vector3 Point, bool Buried, bool Answered, FixedQ4816 Distance, FixedVector3 Gradient);
+
+    // The readings of one colliders report as far as they are taken, one slot per collider, null until read. A reading is
+    // a function of the immutable collider set and field alone, so a cache for the same two instances answers a later call
+    // with exactly what it would have computed; WitnessesFor is the one door that hands one out.
+    private sealed class WitnessCache(IReadOnlyList<WorldDiagnosticCollider> rows, WorldSolidField field) {
+        public WorldSolidField Field { get; } = field;
+        public WitnessReading[]?[] Readings { get; } = new WitnessReading[]?[rows.Count];
+        public IReadOnlyList<WorldDiagnosticCollider> Rows { get; } = rows;
+
+        public int Pending => Readings.Count(predicate: static reading => (reading is null));
+    }
+
+    private WitnessCache WitnessesFor(IReadOnlyList<WorldDiagnosticCollider> rows, WorldSolidField field) =>
+        (m_witnesses = (((m_witnesses is { } kept) && ReferenceEquals(objA: kept.Rows, objB: rows) && ReferenceEquals(objA: kept.Field, objB: field)) ? kept : new WitnessCache(field: field, rows: rows)));
+    // Reads each unread collider's boundary witnesses in parallel, stopping when the caller's answer is owed. The work (a
+    // buried test and a surface solve per witness) reads only the immutable colliders and field, and every collider's
+    // readings land in their own slot, so the answers are the same as one after another. Half the processors serve it: a
+    // diagnostic never takes the whole machine.
+    private static void ReadWitnesses(WitnessCache cache, float?[] bounds, TextAnswerDeadline? deadline) {
+        var rows = cache.Rows;
+
+        _ = Parallel.For(
+            body: (index, state) => {
+                if (cache.Readings[index] is not null) {
+                    return;
+                }
+                if (deadline?.HasPassed == true) {
+                    state.Stop();
+
+                    return;
+                }
+
+                var row = rows[index];
+                var numerical = WorldDiagnosticGeometry.Numerical(collider: row.Collider);
+                var points = WorldDiagnosticGeometry.SurfaceSamples(collider: row.Collider).ToArray();
+                var own = new WitnessReading[points.Length];
+
+                for (var witness = 0; (witness < points.Length); witness++) {
+                    if (((witness % 16) == 15) && (deadline?.HasPassed == true)) {
+                        return;
+                    }
+
+                    var point = points[witness];
+
+                    // A buried union boundary is not an effective outer collision surface: it is settled without the
+                    // field's surface solve, whose exit search from deep inside a solid is the costliest.
+                    if (InsideAnother(row, rows, bounds, point, numerical)) {
+                        own[witness] = new WitnessReading(Answered: false, Buried: true, Distance: default, Gradient: default, Point: point);
+
+                        continue;
+                    }
+
+                    var fixedPoint = FixedVector3.FromVector3(value: point);
+                    var answered = cache.Field.Probe(distance: out var distance, gradient: out var gradient, material: out _, position: in fixedPoint);
+
+                    own[witness] = new WitnessReading(Answered: answered, Buried: false, Distance: distance, Gradient: gradient, Point: point);
+                }
+
+                cache.Readings[index] = own;
+            },
+            fromInclusive: 0,
+            parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = Math.Max(val1: 1, val2: (Environment.ProcessorCount / 2)) },
+            toExclusive: rows.Count
+        );
+    }
+    // Whether another collider covers the witness: it lies inside it, or on a face it shares with it. Only a collider
+    // whose bounding radius, grown by the uncertainty, holds the witness can; the exact test (a field collider's is a
+    // surface solve) runs for those alone, so the cost follows the witness's neighbours, never every collider.
+    private static bool InsideAnother(WorldDiagnosticCollider subject, IReadOnlyList<WorldDiagnosticCollider> rows, float?[] bounds, Vector3 point, double epsilon) {
+        for (var index = 0; (index < rows.Count); index++) {
+            var other = rows[index];
+
+            if (ReferenceEquals(objA: subject, objB: other)) {
+                continue;
+            }
+            if ((bounds[index] is { } reach) && (Vector3.Distance(value1: point, value2: other.Collider.Center.ToVector3()) > (reach + epsilon))) {
+                continue;
+            }
+            if ((WorldDiagnosticGeometry.SignedDistance(collider: other.Collider, point: point) < -epsilon) ||
+                WorldDiagnosticGeometry.SharedInteriorFace(subject.Collider, other.Collider, point, epsilon)) {
                 return true;
             }
         }

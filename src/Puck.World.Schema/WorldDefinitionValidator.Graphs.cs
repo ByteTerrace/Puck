@@ -155,18 +155,10 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"views.nestingDepth {nesting} is outside 0 through {RenderGraphInstanceSet.MaxNestingDepth}: a portal seen through a portal nests at most {RenderGraphInstanceSet.MaxNestingDepth} screens deep.");
         }
         if (views.BuiltinTransition is { } builtinTransition) {
-            RequireNonNegative(
-                value: builtinTransition.Seconds,
-                name: "views.builtinTransition.seconds",
-                errors: errors
-            );
-            RequireRange(
-                value: builtinTransition.RenderScale,
-                min: 0f,
-                max: 1f,
-                name: "views.builtinTransition.renderScale",
+            RequireViewTransition(
                 errors: errors,
-                minExclusive: true
+                path: "views.builtinTransition",
+                transition: builtinTransition
             );
         }
         if (views.GraphBudget is { } budget) {
@@ -215,6 +207,22 @@ public static partial class WorldDefinitionValidator {
     // A row's bound parameters: each value a finite number or a state token naming a Fixed or Int cell, and no field
     // both bound here and overridden, since a binding rewritten over an override every frame hides one of the two. The
     // source's config schema checks that each pass and field exists when the server binds the row.
+    // The one check of a transition envelope, whether a layout carries it or the built-in seat ladder does.
+    private static void RequireViewTransition(WorldViewTransition transition, string path, List<string> errors) {
+        RequireNonNegative(
+            value: transition.Seconds,
+            name: $"{path}.seconds",
+            errors: errors
+        );
+        RequireRange(
+            value: transition.RenderScale,
+            min: 0f,
+            max: 1f,
+            name: $"{path}.renderScale",
+            errors: errors,
+            minExclusive: true
+        );
+    }
     private static void ValidateParameters(string path, WorldViewGraph graph, WorldDefinition definition, List<string> errors) {
         foreach (var (pass, fields) in (graph.Parameters ?? new Dictionary<string, IReadOnlyDictionary<string, BindableScalar>>())) {
             if (string.IsNullOrWhiteSpace(value: pass)) {

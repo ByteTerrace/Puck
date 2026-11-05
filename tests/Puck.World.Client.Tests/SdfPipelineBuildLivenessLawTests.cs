@@ -195,14 +195,15 @@ public sealed class SdfPipelineBuildLivenessLawTests {
 
         // The loss cancels every kernel's build inside the cache's gate before any entry leaves the cache, so once the
         // cache lists only the pass pipelines (the region copy, the mesh pass, its occlusion kernel, the shadow cascades'
-        // pass and the glass pass), released after the set, the held creations can return: no canceled build starts
-        // another.
+        // depth and exit passes and the glass pass), released after the set, the held creations can return: no canceled
+        // build starts another.
+        const int PassPipelines = 6;
         var loss = new Thread(start: node.OnDeviceLost);
 
         loss.Start();
         TestLiveness.Until(
             reason: () => $"{cache.Pipelines.SharedPipelines} pipelines are still leased",
-            step: () => (cache.Pipelines.SharedPipelines <= 5)
+            step: () => (cache.Pipelines.SharedPipelines <= PassPipelines)
         );
         driver.Open();
         loss.Join();

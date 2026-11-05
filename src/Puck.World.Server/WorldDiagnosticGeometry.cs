@@ -79,6 +79,14 @@ public static class WorldDiagnosticGeometry {
     private static bool Exact(FixedStaticCollider collider) => collider.Kind is FixedStaticColliderKind.AxisAlignedBox or
         FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.RoundedBox or FixedStaticColliderKind.Sphere or
         FixedStaticColliderKind.Cylinder or FixedStaticColliderKind.HalfSpace;
+    /// <summary>Returns a radius about the collider's centre that contains the whole solid, so a point farther from
+    /// the centre than this is outside it and on none of its faces.</summary>
+    /// <param name="collider">The compiled surface.</param>
+    /// <returns>The radius in metres; <see langword="null"/> for a half-space or a field with no bounds, which reach
+    /// every point.</returns>
+    public static float? Bound(FixedStaticCollider collider) =>
+        (((collider.Kind == FixedStaticColliderKind.HalfSpace) || ((collider.Kind == FixedStaticColliderKind.Field) && (collider.Field?.Bounded != true)))
+            ? null : Reach(collider: collider));
     // A radius about the centre containing the collider.
     private static float Reach(FixedStaticCollider collider) => collider.Kind switch {
         FixedStaticColliderKind.Sphere => collider.Extent.ToVector3().X,

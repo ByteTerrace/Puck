@@ -382,7 +382,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
             ),
             completion: reply => {
                 if (!reply.Accepted) {
-                    Console.Error.WriteLine(value: $"[player.confirm denied: {reply.Reason}]");
+                    WorldClientDiagnostics.Report(channel: "player.confirm", text: $"denied: {reply.Reason}");
 
                     return;
                 }
@@ -486,7 +486,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
     // value).
     private bool Fill(int slot, WorldIdentity profile, ParticipantState state, ParticipantOrigin origin, Principal actingPrincipal) {
         if (((uint)slot) >= ((uint)m_localSeats)) {
-            Console.Error.WriteLine(value: $"[player.join refused: slot {DisplayNumber(slot: slot)} — the world declares {m_localSeats} local seat(s) (population.localSeats)]");
+            WorldClientDiagnostics.Report(channel: "player.join", text: $"refused: slot {DisplayNumber(slot: slot)} — the world declares {m_localSeats} local seat(s) (population.localSeats)");
 
             return false;
         }
@@ -505,7 +505,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
             ),
             completion: reply => {
                 if (!reply.Accepted) {
-                    Console.Error.WriteLine(value: $"[player.join denied: {reply.Reason}]");
+                    WorldClientDiagnostics.Report(channel: "player.join", text: $"denied: {reply.Reason}");
 
                     return;
                 }
@@ -721,7 +721,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
 
         if (m_localSeats == 0) {
             m_refusedDevices.Add(item: device);
-            Console.Error.WriteLine(value: $"[player.join refused: device {device} — the world declares 0 local seats (population.localSeats); nothing to seat]");
+            WorldClientDiagnostics.Report(channel: "player.join", text: $"refused: device {device} — the world declares 0 local seats (population.localSeats); nothing to seat");
 
             return null;
         }
@@ -999,12 +999,12 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
             subject: GrantSubject.Body(index: current)
         ) is { IsAllowed: false } sourceVerdict)
         ) {
-            Console.Error.WriteLine(value: $"[player.assign denied: {sourceVerdict.DescribeRefusal(
+            WorldClientDiagnostics.Report(channel: "player.assign", text: $"denied: {sourceVerdict.DescribeRefusal(
                 actor: actingPrincipal,
                 dropped: "relocating this device would dissolve it",
                 subject: $"body:{current}",
                 verb: "drive"
-            )}]");
+            )}");
 
             return AssignOutcome.Denied;
         }
@@ -1021,11 +1021,11 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
                 capability: WorldCapability.Drive,
                 subject: GrantSubject.Body(index: targetSlot)
             ) is { IsAllowed: false } verdict) {
-                Console.Error.WriteLine(value: $"[player.assign denied: {verdict.DescribeRefusal(
+                WorldClientDiagnostics.Report(channel: "player.assign", text: $"denied: {verdict.DescribeRefusal(
                     actor: effectivePrincipal,
                     subject: $"body:{targetSlot}",
                     verb: "drive"
-                )}]");
+                )}");
 
                 return AssignOutcome.Denied;
             }
@@ -1441,7 +1441,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
             // (reporting state, separate from the decision — see m_slotDriveAlarm), never once per tick.
             if (m_slotDriveAlarm[slot] != cachedSubject) {
                 m_slotDriveAlarm[slot] = cachedSubject;
-                Console.Error.WriteLine(value: $"[roster: slot {slot} ({claimant.Describe()}) drive lease locked {(m_slotDriveSubject[slot]?.Describe() ?? "nothing")} but its handle now resolves {cachedSubject.Describe()} at the SAME generation — WorldHandleTable invariant violated; holding the leased body, not retargeting]");
+                WorldClientDiagnostics.Report(channel: "roster", text: $"slot {slot} ({claimant.Describe()}) drive lease locked {(m_slotDriveSubject[slot]?.Describe() ?? "nothing")} but its handle now resolves {cachedSubject.Describe()} at the SAME generation — WorldHandleTable invariant violated; holding the leased body, not retargeting");
             }
 
             return (m_slotDrivenBody[slot] ?? NoBody);
@@ -1650,7 +1650,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
             ),
             completion: reply => {
                 if (!reply.Accepted) {
-                    Console.Error.WriteLine(value: $"[player.leave denied: {reply.Reason}]");
+                    WorldClientDiagnostics.Report(channel: "player.leave", text: $"denied: {reply.Reason}");
 
                     return;
                 }
@@ -1917,7 +1917,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
             ),
             completion: reply => {
                 if (!reply.Accepted) {
-                    Console.Error.WriteLine(value: $"[player.identity denied: {reply.Reason}]");
+                    WorldClientDiagnostics.Report(channel: "player.identity", text: $"denied: {reply.Reason}");
 
                     return;
                 }

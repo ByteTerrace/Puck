@@ -30,7 +30,9 @@ internal sealed class WorldDebugViewCommandModule(WorldDiagnostics diagnostics, 
                 else if (args[i].ToString() is "colliders" or "contacts" or "all") { view = args[i].ToString(); }
                 else { return WorldDebugViewForms.Refuse(args: in args, got: args[i].ToString()); }
             }
-            var reports = (view == "all" ? new[] { "colliders", "contacts" } : [view]).Select(diagnostics.Report).ToArray();
+            // A report that cannot finish before this call's answer is owed answers what remains and resumes on the next call.
+            var due = context.TextSession?.AnswerDeadline;
+            var reports = (view == "all" ? new[] { "colliders", "contacts" } : [view]).Select(name => diagnostics.Report(name, due)).ToArray();
             return new CommandResult(Output: json
                 ? (reports.Length == 1 ? reports[0].ToJson() : "[" + string.Join(",", reports.Select(r => r.ToJson())) + "]")
                 : string.Join(Environment.NewLine, reports.Select(Text)));
