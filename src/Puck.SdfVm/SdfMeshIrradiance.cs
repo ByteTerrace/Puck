@@ -551,6 +551,10 @@ public sealed class SdfMeshIrradiance : IDisposable {
                 if (resizing || (low != level.Low)) {
                     level.Low = low;
                     moved = true;
+
+                    var (residentLow, residentHigh) = Resident(dims: layout.DimsOf(level: level.Index), low: low);
+
+                    level.Cache.Retain(high: residentHigh, low: residentLow);
                 }
             }
             if (moved) {
@@ -1222,9 +1226,20 @@ public sealed class SdfMeshIrradiance : IDisposable {
     private static bool InMiddle((int X, int Y, int Z) cell, (int X, int Y, int Z) dims, (int X, int Y, int Z) low) =>
         (Middle(cell: cell.X, dims: dims.X, low: low.X) && Middle(cell: cell.Y, dims: dims.Y, low: low.Y) && Middle(cell: cell.Z, dims: dims.Z, low: low.Z));
     private static bool Middle(int cell, int low, int dims) {
-        var margin = Math.Max(val1: 1, val2: (dims / 8));
+        var margin = MarginOf(dims: dims);
 
         return ((cell >= (low + margin)) && (cell < ((low + dims) - margin)));
+    }
+    // The cells along one axis of a window's band: a camera inside the window short of it keeps the window where it stands
+    // (InMiddle), and a level's cache keeps the probes this far past its window (Resident).
+    private static int MarginOf(int dims) => Math.Max(val1: 1, val2: (dims / 8));
+    // The cells a level's cache may hold about its window: the window grown by its band on every side, so a camera that
+    // moves the window back across that band finds its probes still measured. Every probe outside it is forgotten once the
+    // cache holds more probes than the box has cells, which bounds the cache by the box whatever the camera has visited.
+    private static ((int X, int Y, int Z) Low, (int X, int Y, int Z) High) Resident((int X, int Y, int Z) low, (int X, int Y, int Z) dims) {
+        var margin = (MarginOf(dims: dims.X), MarginOf(dims: dims.Y), MarginOf(dims: dims.Z));
+
+        return ((low.X - margin.Item1, low.Y - margin.Item2, low.Z - margin.Item3), ((low.X + dims.X) + margin.Item1, (low.Y + dims.Y) + margin.Item2, (low.Z + dims.Z) + margin.Item3));
     }
     private bool InWindow(int level, (int X, int Y, int Z) cell) {
         var low = m_levels[level].Low;
@@ -2469,6 +2484,45 @@ public sealed class SdfMeshIrradiance : IDisposable {
             if (m_table is { } table) { m_capacity = table.Keys.Length; }
             Volatile.Write(location: ref m_table, value: null);
         }
+        // Forgets the probes outside a box of cells, from low inclusive to high exclusive, once the cache holds more probes
+        // than the box has cells; the volume's gate is held. The kept probes are published as a new table, as Grow publishes
+        // one, so a reader holding the old table reads a consistent, slightly earlier cache, and a batch block no kept
+        // probe names is released with the forgotten entries.
+        public void Retain((int X, int Y, int Z) low, (int X, int Y, int Z) high) {
+            if (m_table is not { } table) { return; }
+
+            var cells = ((((long)(high.X - low.X)) * (high.Y - low.Y)) * (high.Z - low.Z));
+
+            if (table.Count <= cells) { return; }
+
+            var kept = 0;
+
+            for (var slot = 0; (slot < table.Keys.Length); slot++) {
+                if ((table.Used[slot] != 0) && Inside(high: high, key: table.Keys[slot], low: low)) { kept++; }
+            }
+
+            var capacity = InitialCapacity;
+
+            while (((kept + 1) * 2) > capacity) { capacity *= 2; }
+
+            var compact = new Table(capacity: capacity);
+
+            for (var slot = 0; (slot < table.Keys.Length); slot++) {
+                if ((table.Used[slot] == 0) || !Inside(high: high, key: table.Keys[slot], low: low)) { continue; }
+
+                var free = ~Find(key: table.Keys[slot], table: compact);
+
+                compact.Entries[free] = table.Entries[slot];
+                compact.Keys[free] = table.Keys[slot];
+                compact.Used[free] = 1;
+            }
+
+            compact.Count = kept;
+            m_capacity = capacity;
+            Volatile.Write(location: ref m_table, value: compact);
+        }
+        private static bool Inside((int X, int Y, int Z) key, (int X, int Y, int Z) low, (int X, int Y, int Z) high) =>
+            ((key.X >= low.X) && (key.X < high.X) && (key.Y >= low.Y) && (key.Y < high.Y) && (key.Z >= low.Z) && (key.Z < high.Z));
         public bool ContainsKey((int X, int Y, int Z) key) => ((Volatile.Read(location: ref m_table) is { } table) && (Find(key: key, table: table) >= 0));
         public bool TryGetValue((int X, int Y, int Z) key, out ProbeData value) {
             var table = Volatile.Read(location: ref m_table);
