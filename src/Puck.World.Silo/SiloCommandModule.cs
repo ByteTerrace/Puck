@@ -13,6 +13,8 @@ namespace Puck.World.Silo;
 /// accepted; the outcome lands in <c>silo.grains</c>'/<c>silo.status</c>' next read-back.
 /// </summary>
 public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFactory, SiloConsoleRouting routing) : ICommandModule {
+    private const string CheckpointForm = "[<key>]";
+    private const string PublishForm = "<key> <path>";
     private static void FireAndForget(Task work, string verb, string key) {
         _ = work.ContinueWith(
             continuationAction: task => {
@@ -36,7 +38,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
     );
     private CommandResult HandleGrainLifecycleAction(in WireArgs args, string verb, Func<IWorldGrain, Task> action) {
         if (args.Count != 1) {
-            return CommandResult.Error(output: $"[{verb}: expected exactly one value — <key>]");
+            return CommandResult.Usage(form: "<key>", verb: verb);
         }
 
         if (!host.TryResolveKey(
@@ -96,10 +98,10 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "silo.publish",
-            description: "silo.publish <key> <path>: composes the local world document at <path> (basis folded, validated through a drawn copy) and publishes it undrawn, as a release publishes it, through the authority root as the hosted, composed definition for the declared row named by <key> (owner/{oid}/{world} or the bare world id).",
+            description: "silo.publish " + PublishForm + ": composes the local world document at <path> (basis folded, validated through a drawn copy) and publishes it undrawn, as a release publishes it, through the authority root as the hosted, composed definition for the declared row named by <key> (owner/{oid}/{world} or the bare world id).",
             handler: (context, args) => {
                 if (args.Count != 2) {
-                    return CommandResult.Error(output: "[silo.publish: expected exactly two values — <key> <path>]");
+                    return CommandResult.Usage(form: PublishForm, verb: "silo.publish");
                 }
 
                 if (!host.TryResolveKey(
@@ -167,10 +169,10 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "silo.checkpoint",
-            description: "silo.checkpoint [<key>]: requests an immediate checkpoint of the named row, or of every currently admitted row when <key> is omitted, through each row's own grain. Requested, not synchronous — read silo.grains for the outcome.",
+            description: "silo.checkpoint " + CheckpointForm + ": requests an immediate checkpoint of the named row, or of every currently admitted row when <key> is omitted, through each row's own grain. Requested, not synchronous — read silo.grains for the outcome.",
             handler: (context, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Error(output: "[silo.checkpoint: expected at most one value — [<key>]]");
+                    return CommandResult.Usage(form: CheckpointForm, got: args[1].ToString(), verb: "silo.checkpoint");
                 }
 
                 if (args.Count == 1) {
@@ -216,7 +218,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
             description: "silo.use <key>: selects the row an untagged console line (one with no leading '@<key> ') routes to. Never refuses admitted-row traffic addressed with an explicit tag.",
             handler: (context, args) => {
                 if (args.Count != 1) {
-                    return CommandResult.Error(output: "[silo.use: expected exactly one value — <key>]");
+                    return CommandResult.Usage(form: "<key>", verb: "silo.use");
                 }
 
                 if (!host.TryResolveKey(

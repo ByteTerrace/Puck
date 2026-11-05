@@ -128,7 +128,7 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
                         index: 4,
                         value: "add"
                     )) {
-                        return CommandResult.Error(output: $"[player.state.cell.set: unknown trailing token '{args[4]}' — expected 'add']");
+                        return CommandResult.Usage(form: "<player> <row> <key> <value> [add]", got: args[4].ToString(), verb: "player.state.cell.set");
                     }
 
                     kind = WorldDocumentWriteKind.Add;

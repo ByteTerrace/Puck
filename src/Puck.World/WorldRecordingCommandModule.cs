@@ -37,7 +37,7 @@ internal sealed class WorldRecordingCommandModule(
 
     private CommandResult Start(WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[capture.start: expected at most one argument (an output path)]");
+            return CommandResult.Usage(form: "[<path>]", got: args[1].ToString(), verb: "capture.start");
         }
 
         if (m_capture.IsArmed) {

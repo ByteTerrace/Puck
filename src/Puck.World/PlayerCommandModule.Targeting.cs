@@ -109,7 +109,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private CommandResult TargetsHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[body.targets: expected an optional body index]");
+            return CommandResult.Usage(form: TargetsForm, verb: "body.targets");
         }
 
         var (player, index, error) = ResolveTarget(

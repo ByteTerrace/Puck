@@ -9,7 +9,7 @@ namespace Puck.World;
 internal sealed partial class PlayerCommandModule {
     private CommandResult StateHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[body.state: expected at most 1 value — an optional body index]");
+            return CommandResult.Usage(form: OptionalBodyForm, verb: "body.state");
         }
 
         if (TryRoutedSeatQuery(

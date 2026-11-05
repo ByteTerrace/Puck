@@ -521,14 +521,14 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
 
         if (args.Count > 1) {
             instance = null;
-            error = CommandResult.Error(output: $"[{verb}: too many arguments — expected [instance:<name>]]");
+            error = CommandResult.Usage(form: "[instance:<name>]", got: args[1].ToString(), verb: verb);
 
             return false;
         }
 
         if (!WorldArgs.IsInstanceToken(token: args[0])) {
             instance = null;
-            error = CommandResult.Error(output: $"[{verb}: unrecognized '{args[0]}' — expected [instance:<name>]]");
+            error = CommandResult.Usage(form: "[instance:<name>]", got: args[0].ToString(), verb: verb);
 
             return false;
         }

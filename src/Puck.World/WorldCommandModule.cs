@@ -202,7 +202,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     !double.IsFinite(d: hz) ||
                     (hz <= 0.0)
                 ) {
-                    return CommandResult.Error(output: "[world.target: expected a positive finite Hz value, or 'display'/'vrr' for automatic display pacing]");
+                    return CommandResult.Usage(form: "[<hz>|display|vrr] (<hz> a positive finite number)", got: args[0].ToString(), verb: "world.target");
                 }
 
                 // The echo formats INSIDE the completion — after the lever has applied (or been refused).

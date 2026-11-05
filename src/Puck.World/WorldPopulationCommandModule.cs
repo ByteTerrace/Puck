@@ -625,7 +625,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             description: "Reports every active participant's authored, measured, and applied input hold plus the participant setting the equalized maximum.",
             handler: (_, args) => {
                 if (args.Count != 0) {
-                    return CommandResult.Error(output: "[world.input-holds: expected no values]");
+                    return CommandResult.Usage(form: "", got: args[0].ToString(), verb: "world.input-holds");
                 }
 
                 var result = default(CommandResult);
