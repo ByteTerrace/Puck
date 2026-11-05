@@ -36,7 +36,7 @@ public sealed class SdfFieldSlice {
     /// <summary>The colour, linear RGB, both panels paint a clipped sample: a dull magenta no other reading uses.</summary>
     public static readonly Vector3 ClippedColour = new(x: 0.55f, y: 0.25f, z: 0.55f);
     // The points a lattice samples: five evaluations each fits one reference frame's share of the bake.
-    private const int ChunkPoints = (SdfMeshPathBake.FrameTaps / 5);
+    private const int ChunkPoints = (SdfMeshPathBake.LatticeTaps / 5);
     // The cell the sampler's gradient taps read a sixty-fourth of: taps a millimetre from the point, independent of the
     // slice's pixel, so a coarse slice measures the gradient as finely as a fine one.
     private const float TapCell = 0.064f;

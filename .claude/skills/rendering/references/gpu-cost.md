@@ -328,8 +328,9 @@ should fill whole waves.
   [`GpuRegion`](../../../../src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs)).
 - The SDF compute kernels' groups are 64 threads (8×8 for the pixel passes,
   `SDF_VISIBILITY_GROUP_EDGE`), a whole number of waves on both vendors.
-- The bake spends a fixed share of each frame (`SdfMeshPathBake.FrameTaps`), so
-  a cold debug-world bake takes tens of thousands of dispatches ([cold bake](../../../../docs/plans/open-items.md#bake-proportional-to-change)).
+- The bake dispatches batches of at most `SdfMeshPathBake.BatchTaps` evaluations
+  as background GPU work (`SdfGpuWork`): a cold debug-world bake is about a
+  thousand jobs of a few milliseconds each ([cold bake](../../../../docs/plans/open-items.md#bake-proportional-to-change)).
 
 Sources: [MS-DISPATCH] (65,535 groups a dimension) and [VK-LIMITS]
 (`maxComputeWorkGroupCount`, per device); [AMD-RDNA] (group sizes a multiple of
@@ -347,9 +348,9 @@ large blocks.
   `WaitIdle` stays for a resize, a reload's install, a capture's readback and
   device loss.
 - **Read back late.** The kernel counters arrive a few frames after their frame
-  ([SKILL](../SKILL.md#performance-and-cost)), and `SdfWorldPasses.BeginFrame`
-  polls every bake pass's readbacks each frame
-  ([mesh bake](mesh-bake.md#the-library-and-the-store)).
+  ([SKILL](../SKILL.md#performance-and-cost)), and the background GPU work
+  polls each slot's fence at the top of each frame and after each upload and
+  never waits on one ([mesh bake](mesh-bake.md#the-library-and-the-store)).
 - **Bind read-only where a pass only reads,** or Direct3D 12 keeps the buffer in
   `UNORDERED_ACCESS` and transitions before every reader
   ([kernels](kernels.md#buffer-hazards)).

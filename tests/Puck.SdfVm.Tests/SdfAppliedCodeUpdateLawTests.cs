@@ -89,9 +89,9 @@ public sealed class SdfAppliedCodeUpdateLawTests {
         var kernels = new SdfKernelSet(bytecode: SdfKernelSet.Kernels.Select(selector: static kernel => new ReadOnlyMemory<byte>(array: [((byte)kernel)])).ToArray());
         var built = SdfMeshBakeIdentity.Of(code: closure, kernels: kernels);
 
-        Assert.False(condition: closure.Reads(type: typeof(SdfMeshBakeInputTransport)));
+        Assert.False(condition: closure.Reads(type: typeof(SdfGpuWork)));
         Assert.True(condition: closure.Reads(type: typeof(SdfMeshBakeBatch)));
-        AppliedCodeUpdate.Apply(typeof(SdfMeshBakeInputTransport));
+        AppliedCodeUpdate.Apply(typeof(SdfGpuWork));
         var reallocated = built.UnderRunningCode(code: closure);
 
         // Compare with the current identity, including any earlier process update: test ordering must not require

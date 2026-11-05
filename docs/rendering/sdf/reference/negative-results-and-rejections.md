@@ -35,7 +35,7 @@ certificates before adding another index.
 No view performs per-pixel field marching. That does not reject region-local
 pruning for CPU surface queries or baking: those still pay to evaluate the
 field. Their pruning must preserve exact fixed-point answers and certified
-bounds. `SdfMeshPathBake.FrameTaps` budgets bake work; it does not make each
+bounds. `SdfMeshPathBake.BatchTaps` and the background work's GPU share budget bake work; they do not make each
 field evaluation cheap.
 
 ## Coverage rasterizers as geometry

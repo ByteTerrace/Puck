@@ -59,12 +59,12 @@ memo's option 8 (a per-probe visibility lattice, 34× the rays) would close
 
 **The bake.** From an empty store the same world now bakes in 88.5 s on
 Direct3D 12 and 91 s on Vulkan, and the current debug world, with its water,
-in about 151 s on both, against the one-minute bar. It is bound twice: the
-frame admits one dispatch of at most `MeshBakeMaxSamples` (2^21) samples
-under `SdfMeshPathBake.FrameTaps` (a million field evaluations per 60 Hz
-frame, sized to about a millisecond of GPU time), so the world's 1.1 to
-1.36 G samples need at least 530 frames of 100 to 120 ms each, a pacing floor
-of 53 to 64 s before any GPU time; and the CPU contour saturates every worker
+in about 151 s on both, against the one-minute bar. It was bound twice: the
+frame admitted one dispatch of at most `MeshBakeMaxSamples` (2^21) samples
+under a per-frame share of a million field evaluations, so the world's 1.1 to
+1.36 G samples needed at least 530 frames of 100 to 120 ms each, a pacing floor
+of 53 to 64 s before any GPU time, which B1 removed
+([B1](#b1-the-completion-driven-bake-service)); and the CPU contour saturates every worker
 for about 1,500 thread-seconds, the collapse about 30 %, the crossing stage
 20 %, the contour 12 % ([bake packet](open-items.md#bake-proportional-to-change)).
 A cold bake's private memory passes the Deck tier's 10 GB in its first minute,
@@ -118,11 +118,10 @@ this memo's GPU trace are all M1.
 is not the frame's (sampling a lattice, tracing a probe, relighting one,
 building a hierarchy) is submitted by a service that owns a bounded ring of
 slots, fences and memory admission, and that submits the next batch when the
-last completes rather than once per rendered frame. Puck has the bake's per-
-frame dispatch under `FrameTaps` and its readback polling
-(`SdfWorldPasses.BeginFrame`), which is the frame-paced form the Codex
-synthesis's rank 2 replaces; the probe trace has no GPU form at all. One
-service serves both, on one queue first; a second compute queue is an
+last completes rather than once per rendered frame. B1 built it as
+`SdfGpuWork`, the bake its first client, replacing the bake's frame-paced
+dispatch (the Codex synthesis's rank 2); the probe trace has no GPU form yet
+and is its second client (G1). One service serves both, on one queue first; a second compute queue is an
 overlap measured per device, never a correctness dependency (the Codex
 synthesis's S6 to S8 agree that overlap shares bandwidth and caches and can
 regress). The job system's `Lighting` and `Bake` classes
@@ -459,7 +458,7 @@ whose numbers every step takes itself.
 | Rank | Step | Mechanism | Frame bar | Memory bar | Cold-bake bar | What it proves on the debug world |
 |---|---|---|---|---|---|---|
 | 1 | **G1.** GPU probe trace and relight, software traversal, with the GPU work list | M1 (the hierarchy uploaded once per geometry), M2 (the background GPU service, shared with B1) | The relight's CPU contention goes (holding the sun saved 1 to 3 ms); the GPU gains a budgeted dispatch of milliseconds | The CPU probe cache's hit blocks and the scene build's transient go (about 1.3 GB after a tour); a hierarchy of 140 to 280 MB arrives on the GPU | The trace's quarter of the processors returns to the contour | `[sdf.mesh-gi] done` seconds for a full High window; the lockstep still with the day running; `sdf.mesh-gi.relit` per tick; the device law's hits |
-| 2 | **B1.** The completion-driven bake service, on G1's GPU service | M2 | None directly; fewer bake frames at 120 ms | The slot ring bounds in-flight bytes | The pacing floor (53 to 64 s) goes; the CPU half is the packet's separate cut | Empty-store bake seconds and dispatch occupancy on both backends; identical products to the frame-paced bake |
+| 2 | **B1** (landed). The completion-driven bake service, the GPU service G1 reuses | M2 | Produce no longer decodes samples (83 to 69 ms while baking) | The slot ring bounds in-flight bytes | The pacing floor went: 170 to 102–125 s on Direct3D 12, 190 to 129 s on Vulkan; the CPU half is the packet's separate cut | Measured: identical products within the run-to-run spread, 6–7 s of GPU a cold bake |
 | 3 | **A1.** Portal sight by the consumer's pyramid, and **A2.** Direct3D 12 batching and caller-stated layouts | M4; the recording preconditions | About 5 to 6 ms of GPU at the forest pose; a submission saving measured, not assumed | None | None | `world.budget`'s live frame line shows no hall session from the forest; a painting shows fresh on its first visible frame; `ExecuteCommandLists` count per frame |
 | 4 | **V1b.** The geometry/instance split, with the hierarchy offset and residency handle in the geometry table | M1 | As the visibility plan expects of buckets | The draw table shrinks (the meadow's 539 KB to about 225 KB by the Antigravity file's arithmetic, unverified) | None | The visibility plan's V1b checks |
 | 5 | **G2.** Hardware ray query behind G1's interface | M1 (BLAS and TLAS from the geometry table) | None | BLAS bytes beside the software hierarchy, or instead of it where the hardware leg is chosen | None | Rays per second against G1 on the 4070, the 2060 and the Deck; the same hits within the law's tolerance |
@@ -468,9 +467,11 @@ whose numbers every step takes itself.
 
 G1 is first because it is the one step that changes what the engine can do
 (a world lit under a moving sun with the sweep running, a lockstep still of
-one tick in a frame), removes a whole CPU subsystem's working set, and
-builds the GPU service B1 then reuses. B1 is the cold-bake bar's step and
-depends on G1's service, not on G1's kernels. A1 and A2 are small, checked
+one tick in a frame) and removes a whole CPU subsystem's working set. The
+lead built the GPU service with B1 first, the cold-bake bar's step, since it
+depends on the service and not on G1's kernels; B1 has landed
+([below](#b1-the-completion-driven-bake-service)) and G1 is the service's
+second client. A1 and A2 are small, checked
 and independent of the others, and run beside them. V1b precedes G2 because
 a TLAS is an instance table; building it twice would be the defect the
 plans' fifth goal names.
@@ -536,10 +537,9 @@ the pixels.
 uploaded (its `Node` layout, leaf order and per-draw inverse transforms),
 never rebuilt in a second builder; the upload goes through a `GpuRegion`
 (grow, retire and the staged, ring and in-place policies, tested under every
-policy as `GpuResidencyLawTests` does); the background submission reuses the
-bake's dispatch and readback machinery (`SdfMeshBakeBatch`, the readback
-poll in `SdfWorldPasses.BeginFrame`) generalised into one service that B1
-then takes, not a second ring; the work list is a selection kernel feeding
+policy as `GpuResidencyLawTests` does); the background submission is the
+service B1 landed (`SdfGpuWork`, below), a second client of it beside the
+bake's, not a second ring; the work list is a selection kernel feeding
 an indirect dispatch as `SdfMeshOcclusion` feeds its indirect draws; the
 kernel's bindings are members of `SdfKernelInterfaces`; a value only the
 shader reads is `Tuning`. The relight's local part, sweep convergence and
@@ -567,28 +567,68 @@ contour regains the trace's workers; the far-field memo's fixed poses in
 
 ### B1. The completion-driven bake service
 
-**Family and model.** Codex Astra at high effort (it wrote the analysis and
-holds the context), after G1's step 1 lands the service it extends.
+**Landed.** The background GPU service is `SdfGpuWork`, one per residency's
+tables: a ring of `SdfGpuWork.SlotCount` slots, each a command buffer, a
+submission fence, a readback and two timestamps, filled by its clients in turn
+(`ISdfGpuWorkClient`). The bake is its first client (`SdfMeshBakeGpuWork`):
+each job is one batch (`SdfMeshPathBake.TryTake`), recorded as the mask and
+sampler dispatches and the samples' copy back, with the batch's pass block,
+point table, instance masks and samples in the slot's own buffers and a World
+set of its own binding the tables' current tables. The bake's two passes, its
+scratch and its samples destination left the view fragment, the tables' point
+region and the per-view readback slots went with them, and the frame budget
+(`FrameTaps`, `FrameBudget`) gave way to the service's: at most
+`SdfGpuWork.GpuShare` of the GPU's time, charged by each job's own timestamps.
+`Pump` runs on the frame thread at the top of each frame, before any residency
+prepares, and after each upload; it hands each completed job to its client,
+which copies and decodes the samples on the bake's pool and releases the slot,
+and refills every released slot.
 
-**Outcome.** The bake submits a sampling round when the previous round's
-fence signals and its CPU consumer has taken the readback, bounded by a slot
-ring and the memory account, with the same lattices, sample coordinates and
-products as the frame-paced bake; `world prepare` and a cold boot drive the
-service to completion without rendering a frame per round.
+**Invariant and enforcement, as landed.** A slot is reused only after its fence
+signaled and its client released the job's readback: `SdfGpuWork` is the one
+owner of its slots, a client reaches one only through the recording it is
+handed for one call and the readback it holds until it releases it
+(`SdfGpuWorkReadback`). A batch samples the field its groups were planned
+from: the bake takes nothing unless the tables' last uploaded program is the
+program it meshes (`TryTake`'s `field`, from `SdfWorldTables.BackgroundProgram`),
+and a job binds the upload's World set only while nothing it binds has moved
+since that upload (`SdfWorldTables.BindsBackgroundWork`; between a pack and its
+upload the slot's buffers are owed contents not yet sent). Only a product of
+the current bake generation lands, through the existing door
+(`SdfMeshPathBake.Land` under `Keeps`). Where the guarantee stops: the
+service records and submits on the frame thread, which the GPU layer requires
+(Direct3D 12's process-global `DirectXResourceStates`, the submitters' external
+waits and Vulkan batch, the single-threaded submission fences), so a job
+completes between frames but the next is submitted only at the next pump.
 
-**Invariant and enforcement.** A batch reads immutable captured inputs and
-a slot is reused only after its GPU fence and CPU consumer both complete;
-only a product of the current bake generation lands. Enforced by the
-service's one slot owner (the type that hands a slot out holds the fence
-and the consumer's acknowledgement, and no caller can write a slot it did
-not take) and by the existing landing door (`SdfMeshPathBake.Land` under
-the generation `Keeps`). `puck mesh audit --cpu --group` and the done line's
-samples, triangles and level counts are the check that no product moved.
+**Measured** (RTX 4070, a busy shared machine: CPU load and commit charge are
+in the commit). Empty-store bake of the debug world, `[sdf.mesh-bake] done`
+seconds: Direct3D 12 169.4 and 170.5 s before, 101.7 and 124.7 s after;
+Vulkan 190.0 s before, 129.0 s after. Dispatches went from one a frame (about
+3.8 a second, 583 of 637 frames full) to 7.4 to 9.3 jobs a second, four in
+flight at most. The whole cold bake is 6.1 to 6.8 s of measured GPU time (about
+four nanoseconds a field evaluation), 9% of the wall time a job was in flight,
+so the GPU is no bound: the bake is now CPU-bound (39 to 47% of takes found no
+group owing a lattice, and the stages log 1,100 to 1,500 thread seconds on 16
+threads). The frame while baking is the simulation tick's (180 to 200 ms of a
+250 to 275 ms frame); produce fell from 83 to 69 ms on average on Direct3D 12,
+since the frame thread no longer decodes samples. Peak private bytes held
+within the run-to-run spread (16.4 to 15.4 GB on Direct3D 12, 13.8 to 15.9 GB
+on Vulkan). Products: 1,301 of 1,306 stored meshes are byte-identical between
+a bake before and after, exactly as between two bakes before; the entries that
+vary are the same family in every pair, so the service moves none.
 
-**Checks.** Empty-store bake seconds on both backends against the 88.5 and
-91 s readings; dispatch occupancy and fence wait against GPU execution from
-`world.gpu-timing`; identical `[sdf.mesh-bake] done` counts; peak in-flight
-bytes from `world.residency`; the frame's p99 while baking from
+**Next.** The bar now waits on the CPU half (the collapse and crossing cuts in
+the [bake packet](open-items.md#bake-proportional-to-change)). A submission
+between frames needs A2's caller-stated layouts and a thread-safe submitter,
+after which the pump can move to a waiter on the slots' fences; it pays only
+once the CPU half no longer bounds the bake.
+
+**Checks.** Empty-store bake seconds on both backends; dispatch occupancy from
+the done line's `gpu-work=[…]` (`world.gpu-timing` does not see the service);
+the done line's samples, triangles and level counts within the run-to-run
+spread and the stored payloads compared by content; the service's buffers from
+`world.residency`'s `gpu-work` line; the frame's p99 while baking from
 `host.frames`; an edit and cancel during a bake (a `world.reload`) leaves no
 stale product.
 

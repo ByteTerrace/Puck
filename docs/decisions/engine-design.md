@@ -489,7 +489,7 @@ ledgers and the bake derivation fingerprint.
 
 Mesh derivation and drawing have separate owners. `SdfMeshPathBake` reconciles
 product inputs and derives meshes; `SdfMeshDresser` retains poses, draws and picks;
-`SdfMeshBakeReadback` interprets sampler answers, and `SdfMeshBakeBlock` owns the
+`SdfMeshPathBake.Complete` interprets sampler answers, `SdfMeshBakeGpuWork` carries a batch to the device and back as background GPU work outside the closure, and `SdfMeshBakeBlock` owns the
 bake-only parameter offsets and writer. View parameters have their own initializer;
 both writers use the shared `ShaderParameterWriter` primitives. Positive production entry methods
 define the bake's code closure, and a missing named entry is an error. This boundary

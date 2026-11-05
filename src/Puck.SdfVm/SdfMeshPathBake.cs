@@ -6,7 +6,6 @@ using System.Runtime.InteropServices;
 using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Baking;
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 using Puck.Hosting;
 using Puck.Hosting.Jobs;
@@ -60,17 +59,6 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
     /// every other selector.</summary>
     public int Instances { get; init; } = 1;
 }
-/// <summary>A frame's bake point table: the rows a batch wrote and the runs of their 32-bit words, four a row, which are
-/// the only rows the bake kernel reads (<see cref="SdfMeshBakeBatch.WritePoints"/>). The rows between the runs are
-/// stale and never read, so the table uploads the runs alone, comparing nothing.</summary>
-/// <param name="Rows">The table from its first row through the last row the batch wrote.</param>
-/// <param name="Runs">The runs of words the batch wrote; <see langword="null"/> for an empty table.</param>
-public readonly ref struct SdfMeshBakeInput(ReadOnlySpan<Vector4> Rows, GpuUploadRuns? Runs) {
-    /// <summary>Gets the table from its first row through the last row the batch wrote.</summary>
-    public ReadOnlySpan<Vector4> Rows { get; } = Rows;
-    /// <summary>Gets the runs of words the batch wrote, or <see langword="null"/> for an empty table.</summary>
-    public GpuUploadRuns? Runs { get; } = Runs;
-}
 /// <summary>The lattices one bake dispatch samples, at most <see cref="SdfWorldPackage.MeshBakeBatch"/> holding at most
 /// <see cref="SdfWorldPackage.MeshBakeMaxSamples"/> samples together, and the group each answers.</summary>
 /// <param name="Lattices">The lattices, in dispatch order.</param>
@@ -114,56 +102,37 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
             return samples;
         }
     }
-    /// <summary>Gets whether a bake pass recorded the batch (<see cref="SdfMeshPathBake.Record"/>); a batch no pass
-    /// recorded returns to its groups when the next frame takes one.</summary>
-    public bool Recorded { get; internal set; }
+    /// <summary>Gets whether the batch was answered or abandoned, which settles it once.</summary>
+    public bool Answered { get; internal set; }
 
-    private string? m_instance;
-
-    /// <summary>Claims the batch for a view instance's mask and bake passes: the first instance to ask claims it, so a
-    /// frame of several views of one residency dispatches its batch once.</summary>
-    /// <param name="instance">The asking view instance.</param>
-    /// <returns><see langword="true"/> when the batch is the instance's to dispatch.</returns>
-    public bool Claim(string instance) =>
-        string.Equals(a: (Interlocked.CompareExchange(comparand: null, location1: ref m_instance, value: instance) ?? instance), b: instance, comparisonType: StringComparison.Ordinal);
-
-    /// <summary>Gets or sets whether the batch's samples were answered, which answers it once however many readbacks
-    /// arrive.</summary>
-    public bool Answered { get; set; }
-
-    /// <summary>Writes the batch's point table: each points lattice's points at its first sample's place in the
-    /// dispatch, then each lattice's poses from <see cref="PoseBase"/>.</summary>
-    /// <param name="table">The table, at least <see cref="InputRows"/> entries.</param>
-    /// <param name="runs">When given, receives the runs of the table's 32-bit words the batch wrote, four a row: the only
-    /// rows the bake kernel reads, so an upload of these runs alone leaves no row it reads stale.</param>
-    /// <returns>Whether the batch wrote an entry.</returns>
-    public bool WritePoints(Span<Vector4> table, GpuUploadRuns? runs = null) {
-        const int RowWords = 4;
+    /// <summary>Returns the runs of the batch's point table: each points lattice's points at its first sample's place in
+    /// the dispatch, then each lattice's poses from <see cref="PoseBase"/>, in table rows of one <see cref="Vector4"/>.
+    /// The rows between the runs are never read, so a table that holds the runs alone leaves no row the bake kernel reads
+    /// stale.</summary>
+    /// <returns>The first table row of each run and its rows, in table order; empty when the batch reads no table.</returns>
+    public (int Row, ReadOnlyMemory<Vector4> Rows)[] PointRuns() {
+        var runs = new List<(int Row, ReadOnlyMemory<Vector4> Rows)>();
         var first = 0;
-        var any = false;
 
-        runs?.Clear();
         foreach (var lattice in Lattices) {
-            if (!lattice.Points.IsEmpty) {
-                lattice.Points.Span.CopyTo(destination: table[first..]);
-                runs?.Add(length: (lattice.Points.Length * RowWords), start: (first * RowWords));
-                any = true;
-            }
+            if (!lattice.Points.IsEmpty) { runs.Add(item: (first, lattice.Points)); }
             first += lattice.Samples;
         }
         for (var index = 0; (index < Poses.Length); index++) {
-            var rows = Poses[index].Rows;
-
-            if (!rows.IsEmpty) {
-                var poseBase = PoseBase(lattice: index);
-
-                rows.Span.CopyTo(destination: table[poseBase..]);
-                runs?.Add(length: (rows.Length * RowWords), start: (poseBase * RowWords));
-                any = true;
-            }
+            if (!Poses[index].Rows.IsEmpty) { runs.Add(item: (PoseBase(lattice: index), Poses[index].Rows)); }
         }
 
-        return any;
+        return [.. runs];
+    }
+    /// <summary>Writes the batch's point table (<see cref="PointRuns"/>) into a table of rows, as an answerer on the CPU
+    /// reads it.</summary>
+    /// <param name="table">The table, at least <see cref="InputRows"/> rows.</param>
+    /// <returns>Whether the batch wrote a row.</returns>
+    public bool WritePoints(Span<Vector4> table) {
+        var runs = PointRuns();
+
+        foreach (var (row, rows) in runs) { rows.Span.CopyTo(destination: table[row..]); }
+        return (runs.Length > 0);
     }
     /// <summary>Returns the point table entry a lattice's poses start at: after every sample's point and every earlier
     /// lattice's poses.</summary>
@@ -185,8 +154,9 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
 /// <para>A group is the instances one rigid frame moves: every active instance riding one dynamic-transform slot, or one
 /// static copy, the run of static instances that bake with the first (<see cref="SdfInstanceRange.BakesWithPrevious"/>),
 /// so shapes of one copy that share a face bake as their union. Each group's field is sampled through the frame's own
-/// interpreter (<c>sdf-mesh-bake.comp.hlsl</c>) with only its instances in the walk's mask, lattices taken in the groups' order within a frame's share of field
-/// evaluations (<see cref="FrameTaps"/>): a coarse lattice over the group's bounding sphere, refinements over the box of
+/// interpreter (<c>sdf-mesh-bake.comp.hlsl</c>) with only its instances in the walk's mask, lattices taken in the groups'
+/// order into batches the residency's background GPU work dispatches (<see cref="TryTake"/>, <see cref="SdfGpuWork"/>),
+/// each lattice at most <see cref="LatticeTaps"/> field evaluations: a coarse lattice over the group's bounding sphere, refinements over the box of
 /// the cells the surface can cross until the box stops shrinking, then a final lattice of at most 65 samples a side
 /// whose spacing follows the box's own proportions (a union's cubic, keeping each of its shapes at the resolution its own
 /// lattice would give it), sampled in slabs of whole planes, values alone; then the fine samples
@@ -206,14 +176,19 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
 /// pose it was baked at, and its new mesh replaces the skinned one when it lands (<see cref="SdfMeshSettle"/>).</para>
 /// </summary>
 public sealed partial class SdfMeshPathBake {
-    /// <summary>The field evaluations one frame's bake dispatch makes at most, past its first lattice, in a frame of
-    /// <see cref="ReferenceFrameSeconds"/>: the bake pass's share of the frame, about a millisecond of a current desktop
-    /// GPU. A longer frame takes the same share of its time (<see cref="FrameBudget"/>). Long lattices and point runs are
-    /// cut into chunks of one share; no lattice's spacing or extent reads it, so the meshes depend neither on it nor on the
-    /// frame rate.</summary>
-    public const int FrameTaps = 1_000_000;
-    /// <summary>The frame, in seconds, <see cref="FrameTaps"/> is the bake's share of: a 60 Hz frame, so a display at 60 Hz
-    /// or faster takes one share a frame, and only a frame longer than two reference frames takes more.</summary>
+    /// <summary>The field evaluations one lattice makes at most: long lattices and point runs are cut into chunks of this
+    /// many evaluations (a gradient sample counts five), a few milliseconds of a current desktop GPU
+    /// (<see cref="NanosecondsPerTap"/>). No lattice's spacing or extent reads it, so the meshes do not depend on it.</summary>
+    public const int LatticeTaps = 1_000_000;
+    /// <summary>The field evaluations one batch (<see cref="TryTake"/>) makes at most, past its first lattice. The
+    /// background GPU work (<see cref="SdfGpuWork"/>) paces batches by their measured GPU time; this bounds one
+    /// submission's.</summary>
+    public const int BatchTaps = (8 * LatticeTaps);
+    /// <summary>The GPU time one field evaluation is estimated to take, in nanoseconds, on a current desktop GPU (the
+    /// debug world's cold bake measures about four on an RTX 4070): what the background GPU work charges a batch before
+    /// its timestamps measure it, and on a queue without timestamps.</summary>
+    public const double NanosecondsPerTap = 4.0;
+    /// <summary>The frame, in seconds, a per-frame budget is sized for (<see cref="FrameShares"/>): a 60 Hz frame.</summary>
     public const double ReferenceFrameSeconds = (1.0 / 60.0);
     /// <summary>The most reference frames' shares one frame takes, however long it is.</summary>
     public const int MaxFrameShares = 8;
@@ -472,171 +447,167 @@ public sealed partial class SdfMeshPathBake {
         if (!m_copyAssetSlots.Contains(group.Slot)) { return null; }
         return (m_slotCopies.TryGetValue(group.Slot, out var copies) ? copies : Array.Empty<int>());
     }
-    // The frame's lattices and their groups while TryTakeForFrame chooses them, reused frame to frame.
+    // The lattices and their groups while TryTake chooses them, reused take to take.
     private readonly List<SdfMeshBakeRequest> m_takenLattices = [];
     private readonly List<object> m_takenTickets = [];
 
-    /// <summary>Returns the field evaluations a frame presented over <paramref name="frameSeconds"/> takes: the same share
-    /// of its time a reference frame's <see cref="FrameTaps"/> are, between one and <see cref="MaxFrameShares"/> shares.</summary>
-    /// <param name="frameSeconds">The interval the frame's presentation spans, in seconds; zero or less is a reference
-    /// frame.</param>
-    /// <returns>The frame's evaluations.</returns>
-    public static int FrameBudget(double frameSeconds) => (FrameTaps * FrameShares(frameSeconds: frameSeconds));
     /// <summary>Returns the reference frames' shares a frame presented over <paramref name="frameSeconds"/> takes of a
     /// per-frame budget: one for each whole <see cref="ReferenceFrameSeconds"/> it spans, between one and
     /// <see cref="MaxFrameShares"/>. A budget sized for a 60 Hz frame then spends the same share of a longer frame's time
-    /// (the bake's evaluations, the mesh region's landing words).</summary>
+    /// (the mesh region's landing words).</summary>
     /// <param name="frameSeconds">The interval the frame's presentation spans, in seconds; zero or less is a reference
     /// frame.</param>
     /// <returns>The frame's shares.</returns>
     public static int FrameShares(double frameSeconds) =>
         ((int)Math.Clamp(value: Math.Floor(d: (frameSeconds / ReferenceFrameSeconds)), min: 1.0, max: MaxFrameShares));
-    /// <summary>Takes the lattices a frame dispatches: the first call of a frame takes the next lattice of each group that
-    /// owes one and has none in flight, the groups the demand points see largest first (<see cref="SdfMeshDemand"/>) and the
-    /// plan's order among equals, up to a batch, and every later call of the same frame answers the same, so the frame's
-    /// mask and bake passes agree. Taking them by priority rather than round robin finishes the groups about the views
-    /// first, each landing in the mesh library as it finishes, so a residency the program leaves mid-bake (a body crossing
-    /// into another world) leaves the groups it finished there for the residency it reaches.</summary>
-    /// <param name="frame">The package frame (<see cref="SdfWorldResidency.PackageFrame"/>).</param>
+    /// <summary>Takes the lattices of one dispatch: the next lattice of each group that owes one and has none in flight,
+    /// the groups the demand points see largest first (<see cref="SdfMeshDemand"/>) and the plan's order among equals, up
+    /// to <see cref="SdfWorldPackage.MeshBakeBatch"/> lattices, <see cref="SdfWorldPackage.MeshBakeMaxSamples"/> samples
+    /// and <see cref="BatchTaps"/> evaluations. Each call takes a batch of its own, so several batches dispatch at once,
+    /// each lattice in one of them, and a taken batch counts as the bake's work. Taking by priority rather than round robin
+    /// finishes the groups about the views first, each landing in the mesh library as it finishes, so a residency the
+    /// program leaves mid-bake (a body crossing into another world) leaves the groups it finished there for the residency
+    /// it reaches.</summary>
+    /// <param name="field">The program whose field the dispatch samples: the tables' uploaded program. The bake takes
+    /// nothing unless it is the program the bake meshes (<see cref="Program"/>), so a batch never samples another
+    /// program's field.</param>
     /// <param name="batch">The lattices to dispatch and the group each answers, handed back to
-    /// <see cref="Complete(SdfMeshBakeBatch, ReadOnlySpan{byte})"/>.</param>
-    /// <returns><see langword="true"/> when the frame dispatches a lattice.</returns>
-    public bool TryTakeForFrame(long frame, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch) {
+    /// <see cref="Complete(SdfMeshBakeBatch, ReadOnlySpan{byte})"/> or <see cref="Abandon"/>.</param>
+    /// <returns><see langword="true"/> when the bake takes a lattice.</returns>
+    public bool TryTake(SdfProgram? field, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch) {
+        batch = null;
         using (EnterFrameGate()) {
-            if (m_frameTaken != frame) {
-                m_frameTaken = frame;
-                // A batch no bake pass recorded, as while the view's graph rebuilds, answers nothing.
-                if (m_frameBatch is { Recorded: false } unrecorded) { Return(batch: unrecorded); }
-                m_frameBatch = null;
+            if ((field is null) || !ReferenceEquals(objA: field, objB: m_program)) { return false; }
 
-                var lattices = m_takenLattices;
-                var tickets = m_takenTickets;
+            var lattices = m_takenLattices;
+            var tickets = m_takenTickets;
 
-                lattices.Clear();
-                tickets.Clear();
-                m_takenPoses.Clear();
-                var samples = 0;
-                var taps = 0;
-                // A slice's lattices come first, within the same share, so a long bake never holds a diagnostic back.
-                while ((m_slice is { } slice) && (lattices.Count < SdfWorldPackage.MeshBakeBatch)) {
-                    if (slice.Take(instances: (m_program?.Instances.Count ?? 0), ticket: out var lattice, worldSelector: SdfMeshBakeGroup.WorldSelector) is not { } next) { break; }
-                    if ((lattices.Count > 0) && (((taps + next.Taps) > m_frameBudget) || ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples))) {
-                        slice.Return(ticket: lattice);
-                        break;
-                    }
-                    samples += next.Samples;
-                    taps += next.Taps;
-                    lattices.Add(item: next);
-                    tickets.Add(item: new SliceTicket(Generation: slice.Generation, Lattice: lattice, Slice: slice));
-                    m_takenPoses.Add(item: (0, ReadOnlyMemory<Vector4>.Empty));
+            lattices.Clear();
+            tickets.Clear();
+            m_takenPoses.Clear();
+            var samples = 0;
+            var taps = 0;
+            // A slice's lattices come first, within the same batch, so a long bake never holds a diagnostic back.
+            while ((m_slice is { } slice) && (lattices.Count < SdfWorldPackage.MeshBakeBatch)) {
+                if (slice.Take(instances: (m_program?.Instances.Count ?? 0), ticket: out var lattice, worldSelector: SdfMeshBakeGroup.WorldSelector) is not { } next) { break; }
+                if ((lattices.Count > 0) && (((taps + next.Taps) > BatchTaps) || ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples))) {
+                    slice.Return(ticket: lattice);
+                    break;
                 }
-                var candidates = m_candidates;
-                var pending = false;
-                var flying = 0;
-                var working = 0;
-                var admitted = 0;
+                samples += next.Samples;
+                taps += next.Taps;
+                lattices.Add(item: next);
+                tickets.Add(item: new SliceTicket(Generation: slice.Generation, Lattice: lattice, Slice: slice));
+                m_takenPoses.Add(item: (0, ReadOnlyMemory<Vector4>.Empty));
+            }
+            var candidates = m_candidates;
+            var pending = false;
+            var flying = 0;
+            var working = 0;
+            var admitted = 0;
 
-                candidates.Clear();
-                for (var index = 0; (index < m_groups.Count); index++) {
-                    var group = m_groups[index];
+            candidates.Clear();
+            for (var index = 0; (index < m_groups.Count); index++) {
+                var group = m_groups[index];
 
-                    pending |= !group.Done;
-                    flying += ((!group.Done && group.InFlight) ? 1 : 0);
-                    working += ((!group.Done && group.Contouring) ? 1 : 0);
-                    admitted += ((!group.Done && group.Admitted) ? 1 : 0);
-                    if (group.Done || group.InFlight || group.Contouring || (group.Next is null)) { continue; }
-                    candidates.Add(item: (group.Priority, index));
+                pending |= !group.Done;
+                flying += ((!group.Done && group.InFlight) ? 1 : 0);
+                working += ((!group.Done && group.Contouring) ? 1 : 0);
+                admitted += ((!group.Done && group.Admitted) ? 1 : 0);
+                if (group.Done || group.InFlight || group.Contouring || (group.Next is null)) { continue; }
+                candidates.Add(item: (group.Priority, index));
+            }
+            if (pending) {
+                m_takes++;
+                m_waitingGroups += candidates.Count;
+                m_flyingGroups += flying;
+                m_workingGroups += working;
+            }
+            CollectionsMarshal.AsSpan(list: candidates).Sort(comparison: ByPriority);
+            var stop = 0;
+            // The first group the account defers holds its place: no group behind it starts its final lattice
+            // before it does, so a large group never starves behind a stream of smaller ones.
+            var admissionWaits = false;
+            long? available = null;
+            var availableRead = false;
+            var backlogged = false;
+            var backlogRead = false;
+
+            foreach (var (_, index) in candidates) {
+                if (lattices.Count >= SdfWorldPackage.MeshBakeBatch) { stop = 3; break; }
+
+                var group = m_groups[index];
+                var next = group.Next!.Value;
+
+                // A lattice past the dispatch's remaining samples waits, and a smaller one behind it fills them: a
+                // dispatch that stops at the first lattice too large for it leaves half its samples unused.
+                if ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples) {
+                    stop = 2;
+                    continue;
                 }
-                if (pending) {
-                    m_bakeFrames++;
-                    m_shareTaps += m_frameBudget;
-                    m_waitingGroups += candidates.Count;
-                    m_flyingGroups += flying;
-                    m_workingGroups += working;
-                }
-                CollectionsMarshal.AsSpan(list: candidates).Sort(comparison: ByPriority);
-                var stop = 0;
-                // The first group the account defers holds its place: no group behind it starts its final lattice
-                // before it does, so a large group never starves behind a stream of smaller ones.
-                var admissionWaits = false;
-                long? available = null;
-                var availableRead = false;
-                var backlogged = false;
-                var backlogRead = false;
-
-                foreach (var (_, index) in candidates) {
-                    if (lattices.Count >= SdfWorldPackage.MeshBakeBatch) { stop = 3; break; }
-
-                    var group = m_groups[index];
-                    var next = group.Next!.Value;
-
-                    // A lattice past the dispatch's remaining samples waits, and a smaller one behind it fills them: a
-                    // dispatch that stops at the first lattice too large for it leaves half its samples unused.
-                    if ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples) {
-                        stop = 2;
+                // Only sampled values consume the fixed readback budget. Saved poses follow the sample points
+                // in a growable input table; charging them here strands a full 65-cubed lattice forever.
+                // A batch's first lattice is always taken, and no lattice holds more than LatticeTaps.
+                if ((lattices.Count > 0) && ((taps + next.Taps) > BatchTaps)) { stop = 1; break; }
+                // A group starting its final lattice holds that lattice and everything meshed from it until it lands,
+                // so the process account admits its simultaneous peak; the rest keep their small refining lattices.
+                // A first slab returned unanswered keeps the admission it took.
+                if ((next.Slab == 0) && !group.Admitted) {
+                    if (admissionWaits) { continue; }
+                    // A group admitted while the queue already holds a round of every worker's stages would only wait
+                    // there holding its lattice: admission waits for the queue to drain (Backlogged).
+                    if (!backlogRead) { backlogged = Backlogged(); backlogRead = true; }
+                    if (backlogged && (admitted > 0)) {
+                        admissionWaits = true;
                         continue;
                     }
-                    // Only sampled values consume the fixed readback budget. Saved poses follow the sample points
-                    // in a growable input table; charging them here strands a full 65-cubed lattice forever.
-                    // A frame's lattices stay within its share of field evaluations; its first is always taken, and no
-                    // lattice holds more than a share.
-                    if ((lattices.Count > 0) && ((taps + next.Taps) > m_frameBudget)) { stop = 1; break; }
-                    // A group starting its final lattice holds that lattice and everything meshed from it until it lands,
-                    // so the process account admits its simultaneous peak; the rest keep their small refining lattices.
-                    // A first slab a frame returned unanswered keeps the admission it took.
-                    if ((next.Slab == 0) && !group.Admitted) {
-                        if (admissionWaits) { continue; }
-                        // A group admitted while the queue already holds a round of every worker's stages would only wait
-                        // there holding its lattice: admission waits for the queue to drain (Backlogged).
-                        if (!backlogRead) { backlogged = Backlogged(); backlogRead = true; }
-                        if (backlogged && (admitted > 0)) {
+
+                    var peak = PeakOf(final: group.Final!);
+
+                    // The machine's free memory paces admission; it is read outside the account, at most every
+                    // AvailableSeconds.
+                    if (!availableRead) { available = AvailablePhysicalBytes(); availableRead = true; }
+                    if (!group.Memory.TryReserve(available: available, peak: peak)) {
+                        if (admitted > 0) {
+                            if (!group.DeferredReported) { Console.Error.WriteLine(value: $"[sdf.mesh-bake] deferred residency={Residency} group={group.Selector} peak={peak} admitted={admitted} budget={MemoryAccount.Shared.Read().Budget} available={available}"); group.DeferredReported = true; }
                             admissionWaits = true;
                             continue;
                         }
-
-                        var peak = PeakOf(final: group.Final!);
-
-                        // The machine's free memory paces admission; it is read outside the account, at most every
-                        // AvailableSeconds.
-                        if (!availableRead) { available = AvailablePhysicalBytes(); availableRead = true; }
-                        if (!group.Memory.TryReserve(available: available, peak: peak)) {
-                            if (admitted > 0) {
-                                if (!group.DeferredReported) { Console.Error.WriteLine(value: $"[sdf.mesh-bake] deferred residency={Residency} group={group.Selector} peak={peak} admitted={admitted} budget={MemoryAccount.Shared.Read().Budget} available={available}"); group.DeferredReported = true; }
-                                admissionWaits = true;
-                                continue;
-                            }
-                            // With nothing of the bake admitted, the group is admitted whatever the budget and the machine's
-                            // free memory read, so the bake always progresses, one group at a time. The library's cache
-                            // stays: the groups following a leader take its mesh from there rather than baking it again.
-                            group.Memory.Reserve(peak: peak);
-                            if (!group.DeferredReported) { Console.Error.WriteLine(value: $"[sdf.mesh-bake] admitted alone residency={Residency} group={group.Selector} peak={peak} budget={MemoryAccount.Shared.Read().Budget} available={available}"); }
-                        }
-                        group.DeferredReported = false;
-                        group.Admitted = true;
-                        admitted++;
+                        // With nothing of the bake admitted, the group is admitted whatever the budget and the machine's
+                        // free memory read, so the bake always progresses, one group at a time. The library's cache
+                        // stays: the groups following a leader take its mesh from there rather than baking it again.
+                        group.Memory.Reserve(peak: peak);
+                        if (!group.DeferredReported) { Console.Error.WriteLine(value: $"[sdf.mesh-bake] admitted alone residency={Residency} group={group.Selector} peak={peak} budget={MemoryAccount.Shared.Read().Budget} available={available}"); }
                     }
-                    group.InFlight = true;
-                    samples += next.Samples;
-                    taps += next.Taps;
-                    lattices.Add(item: next);
-                    tickets.Add(item: group);
-                    m_takenPoses.Add(item: (group.PoseFirst, group.PoseRows));
+                    group.DeferredReported = false;
+                    group.Admitted = true;
+                    admitted++;
                 }
-                if (pending) {
-                    if (lattices.Count == 0) { m_idleFrames++; }
-                    switch (stop) {
-                        case 1: m_stopShare++; break;
-                        case 2: m_stopSamples++; break;
-                        case 3: m_stopBatch++; break;
-                        default: m_stopDrained++; break;
-                    }
-                }
-                if (lattices.Count > 0) {
-                    m_frameBatch = new SdfMeshBakeBatch(Lattices: [.. lattices], Tickets: [.. tickets]) { Bake = this, Poses = [.. m_takenPoses] };
+                group.InFlight = true;
+                samples += next.Samples;
+                taps += next.Taps;
+                lattices.Add(item: next);
+                tickets.Add(item: group);
+                m_takenPoses.Add(item: (group.PoseFirst, group.PoseRows));
+            }
+            if (pending) {
+                if (lattices.Count == 0) { m_idleTakes++; }
+                switch (stop) {
+                    case 1: m_stopTaps++; break;
+                    case 2: m_stopSamples++; break;
+                    case 3: m_stopBatch++; break;
+                    default: m_stopDrained++; break;
                 }
             }
-            batch = m_frameBatch;
-            return (batch is not null);
+            if (lattices.Count == 0) { return false; }
+            batch = new SdfMeshBakeBatch(Lattices: [.. lattices], Tickets: [.. tickets]) { Bake = this, Poses = [.. m_takenPoses] };
+            m_batches++;
+            foreach (var lattice in batch.Lattices) {
+                m_dispatches++;
+                m_samples += lattice.Samples;
+                m_taps += lattice.Taps;
+            }
+            return true;
         }
     }
 
@@ -658,81 +629,34 @@ public sealed partial class SdfMeshPathBake {
     }
 
     private readonly List<(int First, ReadOnlyMemory<Vector4> Rows)> m_takenPoses = [];
-    // The groups a frame may take a lattice of, by priority, reused frame to frame.
+    // The groups a take may take a lattice of, by priority, reused take to take.
     private readonly List<(float Priority, int Index)> m_candidates = [];
 
     // Higher priority first, then the plan's order.
     private static readonly Comparison<(float Priority, int Index)> ByPriority = static (left, right) =>
         ((right.Priority.CompareTo(value: left.Priority) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index));
 
-    private long m_frameTaken = -1;
-    // The groups past their refining lattices, from the first slab of the final lattice until they land, that bake at
-    // once: enough to keep every worker busy, few enough that the meshing's working memory stays a few groups' worth.
-
-    private int m_frameBudget = FrameTaps;
-
-    private SdfMeshBakeBatch? m_frameBatch;
-    private SdfMeshBakeInputTransport? m_inputTransport;
-
-    /// <summary>Takes the frame's batch (<see cref="TryTakeForFrame"/>) before the frame's upload and prepares its points
-    /// and saved poses for the point-table upload, which the bake kernel reads.</summary>
-    /// <param name="frame">The package frame.</param>
-    /// <param name="frameSeconds">The interval the frame's presentation spans, in seconds, which sizes its share
-    /// (<see cref="FrameBudget"/>).</param>
-    /// <returns>The sample points and saved pose rows to upload with the runs of words holding them, or an empty input for
-    /// no point table.</returns>
-    public SdfMeshBakeInput Stage(long frame, double frameSeconds) {
-
-        using (EnterFrameGate()) {
-            if (m_frameTaken != frame) { m_frameBudget = FrameBudget(frameSeconds: frameSeconds); }
-        }
-
-        if (!TryTakeForFrame(batch: out var batch, frame: frame)) { return default; }
-        var rows = batch.InputRows;
-        if (rows == 0) { return default; }
-        var input = (m_inputTransport ??= new(allocator: Library.Allocator)).Acquire(requiredRows: rows);
-        return (batch.WritePoints(runs: m_inputRuns, table: input) ? new SdfMeshBakeInput(Rows: input, Runs: m_inputRuns) : default);
-    }
-    // The runs of the point table a frame's batch wrote: each points lattice's and each lattice's poses, two a lattice.
-    private readonly GpuUploadRuns m_inputRuns = new(capacity: ((2 * SdfWorldPackage.MeshBakeBatch) + 2));
-    /// <summary>Returns a dispatched batch's lattices to their groups unanswered, as when its submission never completed;
-    /// each group dispatches its lattice again.</summary>
-    /// <param name="batch">The batch <see cref="TryTakeForFrame"/> took, or <see langword="null"/>.</param>
+    /// <summary>Returns a taken batch's lattices to their groups unanswered, as when its dispatch never completed; each
+    /// group dispatches its lattice again, and the batch's samples count as discarded.</summary>
+    /// <param name="batch">The batch <see cref="TryTake"/> took, or <see langword="null"/>.</param>
     public void Abandon(SdfMeshBakeBatch? batch) {
         if (batch is null) { return; }
-        lock (m_gate) { Return(batch: batch); }
-    }
-
-    // Returns a batch's lattices to their groups, which dispatch them again; a recorded batch's samples were dispatched
-    // for nothing.
-    private void Return(SdfMeshBakeBatch batch) {
-        for (var index = 0; (index < batch.Tickets.Length); index++) {
-            if (batch.Tickets[index] is Group group) { group.InFlight = false; }
-            if ((batch.Tickets[index] is SliceTicket ticket) && ReferenceEquals(objA: ticket.Slice, objB: m_slice) && (ticket.Generation == ticket.Slice.Generation)) {
-                ticket.Slice.Return(ticket: ticket.Lattice);
-            }
-            m_discarded += (batch.Recorded ? batch.Lattices[index].Samples : 0);
-        }
-    }
-
-    /// <summary>Marks a batch a bake pass records, which dispatches it, and counts its lattices, samples and field
-    /// evaluations as the bake's work; a batch taken by a frame no bake pass records is no work.</summary>
-    /// <param name="batch">The batch <see cref="TryTakeForFrame"/> took.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="batch"/> is <see langword="null"/>.</exception>
-    public void Record(SdfMeshBakeBatch batch) {
-        ArgumentNullException.ThrowIfNull(argument: batch);
-
         lock (m_gate) {
-            batch.Recorded = true;
-            foreach (var lattice in batch.Lattices) {
-                m_dispatches++;
-                m_samples += lattice.Samples;
-                m_taps += lattice.Taps;
+            if (batch.Answered) { return; }
+            batch.Answered = true;
+            for (var index = 0; (index < batch.Tickets.Length); index++) {
+                if (batch.Tickets[index] is Group group) { group.InFlight = false; }
+                if ((batch.Tickets[index] is SliceTicket ticket) && ReferenceEquals(objA: ticket.Slice, objB: m_slice) && (ticket.Generation == ticket.Slice.Generation)) {
+                    ticket.Slice.Return(ticket: ticket.Lattice);
+                }
+                m_discarded += batch.Lattices[index].Samples;
             }
         }
     }
-    /// <summary>Answers a dispatched batch with the samples its readback copied, each lattice its own slice.</summary>
-    /// <param name="batch">The batch <see cref="TryTakeForFrame"/> took.</param>
+    /// <summary>Answers a dispatched batch with the samples its readback copied, each lattice its own slice: each group's
+    /// lattice is decoded on the calling thread and answered on the bake's workers. A batch answered or abandoned already
+    /// answers nothing.</summary>
+    /// <param name="batch">The batch <see cref="TryTake"/> took.</param>
     /// <param name="samples">The batch's samples, <see cref="SdfWorldPackage.MeshBakeSampleWords"/> words each, the
     /// lattices back to back.</param>
     public void Complete(SdfMeshBakeBatch batch, ReadOnlySpan<byte> samples) {
@@ -1364,7 +1288,7 @@ public sealed partial class SdfMeshPathBake {
         var final = group.Final!;
 
         var (x, y, z) = final.Lattice.Dims;
-        var planes = Math.Clamp(value: (FrameTaps / (x * y)), min: 1, max: (z - final.Planes));
+        var planes = Math.Clamp(value: (LatticeTaps / (x * y)), min: 1, max: (z - final.Planes));
 
         return final.Lattice with {
             Dims = (x, y, planes),
@@ -1520,7 +1444,7 @@ public sealed partial class SdfMeshPathBake {
     // takes. Gradient taps are spaced by the contour's finest cell.
     private static SdfMeshBakeRequest FinalChunk(Group group, FinalLattice final) {
         var gradients = (final.Stage == FinalStage.Gradients);
-        var count = Math.Clamp(value: (FrameTaps / (gradients ? 5 : 1)), min: 1, max: (final.Points.Length - final.Answered));
+        var count = Math.Clamp(value: (LatticeTaps / (gradients ? 5 : 1)), min: 1, max: (final.Points.Length - final.Answered));
 
         return new SdfMeshBakeRequest(Cell: final.Sampled!.ContourCell, Dims: (count, 1, 1), Gradients: gradients, Origin: Vector3.Zero, Selector: group.Selector) {
             FrameSlot = (group.Dynamic ? group.Slot : -1),
@@ -1651,7 +1575,7 @@ public sealed partial class SdfMeshPathBake {
     }
     // The next chunk of the vertices a group's field check measures, as many as a frame's share of field evaluations takes.
     private static SdfMeshBakeRequest CreaseChunk(Group group) {
-        var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: (FrameTaps / 5));
+        var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: (LatticeTaps / 5));
 
         return new SdfMeshBakeRequest(Cell: group.CreaseSpacing, Dims: (count, 1, 1), Gradients: true, Origin: Vector3.Zero, Selector: group.Selector) {
             FrameSlot = (group.Dynamic ? group.Slot : -1),
@@ -1760,7 +1684,7 @@ public sealed partial class SdfMeshPathBake {
     }
     // The next chunk of a group's material points, at most a frame's share of field evaluations.
     private static SdfMeshBakeRequest PointChunk(Group group) {
-        var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: FrameTaps);
+        var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: LatticeTaps);
 
         return new SdfMeshBakeRequest(Cell: Vector3.One, Dims: (count, 1, 1), Gradients: false, Origin: Vector3.Zero, Selector: group.Selector) {
             FrameSlot = (group.Dynamic ? group.Slot : -1),

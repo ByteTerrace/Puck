@@ -11,7 +11,7 @@ namespace Puck.Cli.Mesh;
 
 /// <summary>
 /// Bakes a world's groups offline, with no device: the baked-mesh path's own bake (<see cref="SdfMeshPathBake"/>) takes
-/// its lattices as a World's frames would, and each is answered on the CPU through the group's field
+/// its lattices as a World's background GPU work would, and each is answered on the CPU through the group's field
 /// (<see cref="SdfMeshAudit.Field"/>, read by <see cref="SdfFieldEvaluator"/>) as the bake kernel
 /// (<c>sdf-mesh-bake.comp.hlsl</c>) answers it on the GPU: a value, a material and a tetrahedral gradient a sample. A group
 /// not selected is outside the bake's selection (<see cref="SdfMeshPathBake.Selection"/>) and bakes nothing, so a selected
@@ -43,17 +43,14 @@ public static class MeshCpuBake {
         var bake = new SdfMeshPathBake { Library = library, Residency = "cpu", Selection = fields.Keys.ToHashSet() };
         using var dresser = new SdfMeshDresser(bake);
         try {
-            var index = 0L;
-
             while (true) {
                 _ = dresser.Dress(frame: frame);
-                if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
-                    bake.Record(batch: batch);
+                if (bake.TryTake(batch: out var batch, field: bake.Program)) {
                     bake.Complete(batch: batch, samples: Answer(batch: batch, fields: fields));
                     continue;
                 }
                 if (!bake.Pending) { break; }
-                // The contour runs on the thread pool; the next frame takes what it asks for next.
+                // The contour runs on the thread pool; the next take takes what it asks for next.
                 Thread.Sleep(millisecondsTimeout: 1);
             }
 

@@ -169,7 +169,7 @@ each bounded in work, and a worker checks for higher-class work between units.
 The latency for a `Frame` or `Tick` fork to acquire every worker is therefore
 one unit, never a whole bake stage. The bake's stages already run as bounded
 slabs: planes per frame (`SdfMeshPathBake.cs:1359`), points per frame (`:1515`,
-`:1646`), all sized from `FrameTaps` (`:174`); the irradiance trace's unit is one
+`:1646`), all sized from `LatticeTaps`; the irradiance trace's unit is one
 probe (`Process`, tracing its hits or relighting them, inside the `Parallel.For`
 at `SdfMeshIrradiance.cs:1527`).
 The unit bound is 2 ms of work, a design parameter measured when the pool
@@ -250,8 +250,8 @@ owner's direction is no added latency. So:
 - **The owner drains at its own latest install point**, on the frame thread,
   exactly where it polls today: `BackgroundBuild.TryTake` once a frame
   (`BackgroundBuild.cs:4-8`), the composition source where it adopts a build
-  (`SdfCompositionFrameSource.cs:565`), the bake where `BeginFrame` polls its
-  readbacks, the irradiance volume where it publishes (`SdfMeshIrradiance.cs:708`).
+  (`SdfCompositionFrameSource.cs:565`), the bake's background GPU work where `SdfGpuWork.Pump` polls its
+  slots' fences, the irradiance volume where it publishes (`SdfMeshIrradiance.cs:708`).
   A result ready before the poll installs on the same frame it does today.
 - **A synchronous dependency settles in the same frame.** A lockstep frame waits
   for its scene build and refill and traces before it renders
@@ -752,8 +752,8 @@ limit, waits for a measured need; none of the consumers above has one.
 Each group stage the bake schedules today (`Schedule(group, work)`,
 `SdfMeshPathBake.Residency.cs:158-170`) becomes a `Bake` job under the descending
 demand comparer (section 1); urgent answers (`AnswerQueue`, `:161`) keep their
-place ahead by a reserved rank. The GPU dispatch share stays the frame's own:
-`FrameTaps` per 60 Hz frame (`SdfMeshPathBake.cs:171`) is recorded by the frame
+place ahead by a reserved rank. The GPU dispatch share is the background GPU
+work's (`SdfGpuWork.GpuShare` of measured GPU time), recorded and submitted by the frame
 thread as GPU work. The CPU stages are bounded units under the memory account.
 What a bake rebakes is the [Bake proportional to change](open-items.md#bake-proportional-to-change)
 packet's: per-group content keys, the narrowed closure, one store for both

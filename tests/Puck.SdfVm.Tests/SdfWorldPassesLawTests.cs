@@ -73,12 +73,7 @@ public sealed partial class SdfWorldPassesLawTests {
             .GroupBy(keySelector: static name => name)
             .ToDictionary(elementSelector: static group => group.Count(), keySelector: static group => group.Key);
 
-        Assert.Equal(
-            actual: new[] { "instanceMasks", "visibility" }.Select(selector: scratch => buffers.GetValueOrDefault(key: $"{SdfTestView.Instance}/sdf.world${scratch}")),
-            expected: [1, 1]
-        );
-        Assert.Equal(expected: 0, actual: buffers.GetValueOrDefault(key: $"{SdfTestView.Instance}/sdf.world$bakeSamples"));
-        Assert.Equal(expected: SdfWorldTables.MeshBakeSampleBytes, actual: view.Residency.Tables!.MeshBakeSamples.SizeBytes);
+        Assert.Equal(expected: 1, actual: buffers.GetValueOrDefault(key: $"{SdfTestView.Instance}/sdf.world$visibility"));
 
         var scheduled = new RenderGraphFrame(
             DisplayHeight: ((int)Extent),

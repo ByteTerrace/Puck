@@ -186,8 +186,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     /// <summary>Describes the residency's mesh residency for <c>world.residency</c>: the latest bake's landing from its
     /// start, near the primary seat's eye and everywhere (<see cref="SdfMeshPathBake.DescribeResidency"/>), the store's reads,
-    /// the mesh region's landing (<see cref="SdfWorldTables.DescribeLanding"/>), the latest program's emission, build and
-    /// size, and the irradiance volume's probe cache.</summary>
+    /// the mesh region's landing (<see cref="SdfWorldTables.DescribeLanding"/>), the background GPU work's buffers
+    /// (<see cref="SdfGpuWork.DescribeBytes"/>), the latest program's emission, build and size, and the irradiance
+    /// volume's probe cache.</summary>
     /// <param name="radius">The distance, in metres, from the primary seat's eye within which a group counts as near.</param>
     /// <param name="composition">The composed frame source whose programs the residency draws, when its frame source
     /// wraps one; <see langword="null"/> reads the frame source itself.</param>
@@ -200,6 +201,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             MeshPathBake.DescribeResidency(radius: radius),
             (MeshPathBake.Library.Disk?.DescribeReads() ?? "store=none"),
             (m_tables?.DescribeLanding() ?? "region=none"),
+            (m_tables?.GpuWork.DescribeBytes() ?? "gpu-work=none"),
             $"change-history-logical-bytes transforms={(m_frame?.MovedTransforms?.StorageBytes ?? 0)} draws={(m_frame?.MeshDrawChanges?.StorageBytes ?? 0)} dresser-scratch={m_meshDresser.ScratchBytes} staging-runs={(m_tables?.DrawChangeScratchBytes ?? 0)} (array payload; headers excluded)",
             string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"program-instances={(program?.Instances.Count ?? 0)} program-words={(program?.Words.Length ?? 0)} program-builds={(composition?.ProgramBuilds ?? 0)} emit-ms={(composition?.EmitMilliseconds ?? 0d):0.0} build-ms={(composition?.BuildMilliseconds ?? 0d):0.0}"),
             MeshIrradiance.DescribeCache(),
@@ -569,9 +571,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             LiveVolumes = frame.Volumes.Count;
         }
 
-        // The bake takes its batch before the upload, which carries the batch's surface points.
         FollowRunningCode();
-        tables.WriteMeshBakePoints(MeshPathBake.Stage(frame: PackageFrame, frameSeconds: context.FrameDeltaSeconds));
         MeshPathBake.ObserveResidency(tables: tables);
         MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.IrradiancePending);
         // A locked tick adapts once its complete geometry supplies the meter, not over partial mesh arrivals.
@@ -621,7 +621,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         ));
     }
     /// <summary>Submits the frame's upload once, when the first pass of the frame records, ahead of every view's
-    /// submission.</summary>
+    /// submission, and pumps the tables' background GPU work against it (<see cref="PumpGpuWork"/>).</summary>
     /// <param name="context">The host's frame context.</param>
     /// <returns>The tables, which hold the frame the pass renders.</returns>
     /// <exception cref="InvalidOperationException">The residency has no tables: a pass records only once its residency is
@@ -637,9 +637,17 @@ public sealed partial class SdfWorldResidency : IDisposable {
             m_submitted = true;
             tables.HoldsFrame = HoldsFrame;
             tables.SubmitUpload();
+            tables.GpuWork.Pump(tables: tables);
         }
 
         return tables;
+    }
+    /// <summary>Pumps the tables' background GPU work (<see cref="SdfGpuWork.Pump"/>): answers the jobs that completed and
+    /// submits the next while the budget allows, among them the bake's sampling. Called on the frame thread at the top of
+    /// each frame, before any residency prepares, and after each upload; a residency with no tables pumps nothing.</summary>
+    public void PumpGpuWork() {
+        if (m_disposed || (m_tables is not { } tables)) { return; }
+        tables.GpuWork.Pump(tables: tables);
     }
     /// <summary>Records that a view rendered the frame the residency holds, whose signature it stands for until one it
     /// renders from changes.</summary>
@@ -904,6 +912,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
             return false;
         }
 
+        // The bake samples through the tables' background GPU work, which owns its jobs' slots and the tables' lifetime.
+        tables.GpuWork.Add(client: new SdfMeshBakeGpuWork(bake: MeshPathBake, tables: tables));
+        MeshPathBake.DispatchReport = tables.GpuWork.Describe;
         // The construction uploaded the frame's program; the frame is packed afresh.
         NoteProgram(program: frame.Program);
         m_packedFrame = null;

@@ -570,11 +570,11 @@ The custom no-GC runtime port stays later work, on the
 
 ### Bake proportional to change
 
-Owner: specialist (rendering) · high · Next: the
-[graphics architecture plan](graphics-architecture.md)'s B1, the
-completion-driven bake service on the background GPU service G1 builds, which
-removes the frame-pacing floor (at least 530 bake frames of 100 to 120 ms); then
-narrow `SdfMeshBakeClosure` to the code that decides mesh contents and key one
+Owner: specialist (rendering) · high · Next: the bake samples through the
+residency's background GPU work
+([B1](graphics-architecture.md#b1-the-completion-driven-bake-service)), so
+the frame-pacing floor is gone and the cold bake is CPU-bound (102 to 125 s on
+Direct3D 12 and 129 s on Vulkan on a busy machine); narrow `SdfMeshBakeClosure` to the code that decides mesh contents and key one
 store for both backends from the HLSL source closure of `MeshBake` and
 `MeshBakeMask`; then cut the collapse (`SdfMeshCollapse`), now the bake's
 largest CPU stage, toward the owner's bar: one minute at most per backend from
@@ -592,16 +592,26 @@ the geometry key alone.
   equivalence, including compiler changes and skin/material/refinement behavior.
   The latest native forest legs have different aggregate triangle counts, so
   source equality alone is not proof of identical products or a halved cold cost.
-- The cold bake fails the one-minute bar on both backends by about double. It
-  is bound twice over. The frame admits one dispatch of at most 2^21 samples, so
-  its 1.1 G samples need at least 530 frames, and a bake frame runs 120 ms or
-  more (produce plus about 40 ms of simulation), so the frame alone costs about
-  65 s. And the contour work saturates every processor: on a busy machine its
-  stages log about 1,500 thread seconds, the collapse
-  (`SdfMeshCollapse.Levels`) about 30% of the workers' CPU, the crossing stage
-  about 20% and the contour (`ExtractRefined`) about 12%. Both halves have to
-  fall: fewer frame costs while baking (or more samples a dispatch once the CPU
-  keeps up) and roughly half the contour CPU.
+- The cold bake fails the one-minute bar on both backends. Its GPU half no
+  longer bounds it: the background GPU work dispatches batches as its slots
+  complete, the whole bake is 6 to 7 s of measured GPU time, and 39 to 47% of
+  the bake's takes find no group owing a lattice. The contour work saturates
+  every processor: its stages log 1,100 to 1,500 thread seconds, the collapse
+  (`SdfMeshCollapse.Levels`, the `land` stage) about 40% of the workers' CPU,
+  the crossing and prepare stages about 15 to 20% each and the contour
+  (`ExtractRefined`) about 10%. Roughly half the contour CPU has to fall.
+- [medium] Every view still renders every frame while a bake is pending
+  (`SdfWorldResidency.IsUnchanged` returns false on `MeshPathBake.Pending`),
+  which the frame-paced bake needed to dispatch and the background GPU work
+  does not; it still needs an upload after any pack that moves what the World
+  set binds (`SdfWorldTables.BindsBackgroundWork`) and a render for each landed
+  mesh. Let a still view stand while the bake runs, uploading without
+  rendering, and measure the frame while baking.
+- [low] The background GPU work submits only at its pumps (the top of a frame
+  and after an upload), so a job completing mid-frame waits for the next
+  frame: moving the pump to a waiter on the slots' fences needs A2's
+  thread-safe submission ([graphics plan](graphics-architecture.md#a1-and-a2-portal-sight-and-direct3d-12-submission)),
+  and pays only once the CPU half stops bounding the bake.
 - [high] A cold bake's private memory climbs far past the Deck tier's 10 GB
   within its first minute, and its allocation is a cost on the frame as well as
   on memory (the frame runs several times its budget with hundreds of
@@ -643,7 +653,7 @@ the geometry key alone.
   delete them.
 - [low] Each residency's bake guarantees its own progress, so several cold
   residencies under a too-small budget each admit one group past it
-  (`SdfMeshPathBake.cs`, `TryTakeForFrame`, the "admitted alone" branch); the
+  (`SdfMeshPathBake.cs`, `TryTake`, the "admitted alone" branch); the
   process-wide pool's progress rule belongs to the job system's J1.
 - [low · unconfirmed] The bake indexes its `static const float3 SdfBakeTaps[4]`
   by the `[loop]` counter (`sdf-mesh-bake.comp.hlsl:22,94,102`), the shape the
@@ -2104,11 +2114,14 @@ allocation tracker or sum of overlapping layers.
 
 Grounded causes and leads:
 
-- Owner: rendering/bake. Per-recorder readback slots reserve full sample capacity
-  when first used; captured cold-run heap paths reach 40 MiB byte arrays through
-  `SdfMeshBakeReadback`. The result destination is now shared per residency.
-  Measure readback demand and consumer lifetimes before sharing/reducing their
-  storage; preserve exact batch identity, CPU consumers and fence-safe reuse.
+- Owner: rendering/bake. The bake's background GPU work holds one readback, one
+  samples buffer and one point table a slot (`SdfGpuWork.SlotCount`), each grown
+  in 4 MiB granules to its largest batch (about 40 MiB of samples) and kept until
+  the tables go, and each completed batch's samples are copied into a pooled
+  managed array of that size on the bake's pool before decoding
+  (`SdfMeshBakeGpuWork.Complete`); `world.residency`'s `gpu-work` line reads the
+  bytes. Measure that line and the pool's arrays on the Deck tier before
+  shrinking or releasing them between bakes.
 - The mesh library budgets meshes residencies still hold and forgets them, so a
   re-plan reloads a second copy (`SdfMeshLibrary.cs:32`, `:285-304`).
 - The GI probe cache is bounded by its window's resident box

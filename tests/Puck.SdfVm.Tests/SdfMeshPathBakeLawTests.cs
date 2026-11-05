@@ -389,7 +389,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
                 };
 
                 _ = dresser.Dress(frame: frame);
-                Assert.True(condition: bake.TryTakeForFrame(batch: out var batch, frame: 0L));
+                Assert.True(condition: bake.TryTake(batch: out var batch, field: bake.Program));
 
                 return (batch, bakeRun);
             } catch { bakeRun.Dispose(); throw; }
@@ -454,12 +454,10 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
             try {
                 var bake = bakeRun.Bake;
                 var dresser = bakeRun.Dresser;
-                var index = 0L;
 
                 TestLiveness.Until(reason: bake.Describe, step: () => {
                     _ = dresser.Dress(frame: frame);
-                    if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
-                        bake.Record(batch: batch);
+                    if (bake.TryTake(batch: out var batch, field: bake.Program)) {
                         bake.Complete(batch: batch, samples: AnswerSlots(batch: batch, shapes: pair));
                     }
 
@@ -549,12 +547,10 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
                     DynamicTransforms = [default, new DynamicTransform(Orientation: Quaternion.Identity, Position: Vector3.Zero)],
                     FarDistance = 100f,
                 };
-                var index = 0L;
 
                 TestLiveness.Until(reason: bake.Describe, step: () => {
                     _ = dresser.Dress(frame: frame);
-                    if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
-                        bake.Record(batch: batch);
+                    if (bake.TryTake(batch: out var batch, field: bake.Program)) {
                         bake.Complete(batch: batch, samples: AnswerSlots(batch: batch, shapes: pair));
                     }
 
@@ -610,12 +606,10 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
     }
     // Answers the bake's lattices frame by frame until it has meshed every group.
     private static void Drive(SdfMeshPathBake bake, SdfMeshDresser dresser, SdfFrame frame, int[] materials, Shape[] shapes) {
-        var index = 0L;
 
         TestLiveness.Until(reason: bake.Describe, step: () => {
             _ = dresser.Dress(frame: frame);
-            if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
-                bake.Record(batch: batch);
+            if (bake.TryTake(batch: out var batch, field: bake.Program)) {
                 bake.Complete(batch: batch, samples: Answer(batch: batch, materials: materials, shapes: shapes));
             }
 
