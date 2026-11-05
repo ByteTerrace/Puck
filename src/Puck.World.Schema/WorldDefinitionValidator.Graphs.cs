@@ -154,6 +154,21 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"views.nestingDepth {nesting} is outside 0 through {RenderGraphInstanceSet.MaxNestingDepth}: a portal seen through a portal nests at most {RenderGraphInstanceSet.MaxNestingDepth} screens deep.");
         }
+        if (views.BuiltinTransition is { } builtinTransition) {
+            RequireNonNegative(
+                value: builtinTransition.Seconds,
+                name: "views.builtinTransition.seconds",
+                errors: errors
+            );
+            RequireRange(
+                value: builtinTransition.RenderScale,
+                min: 0f,
+                max: 1f,
+                name: "views.builtinTransition.renderScale",
+                errors: errors,
+                minExclusive: true
+            );
+        }
         if (views.GraphBudget is { } budget) {
             foreach (var (member, value) in ((ReadOnlySpan<(string, long)>)[
                 ("passPixelsPerFrame", budget.PassPixelsPerFrame),

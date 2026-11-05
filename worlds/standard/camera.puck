@@ -58,6 +58,12 @@ template cameraFeel() {
   cameraResponse()
 
   views {
+    // The ease into or out of the seat ladder no authored layout selects; an authored layout brings its own envelope.
+    builtinTransition {
+      renderScale: 0.5
+      seconds: 0.6
+    }
+
     seatControl {
       boom: cameraBoom
     }

@@ -16,7 +16,7 @@ public sealed class SeatViewStateLawTests {
         var state = new WorldSeatViewState();
         var before = state.CutRevision;
 
-        state.Recenter();
+        state.Recenter(heading: 0f, views: Fixtures.BuildDocument().Views);
         Assert.True(condition: (state.CutRevision > before));
         var cut = state.CutRevision;
         var eye = Vector3.UnitZ;
@@ -83,10 +83,43 @@ public sealed class SeatViewStateLawTests {
         Assert.Equal(expected: -0.2f, actual: state.PresentedLook(interpolationAlpha: 0f).Yaw, tolerance: 1e-6f);
         Assert.Equal(expected: -0.3f, actual: state.PresentedLook(interpolationAlpha: 1f).Yaw, tolerance: 1e-6f);
 
-        state.Recenter();
+        state.Recenter(heading: 0f, views: views);
 
         Assert.Equal(expected: 0f, actual: state.PresentedLook(interpolationAlpha: 0f).Yaw);
         Assert.Equal(expected: 0f, actual: state.PresentedLook(interpolationAlpha: 0f).Pitch);
+    }
+    /// <summary>A world-referenced live yaw turns with a body that was posed to a new heading (a pose epoch under the
+    /// same authority claim) and keeps the camera's place around it; an ordinary turn, a new claim and a body-referenced
+    /// yaw leave it alone, and a recenter seats the camera behind the body's heading rather than at world zero.</summary>
+    [Fact]
+    public void AWorldReferencedLookTurnsWithAPosedBodyAndRecentersBehindIt() {
+        var views = Fixtures.BuildDocument().Views;
+        var world = views with { SeatControlRaw = views.SeatControl with { YawReference = WorldSeatYawReference.World, }, };
+        var body = views with { SeatControlRaw = views.SeatControl with { YawReference = WorldSeatYawReference.Body, }, };
+        var state = new WorldSeatViewState();
+
+        state.ObserveBody(routeEpoch: 1UL, poseEpoch: 1, heading: 0f, yawReference: WorldSeatYawReference.World);
+        // The body turns by degrees without a new epoch: the look does not follow.
+        state.ObserveBody(routeEpoch: 1UL, poseEpoch: 1, heading: 0.5f, yawReference: WorldSeatYawReference.World);
+        Assert.Equal(expected: 0f, actual: state.Yaw);
+        // Posed half a turn round: the look turns with it.
+        state.ObserveBody(routeEpoch: 1UL, poseEpoch: 2, heading: (0.5f + MathF.PI), yawReference: WorldSeatYawReference.World);
+        Assert.Equal(expected: MathF.PI, actual: Math.Abs(state.Yaw), tolerance: 1e-5f);
+        // A new authority claim records the body without turning the look.
+        var turned = state.Yaw;
+
+        state.ObserveBody(routeEpoch: 2UL, poseEpoch: 9, heading: 1f, yawReference: WorldSeatYawReference.World);
+        Assert.Equal(expected: turned, actual: state.Yaw);
+        // A body-referenced yaw already rides the heading.
+        var rides = new WorldSeatViewState();
+
+        rides.ObserveBody(routeEpoch: 1UL, poseEpoch: 1, heading: 0f, yawReference: WorldSeatYawReference.Body);
+        rides.ObserveBody(routeEpoch: 1UL, poseEpoch: 2, heading: 2f, yawReference: WorldSeatYawReference.Body);
+        Assert.Equal(expected: 0f, actual: rides.Yaw);
+        state.Recenter(heading: 1.25f, views: world);
+        Assert.Equal(expected: 1.25f, actual: state.Yaw, tolerance: 1e-6f);
+        state.Recenter(heading: 1.25f, views: body);
+        Assert.Equal(expected: 0f, actual: state.Yaw);
     }
     [Fact]
     public void Recenter_BodyRelativeYaw_DoesNotDoubleBodyHeading() {

@@ -322,7 +322,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// rows (already summed by <see cref="SeatController.HeldIntent"/>), rotated by the frame the world declared on
     /// its MoveAdvance/MoveStrafe pair (<see cref="WorldChannelTable.MoveFrame"/> — <see cref="ChannelFrame.Camera"/>
     /// by the camera yaw, <see cref="ChannelFrame.Heading"/> by the body's authoritative HEADING off the wire
-    /// (<see cref="WorldAuthorityEndpoint.TryEntityHeading"/> — never the drawn attitude, which the sim's facing snap
+    /// (<see cref="WorldAuthorityEndpoint.TryEntityHeading(int, out float)"/> — never the drawn attitude, which the sim's facing snap
     /// angles toward the travel), <see cref="ChannelFrame.World"/> not at all), and the stick's <c>player.move</c> or
     /// <c>player.move.strafe</c> sample, camera-framed by those verbs' definition. A movement-facing stick or
     /// camera-framed channel row latches its camera yaw when movement begins (<see cref="SeatController.CameraFrameYaw"/>),
@@ -773,6 +773,20 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             seat.Orbiting ||
             seat.PointerSteering
         );
+
+        // A body posed or teleported to a new heading carries a world-referenced look with it, ahead of this tick's nudge.
+        if (route.Endpoint.TryEntityHeading(
+            index: route.EntityIndex,
+            heading: out var observedHeading,
+            poseEpoch: out var observedEpoch
+        )) {
+            seat.View.ObserveBody(
+                heading: observedHeading,
+                poseEpoch: observedEpoch,
+                routeEpoch: route.Epoch,
+                yawReference: definition.Views.SeatControl.YawReference
+            );
+        }
 
         seat.View.Nudge(
             input: lookRate,

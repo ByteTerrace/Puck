@@ -79,6 +79,16 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
 
         return builder.Append(value: ']').ToString();
     }
+    // Resets the seat's live orbit to behind the body it is framed on, whose heading the routed authority holds.
+    private void Recenter(SeatController seat, int slot) {
+        var route = seatRouter.Route(slot: slot);
+
+        _ = route.Endpoint.TryEntityHeading(heading: out var heading, index: route.EntityIndex);
+        seat.View.Recenter(
+            heading: heading,
+            views: instances.ResolveRoutedDefinition(slot: slot).Views
+        );
+    }
     private string Describe(int slot) => Frame(fields: Compact(fields: Fields(slot: slot)));
     private static List<KeyValuePair<string, string>> Compact(List<KeyValuePair<string, string>> fields) => [.. CompactKeys.SelectMany(selector: key => fields.Where(predicate: field => (field.Key == key)))];
     // Every field the seat reports, in reading order, as structured pairs: a value that holds a space (an authority
@@ -180,13 +190,13 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "player.camera.reset",
-            description: "Resets this seat's live orbit angles and distance to its authored rig defaults.",
+            description: "Resets this seat's live orbit angles and distance to its authored rig defaults, the camera behind the body it frames.",
             handler: (context, args) => {
                 if (context.Phase is CommandPhase.Completed or CommandPhase.Canceled) { return CommandResult.None; }
                 var seat = roster.Seat(slot: context.Slot);
 
                 if (seat is null) { return CommandResult.Error(output: "[player.camera.reset: no occupied seat]"); }
-                seat.View.Recenter();
+                Recenter(seat: seat, slot: context.Slot);
                 return new CommandResult(Output: Describe(slot: context.Slot));
             },
             routing: CommandRouting.Immediate
@@ -194,7 +204,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "view.recenter",
-            description: $"Resets a seat's live camera orbit and boom to its authored frame: {ViewRecenterForms.Spelling}, player 1..4 (default the acting seat). Answers with the camera state, including without physical devices. Session presentation only.",
+            description: $"Resets a seat's live camera orbit and boom to its authored frame, the camera behind the body it frames: {ViewRecenterForms.Spelling}, player 1..4 (default the acting seat). Answers with the camera state, including without physical devices. Session presentation only.",
             forms: ViewRecenterForms,
             handler: (context, args) => {
                 if (args.Count > 1) {
@@ -205,7 +215,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
                 if (roster.Seat(slot: slot) is not { } seat) {
                     return CommandResult.Error(output: "[view.recenter: no occupied seat]");
                 }
-                seat.View.Recenter();
+                Recenter(seat: seat, slot: slot);
                 return new CommandResult(Output: Describe(slot: slot));
             },
             routing: CommandRouting.Immediate
