@@ -60,15 +60,20 @@ float3 sdfMeshProbeOffset(uint address) {
 
     return float3(sdfMeshIrradianceHalf(first, 0u), sdfMeshIrradianceHalf(first, 1u), sdfMeshIrradianceHalf(second, 0u));
 }
-// First-hit surface support in four reflected angular taps, never whole-sphere plane vetoes.
-// KEEP IN SYNC with SdfMeshProbeDepth.Visibility and its signed octahedral normal bytes.
-float sdfMeshProbeCoverageVisibility(float blocked) {
-    float coverage = saturate((blocked - SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START) * SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE);
+// A level's closing ramp over its taps' blocked share (start, scale). KEEP IN SYNC with SdfMeshProbeCoverage.
+float2 sdfMeshProbeCoverage(uint level) {
+    return ((level == 0u) ? float2(SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START, SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE)
+        : float2(SDF_MESH_IRRADIANCE_COARSE_DEPTH_COVERAGE_START, SDF_MESH_IRRADIANCE_COARSE_DEPTH_COVERAGE_SCALE));
+}
+float sdfMeshProbeCoverageVisibility(float blocked, float2 ramp) {
+    float coverage = saturate((blocked - ramp.x) * ramp.y);
     coverage = coverage * coverage * (3.0 - 2.0 * coverage);
     return 1.0 - coverage;
 }
+// First-hit surface support in four reflected angular taps, never whole-sphere plane vetoes.
+// KEEP IN SYNC with SdfMeshProbeDepth.Visibility and its signed octahedral normal bytes.
 // `bounded` false lets a receiver past a measured miss's reach through, so only measured surfaces block it.
-float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded) {
+float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded, float2 ramp) {
     float distance = length(toward);
     if (!(distance > 0.0)) { return 1.0; }
     float2 texel = (sdfOctEncode(toward) * 0.5 + 0.5) * SDF_MESH_IRRADIANCE_DEPTH_SIZE - 0.5;
@@ -122,7 +127,7 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded) {
     }
     if (planar && planeWeight > 0.0 && planeHigh - planeLow <= 0.5 * SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP) {
         float gap = dot(firstNormal, toward) - planeSum / planeWeight;
-        return sdfMeshProbeCoverageVisibility(planeWeight * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE));
+        return sdfMeshProbeCoverageVisibility(planeWeight * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE), ramp);
     }
     float blocked = 0.0;
     [unroll] for (uint corner = 0u; corner < 4u; corner++) {
@@ -161,7 +166,7 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded) {
         float gap = dot(normalize(gradient), toward - hit);
         blocked += weights[corner] * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE);
     }
-    return sdfMeshProbeCoverageVisibility(blocked);
+    return sdfMeshProbeCoverageVisibility(blocked, ramp);
 }
 struct SdfMeshProbes {
     uint address[8];
@@ -186,10 +191,10 @@ int3 sdfMeshIrradianceDims(uint level) {
 }
 // One level's eight probes about the pushed receiver, its lookup clamped to the level's boundary probes: each corner's
 // weight is its trilinear share times the facing fade (at least `behind`, so a receiver whose every visible probe lies
-// behind its plane still reads them) times the angular surface visibility of the pushed receiver, `bounded` by each
-// probe's measured reach or, unbounded, blocked only by the surfaces it measured. Returns the total weight. KEEP IN SYNC
-// with SdfMeshIrradiance.Gather.
-float sdfMeshProbesGather(uint base, float spacing, int3 low, int3 dims, float3 position, float3 normal, float3 pushed, bool bounded, float behind, inout SdfMeshProbes probes) {
+// behind its plane still reads them) times the angular surface visibility of the pushed receiver under the level's
+// closing `ramp`, `bounded` by each probe's measured reach or, unbounded, blocked only by the surfaces it measured.
+// Returns the total weight. KEEP IN SYNC with SdfMeshIrradiance.Gather.
+float sdfMeshProbesGather(uint base, float spacing, int3 low, int3 dims, float3 position, float3 normal, float3 pushed, bool bounded, float behind, float2 ramp, inout SdfMeshProbes probes) {
     uint count, stride;
     sdfMeshIrradiance.GetDimensions(count, stride);
 
@@ -232,7 +237,7 @@ float sdfMeshProbesGather(uint base, float spacing, int3 low, int3 dims, float3 
         float weight = ((axes.x * axes.y * axes.z) * facing);
 
         if (weight > 0.0) {
-            weight *= sdfMeshProbeDepthVisibility(address, (pushed - probePoint), bounded);
+            weight *= sdfMeshProbeDepthVisibility(address, (pushed - probePoint), bounded, ramp);
         }
         if (weight <= 0.0) {
             continue;
@@ -315,7 +320,7 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
             (sdfMeshIrradianceBeyond(pushed, spacing, low, dims) > ((SDF_MESH_IRRADIANCE_SURFACE_REACH * spacing) + SDF_MESH_IRRADIANCE_NORMAL_BIAS))) {
             continue;
         }
-        if (sdfMeshProbesGather(base, spacing, low, dims, position, normal, pushed, bounded, ((level == 0u) ? SDF_MESH_IRRADIANCE_BEHIND_SHARE : 0.0), probes) > 0.0) {
+        if (sdfMeshProbesGather(base, spacing, low, dims, position, normal, pushed, bounded, ((level == 0u) ? SDF_MESH_IRRADIANCE_BEHIND_SHARE : 0.0), sdfMeshProbeCoverage(level), probes) > 0.0) {
             probes.measured = bounded;
             break;
         }

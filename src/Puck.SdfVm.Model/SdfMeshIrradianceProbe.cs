@@ -43,8 +43,14 @@ public static class SdfMeshIrradianceProbe {
     /// such as a downward rim at the ground whose front probes the ground hides, which would otherwise draw black. A coarser
     /// level's probe behind the plane keeps none: its depth test cannot resolve the receiver's own wall.</summary>
     public const float BehindShare = 0.05f;
-    /// <summary>The hit footprint share below which an edge tap cannot extend a finite block.</summary>
+    /// <summary>The finest level's hit footprint share below which an edge tap cannot extend a finite block: a 1 m probe's
+    /// taps are half a metre wide, and a tap half blocked by a railing must not shadow the floor beyond it.</summary>
     public const float DepthCoverageStart = 0.5f;
-    /// <summary>Scales the footprint's closing ramp to complete at three-quarter coverage.</summary>
+    /// <summary>Scales the finest level's closing ramp to complete at three-quarter coverage.</summary>
     public const float DepthCoverageScale = 4f;
+    /// <summary>A coarser level's hit footprint share at which its closing ramp starts: none, since an 8 m probe's taps
+    /// are metres wide and any hit they measured before the receiver is a slab or a wall between them.</summary>
+    public const float CoarseDepthCoverageStart = 0f;
+    /// <summary>Scales a coarser level's closing ramp to complete at an eighth of the footprint blocked.</summary>
+    public const float CoarseDepthCoverageScale = 8f;
 }

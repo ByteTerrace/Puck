@@ -2174,7 +2174,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
             var front = (ahead > 0f);
             var facing = float.Lerp(amount: outside, value1: MathF.Max(x: ((ahead * ahead) * (3f - (2f * ahead))), y: ((level == 0) ? SdfMeshIrradianceProbe.BehindShare : 0f)), value2: 1f);
             var trilinear = ((weights.X * weights.Y) * weights.Z);
-            var visibility = (probe.Invalid ? 0f : SdfMeshProbeDepth.Visibility(bounded: depth, surfaces: probe.Depth, toward: (pushed - probePoint)));
+            var visibility = (probe.Invalid ? 0f : SdfMeshProbeDepth.Visibility(bounded: depth, coverage: SdfMeshProbeCoverage.Of(level: level), surfaces: probe.Depth, toward: (pushed - probePoint)));
             var weight = ((trilinear * facing) * visibility);
 
             if (!reports.IsEmpty) {

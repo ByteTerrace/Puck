@@ -179,11 +179,12 @@ public static class SdfMeshProbeDepth {
     /// <c>sdfMeshProbeDepthVisibility</c>; there are no cross-probe or whole-sphere plane vetoes.</summary>
     /// <param name="surfaces">The packed surface map of one probe.</param>
     /// <param name="toward">Receiver minus probe position, after normal bias.</param>
+    /// <param name="coverage">The probe level's closing ramp over the taps' blocked share.</param>
     /// <param name="bounded">Whether a receiver past a measured miss's reach is unsupported (zero); when false, only
     /// measured surfaces block, so a receiver past every probe's reach is extrapolated wherever no measured surface lies
     /// before it.</param>
     /// <returns>Visibility from zero to one.</returns>
-    public static float Visibility(ReadOnlySpan<uint> surfaces, Vector3 toward, bool bounded = true) {
+    public static float Visibility(ReadOnlySpan<uint> surfaces, Vector3 toward, SdfMeshProbeCoverage coverage, bool bounded = true) {
         var distance = toward.Length();
 
         if (!(distance > 0f)) { return 1f; }
@@ -247,7 +248,7 @@ public static class SdfMeshProbeDepth {
         if (planar && (planeWeight > 0f) && ((planeHigh - planeLow) <= (0.5f * SdfMeshIrradianceProbe.DepthSurfaceJoinGap))) {
             var gap = (Vector3.Dot(vector1: firstNormal, vector2: toward) - (planeSum / planeWeight));
 
-            return FromCoverage(blocked: (planeWeight * Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade))));
+            return coverage.Visibility(blocked: (planeWeight * Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade))));
         }
         var blocked = 0f;
 
@@ -294,15 +295,9 @@ public static class SdfMeshProbeDepth {
 
             blocked += (weights[corner] * Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade)));
         }
-        return FromCoverage(blocked: blocked);
+        return coverage.Visibility(blocked: blocked);
     }
 
-    private static float FromCoverage(float blocked) {
-        var coverage = Math.Clamp(max: 1f, min: 0f, value: ((blocked - SdfMeshIrradianceProbe.DepthCoverageStart) * SdfMeshIrradianceProbe.DepthCoverageScale));
-
-        coverage = ((coverage * coverage) * (3f - (2f * coverage)));
-        return (1f - coverage);
-    }
     private static Vector3[] BuildDirections() {
         var directions = new Vector3[(Size * Size)];
 
