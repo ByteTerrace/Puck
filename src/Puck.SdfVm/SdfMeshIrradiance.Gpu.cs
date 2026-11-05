@@ -34,6 +34,22 @@ public sealed partial class SdfMeshIrradiance {
     private readonly HashSet<int> m_gpuDirty = [];
     private uint[]? m_gpuVolume;
     private bool m_gpuDraining;
+    // Set by a device reattach; cleared once a completed job carried the volume's full snapshot into the new feedback.
+    private bool m_republishOwed;
+
+    // Under the gate, once the feedback holds the volume's words: owes every slot to the next publication, so each
+    // measured level republishes whole into the new tables.
+    private void RepublishAll() {
+        m_republishOwed = false;
+        for (var level = 0; level < m_levels.Length; level++) {
+            var first = m_layout.OffsetOf(level: level);
+            for (var slot = first; slot < first + m_layout.CountOf(level: level); slot++) {
+                if (m_dirtySlots[slot]) { continue; }
+                m_dirtySlots[slot] = true;
+                m_levels[level].Changed.Add(item: slot);
+            }
+        }
+    }
 
     // Allocation tokens never repeat. Selection validates both words on the device, so a cached CPU description
     // cannot reuse hits after its slot was reclaimed. Only the coordinator allocates or frees, between jobs.
@@ -204,11 +220,13 @@ public sealed partial class SdfMeshIrradiance {
         }
         (int Word, uint[] Words)[] updates;
         int volumeWords;
+        uint[]? snapshotOf = null;
         lock (m_gate) {
             volumeWords = m_volume.Length;
             if (!ReferenceEquals(m_gpuVolume, m_volume)) {
                 updates = [(0, (uint[])m_volume.Clone())];
                 m_gpuVolume = m_volume;
+                snapshotOf = m_volume;
             } else {
                 updates = new (int, uint[])[m_gpuDirty.Count];
                 var i = 0;
@@ -225,6 +243,11 @@ public sealed partial class SdfMeshIrradiance {
             // Admission cancellation consumed no delta. Re-send a full snapshot on the next accepted job.
             lock (m_gate) { m_gpuVolume = null; }
             throw;
+        }
+        if (snapshotOf is not null) {
+            lock (m_gate) {
+                if (m_republishOwed && ReferenceEquals(m_volume, snapshotOf)) { RepublishAll(); }
+            }
         }
         try {
             for (var i = 0; i < count; i++) {

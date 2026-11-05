@@ -486,22 +486,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         return Stage(bakePending: bakePending, frame: frame, tier: tier, write: m_write);
     }
 
+    // The residency attaches its probe service before it stages (EnsureTables, then Stage's reattach), so a volume that
+    // publishes into tables copies the published slots from the service's feedback table on the device.
     private void WriteToTables(ReadOnlyMemory<uint> words) {
-        if (GpuTrace is { } gpu) {
-            m_writeTables!.PublishGpuMeshIrradiance(gpu.FeedbackBuffer, words.Length, m_changedSlots);
-            return;
-        }
-        m_writeTables!.FitMeshIrradiance(wordCount: words.Length);
-        m_changedSlots.Sort();
-        for (var index = 0; (index < m_changedSlots.Count);) {
-            var first = m_changedSlots[index++];
-            var end = (first + 1);
+        var gpu = GpuTrace ?? throw new InvalidOperationException(message: "The irradiance volume publishes into a residency's tables only through its probe service.");
 
-            while ((index < m_changedSlots.Count) && (m_changedSlots[index] == end)) { index++; end++; }
-            var offset = (first * SdfMeshIrradianceProbe.ProbeWords);
-
-            m_writeTables!.WriteMeshIrradiance(words.Span.Slice(length: ((end - first) * SdfMeshIrradianceProbe.ProbeWords), start: offset), offset);
-        }
+        m_writeTables!.PublishMeshIrradiance(gpu.FeedbackBuffer, words.Length, m_changedSlots);
     }
     // The camera the window follows: the first view's. While another residency renders that view
     // (SdfViewSnapshot.Elsewhere: its seat is presented in another world, its camera in that world's coordinates) the
@@ -538,13 +528,18 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 m_gpuDirty.Clear();
                 m_listed = false;
                 m_drained = default;
-                m_gpuMeterClient = null;
-                m_gpuMeterWords = [];
-                m_gpuMeterPositions = [];
+                // The old device's meter is complete; a fault it left belonged to that device.
+                m_gpuMeterTask = null;
+                m_gpuMeter = null;
+                m_gpuMeterAskedOf = null;
                 m_changedSlots.Clear();
                 Array.Clear(m_dirtySlots);
                 foreach (var level in m_levels) { level.Published = default; level.Changed.Clear(); }
                 m_published = default;
+                // The new tables hold no table and the new service no feedback. The volume's words still hold every
+                // measured slot, so the first relight's full snapshot carries them into the feedback, and then every
+                // slot republishes at once (RepublishAll) rather than a level publishing slots it never copied.
+                m_republishOwed = true;
                 Owe();
                 m_traceOwed = true;
             }
@@ -647,6 +642,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             if (m_worker is { IsFaulted: true } faulted) {
                 m_worker = null;
                 throw new InvalidOperationException(message: "The irradiance volume's trace failed.", innerException: faulted.Exception);
+            }
+            if (m_gpuMeterTask is { IsFaulted: true } meterFault) {
+                m_gpuMeterTask = null;
+                throw new InvalidOperationException(message: "The GPU exposure meter failed.", innerException: meterFault.Exception);
             }
             if (drain && GpuTrace is not null && !m_gpuDraining) { m_yield = true; }
             if ((m_owed || drain) && (m_scene is not null) && (m_lighting is not null) && (m_worker is null or { IsCompleted: true }) && (Granted || drain)) {
@@ -809,11 +808,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // a slot still unmeasured keeps its previous window and table words, since publishing an empty slot would invent
     // darkness and filling it with sky would invent a leak. The volume is disabled until a level first publishes, and
     // views then light as without it.
+    // After a device reattach nothing publishes until RepublishAll has owed every slot.
     private void Publish(Layout layout, Action<ReadOnlyMemory<uint>> write) {
         foreach (var level in m_levels) {
             var window = layout.WindowOf(level: level.Index, low: level.Low);
 
-            if ((level.Unwritten > 0) || ((level.Changed.Count == 0) && (level.Published == window))) { continue; }
+            if (m_republishOwed || (level.Unwritten > 0) || ((level.Changed.Count == 0) && (level.Published == window))) { continue; }
             m_geometryWrote |= (m_tracedLanded || (level.Published != window));
             m_changedSlots.AddRange(collection: level.Changed);
             level.Changed.Clear();
@@ -904,7 +904,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         Counters.Count(kind: Meters);
 
         lock (m_gate) {
-            if (GpuTrace is not null) { return TryGpuMeter(position, forward, out luminance, out skyVisibility, out source); }
+            if (GpuTrace is not null) { return TryGpuMeter(position, forward, fresh, out luminance, out skyVisibility, out source); }
             if ((m_lighting is not { } lighting) || !m_windowValid) {
                 return false;
             }
@@ -1046,7 +1046,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             foreach (var level in m_levels) { cached += level.Cache.Count; }
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={(m_volume.LongLength * sizeof(uint))} table-device-bytes={buffers.DeviceLocal} table-upload-bytes={buffers.HostVisible} table-cpu-bytes={(m_writeTables?.MeshIrradianceCpuBytes ?? 0)}");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={(m_volume.LongLength * sizeof(uint))} table-device-bytes={buffers.DeviceLocal}");
         }
     }
     // The budget and the lighting's age, as key=value pairs; under the gate.

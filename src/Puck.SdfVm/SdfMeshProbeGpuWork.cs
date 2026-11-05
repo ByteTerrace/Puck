@@ -273,7 +273,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         var destination = FeedbackBuffer;
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: destination.BufferHandle,
             sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.TransferRead, sourceStageMask: GpuStage.ComputeShader | GpuStage.Transfer,
-            destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+            destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
         for (var i = 0; i < query.Destinations!.Length; i++) {
             var slot = query.Destinations[i];
             if (slot < 0) { continue; }
@@ -283,7 +283,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 (ulong)slot * SdfMeshIrradianceProbe.ProbeWords * 4);
         }
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: destination.BufferHandle,
-            sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
+            sourceAccessMask: GpuAccess.CopyWrite, sourceStageMask: GpuStage.Transfer,
             destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.TransferRead, destinationStageMask: GpuStage.ComputeShader | GpuStage.Transfer);
         // No payload is returned. Completion of this job's fence is the acknowledgement that releases source.
     }

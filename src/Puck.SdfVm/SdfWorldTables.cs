@@ -379,7 +379,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             byteCount: SdfMeshRegion.DrawBytes,
             region: MeshRegionIndex
         ));
-        m_meshIrradianceRegion = scope.Own(created: CreateRegion(byteCount: (SdfMeshIrradianceProbe.ProbeWords * sizeof(uint)), region: MeshIrradianceRegionIndex));
         m_lightRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_lightRecords), region: LightRegionIndex));
         m_skyRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyRecord), region: SkyRegionIndex));
         m_skyLayerRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyLayerRecords), region: SkyLayerRegionIndex));
