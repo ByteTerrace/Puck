@@ -144,6 +144,27 @@ public static class HostProcesses {
 
         return ((entry.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "puck") || entry.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.Cli")) && RunningGpuVerb(arguments: arguments, grammars: grammars, start: next));
     }
+    /// <summary>What an admitted start a process is, for the commit the admission still expects it to grow by: the World
+    /// (<see cref="WorldDevices.StartKind"/> of its own arguments) or a heavy test run
+    /// (<see cref="IsHeavyTest"/>). Shells, builds and every other process are not starts the host tracks.</summary>
+    /// <param name="name">The process name, without extension.</param>
+    /// <param name="commandLine">Its Windows command line or Linux NUL-delimited argv; empty when unreadable.</param>
+    /// <returns>The start's kind, or <see langword="null"/> for any other process.</returns>
+    public static HostStartKind? RunningStart(string name, string commandLine) {
+        var program = ProgramName(path: name);
+
+        if (NeverWork.Contains(value: program, comparer: StringComparer.OrdinalIgnoreCase)) { return null; }
+
+        var arguments = Arguments(commandLine: commandLine);
+
+        // An unreadable command line cannot show a headless boot, so a World with none counts as the larger windowed one.
+        if (program.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.World")) { return WorldDevices.StartKind(arguments: arguments, start: 1); }
+        if ((arguments.Length != 0) && EntryPoint(arguments: arguments, hostAssembly: out _, next: out var next).Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.World")) {
+            return WorldDevices.StartKind(arguments: arguments, start: next);
+        }
+
+        return (IsHeavyTest(name: name, commandLine: commandLine) ? HostStartKind.HeavySuite : null);
+    }
     /// <summary>Whether a process is an MSBuild node left running for reuse.</summary>
     /// <param name="name">The process name, without extension.</param>
     /// <param name="commandLine">Its command line.</param>

@@ -86,9 +86,9 @@ capture repeats.
 `passes/sdf-glass.comp.hlsl`, `frame/sdf-glass.hlsli`;
 [the handbook's limits](../rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)).
 The glass raster accumulates, per pixel, a signed distance sum, a face count
-and three optical-depth floats over every glass face before the opaque hit,
-each material's absorption integrated separately (`sdfGlassAddOpticalDepth`,
-landed in the water follow-up). The shade pass takes the nearest front face,
+and three 64-bit integer optical-depth sums over every glass face before the
+opaque hit, each material's absorption integrated separately and the words
+independent of raster order (`sdfGlassAccumulate`). The shade pass takes the nearest front face,
 refracts once by Snell, reads the lit image where the bent ray would leave
 the glass and carry on to the opaque hit (`sdfGlassProject`), transmits by
 Beer–Lambert over the integrated optical depth, frosts over up to eight taps

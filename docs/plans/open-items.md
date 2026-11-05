@@ -761,7 +761,11 @@ Remaining:
   `FixedFieldColliderContact.TryMeasure`) answers nothing at 36 of 105 points of a
   1 m grid around a lawn flat-crown tree (x 6 to 20, y 0.5 to 6.5, z -27.3 in
   the debug world), and beside a crown it can read the floor 6 m below instead
-  of the crown 0.3 m away. Contact resolution does not read it; the measure's
+  of the crown 0.3 m away. Inside a solid it reports the exit along the
+  gradient, which at a crease of touching solids (a log on the floor) or in
+  overlapping crowns runs through other solids, reading metres deep at a point
+  on a log's end face. Contact resolution and the scene diagnostics do not read it (the
+  diagnostics read `FixedFieldColliderContact.TryRead`); the measure's
   projection and bracketing need a look against the Superellipsoid's
   lower-bound field.
 - [medium] The Superellipsoid's field (`SdfFieldEvaluator`, `mapCore`) is a
@@ -1095,7 +1099,11 @@ the next lanes here; the items below are the system work beside them.
   `WorldFieldEmitter.AdvanceBricks` correctly publishes changed sampled geometry,
   but `SdfProgramBuilder.Build` constructs and analyzes the whole `SdfProgram`
   again. Frequent field changes therefore repeat whole-world compilation.
-  Profile in an isolated run,
+  The geometry identity does not force this: `SdfMeshGeometryBuilder` hashes
+  the voxel contents and ignores their packed address, so it would key the same
+  meshes from any immutable store. Storing the snapshot inside the one packed
+  `SdfProgram` word array does: a changed value is a new program, packed,
+  validated and uploaded whole. Profile in an isolated run,
   then reuse unchanged compilation through one generic program path. Preserve
   snapshot ownership, side-table relocation and geometry-key completeness.
 - [low] Investigate the reported operator attachment loss on `world.reset`.
@@ -1261,12 +1269,22 @@ lowers it to the same JSON as before, except where the look changes on purpose.
 - [medium] The rot sweep found three places where code and its own
   documentation disagree. `puck docs links` does not read XML comments, so
   none of these is checked yet.
-  - **Carve bakes may be dead.** No in-tree producer requests a carve brick
-    bake; `ISdfBrickBakeService.RequestBrickBake`'s only callers are tests.
-    `WorldFieldEmitter.AdvanceBricks` uploads height fields. Yet
-    `bricks-and-baking.md`'s Bake and Swap sections and the XML doc still
-    describe settled-carve bins. Confirm, then delete the path with its
-    chapter, or wire it.
+  - **The external brick pool is dead.** No in-tree producer requests a carve
+    brick bake (`ISdfBrickBakeService.RequestBrickBake`'s only callers are
+    tests), and `WorldFieldEmitter.AdvanceBricks` now publishes height fields
+    as inline sampled values in the program words (`SdfProgramBuilder.SampledValues`)
+    and never calls `UploadBrick`. Every residency still allocates the 64 MB
+    pool (`SdfWorldRenderSpec.BrickPoolVoxelCapacity`,
+    `SdfWorldTables.DefaultBrickPoolVoxelCapacity`), and the pool's second
+    sampled-region path survives in `sdfBrickVoxel` (the `SDF_SAMPLED_REGIONS`
+    arm, `field/sdf-shapes.hlsli:471`), `SdfWorldTables.BrickBake.cs`,
+    `sdf-brick-bake.comp.hlsl`, `SdfBrickBake`, `SdfBrickPoolLayout`, the
+    `sdfBrickPool` world-interface member and the brick budget in
+    `WorldDefinitionValidator.Topology.cs:585`. Delete the pool with its
+    kernel, interfaces, service, budget and `bricks-and-baking.md` chapters,
+    and rename `ISdfFrameSource.AdvanceBricks` for what it now does. Removing
+    the interface member changes the bake kernels' bytecode, so the change
+    rebakes every stored mesh once.
   - **The rule host's effect skip.** `documents-rules.md` says a
     `setState`/`addState` effect is submitted only when it could move the
     destination, but the code that enforces this was not found.

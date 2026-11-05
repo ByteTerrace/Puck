@@ -854,8 +854,11 @@ sample counts for each attempted comparison; these count witnesses, while the
 banner counts clustered causes. Missing evaluation is **unknown**, never a zero.
 
 The colliders report reads each collider's boundary witnesses against the
-authored field, which takes minutes in a world of many relieved creations. The
-reads run on half the processors. A call that owes its caller an answer before
+authored field. A witness's separation is the field's own reading there, scaled
+by the evaluator's certified step scale: exact in sign and never more than the
+distance to the authored surface, so a red finding is one the field proves. A
+witness inside another collider, a field collider included, is buried and not
+compared. The reads run on half the processors. A call that owes its caller an answer before
 they finish (a control attachment's deadline) answers an unfinished report
 instead: one unknown finding, `coverage.pending` naming the colliders still to
 read, nothing retained. The reads already taken are kept, and the next

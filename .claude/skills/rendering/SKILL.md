@@ -452,10 +452,14 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   apart from the opaque ones) and draw in the glass raster pass over the opaque
   image (`passes/sdf-mesh-glass.frag.hlsl`, `passes/sdf-glass.comp.hlsl`). The
   mesh pass, the cascades and the irradiance trace skip glass draws
-  (`SdfMeshDraw.Glass`). Thickness is the glass sums, signed ray distances the
-  raster accumulates with atomics (`frame/sdf-glass.hlsli`): never read a glass
-  shape's thickness from its mesh. One glass layer a pixel; glass through glass
-  is the opaque image. The handbook's
+  (`SdfMeshDraw.Glass`). Thickness and RGB optical depth are the glass sums,
+  integers the raster accumulates with atomics (`frame/sdf-glass.hlsli`,
+  `sdfGlassAccumulate`): never read a glass shape's thickness from its mesh, and
+  never accumulate a sum in floats, whose rounding follows raster order and whose
+  per-face terms cancel badly against the far sky. Transmission integrates every
+  glass material before the opaque hit; only the nearest front face reflects and
+  refracts. `SdfGlassSumsDeviceLawTests` runs the accumulation in many orders on
+  both backends. The handbook's
   [glass section](../../../docs/rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)
   states the limits.
 - **Camera history uses the camera's sample grid.** The first recorder can be

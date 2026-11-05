@@ -31,4 +31,18 @@ public static class WorldDevices {
 
         return opens;
     }
+    /// <summary>What a World started with these arguments is, for the host admission: a test batch (<c>--test-batch</c>) is
+    /// a <see cref="HostStartKind.ReproduceReplica"/>, any other World that opens a device
+    /// (<see cref="OpensDevice"/>) a <see cref="HostStartKind.WindowedWorld"/>, and the rest a
+    /// <see cref="HostStartKind.HeadlessWorld"/>.</summary>
+    /// <param name="arguments">The World's command-line arguments.</param>
+    /// <param name="start">The index of the first argument to read.</param>
+    /// <returns>The World's kind.</returns>
+    public static HostStartKind StartKind(IReadOnlyList<string> arguments, int start = 0) {
+        for (var index = start; (index < arguments.Count); index++) {
+            if (string.Equals(a: arguments[index], b: "--test-batch", comparisonType: StringComparison.OrdinalIgnoreCase)) { return HostStartKind.ReproduceReplica; }
+        }
+
+        return (OpensDevice(arguments: arguments, start: start) ? HostStartKind.WindowedWorld : HostStartKind.HeadlessWorld);
+    }
 }
