@@ -58,13 +58,24 @@ lease retired twice. A steady frame that allocates lease bookkeeping.
 
 **A frame's submissions reach the queue as one batch.** `RenderGraphRuntime`
 opens a batch around its renders (`IGpuQueueSubmitter.BeginBatch`,
-`FlushBatch`); on Vulkan the nodes' submissions join one `vkQueueSubmit`
-(`VulkanSubmissionBatch`), and every fence they arm signals only once the whole
-batch retires, so a lease, a retirement or a readback keyed on a node's fence
-completes no earlier than the frame's last submission. Anything that must see
-deferred work first flushes it: a wait on a deferred fence, `SubmitAndWait`,
-the device's wait for idle and every other submission through
-`VulkanQueueSubmitter`. Direct3D 12 batches through `DirectXGpuQueueSubmitter`, with enhanced buffer barriers independent of decay. Its image barriers take the caller-stated layout. Every native queue operation outside the submitter (an upload, a readback, an export's signal, a release's drain, presentation) reaches the queue through `DirectXDeviceContext.CommandQueueHandle`, which splits the batch first: the deferred lists go to the queue and the batch stays open. An external wait splits it the same way. A new path that keeps its own copy of the queue pointer gets around that door.
+`FlushBatch`). Both backends defer through one implementation,
+`GpuSubmissionBatch<TEntry>` with its fences' shared states in
+`GpuBatchedSubmissionFence`: the nodes' submissions reach the queue in one
+`vkQueueSubmit` or one `ExecuteCommandLists`, and every fence they arm signals
+only once the whole batch retires, so a lease, a retirement or a readback keyed
+on a node's fence completes no earlier than the frame's last submission. Anything
+that must see deferred work first splits the batch (the deferred work goes to the
+queue and the batch stays open): a wait on a deferred fence, `SubmitAndWait`, the
+device's wait for idle, an external wait on Direct3D 12, and every other native
+queue operation (an upload, a readback, an export's signal, a release's drain,
+presentation), which reads the queue through its one door:
+`DirectXDeviceContext.CommandQueueHandle` or `VulkanLogicalDevice.GraphicsQueue`
+and `PresentQueue` (a queue family alone is `GraphicsQueueFamilyIndex`, which
+splits nothing). A new path that keeps its own copy of the queue gets around that
+door. A batch owner whose submit failed before it was armed is abandoned, so its
+fences report nothing outstanding instead of waiting on a signal nothing queued.
+Direct3D 12 uses enhanced buffer barriers independent of decay, and its image
+barriers take the caller-stated layout.
 
 ## 2. Nothing resolves silently to nothing
 

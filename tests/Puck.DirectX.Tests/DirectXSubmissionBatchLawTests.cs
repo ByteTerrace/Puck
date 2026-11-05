@@ -7,7 +7,8 @@ namespace Puck.DirectX.Tests;
 
 /// <summary>Laws for the Direct3D 12 submission batch on a software (WARP) device: a batch defers its lists, and any
 /// operation put on the queue through the context's queue handle (a release's drain, a raw upload, a signal) follows
-/// every list the batch deferred before it, while the batch stays open for the lists after it.</summary>
+/// every list the batch deferred before it, while the batch stays open for the lists after it; a wait on a deferred
+/// fence keeps it open too.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXSubmissionBatchLawTests {
     [Fact]
@@ -38,6 +39,12 @@ public sealed class DirectXSubmissionBatchLawTests {
             // The batch is still open: a submission after the release is deferred again.
             gpu.QueueSubmitter.Submit(commandBufferHandles: [second.CommandBufferHandle], fence: later);
             Assert.False(condition: later.IsSignaled);
+
+            // A wait on a deferred fence hands the batch to the queue and keeps it open.
+            later.Wait();
+            deferred.Wait();
+            gpu.QueueSubmitter.Submit(commandBufferHandles: [first.CommandBufferHandle], fence: deferred);
+            Assert.False(condition: deferred.IsSignaled);
         } finally {
             gpu.QueueSubmitter.FlushBatch();
         }
