@@ -326,7 +326,11 @@ gauge float):
 Cost, on a machine other lanes were loading (counts are the evidence): the chain is 72
 cell visits a lattice step and the pool 1,600; the water adds two of the world's 1,428
 rules; the three height rows make the engine create its 64 MB brick pool (by the code,
-`SdfWorldTables.EnsureBrickPool`; not measured apart). A cold bake
+`SdfWorldTables.EnsureBrickPool`; not measured apart). Against the same world without the
+water documents (the floor's slabs and the wall's bowl kept), the water's creations add 172
+bake groups (7,478 to 7,650), 6.4 million level-0 triangles (47.6 to 54.0 million), 105 MB of
+vertex arrays and 1.0 GB of the mesh region in use (1.67 to 2.68 GB): every animated shape is a
+group of its own, and the stream's 1.4 cm foam bars bake at a millimetre cell. A cold bake
 of the world is 7,650 groups, 54 million triangles and 78 s on Direct3D 12 and about
 115 s on Vulkan; a warm Direct3D 12 World holds 12.4 GiB private (14.3 cold) and the
 cold Vulkan World 15.7. A frame at the pool is 157 ms and at the spawn 160 ms (the

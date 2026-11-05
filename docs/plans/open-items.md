@@ -1051,6 +1051,15 @@ the water strained, measured, and not yet fixed.
   authored material on the row's `field` trait (the palette vocabulary: roughness,
   specular, coat, glass), through `WorldStateFieldTrait`, `WorldFieldRow`, the
   validator and `puck schema`; the water then owns no look in C#.
+- [medium] The water's creations add 172 bake groups, 6.4 million level-0
+  triangles and 1.0 GB of the mesh region in use to the debug world (a World
+  without the water documents: 7,478 groups, 47.6 M triangles, 1.67 GB used; with
+  them 7,650, 54.0 M, 2.68 GB), while private memory stays near 12.5 GiB warm
+  either way. Each animated shape is a group of its own (`puck creation stats`
+  reports `stream-0` as 15 groups for 15 boxes), and the stream's 1.4 cm foam bars
+  and 5 cm brush edges bake at a millimetre cell
+  (`worlds/standard/water.puck`, `streamSegment`); which shape owns the triangles
+  is unmeasured (`puck mesh audit --prototype` selected no groups).
 - [medium] The debug world's compile validates 3.77 GB peak working set without
   the water scenery and 4.78 GB with it (`puck compile worlds/debug/debug.puck
   --validate`; each document alone is under 200 MB). The 1 GB is in the falls,
