@@ -1704,6 +1704,16 @@ internal static partial class LawRegistry {
             claim: SymmetricSolveClaims.ApplyRefusalAndSymmetry,
             id: "symmetric-solve.apply-refusal-and-symmetry"
         ),
+        SweptCase(
+            claim: SymmetricSolveClaims.General3VsOracle,
+            domain: LinearSolve3,
+            id: "symmetric-solve.general3-vs-oracle",
+            width: 12
+        ),
+        ClaimCase(
+            claim: SymmetricSolveClaims.General3PinnedAndRefusals,
+            id: "symmetric-solve.general3-pinned-and-refusals"
+        ),
 
     ];
     private static LawCase[] MixedScaleCases() => [

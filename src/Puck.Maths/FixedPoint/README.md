@@ -151,6 +151,7 @@ give each type its full contract.
 | `CurvatureSpline` (with `CompiledCurvatureSpline`, `CurvatureSplineKnot`, `CurvatureSplineSample`, `CurvatureSplineSegment`, `CurvatureSplineException`/`CurvatureSplineRefusal`) | `static` class + `readonly record struct`s | A curve authored by knot curvature rather than control points—`Compile` derives the cubic-Bézier tangent lengths that reproduce declared endpoint curvatures exactly, at Q32, plus a Simpson arc-length table; `Evaluate(arcLength)` reads position, tangent, elevation grade, and curvature back per tick/frame. Zero-allocation, exception-free evaluation; presentation (the camera program's `path` op) samples the `CompiledCurvatureSpline` and converts the sample to floats. |
 | `FixedVectorMath` | `static` | **Substrate.** The scale-free normalizers and norm helpers that every direction and length operation in the folder routes through: the common power-of-two preconditioner, the exact sums of squares, the restoring per-component division (restoring division is schoolbook long division, one bit at a time), and the `Try…` boundary reports. |
 | `FusedArithmetic` (with `LimbBig`) | `public static` | The public refusing faces provide one-rounding mixed-scale products, three-lane dot products, scaled reciprocals, and the generalized `TryDivideMagnitudeRounded` divider, beside the wrapping `MixedScaleProduct` and the `RawMagnitude` sign-magnitude primitive. The remaining sign-plus-`UInt128` accumulation and wrapping siblings are internal substrate. `LimbBig`, sharing the file, remains the internal exact signed multi-limb accumulator serving `Algebra/MonogenicAlgebra`'s higher-degree lanes. |
+| `FixedLinearSolve` | `public static` | Scale-free general 3×3 solve, `TrySolve3`, by Cramer's rule on `FixedSymmetricSolve`'s machinery: nine independent raw-`long` entries at any shared caller scale, one rounding per component, and a refusal that clears every output. |
 | `FixedSymmetricSolve` | `public static` | Scale-free 2×2/3×3 symmetric apply, solve, and invert for the effective-mass matrices a rigid-body solver uses. Every apply, solve and invert kernel is public: `TryApplySymmetric2`/`3`, `TrySolveSymmetric2`/`3` and `TryInvertSymmetric2`/`3`. Raw-`long` operands may use any shared caller scale; each output rounds exactly once and every refusing call clears its outputs. |
 | `FixedMassProperties` | `public static` | Volume, mass and centroidal inertia for the solid primitives (sphere, box, capsule bodies; all four volumes), the parallel-axis transfer, compound accumulation, and mass/inertia inversion. `TrySphereBody`, `TryBoxBody`, `TryCapsuleBody`, `TryTranslateInertia`, `TryInvertMass` and `TryInvertInertia` are the construction path a rigid body needs from a collider; the four `Try*Volume` overloads, `TryCylinderBody` and `TryCompound` (over its `CompoundPart` record) serve volume alone, a cylinder collider, and a compound body. |
 | `IWorldQuery` (with `RayHit`, `WorldQueryConfidence`, `QueryCapabilities`) | `interface` | The five geometric verbs over a world—raycast, sphere cast, overlap, ground height, line of sight—each answer tagged `Exact` or `Bounded` so a caller knows whether it read a live field or a quantized bake. Declared here for the same reason as `IFieldEvaluator`: it names no representation. |
@@ -1090,6 +1091,11 @@ so it folds the shift into its own fraction-bit request and refuses outright
 rather than manufacture an answer when that would go negative. Both refuse
 (every `out` parameter zero) on an exactly singular matrix.
 
+`FixedLinearSolve.TrySolve3` is the general (non-symmetric) 3×3 solve on the
+same machinery and bit budget: nine independent entries, the determinant by
+first-row expansion, and the same singularity, refusal and one-rounding
+contract. The implicit gyroscopic step's Jacobian is its motivating caller.
+
 `LimbBig` shares the file but serves a different floor: it is the exact signed
 multi-limb accumulator behind `Algebra/MonogenicAlgebra`'s higher-degree
 lanes, and no `FusedArithmetic` kernel calls it—the widest kernel here,
@@ -1395,7 +1401,7 @@ or by nothing:
 | `vector.*` | Componentwise algebra, the fused plane and space products, norms, normalization, and the divergence canaries that prove the fused discipline is load-bearing. |
 | `position.*` | Canonicalization, `Delta`, `Translate`, the group structure, and the render-relative ladder. |
 | `rate.*` | Scalar and vector integration against an exact `BigInteger` ledger, the unit-advance closure, and both refusal ladders. |
-| `symmetric-solve.*` | `FixedSymmetricSolve`: the 2×2/3×3 apply, solve and invert kernels, against independent `BigInteger` Cramer's-rule and Bareiss-elimination oracles, the six-term-determinant bit budget at hand-picked extreme operands, the singularity refusal, and Invert's own large-magnitude refusal envelope. |
+| `symmetric-solve.*` | `FixedSymmetricSolve`: the 2×2/3×3 apply, solve and invert kernels, against independent `BigInteger` Cramer's-rule and Bareiss-elimination oracles, the six-term-determinant bit budget at hand-picked extreme operands, the singularity refusal, and Invert's own large-magnitude refusal envelope; `FixedLinearSolve.TrySolve3` against a column-replacement Sarrus oracle, plus a hand-solved non-symmetric system and its refusals. |
 | `deep.*` | What Default does not reach: the exhaustive four-operand edge cross product for the planar trio, the complete `UnitFraction16` sweep, and the longer ladders. |
 
 **The tiers.**
