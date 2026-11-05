@@ -982,11 +982,7 @@ public sealed class FieldLatticeLawTests {
         Func<StateHandle, ulong, FixedQ4816>? readScalar = null,
         Action<StateHandle, FixedQ4816, ulong>? addScalar = null
     ) : IFieldLatticeHost {
-        public void AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) => addScalar?.Invoke(
-            row,
-            amount,
-            tick
-        );
+        public FixedQ4816 AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) { addScalar?.Invoke(row, amount, tick); return addScalar is null ? FixedQ4816.Zero : amount; }
         public FixedVector3? BodyPosition(int body) => bodyPosition?.Invoke(body);
         public FixedQ4816 ReadScalar(StateHandle row, ulong tick) => (readScalar?.Invoke(
             row,

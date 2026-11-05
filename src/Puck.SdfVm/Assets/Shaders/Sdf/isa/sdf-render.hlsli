@@ -147,7 +147,7 @@
 #define SDF_HISTORY_FEATURE_WEIGHT_CAP 32.0
 
 // The glass sums the glass raster pass accumulates and the glass shading pass reads.
-#define SDF_GLASS_SUM_WORDS 2u
+#define SDF_GLASS_SUM_WORDS 5u
 #define SDF_GLASS_SUM_SCALE 4096.0
 
 // The sky's environment map (SdfSkyEnvironment) and the volume table's capacity (SdfProgramBuilder.MaxVolumes).

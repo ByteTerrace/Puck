@@ -231,6 +231,7 @@ public sealed class SdfKernelInterfaces {
                 Written(element: ShaderValueType.Uint, name: MeshOcclusionCountsWritten),
                 Written(element: ShaderValueType.Uint, name: MeshOcclusionDepthWritten),
                 Read(element: ShaderValueType.Uint, name: MeshIndirectCommands),
+                Read(element: ShaderValueType.Uint4, name: SdfWorldPackage.ProgramWords),
             ],
             name: "sdf-mesh",
             pushesIndex: true

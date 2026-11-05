@@ -33,7 +33,8 @@ public interface IGpuQueueSubmitter {
     /// <param name="fence">The submission fence to arm (created by <see cref="CreateSubmissionFence"/> on the same device).</param>
     void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence);
     /// <summary>Submits one or more command buffers and blocks until the submitted work has drained (Vulkan waits for
-    /// the queue to go idle; Direct3D 12 waits for the whole device).</summary>
+    /// the queue to go idle; Direct3D 12 waits for the whole device). An empty span still drains all earlier work,
+    /// including deferred submissions, and keeps external waits for the next nonempty submission.</summary>
     /// <param name="commandBufferHandles">The command buffer handles to submit.</param>
     void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles);
     /// <summary>Opens a batch: the submissions made until <see cref="FlushBatch"/> are deferred and reach the queue

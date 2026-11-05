@@ -14,7 +14,8 @@ public sealed partial class SdfProgram {
         int RigidLeaves,
         int ConvexPolygonVectors,
         int SweepCurves,
-        int PathEdges
+        int PathEdges,
+        int SampledVectors = 0
     ) {
         public int DataOffset => (ProgramHeaderVectors + Instructions);
         public int PaintOffset => (DataOffset + (InstructionDataVectors * Instructions));
@@ -27,7 +28,8 @@ public sealed partial class SdfProgram {
         public int ConvexPolygonOffset => ((RigidPlanOffset + Segments) + (3 * RigidLeaves));
         public int SweepOffset => (ConvexPolygonOffset + ConvexPolygonVectors);
         public int PathOffset => (SweepOffset + (SweepCurveVectorsPerEntry * SweepCurves));
-        public int PartProgramOffset => checked((PathOffset + (2 * PathEdges)));
+        public int SampledOffset => checked((PathOffset + (2 * PathEdges)));
+        public int PartProgramOffset => checked(SampledOffset + SampledVectors);
 
         // A probe cannot rely on shared or ineligible parts staying that way in every later emission. Each leaf needs
         // at least ResetPoint + ShapeBlend, so its shared record plus placement binding consume at most Instructions

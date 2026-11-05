@@ -77,7 +77,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // visibility records and glass sums the glass pass reads and accumulates (the dummy in every other raster part).
     private readonly IGpuBuffer?[][] m_meshSetBuffers = [];
 
-    private const int MeshSetBuffers = 5;
+    private const int MeshSetBuffers = 6;
     private const int MeshSetCounters = 2;
     private const int MeshSetGlassSums = 4;
     private const int MeshSetOcclusionBuffers = 6;

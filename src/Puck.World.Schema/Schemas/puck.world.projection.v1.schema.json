@@ -32668,6 +32668,11 @@
                               "null"
                             ],
                             "default": null
+                          },
+                          "retain": {
+                            "description": "Optional amount to leave in the donor, or its declared minimum when greater. Requires TakeFrom.",
+                            "default": null,
+                            "title": "WorldLatticeScalar"
                           }
                         },
                         "required": [

@@ -459,7 +459,6 @@ float sdfGlyph(float3 p, float4 data0, float4 data1) {
 // unchanged zero set. Manual trilinear interpolation uses eight explicit loads and ordered, noncontracting arithmetic,
 // so the same voxel values and fractional coordinate interpolate identically across SPIR-V/DXIL; the baked VALUES
 // carry the familiar +-1-LSB WorldLsbExact class. KEEP IN SYNC with SdfProgramBuilder.SampledRegion.
-#ifdef SDF_SAMPLED_REGIONS
 // One brick voxel, clamped to the brick's own [0, dims-1] lattice so the trilinear stencil never reads past the brick's
 // words (clamp-to-edge). Sound because the brick's zero set sits strictly inside the box by the bake margin, so the
 // clamped border half-voxel is always deep-positive far field. Linear index is x-fastest: base + i + j*dx + k*dx*dy —
@@ -467,7 +466,13 @@ float sdfGlyph(float3 p, float4 data0, float4 data1) {
 float sdfBrickVoxel(uint baseWord, uint3 dims, int3 coord) {
     int3 c = clamp(coord, int3(0, 0, 0), (int3(dims) - int3(1, 1, 1)));
 
-    return sdfBrickPool[(baseWord + (uint)c.x + ((uint)c.y * dims.x) + ((uint)c.z * (dims.x * dims.y)))];
+    uint index = (baseWord & 0x7fffffffu) + (uint)c.x + ((uint)c.y * dims.x) + ((uint)c.z * dims.x * dims.y);
+    if ((baseWord & 0x80000000u) != 0u) { return asfloat(sdfWords[index >> 2][index & 3u]); }
+#ifdef SDF_SAMPLED_REGIONS
+    return sdfBrickPool[index];
+#else
+    return SDF_FAR_DISTANCE;
+#endif
 }
 // A precise result of the lerp intrinsic can still lower to SPIR-V FMix, whose arithmetic need not match DXIL's.
 // Spell every operation and mark each intermediate so both backends retain the same subtraction, product and sum.
@@ -478,28 +483,26 @@ float sdfBrickInterpolate(float left, float right, float weight) {
 
     return result;
 }
-#endif
 float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
+    // High bit names immutable program words; clear names the engine's external brick pool.
+    // The instruction and its inline voxel values travel together through every bake submission.
+    uint encodedWord = asuint(data1.z);
+    bool inlineValues = ((encodedWord & 0x80000000u) != 0u);
+    uint numVoxels = 0u;
+    uint stride;
+    if (inlineValues) {
+        sdfWords.GetDimensions(numVoxels, stride);
+        numVoxels *= 4u;
+    } else {
 #ifdef SDF_SAMPLED_REGIONS
-    // A POOL-LESS engine (SdfWorldTablesOptions.BrickPoolVoxelCapacity 0 — every camera or session view) binds a
-    // single-float FILLER for sdfBrickPool so the always-present binding stays valid, yet it
-    // never bakes a brick. Sampling that filler would read 0 (its lone/OOB word), and a stored 0 is distance 0 = the box
-    // interior sitting entirely on the carve surface, so the Subtraction compose would carve a box-shaped HOLE across the
-    // whole region (the same defect an allocated-but-unbaked pool has). Detect the filler by element count and return the
-    // conservative union-hull far field — byte-identical to the pool-UNBOUND #else path — so the region renders as its
-    // uncarved hull, never a hole. A real pool holds one f32 per voxel (>= a full brick), so numVoxels > 1 there; the
-    // check is loop-invariant (the descriptor is fixed per dispatch) so it costs a real baked-carve scene nothing.
-    uint numVoxels;
-    uint voxelStride;
-    sdfBrickPool.GetDimensions(numVoxels, voxelStride);
-    if (numVoxels <= 1u) {
-        return SDF_FAR_DISTANCE;
+        sdfBrickPool.GetDimensions(numVoxels, stride);
+#endif
+        if (numVoxels <= 1u) { return SDF_FAR_DISTANCE; }
     }
-
     float cellSize = data0.w;
     uint packedDims = asuint(data1.y);
     uint3 dims = uint3((packedDims & SDF_SAMPLED_REGION_DIM_MASK), ((packedDims >> 10) & SDF_SAMPLED_REGION_DIM_MASK), ((packedDims >> 20) & SDF_SAMPLED_REGION_DIM_MASK));
-    uint baseWord = asuint(data1.z);
+    uint baseWord = (encodedWord & 0x7fffffffu);
     uint voxelCount = dims.x * dims.y * dims.z;
     if (any(dims == 0u) || baseWord > numVoxels || voxelCount > numVoxels - baseWord
         || !isfinite(cellSize) || cellSize <= 0.0 || !all(isfinite(p)) || !all(isfinite(data0.xyz))) { return SDF_FAR_DISTANCE; }
@@ -527,14 +530,14 @@ float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
     float3 f = (sampleCoord - baseF);
     int3 b = int3(baseF);
 
-    float c000 = sdfBrickVoxel(baseWord, dims, (b + int3(0, 0, 0)));
-    float c100 = sdfBrickVoxel(baseWord, dims, (b + int3(1, 0, 0)));
-    float c010 = sdfBrickVoxel(baseWord, dims, (b + int3(0, 1, 0)));
-    float c110 = sdfBrickVoxel(baseWord, dims, (b + int3(1, 1, 0)));
-    float c001 = sdfBrickVoxel(baseWord, dims, (b + int3(0, 0, 1)));
-    float c101 = sdfBrickVoxel(baseWord, dims, (b + int3(1, 0, 1)));
-    float c011 = sdfBrickVoxel(baseWord, dims, (b + int3(0, 1, 1)));
-    float c111 = sdfBrickVoxel(baseWord, dims, (b + int3(1, 1, 1)));
+    float c000 = sdfBrickVoxel(encodedWord, dims, (b + int3(0, 0, 0)));
+    float c100 = sdfBrickVoxel(encodedWord, dims, (b + int3(1, 0, 0)));
+    float c010 = sdfBrickVoxel(encodedWord, dims, (b + int3(0, 1, 0)));
+    float c110 = sdfBrickVoxel(encodedWord, dims, (b + int3(1, 1, 0)));
+    float c001 = sdfBrickVoxel(encodedWord, dims, (b + int3(0, 0, 1)));
+    float c101 = sdfBrickVoxel(encodedWord, dims, (b + int3(1, 0, 1)));
+    float c011 = sdfBrickVoxel(encodedWord, dims, (b + int3(0, 1, 1)));
+    float c111 = sdfBrickVoxel(encodedWord, dims, (b + int3(1, 1, 1)));
 
     // Interpolate x, then y, then z, with contraction disabled on each operation inside sdfBrickInterpolate.
     float c00 = sdfBrickInterpolate(c000, c100, f.x);
@@ -546,13 +549,7 @@ float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
     float result = sdfBrickInterpolate(c0, c1, f.z);
 
     return result;
-#else
-    // The pool is NOT bound: the conservative UNION-HULL fallback. A Subtraction compose of SDF_FAR_DISTANCE never bites
-    // (max(acc, -1e9) == acc), so the region renders as its uncarved hull — solid, never a hole (the Glyph quad-fallback
-    // precedent). A kernel that does not bind the pool (a probe) takes this path; the bake binds it, and a program with
-    // no SampledRegion never reaches this arm at all.
-    return SDF_FAR_DISTANCE;
-#endif
+
 }
 // === end SDF_SHAPE_SAMPLED_REGION ====================================================================================
 

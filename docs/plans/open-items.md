@@ -567,6 +567,19 @@ The custom no-GC runtime port stays later work, on the
   Refresh Rate: confirm the 60 FPS bar and VRR pacing hold in front of and
   behind another window, and that `world.target display` reaches the display's
   top rate.
+- [medium · unconfirmed] Owner: rendering integration. Attribute the shared-batch
+  review's higher execute/signal counts against A2 with matched camera, validation
+  and device workloads. `DirectXSubmissionWork.Process`
+  (`src/Puck.DirectX/DirectXSubmissionWork.cs:6`) counts all devices, including
+  background work; a process total does not isolate a frame batch regression.
+  The review's paired headless counter deltas are unchanged; GPU readings and
+  capture paths are recorded in its evidence commit.
+- [medium · unconfirmed] Owner: rendering integration. In the painting wing,
+  `world.wait residency` can time out after `world.wait bakes` succeeds and
+  presented captures complete, on both backends. Trace `ArmBakes`' resident
+  predicate (`src/Puck.World.Console/WorldWaitCommandModule.cs:259`) to the
+  particular residency and upload fence; distinguish continuous new demand
+  from an upload completion that cannot retire before changing the predicate.
 
 ### Bake proportional to change
 
@@ -1063,45 +1076,37 @@ Next: what the water as a forcing workload showed
 ([C3 as built](debug-world-composition.md#c3-as-built)); each item is a system
 the water strained, measured, and not yet fixed.
 
-- [medium] Route to the mesh lane: `WorldFieldEmitter.AdvanceBricks` increments its
-  program revision only for a field's first ready brick, not later uploads
-  (`src/Puck.World.Client/WorldFieldEmitter.cs:231`). `SdfMeshGeometryBuilder.Append`
-  hashes instruction words and selected side tables, not sampled brick contents
-  (`src/Puck.SdfVm/SdfMeshGeometry.cs:293`). A changing opaque field therefore
-  appears able to retain stale baked geometry; reproduce that visible effect and
-  make sampled content part of derived identity. The glass pool samples its live
-  brick through the glass path. This is a source finding, not a measured visual failure.
-- [low] `FieldLattice.StepFlow` sends boundary spill through
-  `IFieldLatticeHost.AddScalar`, whose contract clamps at the scalar row's envelope
-  and cannot return unaccepted supply (`src/Puck.Physics/Fields/FieldLattice.cs:32`).
-  A full spill accumulator can discard quantity. The closed hydrology chain has
-  no spill row; extend the exact-transfer seam to bounded scalar stores before
-  using spill as conserved storage.
-
-- [medium] The water's creations add 172 bake groups, 6.4 million level-0
-  triangles and 1.0 GB of the mesh region in use to the debug world (a World
-  without the water documents: 7,478 groups, 47.6 M triangles, 1.67 GB used; with
-  them 7,650, 54.0 M, 2.68 GB), while private memory stays near 12.5 GiB warm
-  either way. Each animated shape is a group of its own (`puck creation stats`
-  reports `stream-0` as 15 groups for 15 boxes), and the stream's 1.4 cm foam bars
-  and 5 cm brush edges bake at a millimetre cell
-  (`worlds/standard/water.puck`, `streamSegment`); which shape owns the triangles
-  is unmeasured (`puck mesh audit --prototype` selected no groups).
-- [medium] The debug world's compile validates 3.77 GB peak working set without
-  the water scenery and 4.78 GB with it (`puck compile worlds/debug/debug.puck
-  --validate`; each document alone is under 200 MB). The 1 GB is in the falls,
-  glacier, lake and bridge creations, not in the eight stream segments, the
-  hydrology rules or the lattices, so it grows with a creation's extent or kind
-  rather than its shape count; the validate stage that holds it is not yet found.
+- [medium] Cold mesh residency still misses the one-minute target. Attribute the
+  remaining large water meshes with `puck mesh audit --prototype` (now selects
+  static and animated placements), and profile bake admission, landing and
+  illumination together. Stream strokes now paint one sheet per segment; they
+  no longer create fine geometric features or one animated group per stroke.
+  The sampled-field fix makes each changed height snapshot a new mesh identity;
+  measure ordinary-rate field updates as well as a paused cold boot. Run costs
+  and before/after evidence live in the water follow-up commits.
+  The prototype audits also flag normal/topology defects in the glacier, lake and falls
+  despite finding no uncovered surface. Inspect those witnesses through the
+  existing mesh-audit image output before attributing them to authored style.
+- [medium] Make packed-program rebuilding proportional to changed emissions.
+  `WorldFieldEmitter.AdvanceBricks` correctly publishes changed sampled geometry,
+  but `SdfProgramBuilder.Build` constructs and analyzes the whole `SdfProgram`
+  again. Frequent field changes therefore repeat whole-world compilation.
+  Profile in an isolated run,
+  then reuse unchanged compilation through one generic program path. Preserve
+  snapshot ownership, side-table relocation and geometry-key completeness.
 - [low] Investigate the reported operator attachment loss on `world.reset`.
   `WorldGrants.EndSessionsForRebuild` ends observation sessions, while
   `WorldControlCommandModule` owns a separate local console endpoint; do not
   conflate those lifetimes when reproducing the report. Reset and reload now
   reseed lattice stores alongside scalar state.
-- [low] The glacier's lumps hinge into the wall but leave their crowns above the
-  crest at zero (`worlds/debug/water-scenery.puck`, `glacierLumps`), the falls
-  are one slab ribbon with no spray, and the lake outlet is not a modelled notch:
-  authoring work against the art pack.
+- [low] Continue the art pack's surface treatment: glacier crevasses and melt
+  channels, wet rock, the reservoir's descending inlet, and the stream's bank
+  contacts. The tapered glacier, impact spray and plunge basin, modelled outlet,
+  connected reservoir pavilion and motion-driven swim are authored already.
+- [medium] Glass transmission now integrates each intervening material, but
+  reflection and refraction still use only the nearest interface
+  (`sdf-glass.comp.hlsl`). Extend that shared path when deeper reflected interfaces
+  must read through an inspection pane; do not add a water-specific shader.
 
 ### Author shaders
 
@@ -1243,6 +1248,11 @@ lifted test requirements for this campaign (AGENTS.md):
 a refactor rewrites or deletes tests freely and is verified by building and
 running what it changed. A `.puck` rewrite proves itself cheaply: `puck compile`
 lowers it to the same JSON as before, except where the look changes on purpose.
+
+- [low] Share the delegate-backed field test host: `LambdaHost` in
+  `tests/Puck.Physics.Tests/FieldLatticeLawTests.cs:978` duplicates
+  `tests/Shared/World/Fixtures.cs:963`. Put the fixture below the World test
+  dependencies so physics and World laws can use one accepted-transfer adapter.
 
 - [medium] The rot sweep found three places where code and its own
   documentation disagree. `puck docs links` does not read XML comments, so

@@ -16,6 +16,39 @@ let waterMaterial = {
   glass { depth: 2, ior: 1.333 }
 }
 
+// A spatial view of a scalar store. The authoritative store remains the caller's row; these cells supply the
+// ordinary surface and medium queries at the place where visitors meet it.
+template waterViews(views) {
+  state {
+    lattices: map(views, view => field(
+        name: view.name, origin: [view.hole[0], view.floorY, view.hole[1]], cellSize: view.cell,
+        width: floor((view.hole[2] - view.hole[0]) / view.cell), depth: floor((view.hole[3] - view.hole[1]) / view.cell),
+        layers: 1, stepEveryTicks: 8,
+        reactions: [
+          transform(
+            when: [{ field: view.rowName, comparison: GreaterOrEqual, value: 0 }],
+            then: [{ field: view.rowName, op: Set, value { row: view.gauge } }]
+          )
+        ]
+      ))
+    world {
+      for view in views { row {
+        name: view.rowName
+        kind: "Fixed"
+        domain: cellsOf(topology: view.name)
+        field {
+          initial: view.initial
+          min: 0
+          max: view.maximumDepth
+          heightScale: view.heightScale
+          material: waterMaterial
+          medium {}
+        }
+      } }
+    }
+  }
+}
+
 // A turn about X by the angle whose cosine is `c` is the quaternion [±halfTurnSine(c), 0, 0, halfTurnCosine(c)], the sign
 // that of the angle's sine: half-angle identities, since the expression vocabulary has no inverse trigonometry.
 function halfTurnSine(c) = squareRoot((1 - c) / 2)
@@ -43,43 +76,75 @@ let stonePalette = [
   { color: "#B3A482", roughness: 0.92, specular: 0.02 }
 ]
 
-// A stretch of stream, `length` metres long (a whole number of ripple spacings) and `width` wide, flowing toward the
-// creation's +Z. A flat turquoise sheet with a white brush edge each side and bars of foam that pulse downstream: each
-// bar is a half sine of the clock, and its phase is its distance along the whole stream (`arc` is where this stretch
-// starts, in metres), so the pulses run on unbroken across stretches that are separate creations.
-template streamSegment(id, length, width = 4.5, arc = 0, spacing = 2, cadence = 0.4, palette = waterPalette, top = 0.1) {
+// A stream's brush edges and moving foam are surface paints, not sub-centimetre mesh features.
+// The ordinary motion system carries the painted sheet; overlapping ends keep adjacent stretches joined.
+template streamSegment(id, length, width = 4.5, arc = 0, spacing = 4, cadence = 0.4, palette = waterPalette, top = 0.1) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
-      palette: palette
+      palette [
+        palette[0] with {
+          paints: concat(
+            map([-1, 1], side => {
+              type: "Box", parent: "sheet", color: palette[1].color,
+              position [side * (width / 2 - 0.2), 0, 0],
+              scale [0.2, 1, length / 2 + spacing]
+            }),
+            map(range(0, 6), k => {
+              type: "Box", parent: "sheet", color: palette[2].color,
+              position [0, 0, (k + 0.5) * length / 6 - length / 2],
+              scale [width / 2 - 0.6, 1, 0.07]
+            })
+          )
+        }
+      ]
       drivers [
         { name: "flow", signal: "time", cadence: cadence, blendInSeconds: 0 }
       ]
       shape Box "sheet" {
         material: 0
-        position [0, top - 0.045, 0]
-        scale [width / 2, 0.045, length / 2]
+        position [0, top - 0.3, 0]
+        scale [width / 2, 0.3, length / 2 + spacing]
+        slides [
+          {
+            driver: "flow", axis [0, 0, 1], amplitude: spacing * 0.9,
+            phase: 0 - arc * 6.283185307179586 / (spacing * 4), wave: "halfSine"
+          }
+        ]
       }
-      for side in [-1, 1] {
-        shape Box $"brush-{side}" {
-          material: 1
-          position [side * (width / 2 - 0.2), top - 0.01, 0]
-          scale [0.2, 0.05, length / 2]
-        }
-      }
-      for k in range(0, floor(length / spacing)) {
-        shape Box $"pulse-{k}" {
-          material: 2
-          position [0, top + 0.012, (k + 0.5) * spacing - length / 2]
-          scale [width / 2 - 0.6, 0.014, 0.07]
-          slides [
+    }
+  }
+}
+// Each piece turns about its own flow axis as discharge falls, narrowing the sheet from the valley's approach.
+// The caller supplies the endpoint visibility as well as discharge; both are ordinary state-driven motion.
+template fallsRibbon(id, profile, width = 8, standoff = 5, gauge = "meltStrength", visible = "meltVisible", palette = waterPalette) {
+  prototype $"{id}" {
+    document {
+      schema: "puck.creation.v1"
+      name: id
+      palette: palette
+      sizeBy: "visible"
+      drivers [
+        { name: "fold", signal: $"state.{gauge}", cadence: -1, blendInSeconds: 0, blendOutSeconds: 0 }
+        { name: "visible", signal: $"state.{visible}", cadence: 1, blendInSeconds: 0, blendOutSeconds: 0 }
+      ]
+      for j in range(0, length(profile) - 1) {
+        shape Box $"sheet-{j}" {
+          material: j % 2 == 0 ? 1 : 2
+          position [0, (profile[j][1] + profile[j + 1][1]) / 2, (profile[j][0] + profile[j + 1][0]) / 2 - standoff]
+          scale [width / 2, 0.3, squareRoot(
+            (profile[j + 1][1] - profile[j][1]) * (profile[j + 1][1] - profile[j][1]) +
+            (profile[j + 1][0] - profile[j][0]) * (profile[j + 1][0] - profile[j][0])) / 2]
+          rotation [0 - halfTurnSine(fallsSlope(profile, j)), 0, 0, halfTurnCosine(fallsSlope(profile, j))]
+          swings [
             {
-              driver: "flow"
-              axis [0, 0, 1]
-              amplitude: spacing * 0.9
-              phase: 0 - (arc + k * spacing) * 6.283185307179586 / (spacing * 4)
-              wave: "halfSine"
+              driver: "fold"
+              pivot [0, (profile[j][1] + profile[j + 1][1]) / 2, (profile[j][0] + profile[j + 1][0]) / 2 - standoff]
+              axis [0, profile[j][1] - profile[j + 1][1], profile[j][0] - profile[j + 1][0]]
+              amplitude: 1.5707963267948966
+              phase: 1
+              wave: "linear"
             }
           ]
         }
@@ -87,93 +152,25 @@ template streamSegment(id, length, width = 4.5, arc = 0, spacing = 2, cadence = 
     }
   }
 }
-
-// A falls: a ribbon of `width` laid along a wall's profile, a list of [r, y] points from its top to its foot in the
-// wall's sector frame (the ribbon stands `standoff` metres in front of the wall so the relief never buries it), with
-// streaks of foam sliding down it. It is the child of an anchor at its top that swings it into the wall as the flow
-// `state.<gauge>` falls from `flowFull` to zero, so a dry falls is a ribbon folded back into the rock.
-template fallsRibbon(id, profile, width = 8, standoff = 5, gauge = "fallsFlow", flowFull = 0.6, foldRadians = 0.12, streaks = 3, palette = waterPalette) {
+// Ice shrinks uniformly about the authored origin; its driver reads the same linear fraction that sets melt volume.
+// Zero parks the creation through the ordinary presentation path, leaving no crowns above the cradle.
+template glacierMass(id, lumps, gauge = "glacierLength", origin = [0, 0, 0], palette = icePalette) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
       palette: palette
+      sizeBy: "melt"
       drivers [
-        { name: "flow", signal: "time", cadence: 0.5, blendInSeconds: 0 }
-        { name: "fold", signal: $"state.{gauge}", cadence: 0 - 1 / flowFull, blendInSeconds: 0 }
-      ]
-      shape Sphere "anchor" {
-        material: 1
-        position [0, profile[0][1], profile[0][0] - standoff]
-        scale [0.3, 0.3, 0.3]
-        swings [
-          {
-            driver: "fold"
-            pivot [0, profile[0][1], profile[0][0] - standoff]
-            axis [1, 0, 0]
-            amplitude: foldRadians
-            phase: 1
-            wave: "linear"
-          }
-        ]
-      }
-      for j in range(0, length(profile) - 1) {
-        shape Box $"sheet-{j}" {
-          parent: "anchor"
-          material: j % 2 == 0 ? 1 : 2
-          position [
-            0,
-            (profile[j][1] + profile[j + 1][1]) / 2,
-            (profile[j][0] + profile[j + 1][0]) / 2 - standoff
-          ]
-          scale [
-            width / 2,
-            0.3,
-            squareRoot(
-              (profile[j + 1][1] - profile[j][1]) * (profile[j + 1][1] - profile[j][1]) +
-                (profile[j + 1][0] - profile[j][0]) * (profile[j + 1][0] - profile[j][0])
-            ) / 2
-          ]
-          rotation [
-            0 - halfTurnSine(fallsSlope(profile, j)),
-            0,
-            0,
-            halfTurnCosine(fallsSlope(profile, j))
-          ]
-        }
-      }
-    }
-  }
-}
-
-// A glacier: lumps of ice on a wall, each hinged on a pivot in the rock behind it and swung into the wall as the clock
-// `state.<gauge>` falls from one to zero, so the mass shrinks as it melts. A lump is { position [x, y, r], radii [rx, ry,
-// rr], hinge [x, y, r], turn }, where `turn` is the radians it swings through by the time the glacier is gone.
-template glacierMass(id, lumps, gauge = "glacier", palette = icePalette) {
-  prototype $"{id}" {
-    document {
-      schema: "puck.creation.v1"
-      name: id
-      palette: palette
-      drivers [
-        { name: "melt", signal: $"state.{gauge}", cadence: -1, blendInSeconds: 0 }
+        { name: "melt", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0, blendOutSeconds: 0 }
       ]
       for (lump, i) in lumps {
         shape Superellipsoid $"ice-{i}" {
           material: i % 2
           exponent: 2.4
-          position: lump.position
+          position [lump.position[0] - origin[0], lump.position[1] - origin[1], lump.position[2] - origin[2]]
           scale: lump.radii
-          swings [
-            {
-              driver: "melt"
-              pivot: lump.hinge
-              axis [1, 0, 0]
-              amplitude: lump.turn
-              phase: 1
-              wave: "linear"
-            }
-          ]
+          group: 1
         }
       }
     }
@@ -229,10 +226,10 @@ template floatGauge(id, height = 3, tick = 0.5, gauge = "aquiferFill", palette =
       }
       shape Box "float" {
         material: 2
-        position [0, 0.15, -0.16]
+        position [0, 0.12, -0.16]
         scale [0.2, 0.12, 0.07]
         slides [
-          { driver: "fill", axis [0, 1, 0], amplitude: height - 0.3, phase: 0, wave: "linear" }
+          { driver: "fill", axis [0, 1, 0], amplitude: height, phase: 0, wave: "linear" }
         ]
       }
     }
@@ -244,6 +241,105 @@ let gaugePalette = [
   { color: "#EAE3CF", roughness: 0.8, specular: 0.02 }
   { color: "#E8832A", roughness: 0.5, specular: 0.15 }
 ]
+
+// Spray is an ordinary cloud volume. The same state driver scales its support and hides it when discharge is zero.
+template impactSpray(id, gauge = "meltStrength", extent = [7, 4, 5]) {
+  prototype $"{id}" {
+    document {
+      schema: "puck.creation.v1"
+      name: id
+      sizeBy: "discharge"
+      drivers [
+        { name: "discharge", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0, blendOutSeconds: 0 }
+      ]
+      volumes [
+        {
+          kind: "cloud"
+          position [0, 0, 0]
+          rotation [0, 0, 0, 1]
+          halfExtent: extent
+          width: 1.2
+          speed: 0.8
+          intensity: 300
+          scatter: 0.9
+          extinction: 0.55
+          coverage: 0.55
+          softness: 0.45
+          ramp [
+            { density: 0, color: "#FFFFFF" }
+            { density: 1, color: "#D9EEF0" }
+          ]
+        }
+      ]
+    }
+  }
+}
+
+// An open observation pavilion: a cream canopy, teal frame and orange shade over a reservoir cutaway.
+// The chamber stays enclosed beneath a glazed inspection window in the dry terrace.
+template reservoirPavilion(id, half = [5, 6], palette = gaugePalette) {
+  prototype $"{id}" {
+    document {
+      schema: "puck.creation.v1"
+      name: id
+      palette: concat(palette, [{ color: "#E9F5F4", roughness: 0.04, specular: 0.5, glass { depth: 8, ior: 1.5 } }])
+      shape Box "observation-window" {
+        material: length(palette)
+        position [0, -0.15, 0]
+        scale [half[0] - 1, 0.15, half[1] - 1]
+      }
+      for side in [-1, 1] {
+        shape Box $"chamber-roof-side-{side}" {
+          material: 1
+          position [side * (half[0] - 0.5), -0.15, 0]
+          scale [0.5, 0.15, half[1]]
+        }
+        shape Box $"chamber-roof-end-{side}" {
+          material: 1
+          position [0, -0.15, side * (half[1] - 0.5)]
+          scale [half[0], 0.15, 0.5]
+        }
+      }
+      for side in [-1, 1] {
+        shape Box $"terrace-{side}" {
+          material: 1
+          position [side * (half[0] + 1), 0.1, 0]
+          scale [1, 0.3, half[1] + 2]
+        }
+        for end in [-1, 1] {
+          shape Box $"column-{side}-{end}" {
+            material: 0
+            position [side * (half[0] + 1), 2.2, end * (half[1] + 0.8)]
+            scale [0.22, 2.2, 0.22]
+          }
+        }
+        shape Box $"rail-{side}" {
+          material: 0
+          position [side * (half[0] + 1.8), 1.1, 0]
+          scale [0.12, 0.12, half[1]]
+        }
+      }
+      shape Box "canopy" {
+        material: 1
+        position [0, 4.5, 0]
+        scale [half[0] + 2, 0.3, half[1] + 2]
+        rounding: 0.25
+      }
+      shape Box "orange-awning" {
+        material: 2
+        position [0, 4.1, half[1] + 2]
+        scale [half[0] + 1.5, 0.25, 0.7]
+      }
+      for i in range(0, 3) {
+        shape Box $"entry-step-{i}" {
+          material: 1
+          position [half[0] + 1, 0.05 * i, half[1] + 2.5 - i * 0.5]
+          scale [1, 0.05 * (i + 1), 0.6]
+        }
+      }
+    }
+  }
+}
 
 // A stone footbridge `length` long and `width` across over a stream, its deck `rise` above the ground on two ramps and
 // two piers, with a low parapet each side. Its +Z runs along the bridge. Every shape is a union of boxes, so it collides as
@@ -282,6 +378,62 @@ template stoneBridge(id, length = 9, width = 3, rise = 1.1, ramp = 3, palette = 
           material: 1
           position [side * (width / 2 - 0.15), rise + 0.25, 0]
           scale [0.15, 0.25, length / 2]
+        }
+      }
+    }
+  }
+}
+template waterBasin(id, half, floorY = -2.4, rimY = -0.4, stepTops = [-1.2, -0.9, -0.6, -0.3], openings = []) {
+  prototype $"{id}" {
+    document {
+      name: id
+      schema: "puck.creation.v1"
+      palette [
+        { color: "#B9A78A", roughness: 0.92, specular: 0.02 }
+        { color: "#A39075", roughness: 0.92, specular: 0.02 }
+      ]
+      shape Box "bed" {
+        material: 0
+        position [0, floorY - 0.15, 0]
+        scale [half[0] + 0.15 * 2, 0.15, half[1] + 0.15 * 2]
+      }
+      shape Box "wall-east" {
+        material: 1
+        position [0 - (half[0] + 0.15), ((floorY - 0.3 + rimY) / 2), 0]
+        scale [0.15, ((rimY - floorY + 0.3) / 2), half[1] + 0.15 * 2]
+      }
+      shape Box "wall-west" {
+        material: 1
+        position [half[0] + 0.15, ((floorY - 0.3 + rimY) / 2), 0]
+        scale [0.15, ((rimY - floorY + 0.3) / 2), half[1] + 0.15 * 2]
+      }
+      shape Box "wall-south" {
+        material: 1
+        position [0, ((floorY - 0.3 + rimY) / 2), half[1] + 0.15]
+        scale [half[0] + 0.15 * 2, ((rimY - floorY + 0.3) / 2), 0.15]
+      }
+      shape Box "wall-north" {
+        material: 1
+        position [0, ((floorY - 0.3 + rimY) / 2), 0 - (half[1] + 0.15)]
+        scale [half[0] + 0.15 * 2, ((rimY - floorY + 0.3) / 2), 0.15]
+      }
+      for (opening, i) in openings {
+        shape Box $"passage-{i}" {
+          material: 1
+          blend: "Subtraction"
+          position: opening.position
+          scale: opening.half
+        }
+      }
+      for (top, i) in stepTops {
+        shape Box $"step-{i}" {
+          material: 0
+          position [
+            0 - (half[0] - (0.8 * (length(stepTops) - i)) / 2),
+            (top + floorY) / 2,
+            0
+          ]
+          scale [(0.8 * (length(stepTops) - i)) / 2, (top - floorY) / 2, 2]
         }
       }
     }

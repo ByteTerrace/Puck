@@ -1,7 +1,7 @@
 // What the water looks like in the debug world, from the standard's scenery (../standard/water.puck): the falls and the
 // glacier on the north-west wall, the lake in its bowl on the rim, the stream from the falls' foot to the pool, and the
-// stone bridge over it. Everything here is a look bound to the gauges water.puck keeps: the glacier's lumps swing into the
-// rock as the melt clock runs, the lake rises and falls with its level, the falls fold into the wall as the flow ebbs.
+// stone bridge over it. Everything here is a look bound to the gauges water.puck keeps: the glacier contracts about its
+// cradle as the melt clock runs, the lake rises and falls with its level, the falls fold into the wall as the flow ebbs.
 import "../standard/water"
 import "valley-form"
 import "water-site"
@@ -11,14 +11,13 @@ let compassRadians = 3.141592653589793 / 180
 // The wall's own sector frame: a placement of yaw (compass + 180) turns the creation's +Z out from the ring's centre.
 let wallYaw = wallSector.compass + 180
 
-// The glacier: six lumps along the face just under the crest, each hinged 14 m behind the face where it stands.
+// The glacier contracts about its cradle's centre, following the authored linear melt fraction.
+let glacierOrigin = [0, 300, sectorFace(wallSector, 300)]
 let glacierLateral = [-30, -16, -2, 12, 26, 40]
 let glacierHeights = [300, 309, 316, 308, 298, 292]
 let glacierLumps = map(range(0, 6), i => {
   position [glacierLateral[i], glacierHeights[i], sectorFace(wallSector, glacierHeights[i]) - 6]
   radii [12 + (i % 3) * 2, 8 + (i % 2) * 2, 9]
-  hinge [glacierLateral[i], glacierHeights[i], sectorFace(wallSector, glacierHeights[i]) + 30]
-  turn: 1.7 + (i % 3) * 0.1
 })
 
 // The stream leaves the falls' foot, 205 m from the centre toward compass 315, and runs in legs of 24 m, each a bearing
@@ -48,14 +47,19 @@ function legMiddle(i) = [
 let bridgeLeg = 5
 
 prototypes {
-  fallsRibbon(id: "falls", profile: fallsProfile, width: 8, standoff: 8, foldRadians: 0.045)
-  glacierMass(id: "glacier", lumps: glacierLumps)
+  fallsRibbon(id: "falls", profile: fallsProfile, width: 8, standoff: 8)
+  glacierMass(id: "glacier", lumps: glacierLumps, origin: glacierOrigin)
   lakeSurface(id: "lake", radius: lakeSite.radius)
   for (leg, i) in streamLegs {
     streamSegment(id: $"stream-{i}", length: leg.length, arc: i * 24)
   }
   stoneBridge(id: "bridge")
-  floatGauge(id: "reservoir-gauge", height: 3)
+  floatGauge(id: "reservoir-gauge", height: 1.8)
+  waterBasin(id: "plunge-basin", half: [10, 10], floorY: -2.4)
+  waterBasin(id: "reservoir-basin", half: [5, 6], floorY: -1.9, stepTops: [], openings: [{ position [5, -1.3, 0], half [0.6, 0.6, 1] }])
+  waterBasin(id: "reservoir-passage", half: [1.2, 1], floorY: -1.9, rimY: -0.7, stepTops: [], openings: [{ position [-1.35, -1.3, 0], half [0.6, 0.6, 1] }, { position [1.35, -1.3, 0], half [0.6, 0.6, 1] }])
+  reservoirPavilion(id: "reservoir-pavilion")
+  impactSpray(id: "falls-spray")
 }
 
 placements {
@@ -66,7 +70,11 @@ placements {
   }
   placement "glacier" {
     prototype: "glacier"
-    position [0, 0, 0]
+    position [
+      glacierOrigin[2] * sine(wallSector.compass * compassRadians),
+      glacierOrigin[1],
+      glacierOrigin[2] * cosine(wallSector.compass * compassRadians)
+    ]
     yawDegrees: wallYaw
   }
   placement "lake" {
@@ -87,8 +95,32 @@ placements {
   // The reservoir's float gauge beside the pool's steps, its ticks facing the path: the aquifer's fill read off the bank.
   placement "reservoir-gauge" {
     prototype: "reservoir-gauge"
-    position [poolHole[2] + 1.5, 0, poolCentre[1] - 5]
-    yawDegrees: 90
+    position [-35, -1.9, -18]
+    yawDegrees: 270
+  }
+  placement "plunge-basin" {
+    prototype: "plunge-basin"
+    position [-143, 0, 144]
+    solid
+  }
+  placement "falls-spray" {
+    prototype: "falls-spray"
+    position [-143, 1.5, 144]
+  }
+  placement "reservoir-basin" {
+    prototype: "reservoir-basin"
+    position [-39, 0, -18]
+    solid
+  }
+  placement "reservoir-passage" {
+    prototype: "reservoir-passage"
+    position [-45, 0, -18]
+    solid
+  }
+  placement "reservoir-pavilion" {
+    prototype: "reservoir-pavilion"
+    position [-39, 0, -18]
+    solid
   }
   placement "bridge" {
     prototype: "bridge"
@@ -97,3 +129,9 @@ placements {
     solid
   }
 }
+
+waterViews(views: [
+  { name: "reservoir-passage", rowName: "passageWater", gauge: "aquiferFill", hole [-46, -19, -44, -17], floorY: -1.9, initial: 0, maximumDepth: 1, heightScale: 1.8, cell: 0.5 }
+  { name: "plunge", rowName: "plungeWater", gauge: "poolLevel", hole: plungeHole, floorY: -2.4, initial: 1.65, maximumDepth: 2.35, heightScale: 1, cell: 1 }
+  { name: "reservoir", rowName: "reservoirWater", gauge: "aquiferFill", hole: reservoirHole, floorY: -1.9, initial: 0, maximumDepth: 1, heightScale: 1.8, cell: 1 }
+])

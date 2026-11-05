@@ -11,10 +11,10 @@
 // design starts with plus the glacier, and the steady level is that total shared across the river and aquifer cells,
 // above the river's bed. A capacity is the number of cells a stage has and the elevation of its bed.
 //
-// The glacier is a finite hydroIce store in each source cell. A transform transfers hydroMeltRate per lattice step,
+// The glacier is a finite hydroIce store in each source cell. A transform transfers ice above hydroTarget per tick,
 // debiting exactly what the water cell receives. Ice plus water is conserved even if a rule firing is refused or a
-// destination fills. hydroClock and glacier are gauges derived from remaining ice, never deposit commands.
-// hydroSpeed scales the requested melt and flow rates; 1 is the authored pace.
+// destination fills. The authored clock sets the remaining-volume target; a blocked transfer retains its supply.
+// hydroSpeed scales simulated elapsed ticks and flow; 1 is the authored pace. Exponent 1 is constant-rate melt.
 //
 // The gauges are state rows the world's visuals bind to: `lakeLevel` (the lake's last cell's water), `fallsFlow` (the falls'
 // top cell's water, the discharge), `riverDepth` (the river's last cell's water) and `aquiferFill` (the aquifer's last
@@ -47,9 +47,8 @@ function hydrologyLast(stages, kind) = hydrologyFirst(stages, kind) +
   reduce(filter(stages, stage => stage.kind == kind), 0, (count, stage) => count + stage.count) -
   1
 
-template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, meltSeconds = 10800, rateHz = 30, waterPerCell = 10, rate = 0.005, stepEveryTicks = 8, fullHead = 1.8, poolBase = 0, poolLevelMax = 100) {
+template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, meltSeconds = 10800, meltExponent = 1, rateHz = 30, waterPerCell = 10, rate = 0.000625, fullHead = 1.8, poolBase = 0, poolLevelMax = 100) {
   let meltTicks = meltSeconds * rateHz
-  let meltTick = floor(waterPerCell * 65536 / meltTicks) / 65536
   let cells = hydrologyCells(stages)
   let sourceCount = length(filter(cells, c => c.kind == "source"))
   let lakeCell = hydrologyLast(stages, "lake")
@@ -65,14 +64,14 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
         width: length(cells),
         depth: 1,
         layers: 1,
-        stepEveryTicks: stepEveryTicks,
+        stepEveryTicks: 1,
         reactions: [
           transform(
             when: [
               { field: hydroIce, comparison: Greater, value: 0 }
             ],
             then: [
-              { field: hydroWater, op: Add, takeFrom: hydroIce, value { row: "hydroMeltRate" } }
+              { field: hydroWater, op: Add, takeFrom: hydroIce, value: waterPerCell, retain { row: "hydroTarget" } }
             ]
           )
           flow(field: hydroWater, rate: { row: "hydroRate" }, over: [hydroBed])
@@ -134,7 +133,7 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
             minZ: origin[2] + cell * 0.25
             maxX: origin[0] + cell * (i + 0.75)
             maxZ: origin[2] + cell * 0.75
-            value: cells[i].kind == "source" ? meltTicks * meltTick : 0
+            value: cells[i].kind == "source" ? waterPerCell : 0
           })
         }
       }
@@ -142,8 +141,11 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
       slot hydroClock = 0.0 bounds(0.0..1000000.0)
       slot hydroSpeed = 1.0 bounds(0.0..1000.0)
       slot hydroRate = rate bounds(0.0..1.0)
-      slot hydroMeltRate = meltTick * stepEveryTicks bounds(0.0..1000.0)
-      slot hydroRemaining = sourceCount * meltTicks * meltTick bounds(0.0..1000000.0)
+      slot hydroTarget = waterPerCell bounds(0.0..1000000.0)
+      slot hydroRemaining = sourceCount * waterPerCell bounds(0.0..1000000.0)
+      slot glacierLength = 1.0 bounds(0.0..1.0)
+      slot meltStrength = 1.0 bounds(0.0..1.0)
+      slot meltVisible = 1.0 bounds(0.0..1.0)
       slot glacier = 1.0 bounds(0.0..1.0)
       slot lakeLevel = 0.0 bounds(0.0..4.0)
       slot fallsFlow = 0.0 bounds(0.0..4.0)
@@ -153,12 +155,24 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
     }
   }
 
-  // A persistent rate requests transfer from finite ice stores. A refused rule retains a rate, never an unconsumed
-  // one-shot deposit; the lattice debits exactly what each water cell can receive.
+  // Evaluate the remaining volume, not a rounded per-tick rate. Taking successive target differences carries every
+  // representable unit to the destination. Keep the final raw unit until T, when the target becomes exactly zero.
   rule "hydro-melt" {
     when $tick >= 0
     mode: Level
-    hydroMeltRate = minimum(1000, hydroSpeed * meltTick * stepEveryTicks)
+    hydroClock = minimum(meltTicks, hydroClock + hydroSpeed)
+    glacierLength = hydroClock < meltTicks ? maximum(0.0000152587890625, 1.0 - hydroClock / meltTicks) : 0.0
+    hydroTarget = waterPerCell
+    meltStrength = 1.0
+    for i in range(0, meltExponent) {
+      hydroTarget *= glacierLength
+    }
+    for i in range(0, meltExponent - 1) {
+      meltStrength *= glacierLength
+    }
+    hydroTarget = hydroClock < meltTicks ? maximum(0.0000152587890625, hydroTarget) : 0.0
+    meltStrength = hydroClock < meltTicks ? meltStrength : 0.0
+    meltVisible = hydroClock < meltTicks ? 1.0 : 0.0
     hydroRate = minimum(1, rate * hydroSpeed)
   }
 
@@ -169,8 +183,7 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
     for i in range(0, length(cells)) {
       hydroRemaining += hydroIce[i]
     }
-    glacier = maximum(0, minimum(1, hydroRemaining / (sourceCount * meltTicks * meltTick)))
-    hydroClock = maximum(0, minimum(meltTicks, (sourceCount * meltTicks * meltTick - hydroRemaining) / (sourceCount * meltTick)))
+    glacier = maximum(0, minimum(1, hydroRemaining / (sourceCount * waterPerCell)))
     lakeLevel = minimum(4, hydroWater[lakeCell])
     fallsFlow = minimum(4, hydroWater[fallsCell])
     riverDepth = minimum(4, hydroWater[riverCell])

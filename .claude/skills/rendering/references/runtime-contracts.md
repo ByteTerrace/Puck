@@ -76,6 +76,15 @@ door. A batch owner whose submit failed before it was armed is abandoned, so its
 fences report nothing outstanding instead of waiting on a signal nothing queued.
 Direct3D 12 uses enhanced buffer barriers independent of decay, and its image
 barriers take the caller-stated layout.
+An alias of an abandoned, unarmed owner never reads or waits on that owner's
+native fence. Disposing a deferred or armed fence first waits through the same
+shared fence state, so disposal cannot announce completion ahead of GPU work or
+free a signal a later split still needs. Device loss during disposal is retained
+for aliases of that generation, rather than reported as successful completion.
+`GpuSubmissionBatchLawTests` holds these failure and disposal interleavings;
+the Direct3D 12 WARP and Vulkan recording-driver batch laws hold empty fenced
+submissions and empty `SubmitAndWait` boundaries. The latter drains earlier work
+on both backends, even with no new command buffers.
 
 ## 2. Nothing resolves silently to nothing
 

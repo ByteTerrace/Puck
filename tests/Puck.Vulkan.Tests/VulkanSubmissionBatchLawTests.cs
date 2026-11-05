@@ -23,6 +23,22 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
     [ThreadStatic] private static List<string>? Calls;
 
     [Fact]
+    public void AnEmptySubmitAndWaitDrainsEarlierDeferredWorkAndKeepsTheBatchOpen() {
+        Calls = [];
+        var device = new VulkanDeviceCommands(17, Procedures(), deviceFaultEnabled: false);
+        using var logical = new VulkanLogicalDevice(device, default, new VkQueue(familyIndex: 0, handle: 31), default, new LogicalApi());
+        var queue = new VulkanGpuQueueSubmitter(new Context(logical), new VulkanQueueSubmitter(), new SynchronizationApi());
+        queue.BeginBatch();
+        queue.Submit([1]);
+        queue.SubmitAndWait([]);
+        Assert.Equal(["submit fence=0 infos=1:1", "queue idle"], Calls);
+        queue.Submit([2]);
+        Assert.Equal(2, Calls.Count);
+        queue.FlushBatch();
+        Assert.Equal("submit fence=0 infos=1:2", Calls[^1]);
+    }
+
+    [Fact]
     public void AnOpenBatchReachesTheQueueInOneSubmitWhoseLastFenceSignalsEveryFenceInIt() {
         Calls = [];
         var device = new VulkanDeviceCommands(17, Procedures(), deviceFaultEnabled: false);
