@@ -6,6 +6,7 @@
 // west of x -38, the camera course, the combat yard and the climate wing.
 import "../standard/foliage"
 import "meadow"
+import "water-site"
 // Shared valley species, also planted by the continuous woodland.
 exports {
   bindings [meadowWindSpeed, meadowFlutterSpeed, meadowWindPose]
@@ -159,7 +160,8 @@ prototypes {
     turf: "#6C8A33",
     paving: "#BC7F58",
     paths: lawnPaths,
-    pathWidth: lawnPathWidth
+    pathWidth: lawnPathWidth,
+    holes: [poolHole]
   )
   broadleafTree(id: "lawn-oak-0")
   broadleafTree(id: "lawn-oak-1", height: 1.12, spread: 0.92, lean: 0.06)

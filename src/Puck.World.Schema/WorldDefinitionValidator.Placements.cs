@@ -962,7 +962,6 @@ public static partial class WorldDefinitionValidator {
         var programRows = BodyMotionProgramRows(programs: definition.BodyMotionPrograms);
 
         var kits = definition.Kits;
-        var hasMedium = HasMediumField(definition: definition);
         var hasMoveUpChannel = definition.Channels.Any(predicate: channel => (channel.Role == ChannelRole.MoveUp));
 
         // A kit is required exactly when the census implies a body to move (a derived refusal, not a flat floor):
@@ -1019,7 +1018,6 @@ public static partial class WorldDefinitionValidator {
                 path: $"{path}.motion",
                 channelNames: compositionChannelNames,
                 dynamicsNames: dynamicsNames,
-                hasMedium: hasMedium,
                 hasMoveUpChannel: hasMoveUpChannel,
                 simulationRateHz: definition.SimulationRateHz,
                 stateSlots: stateSlots,

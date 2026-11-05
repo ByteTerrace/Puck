@@ -1046,6 +1046,62 @@ worlds in place is rewritten.
   and the combat yard's `arena.puck` district rules
   ([debug world content](#debug-world-content)).
 
+### Water
+
+Owner: debug-world content lane (rendering, puck-world, sdf-authoring) · ordinary ·
+Next: what the water as a forcing workload showed
+([C3 as built](debug-world-composition.md#c3-as-built)); each item is a system
+the water strained, measured, and not yet fixed.
+
+- [medium] A lattice row's look is one albedo (`WorldFieldEmitter.cs:363`,
+  `SdfMaterial(Albedo: …)`): the pool reads as a flat cyan fill, with none of the
+  roughness, reflection, depth colour or transparent shallows
+  [the art pack](../game/art/caldera-water-pack/README.md) asks for. The fix is an
+  authored material on the row's `field` trait (the palette vocabulary: roughness,
+  specular, coat, glass), through `WorldStateFieldTrait`, `WorldFieldRow`, the
+  validator and `puck schema`; the water then owns no look in C#.
+- [medium] The water's creations add 172 bake groups, 6.4 million level-0
+  triangles and 1.0 GB of the mesh region in use to the debug world (a World
+  without the water documents: 7,478 groups, 47.6 M triangles, 1.67 GB used; with
+  them 7,650, 54.0 M, 2.68 GB), while private memory stays near 12.5 GiB warm
+  either way. Each animated shape is a group of its own (`puck creation stats`
+  reports `stream-0` as 15 groups for 15 boxes), and the stream's 1.4 cm foam bars
+  and 5 cm brush edges bake at a millimetre cell
+  (`worlds/standard/water.puck`, `streamSegment`); which shape owns the triangles
+  is unmeasured (`puck mesh audit --prototype` selected no groups).
+- [medium] The debug world's compile validates 3.77 GB peak working set without
+  the water scenery and 4.78 GB with it (`puck compile worlds/debug/debug.puck
+  --validate`; each document alone is under 200 MB). The 1 GB is in the falls,
+  glacier, lake and bridge creations, not in the eight stream segments, the
+  hydrology rules or the lattices, so it grows with a creation's extent or kind
+  rather than its shape count; the validate stage that holds it is not yet found.
+- [medium] A lattice height column is solid under the field contact provider
+  (`FieldLattice.cs:1161` `ColumnHeight` unions every height row, a medium
+  included, through `WorldSolidField.cs:118`), so a medium world on that
+  provider would stand on its water; the analytic provider the debug world uses
+  ignores lattice columns. A medium row should be excluded from the solid.
+- [low] A lattice transform's row-referenced term is read, not consumed
+  (`FieldLattice.cs:1000`): the hydrology's melt hands water through a slot
+  (`hydroMeltStep`), so a rule firing that is refused (a gauge outside its
+  envelope did it) leaves the last value to be added every step, and the water
+  is no longer conserved. A transform that moves a store into a cell (`take`)
+  would make the hand-off exact; the hydrology's gauges are clamped meanwhile.
+- [low] A keyed list an imported fragment extends appends after the basis's rows
+  (`documents-composition.md` merge rules), so a hold that must lead the Moth's
+  list (the swim) is authored in her own document, where a fragment cannot
+  reach it. A `before` position on a keyed row would let a fragment order itself.
+- [low] `world.counters` has no lattice source: the chain's work shows only in
+  `world.budget`'s per-region cell visits, and the conserved quantity only in
+  `world.fields`' `total`.
+- [low] `world.reload` keeps a lattice's cell values while it resets state rows
+  (the melt clock restarts over a half-filled aquifer), and a `world.reset`
+  call dropped the operator attachment in one run; a reset that restores the
+  lattice from its paint is the lever a fast-forward needs.
+- [low] The glacier's lumps hinge into the wall but leave their crowns above the
+  crest at zero (`worlds/debug/water-scenery.puck`, `glacierLumps`), the falls
+  are one slab ribbon with no spray, and the lake outlet is not a modelled notch:
+  authoring work against the art pack.
+
 ### Author shaders
 
 Owner: rendering (design first, `principal`) · ordinary · Next: a design memo.
