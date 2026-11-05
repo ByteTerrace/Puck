@@ -43,7 +43,7 @@ float3 sdfRateTint(SdfPixel p, SdfSurfaceSample s, float3 color) {
     }
 
     float3 hue = ((tier == SDF_RATE_HALF) ? float3(1.0, 0.6, 0.05) : float3(0.95, 0.1, 0.8));
-    float luminance = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float luminance = dot(color, SDF_LUMINANCE);
     float3 tinted = (hue * (luminance + (0.3 / max(passGroup.exposure, 1.0e-12))));
 
     return lerp(color, tinted, ((p.viewMode == SDF_DEBUG_VIEW_RATE_FLASH) ? 1.0 : 0.75));

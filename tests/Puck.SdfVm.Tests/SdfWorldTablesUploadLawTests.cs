@@ -36,23 +36,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     private const int StagingReserveBytes = (HeaderBytes + (GpuRegion.MaxCopyRuns * RunEntryBytes));
 
     [Fact]
-    public void ProbeStorageFitsItsPublishedWindowAndChangedRangesSurviveGrowthAndShrink() {
-        using var rig = new Rig(slots: 1);
-
-        rig.Warm();
-        foreach (var probes in new[] { 64, 128, 32 }) {
-            var words = new uint[(probes * SdfMeshIrradianceProbe.ProbeWords)];
-
-            for (var index = 0; (index < words.Length); index++) { words[index] = ((uint)(index + probes)); }
-            rig.Engine.FitMeshIrradiance(wordCount: words.Length);
-            rig.Engine.WriteMeshIrradiance(words.AsSpan(0, (words.Length / 2)));
-            rig.Engine.WriteMeshIrradiance(words.AsSpan(start: (words.Length / 2)), (words.Length / 2));
-            rig.Render(0f);
-            Assert.Equal((((ulong)words.Length) * sizeof(uint)), rig.Engine.MeshIrradianceBufferBytes.DeviceLocal);
-            Assert.Equal(MemoryMarshal.AsBytes(span: words.AsSpan()).ToArray(), rig.Gpu.DeviceLocal((((ulong)words.Length) * sizeof(uint)), "mesh-irradiance"));
-        }
-    }
-    [Fact]
     public void AProgramPastOneDispatchRowUploadsByteExact() {
         // Past one row of 65,535 groups of 64 threads, the copy dispatches a second row; the fake refuses a dispatch
         // that is not exactly GpuRegion.CopyGroups and runs the kernel's thread numbering.

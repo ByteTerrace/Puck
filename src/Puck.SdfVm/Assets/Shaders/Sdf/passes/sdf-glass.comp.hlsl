@@ -44,7 +44,6 @@ static const float GlassFrostMaxPixels = 24.0;
 // The scatter a fully frosted glass spreads light over, as a fraction of the distance behind it.
 static const float GlassFrostSpread = 0.25;
 static const float GlassGoldenAngle = 2.39996323;
-static const float3 GlassLuma = float3(0.2126, 0.7152, 0.0722);
 
 // Projects a world point into the render grid of `view`, whose lens row carries this sample's jitter, as
 // cameraRayDirection maps a pixel to its ray: continuous coordinates with the first pixel's centre at (0.5, 0.5) and
@@ -205,7 +204,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
         float3 reflection = ((sdfGlassSky(reflect(rayDirection, normal)) * fresnel) + sdfGlassHighlights(material, surfacePoint, normal, rayDirection));
         float3 passed = (((1.0 - fresnel) * transmittance) * through.rgb);
-        float luminous = dot(transmittance, GlassLuma);
+        float luminous = dot(transmittance, SDF_LUMINANCE);
 
         color = float4(((reflection * air) + passed), (1.0 - ((1.0 - through.a) * ((1.0 - fresnel) * luminous))));
         reactive = saturate(length(at - own));
