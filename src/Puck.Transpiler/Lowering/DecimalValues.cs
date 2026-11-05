@@ -9,8 +9,9 @@ namespace Puck.Transpiler.Lowering;
 /// <para>A number literal is held as a <see cref="double"/>, and a cast from <see cref="double"/> to
 /// <see cref="decimal"/> is not a fixed function of its operand: the runtime chooses how many digits of the binary
 /// value the result keeps, and runtime versions choose differently. A field whose document spelling is
-/// a decimal is therefore never cast. It is read from the literal's own text where there is one, and from the
-/// double's fifteen significant digits where there is only a computed value.</para>
+/// a decimal is therefore never cast. It is read from the literal's own text where the literal spells at most
+/// <see cref="ExactLiteralDigits"/> significant digits, and from the double's fifteen significant digits where there
+/// is only a computed value or a literal of more digits (a double's round-trip spelling, which is the double).</para>
 /// <para>An authored decimal stays a decimal for as long as the arithmetic applied to it is closed over finite
 /// decimals: a sign, a sum, a difference, a product, a quotient whose exact value is a finite decimal, and a unit
 /// whose scale is a power of ten. Any other quotient, a remainder, a function and an angle conversion are computed in
@@ -55,21 +56,32 @@ public static class DecimalValues {
             _ => 0m,
         });
     }
+    /// <summary>The most significant digits an authored decimal literal may spell and stay an exact decimal: fifteen,
+    /// the count every decimal of which survives a round trip through a <see cref="double"/> (<c>DBL_DIG</c>, from the
+    /// 53-bit significand). A literal of more digits is a double's own round-trip spelling (a double needs sixteen or
+    /// seventeen to be told apart from its neighbours), not a decimal an author chose, so it is the double it
+    /// spells.</summary>
+    public const int ExactLiteralDigits = 15;
+
     /// <summary>Reads the decimal a number literal's own text spells.</summary>
     /// <param name="literal">The literal.</param>
-    /// <param name="authored">The decimal, to the twenty-eight significant digits a <see cref="decimal"/>
-    /// carries.</param>
-    /// <returns><see langword="true"/> when the literal kept its text and a <see cref="decimal"/> holds every digit
-    /// of it. A magnitude above the type's range, one so small it would read as zero, and one whose digits a
-    /// <see cref="decimal"/> would round away (a scale past twenty-eight places, or more than twenty-eight significant
-    /// digits) return <see langword="false"/>, and the literal stays the <see cref="double"/> it parsed to.</returns>
+    /// <param name="authored">The decimal.</param>
+    /// <returns><see langword="true"/> when the literal kept its text, spells at most
+    /// <see cref="ExactLiteralDigits"/> significant digits and a <see cref="decimal"/> holds every digit of it. A
+    /// literal of sixteen or more significant digits, a magnitude above the type's range and one so small it would
+    /// read as zero return <see langword="false"/>, and the literal stays the <see cref="double"/> it parsed to: the
+    /// same double a computed quotient with those digits is, so a pasted spelling of a double and the expression it came
+    /// from are one value.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="literal"/> is <see langword="null"/>.</exception>
     public static bool TryAuthored(LiteralExpressionNode literal, out decimal authored) {
         ArgumentNullException.ThrowIfNull(argument: literal);
 
-        return TryParseEvery(
-            number: out authored,
-            text: literal.RawText
+        return (
+            TryParseEvery(
+                number: out authored,
+                text: literal.RawText
+            ) &&
+            (SignificantDigits(text: literal.RawText!).Length <= ExactLiteralDigits)
         );
     }
     /// <summary>Reads the decimal a number's text spells, when a <see cref="decimal"/> holds every digit of it.</summary>

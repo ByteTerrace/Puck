@@ -49,7 +49,8 @@ let deckReach = 10
 // the whole overlook union to it.
 let parapetHalf = 0.3
 
-let compassRadians = 0.017453292519943295
+// One degree of compass in radians, pi / 180.
+let compassRadians = 3.141592653589793 / 180
 
 // Each sector's recovery wedge, compass - 22.5 .. compass + 22.5: a point (x, z) lies in it where
 // x·cos(a) − z·sin(a) ≥ 0 at the wedge's first edge a and < edge at its second, the north wedge's edge a hair over 0 so
