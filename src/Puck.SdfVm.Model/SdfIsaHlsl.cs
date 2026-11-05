@@ -357,7 +357,9 @@ public static class SdfIsaHlsl {
         declarations.Bits(name: "SDF_MESH_IRRADIANCE_INVALID", value: SdfMeshIrradianceProbe.InvalidFlag);
         declarations.Tuning(name: "SDF_MESH_IRRADIANCE_NORMAL_BIAS", value: SdfMeshIrradianceProbe.NormalBias);
         declarations.Tuning(name: "SDF_MESH_IRRADIANCE_BEHIND_SHARE", value: SdfMeshIrradianceProbe.BehindShare);
-        declarations.Real(name: "SDF_MESH_IRRADIANCE_SURFACE_REACH", value: SdfMeshIrradianceProbe.SurfaceReach);        declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE", value: SdfMeshIrradianceProbe.DepthNormalScale);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_SURFACE_REACH", value: SdfMeshIrradianceProbe.SurfaceReach);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_SURFACE_REACH_FADE_START", value: SdfMeshIrradianceProbe.SurfaceReachFadeStart);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE", value: SdfMeshIrradianceProbe.DepthNormalScale);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE", value: SdfMeshIrradianceProbe.DepthSurfaceFade);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP", value: SdfMeshIrradianceProbe.DepthSurfaceJoinGap);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START", value: SdfMeshIrradianceProbe.DepthCoverageStart);

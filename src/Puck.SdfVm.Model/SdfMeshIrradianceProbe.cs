@@ -38,6 +38,10 @@ public static class SdfMeshIrradianceProbe {
     /// receiver in metres a probe measured, its surface map past that a miss. A level's probes answer receivers this far
     /// past its window's boundary probes before a coarser level does.</summary>
     public const float SurfaceReach = 1.5f;
+    /// <summary>The share of a level's surface reach past its window's boundary probes over which that level keeps its
+    /// whole share of a receiver's answer; from there to the reach the share eases to none, and the next stage takes the
+    /// rest.</summary>
+    public const float SurfaceReachFadeStart = 0.5f;
     /// <summary>The facing weight a finest-level probe behind the receiver's plane keeps: small beside a probe in front, so
     /// it barely shifts a receiver that front probes light, and the whole answer for a receiver no front probe can see,
     /// such as a downward rim at the ground whose front probes the ground hides, which would otherwise draw black. A coarser

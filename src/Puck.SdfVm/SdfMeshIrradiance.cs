@@ -2179,8 +2179,9 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // single corner it measured across a slab, normalized to the whole, would light a room with another's light. The rest
     // of the answer comes from the next stage over another cage (a later stage of the chosen level reads the same probes,
     // so it adds nothing a share would want), with its weights normalized to that rest; where none answers, the chosen
-    // stage's weights are normalized to the whole, the finest level's reads within its window among them. Each slot's
-    // weight is pre-scaled by its stage's share, so the slots' weights sum to one.
+    // stage's weights are normalized to the whole, the finest level's reads within its window among them. A finer level's
+    // stage past its window answers in its share times its reach share (ReachShareOf), so the next stage takes over across
+    // the outer half of its reach. Each slot's weight is pre-scaled by its stage's share, so the slots' weights sum to one.
     private SdfMeshProbeSelection Select(Vector3 point, Vector3 normal, Layout layout, ReadOnlySpan<(int X, int Y, int Z)> lows,
         Span<(int X, int Y, int Z)> cells, Span<float> cornerWeights, ref Corners cornerProbes, Span<SdfMeshProbeReport> reports = default) {
         var held = (m_levels.Length - 1);
@@ -2207,7 +2208,16 @@ public sealed class SdfMeshIrradiance : IDisposable {
             var bounded = (stage <= held);
 
             if (((stage < held) || (stage > (held + 1))) && (held == 0)) { continue; }
-            if ((stage < held) && (Beyond(layout: layout, level: level, low: lows[level], normal: normal, point: point) > SurfaceReachOf(spacing: layout.SpacingOf(level: level)))) { continue; }
+
+            var reachShare = 1f;
+
+            if (stage < held) {
+                var beyond = Beyond(layout: layout, level: level, low: lows[level], normal: normal, point: point);
+                var reach = SurfaceReachOf(spacing: layout.SpacingOf(level: level));
+
+                if (beyond > reach) { continue; }
+                reachShare = ReachShareOf(beyond: beyond, reach: reach);
+            }
             if ((chosen >= 0) && (level == chosen)) { continue; }
 
             var slot = ((chosen >= 0) ? 8 : 0);
@@ -2219,7 +2229,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
                 chosen = level;
                 chosenMeasured = bounded;
                 chosenTotal = total;
-                share = ((front > total) ? (total / front) : 1f);
+                share = (((front > total) ? (total / front) : 1f) * reachShare);
                 if (share >= 1f) { break; }
                 continue;
             }
@@ -2245,6 +2255,15 @@ public sealed class SdfMeshIrradiance : IDisposable {
     /// <param name="spacing">The probe spacing of the probe's level along each axis, in metres.</param>
     /// <returns>The reach, in metres.</returns>
     public static float SurfaceReachOf(Vector3 spacing) => ((SdfMeshIrradianceProbe.SurfaceReach * spacing.Length()) + SdfMeshIrradianceProbe.NormalBias);
+    // The share a finer level's stage keeps of its answer past its window: whole up to SurfaceReachFadeStart of its reach,
+    // easing to none at the reach, so the next stage takes the receiver over across that band rather than at a line one
+    // probe row tall. KEEP IN SYNC with sdfMeshIrradianceReachShare.
+    private static float ReachShareOf(float beyond, float reach) {
+        var start = (SdfMeshIrradianceProbe.SurfaceReachFadeStart * reach);
+        var eased = Math.Clamp(max: 1f, min: 0f, value: ((beyond - start) / (reach - start)));
+
+        return (1f - ((eased * eased) * (3f - (2f * eased))));
+    }
     // How far past a level's boundary probes a receiver pushed along its normal stands, in metres; zero within them.
     private static float Beyond(Layout layout, int level, (int X, int Y, int Z) low, Vector3 normal, Vector3 point) {
         var (unclamped, sample) = Lattice(layout: layout, level: level, low: low, normal: normal, point: point);

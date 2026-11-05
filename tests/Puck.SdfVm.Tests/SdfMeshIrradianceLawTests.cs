@@ -913,6 +913,34 @@ public sealed partial class SdfMeshIrradianceLawTests {
 
         Assert.DoesNotContain(expectedSubstring: "weight=0]", actualString: sealedWall);
     }
+    /// <summary>THE LAW: the finest level hands a receiver past its window to the next stage across the outer half of its
+    /// reach, not at one line. Along a sunlit floor at the High tier, from the finest window's boundary probes out past
+    /// their reach every 5 cm, the finest level's share of the answer falls from whole to none and never steps by more than
+    /// a fifth between neighbours, and the receivers past the reach read the storey level.</summary>
+    [Fact]
+    public void TheFinestLevelHandsAReceiverPastItsWindowOverAcrossItsReach() {
+        var volume = new SdfMeshIrradiance();
+        var (parameters, _) = Trace(frame: OpenFloor() with { ConvergesLighting = true }, tier: SdfIndirectTier.High, volume: volume);
+        var finest = parameters.Window(level: 0);
+        var boundary = ((finest.Low.X + finest.Dims.X - 0.5f) * finest.Spacing.X);
+        var reach = SdfMeshIrradiance.SurfaceReachOf(spacing: finest.Spacing);
+        var cells = new (int X, int Y, int Z)[SdfMeshIrradiance.GatherSlots];
+        var weights = new float[SdfMeshIrradiance.GatherSlots];
+        var previous = 1f;
+        var steepest = 0f;
+
+        for (var x = boundary; (x < (boundary + reach + 0.5f)); x += 0.05f) {
+            Assert.True(condition: volume.TryGather(cells: cells, normal: Vector3.UnitY, point: new Vector3(x: x, y: 0f, z: 0.3f), reports: default, selection: out var selection, weights: weights));
+
+            var share = ((selection.Level == 0) ? selection.Share : 0f);
+
+            steepest = MathF.Max(x: steepest, y: MathF.Abs(x: (share - previous)));
+            previous = share;
+            if (x > (boundary + reach + 0.1f)) { Assert.Equal(expected: 1, actual: selection.Level); }
+        }
+        Assert.Equal(expected: 0f, actual: previous);
+        Assert.True(condition: (steepest <= 0.2f), userMessage: $"the finest level's share steps by {steepest} between receivers 5 cm apart");
+    }
     /// <summary>THE LAW: the meter answers while the bake still lands static meshes: a frame with the bake pending builds
     /// a scene from the meshes it has, the probes trace it, and the meter reads; a pending bake with no static mesh landed
     /// builds no scene, since an empty one would measure open sky where walls have yet to land; a lockstep frame builds

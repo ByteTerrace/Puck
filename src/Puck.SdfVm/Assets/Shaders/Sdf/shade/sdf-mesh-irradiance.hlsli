@@ -285,6 +285,14 @@ float sdfMeshProbesGather(uint base, float3 spacing, int3 low, int3 dims, float3
 
     return total;
 }
+// The share a finer level's stage keeps of its answer past its window, `beyond` metres past its boundary probes: whole up
+// to SDF_MESH_IRRADIANCE_SURFACE_REACH_FADE_START of its `reach`, easing to none at the reach, so the next stage takes the
+// receiver over across that band. KEEP IN SYNC with SdfMeshIrradiance.ReachShareOf.
+float sdfMeshIrradianceReachShare(float beyond, float reach) {
+    float start = (SDF_MESH_IRRADIANCE_SURFACE_REACH_FADE_START * reach);
+    float eased = saturate((beyond - start) / (reach - start));
+    return (1.0 - ((eased * eased) * (3.0 - (2.0 * eased))));
+}
 // How far past a level's boundary probes the pushed receiver stands, in metres; zero within them.
 float sdfMeshIrradianceBeyond(float3 pushed, float3 spacing, int3 low, int3 dims) {
     float3 unclamped = ((pushed / spacing) - 0.5);
@@ -299,7 +307,8 @@ float sdfMeshIrradianceBeyond(float3 pushed, float3 spacing, int3 low, int3 dims
 // wall a finer probe measured. The first stage whose probes answer is chosen, in its share: its weight over the same
 // cage's front weight before visibility, clamped to one, so a single corner an 8 m level measured across a slab never
 // stands for the whole answer. The rest comes from the next stage over another cage (a later stage of the chosen level
-// reads the same probes), normalized to that rest; where none answers, the chosen stage is normalized to the whole.
+// reads the same probes), normalized to that rest; where none answers, the chosen stage is normalized to the whole. A
+// finer level's stage past its window answers in its share times its reach share (sdfMeshIrradianceReachShare).
 // Only the finest level keeps the facing floor (SDF_MESH_IRRADIANCE_BEHIND_SHARE): its depth test resolves the
 // receiver's own surface, while a coarser probe behind the receiver's plane is as likely beyond the receiver's own wall.
 SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
@@ -359,9 +368,14 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
         if (((attempt < chosen) || (attempt > (chosen + 1u))) && (!all(spacing > 0.0) || any(dims <= 0) || (chosen == 0u))) {
             continue;
         }
-        if ((attempt < chosen) &&
-            (sdfMeshIrradianceBeyond(pushed, spacing, low, dims) > ((SDF_MESH_IRRADIANCE_SURFACE_REACH * length(spacing)) + SDF_MESH_IRRADIANCE_NORMAL_BIAS))) {
-            continue;
+        float reachShare = 1.0;
+        if (attempt < chosen) {
+            float beyond = sdfMeshIrradianceBeyond(pushed, spacing, low, dims);
+            float reach = ((SDF_MESH_IRRADIANCE_SURFACE_REACH * length(spacing)) + SDF_MESH_IRRADIANCE_NORMAL_BIAS);
+            if (beyond > reach) {
+                continue;
+            }
+            reachShare = sdfMeshIrradianceReachShare(beyond, reach);
         }
         if (found && (level == first)) {
             continue;
@@ -379,7 +393,7 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
             first = level;
             firstTotal = total;
             probes.measured = bounded;
-            share = ((front > total) ? (total / front) : 1.0);
+            share = (((front > total) ? (total / front) : 1.0) * reachShare);
             [unroll] for (uint chosenCorner = 0u; (chosenCorner < 8u); chosenCorner++) {
                 probes.address[chosenCorner] = cage.address[chosenCorner];
                 probes.weight[chosenCorner] = cage.weight[chosenCorner];
