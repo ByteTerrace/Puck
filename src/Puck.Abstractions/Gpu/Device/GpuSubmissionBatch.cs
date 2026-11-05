@@ -71,10 +71,12 @@ public abstract class GpuSubmissionBatch<TEntry> : GpuSubmissionBatch {
             // Even after a failed submit every fence answers from the owner. An owner the backend never armed never
             // reached the queue, so it and every fence answering from it have nothing outstanding; one it armed reports
             // its device's loss through its own native fence.
-            owner?.AbandonIfDeferred();
             foreach (var fence in fences) {
                 if (!ReferenceEquals(objA: fence, objB: owner)) { fence.Alias(owner: owner!); }
             }
+            // Capture the submitted generation first. Abandonment retires that generation, so an alias cannot attach
+            // to the next submission if the unarmed owner is reused before the alias is waited.
+            owner?.AbandonIfDeferred();
             entries.Clear();
             fences.Clear();
         }
