@@ -622,7 +622,31 @@ template sceneryScatter(id, prototype, rows, origin = [0, 0, 0], contact = null)
 // bake or contact and keeps the art direction's sharp edge. Each path is { a [x, z], b [x, z], c [x, z] }, a quadratic
 // Bezier of `pathWidth` in world X/Z, at most eight (a palette slot's paint limit). A paint on a static placement is in
 // world space, so the ground is placed at the origin.
-template paintedGround(id, radius, turf, paving, paths = [], pathWidth = 2.4, depth = 0.2) {
+//
+// `holes` opens the ground where something sunk into it stands (a pool's basin): each is [minX, minZ, maxX, maxZ] in
+// world X/Z, disjoint and axis-aligned, and the ground is then the square of the same half-width as boxes tiled around
+// them (groundSlabs), since the analytic contact an unrelieved creation gets has no carve and a body would stand on
+// the uncarved disc over the opening. With no holes the ground is the one disc.
+function groundEdges(extent, holes) = sort(distinct(concat([0 - extent, extent], flatMap(holes, h => [h[0], h[2]]))))
+// The holes spanning the strip between two edges, nearest the south first, and the slabs and cursor left by cutting the
+// strip's full depth at each.
+function groundCuts(x0, x1, extent, holes) = reduce(
+  sort(filter(holes, h => h[0] <= x0 and h[2] >= x1), h => h[1]),
+  { z: 0 - extent, slabs [] },
+  (run, h) => { z: h[3], slabs: concat(run.slabs, [{ x0: x0, x1: x1, z0: run.z, z1: h[1] }]) }
+)
+function groundStripSlabs(x0, x1, extent, holes) = concat(
+  groundCuts(x0, x1, extent, holes).slabs,
+  [{ x0: x0, x1: x1, z0: groundCuts(x0, x1, extent, holes).z, z1: extent }]
+)
+function groundSlabs(extent, holes) = filter(
+  flatMap(
+    range(0, length(groundEdges(extent, holes)) - 1),
+    i => groundStripSlabs(groundEdges(extent, holes)[i], groundEdges(extent, holes)[i + 1], extent, holes)
+  ),
+  s => s.z1 > s.z0
+)
+template paintedGround(id, radius, turf, paving, paths = [], pathWidth = 2.4, depth = 0.2, holes = []) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -642,10 +666,20 @@ template paintedGround(id, radius, turf, paving, paths = [], pathWidth = 2.4, de
           })
         }
       ]
-      shape Cylinder "ground" {
-        material: 0
-        position [0, -depth, 0]
-        scale [radius, depth, radius]
+      for open in filter([0], k => length(holes) == 0) {
+        shape Cylinder "ground" {
+          material: 0
+          position [0, -depth, 0]
+          scale [radius, depth, radius]
+        }
+      }
+      // Author +X and +Z are world -X and -Z (the author frame), so each slab is placed at its negated centre.
+      for (slab, i) in (length(holes) == 0 ? [] : groundSlabs(radius, holes)) {
+        shape Box $"ground-{i}" {
+          material: 0
+          position [0 - (slab.x0 + slab.x1) / 2, -depth, 0 - (slab.z0 + slab.z1) / 2]
+          scale [(slab.x1 - slab.x0) / 2, depth, (slab.z1 - slab.z0) / 2]
+        }
       }
     }
   }

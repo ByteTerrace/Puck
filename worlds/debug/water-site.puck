@@ -1,0 +1,11 @@
+// Where the debug world's water stands, shared by the floor that opens for the pool (lawn.puck) and by the water itself
+// (pool.puck, water.puck). A library: it emits no document.
+//
+// The pool is a square basin sunk into the lawn at the end of the stream, west of the spawn and 8 m past the end of the
+// lawn's west path. The floor is one slab 0.4 m thick, so the basin reaches 2.4 m under the lawn from the opening.
+
+// The opening in the floor, [minX, minZ, maxX, maxZ] in world X/Z, and the basin's floor under it.
+let poolHole = [-66, -22, -46, -2]
+let poolFloor = -2.4
+let poolCentre = [(poolHole[0] + poolHole[2]) / 2, (poolHole[1] + poolHole[3]) / 2]
+let poolHalf = [(poolHole[2] - poolHole[0]) / 2, (poolHole[3] - poolHole[1]) / 2]

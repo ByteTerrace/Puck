@@ -78,7 +78,7 @@ public sealed partial class WorldBody {
             // too, onto support the snap proves: a step that leaves its ground by less than a field's box bounds can
             // prove clear is unproved by construction, which is the pose a snap exists to settle, and its landing may
             // leave uncertain only the pairs the step already did.
-            if (m_grounded && m_bodyMotionProgram.OwnsVerticalContactState && !HoldOwnsVerticalChannel &&
+            if (m_grounded && m_bodyMotionProgram.OwnsVerticalContactState && !HoldOwnsVerticalChannel && !HoldIsMedium &&
                 (scratch.DirectVerticalVelocity <= FixedQ4816.Zero) && !contactResolution.Grounded &&
                 FixedStepUp.TrySnap(step: ref step, start: in scratch.NextPosition, velocity: in resolvedVelocity,
                     up: in scratch.Up, distance: GroundSnap, result: out var snapped, uncertain: contactResolution.Uncertainty)) {

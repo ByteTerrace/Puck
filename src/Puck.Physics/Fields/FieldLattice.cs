@@ -1217,7 +1217,7 @@ public sealed class FieldLattice {
 
             parts.Add(item: string.Create(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"{m_names[field]} nonzero={nonzero} mean={(sum / CellCount):0.###}{color}"
+                handler: $"{m_names[field]} nonzero={nonzero} mean={(sum / CellCount):0.###} total={sum:0.#####}{color}"
             ));
         }
 

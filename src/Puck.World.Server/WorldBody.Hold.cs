@@ -1258,6 +1258,11 @@ public sealed partial class WorldBody {
     /// contact resolution must not fold its resolved velocity back into it.</summary>
     private bool HoldOwnsVerticalChannel => (TryCurrentHold(hold: out var hold) && (hold.Kind == BodyHoldKind.Pull));
 
+    /// <summary>Gets a value indicating whether the current hold is a medium, whose displacement law sets the body's
+    /// vertical motion. Ground following must not run under it: the snap pulls a body that leaves a floor by less than
+    /// the kit's snap reach back down to it, which pins a swimmer to the bed it is rising from.</summary>
+    private bool HoldIsMedium => (TryCurrentHold(hold: out var hold) && (hold.Bond == BodyHoldBond.Medium));
+
     // The pull along the face normal, as a positional constraint rather than a force. A force cannot be
     // trusted here: the field depenetrates along its own nearest gradient, which for a body at a wall's foot is the
     // floor, so an inward force meets no resistance from the wall and walks the body through it.

@@ -979,12 +979,15 @@ kits [
     // The capsule stands as tall as the drawn Moth: its 0.35 m spheres span 0 to 2.06 m, the top of the helmet.
     collider: capsule(endpoint: [0, 1.36, 0], radius: 0.35)
     mass: 0
-    // Flight mode's rows come first and spend flightFuel, so they are offered only while it is switched on: on the
+    // Water leads: where the world has a medium at her cell (water.puck's pool) she swims, floating with her feet 1.25 m
+    // under the surface, which leaves her shoulders at it, and wading at half her walking pace; the MoveUp channel dives and
+    // surfaces her. A world with no medium never offers it.
+    // Flight mode's rows spend flightFuel, so they are offered only while it is switched on: on the
     // ground the rise channel lifts her off, and in the air she hovers and thrusts. Out of flight mode she walks and
     // falls with no hover and no thrust, and jumps instead. She walks at 5 m/s and runs at 10 while the run channel is
     // held, and steps up to knee height: a kerb or the test room's raised floor, and nothing taller.
     motion: walkerMotion with {
-      holds [groundFlightHold, groundHold, flightHold, fallHold]
+      holds [swimHold(equilibriumOffset: 1.25, settleRate: 2.5, speed: 2.5), groundFlightHold, groundHold, flightHold, fallHold]
       speed: walkerMotion.speed with { value: 5 }
     }
     // Out of flight mode, south or space jumps: 5.1 m/s peaks about 1.2 m under the rise the world's 18 m/s² gravity
