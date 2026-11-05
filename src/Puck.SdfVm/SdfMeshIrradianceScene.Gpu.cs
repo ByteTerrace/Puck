@@ -11,6 +11,20 @@ public sealed partial class SdfMeshIrradianceScene {
         }
         return true;
     }
+    internal Dictionary<SdfMesh, SdfMeshRegionMesh> CaptureGpuPlacements(IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements) {
+        var captured = new Dictionary<SdfMesh, SdfMeshRegionMesh>(ReferenceEqualityComparer.Instance);
+        foreach (var instance in m_instances) { captured.TryAdd(instance.Mesh, placements[instance.Mesh]); }
+        return captured;
+    }
+    internal bool MatchesGpuPlacements(IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> current, IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> captured) {
+        foreach (var instance in m_instances) {
+            if (!captured.TryGetValue(instance.Mesh, out var prior)) { return false; }
+            var placed = current[instance.Mesh];
+            if (placed.VertexWord != prior.VertexWord || placed.IndexWord != prior.IndexWord ||
+                (!instance.TriangleMaterials.IsEmpty && placed.MaterialWord != prior.MaterialWord)) { return false; }
+        }
+        return true;
+    }
     /// <summary>Exports the existing hierarchy in traversal order, referencing triangles in an already placed mesh
     /// region. Word zero is the top root's address, or zero for an empty scene. No triangles or hierarchy are rebuilt.
     /// The caller retains this scene and the region's placements until the GPU submission completes.</summary>

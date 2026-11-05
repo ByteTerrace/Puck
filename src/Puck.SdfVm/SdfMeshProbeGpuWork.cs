@@ -26,6 +26,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private IGpuBuffer? m_meterCache;
     private int m_feedbackWords;
     private SdfMeshIrradianceScene? m_scene;
+    private IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> m_scenePlacements = new Dictionary<SdfMesh, SdfMeshRegionMesh>();
     private long m_placementVersion = -1;
     private bool m_inFlight;
     // The head job waiting for its scene's meshes to be resident, and since when.
@@ -138,6 +139,10 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 return false;
             }
             m_waiting = null;
+            // A changed mesh roster need not move any of this scene's addresses.
+            if (ReferenceEquals(m_scene, pending.Scene) && m_placementVersion != version && pending.Scene.MatchesGpuPlacements(placements, m_scenePlacements)) {
+                m_placementVersion = version;
+            }
             // Serialized queries make replacing the hierarchy safe: the prior token has been released before
             // the coordinator can enqueue another. No slot descriptor or region is changed while it is read.
             if (!ReferenceEquals(m_scene, pending.Scene) || m_placementVersion != version) {
@@ -350,8 +355,6 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         catch { readback.Release(); throw; }
         if (holdsOutput) { query.HeldReadback = readback; }
         else { readback.Release(); }
-        m_sceneCarry?.Dispose();
-        m_sceneCarry = null;
         var result = query.CommitSource is not null ? readWords : readWords[..^1];
         if (query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.StackOverflow, readWords[^1]); }
         if (query.Lighting is null && query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.GpuRays, query.Origins.Length * SdfMeshProbeDepth.HitCount); }

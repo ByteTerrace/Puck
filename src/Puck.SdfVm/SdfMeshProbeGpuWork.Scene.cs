@@ -56,6 +56,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
             m_sceneArena.Publish(upload.Export!);
             m_scene?.Dispose();
             m_scene = upload.Scene.Acquire();
+            m_scenePlacements = upload.Placements;
             m_placementVersion = upload.PlacementVersion;
             m_sceneUploads++;
             m_sceneLastBytes = upload.Bytes;
@@ -69,6 +70,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
     private sealed class SceneUpload : IDisposable {
         internal readonly SdfMeshIrradianceScene Scene;
         internal readonly long PlacementVersion;
+        internal readonly IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> Placements;
         internal readonly Channel<SceneChunk> Chunks = Channel.CreateBounded<SceneChunk>(new BoundedChannelOptions(2) { SingleReader = true, SingleWriter = true });
         private readonly CancellationTokenSource m_cancel = new();
         private SceneChunk? m_root;
@@ -79,9 +81,9 @@ internal sealed partial class SdfMeshProbeGpuWork {
         internal SceneUpload(SdfMeshIrradianceScene scene, IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, long placementVersion, SdfMeshIrradianceScene.GpuArena arena) {
             Scene = scene.Acquire();
             PlacementVersion = placementVersion;
-            var captured = new Dictionary<SdfMesh, SdfMeshRegionMesh>(placements);
+            Placements = scene.CaptureGpuPlacements(placements);
             Work = Task.Run(async () => {
-                Export = Scene.CreateGpuExport(captured, arena);
+                Export = Scene.CreateGpuExport(Placements, arena);
                 foreach (var (word, count) in Export.Changed) {
                     for (var offset = 0; offset < count;) {
                         m_cancel.Token.ThrowIfCancellationRequested();
@@ -106,6 +108,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
             Cancel();
             try { Work.GetAwaiter().GetResult(); }
             catch (OperationCanceledException) { }
+            catch when (Work.IsFaulted) { } // TryTake reports packing faults; teardown must still release device resources.
             finally { Scene.Dispose(); m_cancel.Dispose(); }
         }
     }
