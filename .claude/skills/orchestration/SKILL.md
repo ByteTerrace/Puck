@@ -350,7 +350,11 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   or sheds them when memory runs low. Commit charge against the commit limit is
   the line that matters: allocations fail at the limit while physical memory
   can still look free. A windowed debug World grows past ten gigabytes, so a
-  GPU lane closes its World between capture batches. The hard limits are one heavy integration job and one GPU
+  GPU lane closes its World between capture batches. CPU saturation does not
+  endanger lanes but voids timings: a lane whose evidence is a time (a tick, a
+  frame, a bake) attributes cost by samples and counts while the machine is
+  busy and takes its before/after times in a quiet window the lead clears; a
+  paired timing taken at full CPU swung both ways by 30%. The hard limits are one heavy integration job and one GPU
   leg at a time. A windowed debug World holds a large share of
   the machine's memory within a minute of boot (`host.memory` reads it), so
   only a couple of building lanes fit beside one. Keep windowed capture
@@ -496,7 +500,10 @@ a brief that deletes files says to use `git rm`. Reading a file outside the
 workspace is auto-denied the same way ("a tool required the read_file
 permission that headless mode cannot prompt for"), so the lead copies any
 shared brief, findings or facts into the lane's worktree (`.claude/scratch/`)
-and the brief names workspace-relative paths only. A headless run also ends when the agent
+and the brief names workspace-relative paths only. A findings-only lane writes its file under
+`.claude/scratch/` and leaves it uncommitted: that directory is ignored, and a
+brief that says to commit it gets a force-add that the next merge carries into
+the tree. The lead reads the file from the lane's worktree. A headless run also ends when the agent
 goes idle waiting on a background task of its own (a background build), leaving
 its edits uncommitted, so a brief tells it to build and test in the foreground.
 A headless run can also stall with its process alive and its log empty, so the
