@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-bricks' (sha256/76debd7560a1a1e385d017179037d35f2b4b366f17d0fa7776140f7a8340de9e). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-bricks' (sha256/82375739c059ae5b6b313afe48b21f07908f2904e14afc8e6c991ca370944724). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_BRICKS
 #define PUCK_SHADER_INTERFACE_SDF_BRICKS
 
@@ -18,8 +18,8 @@ struct SdfBricksFrame {
 struct SdfBricksPass {
     [[vk::offset(0)]] uint2 extent;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfBricksPass> passGroupIsaE1A5EA11 : register(b0, space3);
-#define passGroup passGroupIsaE1A5EA11
+[[vk::binding(0, 3)]] ConstantBuffer<SdfBricksPass> passGroupIsaDADAA89D : register(b0, space3);
+#define passGroup passGroupIsaDADAA89D
 [[vk::binding(1, 3)]] StructuredBuffer<float4> bakeRequest : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<float> brickPool : register(u2, space3);
 

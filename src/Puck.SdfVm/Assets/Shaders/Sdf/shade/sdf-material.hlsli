@@ -43,6 +43,16 @@ struct SdfMaterialData {
     float4 toonShadow;
     float4 toonOutline;
     float3 toonInk;
+    // The flow layer (SdfFlow, rows 27 to 30; sdfApplyFlow): the velocity and the pattern's frequency (a zero frequency
+    // says no flow); the stretch along the flow, the cycles the flow clock's period holds, the tilt and the coverage; the
+    // revealed colour and the coverage's softness; the revealed roughness and metal, the seed and the control word (the
+    // lane plus one in SDF_FLOW_LANE_MASK, SDF_FLOW_WORLD_FRAME for a world-space velocity).
+    float4 flowVelocity;
+    float4 flowShape;
+    float4 flowColor;
+    float2 flowResponse;
+    uint flowSeed;
+    uint flowControl;
 };
 
 // The GGX roughness floor: alpha2 = roughness^2 + SdfRoughnessFloorSquared, so a bare light direction (no authored
@@ -127,6 +137,12 @@ SdfMaterialData sdfMaterialLoad(int material) {
     data.toonShadow = asfloat(sdfWords[materialBase + 23u]);
     data.toonOutline = asfloat(sdfWords[materialBase + 24u]);
     data.toonInk = asfloat(sdfWords[materialBase + 25u]).rgb;
+    data.flowVelocity = asfloat(sdfWords[materialBase + 27u]);
+    data.flowShape = asfloat(sdfWords[materialBase + 28u]);
+    data.flowColor = asfloat(sdfWords[materialBase + 29u]);
+    data.flowResponse = asfloat(sdfWords[materialBase + 30u].xy);
+    data.flowSeed = sdfWords[materialBase + 30u].z;
+    data.flowControl = sdfWords[materialBase + 30u].w;
 
     return data;
 }

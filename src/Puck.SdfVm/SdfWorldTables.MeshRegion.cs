@@ -16,6 +16,20 @@ namespace Puck.SdfVm;
 // keeps it. A view's mesh pass reads the draws' triangles from it, and primary a mesh hit's material.
 public sealed partial class SdfWorldTables {
     private readonly SdfMeshRegionArena m_meshArena = new();
+    private long m_meshPlacementVersion;
+
+    // Called only during a background admission on the frame thread. An owed geometry is never bound.
+    internal bool TryProbeScene(SdfMeshIrradianceScene scene, out IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, out IGpuBuffer meshes, out long version) {
+        placements = m_meshArena.Placements;
+        meshes = m_meshRegion.Buffer(m_currentSlot);
+        version = m_meshPlacementVersion;
+        return BindsBackgroundWork && (m_meshRequiredUpload <= m_uploads) && scene.HasGpuPlacements(placements, m_meshesOwed);
+    }
+
+    internal GpuRegion CreateProbeSceneRegion(int bytes) => new(
+        policy: GpuResidencyPolicy.Staged, memory: GpuResidency.RingMemory(m_deviceContext.MemoryProfile),
+        byteCount: bytes, slotCount: 1, buffers: m_gpu.BufferFactory, bindings: m_gpu.Bindings,
+        recorder: m_gpu.Recorder, copyPipeline: m_regionCopyPipeline, name: NameOf("probe-scene"));
 
     private SdfMeshClaims? m_meshClaims;
     private bool m_meshTrimListening;
@@ -225,6 +239,7 @@ public sealed partial class SdfWorldTables {
             (revision != m_meshSourceRevision)
         ) {
             m_meshArena.Plan(draws: draws);
+            if (!m_meshArena.Unchanged) { m_meshPlacementVersion++; }
             SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.StagingPlanRecords, draws.Count);
             m_meshOrderStale |= !m_meshArena.Unchanged;
             Volatile.Write(

@@ -123,9 +123,10 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             float3 layerPoint = surfacePoint;
             float3 layerNormal = normal;
             float3 layerRay = p.rayDirection;
+            float4 frameRotation = float4(0.0, 0.0, 0.0, 1.0);
             if (s.frameSlot != SDF_TRANSFORM_SLOT_NONE) {
                 float3 frameOrigin = sdfDynamicTransforms[3u * (uint)s.frameSlot].xyz;
-                float4 frameRotation = sdfDynamicTransforms[3u * (uint)s.frameSlot + 1u];
+                frameRotation = sdfDynamicTransforms[3u * (uint)s.frameSlot + 1u];
                 layerPoint = rotatePointByInverseQuaternion(surfacePoint - frameOrigin, frameRotation);
                 // Rigid copies share unit-space palette layers; scale belongs to their root, not a palette copy.
                 float materialScale = sdfDynamicTransforms[3u * (uint)s.frameSlot].w;
@@ -146,6 +147,21 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             shadeMaterial.albedo = paintedAlbedo;
             applyInset(layerPoint, layerNormal, layerRay, shadeMaterial);
             applyWeathering(layerPoint, layerNormal, normal.y, s.curvature, p.pixelFootprint * s.t, s.lanes, shadeMaterial);
+            if (shadeMaterial.flowVelocity.w > 0.0) {
+                // A world-frame flow runs in world space, its pattern continuous across every surface wearing it. An
+                // object-frame flow runs in the layer frame: its velocity rides a slot's frame as it is, and a draw shading
+                // in world space (a static copy) turns it by the draw's matrix and carry.
+                bool worldFlow = ((shadeMaterial.flowControl & SDF_FLOW_WORLD_FRAME) != 0u);
+                bool slotFlow = (!worldFlow && (s.frameSlot != SDF_TRANSFORM_SLOT_NONE));
+                float3 flowVelocity = shadeMaterial.flowVelocity.xyz;
+                if (!worldFlow && !slotFlow) {
+                    uint flowRecord = sdfMeshRecord(s.meshDraw);
+                    flowVelocity = sdfMeshCarryDirection(flowRecord, sdfMeshWorldDirection(flowRecord, flowVelocity));
+                }
+                float3 flowNormal = sdfApplyFlow((worldFlow ? surfacePoint : layerPoint), (worldFlow ? normal : layerNormal), flowVelocity,
+                    passGroup.flowClock, p.pixelFootprint * s.t, s.lanes, shadeMaterial);
+                normal = (slotFlow ? rotatePointByQuaternion(flowNormal, frameRotation) : flowNormal);
+            }
             sdfApplyEmissiveLane(s.lanes, shadeMaterial);
 
             // The surface pass's occlusion, into the ambient fill and unslotted directionals. A wrapped (skin-like)

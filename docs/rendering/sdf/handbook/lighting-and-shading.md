@@ -470,9 +470,25 @@ reflectance (`((ior − 1) / (ior + 1))²`, 0.04 for window glass). The glass
 pass lights the surface with the sky's environment map in the mirror direction
 and every directional and point light's GGX highlight through that reflectance,
 unshadowed; it reads none of the opaque epilogue's terms, no occlusion, no
-cascade, no irradiance volume, no paint and no weathering. A glass shape in an
-opaque group (a pooled creation's mixed `group`, which the document validator
-refuses) shades as an opaque surface with the tint as its albedo.
+cascade, no irradiance volume, no paint, no weathering and no flow. A glass
+shape in an opaque group (a pooled creation's mixed `group`, which the
+document validator refuses) shades as an opaque surface with the tint as its
+albedo.
+
+## Flow
+
+A palette slot's `flow` moves its shading along an authored velocity while the
+geometry stands still. The light stage runs it after the weathering
+(`sdfApplyFlow`): two layers of the weathering's lattice noise, half a cycle
+apart, advect along the velocity's part that runs along the surface and
+cross-fade so neither restart shows, revealing an authored surface over the
+flow's coverage and tilting the shading normal by the pattern's slope, so
+the lights, the probes' reflection and the specular all see the moving
+normal. The phase is the pass block's `flowClock`, which the host integrates
+from the presented tick and writes only for a program that carries a flow,
+so a settled capture holds still and a still world's views keep standing.
+Authoring and frames are in
+[the surface reference](../../../../.claude/skills/sdf-authoring/references/surface.md#flow).
 
 ## Screen lights and the CRT material
 

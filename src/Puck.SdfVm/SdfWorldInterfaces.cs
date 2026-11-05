@@ -15,6 +15,10 @@ public static class SdfWorldInterfaces {
         fieldStamp: SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Field),
         stamp: SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value)
     );
+    /// <summary>The software probe trace's generated resource layout.</summary>
+    public static ShaderInterfaceLayout ProbeTraceLayout { get; } = new(Recorded.ProbeTrace);
+    /// <summary>The background relight's resources.</summary>
+    public static ShaderInterfaceLayout ProbeRelightLayout { get; } = new(Recorded.ProbeRelight);
 
     /// <summary>Gets the stamp the SDF kernels' interfaces carry for this build's instruction set:
     /// <see cref="SdfIsaHlsl.StampOf"/> of <see cref="SdfIsaFingerprint.Value"/>.</summary>

@@ -202,7 +202,20 @@ public static class SdfEncodingProbe {
                         ShadowTint = new Vector3(x: v[85], y: v[86], z: v[87]), OutlineWidth = v[88], OutlineDistance = v[89],
                         OutlineNormal = v[90], OutlineTint = new Vector3(x: v[91], y: v[92], z: v[93]), SpecularSize = v[94],
                         Exposure = v[95], Shoulder = v[96],
-                    }
+                    },
+                    Flow: new SdfFlow(
+                        Velocity: new Vector3(x: v[103], y: v[104], z: v[105]),
+                        Scale: v[106],
+                        Stretch: v[107],
+                        Cycle: v[108],
+                        Tilt: v[109],
+                        Coverage: v[110],
+                        Softness: v[111],
+                        Surface: new SdfSurface(Color: new Vector3(x: v[112], y: v[113], z: v[114]), Metal: v[115], Roughness: v[116]),
+                        Seed: ((uint)v[117]),
+                        Lane: ((int)v[118]),
+                        Frame: SdfFlowFrame.World
+                    )
                 )),
                 radius: 0.5f
             ),
@@ -217,6 +230,7 @@ public static class SdfEncodingProbe {
                 0.81f, 0.82f, 0.83f, 0.5f, 0.6f, 0.7f, 0.03f, 0.87f, 0.88f, 0.89f,
                 2f, 0.004f, 1.5f, 0.41f, 0.12f, 0.31f, 0.42f, 0.53f, 1.25f, 10f, 0.6f, 0.11f,
                 0.21f, 0.32f, 0.03f, 0.75f, 0.7f, 2.03f, 0.4f, 0.1f, 0.2f, 0.3f, 0.9f,
+                0.4f, -0.2f, 1.1f, 1.5f, 3f, 2.5f, 0.3f, 0.45f, 0.2f, 0.9f, 0.95f, 0.97f, 0.1f, 0.6f, 77f, 1f,
             ],
             name: "material"
         );

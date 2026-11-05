@@ -66,7 +66,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     // A node range at least this many primitives wide builds its two children in parallel, and a geometry at least
     // this many triangles wide prepares its triangles in parallel chunks of it.
     private const int ParallelPrimitives = 16_384;
-    private const int StackDepth = 64;
+    private const int StackDepth = SdfMeshProbeTrace.StackDepth;
     // The widest subtree of a geometry the top level indexes on its own (Geometry.Braids).
     private const int BraidTriangles = 1024;
 
@@ -91,9 +91,16 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     /// <summary>Gets the triangles of the geometry the scene keeps for a later scene though no draw of its own uses it.</summary>
     public long TrianglesRetained { get; }
 
+    /// <summary>Gets the managed array payload of this scene's hierarchy, including retained geometry hierarchies.
+    /// Excludes object headers, dictionaries, mesh arrays shared with the bake, and temporary build workspace.</summary>
+    public long HierarchyBytes => m_nodes.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Node>() +
+        m_entries.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Entry>() +
+        m_instances.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Instance>() + Materials.LongLength * sizeof(int) +
+        m_geometries.Values.Sum(static geometry => geometry.HierarchyBytes) + m_retained.Sum(static entry => entry.Value.HierarchyBytes);
+
     // 28 bytes: the bounds, then one word holding the first index above the count's CountBits.
     private struct Node {
-        private const int CountBits = 3;
+        private const int CountBits = SdfMeshProbeTrace.NodeCountBits;
 
         public Vector3 Low;
         public Vector3 High;
@@ -303,7 +310,11 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     /// <param name="material">Program material.</param>
     /// <param name="bakeHalfDiagonal">Half of the hit draw's world-space contour cell diagonal; zero for authored triangles.</param>
     /// <returns>Whether a retained triangle was hit.</returns>
-    public bool Intersect(Vector3 origin, Vector3 direction, float maximum, out float distance, out Vector3 normal, out int material, out float bakeHalfDiagonal) {
+    public bool Intersect(Vector3 origin, Vector3 direction, float maximum, out float distance, out Vector3 normal, out int material, out float bakeHalfDiagonal) =>
+        Intersect(origin, direction, maximum, out distance, out normal, out material, out bakeHalfDiagonal, out _, out _);
+
+    /// <summary>Finds the nearest hit, also returning its scene instance and original mesh triangle ordinal, or -1 for a miss.</summary>
+    public bool Intersect(Vector3 origin, Vector3 direction, float maximum, out float distance, out Vector3 normal, out int material, out float bakeHalfDiagonal, out int instance, out int triangle) {
         var inverse = Reciprocal(direction: direction);
         var nearest = new DrawLeaves(any: false, direction: direction, entries: m_entries, instances: m_instances, inverse: inverse, origin: origin);
 
@@ -312,6 +323,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         if ((m_nodes.Length > 0) && Slab(low: m_nodes[0].Low, high: m_nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
             Walk(distance: ref distance, inverse: inverse, leaves: ref nearest, nodes: m_nodes, origin: origin, start: 0);
         }
+        instance = nearest.Instance;
+        triangle = instance < 0 ? -1 : m_instances[instance].Geometry.Triangles[nearest.Triangle];
         if (nearest.Instance < 0) {
             normal = default;
             material = 0;
@@ -507,6 +520,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     // carries a normal of the mesh's frame to world space with the winding the transform gives it, its program material
     // base and its mesh's triangle materials.
     private readonly struct Instance {
+        public required SdfMesh Mesh { get; init; }
         public required Geometry Geometry { get; init; }
         public required Matrix4x4 ObjectToWorld { get; init; }
         public required Matrix4x4 WorldToObject { get; init; }
@@ -528,6 +542,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
             if (matrix.GetDeterminant() < 0f) { normalToWorld *= -1f; }
             instance = new Instance {
+                Mesh = draw.Mesh,
                 Geometry = geometry,
                 Identity = matrix.IsIdentity,
                 Material = draw.Material,
@@ -559,6 +574,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     // triangle whose box is loose about it (a long thin one a merged polygon leaves, SdfMeshPlanarMerge) holds several
     // leaf positions, each bounded by a piece of it, so a ray tests it only where it passes near.
     private sealed class Geometry {
+        public long HierarchyBytes => Nodes.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Node>() +
+            (Triangles.LongLength + Braids.LongLength) * sizeof(int);
         public required int[] Braids { get; init; }
         public int Count => (Indices.Length / 3);
         public required ReadOnlyMemory<uint> Indices { get; init; }

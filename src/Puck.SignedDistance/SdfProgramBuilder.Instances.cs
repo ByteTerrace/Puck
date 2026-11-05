@@ -84,11 +84,12 @@ public sealed partial class SdfProgramBuilder {
         if (!SdfMaterialLayers.IsValid(
             inset: material.Inset,
             weathering: material.Weathering,
-            paints: material.Paints
+            paints: material.Paints,
+            flow: material.Flow
         )) {
             throw new ArgumentOutOfRangeException(
                 nameof(material),
-                $"Invalid inset, weathering or paint layer: inset {material.Inset}, weathering {material.Weathering}, paints [{string.Join(separator: ", ", values: (material.Paints ?? []))}]."
+                $"Invalid inset, weathering, paint or flow layer: inset {material.Inset}, weathering {material.Weathering}, paints [{string.Join(separator: ", ", values: (material.Paints ?? []))}], flow {material.Flow}."
             );
         }
         if (!material.IsGlassValid) {

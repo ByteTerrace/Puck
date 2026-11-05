@@ -28,7 +28,8 @@ internal static class WorldSurfaceMaterials {
                 Paints: paints,
                 EmissiveLane: entry?.EmissiveLane,
                 Glass: entry?.Glass?.ToGlass(scale: scale),
-                Toon: (((entry?.ToonSelect is { } select) ? select.CaseOf(value: colors.ResolveWhole(token: select.State)) : null) ?? entry?.Toon)?.ToToon()
+                Toon: (((entry?.ToonSelect is { } select) ? select.CaseOf(value: colors.ResolveWhole(token: select.State)) : null) ?? entry?.Toon)?.ToToon(),
+                Flow: entry?.Flow?.ToFlow(resolve: colors.LayerColor, scale: scale)
             );
 
 }

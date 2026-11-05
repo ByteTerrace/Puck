@@ -1067,6 +1067,126 @@
                   "additionalProperties": false,
                   "default": null,
                   "description": "The slot\u0027s styles chosen live by a state cell (PaletteToonSelectDocument), whose case replaces Toon while the cell names one; null keeps Toon."
+                },
+                "flow": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "velocity": {
+                      "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                      "description": "The flow, in units per second."
+                    },
+                    "scale": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "The pattern\u0027s frequency, in cells per unit; positive (null = 1)."
+                    },
+                    "stretch": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "How many times longer a pattern feature is along the flow than across; at least 1 (null = 1)."
+                    },
+                    "cycle": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "The seconds a layer advects before it restarts, in [0.25, 4096] (null = 1)."
+                    },
+                    "tilt": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "The normal tilt per unit slope of the pattern; non-negative (null = 0)."
+                    },
+                    "coverage": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "The share of the slot the pattern reveals Surface over, in [0, 1] (null = 0)."
+                    },
+                    "softness": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "The coverage edge\u0027s width, in [0, 1] (null = 0.1)."
+                    },
+                    "surface": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "color": {
+                          "type": "string"
+                        },
+                        "roughness": {
+                          "type": "number"
+                        },
+                        "metal": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "color",
+                        "roughness",
+                        "metal"
+                      ],
+                      "additionalProperties": false,
+                      "default": null,
+                      "description": "The surface the coverage reveals; required when Coverage is positive."
+                    },
+                    "seed": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "The pattern\u0027s seed (null = 0)."
+                    },
+                    "lane": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "The render lane in [0, 3] whose value scales the velocity, read from an inhabited body\u0027s look lanes; a placement without lanes reads zero and stands still. Null keeps the velocity constant."
+                    },
+                    "frame": {
+                      "enum": [
+                        "Object",
+                        "World",
+                        null
+                      ],
+                      "default": null,
+                      "description": "The frame the velocity is authored in (null = Object).",
+                      "x-enumDescriptions": {
+                        "Object": "The frame of the surface\u0027s own object: the creation\u0027s frame for a placed creation (its copies turn the vector with them), the slot\u0027s frame for a surface riding a slot, and world space for a surface emitted in world space (a field row).",
+                        "World": "World space whatever the surface rides, the pattern included, so it runs continuously across every surface wearing the material: a wind across a meadow of separately swaying blades."
+                      }
+                    }
+                  },
+                  "required": [
+                    "velocity"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "description": "The slot\u0027s flow layer (PaletteFlowDocument): shading that moves along an authored flow over still geometry; null moves nothing."
                 }
               },
               "required": [

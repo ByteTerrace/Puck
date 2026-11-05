@@ -68,6 +68,42 @@ let waterPalette = [
   { color: "#F4F8F6", roughness: 0.55, specular: 0.1, wrap: 0.45 }
   { color: "#FFFFFF", roughness: 0.6, specular: 0.05, wrap: 0.5 }
 ]
+// The standard's flows, as palette `flow` layers: the water's shading moves while its geometry stands still. A velocity is
+// in the creation's engine frame (the author frame's x and z negated), so a stream whose author +Z is its flow runs
+// along -Z. One cycle's travel stays under a third of a pattern feature along the flow (stretch / scale).
+let streamFlowLayer = {
+  velocity [0, 0, -1.2]
+  scale: 0.6
+  stretch: 4
+  cycle: 2
+  tilt: 0.25
+  coverage: 0.2
+  softness: 0.08
+  surface { color: "#F4F8F6", roughness: 0.55, metal: 0 }
+  seed: 7
+}
+// A falls runs down every sheet at the sheet's own slope: only the velocity's part along a surface moves it.
+let fallsFlowLayer = {
+  velocity [0, -4, 0]
+  scale: 0.5
+  stretch: 6
+  cycle: 1
+  tilt: 0.3
+  coverage: 0.55
+  softness: 0.12
+  surface { color: "#FFFFFF", roughness: 0.6, metal: 0 }
+  seed: 11
+}
+// A lake's breeze: world-space ripples, a slow drift and no foam.
+let lakeFlowLayer = {
+  velocity [0.3, 0, 0.2]
+  scale: 0.8
+  stretch: 1.5
+  cycle: 3
+  tilt: 0.12
+  frame: World
+  seed: 5
+}
 // Glacier ice: a pale blue body and a whiter weathered face.
 let icePalette = [
   { color: "#CFE8F2", roughness: 0.3, specular: 0.4, wrap: 0.3 }
@@ -79,77 +115,44 @@ let stonePalette = [
   { color: "#B3A482", roughness: 0.92, specular: 0.02 }
 ]
 
-// A stream's brush edges and moving foam are surface paints, not sub-centimetre mesh features.
-// The ordinary motion system carries the painted sheet; overlapping ends keep adjacent stretches joined.
-template streamSegment(id, length, width = 4.5, arc = 0, spacing = 4, cadence = 0.4, palette = waterPalette, top = 0.1) {
+// A stream segment is one still sheet `length` long whose shading flows along its author +Z (`flow`, a palette flow
+// layer): the geometry never moves, so every segment of a stream is a placement of one prototype sharing one baked
+// mesh. `overlap` extends each end past the segment's length so adjacent segments meet at a bend; a stream raises
+// alternate segments by two centimetres so overlapping ends never share a plane.
+template streamSegment(id, length, width = 4.5, overlap = 0.5, palette = waterPalette, flow = streamFlowLayer, top = 0.1) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
-      palette [
-        palette[0] with {
-          paints: concat(
-            map([-1, 1], side => {
-              type: "Box", parent: "sheet", color: palette[1].color,
-              position [side * (width / 2 - 0.2), 0, 0],
-              scale [0.2, 1, length / 2 + spacing]
-            }),
-            map(range(0, 6), k => {
-              type: "Box", parent: "sheet", color: palette[2].color,
-              position [0, 0, (k + 0.5) * length / 6 - length / 2],
-              scale [width / 2 - 0.6, 1, 0.07]
-            })
-          )
-        }
-      ]
-      drivers [
-        { name: "flow", signal: "time", cadence: cadence, blendInSeconds: 0 }
-      ]
+      palette [palette[0] with { flow: flow }]
       shape Box "sheet" {
         material: 0
         position [0, top - 0.3, 0]
-        scale [width / 2, 0.3, length / 2 + spacing]
-        slides [
-          {
-            driver: "flow", axis [0, 0, 1], amplitude: spacing * 0.9,
-            phase: 0 - arc * 6.283185307179586 / (spacing * 4), wave: "halfSine"
-          }
-        ]
+        scale [width / 2, 0.3, length / 2 + overlap]
       }
     }
   }
 }
-// Each piece turns about its own flow axis as discharge falls, narrowing the sheet from the valley's approach.
-// The caller supplies the endpoint visibility as well as discharge; both are ordinary state-driven motion.
-template fallsRibbon(id, profile, width = 8, standoff = 5, gauge = "meltStrength", visible = "meltVisible", palette = waterPalette) {
+// A falls is a ribbon of still sheets down the wall's profile, its shading falling down each sheet (`flow`). The caller
+// supplies the endpoint visibility, which parks the ribbon when the falls runs dry.
+template fallsRibbon(id, profile, width = 8, standoff = 5, visible = "meltVisible", palette = waterPalette, flow = fallsFlowLayer) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
-      palette: palette
+      palette [palette[0] with { flow: flow }]
       sizeBy: "visible"
       drivers [
-        { name: "fold", signal: $"state.{gauge}", cadence: -1, blendInSeconds: 0, blendOutSeconds: 0 }
         { name: "visible", signal: $"state.{visible}", cadence: 1, blendInSeconds: 0, blendOutSeconds: 0 }
       ]
       for j in range(0, length(profile) - 1) {
         shape Box $"sheet-{j}" {
-          material: j % 2 == 0 ? 1 : 2
+          material: 0
           position [0, (profile[j][1] + profile[j + 1][1]) / 2, (profile[j][0] + profile[j + 1][0]) / 2 - standoff]
           scale [width / 2, 0.3, squareRoot(
             (profile[j + 1][1] - profile[j][1]) * (profile[j + 1][1] - profile[j][1]) +
             (profile[j + 1][0] - profile[j][0]) * (profile[j + 1][0] - profile[j][0])) / 2]
           rotation [0 - halfTurnSine(fallsSlope(profile, j)), 0, 0, halfTurnCosine(fallsSlope(profile, j))]
-          swings [
-            {
-              driver: "fold"
-              pivot [0, (profile[j][1] + profile[j + 1][1]) / 2, (profile[j][0] + profile[j + 1][0]) / 2 - standoff]
-              axis [0, profile[j][1] - profile[j + 1][1], profile[j][0] - profile[j + 1][0]]
-              amplitude: 1.5707963267948966
-              phase: 1
-              wave: "linear"
-            }
-          ]
         }
       }
     }
@@ -181,13 +184,13 @@ template glacierMass(id, lumps, gauge = "glacierLength", origin = [0, 0, 0], pal
 }
 
 // A lake's surface: a flat turquoise disc of `radius` that rises and falls with the gauge `state.<gauge>` by `rise` metres
-// a unit above `rest`, the gauge's value at the lake's outlet.
-template lakeSurface(id, radius, gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette) {
+// a unit above `rest`, the gauge's value at the lake's outlet, its shading rippled by `flow`.
+template lakeSurface(id, radius, gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette, flow = lakeFlowLayer) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
-      palette: palette
+      palette [palette[0] with { flow: flow }]
       drivers [
         { name: "level", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0 }
       ]
