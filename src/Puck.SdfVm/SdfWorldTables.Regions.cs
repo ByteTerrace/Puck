@@ -21,7 +21,7 @@ public sealed partial class SdfWorldTables {
     private const int MeshRegionIndex = 6;
     private const int ProgramRegionIndex = 0;
     // The per-frame regions RegionAt names.
-    private const int RegionCount = 12;
+    private const int RegionCount = 11;
     private const int ScreenMappingRegionIndex = 5;
     private const int ScreenSurfaceRegionIndex = 2;
     private const int VolumeRegionIndex = 3;
@@ -75,7 +75,7 @@ public sealed partial class SdfWorldTables {
             copySets: m_regionCopyPool.Region(index: region),
             memory: GpuResidency.RingMemory(profile: profile),
             name: RegionName(region: region),
-            policy: ((region is MeshRegionIndex or MeshIrradianceRegionIndex)
+            policy: ((region is MeshRegionIndex)
                 ? GpuResidencyPolicy.Staged
                 : GpuResidency.Select(
                     byteCount: ((ulong)byteCount),
@@ -92,7 +92,7 @@ public sealed partial class SdfWorldTables {
             RegionAt(index: index)?.Dispose();
         }
 
-        m_gpuMeshIrradiance?.Dispose();
+        m_meshIrradiance?.Dispose();
         m_shadowHandoffBuffer.Dispose();
         m_regionCopyPool.Dispose();
     }
@@ -139,7 +139,7 @@ public sealed partial class SdfWorldTables {
         get {
             var bytes = (new GpuMemoryBytes(DeviceLocal: (((m_previousDynamicTransforms.SizeBytes + m_previousMeshTransforms.SizeBytes) + m_shadowHandoffBuffer.SizeBytes) + ScreenEmission.SizeBytes), HostVisible: 0));
             bytes += m_meshHistoryCopies.OwnedBytes;
-            bytes += new GpuMemoryBytes(DeviceLocal: m_gpuMeshIrradiance?.SizeBytes ?? 0, HostVisible: 0);
+            bytes += MeshIrradianceBufferBytes;
 
             for (var index = 0; (index < RegionCount); index++) {
                 if (RegionAt(index: index) is { } region) {
@@ -162,7 +162,6 @@ public sealed partial class SdfWorldTables {
         LightRegionIndex => m_lightRegion,
         SkyRegionIndex => m_skyRegion,
         SkyLayerRegionIndex => m_skyLayerRegion,
-        MeshIrradianceRegionIndex => m_meshIrradianceRegion,
         _ => m_shadowHandoffRegion,
     };
     // The debug name of region index's objects, its reserved copy sets included: its table's role.
@@ -177,8 +176,7 @@ public sealed partial class SdfWorldTables {
         LightRegionIndex => "lights",
         SkyRegionIndex => "sky",
         SkyLayerRegionIndex => "sky-layers",
-        ShadowHandoffRegionIndex => "shadow-handoffs",
-        _ => "mesh-irradiance",
+        _ => "shadow-handoffs",
     });
     // Creates the one copy pool of every region the tables may create, each region's sets named as its region: the pool its admission states (RegionCopyPoolSizes).
     private GpuRegionCopyPool ReserveRegionCopyPool(GpuCreationScope scope) {

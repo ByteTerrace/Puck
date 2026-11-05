@@ -2246,6 +2246,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state at,
             // never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.
             Clock = m_client.StateMirror.Presented,
+            // render.lanes at the presented tick, resolved with the sky through the state mirror.
+            WorldLanes = lighting.Lanes,
             DiagnosticSource = m_diagnosticSource,
         };
 

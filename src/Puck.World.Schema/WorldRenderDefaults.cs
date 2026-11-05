@@ -156,6 +156,10 @@ public readonly record struct WorldQualityPreset(
 /// <param name="ShadowCoverage">How far the key light's shadow cascades reach (<see cref="WorldRenderShadowCoverage"/>).
 /// Absent keeps the engine's 16 m near, 120 m far and 200 m caster reach; <c>world.budget</c> prints the coverage with
 /// each cascade's texel.</param>
+/// <param name="Lanes">The world's render lanes: up to four bindable scalars (a literal, a <c>state.&lt;row&gt;</c>
+/// binding, or keys on a clock), resolved at each frame's presented tick and read by every surface and volume as
+/// render lanes 4 to 7 (<c>SdfLanes</c>), so a static placement sharing one baked mesh follows world state without a
+/// slot. Absent or a missing entry reads zero; <c>world.lighting</c> echoes them as authored.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     bool AmbientOcclusion = false,
@@ -182,8 +186,12 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderExposure? Exposure = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ToonStyleDocument? Toon = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Hosting.CameraBloom? Bloom = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderShadowCoverage? ShadowCoverage = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderShadowCoverage? ShadowCoverage = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<BindableScalar>? Lanes = null
 ) {
+    /// <summary>The most world lanes <see cref="Lanes"/> holds (<c>SdfLanes.WorldCount</c>).</summary>
+    public const int MaxLanes = SdfLanes.WorldCount;
+
     /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units, the largest power of two
     /// at which a float's spacing (2^13 · 2^-23 = 0.00098) still resolves a millimetre, so a depth anywhere in the view
     /// still places a surface to within one.</summary>

@@ -11,6 +11,7 @@ public static partial class WorldDefinitionValidator {
         ValidateShadowCoverage(definition.Render.ShadowCoverage, errors);
         ValidateBloom(definition.Render.Bloom, "render.bloom", errors);
         ValidateIndirect(definition: definition, errors: errors);
+        ValidateRenderLanes(definition: definition, errors: errors);
         ValidateSkyFieldScale(definition.Render.SkyFieldScale, "render.skyFieldScale", errors);
         RequireRange(definition.Render.RenderScale, 0.125f, 1f, "render.renderScale", errors);
         foreach (var tier in Enum.GetValues<Puck.Abstractions.Presentation.QualityTier>()) {
@@ -82,6 +83,15 @@ public static partial class WorldDefinitionValidator {
     }
     // The cascades' reach shares the far distance's representable band; the near reach must stay below the far one so
     // each cascade covers a slice of its own.
+    private static void ValidateRenderLanes(WorldDefinition definition, List<string> errors) {
+        if (definition.Render.Lanes is not { } lanes) { return; }
+        if (lanes.Count > WorldRenderDefaults.MaxLanes) {
+            errors.Add(item: $"render.lanes holds at most {WorldRenderDefaults.MaxLanes} lanes (render lanes {SdfLanes.FirstWorld} to {(SdfLanes.Count - 1)}); got {lanes.Count}.");
+        }
+        for (var index = 0; (index < lanes.Count); index++) {
+            JudgeScalar(WorldValueFields.RenderLane, lanes[index], definition, $"render.lanes[{index}]", errors);
+        }
+    }
     private static void ValidateShadowCoverage(WorldRenderShadowCoverage? coverage, List<string> errors) {
         if (coverage is null) {
             return;

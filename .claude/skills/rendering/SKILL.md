@@ -477,6 +477,17 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   draw shading in world space (a static copy) turns by the draw's matrix;
   `World` keeps the velocity and the pattern in world space. The glass pass
   does not run the layer.
+- **A shading-time lane is a slot's or the world's.** Lanes 0 to 3 are the
+  draw's frame-slot lanes (a body's look lanes; zero on a static copy or an
+  animated placement), lanes 4 to 7 the world's `render.lanes`, which
+  `WorldEnvironmentResolve` resolves at the presented tick into
+  `SdfFrame.WorldLanes` and the pass block carries as `worldLanes`
+  (`SdfLanes`). Every consumer (emission, weathering, a flow's velocity and
+  coverage, a volume's intensity) reads a lane through `sdfLane`
+  (`frame/sdf-lanes.hlsli`), the one reader of `worldLanes`; never index
+  `s.lanes` directly. `SdfFrameBlock.WorldLanesOf` writes zero for a frame
+  that reads no world lane, so a still world stands. Erosion and morph are
+  bake-time and read slot lanes only.
 - **Camera history uses the camera's sample grid.** The first recorder can be
   a shadow cascade, so `TemporalOf` receives the recording's `RenderWidth` and
   `RenderHeight`, never its pass-local `Width` and `Height`. A still camera's

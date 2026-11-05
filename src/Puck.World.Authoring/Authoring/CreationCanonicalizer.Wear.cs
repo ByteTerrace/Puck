@@ -110,7 +110,7 @@ public static partial class CreationCanonicalizer {
                 flow: entry.Flow?.ToFlow(resolve: Resolve)
             )) {
                 errors.Add(item: new(
-                    Message: "Invalid inset, weathering, paint or flow: check frames, ordered stops, surfaces, ranges, lane [0, 3], a nonzero paint rotation, a positive paint scale, a non-negative stroke, and a flow's positive scale, stretch of at least 1, cycle in [0.25, 4096], non-negative tilt and the surface its coverage reveals.",
+                    Message: "Invalid inset, weathering, paint or flow: check frames, ordered stops, surfaces, ranges, lanes in [0, 7], a nonzero paint rotation, a positive paint scale, a non-negative stroke, and a flow's positive scale, stretch of at least 1, cycle in [0.25, 4096], non-negative tilt and the surface its coverage reveals.",
                     Path: $"palette[{index}]"
                 ));
             }
@@ -141,9 +141,9 @@ public static partial class CreationCanonicalizer {
                 Path: $"palette[{index}].receive"
             ));
         }
-        if (!SdfMaterial.IsEmissiveLane(lane: entry.EmissiveLane)) {
+        if (!SdfLanes.IsLane(lane: entry.EmissiveLane)) {
             errors.Add(item: new(
-                Message: $"emissiveLane must be a render lane in [0, 3]; got {entry.EmissiveLane}.",
+                Message: $"emissiveLane must be a render lane in [0, {(SdfLanes.Count - 1)}]; got {entry.EmissiveLane}.",
                 Path: $"palette[{index}].emissiveLane"
             ));
         }
@@ -167,7 +167,7 @@ public static partial class CreationCanonicalizer {
     private static void ValidateShapeErode(ShapeDocument shape, List<DocumentValidationError> errors, int index) {
         if (
             (shape.Erode is { } erode) &&
-            ((((uint)erode.Lane) > 3u) || !float.IsFinite(f: erode.From) || !float.IsFinite(f: erode.To) || (erode.From == erode.To) || !float.IsFinite(f: (erode.Noise ?? 1f)))
+            (!SdfLanes.IsSlotLane(lane: erode.Lane) || !float.IsFinite(f: erode.From) || !float.IsFinite(f: erode.To) || (erode.From == erode.To) || !float.IsFinite(f: (erode.Noise ?? 1f)))
         ) {
             errors.Add(item: new(
                 Message: "erode requires a defined lane, a finite from/to that differ, and a finite noise.",

@@ -42,13 +42,15 @@ public enum SdfFlowFrame {
 /// <param name="Surface">The surface the coverage reveals (streaks, foam); required when <paramref name="Coverage"/> is
 /// positive.</param>
 /// <param name="Seed">The pattern's seed.</param>
-/// <param name="Lane">The render lane in [0, 3] whose value scales <paramref name="Velocity"/> at shading time, read
-/// from the surface's frame slot as the weathering's and the emissive's lanes are; null keeps the constant. A surface with
-/// no slot reads every lane as zero, so a lane-driven flow stands still there.</param>
+/// <param name="Lane">The render lane (<see cref="SdfLanes"/>) whose value scales <paramref name="Velocity"/> at shading
+/// time; null keeps the constant. A slot lane reads zero on a surface with no slot, so a flow driven by one stands still
+/// there.</param>
 /// <param name="Frame">The frame <paramref name="Velocity"/> is authored in.</param>
+/// <param name="CoverageLane">The render lane (<see cref="SdfLanes"/>) whose value, saturated to [0, 1], scales
+/// <paramref name="Coverage"/> at shading time; null keeps the constant.</param>
 public sealed record SdfFlow(Vector3 Velocity, float Scale = 1f, float Stretch = 1f, float Cycle = 1f, float Tilt = 0f,
     float Coverage = 0f, float Softness = 0.1f, SdfSurface? Surface = null, uint Seed = 0, int? Lane = null,
-    SdfFlowFrame Frame = SdfFlowFrame.Object) {
+    SdfFlowFrame Frame = SdfFlowFrame.Object, int? CoverageLane = null) {
     /// <summary>The period, in seconds, the host reduces the flow clock by (<c>SdfWorldPackage.FlowClock</c> carries the
     /// presented time over this period, in [-1/2, 1/2]). A power of two, so a whole number of cycles fills it and the
     /// layer joins without a seam where the clock wraps.</summary>
@@ -63,7 +65,7 @@ public sealed record SdfFlow(Vector3 Velocity, float Scale = 1f, float Stretch =
 
     /// <summary>Gets whether the flow is admissible: a finite velocity, positive finite scale, a stretch of at least
     /// one, a cycle in range, a non-negative tilt, a coverage and softness in [0, 1], a valid surface whenever coverage
-    /// is positive, and a lane absent or in [0, 3].</summary>
+    /// is positive, and each lane absent or one of <see cref="SdfLanes"/>.</summary>
     public bool IsValid =>
         VectorFunctions.IsFinite(vector: Velocity) &&
         float.IsFinite(f: Scale) && (Scale > 0f) &&
@@ -73,7 +75,7 @@ public sealed record SdfFlow(Vector3 Velocity, float Scale = 1f, float Stretch =
         float.IsFinite(f: Coverage) && (Coverage >= 0f) && (Coverage <= 1f) &&
         float.IsFinite(f: Softness) && (Softness >= 0f) && (Softness <= 1f) &&
         ((Coverage <= 0f) || (Surface is { } surface && SdfMaterialLayers.IsSurface(surface: surface))) &&
-        ((Lane is not { } lane) || (((uint)lane) <= 3u)) &&
+        SdfLanes.IsLane(lane: Lane) && SdfLanes.IsLane(lane: CoverageLane) &&
         Enum.IsDefined(value: Frame);
 
     /// <summary>Returns the flow clock the pass block carries at a presented time: the time in seconds reduced by

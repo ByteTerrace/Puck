@@ -569,6 +569,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         ) {
             // The destination's own presented tick, never the viewer's, so its sky and media show its authority's time.
             Clock = m_mirror.FollowState().Presented,
+            WorldLanes = environment.Lanes,
             DynamicTransforms = transforms,
             MovedTransforms = moved,
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its

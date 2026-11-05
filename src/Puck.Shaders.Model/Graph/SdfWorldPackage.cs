@@ -116,6 +116,10 @@ public static partial class SdfWorldPackage {
     /// over that period, in [-1/2, 1/2] (<c>SdfFlow.Clock</c>), integrated on the host from the frame's presented tick
     /// so no kernel reads a clock; zero for a frame whose program carries no flow layer (<c>float</c>).</summary>
     public const string FlowClock = "flowClock";
+    /// <summary>The pass-group value holding the world's four render lanes (<c>SdfLanes</c> 4 to 7), resolved on the host
+    /// from <c>render.lanes</c> against the frame's presented state; zero where the world authors none. The one way a
+    /// world lane enters the kernels, read through <c>sdfLane</c> (<c>frame/sdf-lanes.hlsli</c>) (<c>float4</c>).</summary>
+    public const string WorldLanes = "worldLanes";
     /// <summary>The stable shadow slots' light indices; an empty slot holds −1 (<c>int4</c>).</summary>
     public const string ShadowSlots = "shadowSlots";
     /// <summary>The configured stable shadow slot count (<c>uint</c>).</summary>
@@ -306,6 +310,7 @@ public static partial class SdfWorldPackage {
         Value(name: ToonShadow, type: ShaderValueType.Float4),
         Value(name: ToonOutline, type: ShaderValueType.Float4),
         Value(name: ToonInk, type: ShaderValueType.Float4),
+        Value(name: WorldLanes, type: ShaderValueType.Float4),
         Value(name: ExposeShare, type: ShaderValueType.Float),
         Value(name: AirLight, type: ShaderValueType.Float),
         Value(name: MeterLuminance, type: ShaderValueType.Float),

@@ -1724,6 +1724,20 @@ the fixed poses and the approaches already rejected.
   buffer. Preserve the source output's readback-token/fence ownership through
   commit; do not trade that lifetime guarantee for fewer copied bytes.
 
+- [medium] GPU probe work still duplicates memory and copies.
+  - The probe service's feedback region keeps a CPU copy as large as the
+    volume (`trace-feedback-shadow-bytes`, 46 MB at Medium) beside the
+    volume's own words (`SdfMeshProbeGpuWork.TryTake`). Read it from the
+    volume instead, keeping the snapshot's timing.
+  - `RecordCommit` records one buffer copy per probe because the source
+    interleaves records; one scatter dispatch replaces them.
+  - The bloom kernels (`sdf-bloom-down`, `sdf-bloom-apply`) and the overlay
+    keep literal luminance weights instead of the generated `SDF_LUMINANCE`.
+  - `SdfMeshProbeGpuWork.Abandon` leaves the scene carry to the next
+    completion.
+  - Relight, select, meter and cache have no CPU/GPU parity law; only
+    `world.probe`'s relight reference compares them.
+
 - [high] Night lighting, from the owner's walkthrough at the lawn's trees:
   - **The jump to night is wrong.** Forcing midnight
     (`world.state.cell.set day $value 0.0`) leaves the scene near-black for

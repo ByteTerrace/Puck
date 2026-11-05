@@ -524,10 +524,14 @@ and the geometry, the cascades and the surface pass stand. No `sdf-*` kernel
 reads the Frame group's `time` or `timeDelta`: `puck search -M 0
 "frameGroup\.(time|timeDelta)" src/Puck.SdfVm/Assets/Shaders/Sdf` finds
 nothing. Where it stops: a lane-driven flow is as deterministic as the lane's
-expression, and a lane reads zero on any placement without lanes (static and
-animated placements supply none), so the per-instance phase the brief
-imagined for the stream legs has no carrier there; the world-space pattern
-static copies shade in makes it unnecessary, since no two legs repeat.
+value. A body lane (0 to 3) reads zero on a placement without one, so the
+per-instance phase the brief imagined for the stream legs has no carrier
+there; the world-space pattern static copies shade in makes it unnecessary,
+since no two legs repeat. A world lane (4 to 7, `render.lanes`) reads the same
+on every surface, static copies included: the host resolves it from state at
+the presented tick (`WorldEnvironmentResolve`, the sky's binding path) and it
+enters the kernels through one pass value, `worldLanes`, read only by `sdfLane`
+(`frame/sdf-lanes.hlsli`), as `flowClock` enters through one.
 
 **The water on it.** In the standard (`worlds/standard/water.puck`), the
 stream segment is one still sheet wearing `streamFlowLayer`; its slide, its
@@ -535,9 +539,13 @@ brush-edge paints and its foam paints are gone (a paint on a static placement
 is world-space, so they could not ride a shared copy). The debug world places
 the one `stream` prototype eight times, alternate legs 2 cm higher so the
 overlapping ends at each bend never share a plane, a shorter leg starting back
-along the leg before it. The falls is fourteen still sheets wearing
-`fallsFlowLayer`, one downward velocity that runs down every sheet at its own
-slope; it lost the fold by `meltStrength` and keeps the visibility park. The
+along the leg before it. The falls is fourteen sheets wearing `fallsFlowLayer`,
+one world-space downward velocity that runs down every sheet at its own slope.
+Each sheet folds about its own flow axis by `meltStrength` (edge-on to the
+valley at zero), so the falls narrows as the melt ebbs, and its foam coverage
+follows world lane 4, which the debug world binds to `state.meltStrength`
+(`water-scenery.puck`), so the foam thins with it; the visibility park removes
+the edge-on ribbon when the melt ends. The
 lake keeps its level slide, a state gauge's legitimate rig use, and wears
 `lakeFlowLayer`, world-space breeze ripples. The meadow's grass
 (`windMeadowTile` in `foliage.puck`) wears `meadowWind`, a world-space flow
@@ -545,9 +553,7 @@ whose paler gust patches cross every tile and blade together.
 
 **Not yet.** The glass pass does not run the layer, so a water surface on a
 glass row (W1) needs `sdfApplyFlow` in `sdf-glass.comp.hlsl` before the stream
-moves to glass. The falls no longer narrows as discharge falls: a coverage or
-tilt driven by the gauge needs a lane, and an animated placement supplies
-none.
+moves to glass.
 
 ### W2's field source
 

@@ -23,8 +23,8 @@ public readonly record struct SdfDensityStop(float Density, Vector3 Color);
 /// (<see cref="NoiseCell"/>), so a flow narrower than its noise stays continuous. NoiseDepth, in [0, 1], is the share
 /// of a flow's density its noise modulates: one multiplies by the noise, zero leaves a smooth column whose density peaks
 /// at one on the axis at the mouth, where the ramp's top stop colours a core. Ramp contains one to four ascending density stops, evaluated at each sample before integration.
-/// PulseAmplitude is in [0, 1]; PulseFrequency is cycles per second. IntensityLane selects [0, 3], or null
-/// for constant gain. An authored lane on a static volume reads zero. Seed preserves all 32 bits.
+/// PulseAmplitude is in [0, 1]; PulseFrequency is cycles per second. IntensityLane selects a render lane
+/// (<see cref="SdfLanes"/>), or null for constant gain; a slot lane on a static volume reads zero. Seed preserves all 32 bits.
 /// Coverage is in [0, 1]; Softness is the cloud density transition width in (0, 1]. Scatter, in [0, 1], is the
 /// share of each sample's extinction that scatters the light-casting bodies' light toward the eye (its single-scattering
 /// albedo, by the phase of <see cref="ScatterAnisotropy"/>, through the sky block's air lights); zero scatters none, and
@@ -83,7 +83,7 @@ public readonly record struct SdfVolume(SdfVolumeKind Kind, Vector3 Position, Qu
             !NonNegative(v: PulseAmplitude) ||
             (PulseAmplitude > 1f) ||
             !NonNegative(v: PulseFrequency) ||
-            ((IntensityLane is { } lane) && (((uint)lane) > 3u)) ||
+            !SdfLanes.IsLane(lane: IntensityLane) ||
             (Ramp is not { Count: >= 1 and <= 4 }) ||
             !NonNegative(v: Coverage) ||
             (Coverage > 1f) ||
