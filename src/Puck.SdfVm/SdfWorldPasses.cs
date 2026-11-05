@@ -67,10 +67,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// <inheritdoc/>
     public string? WaitingOf(string instance) {
         lock (m_gate) {
-            return ((m_entries.TryGetValue(key: instance, value: out var entry) &&
-                (entry.Residency is { Frame.TickLocked: true } residency) && residency.MeshPathBake.Pending)
-                ? $"residency '{residency.Name}' is completing its meshes"
-                : null);
+            if (!m_entries.TryGetValue(key: instance, value: out var entry) || entry.Residency is not { } residency) { return null; }
+            if (residency.Frame is { TickLocked: true } && residency.MeshPathBake.Pending) { return $"residency '{residency.Name}' is completing its meshes"; }
+            return residency.LightingPending ? $"residency '{residency.Name}' is converging its probe lighting and exposure" : null;
         }
     }
     /// <inheritdoc/>
