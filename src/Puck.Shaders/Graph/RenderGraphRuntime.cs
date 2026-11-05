@@ -1310,6 +1310,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         var renders = schedule.Renders;
         // The node that submitted last this frame, whose submission follows the host's presentation of the last frame.
         ShaderPipelineRenderNode? submitter = null;
+        // The frame's longest single recording, the critical path its record jobs would keep side by side.
+        var longestRecord = -1L;
         var holdingConvergence = ((m_convergence is { IsActive: true } convergence) &&
             (convergence.Samples >= convergence.Request.Converge) &&
             (m_nodes[m_captureInstance]?.PendingCapturePath == convergence.Request.Path));
@@ -1488,6 +1490,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     surface = node.ProduceFrame(context: in context);
                 } finally {
                     if (node.FrameCounter != rendered) {
+                        longestRecord = Math.Max(val1: longestRecord, val2: node.LastRecordTicks);
                         m_historySucceeded[index] = true;
                         RememberOutput(index: index, node: node, schedule: schedule, surface: node.PublishedSurface);
                     }
@@ -1548,6 +1551,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         } finally {
             queue.FlushBatch();
         }
+        if (longestRecord >= 0) { RenderRecordWork.Process.Frame(longestRecordTicks: longestRecord); }
 
         // The image the display presents this frame, read back once every node has submitted.
         ServePresented(presentation: frame.Index);

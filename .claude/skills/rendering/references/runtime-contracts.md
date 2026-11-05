@@ -84,7 +84,30 @@ for aliases of that generation, rather than reported as successful completion.
 `GpuSubmissionBatchLawTests` holds these failure and disposal interleavings;
 the Direct3D 12 WARP and Vulkan recording-driver batch laws hold empty fenced
 submissions and empty `SubmitAndWait` boundaries. The latter drains earlier work
-on both backends, even with no new command buffers.
+on both backends, even with no new command buffers. An external wait whose fence
+already reached its value is dropped before it can split anything
+(`GpuExternalWait.IsReached`); `world.counters gpu.queue` names every split's
+cause.
+
+**A node's frame is one record job.** `ShaderPipelineRenderNode.RenderFrame` runs
+`PrepareFrame` (the slot's fence wait, lease and region binding, the cadence
+checkpoint), `RecordFrame` (the slot's lists) and `CommitFrame` (submission,
+history commit, publication, readbacks, export completion). The slot's lists
+belong to one recording from `BeginFrameCommands` until `SubmitCounted` hands
+them over or `AbandonRecording` gives them up; every path that records into
+them (a frame, a re-presented selection, a capture pin) passes those two doors,
+and a second begin while one is active throws. A recording that fails before its
+submission is abandoned: its open lists are ended (or their pool replaced) so
+the slot's next begin can reset them, the cadence rolls back, the frame's held
+leases retire unsampled, nothing is published or captured, and the instance is
+refused with `LastRecordError` until a later recording commits. A device loss
+still propagates to the host's recovery. `gpu.faults record <n>` fails the nth
+recording partway through its list to exercise this. The jobs run serially on
+the frame thread: package recorders (the SDF residency's upload and pump, its
+frame staging), the pipeline cache and the counting recorder share host state
+across nodes, so recording them on workers needs those split into the
+coordinator's preparation first
+([lessons plan](../../../../docs/plans/frame-source-lessons.md#1-complete-a2s-accounting-and-give-j6-immutable-recording-jobs)).
 
 ## 2. Nothing resolves silently to nothing
 
