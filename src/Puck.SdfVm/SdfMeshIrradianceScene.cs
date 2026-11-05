@@ -112,7 +112,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         m_geometries.Values.Sum(static geometry => geometry.HierarchyBytes) + m_retained.Sum(static entry => entry.Value.HierarchyBytes);
 
     // 28 bytes: the bounds, then one word holding the first index above the count's CountBits.
-    private struct Node {
+    internal struct Node {
         private const int CountBits = SdfMeshProbeTrace.NodeCountBits;
 
         public Vector3 Low;
@@ -594,7 +594,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     // braid subtrees: the widest nodes at most BraidTriangles wide, which together hold every leaf position once. A
     // triangle whose box is loose about it (a long thin one a merged polygon leaves, SdfMeshPlanarMerge) holds several
     // leaf positions, each bounded by a piece of it, so a ray tests it only where it passes near.
-    private sealed class Geometry {
+    internal sealed class Geometry {
         public long HierarchyBytes => Nodes.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Node>() +
             (Triangles.LongLength + Braids.LongLength) * sizeof(int);
         public required int[] Braids { get; init; }

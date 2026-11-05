@@ -76,9 +76,21 @@ elsewhere cameras are excluded because their coordinates belong to another
 world. The diagnostic additionally reports the first view's counts, median
 and oldest ages against those outside that frustum at each level.
 
-The runtime streams the existing scene's nodes and leaf indices through a
-`GpuRegion` source, without a second packed hierarchy on the CPU. One admitted
-query owns the shared scene and feedback regions until its fence completes;
+The runtime retains geometry addresses in `SdfMeshIrradianceScene.GpuArena`,
+using the shared `GpuMemoryRanges` allocator. A replacement allocates its own
+top hierarchy, braid entries and instance records, and only new geometry gets
+uploaded. A worker packs these changed ranges into a bounded queue of
+`SdfGpuWork.UploadChunkBytes` blocks. B1 admits their copies under its GPU,
+host-time and byte budgets; `GpuRegion` remains the only uploader, with a
+one-word CPU shadow. No hierarchy serialization runs on the frame thread.
+`SdfMeshProbeGpuWork.TakeSceneUpload` excludes queries during replacement;
+the old root and allocations stay intact until the new root's last upload
+fence, then `CompleteSceneUpload` publishes and frees retired ranges. Query
+admission rechecks mesh residency and placement version after publication:
+an intervening mesh relocation repacks instance addresses before any trace.
+`world.residency` reports completed scene changes, total payload bytes and the
+last change's payload bytes, separately from staging allocation sizes.
+One admitted query owns the shared scene and feedback regions until its fence completes;
 they therefore have one staging slot. Service slots independently retain their
 outputs through readback release. GPU hit-cache allocations carry nonrepeating
 tokens, checked by selection before reuse. The cache is sized to the published

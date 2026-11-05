@@ -1090,6 +1090,17 @@ visible until its replacement is ready. Camera exposure queries use the same
 service and shading function. CPU traversal and shading remain the diagnostic
 reference, and CPU nearest-surface and short clearance queries still place probes.
 
+Scene updates preserve unchanged geometry addresses. The shared range allocator
+places a replacement's top hierarchy and instance records beside the published
+scene, and a worker serializes only those records and new geometry. B1 stages
+bounded blocks through `GpuRegion` under its host-time, byte and GPU budgets.
+The root is the publication point: no query is admitted during replacement,
+and old allocations retire only after the new root's upload fence. Admission
+then checks the mesh placements again, so a relocation during staging cannot
+pair a scene's instance addresses with another mesh layout. Repacking and
+uploading the whole trace scene for a field's one changed mesh would make
+frame work proportional to world size.
+
 Visibility is an any-hit query: GPU `sdfProbeOccluded` and CPU `Unblocked`
 stop at the first accepted triangle, sharing their nearest-hit walk's node
 and triangle tests. Shadows, light bits and camera visibility use this door.
