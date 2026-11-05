@@ -44,14 +44,15 @@ public sealed partial class SdfWorldTables {
     /// (<see cref="DescriptorPoolSizes"/>), then the one pool holding the copy sets they reserve for all their regions
     /// (<see cref="GpuRegionCopyPool"/>, sized by <see cref="GpuRegionCopyPool.SizesOf"/>), whatever policy the device
     /// selects: the shared frame tables, the shadow handoff controls, the mesh region, and with a brick pool the brick staging. Construction creates
-    /// these and the strided history-copy pool, so no later frame, the first to draw a mesh or a growing program included,
-    /// takes a descriptor range.</summary>
+    /// these and the strided history-copy pool, and the residency the mesh bake's background work pool, so no later
+    /// frame, the first to draw a mesh or a growing program included, takes a descriptor range.</summary>
     /// <param name="brickPool">Whether the tables keep a brick pool.</param>
     /// <returns>The pools' sizes, the tables' own first.</returns>
     public static GpuDescriptorPoolSizes[] DescriptorPools(bool brickPool) => [
         DescriptorPoolSizes(brickPool: brickPool),
         RegionCopyPoolSizes(brickPool: brickPool),
         GpuBufferStridedCopy.PoolSizes(frameSlotCount: FrameRingSize, recordingCount: 2),
+        SdfMeshBakeGpuWork.PoolSizes,
     ];
     /// <summary>Returns the one descriptor pool the tables create themselves, the statement their construction creates the
     /// pool from: the World set per ring slot, holding the World group of

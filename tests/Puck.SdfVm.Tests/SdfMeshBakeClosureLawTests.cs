@@ -56,20 +56,20 @@ public sealed class SdfMeshBakeClosureLawTests {
 
         // Choosing a batch, addressing its points/poses and encoding the dispatch are product inputs, even when
         // storage growth changes independently. These are current semantic entries, not a saved member/hash ledger.
-        Requires(typeof(SdfMeshPathBake), nameof(SdfMeshPathBake.Stage));
-        Requires(typeof(SdfMeshPathBake), nameof(SdfMeshPathBake.TryTakeForFrame));
-        Requires(typeof(SdfMeshBakeBatch), nameof(SdfMeshBakeBatch.WritePoints));
+        Requires(typeof(SdfMeshPathBake), nameof(SdfMeshPathBake.TryTake));
+        Requires(typeof(SdfMeshBakeBatch), nameof(SdfMeshBakeBatch.PointRuns));
         Requires(typeof(SdfMeshBakeBatch), "get_" + nameof(SdfMeshBakeBatch.InputRows));
         Requires(typeof(SdfMeshBakeBatch), nameof(SdfMeshBakeBatch.PoseBase));
         Requires(typeof(SdfMeshBakeBlock), nameof(SdfMeshBakeBlock.Write));
         Assert.True(condition: closure.Reads(type: typeof(SdfMeshBakeBatch)));
 
-        // Neither methods nor layout of the allocation-only owner may enter derivation. Its call signature remains
-        // in Stage's IL; only changes behind that stable storage door are excluded.
-        var transport = typeof(SdfMeshBakeInputTransport);
-        var transportPrefix = $"{transport.Assembly.GetName().Name}!{transport.FullName}";
-        Assert.DoesNotContain(collection: closure.Members.Keys, filter: member => member.StartsWith(value: transportPrefix, comparisonType: StringComparison.Ordinal));
-        Assert.False(condition: closure.Reads(type: transport));
+        // Neither the background GPU work nor the bake's client of it, which only carry a batch's rows and samples to
+        // the device and back, may enter derivation.
+        foreach (var transport in new[] { typeof(SdfGpuWork), typeof(SdfGpuWork).Assembly.GetType(name: "Puck.SdfVm.SdfMeshBakeGpuWork", throwOnError: true)! }) {
+            var transportPrefix = $"{transport.Assembly.GetName().Name}!{transport.FullName}";
+            Assert.DoesNotContain(collection: closure.Members.Keys, filter: member => member.StartsWith(value: transportPrefix, comparisonType: StringComparison.Ordinal));
+            Assert.False(condition: closure.Reads(type: transport));
+        }
     }
 }
 

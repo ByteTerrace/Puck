@@ -77,8 +77,7 @@ public sealed class SdfFieldSliceLawTests {
         while (!done()) {
             Assert.True(condition: (frames < 64), userMessage: "the slice never completed");
             if (frame is not null) { _ = dresser.Dress(frame: frame); }
-            if (bake.TryTakeForFrame(batch: out var batch, frame: frames)) {
-                bake.Record(batch: batch);
+            if (bake.TryTake(batch: out var batch, field: bake.Program)) {
                 bake.Complete(batch: batch, samples: Answer(batch: batch, instances: instances, world: world));
             }
             frames++;
@@ -144,12 +143,12 @@ public sealed class SdfFieldSliceLawTests {
         var frame = Frame(half: new Vector3(value: 0.25f));
         var completions = 0;
         // Past one reference frame's share of evaluations: a chunk's lattice with gradients is a whole share
-        // (SdfMeshPathBake.FrameTaps), so the slice's two chunks sample over several frames.
+        // (SdfMeshPathBake.LatticeTaps), so the slice's two chunks sample over several frames.
         var slice = new SdfFieldSlice(axis: SdfAxis.Y, bands: 0.05f, centre: Vector2.Zero, completed: _ => completions++, half: 1.2f, offset: 0.1f, resolution: 512);
 
         _ = dresser.Dress(frame: frame);
         Assert.True(condition: bake.Probe(slice: slice));
-        Assert.True(condition: bake.TryTakeForFrame(batch: out var first, frame: 0));
+        Assert.True(condition: bake.TryTake(batch: out var first, field: bake.Program));
         // The slice's lattice first, every instance in its mask; the box's group waits.
         var lattice = first.Lattices[0];
 
@@ -159,7 +158,7 @@ public sealed class SdfFieldSliceLawTests {
         Assert.True(condition: lattice.Gradients);
         // An abandoned dispatch hands its lattice back, and the next frame takes it again.
         bake.Abandon(batch: first);
-        Assert.True(condition: bake.TryTakeForFrame(batch: out var again, frame: 1));
+        Assert.True(condition: bake.TryTake(batch: out var again, field: bake.Program));
         Assert.Equal(expected: lattice.Points, actual: again.Lattices[0].Points);
 
         var frames = Drive(bake: bake, dresser: dresser, done: () => (completions > 0), frame: frame, instances: Gauge, world: Far);
@@ -191,8 +190,7 @@ public sealed class SdfFieldSliceLawTests {
 
         _ = dresser.Dress(frame: Frame(half: new Vector3(value: 0.25f)));
         Assert.True(condition: bake.Probe(slice: slice));
-        Assert.True(condition: bake.TryTakeForFrame(batch: out var stale, frame: 0));
-        bake.Record(batch: stale);
+        Assert.True(condition: bake.TryTake(batch: out var stale, field: bake.Program));
         // The program changes while the lattice is in flight: its answer lands on nothing, and the slice samples anew.
         var next = Frame(half: new Vector3(value: 0.3f));
 

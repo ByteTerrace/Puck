@@ -13,6 +13,11 @@ public sealed partial class SdfMeshPathBake {
     /// before dressing it. A bake no residency observes for has none, and keeps its plan's order.</summary>
     public SdfMeshDemand Demand { get; init; } = new();
 
+    /// <summary>Gets or sets what the done line reports of the dispatches that answered the bake (the residency's
+    /// background GPU work, <see cref="SdfGpuWork.Describe"/>), or <see langword="null"/> for nothing. It only reports:
+    /// no mesh depends on it.</summary>
+    public Func<string>? DispatchReport { get; set; }
+
     // The latest dressed frame's dynamic transforms, which carry a dynamic group's demand box into world space.
     private IReadOnlyList<DynamicTransform> m_demandTransforms = [];
 
@@ -99,13 +104,13 @@ public sealed partial class SdfMeshPathBake {
     private readonly long[] m_kindSamples = new long[8];
     private static readonly string[] KindNames = ["refine", "slab", "fine", "crossing", "gradient", "crease", "material", "skin"];
 
-    // The frames that took lattices while a group still owed one, those that took none, the field evaluations their
-    // shares allowed, and what ended each frame's batch: its share, the dispatch's samples, the batch's lattices, or no
-    // group owing a lattice. The groups waiting on a dispatch, in flight and on the workers, summed over those frames.
-    private long m_bakeFrames;
-    private long m_idleFrames;
-    private long m_shareTaps;
-    private long m_stopShare;
+    // The takes made while a group still owed a lattice, those that took none, and what ended each take's batch: its
+    // evaluations, the dispatch's samples, the batch's lattices, or no group owing a lattice. The groups waiting on a
+    // dispatch, in flight and on the workers, summed over those takes; and the batches taken.
+    private long m_takes;
+    private long m_idleTakes;
+    private long m_batches;
+    private long m_stopTaps;
     private long m_stopSamples;
     private long m_stopBatch;
     private long m_stopDrained;
@@ -113,7 +118,7 @@ public sealed partial class SdfMeshPathBake {
     private long m_flyingGroups;
     private long m_workingGroups;
 
-    // How long the frame thread waited to take the bake's gate (PrepareFrame, TryTakeForFrame and Stage) since the bake
+    // How long the frame thread waited to take the bake's gate (PrepareFrame and TryTake) since the bake
     // started: the longest wait, their sum, and the waits past a millisecond. A worker that holds the gate through
     // array-sized work shows here as frame time.
     private long m_frameGateWaitMax;
@@ -150,18 +155,18 @@ public sealed partial class SdfMeshPathBake {
     private void ClearAccounts() {
         Array.Clear(array: m_stageTicks);
         Array.Clear(array: m_kindSamples);
-        m_bakeFrames = m_idleFrames = m_shareTaps = m_stopShare = m_stopSamples = m_stopBatch = m_stopDrained = 0;
+        m_takes = m_idleTakes = m_batches = m_stopTaps = m_stopSamples = m_stopBatch = m_stopDrained = 0;
         m_waitingGroups = m_flyingGroups = m_workingGroups = 0;
         m_frameGateWaitMax = m_frameGateWaitTotal = m_frameGateWaitsSlow = 0;
     }
     // The accounts as done-line fields: each stage's thread seconds, then the frames' use of their shares.
     private string DescribeAccounts() {
         var stages = string.Join(separator: ",", values: Enum.GetValues<BakeStage>().Select(selector: stage => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{stage.ToString().ToLowerInvariant()}:{(Interlocked.Read(location: ref m_stageTicks[((int)stage)]) / ((double)Stopwatch.Frequency)):0.0}")));
-        var frames = Math.Max(val1: 1L, val2: m_bakeFrames);
+        var takes = Math.Max(val1: 1L, val2: m_takes);
 
         var kinds = string.Join(separator: ",", values: Enumerable.Range(start: 0, count: KindNames.Length).Select(selector: kind => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{KindNames[kind]}:{m_kindSamples[kind]}")));
 
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" kinds=[{kinds}] cpu=[{stages}] frames={m_bakeFrames} idle={m_idleFrames} share-use={((m_shareTaps > 0) ? (m_taps / ((double)m_shareTaps)) : 0d):0.00} stop=[share:{m_stopShare},samples:{m_stopSamples},batch:{m_stopBatch},drained:{m_stopDrained}] per-frame=[waiting:{(m_waitingGroups / ((double)frames)):0.0},flying:{(m_flyingGroups / ((double)frames)):0.0},working:{(m_workingGroups / ((double)frames)):0.0}] frame-gate=[max:{((m_frameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((m_frameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{m_frameGateWaitsSlow}]");
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" kinds=[{kinds}] cpu=[{stages}] batches={m_batches} takes={m_takes} idle={m_idleTakes} stop=[taps:{m_stopTaps},samples:{m_stopSamples},batch:{m_stopBatch},drained:{m_stopDrained}] per-take=[waiting:{(m_waitingGroups / ((double)takes)):0.0},flying:{(m_flyingGroups / ((double)takes)):0.0},working:{(m_workingGroups / ((double)takes)):0.0}]{DispatchReport?.Invoke()} frame-gate=[max:{((m_frameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((m_frameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{m_frameGateWaitsSlow}]");
     }
     // Measures every group still owing a mesh by its demand box at the demand points; with none, the priorities stand as
     // they were and the plan's order decides. It runs on the frame's thread with the gate open: the frame's thread alone
@@ -230,6 +235,14 @@ public sealed partial class SdfMeshPathBake {
         Enqueue(group: group, urgent: false, work: work);
         return true;
     }
+    // Runs work on the bake's pool ahead of every queued stage, in the order it came, as a lattice's answer runs: a
+    // completed dispatch's samples are read and decoded there, off the frame's thread.
+    internal static void RunFirst(Action work) {
+        lock (WorkGate) {
+            AnswerQueue.Enqueue(item: _ => work());
+            StartWorkers();
+        }
+    }
     // Queues work for which the group's job count is already taken (Group.QueueWork). A stage that throws finishes its
     // group with no new mesh (Fail), so its reservation and workspace are released and the bake still settles. An
     // urgent answer runs even once its group retires, since it owns its decoded samples and frees them.
@@ -293,7 +306,6 @@ public sealed partial class SdfMeshPathBake {
                 group.Retired = true;
                 group.InFlight = false;
             }
-            m_inputTransport?.Dispose(); m_inputTransport = null;
         }
         lock (WorkGate) { _ = WorkQueue.RemoveAll(match: item => { if (!item.Group.Retired) { return false; } item.Group.EndWork(); return true; }); }
     }

@@ -135,21 +135,20 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
 ## Groups, poses and materials
 
 The dispatch's fixed `MeshBakeMaxSamples` budget counts sampled values, not
-the saved pose rows appended to its input point table. That table grows through
-its existing `GpuRegion`, retires the old buffers and refreshes World bindings.
+the saved pose rows appended to its input point table. Each slot of the
+background GPU work holds its batch's point table, a host-visible buffer the
+kernel reads in place (`SdfMeshBakeGpuWork`), grown in 4 MiB granules once the
+slot's last job is released (`SdfGpuWork.Granule`), and bound through the slot's
+own World set at the bake's point member, where the tables' World sets bind the
+unused-member buffer (`SdfWorldTables.WriteBackgroundWorldSet`).
 `SdfMeshBakeBatch.InputRows` is the highest input prefix actually read: explicit
 points retain their sample offsets; saved poses still begin after all samples.
-A grid-only batch without poses needs no input rows. Do not allocate or upload
-its sample-count holes. `SdfMeshBakeInputTransport` lazily owns the reusable CPU
-prefix; the device point region starts with one bound float4 and grows on demand.
-Neither side reserves `MeshBakeMaxSamples` rows merely because that is the sampled
-output budget. Interior holes before explicit points or poses remain part of the
-current kernel layout. Preserve their addresses when changing storage.
-The holes are never read, so the region uploads only the runs the batch wrote
-(`SdfMeshBakeBatch.WritePoints` fills `SdfMeshBakeInput.Runs`, which
-`GpuRegion.WriteRuns` copies and owes without comparing): a batch's points are
-new every frame, and comparing a 2 M-row table against the last frame's costs
-about a fifth of the frame thread during a cold bake.
+A grid-only batch without poses needs no input rows. Do not allocate or write
+its sample-count holes; nothing reserves `MeshBakeMaxSamples` rows merely
+because that is the sampled output budget. Interior holes before explicit
+points or poses remain part of the current kernel layout. Preserve their
+addresses when changing storage. The holes are never read, so a slot writes only
+the runs the batch names (`SdfMeshBakeBatch.PointRuns`), comparing nothing.
 Charging poses against the sample limit can strand the first pending lattice
 forever: a nearly cubic lattice plus a sparse pose span no longer fits, so the
 scheduler takes no work and every group behind it waits. Cold bakes expose this;
@@ -181,7 +180,7 @@ laws exercise that boundary.
   past a pixel ranks by the pixels a metre covers at the box, nearest first
   whatever its size; one under a pixel ranks after. Ranking by projected size
   instead let far terrain and shells outrank the lobby's small parts, and the
-  occupied area landed no sooner than in plan order. `TryTakeForFrame` takes
+  occupied area landed no sooner than in plan order. `TryTake` takes
   lattices, the work queue (`Schedule`) runs store loads, lattice answers and
   every CPU stage of the bake, and `SdfWorldTables.WriteOwedMeshes`
   writes owed mesh words in that order, the plan's or the list's order among
@@ -197,14 +196,17 @@ laws exercise that boundary.
   order, then the stages by group priority. A pool per residency oversubscribes
   the processors three times over on the debug world, and workers below normal
   priority lose them to the irradiance trace and the machines, more than doubling a
-  cold bake. The frame thread decodes a batch's readback into each group's
-  answer buffers, the one pass the copy of it took, and does nothing else with
-  it. Only the groups the process memory account admits hold a final lattice
+  cold bake. A completed batch's readback is copied and decoded into each
+  group's answer buffers on the pool, ahead of every queued stage
+  (`SdfMeshPathBake.RunFirst`, from `SdfMeshBakeGpuWork.Complete`), and its slot
+  is released as soon as the copy is taken, so the frame thread reads no
+  samples. Only the groups the process memory account admits hold a final lattice
   (admitted at its first slab, whose answer allocates the lattice's values), by
   each group's own peak (`PeakOf`); the admission rules are in
   [data and memory](../../dotnet-performance/references/data-and-memory.md#owned-storage-and-byte-admission).
-  Unadmitted groups keep refining their small coarse lattices. A first slab a
-  frame hands back unanswered (a graph rebuilding) keeps its admission;
+  Unadmitted groups keep refining their small coarse lattices. A first slab
+  handed back unanswered (`Abandon`: a job whose recording failed or whose
+  service was disposed) keeps its admission;
   counting its retry as a new one let returned first slabs fill every admission
   and stall the bake. A stage that throws finishes its group with no new mesh
   (`[sdf.mesh-bake] ... failed`, `Fail`), releasing its reservation and
@@ -213,12 +215,12 @@ laws exercise that boundary.
   pool drops its queued work, an answer arriving for it is dropped, and its
   workspace is freed when its running job ends; `Retire` never waits.
 - **Nothing array-sized runs under the bake's gate.** The frame thread takes
-  `m_gate` in `PrepareFrame`, `TryTakeForFrame` and `Stage`, so a worker fills a
+  `m_gate` in `PrepareFrame` and `TryTake`, so a worker fills a
   group's lattice, points and answers on its own job, which only that group's
   one running job touches, and takes the gate only to publish the group's next
   request or stage. The done line's `frame-gate=[max,total,over-1ms]` reads the
   frame thread's waits on the gate.
-- **A dispatch fills its samples.** A frame takes lattices by priority until
+- **A dispatch fills its samples.** A take takes lattices by priority until
   `MeshBakeMaxSamples`, passing over one too large for what is left and taking
   smaller ones behind it; stopping at the first that did not fit left the debug
   world's dispatches under half full.
@@ -543,7 +545,7 @@ laws exercise that boundary.
   layout that moves placed meshes when one lands (sections by attribute) made
   every landing rewrite the whole region. Newly placed meshes land within
   `SdfWorldTables.MeshLandingWords` for each whole 60 Hz frame a frame spans
-  (`SdfMeshPathBake.FrameShares`, as the bake's evaluations do; at a flat 2 MB a
+  (`SdfMeshPathBake.FrameShares`; at a flat 2 MB a
   frame, a cold bake's 1.7 GB region at 5 to 7 frames a second lands a minute
   after the bake finishes), their draws waiting out of the
   staged records until they do, and a grown region takes the words it held. A
@@ -592,20 +594,38 @@ laws exercise that boundary.
   (`WorldStateSettlement.SettleResponses`), so the debug world's raised blinds
   never reach the first plan; look for another tick-one change (a rule, a deal)
   when the line comes back.
-- **The bake keeps the frame's budget.** `SdfMeshPathBake.FrameTaps` (a
-  million) bounds the field evaluations a 60 Hz frame's bake dispatch makes (a
-  gradient sample counts five), sized to about a millisecond of GPU time, and a longer frame takes a share for each whole 60 Hz frame it spans, up to
-  eight (`FrameBudget`); every lattice is chunked to fit one share (final
-  lattices in slabs, material and gradient, fine and material points in
-  chunks). One dispatch holds up to `SdfWorldPackage.MeshBakeBatch` lattices
-  (240: their rows fill the bake pass block to the portable 16 KiB uniform
-  limit) and `MeshBakeMaxSamples` (2^21, 32,768 groups of 64, under the 65,535 a dispatch axis allows) samples; the kernel finds a sample's
-  lattice by binary search over their first samples. A dispatch sized to the
-  frame's CPU rather than the GPU leaves the GPU idle and hundreds of groups a
-  frame waiting for one; `world.gpu-timing` reads the bake pass's cost. Gradients
-  are measured only at the samples
-  `SdfDualContouring` reads a normal at (`SdfSampledLattice.GradientPoints`): a
-  cell's normal reads its own eight corners, so no other sample needs one.
+- **The bake is background GPU work under a budget.** The residency's tables
+  own one `SdfGpuWork`: a ring of `SdfGpuWork.SlotCount` slots, each a command
+  buffer, a submission fence, a readback and two timestamps, which its bake
+  client (`SdfMeshBakeGpuWork`) fills with one batch a slot (`TryTake`: up to
+  `SdfWorldPackage.MeshBakeBatch` lattices, 240, whose rows fill the bake pass
+  block to the portable 16 KiB uniform limit; `MeshBakeMaxSamples` samples,
+  2^21, 32,768 groups of 64, under the 65,535 a dispatch axis allows; and
+  `SdfMeshPathBake.BatchTaps` field evaluations, a gradient sample counting
+  five). A batch is the mask dispatch, the sampler dispatch and the samples'
+  copy back, submitted on its slot's fence; the kernel finds a sample's lattice
+  by binary search over their first samples. `Pump` runs on the frame thread
+  (the GPU layer records and submits on that thread alone) at the top of each
+  frame, before any residency prepares, and after each upload: it hands every
+  job whose fence signaled to its client, which copies and decodes the samples
+  on the bake's pool and releases the slot (`SdfGpuWorkReadback.Release`), and
+  refills every released slot while the budget holds. The budget is
+  `SdfGpuWork.GpuShare` of the GPU's time, charged by each job's own
+  timestamps (a client's estimate, `NanosecondsPerTap`, until they land or on a
+  queue without them), banking at most a short spell while idle. A job binds the
+  latest upload's World set only while nothing it binds has moved since that
+  upload and the tables' uploaded program is the bake's
+  (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`): between a pack
+  and its upload the slot's buffers are owed contents not yet sent. Every
+  lattice is chunked to fit `SdfMeshPathBake.LatticeTaps` (final lattices in
+  slabs, material and gradient, fine and material points in chunks). The done
+  line's `gpu-work=[…]` reads jobs, their measured GPU time, the wall time some
+  job was in flight and the GPU's share of it, the most in flight, the pumps,
+  the pumps the World set could not be bound in and those the budget held;
+  `world.gpu-timing` does not see the work. Gradients are measured only at the
+  samples `SdfDualContouring` reads a normal at
+  (`SdfSampledLattice.GradientPoints`): a cell's normal reads its own eight
+  corners, so no other sample needs one.
 - **A mesh never depends on how its lattices are cut.** A slab keeps its final
   lattice's origin and names its first plane in the lattice's mode word, so its
   samples lie at `origin + (x, y, slab + z) * cell` exactly as the whole
@@ -621,19 +641,15 @@ laws exercise that boundary.
 ## The library and the store
 
 - **A batch answers the bake that took it.** `SdfMeshBakeBatch.Bake` names it,
-  and `SdfWorldPasses.BeginFrame` polls every bake pass's readbacks each frame,
-  so a view that leaves the frame or follows another residency never strands a
-  bake.
-  `SdfWorldTables.MeshBakeSamples` owns one result destination per residency;
-  views borrow it through the graph's existing mask → bake → surface/readback
-  ports. The batch claim selects one view's dispatch. Its submission copies the
-  result into that recorder's existing readback slot before another queued
-  submission can overwrite it. Readbacks and their fences remain view-local.
-  Package borrowing acquires the exact backing owner before recording; when a
-  view follows another residency, graph ports and readbacks switch together and
-  the old hold retires through the graph's submission/publication retirement.
-  Destination bytes belong once to Tables, never each borrowing node's owned
-  gauge; recorder readback bytes still belong to their actual recorder.
+  and the slot that dispatched it holds it until its readback is released, so a
+  view that leaves the frame or follows another residency never strands a bake:
+  no view dispatches or reads back a batch. A slot is reused only after its
+  fence signaled and its client released the readback (`SdfGpuWork`, the one
+  owner of its slots), and a slot's inputs and outputs (its pass block, point
+  table, instance masks and samples) are written only while it is free. A batch
+  abandoned (a recording that failed, a disposed service) returns its lattices
+  to their groups, which dispatch them again, and counts its samples as
+  `discarded`; `Answered` settles a batch once.
 - **Groups are keyed by geometry** (`SdfMeshGeometryBuilder`: instructions with
   side-table values for offsets, materials by place, a dynamic bound's radius
   alone, other slots by their rounded pose in the group's frame, lane-erosion
@@ -693,8 +709,8 @@ laws exercise that boundary.
   for byte as it was on DXIL and SPIR-V; an edit to the field, its generated
   vocabulary, the encoding or the bake kernels moves it. The code part is read from
   the build's assemblies: positive production entry methods in `SdfMeshBakeClosure.BakeRoots` include
-  the bake's constructor/defaults, `PrepareFrame`, planning, exact point-table preparation, the standalone
-  `SdfMeshBakeReadback.Poll` sample handoff, `SdfMeshBakeBlock.Write`, persisted-product normalization
+  the bake's constructor/defaults, `PrepareFrame`, planning, batch taking (`TryTake`) and the point table's
+  layout (`SdfMeshBakeBatch.PointRuns`), the sample answer (`Complete`), `SdfMeshBakeBlock.Write`, persisted-product normalization
   (`SdfMesh.NativeCopy`) and the store codec. Their graph reaches group/geometry planning, lattice refinement,
   contours, material cuts, skin and levels. It follows every call, delegate, override of a type the bake constructs
   and implementation of an abstract member it calls across the `Puck` assemblies `Puck.SdfVm`
@@ -709,9 +725,9 @@ laws exercise that boundary.
   constructs counts its whole layout, since its synthesized equality and
   printing read every field. `SdfMeshBakeClosureLawTests` pins both ways. It
   stops at `SdfMeshLibrary` and `SdfMeshStore`,
-  which hold meshes, at `SdfMeshBakeInputTransport`, whose allocation and lifetime
-  carry already prepared rows, and at `GpuRegion` and `GpuUploadRuns`, which carry the point
-  table's words to the device rather than choose them, and at the runtime. An edit to `Puck.Maths` code the
+  which hold meshes, and at `GpuRegion` and `GpuUploadRuns`, and at the runtime. The
+  background GPU work (`SdfGpuWork`, `SdfMeshBakeGpuWork`), which carries a batch's rows to the device and its samples
+  back rather than choosing them, is outside it: no root reaches it. An edit to `Puck.Maths` code the
   contour calls re-bakes. The standalone `SdfMeshDresser`, `SdfMeshHistory`, `SdfWorldPassRecorder`, `SdfWorldTables`,
   `SdfFrameBlock` and `SdfMeshRegion` are outside the CPU closure, including type-granular applied updates;
   `SdfMeshBakeBlock` and the shared `ShaderParameterWriter` remain inside. Comments and checkout paths do not

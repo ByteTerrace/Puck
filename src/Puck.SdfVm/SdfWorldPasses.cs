@@ -10,7 +10,7 @@ namespace Puck.SdfVm;
 public readonly record struct SdfWorldView(SdfWorldResidency Residency, int View);
 /// <summary>
 /// The <c>sdf.world</c> package's recorders: each instance of the package is a view of a residency's frame, run as the
-/// package's fragment (<see cref="SdfWorldPackage.NativeFragment"/>) — the mesh bake while one is pending, the shadow
+/// package's fragment (<see cref="SdfWorldPackage.NativeFragment"/>) — the shadow
 /// cascades, the mesh pass, the surface pass, shading, the sky and the composite into the view's color — every
 /// pass recorded into its instance's submission with the barriers the planner planned, over scratch the instance
 /// allocates once, counted by the residency (<see cref="SdfWorldResidency.CountsAt"/>). The host names the residency and
@@ -34,9 +34,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     private readonly Lock m_gate = new();
     // Every residency an entry resolves or a recorder holds, with its holds.
     private readonly Dictionary<SdfWorldResidency, int> m_residencies = new(comparer: ReferenceEqualityComparer.Instance);
-    // Every bake pass's recorder, whose readbacks each frame polls whether or not the pass records again: a view that
-    // leaves the frame, or follows another residency, still answers the bake that dispatched its batch.
-    private readonly HashSet<SdfWorldPassRecorder> m_bakeReaders = new(comparer: ReferenceEqualityComparer.Instance);
     // The frame the package started last, which each residency's frame is started for once.
     private long m_frame = 1;
 
@@ -158,28 +155,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
             throw;
         }
-    }
-    /// <inheritdoc/>
-    public bool OwnsBuffer(string? part) => (part == SdfWorldPackage.Parts.Bake);
-
-    /// <inheritdoc/>
-    public RenderGraphBorrowedBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built,
-        ShaderPipelineResource resource, IGpuBuffer? previous) {
-        if (context.Part != SdfWorldPackage.Parts.Bake) { return null; }
-        // BeginFrame already resolved every installed entry after capturing its host. Acquiring storage must not
-        // resolve or prepare the world again, and must use the same selected view the recorders will follow.
-        var selected = ((previous is null) ? ((Built)built!).View : m_entries.GetValueOrDefault(key: context.Instance)?.View);
-        if (selected is not { } view) { return new(previous!); }
-        var residency = view.Residency;
-        var buffer = residency.Tables!.MeshBakeSamples;
-        if (ReferenceEquals(buffer, previous)) { return new(buffer); }
-        residency.Retain();
-        return new(buffer, new BorrowedResidency(residency));
-    }
-
-    // Independent of a recorder's current followed view: the graph retires this hold after the final buffer reader.
-    private sealed class BorrowedResidency(SdfWorldResidency residency) : IDisposable {
-        public void Dispose() => residency.Release();
     }
     /// <inheritdoc/>
     public IShaderPipelineStorageCounter? CounterOf(string instance) => Refresh(instance: instance);
@@ -420,10 +395,10 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             }
         }
 
-        lock (m_gate) {
-            foreach (var reader in m_bakeReaders) {
-                reader.PollBake();
-            }
+        // Each residency's background GPU work answers what completed and submits more against its latest upload, before
+        // any residency prepares a frame that moves what that upload's World set binds.
+        foreach (var residency in m_residencies.Keys) {
+            residency.PumpGpuWork();
         }
 
         m_frame++;
@@ -455,12 +430,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         if (residency.PackageFrame != m_frame) {
             residency.PackageFrame = m_frame;
             residency.BeginFrame();
-        }
-    }
-    // Adds or removes a bake pass's recorder from the readers each frame polls.
-    internal void ReadBakes(SdfWorldPassRecorder reader, bool reads) {
-        lock (m_gate) {
-            _ = (reads ? m_bakeReaders.Add(item: reader) : m_bakeReaders.Remove(item: reader));
         }
     }
     // Holds a residency the package tells of a device loss.

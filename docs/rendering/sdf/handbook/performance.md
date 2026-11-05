@@ -86,8 +86,8 @@ is always which one you're in—because the fix for each is different.
                    More triangles drawn, three cascades a frame.
                    Fix lives in the bake's resolution and the cascades.
 
-  bake-bound    ── the mask and bake passes are the wall, while a bake is
-                   pending. FrameBudget bounds them; a settled scene has none.
+  bake-bound    ── none in the frame: the bake runs as background GPU work,
+                   at most SdfGpuWork.GpuShare of the GPU; a settled scene has none.
 
   pace-bound    ── none. The GPU is idle; the frame rate is the
                    present cadence, not the render cost.
