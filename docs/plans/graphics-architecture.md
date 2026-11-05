@@ -645,7 +645,7 @@ frame's geometry; moving occluders carry the readback delay. Camera changes
 restore demand immediately. Settled captures and non-occlusion cull modes bypass
 the delayed test. Evidence belongs to the implementation commit.
 
-**A2 implemented; integration checks pending.** `DirectXGpuRecorder.TransitionImageLayout` uses the caller's
+**A2 implemented.** `DirectXGpuRecorder.TransitionImageLayout` uses the caller's
 `oldLayout` as the before state (the callers already pass it) and the
 tracking table is removed with the buffer-decay assumption. Enhanced buffer
 access barriers order work across lists; fixed-state upload/readback heaps use
@@ -655,9 +655,14 @@ earlier accesses within the same execution. Thus
 lists into one `ExecuteCommandLists` and one signal, as Vulkan's submitter
 does. Invariant: a transition's before state is the one the submission order
 implies; enforced by taking it from the caller alone (no global table to
-race). Check: GPU-based validation clean at every standard stop;
-`ExecuteCommandLists` and signal counts per frame; the native submission
-time at the spawn against the 2 ms reading, in a quiet window.
+race). The guarantee stops at the caller's access declarations: the backend
+does not repair a wrong declaration by guessing from another recording.
+Basic API validation, D3D12/Vulkan windowed runs, submission counts and the
+headless integration-counter comparison passed; evidence is in the implementation
+and integration-verification commits. Full GPU-based validation at the standard
+stops remains an explicit qualification item: the attempted run did not complete.
+The submission comparison isolates batching with an unbatched control; it reduces
+native executes and signals without claiming a reduction in shader work.
 
 ### Owned questions
 

@@ -377,6 +377,15 @@ internal sealed class UploadModelGpu :
 
         return buffer;
     }
+    private nint NextHandle() => ((nint)Interlocked.Increment(location: ref m_nextHandle));
+    private MemoryBuffer Single(bool hostVisible, ulong sizeBytes, string? part = null) => m_buffers.Values.Single(predicate: buffer =>
+        (!buffer.Uniform &&
+        (buffer.HostVisible == hostVisible) &&
+        (buffer.SizeBytes == sizeBytes) && ((part is null) || (buffer.Part == part)))
+    );
+
+    void IGpuQueueSubmitter.AddExternalWait(GpuExternalWait wait) => m_inner.Services.QueueSubmitter.AddExternalWait(wait: wait);
+    IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() => m_inner.Services.QueueSubmitter.CreateSubmissionFence();
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) {
         m_inner.Services.QueueSubmitter.Submit(commandBufferHandles: commandBufferHandles);
     }
