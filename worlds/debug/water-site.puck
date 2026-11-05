@@ -4,6 +4,22 @@
 // The pool is a square basin sunk into the lawn at the end of the stream, west of the spawn and 8 m past the end of the
 // lawn's west path. The floor is one slab 0.4 m thick, so the basin reaches 2.4 m under the lawn from the opening.
 
+import "valley-form"
+
+// The rest of the water stands on the north-west wall (compass 315, foot 205 m), which the spawn faces left of the hall.
+// Its lake fills a bowl cut into the rim's upper level, its glacier lies on the face just below the crest, and its falls
+// run down the face from the lake's outlet at the crest to the floor, where the stream begins. The north-west sector's
+// own face gives the heights: `sectorFace` is how far out the face stands at a height.
+let wallSector = filter(valleySectors, s => s.name == "north-west")[0]
+let lakeSite = { lateral: 0, radial: 440, surface: 324.5, radius: 44 }
+// The bowls cut into the valley's masses, per sector (valley.puck).
+let valleyBasins = [
+  { sector: "north-west", label: "lake-basin", lateral: 0, radial: lakeSite.radial, y: 336, radii [46, 17, 46] }
+]
+// The falls' profile from the outlet to the floor, [r, y] in the sector frame: the face at each height.
+let fallsHeights = [323, 300, 275, 250, 225, 200, 175, 150, 125, 100, 75, 50, 30, 14, 3]
+let fallsProfile = map(fallsHeights, y => [sectorFace(wallSector, y), y])
+
 // The opening in the floor, [minX, minZ, maxX, maxZ] in world X/Z, and the basin's floor under it.
 let poolHole = [-66, -22, -46, -2]
 let poolFloor = -2.4

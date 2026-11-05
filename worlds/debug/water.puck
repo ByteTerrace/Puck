@@ -12,9 +12,10 @@
 // glacier` reads the clock and `world.state.cell.set glacier $value 0.5` sets it, `world.fields` prints each row's total
 // (the conserved water), and `world.reset` returns the cycle to its start.
 import "../standard/hydrology"
-// The gauges the pool and the visuals read.
+// The gauges the pool reads and the scenery binds.
 exports {
-  reads [poolLevel, glacier, lakeLevel, fallsFlow, riverDepth, aquiferFill]
+  bindings [glacier, lakeLevel, fallsFlow, riverDepth, aquiferFill]
+  reads [poolLevel]
 }
 
 // The chain's numbers. A cell is a metre; the glacier holds 20 units of water, the aquifer ten cells at bed 0 under a river
