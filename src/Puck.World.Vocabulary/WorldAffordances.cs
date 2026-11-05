@@ -43,6 +43,15 @@ public static class WorldAffordances {
     /// structural half, never the channel half) while this is <see langword="false"/>.</summary>
     public static bool Installed => (Registry is not null);
 
+    /// <summary>The identities of the current registration inputs. Native registrations stand for a registry's
+    /// lifetime; authored commands are replaced as a set. Derived registration decisions key both identities.</summary>
+    public static (CommandRegistry? Registry, AuthoredCommandSet? Commands) RegistrationIdentity {
+        get {
+            var registry = Registry;
+            return (registry, registry?.AuthoredCommands);
+        }
+    }
+
     private static WorldSeatModeFamily? FindSeatMode(IReadOnlyList<WorldSeatModeFamily> seatModes, string family) {
         foreach (var mode in (seatModes ?? [])) {
             if (string.Equals(

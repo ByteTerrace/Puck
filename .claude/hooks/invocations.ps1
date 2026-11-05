@@ -649,7 +649,23 @@ function Get-PolicyPwshInvocations {
             Resolve-PolicyInvocation $argv ([bool[]]@($argv | ForEach-Object { $false })) @{} $here $source 'powershell' $Depth
             continue
         }
-        $words = @($elements | ForEach-Object { ConvertFrom-PolicyPwshElement $_ })
+        $words = [Collections.Generic.List[object]]::new()
+        for ($index = 0; $index -lt $elements.Count; $index++) {
+            $element = $elements[$index]
+            $converted = @(ConvertFrom-PolicyPwshElement $element)
+            # After --, PowerShell splits a native -name:value into adjacent AST elements (-name: and value),
+            # but passes it as one argument. Preserve that boundary before unwrapping a lease's child command.
+            if ($index -gt 0 -and $converted.Count -eq 1 -and $words.Count -gt 0 -and
+                $elements[$index - 1] -is [Management.Automation.Language.StringConstantExpressionAst] -and
+                $elements[$index - 1].Extent.Text -match '^--?[^:\s]+:$' -and
+                $elements[$index - 1].Extent.EndOffset -eq $element.Extent.StartOffset) {
+                $last = $words[$words.Count - 1]
+                $last.Value += $converted[0].Value
+                $last.Dynamic = $last.Dynamic -or $converted[0].Dynamic
+            } else {
+                foreach ($word in $converted) { $words.Add($word) }
+            }
+        }
         $argv = [string[]]@($words | ForEach-Object Value)
         $flags = [bool[]]@($words | ForEach-Object Dynamic)
         Resolve-PolicyInvocation $argv $flags @{} $Cwd $source 'powershell' $Depth

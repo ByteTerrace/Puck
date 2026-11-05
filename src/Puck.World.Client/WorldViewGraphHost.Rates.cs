@@ -12,6 +12,33 @@ namespace Puck.World.Client;
 // times the consumer's share of the display, measured before this frame prunes small glass. Each rated producer's
 // achieved intervals are read back from the schedule its footprints were scheduled in (MeasureRatedRenders).
 public sealed partial class WorldViewGraphHost {
+    private readonly Dictionary<(string Consumer, string Producer), (PortalSight Sight, double Width, double Height, int Glass)> m_portalCoverage = [];
+
+    // A completion's cameras and placements stand while it decides demand. The stack-scoped frame clears the
+    // scratch cache on construction and is the only path to its readings; nothing is retained across completions.
+    private readonly ref struct FootprintFrame {
+        private readonly WorldViewGraphHost m_host;
+        public readonly SdfUpdateRates Rates;
+
+        public FootprintFrame(WorldViewGraphHost host) {
+            m_host = host;
+            Rates = host.FrameRates;
+            host.m_portalCoverage.Clear();
+        }
+
+        public PortalSight PortalCoverage(string consumer, string producer, out (double Width, double Height) coverage, out int glass) {
+            var key = (consumer, producer);
+            if (!m_host.m_portalCoverage.TryGetValue(key, out var reading)) {
+                var sight = m_host.ReadPortalCoverage(consumer, producer, out coverage, out glass);
+                reading = (sight, coverage.Width, coverage.Height, glass);
+                m_host.m_portalCoverage.Add(key, reading);
+            }
+            coverage = (reading.Width, reading.Height);
+            glass = reading.Glass;
+            return reading.Sight;
+        }
+    }
+
     // Each instance's extent as a share of the display's. BeginFrame measures the previous frame for pose rates;
     // CompleteFootprints measures current placements for view and screen demand.
     private readonly Dictionary<string, (double Width, double Height)> m_displayShares = new(comparer: StringComparer.Ordinal);
@@ -22,10 +49,8 @@ public sealed partial class WorldViewGraphHost {
     // Each producer a rated footprint showed: what its footprints asked this frame and its interval since it last
     // rendered.
     private readonly Dictionary<string, RatedProducer> m_ratedProducers = new(comparer: StringComparer.Ordinal);
-    // The boot world's screen the latest seen portal's glass is, or -1 (PortalCoverage).
-    private int m_portalGlass = -1;
     // The readings PublishRateReadings gathers a lever's into.
-    private readonly List<SdfUpdateRateReadings.Reading> m_rateReadings = [];
+    private readonly SdfUpdateRateReadings.Buffer m_rateReadings = new();
     // The frame of the latest schedule the rated producers were measured against, so a frame the runtime did not
     // schedule is not read twice.
     private long m_ratedMeasured = -1;
@@ -84,11 +109,11 @@ public sealed partial class WorldViewGraphHost {
 
     // Measures each instance's shares of the display's extent from the current footprint list: a root's
     // share is its own, and a producer's is the largest over its consumers of the consumer's share times the footprint's.
-    private void MeasureDisplayShares() {
+    private void MeasureDisplayShares(SdfUpdateRates rates) {
         m_displayShares.Clear();
         m_sourceRefresh.Clear();
 
-        if ((FrameRates & (SdfUpdateRates.Bodies | SdfUpdateRates.Views | SdfUpdateRates.Screens)) == 0) {
+        if ((rates & (SdfUpdateRates.Bodies | SdfUpdateRates.Views | SdfUpdateRates.Screens)) == 0) {
             return;
         }
 
@@ -131,9 +156,9 @@ public sealed partial class WorldViewGraphHost {
         : m_displayShares.GetValueOrDefault(key: instance).Height);
     // The refresh a footprint showing a nested view asks for: every frame unless the views lever is on and the view covers
     // few enough pixels of the display (SdfUpdateRateTiers.ViewHertz).
-    private RenderGraphRefresh ViewRefresh(string consumer, string producer, double coverage, int glass) {
+    private RenderGraphRefresh ViewRefresh(string consumer, string producer, double coverage, int glass, SdfUpdateRates rates) {
         if (
-            ((FrameRates & SdfUpdateRates.Views) == 0) ||
+            ((rates & SdfUpdateRates.Views) == 0) ||
             (RenderSettings is not { } settings) ||
             !m_displayShares.TryGetValue(key: consumer, value: out var share)
         ) {
@@ -153,9 +178,9 @@ public sealed partial class WorldViewGraphHost {
     // and holds its latest image: the views lever is on for the frame (FrameRates), the host is paced to a display, the
     // view has rendered before, and the glass covers no more than SdfUpdateRateTiers.ViewHeldPixels. A held glass is
     // counted (SdfUpdateRateCounts.ViewsHeld) and listed by world.rates.
-    private bool HoldsGlass(string producer, double pixels) {
+    private bool HoldsGlass(string producer, double pixels, SdfUpdateRates rates) {
         if (
-            ((FrameRates & SdfUpdateRates.Views) == 0) ||
+            ((rates & SdfUpdateRates.Views) == 0) ||
             !m_presentationRate.IsPaced ||
             !(pixels <= SdfUpdateRateTiers.ViewHeldPixels) ||
             !m_portalsRendered.Contains(item: producer)
@@ -248,13 +273,13 @@ public sealed partial class WorldViewGraphHost {
     // sight counting as no size at all (SdfUpdateRateTiers.ScreenHertz). A consumer rendering another world (a session
     // through a window) shows it no larger than its own image; a consumer whose camera is not known yet and a source no
     // screen of the boot world shows ask every frame. A source's image size is the crop its boot-world screen shows.
-    private RenderGraphRefresh ScreenRefresh(in RenderGraphFootprint footprint) {
+    private RenderGraphRefresh ScreenRefresh(in RenderGraphFootprint footprint, SdfUpdateRates rates) {
         // A sky environment's reads take their views' refresh once every view's is known (RateEnvironmentReads).
         if (m_environmentResidencies.ContainsKey(key: footprint.Consumer)) {
             return RenderGraphRefresh.EveryFrame;
         }
 
-        var refresh = ScreenSight(footprint: in footprint);
+        var refresh = ScreenSight(footprint: in footprint, rates: rates);
 
         // A view the display reached no share of last frame (a seat's view no one occupies) demands nothing to rate by.
         if (!m_displayShares.ContainsKey(key: footprint.Consumer)) {
@@ -288,9 +313,9 @@ public sealed partial class WorldViewGraphHost {
         }
     }
     // The refresh a view's footprint of a source asks for by the screens it shows the source on.
-    private RenderGraphRefresh ScreenSight(in RenderGraphFootprint footprint) {
+    private RenderGraphRefresh ScreenSight(in RenderGraphFootprint footprint, SdfUpdateRates rates) {
         if (
-            ((FrameRates & SdfUpdateRates.Screens) == 0) ||
+            ((rates & SdfUpdateRates.Screens) == 0) ||
             (RenderSettings is not { } settings) ||
             (Screens is not { } screens) ||
             (ViewScenes is not { } scenes) ||
@@ -360,8 +385,8 @@ public sealed partial class WorldViewGraphHost {
                 }
             }
 
-            latest.Sort(comparison: static (left, right) => string.CompareOrdinal(strA: left.Name, strB: right.Name));
-            readings.Publish(lever: lever, readings: latest);
+            latest.Sort();
+            latest.PublishTo(readings: readings, lever: lever);
         }
     }
     /// <summary>Writes each screen's <see cref="SdfUpdateRateCode"/> for the frame this host's footprints were reset for:

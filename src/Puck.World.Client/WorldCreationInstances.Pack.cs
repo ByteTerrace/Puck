@@ -149,6 +149,7 @@ public sealed partial class WorldCreationInstances {
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;
+        var previousPoseBytes = 0L;
 
         for (var index = 0; (index < m_pool.Length); index++) {
             var rootSlot = (slotBase + RootSlotOffset(index: index));
@@ -264,6 +265,7 @@ public sealed partial class WorldCreationInstances {
                         length: previous.Length,
                         start: rootSlot
                     ).CopyTo(destination: previous);
+                    previousPoseBytes += ((long)previous.Length * System.Runtime.CompilerServices.Unsafe.SizeOf<DynamicTransform>());
                 }
 
                 if (holds) {
@@ -383,6 +385,8 @@ public sealed partial class WorldCreationInstances {
         }
 
         Rigid.Pack(transforms, client, (slotBase + ArticulatedSlotCount), deltaSeconds);
+        WorldCreationWork.ProcessWork.Add(kind: WorldCreationWork.PreviousPoseBytes, amount: previousPoseBytes);
+        WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Packs);
         EndRateCodes();
 
         // The list is replaced only when a run changed: the mesh dressing redraws and reuploads every draw record when it
