@@ -9,7 +9,8 @@ function quadraticPathSegments(paths, steps = 40) = flatMap(paths, path => map(
   i => { a: quadraticPathPoint(path, i / steps), b: quadraticPathPoint(path, (i + 1) / steps) }
 ))
 function pathPointDistanceSquared(x, z, point) = (x - point.x) * (x - point.x) + (z - point.z) * (z - point.z)
-function pathSegmentFraction(x, z, segment) = maximum(0, minimum(1,
+function pathSegmentFraction(x, z, segment) = maximum(0, minimum(
+  1,
   ((x - segment.a.x) * (segment.b.x - segment.a.x) + (z - segment.a.z) * (segment.b.z - segment.a.z)) / maximum(
     0.000000000001,
     pathPointDistanceSquared(segment.b.x, segment.b.z, segment.a)
@@ -17,9 +18,8 @@ function pathSegmentFraction(x, z, segment) = maximum(0, minimum(1,
 ))
 // A quadratic's maximum deviation from a chord over 1/steps is |a - 2b + c| / (4 steps^2).
 function quadraticPathChordError(path, steps = 40) = squareRoot(
-  (path.a[0] - 2 * path.b[0] + path.c[0]) * (path.a[0] - 2 * path.b[0] + path.c[0]) + (path.a[1] -
-    2 * path.b[1] +
-    path.c[1]) * (path.a[1] - 2 * path.b[1] + path.c[1])
+  (path.a[0] - 2 * path.b[0] + path.c[0]) * (path.a[0] - 2 * path.b[0] + path.c[0]) +
+    (path.a[1] - 2 * path.b[1] + path.c[1]) * (path.a[1] - 2 * path.b[1] + path.c[1])
 ) / (4 * steps * steps)
 
 // Precomputed bounds reject distant corridors and segments before evaluating their distance.
@@ -31,8 +31,10 @@ function quadraticPathCorridors(paths, steps = 16) = map(paths, path => {
   error: quadraticPathChordError(path, steps)
   segments: quadraticPathSegments([path], steps)
 })
-function pathBoundsClear(x, z, radius, bounds) = (x < bounds.minX - radius or x > bounds.maxX + radius or z <
-  bounds.minZ - radius or z > bounds.maxZ + radius)
+function pathBoundsClear(x, z, radius, bounds) = (x < bounds.minX - radius or
+  x > bounds.maxX + radius or
+  z < bounds.minZ - radius or
+  z > bounds.maxZ + radius)
 function pathSegmentProjectionDistanceSquared(x, z, segment, fraction) = pathPointDistanceSquared(x, z, {
   x: segment.a.x + fraction * (segment.b.x - segment.a.x)
   z: segment.a.z + fraction * (segment.b.z - segment.a.z)
@@ -53,6 +55,8 @@ function pathCorridorClear(x, z, radius, corridor) = (pathBoundsClear(x, z, radi
     true,
     (clear, segment) => clear and pathSegmentClear(x, z, radius + corridor.error, segment)
   ))
-function pathCorridorsClear(x, z, radius, corridors) = reduce(corridors, true,
+function pathCorridorsClear(x, z, radius, corridors) = reduce(
+  corridors,
+  true,
   (clear, corridor) => clear and pathCorridorClear(x, z, radius, corridor)
 )

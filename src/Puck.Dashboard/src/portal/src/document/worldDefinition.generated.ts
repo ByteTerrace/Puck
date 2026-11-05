@@ -9312,6 +9312,10 @@ export type WorldPrototype = {
          */
         radius?: number | null;
       } | null)[] | null;
+      /**
+       * Whether a placed copy of the creation may animate at the update-rate lever's reduced tiers (world.rates bodies: at least 30 or 15 updates a second) while it stands small on every view that may see it. Null or false = full rate wherever anything may show or read it; a copy nothing may show holds either way. A body-rooted creation takes the reduced tiers whatever this says.
+       */
+      reducedRateAtDistance?: boolean | null;
     } | null;
     /**
      * The engraved/embossed text runs the creation carries (null/empty = none). Each is a string laid onto a surface, expanded at emission into Glyph shapes — see TextRunDocument. Omitted from the wire when null, so a creation authored without this member serializes to unchanged bytes.
@@ -13361,6 +13365,10 @@ export type WorldViewDefaults = {
    */
   programs?: (WorldCameraProgram | null)[] | null;
   /**
+   * The ease into or out of the built-in seat ladder (the composition no authored layout selects), or null for the neutral WorldViewTransition defaults (a cut). An authored layout brings its own envelope.
+   */
+  builtinTransition?: WorldViewTransition | null;
+  /**
    * Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
   layouts?: (WorldViewLayout | null)[] | null;
@@ -13548,6 +13556,17 @@ export type WorldViewSlot = {
    * The views.graphs row name whose output fills this slot, or null for a seat or camera slot.
    */
   instance?: string | null;
+};
+
+export type WorldViewTransition = {
+  /**
+   * How long the ease takes, in seconds; 0 is a cut. Default 0.
+   */
+  seconds?: number;
+  /**
+   * The render scale (0, 1] applied to every slot mid-transition; 1 is no dip. Default 1.
+   */
+  renderScale?: number;
 };
 
 /**

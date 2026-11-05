@@ -22,6 +22,12 @@ namespace Puck.World;
 /// derived-face index space, and session binding are the boot instance's own presentation state, and a spawned
 /// instance carries neither a client nor a real machine host to bind them from.</remarks>
 internal sealed partial class WorldPlacementCommandModule(WorldServer server, WorldPopulation population, WorldScreenBinder binder, WorldInstanceHost instances, WorldSessionResolver resolver, IServerLink link, WorldDeferredVerbEchoes echoes) : ICommandModule {
+    private static readonly CommandForms WorldPlacementsForms = CommandForms.Of(verb: "world.placements", "[instance:<name>]");
+    private static readonly CommandForms WorldInhabitantsForms = CommandForms.Of(verb: "world.inhabitants", "[instance:<name>]");
+    private static readonly CommandForms WorldAttachmentsForms = CommandForms.Of(verb: "world.attachments", "[instance:<name>]");
+    private static readonly CommandForms WorldPortalsForms = CommandForms.Of(verb: "world.portals", "[instance:<name>]");
+    private static readonly CommandForms WorldDestinationsForms = CommandForms.Of(verb: "world.destinations", "[instance:<name>]");
+    private static readonly CommandForms WorldAdjacenciesForms = CommandForms.Of(verb: "world.adjacencies", "[instance:<name>]");
     // The resolver's own live state for one destination row — see WorldSessionResolver.DescribeActive. Occupancy
     // reads back "?" for a generation whose instance is no longer running (a stale echo, not a live one — the
     // resolver's own cache entry is cleared the moment WorldInstanceHost.TryRetire/ReapIfEmpty actually retires it, so
@@ -511,7 +517,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
     // Resolves the optional trailing `instance:<name>` token: absent addresses the boot instance (null), a single
     // matching token addresses a named running instance, and anything else — a second token, 'instance:boot', an
     // empty name, or an unknown name — is refused by name rather than silently answering for the boot world.
-    private bool TryResolveInstance(in WireArgs args, string verb, out WorldInstance? instance, out CommandResult? error) {
+    private bool TryResolveInstance(in WireArgs args, CommandForms forms, out WorldInstance? instance, out CommandResult? error) {
         if (args.Count == 0) {
             instance = null;
             error = null;
@@ -521,21 +527,21 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
 
         if (args.Count > 1) {
             instance = null;
-            error = CommandResult.Usage(form: "[instance:<name>]", got: args[1].ToString(), verb: verb);
+            error = forms.Refuse(got: args[1].ToString());
 
             return false;
         }
 
         if (!WorldArgs.IsInstanceToken(token: args[0])) {
             instance = null;
-            error = CommandResult.Usage(form: "[instance:<name>]", got: args[0].ToString(), verb: verb);
+            error = forms.Refuse(got: args[0].ToString());
 
             return false;
         }
 
         return WorldArgs.TryResolveInstance(
             token: args[0],
-            verb: verb,
+            verb: forms.Verb,
             instances: instances,
             instance: out instance,
             error: out error
@@ -560,13 +566,14 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.placements",
-            description: "Reports the placement census (Immediate; reads the settled state after any pending mutation): one entry per placement row — id, prototypeId, resolved world position/yaw (the parent chain composed), scale, parent, and every facet it carries; a dealt template echoes 'dealt from <row> (<children present> of <row capacity>)' and a dealt child 'dealt by <template>'. A dealt child is described as the caller's state disclosure deals it: one dealt from a cell the caller may not read shows the template's own prototype, or is absent when its dealt cell is withheld. A trailing instance:<name> token reads a named running instance's own document instead of the boot world's.",
+            forms: WorldPlacementsForms,
+            description: WorldPlacementsForms.Spelling + " — Reports the placement census (Immediate; reads the settled state after any pending mutation): one entry per placement row — id, prototypeId, resolved world position/yaw (the parent chain composed), scale, parent, and every facet it carries; a dealt template echoes 'dealt from <row> (<children present> of <row capacity>)' and a dealt child 'dealt by <template>'. A dealt child is described as the caller's state disclosure deals it: one dealt from a cell the caller may not read shows the template's own prototype, or is absent when its dealt cell is withheld. A trailing instance:<name> token reads a named running instance's own document instead of the boot world's.",
             handler: (context, args) => {
                 if (!TryResolveInstance(
                     args: in args,
                     error: out var tokenError,
                     instance: out var instance,
-                    verb: "world.placements"
+                    forms: WorldPlacementsForms
                 )) {
                     return tokenError!.Value;
                 }
@@ -585,13 +592,14 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.inhabitants",
-            description: "Reports the inhabited-placement census (Immediate; reads the settled state after any pending mutation): one line per inhabited body — placementId, prototypeId, kit, source, bodyIndex, position. A trailing instance:<name> token reads a named running instance's own population instead of the boot world's (see world.instance.status) — the same grammar every instance-addressed read-back shares.",
+            forms: WorldInhabitantsForms,
+            description: WorldInhabitantsForms.Spelling + " — Reports the inhabited-placement census (Immediate; reads the settled state after any pending mutation): one line per inhabited body — placementId, prototypeId, kit, source, bodyIndex, position. A trailing instance:<name> token reads a named running instance's own population instead of the boot world's (see world.instance.status) — the same grammar every instance-addressed read-back shares.",
             handler: (_, args) => {
                 if (!TryResolveInstance(
                     args: in args,
                     error: out var tokenError,
                     instance: out var instance,
-                    verb: "world.inhabitants"
+                    forms: WorldInhabitantsForms
                 )) {
                     return tokenError!.Value;
                 }
@@ -624,13 +632,14 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.attachments",
-            description: "Reports every placement's ATTACH facet resolution (Immediate; reads the settled state after any pending mutation): one line per attached placement — placementId, bodyIndex, and either the resolved world pos/yaw (the body transform composed with the authored local offset, fixed-point) or the reason the row contributes nothing (an out-of-range or inactive/despawned body). This is the AUTHORITATIVE tick-aligned pose; the rendered stamp composes the same offset over the client's interpolated body pose, so between ticks the drawn position leads or trails this one exactly as an avatar's does. A trailing instance:<name> token reads a named running instance's own population instead of the boot world's.",
+            forms: WorldAttachmentsForms,
+            description: WorldAttachmentsForms.Spelling + " — Reports every placement's ATTACH facet resolution (Immediate; reads the settled state after any pending mutation): one line per attached placement — placementId, bodyIndex, and either the resolved world pos/yaw (the body transform composed with the authored local offset, fixed-point) or the reason the row contributes nothing (an out-of-range or inactive/despawned body). This is the AUTHORITATIVE tick-aligned pose; the rendered stamp composes the same offset over the client's interpolated body pose, so between ticks the drawn position leads or trails this one exactly as an avatar's does. A trailing instance:<name> token reads a named running instance's own population instead of the boot world's.",
             handler: (_, args) => {
                 if (!TryResolveInstance(
                     args: in args,
                     error: out var tokenError,
                     instance: out var instance,
-                    verb: "world.attachments"
+                    forms: WorldAttachmentsForms
                 )) {
                     return tokenError!.Value;
                 }
@@ -644,13 +653,14 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.portals",
-            description: "Reports every placement face's PORTAL facet (Immediate): one line per door — placementId/faceName, the named destination (a destinations row), that row's resolved durability (ephemeral|persisted, from the destinations section — '?' when the name resolves to nothing), the RESOLVED travel (facet.travel, else portals.portalDefaults.travel, else 'body' when the world declares no portals section — the same order WorldDefinitionValidator resolves against), the arrival mode (spawn|mapped), its authored counterpart placementId/face for a mapped facet, and inside=<the 1-based local seats currently latched just through that door's glass, 'none' when nobody is>. The inside= column is the live edge latch: a door fires when a body's origin passes INTO the slab behind its glass, so a latched seat cannot fire again until it leaves — and an ARRIVING traveler seeds its own latches at transfer commit, which nothing else echoes. Authored data only: no boot-time destination-document or counterpart-existence check (a counterpart's placement/face is resolved against the DESTINATION document at transfer time, not here), and this verb echoes the DECISION — WorldInstanceHost's portal scan (ScanInstancePortals, then ResolveAndEnqueueCoalescedTransfers), not this verb, is what actually fires it. A trailing instance:<name> token reads a named running instance's own document instead of the boot world's.",
+            forms: WorldPortalsForms,
+            description: WorldPortalsForms.Spelling + " — Reports every placement face's PORTAL facet (Immediate): one line per door — placementId/faceName, the named destination (a destinations row), that row's resolved durability (ephemeral|persisted, from the destinations section — '?' when the name resolves to nothing), the RESOLVED travel (facet.travel, else portals.portalDefaults.travel, else 'body' when the world declares no portals section — the same order WorldDefinitionValidator resolves against), the arrival mode (spawn|mapped), its authored counterpart placementId/face for a mapped facet, and inside=<the 1-based local seats currently latched just through that door's glass, 'none' when nobody is>. The inside= column is the live edge latch: a door fires when a body's origin passes INTO the slab behind its glass, so a latched seat cannot fire again until it leaves — and an ARRIVING traveler seeds its own latches at transfer commit, which nothing else echoes. Authored data only: no boot-time destination-document or counterpart-existence check (a counterpart's placement/face is resolved against the DESTINATION document at transfer time, not here), and this verb echoes the DECISION — WorldInstanceHost's portal scan (ScanInstancePortals, then ResolveAndEnqueueCoalescedTransfers), not this verb, is what actually fires it. A trailing instance:<name> token reads a named running instance's own document instead of the boot world's.",
             handler: (_, args) => {
                 if (!TryResolveInstance(
                     args: in args,
                     error: out var tokenError,
                     instance: out var instance,
-                    verb: "world.portals"
+                    forms: WorldPortalsForms
                 )) {
                     return tokenError!.Value;
                 }
@@ -664,13 +674,14 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.destinations",
-            description: "Reports the destinations section (Immediate): one line per row — name, durability (ephemeral|persisted), scope (user|group|global) and its selector when scope=group ({\"$type\":\"named\"|\"tagged\", ...}), the selected references row (name -> document path, '?' when the name resolves to nothing), every placement/face PORTAL facet that names it ('none' when no facet does), and the RESOLVER's own live state for that row — one entry per active (scope key, generation id, instance name), plus that instance's current occupancy where it is still running ('none' when nothing has resolved this row yet). Authored data is boot-time only; resolver state is live and changes as travelers cross. Refuses nothing — an absent destinations section prints an honest empty line. A trailing instance:<name> token reads a named running instance's own destinations section instead of the boot world's; the resolver's own live generation/occupancy state is host-wide either way.",
+            forms: WorldDestinationsForms,
+            description: WorldDestinationsForms.Spelling + " — Reports the destinations section (Immediate): one line per row — name, durability (ephemeral|persisted), scope (user|group|global) and its selector when scope=group ({\"$type\":\"named\"|\"tagged\", ...}), the selected references row (name -> document path, '?' when the name resolves to nothing), every placement/face PORTAL facet that names it ('none' when no facet does), and the RESOLVER's own live state for that row — one entry per active (scope key, generation id, instance name), plus that instance's current occupancy where it is still running ('none' when nothing has resolved this row yet). Authored data is boot-time only; resolver state is live and changes as travelers cross. Refuses nothing — an absent destinations section prints an honest empty line. A trailing instance:<name> token reads a named running instance's own destinations section instead of the boot world's; the resolver's own live generation/occupancy state is host-wide either way.",
             handler: (_, args) => {
                 if (!TryResolveInstance(
                     args: in args,
                     error: out var tokenError,
                     instance: out var instance,
-                    verb: "world.destinations"
+                    forms: WorldDestinationsForms
                 )) {
                     return tokenError!.Value;
                 }
@@ -684,13 +695,14 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.adjacencies",
-            description: "Reports every invisible authority boundary and its live delivered neighbour: reciprocal row, boundary frame, compiler-derived overlap, neighbour tick, and durable addresses of active remote entities. Unreachable neighbours read CLOSED by name. A trailing instance:<name> token reads a named running authority.",
+            forms: WorldAdjacenciesForms,
+            description: WorldAdjacenciesForms.Spelling + " — Reports every invisible authority boundary and its live delivered neighbour: reciprocal row, boundary frame, compiler-derived overlap, neighbour tick, and durable addresses of active remote entities. Unreachable neighbours read CLOSED by name. A trailing instance:<name> token reads a named running authority.",
             handler: (_, args) => {
                 if (!TryResolveInstance(
                     args: in args,
                     error: out var tokenError,
                     instance: out var instance,
-                    verb: "world.adjacencies"
+                    forms: WorldAdjacenciesForms
                 )) {
                     return tokenError!.Value;
                 }

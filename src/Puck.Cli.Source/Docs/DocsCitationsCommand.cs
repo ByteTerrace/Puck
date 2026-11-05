@@ -413,18 +413,21 @@ public static class DocsCitationsCommand {
         CliProcessResult process;
 
         try {
+            string[] arguments = [
+                artifact,
+                "--world", world,
+                .. WorldDevices.NoneArguments,
+                "--exit-after-seconds", "20",
+                "--state-dir", stateDirectory,
+                "--headless", (headless
+                    ? "true"
+                    : "false"),
+            ];
+
+            WorldAdmission.Wait(step: "docs citations", worldArguments: arguments);
             process = CliProcess.RunCaptured(
                 fileName: "dotnet",
-                arguments: [
-                    artifact,
-                    "--world", world,
-                    .. WorldDevices.NoneArguments,
-                    "--exit-after-seconds", "20",
-                    "--state-dir", stateDirectory,
-                    "--headless", (headless
-                ? "true"
-                : "false"),
-                ],
+                arguments: arguments,
                 input: input,
                 timeout: TimeSpan.FromSeconds(value: 60),
                 workingDirectory: runDirectory

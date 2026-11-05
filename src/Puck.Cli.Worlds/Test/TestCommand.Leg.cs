@@ -98,28 +98,38 @@ public static partial class TestCommand {
 
         _ = Directory.CreateDirectory(path: legDirectory);
 
+        string[] arguments = [
+            artifact,
+            .. WorldDevices.NoneArguments,
+            "--world", world,
+            "--headless", "true",
+            "--unpaced", "true",
+            "--exit-after-seconds", ((int)Math.Ceiling(a: LegCeiling(
+                exportTick: exportTick,
+                rateHz: rateHz
+            ).TotalSeconds)).ToString(provider: CultureInfo.InvariantCulture),
+            "--state-dir", Path.Combine(
+                path1: legDirectory,
+                path2: "state"
+            ),
+            "--schedule-dir", scheduleDirectory,
+        ];
+
+        try {
+            WorldAdmission.Wait(step: "puck test", worldArguments: arguments);
+        } catch (HostAdmissionRefusedException exception) {
+            error.WriteLine(value: $"ERROR: {exception.Message}");
+
+            return false;
+        }
+
         using var watchdog = new CancellationTokenSource(delay: StartupBudget);
         CliProcessResult process;
 
         try {
             process = CliProcess.RunCaptured(
                 fileName: "dotnet",
-                arguments: [
-                    artifact,
-                    .. WorldDevices.NoneArguments,
-                    "--world", world,
-                    "--headless", "true",
-                    "--unpaced", "true",
-                    "--exit-after-seconds", ((int)Math.Ceiling(a: LegCeiling(
-                        exportTick: exportTick,
-                        rateHz: rateHz
-                    ).TotalSeconds)).ToString(provider: CultureInfo.InvariantCulture),
-                    "--state-dir", Path.Combine(
-                        path1: legDirectory,
-                        path2: "state"
-                    ),
-                    "--schedule-dir", scheduleDirectory,
-                ],
+                arguments: arguments,
                 cancellationToken: watchdog.Token,
                 input: LegScript(
                     exportTick: exportTick,

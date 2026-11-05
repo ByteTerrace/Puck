@@ -39,6 +39,18 @@ public sealed partial class WorldViewGraphHost {
     // shorter than that floor's period.
     private readonly HashSet<string> m_visiblePortals = new(comparer: StringComparer.Ordinal);
 
+    // DecideScreenFootprints' working storage, reused each frame: the footprints it decides, each one's state, and the
+    // instances its kept footprints and the roots demand so far.
+    private readonly List<RenderGraphFootprint> m_pending = [];
+    private readonly List<FootprintState> m_pendingState = [];
+    private readonly HashSet<string> m_demanded = new(comparer: StringComparer.Ordinal);
+
+    private enum FootprintState : byte {
+        Waiting = 0,
+        Kept = 1,
+        Dropped = 2,
+    }
+
     private sealed class RatedProducer {
         // The lever its footprints rate it under.
         public SdfUpdateRates Lever;

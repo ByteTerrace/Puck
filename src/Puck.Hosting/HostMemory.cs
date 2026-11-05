@@ -4,9 +4,9 @@ using System.Runtime.InteropServices;
 namespace Puck.Hosting;
 
 /// <summary>
-/// Reads how much physical memory the machine has free now and how much it has installed: on Windows the memory
-/// status, on Linux <c>/proc/meminfo</c>. A cheap operating-system query, so a scheduler may ask before each piece of
-/// work it starts.
+/// Reads how much physical memory the machine has free now and how much it has installed, and how much of its commit
+/// limit is charged: on Windows the memory status, on Linux <c>/proc/meminfo</c>. A cheap operating-system query, so a
+/// scheduler may ask before each piece of work it starts.
 /// </summary>
 public static partial class HostMemory {
     [StructLayout(layoutKind: LayoutKind.Sequential)]
@@ -66,6 +66,31 @@ public static partial class HostMemory {
         }
         if (OperatingSystem.IsLinux()) {
             return MemInfoBytes(field: "MemTotal:");
+        }
+
+        return null;
+    }
+    /// <summary>Returns the system's commit charge and commit limit, in bytes. Allocations fail at the limit whatever
+    /// physical memory is free, so this is the reading that says whether another process can start. On Windows it is the
+    /// memory status's page-file total (the commit limit) and what is left of it; on Linux <c>/proc/meminfo</c>'s
+    /// <c>Committed_AS</c> and <c>CommitLimit</c>, and only under strict overcommit (<c>vm.overcommit_memory</c> 2),
+    /// since the kernel enforces no limit otherwise and a charge over it is ordinary there.</summary>
+    /// <returns>The charge and the limit, or <see langword="null"/> when this platform or this moment cannot say, or the
+    /// platform enforces no commit limit.</returns>
+    public static (long Charge, long Limit)? CommitBytes() {
+        if (OperatingSystem.IsWindows()) {
+            return (((Status() is { } status) && (status.TotalPageFile > 0) && (status.AvailablePageFile <= status.TotalPageFile))
+                ? (((long)Math.Min(val1: (status.TotalPageFile - status.AvailablePageFile), val2: long.MaxValue)), ((long)Math.Min(val1: status.TotalPageFile, val2: long.MaxValue)))
+                : null);
+        }
+        if (OperatingSystem.IsLinux()) {
+            try {
+                if (File.ReadAllText(path: "/proc/sys/vm/overcommit_memory").Trim() != "2") { return null; }
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                return null;
+            }
+
+            return (((MemInfoBytes(field: "Committed_AS:") is { } charge) && (MemInfoBytes(field: "CommitLimit:") is { } limit) && (limit > 0)) ? (charge, limit) : null);
         }
 
         return null;

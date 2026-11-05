@@ -2,26 +2,29 @@
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "input-genre-controls"
-channels: concat([
-  { name: "moveX", shape: Bipolar, composition: true },
-  { name: "moveY", shape: Bipolar, composition: true },
-  { name: "aimX", shape: Bipolar, composition: true },
-  { name: "aimY", shape: Bipolar, composition: true },
-  {
-    name: "lookX"
-    shape: Relative
-    composition: true
-    relative { unit: "radians", sensitivity: 0.25, maximumPerStep: 4 }
-  },
-  {
-    name: "lookY"
-    shape: Relative
-    composition: true
-    relative { unit: "radians", sensitivity: 0.25, maximumPerStep: 4 }
-  },
-  { name: "fire", shape: Binary, composition: true },
-  { name: "navigate", shape: Bipolar, composition: true }
-], map(range(0, 63), i => { name: $"weaponButton{i}", shape: Binary, composition: true }))
+channels: concat(
+  [
+    { name: "moveX", shape: Bipolar, composition: true },
+    { name: "moveY", shape: Bipolar, composition: true },
+    { name: "aimX", shape: Bipolar, composition: true },
+    { name: "aimY", shape: Bipolar, composition: true },
+    {
+      name: "lookX"
+      shape: Relative
+      composition: true
+      relative { unit: "radians", sensitivity: 0.25, maximumPerStep: 4 }
+    },
+    {
+      name: "lookY"
+      shape: Relative
+      composition: true
+      relative { unit: "radians", sensitivity: 0.25, maximumPerStep: 4 }
+    },
+    { name: "fire", shape: Binary, composition: true },
+    { name: "navigate", shape: Bipolar, composition: true }
+  ],
+  map(range(0, 63), i => { name: $"weaponButton{i}", shape: Binary, composition: true })
+)
 seatModes [{name: "activity", defaultState: "shooter", states [
       { name: "shooter" }, { name: "ability" }, { name: "fps" }, { name: "weapon" }, { name: "menu" }, { name: "panel" }
     ]

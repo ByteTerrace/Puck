@@ -14,6 +14,16 @@ public static class DocumentJsonPointer {
     /// <returns>The segment, with <c>~</c> as <c>~0</c> and <c>/</c> as <c>~1</c>.</returns>
     public static string Escape(string value) => value.Replace(comparisonType: StringComparison.Ordinal, newValue: "~0", oldValue: "~")
         .Replace(comparisonType: StringComparison.Ordinal, newValue: "~1", oldValue: "/");
+    /// <summary>Names a member of the node a pointer stands at.</summary>
+    /// <param name="pointer">The pointer of the parent; empty for the document itself.</param>
+    /// <param name="name">The unescaped member name.</param>
+    /// <returns>The parent's pointer followed by <paramref name="name"/> as one escaped segment.</returns>
+    public static string Child(string pointer, string name) => string.Concat(str0: pointer, str1: "/", str2: Escape(value: name));
+    /// <summary>Names an element of the list a pointer stands at.</summary>
+    /// <param name="pointer">The pointer of the list; empty for the document itself.</param>
+    /// <param name="index">The zero-based element index.</param>
+    /// <returns>The list's pointer followed by <paramref name="index"/> as one segment.</returns>
+    public static string Child(string pointer, int index) => string.Concat(str0: pointer, str1: "/", str2: index.ToString(provider: CultureInfo.InvariantCulture));
     /// <summary>Reads a pointer segment back to the member name it escapes.</summary>
     /// <param name="value">The segment.</param>
     /// <returns>The member name.</returns>
@@ -161,12 +171,12 @@ public static class DocumentJsonPointer {
                 break;
             case JsonObject obj:
                 foreach (var (name, child) in obj) {
-                    WalkValues(node: child, pointer: ((pointer + "/") + Escape(value: name)), visit: visit);
+                    WalkValues(node: child, pointer: Child(name: name, pointer: pointer), visit: visit);
                 }
                 break;
             case JsonArray array:
                 for (var index = 0; (index < array.Count); index++) {
-                    WalkValues(node: array[index], pointer: ((pointer + "/") + index.ToString(provider: CultureInfo.InvariantCulture)), visit: visit);
+                    WalkValues(node: array[index], pointer: Child(index: index, pointer: pointer), visit: visit);
                 }
                 break;
         }

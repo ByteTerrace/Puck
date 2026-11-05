@@ -210,6 +210,66 @@ public sealed partial class WorldViewPaneMappingLawTests {
         }
     }
 
+    // THE LAW: a view shown only inside a session that is held as too small to render is neither rated nor listed by
+    // world.rates. The boot session's glass stands 200 m away, a fraction of a pixel, so the session holds its image; the
+    // routed session its glass shows is then in no image anyone renders, whatever share the frame's earlier measure gave
+    // it. The control is the same chain with the boot session's glass in front of the camera, where both are listed.
+    [InlineData(true)]
+    [InlineData(false)]
+    [Theory]
+    public void ASessionShownOnlyInsideAHeldSessionIsNotListedByWorldRates(bool held) {
+        var screens = ShowTwoWorlds();
+
+        screens.ReconcileViews(views: WorldViewInstances.Of(views: [
+            new WorldView(Demand: WorldViewDemand.Screen, FilmsWorld: false, Height: 0.5, Name: BootSession, Refresh: RenderGraphRefresh.EveryFrame, Width: 0.5) { Reads = [RoutedSession] },
+            new WorldView(Demand: WorldViewDemand.Screen, FilmsWorld: false, Height: 0.5, Name: RoutedSession, Refresh: RenderGraphRefresh.EveryFrame, Width: 0.5) { Parent = BootSession },
+        ]));
+        m_host.ViewScenes = new HeldChainScenes(Held: held);
+
+        var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults()) { UpdateRates = SdfUpdateRates.Views };
+
+        m_host.RenderSettings = settings;
+        m_rate = Paced60;
+        for (var frame = 0; (frame < 8); frame++) {
+            Frame(pane: null);
+        }
+
+        var listed = settings.RateReadings.Latest(lever: SdfUpdateRates.Views).Select(selector: static reading => reading.Name).ToArray();
+
+        Assert.Contains(expected: BootSession, collection: listed);
+        Assert.Equal(expected: !held, actual: listed.Contains(value: RoutedSession));
+    }
+
+    // A scene whose boot session stands on a glass in the boot world, far from the camera when held, and whose routed
+    // session stands on a glass in front of the boot session's camera.
+    private sealed record HeldChainScenes(bool Held) : IWorldViewScenes {
+        public bool Bakes(string view) => false;
+        public bool TryCamera(string view, out CameraSnapshot camera) {
+            camera = Camera(x: 0f);
+
+            return true;
+        }
+        public bool TryVisibilityCamera(string view, out CameraSnapshot camera) => TryCamera(view, out camera);
+        public bool TrySurface(string view, SourceRay ray, out FixedVector3 point) {
+            point = default;
+
+            return false;
+        }
+        public bool TryPlacements(string view, out IReadOnlyList<SourceMapping> placements) {
+            placements = [];
+
+            return false;
+        }
+        public WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass) {
+            var shown = ((producer == RoutedSession) ? (consumer == BootSession) : ((producer == BootSession) && (consumer != BootSession) && (consumer != RoutedSession)));
+            var origin = ((Held && (producer == BootSession)) ? new DocumentVector3(value: new Vector3(x: 0f, y: 1f, z: -200f)) : new DocumentVector3(value: new Vector3(x: 0f, y: 1f, z: 0f)));
+
+            glass = (shown ? (FacingScreen(index: 0, source: new WorldScreenSource.Session(Destination: "beyond")) with { Origin = origin }) : null);
+
+            return (shown ? WorldPortalGlass.Found : WorldPortalGlass.Elsewhere);
+        }
+    }
+
     // A scene whose filming camera stands at a given pose and whose session "session" stands on a given glass of the
     // boot world.
     private sealed record FilmedGlassScenes(CameraSnapshot Camera, WorldScreen Glass) : IWorldViewScenes {

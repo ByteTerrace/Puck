@@ -69,7 +69,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         return text.ToString();
     }
     // One instance's row of the live budget, from its name to the next row.
-    private static string RowOf(string budget, string instance) => budget.Split(separator: "; ").Single(predicate: row => row.StartsWith(comparisonType: StringComparison.Ordinal, value: (instance + " ")));
+    private static string RowOf(string budget, string instance) => budget.Split(separator: Environment.NewLine).Single(predicate: row => row.StartsWith(comparisonType: StringComparison.Ordinal, value: (instance + " ")));
 
     /// <summary>Across frames the budget reads what the scheduler decided: the root renders every frame at the
     /// display's extent, the pane at half the display every other frame, and the static source once, at its negotiated

@@ -208,8 +208,9 @@ patterns [
   {
     name: "solitaireFreecellRun"
     kind: Int
-    value: 1 + (solitaireFreecellRank[$token] == solitaireFreecellRank[$previous] - 1) *
-      (solitaireFreecellSuit[$token] % 2 != solitaireFreecellSuit[$previous] % 2)
+    value: 1 +
+      (solitaireFreecellRank[$token] == solitaireFreecellRank[$previous] - 1) *
+        (solitaireFreecellSuit[$token] % 2 != solitaireFreecellSuit[$previous] % 2)
     symbols [
       {
         name: "face"
@@ -249,7 +250,8 @@ patterns [
 // The door is idle on a request: the table is up, a request waits, and no deal or move is under way.
 function freecellIdle() = (solitaire.table == 2 and
   solitaireFreecell.request != solitaireFreecell.applied and
-  solitaireFreecell.stage == 0 and solitaireFreecell.busy == 0)
+  solitaireFreecell.stage == 0 and
+  solitaireFreecell.busy == 0)
 
 // The door is idle on a request for action `kind` in a game under way.
 function freecellRequest(kind) = freecellIdle() and solitaireFreecell.status == 1 and solitaireFreecell.action == kind

@@ -28,6 +28,12 @@ namespace Puck.World;
 /// <param name="link">The existing submission path for authoritative session levers.</param>
 /// <param name="renderProbe">The presentation owner's live renderer.</param>
 public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule {
+    private static readonly CommandForms WorldSkyLayerForms = CommandForms.Of(verb: "world.sky-layer", "[solo <index>|solo off|mute <index> on|off]");
+    private static readonly CommandForms WorldToonForms = CommandForms.Of(verb: "world.toon", "[on|off|toggle]");
+    private static readonly CommandForms WorldIndirectForms = CommandForms.Of(verb: "world.indirect", "[off|medium|high]");
+    private static readonly CommandForms WorldResidencyForms = CommandForms.Of(verb: "world.residency", "[radius]");
+    private static readonly CommandForms WorldProbeForms = CommandForms.Of(verb: "world.probe", "<x> <y> <z> [<nx> <ny> <nz>]");
+    private static readonly CommandForms WorldSkyFieldScaleForms = WorldSessionLevers.SkyFieldScaleForms;
     // The world.quality echo: the current individual settings the preset (or a later override) left in place.
     private string DescribeQuality() {
         return $"[world.quality: shadows={ShadowTierName(tier: settings.Shadows)} ao={(settings.AmbientOcclusion
@@ -296,7 +302,8 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.sky-layer",
-            description: "Auditions the sky rows printed by world.lighting: world.sky-layer [solo <index>|solo off|mute <index> on|off]. Session-only; mute takes precedence over solo.",
+            description: $"Auditions the sky rows printed by world.lighting: {WorldSkyLayerForms.Spelling}. Session-only; mute takes precedence over solo.",
+            forms: WorldSkyLayerForms,
             handler: (context, args) => {
                 CommandResult Echo() => new(Output: $"[world.sky-layer: solo={((settings.SkyLayers.Solo < 0) ? "off" : settings.SkyLayers.Solo.ToString(provider: CultureInfo.InvariantCulture))} | {string.Join(separator: " | ", values: Enumerable.Range(0, (server.Definition.Render.Sky?.Layers?.Count ?? 0)).Select(selector: index => $"sky[{index}] muted={settings.SkyLayers.Muted(index: index)} included={settings.SkyLayers.Includes(index: index)}"))}]");
                 if (args.Count == 0) { return Echo(); }
@@ -307,7 +314,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
 
                 if ((!solo && !args.Is(index: 0, value: "mute")) || (args.Count != (solo ? 2 : 3)) || (!solo && (mute is null)) ||
                     (!off && (!int.TryParse(args[1], CultureInfo.InvariantCulture, out index) || (index < 0) || (index >= (server.Definition.Render.Sky?.Layers?.Count ?? 0))))) {
-                    return CommandResult.Usage(form: "solo <index>|solo off|mute <index> on|off", verb: "world.sky-layer");
+                    return WorldSkyLayerForms.Refuse();
                 }
                 return SubmitLever(link, context.Principal, (solo ? WorldSessionLevers.SkySolo : WorldSessionLevers.SkyMute), index, Echo, ((mute == true) ? 1d : 0d));
             });
@@ -376,14 +383,15 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.toon",
-            description: "Cel shading, live: world.toon [on|off|toggle]. No argument echoes the mode. Switches each world's default style, render.toon (the standard's styles.puck authors celStyle); a world that authors none has no style to band with, and a material with a style of its own keeps it. Screens, portals and sky are not posterised. Presentation only, under the render grant.",
+            description: $"Cel shading, live: {WorldToonForms.Spelling}. No argument echoes the mode. Switches each world's default style, render.toon (the standard's styles.puck authors celStyle); a world that authors none has no style to band with, and a material with a style of its own keeps it. Screens, portals and sky are not posterised. Presentation only, under the render grant.",
+            forms: WorldToonForms,
             handler: (context, args) => {
                 CommandResult Echo() => new(Output: $"[world.toon: {(settings.Toon ? "on" : "off")}{(settings.ToonStyled ? string.Empty : " (render.toon authors no complete style, so this world's default stays continuous)")}]");
                 if (args.Count == 0) { return Echo(); }
-                if (args.Count != 1) { return CommandResult.Usage(form: "on|off|toggle", verb: "world.toon"); }
+                if (args.Count != 1) { return WorldToonForms.Refuse(); }
                 var on = (args.Is(index: 0, value: "toggle") ? !settings.Toon : ParseOnOff(token: args[0]));
 
-                if (on is not { } resolved) { return CommandResult.Usage(form: "on|off|toggle", verb: "world.toon"); }
+                if (on is not { } resolved) { return WorldToonForms.Refuse(); }
                 return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.Toon,
                     a: (resolved ? 1d : 0d), formatEcho: Echo);
             }
@@ -519,7 +527,8 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.indirect",
-            description: "Selects the indirect-light tier the baked-mesh path's irradiance volume traces at: world.indirect [off|medium|high]. No argument reads the selected tier.",
+            description: $"Selects the indirect-light tier the baked-mesh path's irradiance volume traces at: {WorldIndirectForms.Spelling}. No argument reads the selected tier.",
+            forms: WorldIndirectForms,
             handler: (context, args) => {
                 CommandResult Echo() => new(Output: $"[world.indirect: {settings.IndirectTier.ToString().ToLowerInvariant()}]");
                 if (args.Count == 0) { return Echo(); }
@@ -531,7 +540,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                 });
 
                 if (tier is not { } selected) {
-                    return CommandResult.Usage(form: "off|medium|high", verb: "world.indirect");
+                    return WorldIndirectForms.Refuse();
                 }
                 return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.Indirect,
                     a: ((int)selected), formatEcho: Echo);
@@ -558,17 +567,18 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.residency",
-            description: "Reads the world residency's mesh residency: world.residency [radius] (metres, default 8). Echoes the latest bake's groups and when they landed (finished) and became resident (their words in the mesh region), counted from the bake's start, both for every group and for the groups whose planned box lies within the radius of the primary seat's camera (the occupied area), with when half and nine tenths of those landed and which landed last; its store loads and their span; the time its plan and restart took; the resident meshes' region bytes by level of detail; the store's reads, bytes and read and decode thread-seconds; the mesh region's held, used, written and owed bytes and the frames and seconds it owed words; the latest program's instances, words, builds and its emission and build milliseconds; and the irradiance volume's probe cache bytes. 'pending' marks a time not reached yet. Presentation only; reads change nothing.",
+            description: $"Reads the world residency's mesh residency: {WorldResidencyForms.Spelling} (metres, default 8). Echoes the latest bake's groups and when they landed (finished) and became resident (their words in the mesh region), counted from the bake's start, both for every group and for the groups whose planned box lies within the radius of the primary seat's camera (the occupied area), with when half and nine tenths of those landed and which landed last; its store loads and their span; the time its plan and restart took; the resident meshes' region bytes by level of detail; the store's reads, bytes and read and decode thread-seconds; the mesh region's held, used, written and owed bytes and the frames and seconds it owed words; the latest program's instances, words, builds and its emission and build milliseconds; and the irradiance volume's probe cache bytes. 'pending' marks a time not reached yet. Presentation only; reads change nothing.",
+            forms: WorldResidencyForms,
             handler: (_, args) => {
                 var radius = 8f;
 
                 if (args.Count == 1) {
                     if (!args.TryFloats(count: 1, start: 0, values: out var values) || !float.IsFinite(f: values[0]) || (values[0] < 0f)) {
-                        return CommandResult.Usage(form: "[radius], a finite number of metres, zero or more", verb: "world.residency");
+                        return WorldResidencyForms.Refuse();
                     }
                     radius = values[0];
                 } else if (args.Count > 1) {
-                    return CommandResult.Usage(form: "[radius], a finite number of metres, zero or more", verb: "world.residency");
+                    return WorldResidencyForms.Refuse();
                 }
                 if (renderProbe.Residency is not { } node) {
                     return new CommandResult(Output: "[world.residency: renderer not built yet]");
@@ -580,10 +590,11 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.probe",
-            description: "Reads the settled irradiance probes about a point: world.probe <x> <y> <z> [<nx> <ny> <nz>]. A changing trace or pending publication is marked unsettled with the published GPU and live CPU windows. Otherwise echoes spacing, window, answering corners and total weight for a receiver facing the normal (up by default), then each corner's cell, relocated position, offset, back-face share, validity, sweeps, measured cubes' mean sky and luminance, and weight terms: trilinear share, positive normal cosine, octahedral depth visibility and final weight. reference-clear is the exact static-mesh segment check for diagnosing sampling; it never changes the gather.",
+            description: $"Reads the settled irradiance probes about a point: {WorldProbeForms.Spelling}. A changing trace or pending publication is marked unsettled with the published GPU and live CPU windows. Otherwise echoes spacing, window, answering corners and total weight for a receiver facing the normal (up by default), then each corner's cell, relocated position, offset, back-face share, validity, sweeps, measured cubes' mean sky and luminance, and weight terms: trilinear share, positive normal cosine, octahedral depth visibility and final weight. reference-clear is the exact static-mesh segment check for diagnosing sampling; it never changes the gather.",
+            forms: WorldProbeForms,
             handler: (_, args) => {
                 if (((args.Count != 3) && (args.Count != 6)) || !args.TryFloats(count: args.Count, start: 0, values: out var values) || values.Any(predicate: static value => !float.IsFinite(f: value))) {
-                    return CommandResult.Usage(form: "<x> <y> <z> [<nx> <ny> <nz>], finite numbers", verb: "world.probe");
+                    return WorldProbeForms.Refuse();
                 }
 
                 var normal = ((args.Count == 6) ? new System.Numerics.Vector3(x: values[3], y: values[4], z: values[5]) : System.Numerics.Vector3.UnitY);
@@ -704,7 +715,8 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.sky-field-scale",
-            description: "Sets the sky field grid independently of the scene grid: world.sky-field-scale [1|0.5]. One half evaluates a ceil-half grid and reconstructs it during composition; retained field allocation capacity stays unchanged. No argument echoes the current fraction; quality presets and save retain it.",
+            description: $"Sets the sky field grid independently of the scene grid: {WorldSkyFieldScaleForms.Spelling}. One half evaluates a ceil-half grid and reconstructs it during composition; retained field allocation capacity stays unchanged. No argument echoes the current fraction; quality presets and save retain it.",
+            forms: WorldSkyFieldScaleForms,
             handler: (context, args) => {
                 CommandResult Echo() => new(Output: $"[world.sky-field-scale: {settings.SkyFieldScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}]");
                 if (args.Count == 0) { return Echo(); }
@@ -714,7 +726,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                     _ => null,
                 } : null);
 
-                if (scale is not { } chosen) { return CommandResult.Usage(form: "1|0.5", verb: "world.sky-field-scale"); }
+                if (scale is not { } chosen) { return WorldSkyFieldScaleForms.Refuse(); }
                 return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.SkyFieldScale,
                     a: chosen, formatEcho: Echo);
             }

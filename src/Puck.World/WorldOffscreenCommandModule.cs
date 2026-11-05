@@ -15,6 +15,7 @@ namespace Puck.World;
 internal sealed class WorldOffscreenCommandModule(OffscreenRenderOptions options) : ICommandModule {
     private const string Verb = "world.resize";
     private const string ResizeForm = "<width> <height>";
+    private static readonly CommandForms WorldResizeForms = CommandForms.Of(verb: Verb, ResizeForm);
 
     private CommandResult Handler(CommandContext context, WireArgs args) {
         if (args.Count == 0) {
@@ -38,7 +39,7 @@ internal sealed class WorldOffscreenCommandModule(OffscreenRenderOptions options
             (width > WorldHostDefaults.MaxDisplayExtent) ||
             (height > WorldHostDefaults.MaxDisplayExtent)
         ) {
-            return CommandResult.Usage(form: ResizeForm, verb: Verb);
+            return WorldResizeForms.Refuse();
         }
 
         options.Resize(
@@ -54,7 +55,8 @@ internal sealed class WorldOffscreenCommandModule(OffscreenRenderOptions options
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: Verb,
-            description: "Resizes the offscreen display live: world.resize " + ResizeForm + ", each 1..16384 pixels. The display shows its last image until the render root has installed the new extent, and a world.screenshot armed meanwhile captures the first frame at it, so a script checks a resize without a window. No argument echoes the current extent. Offscreen only: a windowed host's display follows its window's client area.",
+            description: "Resizes the offscreen display live: " + WorldResizeForms.Spelling + ", each 1..16384 pixels. The display shows its last image until the render root has installed the new extent, and a world.screenshot armed meanwhile captures the first frame at it, so a script checks a resize without a window. No argument echoes the current extent. Offscreen only: a windowed host's display follows its window's client area.",
+            forms: WorldResizeForms,
             handler: Handler
         );
     }

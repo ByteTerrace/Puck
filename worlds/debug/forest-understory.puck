@@ -1,19 +1,19 @@
 import "forest-layout"
 
-let forestShrubs = filter(scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 9, radius: 4,
-  seed: 6247
-), p => forestInBelt(p[0], p[2] - 150, 3) and not forestInGlade(p[0], p[2] - 150, -1) and lawnPathClear(
-  p[0],
-  p[2] - 150,
-  0.65
-) and forestThicket(p[0], p[2] - 150) > -0.4)
-let forestFerns = filter(scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 6, radius: 3,
-  seed: 28411
-), p => forestInBelt(p[0], p[2] - 150, 1) and not forestInGlade(p[0], p[2] - 150, -1.5) and lawnPathClear(
-  p[0],
-  p[2] - 150,
-  0.3
-) and forestThicket(p[0], p[2] - 150) > -0.2)
+let forestShrubs = filter(
+  scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 9, radius: 4, seed: 6247),
+  p => forestInBelt(p[0], p[2] - 150, 3) and
+    not forestInGlade(p[0], p[2] - 150, -1) and
+    lawnPathClear(p[0], p[2] - 150, 0.65) and
+    forestThicket(p[0], p[2] - 150) > -0.4
+)
+let forestFerns = filter(
+  scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 6, radius: 3, seed: 28411),
+  p => forestInBelt(p[0], p[2] - 150, 1) and
+    not forestInGlade(p[0], p[2] - 150, -1.5) and
+    lawnPathClear(p[0], p[2] - 150, 0.3) and
+    forestThicket(p[0], p[2] - 150) > -0.2
+)
 
 placements {
   for (p, i) in forestShrubs {

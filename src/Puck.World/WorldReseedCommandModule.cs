@@ -12,17 +12,19 @@ namespace Puck.World;
 /// <param name="screens">The presented scenes, when the host renders.</param>
 /// <param name="routes">The seats' authoritative body routes.</param>
 public sealed class WorldReseedCommandModule(WorldCreationInstances stamps, WorldScreenBinder? screens = null, WorldSeatAuthorityRouter? routes = null) : ICommandModule {
+    private static readonly CommandForms ViewReseedForms = CommandForms.Of(verb: "view.reseed", "[<body>]");
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "view.reseed",
-            description: "Restarts a body's presentation-only animation as for a new occupant: view.reseed [<body>] (the 0-based entity index, default 0) seeds its gait drivers' phases, weights and eased speed, its foot plants and steps, and its root and part followers again from the next frame's pose. A teleport (body.pose) of the same occupant keeps its gait phases so it never pops, which makes a scripted motion repeated from one reset pose show a different stride; pin view.reseed beside the body.pose (world.at) and the repeat looks the same. Echoes [view.reseed: body <n> restarted <k> registration(s)]. Session presentation only: nothing the simulation reads or a replay hashes changes.",
+            description: $"Restarts a body's presentation-only animation as for a new occupant: {ViewReseedForms.Spelling} (the 0-based entity index, default 0) seeds its gait drivers' phases, weights and eased speed, its foot plants and steps, and its root and part followers again from the next frame's pose. A teleport (body.pose) of the same occupant keeps its gait phases so it never pops, which makes a scripted motion repeated from one reset pose show a different stride; pin view.reseed beside the body.pose (world.at) and the repeat looks the same. Echoes [view.reseed: body <n> restarted <k> registration(s)]. Session presentation only: nothing the simulation reads or a replay hashes changes.",
+            forms: ViewReseedForms,
             handler: (context, args) => {
                 var body = 0;
 
                 if ((args.Count > 1) || ((args.Count == 1) && (!args.TryInt(index: 0, value: out body) || (body < 0)))) {
-                    return CommandResult.Usage(form: "[<body>]", verb: "view.reseed");
+                    return ViewReseedForms.Refuse();
                 }
 
                 var pool = stamps;

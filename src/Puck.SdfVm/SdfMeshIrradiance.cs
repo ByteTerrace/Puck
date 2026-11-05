@@ -131,7 +131,10 @@ public sealed class SdfMeshIrradiance : IDisposable {
     /// <summary>Counts relights of a cached camera sample's hits under a changed lighting.</summary>
     public static readonly WorkKind CameraRelights = new(name: "sdf.mesh-gi.camera-relights", unit: "samples", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, Behind, CameraTraces, CameraRelights];
+    /// <summary>Counts each exposure meter reading asked of the volume (<see cref="TryMeter"/>).</summary>
+    public static readonly WorkKind Meters = new(name: "sdf.mesh-gi.meters", unit: "readings", workClass: WorkClass.Pacing);
+
+    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, Behind, CameraTraces, CameraRelights, Meters];
 
     /// <summary>Gets the kinds the counters count, in report order, for a reader that registers the source before a
     /// volume exists.</summary>
@@ -814,6 +817,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
         luminance = 0f;
         skyVisibility = 1f;
         source = SdfExposureMeterSource.None;
+        Counters.Count(kind: Meters);
 
         lock (m_gate) {
             if ((m_lighting is not { } lighting) || !m_windowValid) {

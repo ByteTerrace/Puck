@@ -21,8 +21,8 @@ namespace Puck.World;
 /// </summary>
 /// <param name="faults">The host's creation faults.</param>
 public sealed class GpuFaultsCommandModule(GpuCreationFaults faults) : ICommandModule {
-    private const string Form = "arm <kind> [<n>] | lose [<n>] | remove [<n>] | disarm | list; kinds: pipeline, buffer, image, render-pass, framebuffer, shader-module, command-pool, bindings-pool, timestamp-pool";
     private const string Verb = "gpu.faults";
+    private static readonly CommandForms GpuFaultsForms = CommandForms.Of(verb: "gpu.faults", "arm <kind> [<n>]", "lose [<n>]", "remove [<n>]", "disarm", "list");
 
     private CommandResult Arm(WireArgs args) {
         if (
@@ -32,7 +32,7 @@ public sealed class GpuFaultsCommandModule(GpuCreationFaults faults) : ICommandM
                 name: args[1]
             )
         ) {
-            return CommandResult.Usage(form: Form, verb: "gpu.faults");
+            return GpuFaultsForms.Refuse(args: in args);
         }
 
         var nth = 1;
@@ -44,7 +44,7 @@ public sealed class GpuFaultsCommandModule(GpuCreationFaults faults) : ICommandM
                 value: out nth
             ) || (nth < 1))
         ) {
-            return CommandResult.Usage(form: Form, verb: "gpu.faults");
+            return GpuFaultsForms.Refuse(args: in args);
         }
 
         faults.Arm(
@@ -110,7 +110,7 @@ public sealed class GpuFaultsCommandModule(GpuCreationFaults faults) : ICommandM
                 value: out nth
             ) || (nth < 1)))
         ) {
-            return CommandResult.Usage(form: Form, verb: "gpu.faults");
+            return GpuFaultsForms.Refuse(args: in args);
         }
 
         faults.ArmLoss(
@@ -149,7 +149,7 @@ public sealed class GpuFaultsCommandModule(GpuCreationFaults faults) : ICommandM
         }
 
         if (args.Count != 1) {
-            return CommandResult.Usage(form: Form, verb: "gpu.faults");
+            return GpuFaultsForms.Refuse(args: in args);
         }
 
         if (args.Is(
@@ -166,7 +166,7 @@ public sealed class GpuFaultsCommandModule(GpuCreationFaults faults) : ICommandM
             value: "list"
         )
             ? Describe()
-            : CommandResult.Usage(form: Form, verb: "gpu.faults")
+            : GpuFaultsForms.Refuse(args: in args)
         );
     }
 
@@ -175,7 +175,8 @@ public sealed class GpuFaultsCommandModule(GpuCreationFaults faults) : ICommandM
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
-            description: $"Arms, clears and lists the creation faults every GPU device's services pass through, and the device loss GPU hosts count their frames against (operator only): gpu.faults arm <kind> [<n>] | lose [<n>] | remove [<n>] | disarm | list. arm fails the nth creation of a kind counted from now (default 1, the next), replacing that kind's armed fault; the failed call throws {GpuCreationFaults.RefusalCode} before it reaches the device, so nothing is created, and the fault fires once. Kinds: pipeline, buffer, image, render-pass, framebuffer, shader-module, command-pool, bindings-pool, timestamp-pool. lose loses the device on the nth frame a GPU host produces from now (default 1, the next): the frame throws {GpuCreationFaults.LossRefusalCode} as a device loss on a healthy device, and the host recovers through its device-loss policy, refusing every capture armed at the loss; the loss fires once. remove does the same on a device it removes for real (Direct3D 12's RemoveDevice), so the frame's own GPU calls fail as a removed device's do and the backend writes its removal record ([d3d12-dred] lines) as it recovers; a backend that cannot remove its device (Vulkan) loses it as lose does, and says so. disarm clears every armed fault, the armed loss and every count. Each form prints armed=<kind>:<n>,…,lose:<n> (the creation or frame, counted from now, that fails) (remove:<n> for a removal) or armed=none, then <kind>=<seen> per kind: the creations since the last disarm, failed ones included, then frames=<seen>, the frames counted since then. Counts are creation calls and frames in arrival order: no randomness and no clock.",
+            description: $"Arms, clears and lists the creation faults every GPU device's services pass through, and the device loss GPU hosts count their frames against (operator only): {GpuFaultsForms.Spelling}. arm fails the nth creation of a kind counted from now (default 1, the next), replacing that kind's armed fault; the failed call throws {GpuCreationFaults.RefusalCode} before it reaches the device, so nothing is created, and the fault fires once. Kinds: pipeline, buffer, image, render-pass, framebuffer, shader-module, command-pool, bindings-pool, timestamp-pool. lose loses the device on the nth frame a GPU host produces from now (default 1, the next): the frame throws {GpuCreationFaults.LossRefusalCode} as a device loss on a healthy device, and the host recovers through its device-loss policy, refusing every capture armed at the loss; the loss fires once. remove does the same on a device it removes for real (Direct3D 12's RemoveDevice), so the frame's own GPU calls fail as a removed device's do and the backend writes its removal record ([d3d12-dred] lines) as it recovers; a backend that cannot remove its device (Vulkan) loses it as lose does, and says so. disarm clears every armed fault, the armed loss and every count. Each form prints armed=<kind>:<n>,…,lose:<n> (the creation or frame, counted from now, that fails) (remove:<n> for a removal) or armed=none, then <kind>=<seen> per kind: the creations since the last disarm, failed ones included, then frames=<seen>, the frames counted since then. Counts are creation calls and frames in arrival order: no randomness and no clock.",
+            forms: GpuFaultsForms,
             handler: (_, args) => Handle(args: args),
             name: Verb
         );

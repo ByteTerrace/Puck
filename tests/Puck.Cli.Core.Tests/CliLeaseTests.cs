@@ -261,6 +261,37 @@ public sealed class CliLeaseTests : IDisposable {
         Assert.Equal(expected: 2, actual: await CliRoot.InvokeAsync(args: ["lease", "gpu", "--holder", "agents-slim", "--", "agents-slim-missing-executable"], root: command));
         Assert.False(condition: Directory.Exists(path: Path.Combine(path1: m_root, path2: "gpu")));
     }
+    // Law: puck lease heavy and gpu wait on the host admission once they hold their lease, as a heavy suite and a device
+    // step respectively, bounded by what --wait left; a refusal starts nothing and releases the lease. The build lease and
+    // the quiet window (which settles on the same readings) take no admission of their own.
+    [Fact]
+    public async Task HeavyAndGpuLeasesAdmitThroughTheHostAdmissionHoldingTheLeaseAndARefusalStartsNothing() {
+        var asked = new List<(string Step, bool Device, bool Heavy, bool Held, TimeSpan? Bound)>();
+        var refuse = false;
+        HostAdmit admit = (_, step, device, heavySuite, bound, _, _, _) => {
+            asked.Add(item: (step, device, heavySuite, Directory.Exists(path: Path.Combine(path1: m_root, path2: (device ? "gpu" : "heavy"))), bound));
+
+            return Task.FromResult(result: !refuse);
+        };
+        var command = CliRoot.Compose(description: "Lease test", verbs: [LeaseCommand.Create(admit: admit, clock: TimeProvider.System, leaseRoot: m_root)]);
+        var args = (OperatingSystem.IsWindows() ? new[] { "cmd.exe", "/c", "exit 0" } : new[] { "/bin/sh", "-c", "exit 0" });
+
+        Assert.Equal(expected: 0, actual: await CliRoot.InvokeAsync(args: ["lease", "heavy", "--holder", "agents-slim", "--wait", "60", "--", .. args], root: command));
+        Assert.Equal(expected: 0, actual: await CliRoot.InvokeAsync(args: ["lease", "gpu", "--holder", "agents-slim", "--", .. args], root: command));
+        Assert.Equal(expected: 0, actual: await CliRoot.InvokeAsync(args: ["lease", "build", "--holder", "agents-slim", "--", .. args], root: command));
+        Assert.Equal(expected: 2, actual: asked.Count);
+        Assert.Equal(expected: ("lease heavy agents-slim", false, true, true), actual: (asked[0].Step, asked[0].Device, asked[0].Heavy, asked[0].Held));
+        Assert.InRange(actual: asked[0].Bound!.Value, low: TimeSpan.FromSeconds(seconds: 50), high: TimeSpan.FromSeconds(seconds: 60));
+        Assert.Equal(expected: ("lease gpu agents-slim", true, false, true, TimeSpan.Zero), actual: (asked[1].Step, asked[1].Device, asked[1].Heavy, asked[1].Held, asked[1].Bound!.Value));
+
+        refuse = true;
+        var marker = Path.Combine(path1: m_root, path2: "ran");
+        var touch = (OperatingSystem.IsWindows() ? new[] { "cmd.exe", "/c", "mkdir", marker } : new[] { "/bin/mkdir", marker });
+
+        Assert.Equal(expected: 2, actual: await CliRoot.InvokeAsync(args: ["lease", "gpu", "--holder", "agents-slim", "--", .. touch], root: command));
+        Assert.False(condition: Directory.Exists(path: marker));
+        Assert.False(condition: Directory.Exists(path: Path.Combine(path1: m_root, path2: "gpu")));
+    }
     [Fact]
     public async Task CancellingTheCommandKillsItsChildBeforeReleasingTheLease() {
         Directory.CreateDirectory(path: m_root);
