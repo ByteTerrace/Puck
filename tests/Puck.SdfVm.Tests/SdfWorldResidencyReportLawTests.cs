@@ -89,7 +89,6 @@ public sealed class SdfWorldResidencyReportLawTests {
         )],
     };
     private static SdfWorldResidency Residency(SdfFrame frame) => new(
-        brickPoolVoxelCapacity: 0,
         frameSource: new FixedFrameSource(frame: frame),
         height: Extent,
         kernels: SdfTestPipelines.Kernels(),

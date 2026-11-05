@@ -17,7 +17,7 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfKernelSetLawTests {
     private static readonly string[] Stems = [
-        "sdf-world-surface", "sdf-mesh-bake-mask", "sdf-brick-bake", "sdf-sky-runs", "sdf-world-views", "sdf-resolve",
+        "sdf-world-surface", "sdf-mesh-bake-mask", "sdf-sky-runs", "sdf-world-views", "sdf-resolve",
         "sdf-composite", "sdf-sky-environment", "sdf-sky-environment-reduce", "sdf-screen-emission", "sdf-mesh-bake", "sdf-mesh-pyramid",
         "sdf-glass", "sdf-bloom-down", "sdf-bloom-up", "sdf-bloom-apply",
     ];
@@ -131,7 +131,7 @@ public sealed class SdfKernelSetLawTests {
     // Both interfaces the kernels read carry this host's instruction set in their pass blocks' variable names.
     [Fact]
     public void TheKernelInterfacesCarryTheHostsInstructionSetStamp() {
-        foreach (var layout in ((ReadOnlySpan<ShaderInterfaceLayout>)[SdfWorldInterfaces.WorldLayout, SdfWorldInterfaces.BrickBakeLayout, SdfWorldInterfaces.ResolveParameters.Layout])) {
+        foreach (var layout in ((ReadOnlySpan<ShaderInterfaceLayout>)[SdfWorldInterfaces.WorldLayout, SdfWorldInterfaces.ResolveParameters.Layout])) {
             Assert.Equal(expected: SdfWorldInterfaces.Stamp, actual: layout.Interface.Stamp);
             Assert.Equal(
                 expected: ("passGroup" + SdfWorldInterfaces.Stamp),

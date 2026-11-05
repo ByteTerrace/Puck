@@ -35,18 +35,14 @@ public enum SdfShapeType : uint {
     // world-views kernel, SDF_GLYPH_ATLAS); every other kernel falls back to the exact 2D quad's extruded box — a
     // conservative underestimate, since the glyph is strictly inside its cell.
     Glyph = 14,
-    // A SAMPLED distance-field brick: the settled-carve UNION field (min_i(|p-c_i|-r_i)), baked once into a cubic-voxel
-    // lattice the kernels sample O(1) with manual trilinear interpolation, composed into the analytic program as ONE
-    // ordinary Subtraction-blend instance so the primary/shadow/AO marches stop paying O(carve-count). Data0 =
-    // (boxMinX, boxMinY, boxMinZ, cellSize); box extent derives as dims*cellSize. Data1 = (smooth [ISA-wide, = 0 for the
-    // hard subtraction a brick composes with], packedDims [uint bits: 3x10-bit dims, <= 1023/axis, host-packed],
-    // brickWordOffset [uint bits: the brick's base word in the sdfBrickPool buffer], boundaryFloor [= margin/lambda,
-    // host-baked - the outside-box lower-bound offset]). The stored values are pre-scaled c/lambda (lambda = sqrt(3)
-    // folded in at bake time), so the trilinear interpolant is 1-Lipschitz and march-safe with NO stepScale change and
-    // an unchanged zero set. Evaluated only where the brick pool is bound (SDF_SAMPLED_REGIONS - the world-views + beam
-    // kernels); every other kernel falls back to the conservative UNION
-    // HULL - SDF_FAR_DISTANCE, so the subtraction never bites and the region renders uncarved (the Glyph quad-fallback
-    // precedent: solid, never a hole).
+    // A sampled distance field: a cubic-voxel lattice sampled by manual trilinear interpolation. Data0 = (boxMinX, boxMinY,
+    // boxMinZ, cellSize); the box extent derives as dims*cellSize. Data1 = (smooth [ISA-wide, 0: a sampled field composes
+    // hard], packedDims [uint bits: 3x10-bit dims, <= 1023/axis], handle [uint bits: the field's place in
+    // SdfProgram.SampledFields], boundaryFloor [margin/lambda, the outside-box lower-bound offset]). The values are not in
+    // the program: each frame carries its fields' snapshots (SdfSampledSet), and only the mesh bake, the kernel that defines
+    // SDF_SAMPLED_REGIONS, samples them, from the snapshots its job's groups hashed. The stored values are pre-scaled 1/lambda
+    // (lambda = sqrt(3)), so the interpolant is 1-Lipschitz with no stepScale change. Every other kernel answers the far
+    // distance (the Glyph quad-fallback precedent).
     SampledRegion = 15,
     // A member of the 2D-primitive family (SAME lane layout as RoundedRectangle): a 45-degree-beveled rectangle (the
     // box field intersected with a diagonal bevel half-plane per corner) lifted to 3D by revolve/extrude. Data0 =

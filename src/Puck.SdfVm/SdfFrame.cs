@@ -169,6 +169,15 @@ public sealed record SdfFrame(
     /// <summary>Gets the words <see cref="Program"/> differs in from the program built before it, which tables holding
     /// that earlier program upload alone, or <see langword="null"/> when its builder measured none.</summary>
     public SdfProgramDelta? ProgramDelta { get; internal set; }
+    /// <summary>Gets the snapshots <see cref="Program"/>'s sampled fields hold this frame, by handle
+    /// (<see cref="SdfProgram.SampledFields"/>): the producer's capture (<see cref="SdfSampledSet.Capture"/>), or the
+    /// program's own (<see cref="SdfProgram.Sampled"/>) when it set none. A field publishing new values moves this set and
+    /// no program word; the mesh bake plans again only the groups that read a moved field.</summary>
+    public SdfSampledSet Sampled {
+        get => (m_sampled ?? Program.Sampled);
+        init => m_sampled = value;
+    }
+    private SdfSampledSet? m_sampled;
 
     /// <summary>Gets the slot ranges drawn on both sides of a portal this frame (<see cref="SdfSlotClip"/>): the frame's
     /// producer fills it from the stamp pools whose slots the frame carries (a composition from every emitter's

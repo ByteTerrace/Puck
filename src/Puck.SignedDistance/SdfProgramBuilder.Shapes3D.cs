@@ -325,30 +325,10 @@ public sealed partial class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    /// <summary>Adds a sampled distance-field brick (<see cref="SdfShapeType.SampledRegion"/>) — the settled-carve union field,
-    /// pre-baked into a <paramref name="dimX"/>x<paramref name="dimY"/>x<paramref name="dimZ"/> cubic-voxel lattice at
-    /// <paramref name="brickWordOffset"/> in the engine's <c>sdfBrickPool</c> buffer, sampled O(1) by manual trilinear
-    /// interpolation and composed as one ordinary <see cref="SdfBlendOp.Subtraction"/> instance. The distance channel is
-    /// pre-scaled c/λ (λ folded in at bake time, so this op applies no step clamp), and <paramref name="boundaryFloor"/>
-    /// (= margin/λ, host-baked) is the outside-box lower-bound offset. Where the pool is not bound the shape falls back to
-    /// the conservative union hull (SDF_FAR_DISTANCE — the subtraction never bites), so a brick program renders uncarved
-    /// but never holes. The lane packing (Data0 = boxMin.xyz + cellSize; Data1 = smooth + packedDims + brickWordOffset +
-    /// boundaryFloor) is KEEP IN SYNC with sdfSampledRegion in Assets/Shaders/Sdf/field/sdf-shapes.hlsli.</summary>
-    /// <param name="boxMin">The brick box's minimum corner in the chain's local space (voxel (0,0,0)'s cell origin).</param>
-    /// <param name="cellSize">The cubic voxel edge (world units per voxel); must be finite and greater than zero.</param>
-    /// <param name="dimX">Voxel count along local X, in [1, <see cref="MaxSampledRegionDim"/>].</param>
-    /// <param name="dimY">Voxel count along local Y, in [1, <see cref="MaxSampledRegionDim"/>].</param>
-    /// <param name="dimZ">Voxel count along local Z, in [1, <see cref="MaxSampledRegionDim"/>].</param>
-    /// <param name="brickWordOffset">The brick's base word index in the pool buffer (from the planner's slot layout); ≥ 0.</param>
-    /// <param name="boundaryFloor">The host-baked outside-box lower-bound offset (margin/λ); finite and ≥ 0.</param>
-    /// <param name="material">The material id the carved region shades with (unused where subtraction only removes).</param>
-    /// <param name="blend">The compose against the accumulated field; <see cref="SdfBlendOp.Subtraction"/> by default (a
-    /// brick carves). Smooth and chamfered carves remain analytic and must not use this sampled representation.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="boxMin"/> is not finite, a dim is out of range,
-    /// <paramref name="cellSize"/> is not positive and finite, <paramref name="brickWordOffset"/> is negative,
-    /// <paramref name="boundaryFloor"/> is negative or not finite, or <paramref name="blend"/> is not a defined
-    /// <see cref="SdfBlendOp"/>.</exception>
-    public SdfProgramBuilder SampledRegion(Vector3 boxMin, float cellSize, int dimX, int dimY, int dimZ, int brickWordOffset, float boundaryFloor, int material, SdfBlendOp blend = SdfBlendOp.Subtraction) {
+    // The sampled instruction SampledValues binds to its field: the lanes Data0 = boxMin.xyz + cellSize, Data1 = smooth +
+    // packedDims + handle (written by the program, SdfProgram.BindSampledFields) + boundaryFloor. KEEP IN SYNC with
+    // sdfSampledRegion in Assets/Shaders/Sdf/field/sdf-shapes.hlsli.
+    private SdfProgramBuilder SampledRegion(Vector3 boxMin, float cellSize, int dimX, int dimY, int dimZ, float boundaryFloor, int material, SdfBlendOp blend) {
         // The one lane this method did not check: the box corner is signed by construction (it is a position) but
         // still reaches Data0.xyz raw, and TryGetLocalBound derives the brick's whole cull sphere from it.
         RequireFinite(
@@ -397,13 +377,6 @@ public sealed partial class SdfProgramBuilder {
             );
         }
 
-        if (brickWordOffset < 0) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(brickWordOffset),
-                message: "A sampled-region brick word offset must be non-negative."
-            );
-        }
-
         if (
             !float.IsFinite(f: boundaryFloor) ||
             (boundaryFloor < 0f)
@@ -414,8 +387,8 @@ public sealed partial class SdfProgramBuilder {
             );
         }
 
-        // 3x10-bit dim pack; the two uint bit-fields (packedDims, brickWordOffset) ride the float lanes as reinterpreted
-        // bits (like Glyph's PackUv) and round-trip exactly through SdfProgram's WriteVector4 — no arithmetic touches them.
+        // 3x10-bit dim pack; the two uint bit-fields (packedDims, handle) ride the float lanes as reinterpreted bits (like
+        // Glyph's PackUv) and round-trip exactly through SdfProgram's WriteVector4 — no arithmetic touches them.
         var packedDims = ((uint)dimX) | (((uint)dimY) << 10) | (((uint)dimZ) << 20);
 
         // Every dim is capped at MaxSampledRegionDim (1023) and cellSize is required positive and finite, but the
@@ -439,7 +412,7 @@ public sealed partial class SdfProgramBuilder {
         return Shape(
             blend: blend,
             derived1: BitConverter.UInt32BitsToSingle(value: packedDims),                // Data1.y = packedDims (uint bits)
-            derived2: BitConverter.UInt32BitsToSingle(value: ((uint)brickWordOffset)),      // Data1.z = brickWordOffset (uint bits)
+            derived2: 0f,                                                                 // Data1.z = the field's handle, bound by the program
             derived3: boundaryFloor,                                                      // Data1.w = boundaryFloor
             dimensions: new Vector4(
                 w: cellSize,       // Data0.w = cellSize
@@ -449,7 +422,7 @@ public sealed partial class SdfProgramBuilder {
             ),
             material: material,
             shape: SdfShapeType.SampledRegion,
-            smooth: 0f             // Data1.x = smooth: a brick composes with HARD subtraction (smooth carves stay analytic)
+            smooth: 0f             // Data1.x = smooth: a sampled field composes hard
         );
     }
     public SdfProgramBuilder ScreenSlab(Vector3 halfExtents, float round, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {

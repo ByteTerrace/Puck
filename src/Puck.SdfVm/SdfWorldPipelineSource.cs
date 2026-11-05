@@ -56,7 +56,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     // frame thread, so a device loss reaches the host's recovery; the next call starts again. Leases whose kernels are
     // already loaded are taken on this call: taking one joins the cache's entry or starts its build, and never waits,
     // so a holder whose pipelines another holder already built has its set in the frame that first asks.
-    public SdfWorldPipelines? Poll(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines) {
+    public SdfWorldPipelines? Poll(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX) {
         if (
             (m_lease is null) &&
             (kernels is not null) &&
@@ -65,7 +65,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             var leases = TakeLeases(
                 device: device,
                 hostsOnDirectX: hostsOnDirectX,
-                includeBrickPipelines: includeBrickPipelines, kernels: kernels
+                kernels: kernels
             );
 
             Take(leases: leases);
@@ -75,7 +75,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
                 Start(
                     device: device,
                     hostsOnDirectX: hostsOnDirectX,
-                    includeBrickPipelines: includeBrickPipelines, kernels: kernels
+                    kernels: kernels
                 );
             }
 
@@ -185,8 +185,8 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     // release revision (IGpuBindings.HeapReleaseRevision) moves, as another owner returns its pools; a refusal of any
     // other kind never reads it. Release (a device loss or disposal) forgets the refusal. The inputs are read with inputsOf only when a build is due or a refusal is being
     // checked, never while the set builds. A device loss is never refused: it reaches the host's recovery.
-    public SdfWorldTables? TryBuild<TState, TInputs>(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines, string label, TState state, Func<TState, TInputs> inputsOf, Func<SdfWorldPipelines, SdfWorldPassPipelines, TInputs, SdfWorldTables> construct) where TInputs : IEquatable<TInputs> {
-        var key = KeyOf(device: device, hostsOnDirectX: hostsOnDirectX, includeBrickPipelines: includeBrickPipelines, kernels: kernels);
+    public SdfWorldTables? TryBuild<TState, TInputs>(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, string label, TState state, Func<TState, TInputs> inputsOf, Func<SdfWorldPipelines, SdfWorldPassPipelines, TInputs, SdfWorldTables> construct) where TInputs : IEquatable<TInputs> {
+        var key = KeyOf(device: device, hostsOnDirectX: hostsOnDirectX, kernels: kernels);
         TInputs inputs = default!;
         var inputsRead = false;
         var heapRevision = device.Services.Bindings.HeapReleaseRevision;
@@ -212,7 +212,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             if (Poll(
                 device: device,
                 hostsOnDirectX: hostsOnDirectX,
-                includeBrickPipelines: includeBrickPipelines, kernels: kernels
+                kernels: kernels
             ) is not { } pipelines) {
                 return null;
             }
@@ -252,7 +252,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             // creation fault that fired inside it moved the faults' revision, which is no change the build could retry on.
             m_refusal = refusal;
             m_refusedHeapRevision = heapRevision;
-            m_refusedKey = KeyOf(device: device, hostsOnDirectX: hostsOnDirectX, includeBrickPipelines: includeBrickPipelines, kernels: kernels);
+            m_refusedKey = KeyOf(device: device, hostsOnDirectX: hostsOnDirectX, kernels: kernels);
             m_refusedInputs = (inputsRead
                 ? inputs
                 : inputsOf(arg: state)
@@ -264,11 +264,10 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
 
     // The key of a build from these arguments and the leases and set held now. A refusal reads it again after the failed
     // attempt, which may have taken the leases; both readings come from here so neither can miss a lease.
-    private BuildKey KeyOf(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines) => new(
+    private BuildKey KeyOf(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX) => new(
         Device: device,
         FaultsRevision: (device.Services.Faults?.Revision ?? 0L),
         HostsOnDirectX: hostsOnDirectX,
-        IncludeBrickPipelines: includeBrickPipelines,
         Kernels: kernels,
         MeshRaster: MeshRaster,
         RegionCopy: RegionCopy,
@@ -280,22 +279,21 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
         SetKernels: Current?.Kernels
     );
     // What a build is made from besides the holder's own inputs; a refused build is tried again when any of it changes.
-    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfKernelSet? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, GpuPassPipeline? MeshRaster, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, GpuPassPipeline? ShadowRaster, GpuPassPipeline? ShadowExitRaster, GpuPassPipeline? GlassRaster, GpuPassPipeline? Occlusion, SdfKernelSet? SetKernels);
+    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfKernelSet? Kernels, bool HostsOnDirectX, GpuPassPipeline? MeshRaster, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, GpuPassPipeline? ShadowRaster, GpuPassPipeline? ShadowExitRaster, GpuPassPipeline? GlassRaster, GpuPassPipeline? Occlusion, SdfKernelSet? SetKernels);
 
     // Kept apart from Poll so the closure is allocated only when a lease is taken, never on a polled frame. Only loading
     // the deployed kernels reads files, so only a holder with none of its own takes its leases on the thread pool.
-    private void Start(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines) =>
+    private void Start(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX) =>
         m_acquire.Start(build: _ => TakeLeases(
             device: device,
             hostsOnDirectX: hostsOnDirectX,
-            includeBrickPipelines: includeBrickPipelines, kernels: kernels
+            kernels: kernels
         ));
     // Takes every lease a holder's engine needs. A pass-pipeline acquire that throws releases the leases taken before it.
-    private Leases TakeLeases(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines) {
+    private Leases TakeLeases(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX) {
         var set = SdfWorldPipelines.Acquire(
             cache: catalog.Pipelines,
             device: device,
-            includeBrickPipelines: includeBrickPipelines,
             kernels: (kernels ?? catalog.LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: hostsOnDirectX)))
         );
 

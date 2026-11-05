@@ -211,7 +211,7 @@ public sealed partial class WorldScreenBinder {
     private SdfWorldResidency? InfinityResidencyOf(InfinityEntry entry) {
         if (entry.Residency is { } held) { return held; }
         if ((m_viewPipelines is null) || (entry.Source is not { } source)) { return null; }
-        var residency = new SdfWorldResidency(brickPoolVoxelCapacity: 0,
+        var residency = new SdfWorldResidency(
             dynamicTransformCapacity: source.DynamicTransformCapacity,
             frameSource: new WorldSessionFrameSource(source, CaptureHostFirst),
             height: ((uint)m_viewDisplayHeight), width: ((uint)m_viewDisplayWidth),

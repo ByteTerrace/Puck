@@ -21,8 +21,7 @@ public sealed partial class SdfWorldPassesLawTests {
         lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 1);
         lights.ShadowSlots.SetSlot(light: 0, slot: 0);
         using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
-            residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
-                frameSource: new FixedFrameSource(frame: Frame() with { Lights = lights }), height: Extent,
+            residency: new SdfWorldResidency(frameSource: new FixedFrameSource(frame: Frame() with { Lights = lights }), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var frame = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
             Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = gpu }),

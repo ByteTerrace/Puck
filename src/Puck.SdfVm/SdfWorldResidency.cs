@@ -39,7 +39,6 @@ public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 
 /// </para>
 /// </summary>
 public sealed partial class SdfWorldResidency : IDisposable {
-    private readonly int m_brickPoolVoxelCapacity;
     private readonly int m_dynamicTransformCapacity;
     private readonly ISdfFrameSource m_frameSource;
     private readonly int m_instanceCapacity;
@@ -119,13 +118,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <see cref="SdfWorldTablesOptions"/>): a frame source that hot-swaps programs declares its envelope here.</param>
     /// <param name="instanceCapacity">An optional floor on the instance count the bake's instance masks are sized
     /// for.</param>
-    /// <param name="brickPoolVoxelCapacity">The carve-bake brick pool's voxel capacity (see
-    /// <see cref="SdfWorldTablesOptions.BrickPoolVoxelCapacity"/>), frozen at construction; 0 allocates no pool.</param>
     /// <param name="meshLibrary">The library the residency's bake shares meshes through with every other residency
     /// holding it (<see cref="SdfMeshPathBake.Library"/>), or <see langword="null"/> for a library of its own.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfWorldResidency(SdfWorldPipelineCatalog pipelines, ISdfFrameSource frameSource, SdfKernelSet kernels, string name, uint width, uint height, ISdfScreenSources? screenSources = null, Func<FrameContext, bool>? film = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int brickPoolVoxelCapacity = SdfWorldTables.DefaultBrickPoolVoxelCapacity, SdfMeshLibrary? meshLibrary = null) {
+    public SdfWorldResidency(SdfWorldPipelineCatalog pipelines, ISdfFrameSource frameSource, SdfKernelSet kernels, string name, uint width, uint height, ISdfScreenSources? screenSources = null, Func<FrameContext, bool>? film = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, SdfMeshLibrary? meshLibrary = null) {
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(frameSource);
         ArgumentException.ThrowIfNullOrEmpty(name);
@@ -137,7 +134,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
             throw new ArgumentException(message: "An SDF residency's extent must be non-zero.");
         }
 
-        m_brickPoolVoxelCapacity = brickPoolVoxelCapacity;
         m_dynamicTransformCapacity = dynamicTransformCapacity;
         m_film = film;
         m_frameSource = frameSource;
@@ -825,8 +821,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     // Whether the frame's preparation left the tables holding a frame the views can render.
     private bool m_renders;
 
-    // Captures the frame from the frame source when it films one this frame, first advancing its brick planner against
-    // the live tables, whose Ready flip bumps the source's content revision so the capture emits the brick this frame.
+    // Captures the frame from the frame source when it films one this frame.
     private void Capture(in FrameContext context) {
         if (!(m_film?.Invoke(arg: context) ?? true)) {
             return;
@@ -841,10 +836,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
         } else {
             if (!converging) {
                 m_frozenFrame = null;
-            }
-
-            if (m_tables is { } tables) {
-                m_frameSource.AdvanceBricks(bakes: tables);
             }
 
             frame = m_frameSource.CaptureFrame(
@@ -903,7 +894,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
             ),
             device: device,
             hostsOnDirectX: false,
-            includeBrickPipelines: (m_brickPoolVoxelCapacity > 0),
             inputsOf: static state => (
                 state.Residency,
                 state.Device,
@@ -946,7 +936,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
     private SdfWorldTablesOptions TablesOptions(SdfFrame frame) =>
         new(
-            BrickPoolVoxelCapacity: m_brickPoolVoxelCapacity,
             DynamicTransformCapacity: Math.Max(
                 val1: Math.Max(
                     val1: 1,

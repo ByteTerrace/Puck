@@ -305,8 +305,6 @@ public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Heigh
     public ulong DynamicTransforms { get; init; }
     /// <summary>Gets the words of one instance mask, which the host derives from its instances.</summary>
     public ulong InstanceMaskWords { get; init; }
-    /// <summary>Gets the voxels of the SDF brick pool the host provisions for its world.</summary>
-    public ulong BrickPoolVoxels { get; init; }
 
     /// <summary>Returns the units a basis counts.</summary>
     /// <param name="basis">The basis.</param>
@@ -320,7 +318,6 @@ public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Heigh
         ShaderPipelineCountBasis.Viewports => Viewports,
         ShaderPipelineCountBasis.DynamicTransforms => DynamicTransforms,
         ShaderPipelineCountBasis.InstanceMaskWords => InstanceMaskWords,
-        ShaderPipelineCountBasis.BrickPoolVoxels => BrickPoolVoxels,
         _ => throw new ArgumentOutOfRangeException(
             actualValue: basis,
             message: "Unknown count basis.",

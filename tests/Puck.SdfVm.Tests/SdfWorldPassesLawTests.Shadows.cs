@@ -32,8 +32,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
         var current = Shaped(resolution: SdfShadowResolution.Full, slots: 2);
         using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
-            residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
-                frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
+            residency: new SdfWorldResidency(frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
             Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = gpu }),
@@ -85,8 +84,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
         var current = ShadowFrame(active: false, capacity: 0, weight: 0f);
         using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
-            residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
-                frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
+            residency: new SdfWorldResidency(frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
             Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = gpu }),

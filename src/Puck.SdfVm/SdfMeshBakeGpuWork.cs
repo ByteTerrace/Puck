@@ -10,11 +10,15 @@ namespace Puck.SdfVm;
 /// takes (<see cref="SdfMeshPathBake.TryTake"/>), dispatched as the mask kernel writing each lattice's instance mask and
 /// the bake kernel sampling every lattice through the field interpreter, its samples copied back and answered
 /// (<see cref="SdfMeshPathBake.Complete(SdfMeshBakeBatch, ReadOnlySpan{byte})"/>). Each slot holds the batch's own inputs and outputs: its pass block, its
-/// point table (sample points, then saved poses), its instance masks and samples, and a World set binding the tables'
-/// current tables with that point table in place of theirs.
+/// point table (sample points, then saved poses), its sampled table, its instance masks and samples, and a World set
+/// binding the tables' current tables with that point table and sampled table in place of theirs.
 /// <para>Invariant: a batch samples the program the tables last uploaded. The bake takes a batch only for the program
 /// it meshes, and only when that is the tables' uploaded program (<see cref="SdfWorldTables.BackgroundProgram"/>), so
 /// the field the World set binds is the field the batch's groups were planned from.</para>
+/// <para>Invariant: a lattice samples exactly the snapshots its group's geometry hashed. The sampled values the kernel
+/// reads come from one place, the slot's sampled table, written here from the batch's snapshots
+/// (<see cref="SdfMeshBakeBatch.WriteSampled"/>), which the bake takes from its groups' sealed snapshots
+/// (<see cref="SdfMeshBakeGroup.SampledSnapshots"/>), one snapshot a handle; the tables bind a filler there.</para>
 /// </summary>
 internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
     // The words the work counters' one row and its details take at most.
@@ -120,7 +124,12 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         var pointBytes = (((ulong)Math.Max(val1: 1, val2: batch.InputRows)) * PointRowBytes);
         var replaced = false;
 
+        var sampledBytes = (((ulong)batch.SampledWords) * sizeof(uint));
+
         slot.Points = Ensure(buffer: slot.Points, bytes: pointBytes, create: bytes => m_gpu.BufferFactory.CreateHostVisible(name: Name(part: "points", index: index), sizeBytes: bytes, usage: GpuBufferUsage.Storage), replaced: ref replaced);
+        var sampledReplaced = false;
+
+        slot.Sampled = Ensure(buffer: slot.Sampled, bytes: sampledBytes, create: bytes => m_gpu.BufferFactory.CreateHostVisible(name: Name(part: "sampled", index: index), sizeBytes: bytes, usage: GpuBufferUsage.Storage), replaced: ref sampledReplaced);
         slot.Masks = Ensure(buffer: slot.Masks, bytes: Math.Max(val1: maskBytes, val2: sizeof(uint)), create: bytes => m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "masks", index: index), sizeBytes: bytes, usage: GpuBufferUsage.Storage), replaced: ref replaced);
         slot.Samples = Ensure(buffer: slot.Samples, bytes: Math.Max(val1: sampleBytes, val2: sizeof(uint)), create: bytes => m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "samples", index: index), sizeBytes: bytes, usage: GpuBufferUsage.Storage), replaced: ref replaced);
         if (replaced || !slot.PassSetsWritten) { WritePassSets(slot: slot); }
@@ -128,10 +137,23 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         foreach (var (row, rows) in batch.PointRuns()) {
             ((IGpuStorageBuffer)slot.Points).Write<Vector4>(data: rows.Span, destinationOffsetBytes: (((ulong)row) * PointRowBytes));
         }
+        // The slot keeps the table its last job wrote: a batch of the same snapshots at the same handles rewrites nothing.
+        if (sampledReplaced || !SameSampled(batch: batch, slot: slot)) {
+            var words = ArrayPool<uint>.Shared.Rent(minimumLength: batch.SampledWords);
+
+            try {
+                batch.WriteSampled(table: words);
+                slot.Sampled.Write<uint>(data: words.AsSpan(start: 0, length: batch.SampledWords));
+            } finally {
+                ArrayPool<uint>.Shared.Return(array: words);
+            }
+            slot.SampledHandles = batch.SampledHandles;
+            slot.SampledWritten = batch.Sampled;
+        }
         Array.Clear(array: m_block);
         SdfMeshBakeBlock.Write(batch: batch, block: m_block, instanceMaskWordCount: (uint)maskWords, workCounterDetailRow: 0u, workCounterRow: 0u);
         slot.Block.Write<byte>(data: m_block);
-        m_tables.WriteBackgroundWorldSet(overrides: [(SdfWorldPackage.MeshBakePoints, slot.Points)], set: slot.WorldSet);
+        m_tables.WriteBackgroundWorldSet(overrides: [(SdfWorldPackage.MeshBakePoints, slot.Points), (SdfWorldPackage.SampledValues, slot.Sampled)], set: slot.WorldSet);
 
         var recorder = recording.Recorder;
         var commandBuffer = recording.CommandBuffer;
@@ -182,7 +204,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
     /// <inheritdoc/>
     public void Abandon(object job) => m_bake.Abandon(batch: (SdfMeshBakeBatch)job);
     /// <inheritdoc/>
-    /// <remarks>Each slot's pass block and point table (host-visible) and its instance masks and samples
+    /// <remarks>Each slot's pass block, point table and sampled table (host-visible) and its instance masks and samples
     /// (device-local), with the frame block and the counters.</remarks>
     public GpuMemoryBytes OwnedBytes {
         get {
@@ -190,7 +212,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
             var host = m_frameBlock.SizeBytes;
 
             foreach (var slot in m_slots) {
-                host += slot.Block.SizeBytes + (slot.Points?.SizeBytes ?? 0UL);
+                host += slot.Block.SizeBytes + (slot.Points?.SizeBytes ?? 0UL) + (slot.Sampled?.SizeBytes ?? 0UL);
                 device += (slot.Masks?.SizeBytes ?? 0UL) + (slot.Samples?.SizeBytes ?? 0UL);
             }
             return new GpuMemoryBytes(DeviceLocal: device, HostVisible: host);
@@ -205,6 +227,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         foreach (var slot in m_slots) {
             slot.Block.Dispose();
             slot.Points?.Dispose();
+            slot.Sampled?.Dispose();
             slot.Masks?.Dispose();
             slot.Samples?.Dispose();
         }
@@ -213,6 +236,16 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         m_gpu.Bindings.DestroyPool(poolHandle: m_pool);
     }
 
+    // Whether a slot's sampled table holds a batch's snapshots at its handles, by snapshot object.
+    private static bool SameSampled(SdfMeshBakeBatch batch, SlotResources slot) {
+        var written = slot.SampledWritten;
+
+        if ((written is null) || (slot.SampledHandles != batch.SampledHandles) || (written.Length != batch.Sampled.Length)) { return false; }
+        for (var index = 0; (index < written.Length); index++) {
+            if ((written[index].Handle != batch.Sampled[index].Handle) || !ReferenceEquals(objA: written[index].Snapshot, objB: batch.Sampled[index].Snapshot)) { return false; }
+        }
+        return true;
+    }
     // Binds a kernel and its three groups: the client's frame set, the job's pass set and its World set.
     private void Bind(IGpuRecorder recorder, nint commandBuffer, IGpuComputePipeline pipeline, nint pass, nint world) {
         recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, pipelineHandle: pipeline.Handle);
@@ -257,6 +290,10 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         public nint BakeSet { get; } = BakeSet;
         public nint WorldSet { get; } = WorldSet;
         public IGpuStorageBuffer? Points { get; set; }
+        public IGpuStorageBuffer? Sampled { get; set; }
+        // The batch snapshots and handle count the sampled table was last written with.
+        public (int Handle, Puck.SignedDistance.SdfSampledSnapshot Snapshot)[]? SampledWritten { get; set; }
+        public int SampledHandles { get; set; }
         public IGpuBuffer? Masks { get; set; }
         public IGpuBuffer? Samples { get; set; }
         public bool PassSetsWritten { get; set; }

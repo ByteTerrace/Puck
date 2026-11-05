@@ -16,7 +16,8 @@ public readonly record struct SdfMeshGeometry(bool Dynamic, UInt128 Hash);
 /// (<see cref="SdfMeshLibrary"/>):
 /// <list type="bullet">
 /// <item>each instruction's fields, a side-table entry's values (<see cref="SdfProgram.SideTableValues"/>) in place of the
-/// offset its program packed the entry at;</item>
+/// offset its program packed the entry at, and a sampled instruction's snapshot (<see cref="SdfSampledSet"/>) in place of
+/// its field's handle;</item>
 /// <item>an instance's shapes' materials by their place among the group's materials (<see cref="Materials"/>), since a
 /// program numbers its palette in the order its emitters register materials;</item>
 /// <item>a static instance's bound, and a dynamic instance's bound radius, which clips what the bake samples. A dynamic
@@ -34,8 +35,9 @@ public readonly record struct SdfMeshGeometry(bool Dynamic, UInt128 Hash);
 /// <item>the lanes (<see cref="DynamicTransform.Lanes"/>) a lane erosion or a morph reads from the slot its chain
 /// rides.</item>
 /// </list>
-/// The rounded poses and lanes it hashes are kept (<see cref="Poses"/>), and the bake samples the group through them
-/// rather than through the frame it dispatches in, so a mesh is a function of its geometry alone.
+/// The rounded poses and lanes it hashes are kept (<see cref="Poses"/>), as are the snapshots (<see cref="Sampled"/>), and
+/// the bake samples the group through them rather than through the frame it dispatches in, so a mesh is a function of its
+/// geometry alone.
 /// </summary>
 /// <param name="dynamic">Whether the group bakes in its slot's frame.</param>
 public sealed class SdfMeshGeometryBuilder(bool dynamic) {
@@ -68,6 +70,9 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
     // Made by the first kept pose: most static groups keep none.
     private SortedDictionary<int, DynamicTransform>? m_poses;
+    // Made by the first sampled instruction: each handle the group reads, with the snapshot its geometry hashed.
+    private SortedDictionary<int, SdfSampledSnapshot>? m_sampled;
+    private static readonly IReadOnlyDictionary<int, SdfSampledSnapshot> NoSampled = new Dictionary<int, SdfSampledSnapshot>();
 
     private static readonly IReadOnlyDictionary<int, DynamicTransform> NoPoses = new Dictionary<int, DynamicTransform>();
     // The slot the chain being appended rides, whose lanes a lane erosion reads; -1 under none.
@@ -156,6 +161,28 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         }
     }
 
+    /// <summary>Gets each sampled field the appended instructions read, by its handle in the program
+    /// (<see cref="SdfProgram.SampledFields"/>), with the snapshot the geometry hashed, which the bake samples the group
+    /// through.</summary>
+    public IReadOnlyDictionary<int, SdfSampledSnapshot> Sampled => (((IReadOnlyDictionary<int, SdfSampledSnapshot>?)m_sampled) ?? NoSampled);
+    /// <summary>Gets whether an appended instruction samples a field, so the geometry depends on the frame's sampled
+    /// set.</summary>
+    public bool ReadsSampled => (m_sampled is not null);
+
+    /// <summary>Returns whether every snapshot the geometry hashed is the one a set holds at its handle.</summary>
+    /// <param name="sampled">The set.</param>
+    /// <returns><see langword="true"/> when the geometry reads no field or reads the set's snapshots.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="sampled"/> is <see langword="null"/>.</exception>
+    public bool SampledMatches(SdfSampledSet sampled) {
+        ArgumentNullException.ThrowIfNull(argument: sampled);
+
+        if (m_sampled is null) { return true; }
+        foreach (var (handle, snapshot) in m_sampled) {
+            if ((handle >= sampled.Count) || !ReferenceEquals(objA: sampled[handle], objB: snapshot)) { return false; }
+        }
+        return true;
+    }
+
     /// <summary>Gets the lowest and highest slot <see cref="Poses"/> holds, or <c>(-1, -1)</c> while it holds none.</summary>
     public (int First, int Last) PoseSlots => ((m_poses is null) ? (-1, -1) : (m_firstPose, m_lastPose));
 
@@ -186,12 +213,15 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// <param name="program">The program.</param>
     /// <param name="instance">The instance's index in <see cref="SdfProgram.Instances"/>.</param>
     /// <param name="transforms">The frame's dynamic transforms, which the bake samples the instance through.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="transforms"/> is
-    /// <see langword="null"/>.</exception>
+    /// <param name="sampled">The frame's sampled set, whose snapshots the bake samples the instance's sampled fields
+    /// through.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="program"/>, <paramref name="transforms"/> or
+    /// <paramref name="sampled"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="instance"/> names no instance.</exception>
-    public void AppendInstance(SdfProgram program, int instance, IReadOnlyList<DynamicTransform> transforms) {
+    public void AppendInstance(SdfProgram program, int instance, IReadOnlyList<DynamicTransform> transforms, SdfSampledSet sampled) {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: transforms);
+        ArgumentNullException.ThrowIfNull(argument: sampled);
 
         var range = program.Instances[instance];
         var bound = (range.IsDynamic ? new Vector4(x: 0f, y: 0f, z: 0f, w: range.Radius) : new Vector4(value: range.Center, w: range.Radius));
@@ -234,7 +264,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
                 }
                 instruction = (instruction with { Material = ((uint)place) });
             }
-            Append(index: index, instruction: instruction, ownSlot: ownSlot, program: program, transforms: transforms);
+            Append(index: index, instruction: instruction, ownSlot: ownSlot, program: program, sampled: sampled, transforms: transforms);
         }
     }
     /// <summary>Appends the reach a group's box is clamped to: a group whose bound passes the frame's far distance, or the
@@ -247,19 +277,22 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// <param name="program">The program.</param>
     /// <param name="index">The instruction's index in <see cref="SdfProgram.Instructions"/>.</param>
     /// <param name="transforms">The frame's dynamic transforms, which the bake samples the instruction through.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="transforms"/> is
-    /// <see langword="null"/>.</exception>
+    /// <param name="sampled">The frame's sampled set, whose snapshot the bake samples a sampled instruction through.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="program"/>, <paramref name="transforms"/> or
+    /// <paramref name="sampled"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> names no instruction.</exception>
-    public void AppendInstruction(SdfProgram program, int index, IReadOnlyList<DynamicTransform> transforms) {
+    public void AppendInstruction(SdfProgram program, int index, IReadOnlyList<DynamicTransform> transforms, SdfSampledSet sampled) {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: transforms);
+        ArgumentNullException.ThrowIfNull(argument: sampled);
 
-        Append(index: index, instruction: program.Instructions[index], ownSlot: -1, program: program, transforms: transforms);
+        Append(index: index, instruction: program.Instructions[index], ownSlot: -1, program: program, sampled: sampled, transforms: transforms);
     }
 
     // Appends an instruction: a transform into the group's own slot by that role and into another slot with that slot's
-    // pose in the group's frame, a lane erosion with the lanes it reads, and a side-table entry's values for its offset.
-    private void Append(SdfProgram program, int index, SdfInstruction instruction, int ownSlot, IReadOnlyList<DynamicTransform> transforms) {
+    // pose in the group's frame, a lane erosion with the lanes it reads, a side-table entry's values for its offset, and a
+    // sampled field's snapshot for its handle.
+    private void Append(SdfProgram program, int index, SdfInstruction instruction, int ownSlot, IReadOnlyList<DynamicTransform> transforms, SdfSampledSet sampled) {
         ContainsGlyph |= ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Glyph)));
         switch (instruction.Op) {
             case SdfOp.ResetPoint:
@@ -294,14 +327,23 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
                 break;
         }
 
-        var table = (((instruction.Op == SdfOp.ShapeBlend) && (((SdfShapeType)instruction.Shape) is SdfShapeType.ConvexPolygon or SdfShapeType.Sweep or SdfShapeType.Path or SdfShapeType.SampledRegion))
+        if ((instruction.Op == SdfOp.ShapeBlend) && ((SdfShapeType)instruction.Shape == SdfShapeType.SampledRegion)) {
+            var handle = (int)BitConverter.SingleToUInt32Bits(value: instruction.Data1.Z);
+            var snapshot = sampled[handle];
+            var count = snapshot.Count;
+
+            (m_sampled ??= [])[handle] = snapshot;
+            instruction = instruction with { Data1 = instruction.Data1 with { Z = 0f } };
+            Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in count)));
+            Hash(source: MemoryMarshal.AsBytes(span: snapshot.Values));
+        }
+
+        var table = (((instruction.Op == SdfOp.ShapeBlend) && (((SdfShapeType)instruction.Shape) is SdfShapeType.ConvexPolygon or SdfShapeType.Sweep or SdfShapeType.Path))
             ? program.SideTableValues(instructionIndex: index)
             : []);
 
         if (!table.IsEmpty) {
-            instruction = ((SdfShapeType)instruction.Shape == SdfShapeType.SampledRegion)
-                ? instruction with { Data1 = instruction.Data1 with { Z = 0f } }
-                : instruction with { Data0 = instruction.Data0 with { X = 0f } };
+            instruction = instruction with { Data0 = instruction.Data0 with { X = 0f } };
             Hash(source: MemoryMarshal.AsBytes(span: table));
         }
 

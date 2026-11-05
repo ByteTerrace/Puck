@@ -1,6 +1,6 @@
 // The shared buffer copy — moves packed host data or selected rows between strided GPU buffers, one dispatch per request.
 // It is the staged policy's copy for every GpuRegion owner: the SDF
-// engine's per-frame regions, its mesh region, and its brick staging, whose destination is the brick pool. One pipeline
+// engine's per-frame regions and its mesh region. One pipeline
 // serves a device (GpuRegionCopyPass). Words outside every range keep what earlier copies wrote. Bit-exact: uints move
 // as uints, whatever the block stores in them.
 //

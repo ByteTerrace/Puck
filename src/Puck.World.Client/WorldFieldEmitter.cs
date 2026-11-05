@@ -4,24 +4,26 @@ using Puck.SignedDistance;
 
 namespace Puck.World.Client;
 
-/// <summary>Renders a world's field lattice: one sampled distance brick per height field, baked on the CPU and composed
-/// as a union with the field's authored colour. A field's cells reach it the way every presentation read of state
-/// does, through the client's state mirror: the presentation manifest registers each height field's row whole
-/// (<see cref="WorldStateConversion.Row"/>, the same slot a pass's array bound to <c>state.&lt;field&gt;</c> reads),
-/// and the brick is re-baked whenever that slot moves. The program shape is fixed by the lattice declaration — a
-/// value change publishes an immutable voxel snapshot in the program, so baked meshes key and sample the same values.</summary>
+/// <summary>Renders a world's field lattice: one sampled distance field per height field (<see cref="SdfSampledField"/>),
+/// baked on the CPU and composed as a union with the field's authored colour. A field's cells reach it the way every
+/// presentation read of state does, through the client's state mirror: the presentation manifest registers each height
+/// field's row whole (<see cref="WorldStateConversion.Row"/>, the same slot a pass's array bound to
+/// <c>state.&lt;field&gt;</c> reads), and the voxels are baked again whenever that slot moves. A drawn height change
+/// publishes a new snapshot of the field and moves no program revision: the program names the field, the frame carries
+/// its snapshot, and the mesh bake keys and samples that snapshot. The program rebuilds only when a field joins it, its
+/// lattice changes shape, or its colour moves.</summary>
 public sealed class WorldFieldEmitter : ISdfSceneEmitter {
-    private const float InverseLambda = 0.57735026f; // 1/√3 — the brick pool's stored-distance scale (KEEP IN SYNC with sdfSampledRegion).
+    private const float InverseLambda = 0.57735026f; // 1/√3 — the sampled field's stored-distance scale (KEEP IN SYNC with sdfSampledRegion).
     private const int Reach = 2;
 
     private readonly WorldClient m_client;
     private readonly WorldBakedColors m_colors;
 
     private float[] m_heights = [];
-    private float[][] m_snapshots = [];
+    // Each field's drawn heights, and the sampled field the program names for it, null until its first bake.
     private float[][] m_heightSnapshots = [];
+    private SdfSampledField?[] m_surfaces = [];
     private int m_programRevision;
-    private bool[] m_ready = [];
     private int[] m_uploadedChanged = [];
     private (WorldFieldsSection Region, WorldFieldRow Row)[] m_heightFields = [];
     // The height scale and surface step each field's drawn heights were taken at.
@@ -42,7 +44,7 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
 
     // Each voxel holds the distance to the union of the nearby raised columns (boxes from one cell below the origin
     // to the column top), exact within Reach cells and a conservative lower bound beyond, scaled by 1/√3 as the
-    // pool stores it. Voxel (0,0,0) is centred half a cell above boxMin on every axis.
+    // sampled field stores it. Voxel (0,0,0) is centred half a cell above boxMin on every axis.
     private void Bake(WorldFieldLatticeDefinition lattice, float[] heights, float cell, int dimX, int dimY, int dimZ) {
         var far = (Reach * cell);
 
@@ -122,29 +124,6 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             }
         }
     }
-    // Voxels along +Y: one below the origin, the tallest column any height field can raise, one above — the same
-    // one-cell pad the X/Z edges carry.
-    private static int BrickLayers(WorldFieldsSection document) {
-        var tallest = 0f;
-
-        foreach (var row in document.Fields) {
-            tallest = MathF.Max(
-                x: tallest,
-                y: ((row.Max * row.HeightScale) * document.Lattice.Layers)
-            );
-        }
-
-        return Math.Min(
-            val1: SdfBrickPoolLayout.BrickDim,
-            val2: (((int)MathF.Ceiling(x: (tallest / document.Lattice.CellSize))) + 3)
-        );
-    }
-    // A sampled brick needs the pool dimension on every axis; a lattice wider than the brick edge renders its first
-    // BrickDim columns only.
-    private static int Clamp(int cells) => Math.Min(
-        val1: SdfBrickPoolLayout.BrickDim,
-        val2: cells
-    );
     // Height-field slots are global across the world's regions; every slot keeps the lattice that owns its row.
     private void Shape(IReadOnlyList<WorldFieldsSection> regions) {
         if (ReferenceEquals(objA: regions, objB: m_uploadedRegions)) { return; }
@@ -153,9 +132,6 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             .Select(selector: row => (Region: region, Row: row)))
             .ToArray();
 
-        if (heightFields.Length > SdfBrickPoolLayout.MaxBricks) {
-            throw new InvalidOperationException(message: "The declared physical regions exceed the resident sampled-field brick buffer.");
-        }
         var sameShape = (heightFields.Length == m_heightFields.Length);
 
         for (var field = 0; (sameShape && (field < heightFields.Length)); field++) {
@@ -173,24 +149,19 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
         m_uploadedChanged = new int[heightFields.Length];
         Array.Fill(array: m_uploadedChanged, value: int.MinValue);
         m_uploadedScales = new (float, float)[heightFields.Length];
-        m_ready = new bool[heightFields.Length];
-        m_snapshots = new float[heightFields.Length][];
+        m_surfaces = new SdfSampledField?[heightFields.Length];
         m_heightSnapshots = new float[heightFields.Length][];
         if (dropsReadyField) { m_programRevision++; }
     }
-    // Whether the live program names any field's brick (Emit names a field only once its first upload is ready), so
-    // that a reset of the brick state, which forgets every ready field, changes the program. A reset before any field is
-    // ready leaves the program as it was, and moving its revision then would rebuild an unchanged program and render
-    // every standing view again.
-    private bool AnyReady() => (Array.IndexOf(array: m_ready, value: true) >= 0);
+    // Whether the live program names any field (Emit names a field only once its first bake made it), so that a reset,
+    // which forgets every field, changes the program. A reset before any field is made leaves the program as it was, and
+    // moving its revision then would rebuild an unchanged program and render every standing view again.
+    private bool AnyReady() => Array.Exists(array: m_surfaces, match: static surface => (surface is not null));
 
-    /// <summary>Publishes changed height fields as immutable sampled values. The ordinary brick-update phase calls
-    /// this before capturing geometry revisions; external pool uploads are unnecessary.</summary>
-    /// <param name="bakes">The engine's sampling service, supplied by the frame-source contract.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="bakes"/> is <see langword="null"/>.</exception>
-    public void AdvanceBricks(ISdfBrickBakeService bakes) {
-        ArgumentNullException.ThrowIfNull(argument: bakes);
-
+    /// <summary>Bakes each height field whose drawn heights moved and publishes its voxels as a new snapshot of its
+    /// sampled field, before the composition reads revisions: a field's first bake, or one whose lattice changed shape,
+    /// makes a new field and moves the program revision; any other moves no revision.</summary>
+    public void PrepareFrame() {
         Shape(regions: m_client.Definition.FieldRegions);
 
         var mirror = m_client.StateMirror;
@@ -204,9 +175,7 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             var lattice = document.Lattice;
             var cell = lattice.CellSize;
             var cellCount = checked(((lattice.Width * lattice.Layers) * lattice.Depth));
-            var dimX = Clamp(cells: (lattice.Width + 2));
-            var dimZ = Clamp(cells: (lattice.Depth + 2));
-            var dimY = BrickLayers(document: document);
+            var (dimX, dimY, dimZ) = WorldFieldCapacity.SurfaceVoxels(region: document);
             var total = checked(((dimX * dimY) * dimZ));
 
             if (m_voxels.Length < total) { m_voxels = new float[total]; }
@@ -242,7 +211,8 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             // or step change or a first upload draws every column at its nearest step. Simulation and medium queries keep their full
             // fixed-point values.
             var step = MathF.Max(x: row.SurfaceStep, y: (1f / SdfMeshGeometryBuilder.PositionSteps));
-            var drawn = ((m_ready[field] && (m_uploadedScales[field] == (row.HeightScale, row.SurfaceStep))) ? m_heightSnapshots[field] : null);
+            var surface = m_surfaces[field];
+            var drawn = (((surface is not null) && (m_uploadedScales[field] == (row.HeightScale, row.SurfaceStep))) ? m_heightSnapshots[field] : null);
 
             // A row slot's element i is lattice cell i: z, then layer, then x.
             for (var z = 0; (z < lattice.Depth); z++) {
@@ -264,7 +234,7 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             m_uploadedChanged[field] = changed;
             m_uploadedScales[field] = (row.HeightScale, row.SurfaceStep);
             var heights = m_heights.AsSpan(0, heightCellCount);
-            if (m_ready[field] && heights.SequenceEqual(m_heightSnapshots[field])) { continue; }
+            if ((surface is not null) && heights.SequenceEqual(m_heightSnapshots[field])) { continue; }
             m_heightSnapshots[field] = heights.ToArray();
             Bake(
                 cell: cell,
@@ -275,10 +245,13 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                 lattice: lattice
             );
 
-            var snapshot = m_voxels.AsSpan(0, total);
-            if (m_ready[field] && snapshot.SequenceEqual(m_snapshots[field])) { continue; }
-            m_snapshots[field] = snapshot.ToArray();
-            m_ready[field] = true;
+            var voxels = m_voxels.AsSpan(0, total);
+
+            if ((surface is not null) && (surface.DimX == dimX) && (surface.DimY == dimY) && (surface.DimZ == dimZ)) {
+                if (!voxels.SequenceEqual(other: surface.Current.Values)) { _ = surface.Publish(values: voxels); }
+                continue;
+            }
+            m_surfaces[field] = new SdfSampledField(dimX: dimX, dimY: dimY, dimZ: dimZ, values: voxels);
             m_programRevision++;
         }
     }
@@ -292,25 +265,21 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
         for (var field = 0; (field < m_heightFields.Length); field++) {
             var (document, row) = m_heightFields[field];
             var lattice = document.Lattice;
-            // The brick box is padded one cell on every side so no column reaches a face.
+            // The box is padded one cell on every side so no column reaches a face.
             var boxMin = new Vector3(
                 x: (lattice.Origin.X - lattice.CellSize),
                 y: (lattice.Origin.Y - lattice.CellSize),
                 z: (lattice.Origin.Z - lattice.CellSize)
             );
-            var dimX = Clamp(cells: (lattice.Width + 2));
-            var dimZ = Clamp(cells: (lattice.Depth + 2));
-            var dimY = BrickLayers(document: document);
+            var (dimX, dimY, dimZ) = WorldFieldCapacity.SurfaceVoxels(region: document);
+            var surface = ((field < m_surfaces.Length) ? m_surfaces[field] : null);
 
-            // Keep an uninitialized field out of the live program. The probe reserves every snapshot's full extent.
-            if (
-                !context.Probe &&
-                ((field >= m_ready.Length) || !m_ready[field])
-            ) {
+            // Keep an unbaked field out of the live program. The probe reserves every field's full extent.
+            if (!context.Probe && (surface is null)) {
                 continue;
             }
 
-            // The brick holds only distances, so a state-bound colour is read through the mirror here, and its move
+            // The field holds only distances, so a state-bound colour is read through the mirror here, and its move
             // rebuilds the program (WriteRevision) with no re-bake.
             var material = builder.AddMaterial(material: WorldSurfaceMaterials.Resolve(
                 entry: row.Material,
@@ -326,10 +295,7 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                 box: (boxMin, boxMin + extent)).ResetPoint().SampledValues(
                 boxMin: boxMin,
                 cellSize: lattice.CellSize,
-                dimX: dimX,
-                dimY: dimY,
-                dimZ: dimZ,
-                values: (context.Probe ? new float[checked(dimX * dimY * dimZ)] : m_snapshots[field]),
+                field: (surface ?? new SdfSampledField(dimX: dimX, dimY: dimY, dimZ: dimZ, values: new float[checked((dimX * dimY) * dimZ)])),
                 boundaryFloor: (lattice.CellSize * InverseLambda),
                 material: material,
                 blend: SdfBlendOp.Union

@@ -11,9 +11,6 @@ public sealed partial class SdfProgram {
     /// <param name="instructionIndex">The instruction's index in <see cref="Instructions"/>.</param>
     /// <returns>The entry's values, or empty for an instruction that names no side-table entry.</returns>
     public ReadOnlySpan<float> SideTableValues(int instructionIndex) {
-        foreach (var entry in m_sampledValues) {
-            if (entry.InstructionIndex == instructionIndex) { return (float[])entry.Values; }
-        }
         foreach (var (index, vertices) in m_convexPolygonProfiles) {
             if (index == instructionIndex) { return MemoryMarshal.Cast<System.Numerics.Vector2, float>(span: vertices); }
         }

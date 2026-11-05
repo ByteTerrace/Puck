@@ -249,7 +249,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             MovedTransforms = moved,
         };
         using var node = new SdfWorldResidency(
-            brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: frame),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),
@@ -692,50 +691,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             volumes: [.. Enumerable.Repeat(count: (SdfWorldTables.MaxVolumes + 1), element: cloud)]
         ));
     }
-    // A host-baked brick (a height field's, WorldFieldEmitter) reaches the device's brick pool: queued, its slot reads
-    // Baking at its serial; the next upload lands the voxels at the slot's word offset and reads Ready with the serial
-    // moved on; two uploads to one slot before a frame land only the newer; and pool-less tables refuse an upload.
-    [Fact]
-    public void AHostBakedBrickLandsInItsPoolSlotAndTheSlotTurnsReady() {
-        const int Slot = 1;
-        const int Dim = 4;
-        const int VoxelCount = ((Dim * Dim) * Dim);
-        const int Capacity = (SdfBrickPoolLayout.VoxelsPerBrick + VoxelCount);
-        using var rig = new Rig(brickPoolVoxelCapacity: Capacity, slots: 1);
-        using var poolless = new Rig(slots: 1);
-
-        static float[] Voxels(float bias) => [.. Enumerable.Range(count: VoxelCount, start: 0).Select(selector: index => (bias + (index * 0.125f)))];
-        float[] SlotVoxels() => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(sizeBytes: (Capacity * sizeof(float))).AsSpan(
-            length: (VoxelCount * sizeof(float)),
-            start: (SdfBrickPoolLayout.SlotWordOffset(slot: Slot) * sizeof(float))
-        )).ToArray();
-
-        rig.Warm();
-
-        var before = rig.Engine.GetBrickState(slot: Slot);
-        var first = Voxels(bias: 1f);
-
-        Assert.True(condition: rig.Engine.BrickBakeAvailable);
-        Assert.Equal(expected: BrickBakeState.Empty, actual: before.State);
-
-        rig.Engine.UploadBrick(dimX: Dim, dimY: Dim, dimZ: Dim, slot: Slot, voxels: first);
-        Assert.Equal(expected: new BrickBakeStatus(Serial: before.Serial, State: BrickBakeState.Baking), actual: rig.Engine.GetBrickState(slot: Slot));
-
-        rig.Render(time: 0f);
-        Assert.Equal(expected: new BrickBakeStatus(Serial: (before.Serial + 1), State: BrickBakeState.Ready), actual: rig.Engine.GetBrickState(slot: Slot));
-        Assert.Equal(expected: first, actual: SlotVoxels());
-
-        var newest = Voxels(bias: 20f);
-
-        rig.Engine.UploadBrick(dimX: Dim, dimY: Dim, dimZ: Dim, slot: Slot, voxels: Voxels(bias: 10f));
-        rig.Engine.UploadBrick(dimX: Dim, dimY: Dim, dimZ: Dim, slot: Slot, voxels: newest);
-        rig.Render(time: 0f);
-        Assert.Equal(expected: new BrickBakeStatus(Serial: (before.Serial + 2), State: BrickBakeState.Ready), actual: rig.Engine.GetBrickState(slot: Slot));
-        Assert.Equal(expected: newest, actual: SlotVoxels());
-
-        Assert.False(condition: poolless.Engine.BrickBakeAvailable);
-        _ = Assert.Throws<InvalidOperationException>(testCode: () => poolless.Engine.UploadBrick(dimX: Dim, dimY: Dim, dimZ: Dim, slot: 0, voxels: first));
-    }
     [Fact]
     public void TheMeshRegionHoldsAKnownDrawSetAndOwesOnlyTheWordsANewSetChanges() {
         using var rig = new Rig(slots: 1);
@@ -1077,7 +1032,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(
             actual: rig.Gpu.PoolsCreated.CountBy(keySelector: static pool => pool).ToDictionary(),
             // The final admitted pool belongs to the residency's bake client, absent from standalone tables.
-            expected: SdfWorldTables.DescriptorPools(brickPool: false)[..^1].CountBy(keySelector: static pool => pool).ToDictionary()
+            expected: SdfWorldTables.DescriptorPools[..^1].CountBy(keySelector: static pool => pool).ToDictionary()
         );
 
         var pools = rig.Gpu.PoolsCreated.Count;
@@ -1203,7 +1158,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         private readonly List<int> m_pendingMoves = [];
         private readonly List<(int Slot, DynamicTransform Previous)> m_pendingReseats = [];
 
-        private readonly int m_brickPoolVoxelCapacity;
         private readonly SdfProgram m_program;
         private readonly int m_programWordReserve;
         private readonly DynamicTransform[] m_transforms;
@@ -1215,12 +1169,11 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         private GpuPassPipeline m_meshRaster = null!;
         private GpuPassPipeline m_regionCopy = null!;
 
-        public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default, GpuDescriptorHeapBudget? heap = null, int brickPoolVoxelCapacity = 0) {
+        public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default, GpuDescriptorHeapBudget? heap = null) {
             Gpu = new UploadModelGpu() {
                 DescriptorHeap = heap,
                 MemoryProfile = profile,
             };
-            m_brickPoolVoxelCapacity = brickPoolVoxelCapacity;
             m_programWordReserve = programWordReserve;
             m_program = Program(albedo: Vector3.One);
             m_transforms = Transforms(slots: slots);
@@ -1351,24 +1304,15 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                 device: Gpu,
                 ledger: ledger
             );
-            // A brick pool needs its bake pipeline, so its set is built with a one-byte brick kernel.
-            m_pipelines = ((m_brickPoolVoxelCapacity == 0)
-                ? SdfTestPipelines.Build(
-                    device: Gpu,
-                    kernels: SdfTestPipelines.Kernels(),
-                    cache: new GpuPassPipelineCache()
-                )
-                : SdfTestPipelines.Build(
-                    device: Gpu,
-                    includeBrickPipelines: true,
-                    kernels: SdfTestPipelines.Kernels().With(bytecode: new byte[] { 1 }, kernel: SdfKernel.BrickBake),
-                    cache: new GpuPassPipelineCache()
-                ));
+            m_pipelines = SdfTestPipelines.Build(
+                device: Gpu,
+                kernels: SdfTestPipelines.Kernels(),
+                cache: new GpuPassPipelineCache()
+            );
 
             return new SdfWorldTables(
                 device: Gpu,
                 options: new SdfWorldTablesOptions(
-                    BrickPoolVoxelCapacity: m_brickPoolVoxelCapacity,
                     DynamicTransformCapacity: m_transforms.Length,
                     Program: m_program,
                     ProgramWordCapacity: m_programWordReserve,

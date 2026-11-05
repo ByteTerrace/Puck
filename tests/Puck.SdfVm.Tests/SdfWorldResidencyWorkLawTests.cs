@@ -120,7 +120,6 @@ public sealed class SdfWorldResidencyWorkLawTests {
             );
 
             Node = new SdfWorldResidency(
-                brickPoolVoxelCapacity: 0,
                 frameSource: new FixedFrameSource(frame: frame),
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),

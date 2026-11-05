@@ -298,8 +298,9 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
   creation palette's, a height field's, a text screen's ink and `{state.*}`
   placeholders), read through the mirror's color and number slots; the scene
   and field emitters and the decal cache follow a bound one's move with a
-  rebuild. `WorldFieldEmitter` bakes each height field's brick from the
-  field row's slot, the same slot a pass's array bound to `state.<field>` reads.
+  rebuild. `WorldFieldEmitter` bakes each height field's sampled values from
+  the field row's slot and publishes them as a snapshot of its `SdfSampledField`,
+  which moves no program revision, the same slot a pass's array bound to `state.<field>` reads.
   Text screens accept `{state.<row>[.<key>][.$target]}` for declared Int, Fixed,
   Bool and Text rows; `$body` has no screen context and is refused. `{{` and
   `}}` display literal braces, so `{{state.count}}` displays `{state.count}`.
@@ -313,7 +314,7 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
   presentation projections through the same recipient disclosure checks as
   other bound values; restricted sources refuse disclosure.
   Every named physical region uses its own origin, dimensions, cell size and
-  fields. Brick slots span all regions, while bound field rows retain their
+  fields. Sampled fields span all regions, while bound field rows retain their
   globally unique state-row names and their region's own row length.
 - `WorldWheelRings.cs` is one seat's drawn radial: each sector's label and icon
   and the hub label, read from the wheel's label and icon rows through the

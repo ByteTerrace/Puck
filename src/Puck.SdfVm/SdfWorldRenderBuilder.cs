@@ -21,7 +21,6 @@ public static class SdfWorldRenderBuilder {
         ArgumentNullException.ThrowIfNull(spec);
 
         return new SdfWorldResidency(
-            brickPoolVoxelCapacity: spec.BrickPoolVoxelCapacity,
             dynamicTransformCapacity: spec.DynamicTransformCapacity,
             frameSource: spec.FrameSource,
             height: spec.Height,
