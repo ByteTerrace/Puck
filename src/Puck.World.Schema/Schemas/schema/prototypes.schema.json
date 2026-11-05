@@ -1177,7 +1177,7 @@
                       "description": "The frame the velocity is authored in (null = Object).",
                       "x-enumDescriptions": {
                         "Object": "The frame of the surface\u0027s own object: the creation\u0027s frame for a placed creation (its copies turn the vector with them), the slot\u0027s frame for a surface riding a slot, and world space for a surface emitted in world space (a field row).",
-                        "World": "World space whatever the surface rides: a wind across a meadow of turned copies."
+                        "World": "World space whatever the surface rides, the pattern included, so it runs continuously across every surface wearing the material: a wind across a meadow of separately swaying blades."
                       }
                     }
                   },
