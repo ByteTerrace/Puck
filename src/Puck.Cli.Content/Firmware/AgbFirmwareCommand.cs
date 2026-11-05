@@ -8,7 +8,7 @@ public static class AgbFirmwareCommand {
 
     private static readonly string[] Sources = ["entrypoint.s", "boot.c", "services.c", "codec.c", "math.c", "sound.c", "multiboot.c"];
 
-    public static async Task<int> RunAsync(string source, string output, string clang, string linker, bool verify) {
+    public static async Task<int> RunAsync(string source, string output, string clang, string linker) {
         try {
             source = Path.GetFullPath(path: source);
             output = Path.GetFullPath(path: output);
@@ -28,11 +28,10 @@ public static class AgbFirmwareCommand {
                 source: source
             );
 
-            return (GeneratedArtifact.WriteOrVerify(
+            return (GeneratedArtifact.Write(
                 bytes: bytes,
                 path: output,
-                verb: "firmware agb",
-                verify: verify
+                verb: "firmware agb"
             )
                 ? 0
                 : 1
@@ -124,18 +123,16 @@ public static class AgbFirmwareCommand {
         var output = new Option<string>(name: "--output") { Description = "Destination 16 KiB BIOS image.", Required = true };
         var clang = new Option<string>(name: "--clang") { Description = "Path to the native Clang executable with the ARM target.", Required = true };
         var linker = new Option<string>(name: "--linker") { Description = "Path to the native ld.lld ELF linker executable.", Required = true };
-        var verify = new Option<bool>(name: "--verify") { Description = "Rebuild in temporary storage and compare the existing image without writing it." };
         var command = new Command(
             description: "Build the Puck AGB BIOS from its freestanding C and ARM sources.",
             name: "agb"
-        ) { source, output, clang, linker, verify };
+        ) { source, output, clang, linker };
 
         command.SetAction(action: (result, _) => RunAsync(
             source: result.GetRequiredValue(option: source),
             output: result.GetRequiredValue(option: output),
             clang: result.GetRequiredValue(option: clang),
-            linker: result.GetRequiredValue(option: linker),
-            verify: result.GetValue(option: verify)
+            linker: result.GetRequiredValue(option: linker)
         ));
         return command;
     }

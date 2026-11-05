@@ -741,7 +741,10 @@ laws exercise that boundary.
   World table after `FieldTables` is outside it and leaves their bytecode byte
   for byte as it was on DXIL and SPIR-V; an edit to the field, its generated
   vocabulary, the encoding or the bake kernels moves it. The code part is read from
-  the build's assemblies: positive production entry methods in `SdfMeshBakeClosure.BakeRoots` include
+  the build's assemblies through the shared `Puck.Assets.CodeClosure` walker;
+  `SdfMeshBakeClosure` supplies the bake's roots and transport boundaries, while
+  compiled-world chunks and generated machine images use the same walker with their own roots.
+  Positive production entry methods in `SdfMeshBakeClosure.BakeRoots` include
   the bake's constructor/defaults, `PrepareFrame`, planning, batch taking (`TryTake`) and the point table's
   layout (`SdfMeshBakeBatch.PointRuns`), the sample answer (`Complete`), `SdfMeshBakeBlock.Write`, persisted-product normalization
   (`SdfMesh.NativeCopy`) and the store codec. Their graph reaches group/geometry planning, lattice refinement,

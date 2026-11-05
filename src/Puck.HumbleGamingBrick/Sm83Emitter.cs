@@ -1,6 +1,6 @@
-using Puck.GamingBricks.Forge;
+using Puck.Assets;
 
-namespace Puck.HumbleGamingBrick.Forge;
+namespace Puck.HumbleGamingBrick;
 
 /// <summary>Specifies one of the SM83's eight 8-bit operand slots (encoded 0..7). <see cref="Memory"/> is the
 /// <c>(hl)</c> indirection that occupies slot 6 of every register/ALU-grid instruction.</summary>

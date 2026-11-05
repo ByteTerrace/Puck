@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick.Forge;
+namespace Puck.HumbleGamingBrick;
 
 /// <summary>
 /// Emits the Color boot program's header-driven half: the title checksum and licensee gate, the register file the

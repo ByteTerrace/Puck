@@ -1,7 +1,6 @@
 using Puck.HumbleGamingBrick.Interfaces;
-using MachineInstance = Puck.Machines.MachineInstance<Puck.HumbleGamingBrick.Machine, Puck.HumbleGamingBrick.MachineConfiguration>;
 
-namespace Puck.HumbleGamingBrick.Forge;
+namespace Puck.HumbleGamingBrick;
 
 /// <summary>
 /// Reads the machine state a cartridge can observe at <c>0x0100</c>: the processor's register file, the divider

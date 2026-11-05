@@ -36,7 +36,7 @@ machines [
     configuration {
       schema: "puck.humble-gaming-deck.configuration.v1"
       content {
-        path: "../cartridges/deck/colour-bars.nes"
+        path: "../cartridges/deck/colour-bars.deck"
       }
     }
   }
@@ -45,15 +45,15 @@ machines [
 
 ## Test cartridges
 
-No world runs a downloaded ROM. `DeckTestCartridges` builds the shipped images
-with `DeckProgram`, the forge's 6502 assembler, and
-`puck cartridges deck --output worlds/debug/cartridges/deck` writes
-them (`--check` compares without writing):
+The debug world commits `.deck` program selections. `DeckContentProvider` builds
+their images with `DeckTestCartridges` and `DeckProgram` on a cache miss; the
+shared derived cache keys the generator code and selection and counts misses and hits.
+`puck cartridges deck --output <dir>` exports native images for other hosts:
 
 | Cartridge | Picture | Input |
 |---|---|---|
-| `colour-bars.nes` | Eight vertical bars: white, yellow, cyan, green, magenta, red, blue, black. | A, B and Select emphasise blue, green and red; Start turns the picture greyscale. |
-| `moving-sprite.nes` | A 16 by 16 orange ball bouncing round a navy sky above a green striped ground. | The control pad steers the ball. |
+| `colour-bars.deck` | Eight vertical bars: white, yellow, cyan, green, magenta, red, blue, black. | A, B and Select emphasise blue, green and red; Start turns the picture greyscale. |
+| `moving-sprite.deck` | A 16 by 16 orange ball bouncing round a navy sky above a green striped ground. | The control pad steers the ball. |
 
 The battery's `shipped-cartridges` stage runs both and reads their pictures from
 the PPU's pixel codes.

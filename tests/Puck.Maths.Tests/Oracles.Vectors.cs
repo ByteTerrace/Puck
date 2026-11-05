@@ -725,6 +725,42 @@ internal static partial class Oracles {
         raw = ((long)rounded);
         return true;
     }
+    /// <summary>The exact rational solve of a general 3×3 system by classical Cramer's rule: each component is the
+    /// determinant of the matrix with that column replaced by the right-hand side, over the matrix's own determinant,
+    /// every determinant expanded by the rule of Sarrus in <see cref="BigInteger"/>. It forms no cofactor and no
+    /// adjugate, and reads every entry at its own raw magnitude with no preconditioning, so a transposed cofactor,
+    /// a sign slip or a shift-budget defect in <see cref="FixedLinearSolve.TrySolve3"/> cannot also appear here.</summary>
+    /// <param name="m">The nine entries in row-major order.</param>
+    /// <param name="rhs">The three right-hand-side components.</param>
+    /// <param name="outputFractionShift">The requested output fraction bit count.</param>
+    /// <param name="solution">The three rounded components on success; zeros on refusal.</param>
+    /// <returns><see langword="false"/> for an exactly singular matrix or a component outside the signed 64-bit range.</returns>
+    public static bool TrySolveGeneral3(ReadOnlySpan<long> m, ReadOnlySpan<long> rhs, int outputFractionShift, Span<long> solution) {
+        solution.Clear();
+
+        static BigInteger Sarrus(BigInteger[] e) =>
+            ((((((e[0] * e[4]) * e[8]) + ((e[1] * e[5]) * e[6])) + ((e[2] * e[3]) * e[7])) - ((e[2] * e[4]) * e[6])) - ((e[0] * e[5]) * e[7])) - ((e[1] * e[3]) * e[8]);
+
+        var entries = new BigInteger[9];
+
+        for (var index = 0; (index < 9); ++index) { entries[index] = m[index]; }
+
+        var det = Sarrus(e: entries);
+
+        if (det.IsZero) { return false; }
+
+        Span<long> rounded = stackalloc long[3];
+
+        for (var column = 0; (column < 3); ++column) {
+            var replaced = (BigInteger[])entries.Clone();
+
+            for (var row = 0; (row < 3); ++row) { replaced[((row * 3) + column)] = rhs[row]; }
+            if (!TryRoundRatio(denominator: det, numerator: Sarrus(e: replaced), raw: out rounded[column], shift: outputFractionShift)) { return false; }
+        }
+
+        rounded.CopyTo(destination: solution);
+        return true;
+    }
 
     /// <summary>The exact rational solve of a symmetric 2×2 system by FRACTION-FREE (Bareiss) Gaussian elimination
     /// — the SECOND, algorithmically independent oracle this family carries. <see cref="TrySolveSymmetric2"/> above

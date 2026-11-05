@@ -2796,12 +2796,13 @@ per body per tick from speed and collider size against `rigidSubstepTravelFracti
 (default 0.5, strictly positive—the fraction of the collider's own
 bounding radius one substep may travel) floored by `rigidSubstepMinimumTravel`
 (default 0.001 world units, strictly positive), never authored directly; the
-ceiling only bounds worst-case cost. `rigidRestLinearSpeed`/`rigidRestAngularSpeed`
-(default 0.05/0.1, non-negative) and `rigidRestHoldSeconds` (default 0.25,
-non-negative) are the thresholds and hold window that decide when a grounded
-rigid body's `Resting` fact latches—`rigidRestLinearSpeed` scales with each
-body's own live `Scale` (see "Body scale" above); `rigidRestAngularSpeed` does
-not. `rigidPairRestitutionSpeed` (default
+ceiling only bounds worst-case cost. `rigidRestSpeed` (default 0.05,
+non-negative) and `rigidRestHoldSeconds` (default 0.25, non-negative) are the
+threshold and hold window that decide when a grounded rigid body's `Resting`
+fact latches. The threshold reads the speed of the body's fastest point, its
+linear speed plus its angular speed times its bounding radius (the same
+quantity the substep count is derived from), and scales with each body's own
+live `Scale` (see "Body scale" above). `rigidPairRestitutionSpeed` (default
 0.05, non-negative) is the closing-speed floor below which a rigid-vs-rigid
 contact restitutes at zero rather than the authored coefficient—a rigid
 pair carries no rising-edge latch, so without this floor two touching bodies

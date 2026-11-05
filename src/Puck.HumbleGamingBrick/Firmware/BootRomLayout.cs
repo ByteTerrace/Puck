@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick.Forge;
+namespace Puck.HumbleGamingBrick;
 
 /// <summary>The cartridge header a calibration probe presents, and the vertical line the seeded handoff puts the
 /// picture processor on for that header class.</summary>

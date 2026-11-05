@@ -381,7 +381,8 @@ A verb that builds the World (`puck test`, `canary`, `sweep`, `parity`, `counter
 `gate` and `affected` hold the same heavy lease through each heavy suite and
 pass the same host admission after acquisition. `puck test` holds it too whenever it runs
 more than one world (a debug-world sweep is 112 World processes, several GB each);
-a single world stays unleased, and `--workers` legs run one after another so they
+a single world stays unleased (including `sweep --no-scenarios` without `--tour`,
+which passes its own headless-World admission), and `--workers` legs run one after another so they
 do not count. When an ancestor already owns it,
 validated PID/start-time ancestry admits a serialized child lease, so a run
 does not wait on itself and siblings still exclude one another; every

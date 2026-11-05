@@ -640,7 +640,7 @@ public static class FixedSymmetricSolve {
     /// <summary>Adds (or subtracts) an already-formed signed magnitude term into a running accumulator — the one
     /// sign-magnitude combine every multi-term sum in this file funnels through, mirroring
     /// <see cref="FusedArithmetic.CombineSigned"/>'s own role for <see cref="FusedArithmetic.AddProducts"/>.</summary>
-    private static (bool Negative, UInt128 Magnitude) Accumulate((bool Negative, UInt128 Magnitude) accumulator, (bool Negative, UInt128 Magnitude) term, bool subtract) =>
+    internal static (bool Negative, UInt128 Magnitude) Accumulate((bool Negative, UInt128 Magnitude) accumulator, (bool Negative, UInt128 Magnitude) term, bool subtract) =>
         FusedArithmetic.CombineSigned(
             firstMagnitude: accumulator.Magnitude,
             firstNegative: accumulator.Negative,
@@ -829,13 +829,13 @@ public static class FixedSymmetricSolve {
     /// <summary>Scales an already-formed signed magnitude term (a 2×2 cofactor) by one more raw factor (a
     /// right-hand-side component) — the adjugate-times-vector step of Cramer's rule, exact by the same widening
     /// argument as <see cref="TripleProduct"/>.</summary>
-    private static (bool Negative, UInt128 Magnitude) ScaleByRaw((bool Negative, UInt128 Magnitude) term, long value) =>
+    internal static (bool Negative, UInt128 Magnitude) ScaleByRaw((bool Negative, UInt128 Magnitude) term, long value) =>
         (term.Negative ^ (value < 0L), (term.Magnitude * ((UInt128)FusedArithmetic.RawMagnitude(value: value))));
     private static (bool Negative, UInt128 Magnitude) SignedPair(long value) =>
         ((value < 0L), ((UInt128)FusedArithmetic.RawMagnitude(value: value)));
     private static int Symmetric2Shift(ulong rawMagnitude) =>
         (Symmetric2TargetLeadingBit - (63 - BitOperations.LeadingZeroCount(value: rawMagnitude)));
-    private static int Symmetric3Shift(ulong rawMagnitude) =>
+    internal static int Symmetric3Shift(ulong rawMagnitude) =>
         (Symmetric3TargetLeadingBit - (63 - BitOperations.LeadingZeroCount(value: rawMagnitude)));
     /// <summary>The exact triple product <c>left·middle·right</c> as sign plus <see cref="UInt128"/> magnitude. The
     /// first pairing forms an ordinary raw product (<see cref="FusedArithmetic.Product"/>, magnitude at most
@@ -857,7 +857,7 @@ public static class FixedSymmetricSolve {
     /// narrowing silently when the rounded magnitude does not fit the signed 64-bit result — the one place every
     /// solve and invert output in this type crosses back from the wide sign-magnitude world to a raw
     /// <see langword="long"/>.</summary>
-    private static bool TryFinishRatio(
+    internal static bool TryFinishRatio(
         (bool Negative, UInt128 Magnitude) numerator,
         (bool Negative, UInt128 Magnitude) denominator,
         int fractionBitCount,

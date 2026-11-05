@@ -28,6 +28,7 @@ public sealed partial class WorldColliderSet {
         }
         m_attachedHash = m_refreshHash.Value;
         m_attachedMoves = default;
+        m_attachedSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders));
     }
 
     private void RestoreAttachedRow(int row, FixedVector3 origin, FixedQuaternion rotation) {

@@ -129,12 +129,11 @@ public sealed record WorldCollisionEvents(int CandidateBudget = 32, int MaxPairs
 /// tick — the derived-count's own ceiling: the actual count is derived per body per tick from its speed and collider
 /// size (a fast ball takes more, a resting one takes one), never authored directly, but the ceiling bounds the
 /// worst-case per-tick cost and is echoed in <c>world.budget</c>.</param>
-/// <param name="RigidRestLinearSpeed">Below this linear speed (world units/second) a grounded rigid body counts
-/// toward the resting hold window (<see cref="RigidRestHoldSeconds"/>). Non-negative; the default reproduces the
-/// engine's original hard-coded threshold.</param>
-/// <param name="RigidRestAngularSpeed">Below this angular speed (radians/second) a grounded rigid body counts toward
-/// the resting hold window, on the same terms as <see cref="RigidRestLinearSpeed"/>. Non-negative.</param>
-/// <param name="RigidRestHoldSeconds">How long a rigid body must stay under both rest thresholds while grounded
+/// <param name="RigidRestSpeed">Below this speed (world units/second) of its fastest point, the centre's linear speed
+/// plus its angular speed times its bounding radius, a grounded rigid body counts toward the resting hold window
+/// (<see cref="RigidRestHoldSeconds"/>). It scales with each body's live scale, so a long piece turning slowly about
+/// its centre stays awake while its ends still move. Non-negative.</param>
+/// <param name="RigidRestHoldSeconds">How long a rigid body must stay under the rest speed while grounded
 /// before the resting latch actually closes — long enough that crossing a contact skin's noise band for one tick
 /// never freezes a body mid-roll. Non-negative.</param>
 /// <param name="RigidSubstepTravelFraction">The fraction of a rigid body's own bounding radius one continuous-
@@ -164,7 +163,7 @@ public sealed record WorldCollisionEvents(int CandidateBudget = 32, int MaxPairs
 /// <param name="RigidPairIterationBudget">The total pair-pass work one tick's extra rigid-pair sweeps may spend,
 /// before <see cref="RigidPairIterationCeiling"/> caps it — see that field. Strictly positive.</param>
 public sealed record WorldBodyContactPolicy(int CandidateBudget = 32, int MaxPairsPerBody = 8, int RigidSubstepCeiling = 8,
-    float RigidRestLinearSpeed = 0.05f, float RigidRestAngularSpeed = 0.1f, float RigidRestHoldSeconds = 0.25f,
+    float RigidRestSpeed = 0.05f, float RigidRestHoldSeconds = 0.25f,
     float RigidSubstepTravelFraction = 0.5f, float RigidSubstepMinimumTravel = 0.001f, float RigidPairRestitutionSpeed = 0.05f,
     int RigidManifoldIterations = 4, int RigidPairIterationCeiling = 4, int RigidPairIterationBudget = 64) {
     /// <summary>The largest accepted candidate budget per solid body.</summary>
