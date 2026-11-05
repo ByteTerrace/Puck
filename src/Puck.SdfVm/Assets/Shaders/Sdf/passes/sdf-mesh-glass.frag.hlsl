@@ -15,6 +15,20 @@
 #include "../frame/sdf-stamp-fade.hlsli"
 #include "../frame/sdf-visibility.hlsli"
 #include "../frame/sdf-glass.hlsli"
+#include "../field/sdf-program.hlsli"
+#include "../shade/sdf-material.hlsli"
+
+// Presentation floats avoid overflow when a thin, strongly absorbing material lies far from the opaque hit.
+// Each successful compare/exchange contributes once; helper lanes must not enter an atomic retry loop.
+void sdfGlassAddOpticalDepth(uint word, float value) {
+    uint expected = sdfGlassSumsRW[word];
+    [allow_uav_condition] while (true) {
+        uint observed;
+        InterlockedCompareExchange(sdfGlassSumsRW[word], expected, asuint(asfloat(expected) + value), observed);
+        if (observed == expected) { break; }
+        expected = observed;
+    }
+}
 
 struct GlassFragment {
     float4 target : SV_Target0;
@@ -34,13 +48,21 @@ GlassFragment PSMain(MeshRasterVertex input) {
     float opaque = (sdfVisibilityHit(visibility) ? visibility.t : worldFarDistance(view));
     bool counts = (t < opaque);
 
-    if (counts) {
+    if (counts && !IsHelperLane()) {
         uint word = sdfGlassSumWord(pixel, passGroup.imageExtent);
         int distance = (int)round(t * SDF_GLASS_SUM_SCALE);
         uint before;
 
         InterlockedAdd(sdfGlassSumsRW[word], asuint(front ? -distance : distance), before);
         InterlockedAdd(sdfGlassSumsRW[(word + 1u)], asuint(front ? 1 : -1), before);
+        // Integrate each material independently up to the opaque hit. Paired faces subtract out the air between
+        // solids; an opaque surface inside a solid clips its interval without needing a back face behind it.
+        SdfMaterialData material = sdfMaterialLoad(sdfMeshMaterial(input.draw, input.triangleIndex));
+        float3 opticalDepth = material.absorption * (opaque - t);
+        if (!front) { opticalDepth = -opticalDepth; }
+        sdfGlassAddOpticalDepth(word + 2u, opticalDepth.x);
+        sdfGlassAddOpticalDepth(word + 3u, opticalDepth.y);
+        sdfGlassAddOpticalDepth(word + 4u, opticalDepth.z);
     }
     puckCountFragmentWork(0u, 1u);
 

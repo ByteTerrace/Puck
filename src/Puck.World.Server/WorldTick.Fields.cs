@@ -101,7 +101,7 @@ public sealed partial class WorldTick : IFieldLatticeHost {
         row: row,
         tick: tick
     );
-    void IFieldLatticeHost.AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) => AddScalarSlot(
+    FixedQ4816 IFieldLatticeHost.AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) => AddScalarSlot(
         catalog: Host.Document.Definition.StateCatalog,
         row: row,
         amount: amount,
@@ -127,9 +127,9 @@ public sealed partial class WorldTick : IFieldLatticeHost {
     // A clamped-add write to a scalar slot row: precomputes the already-in-envelope sum itself (ClampToEnvelope is
     // documented for reads, not writes -- an explicit write outside a row's envelope is refused, never silently
     // clamped) so the mutation below can never be refused for a value this method already brought into range.
-    private void AddScalarSlot(StateCatalog catalog, StateHandle row, FixedQ4816 amount, ulong tick) {
+    private FixedQ4816 AddScalarSlot(StateCatalog catalog, StateHandle row, FixedQ4816 amount, ulong tick) {
         if (amount == FixedQ4816.Zero) {
-            return;
+            return FixedQ4816.Zero;
         }
 
         if (!WorldStateReader.TryReadHandle(arena: Host.Arena,
@@ -143,7 +143,7 @@ public sealed partial class WorldTick : IFieldLatticeHost {
             tick: tick,
             engineTick: CompletedEngineTicks
         )) {
-            return;
+            return FixedQ4816.Zero;
         }
 
         var current = (raw ?? 0L);
@@ -151,10 +151,10 @@ public sealed partial class WorldTick : IFieldLatticeHost {
         var clamped = declared.ClampToEnvelope(value: FixedSaturate.ToInt64(value: sum));
 
         if (clamped == current) {
-            return;
+            return FixedQ4816.Zero;
         }
 
-        _ = Host.TryApplyMutation(
+        var accepted = Host.TryApplyMutation(
             mutation: new WorldMutation.UpsertStateCell(
                 Principal: Principal.World,
                 Row: declared.Name,
@@ -169,6 +169,7 @@ public sealed partial class WorldTick : IFieldLatticeHost {
             preMetered: false
         );
         Host.Document.DeliverPending();
+        return accepted ? FixedQ4816.FromRawBits(clamped - current) : FixedQ4816.Zero;
     }
     // Placement response traits are authored outside the field reaction program and therefore name their row rather
     // than carrying a compiled handle; resolves through the document catalog's name -> handle dictionary and then the

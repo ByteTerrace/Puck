@@ -24,7 +24,7 @@ public sealed partial class WorldCreationInstances {
         if (shape is not null) {
             return new(
                 (transform.Position + Vector3.Transform(
-                    (shape.Position.Value * live!.Scale),
+                    (shape.Position.Value * transform.Scale),
                     transform.Orientation
                 )),
                 Quaternion.Normalize(value: (transform.Orientation * shape.Rotation.Value))

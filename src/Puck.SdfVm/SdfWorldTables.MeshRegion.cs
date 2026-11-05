@@ -52,7 +52,7 @@ public sealed partial class SdfWorldTables {
     /// completed. Pose, draw-record and irradiance uploads do not delay it. Read on the frame thread; never waits.</summary>
     public bool MeshesResident {
         get {
-            if (m_disposed || (m_meshesOwed.Count != 0)) { return false; }
+            if (m_disposed || (m_owedWords != 0)) { return false; }
             var required = m_meshRequiredUpload;
             return ((required == 0UL) || ((required <= m_uploads) &&
                 ((required <= m_completedUploads) || m_frameFences[((int)((required - 1UL) % FrameRingSize))].IsSignaled)));
@@ -78,6 +78,7 @@ public sealed partial class SdfWorldTables {
 
     // The placed meshes whose words the region still owes, and the draws of the planned list whose meshes are written.
     private readonly HashSet<SdfMesh> m_meshesOwed = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly HashSet<SdfMesh> m_activeOwed = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<SdfMeshDraw> m_meshLanded = [];
     // A copy of each draw last staged, by index, and whether that staging staged its whole list (no draw waiting on an
     // owed mesh): what StageChangedDraws compares a list against.
@@ -191,7 +192,7 @@ public sealed partial class SdfWorldTables {
         var changes = frame.MeshDrawChanges;
         var draws = frame.MeshDraws;
         if ((changes is null) || !ReferenceEquals(changes, m_drawChangesSource) || !ReferenceEquals(draws, m_meshSource) ||
-            !m_meshStaged || !m_stagedWhole || (m_meshesOwed.Count != 0) || (draws.Count != m_stagedCount) ||
+            !m_meshStaged || !m_stagedWhole || (m_owedWords != 0) || (draws.Count != m_stagedCount) ||
             ((frame.MeshDrawsRevision != m_meshSourceRevision) && (frame.MeshDrawChangesSerial <= m_drawChangesSerial)) ||
             !changes.TryCollect(since: m_drawChangesSerial, through: frame.MeshDrawChangesSerial, into: m_owedDraws)) { return false; }
 
@@ -264,7 +265,7 @@ public sealed partial class SdfWorldTables {
         }
 
         WriteOwedMeshes(draws: draws, words: landingWords);
-        CountOwed();
+        CountOwed(draws);
 
         // A draw whose mesh's words are still owed waits for them: the staged list holds the draws whose meshes are
         // written, and the next frames write the rest.
@@ -440,11 +441,14 @@ public sealed partial class SdfWorldTables {
     private long m_owedSince;
 
     // Counts a staging that still owes meshes, and the time from the first such staging to the one that owes none.
-    private void CountOwed() {
+    private void CountOwed(IReadOnlyList<SdfMeshDraw> draws) {
         var words = 0L;
-
-        foreach (var mesh in m_meshesOwed) {
-            if (m_meshArena.Placements.ContainsKey(key: mesh)) { words += SdfMeshRegion.WordsOf(mesh: mesh); }
+        m_activeOwed.Clear();
+        // Retained placements can be absent from the current roster. They still need an upload if reused, but they
+        // neither block this roster's residency nor disable its changed-draw fast path. Count a shared mesh once.
+        foreach (var draw in draws) {
+            var mesh = draw.Mesh;
+            if (m_meshesOwed.Contains(mesh) && m_activeOwed.Add(mesh)) { words += SdfMeshRegion.WordsOf(mesh: mesh); }
         }
         Volatile.Write(location: ref m_owedWords, value: words);
 

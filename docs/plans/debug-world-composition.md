@@ -283,66 +283,49 @@ passes on the meadow, hall and noclip scenarios.
 
 ### C3 as built
 
-The water is one conserved cycle ([water.puck](../../worlds/debug/water.puck) over
-the standard's [hydrology](../../worlds/standard/hydrology.puck)): a glacier on the
-north-west wall melts over three hours into a lake in a bowl cut into the rim, the
-lake's outlet falls down the face, the stream runs 186 m from the falls' foot to the
-pool, and the river drains into an aquifer that fills, gives water back and settles
-against it. The cycle is a 24-cell chain on a flow lattice hidden under the floor
-(source, lake, sill, falls, river and aquifer stages, each a run of cells at a bed
-elevation), transferring a finite ice store into water in fixed-point quantities, so a reproduce run
-repeats it. The scenery binds the chain's gauges (the glacier's lumps hinge into the
-rock with the clock, the lake follows its level, the falls fold into the wall as
-their flow ebbs) and a float gauge on the pool's bank reads the aquifer.
-[The pool](../../worlds/debug/pool.puck) is a 20 m square basin the floor opens for
-(`paintedGround` takes `holes`), 2.4 m deep, holding a medium lattice whose surface
-follows the river's depth; `debug.go pool` stands a body on the path's end facing the
-water. The Moth's swim is the standard's `swimHold` leading her hold list: she floats
-with her feet 1.25 m under the surface, which leaves her shoulders at it.
+The water is one conserved cycle: [water.puck](../../worlds/debug/water.puck)
+instantiates the standard's [hydrology](../../worlds/standard/hydrology.puck).
+Its field chain connects finite ice, lake, sill, falls, river and aquifer stores.
+The authored clock chooses a remaining-volume target; the field kernel transfers
+only supply above that target and only what the recipient accepts. Duration and
+integer exponent are template parameters, with constant-rate exponent 1 as the
+neutral default and exponent 3 in the debug world. The final raw unit remains until
+the duration ends. `world.fields` exposes `totalRaw`: `hydroIce` plus `hydroWater`
+is the conserved total. `water.speed 60` accelerates the clock and transport together.
 
-Measured on the running debug world (Direct3D 12 captures at the pool, the falls from
-the spawn and a swim; a Vulkan capture of the pool, and of the level rising with the
-gauge float):
+The scenery comes from [standard water families](../../worlds/standard/water.puck).
+The glacier contracts uniformly about its cradle using `CreationDocument.SizeBy`
+and the authored linear fraction; zero parks the creation. The falls' motion reads
+melt strength and its endpoint visibility, rather than mistaking a cell's retained
+water depth for discharge. Impact spray is a state-scaled cloud volume. The lake's
+outlet is a terrain subtraction, shared by the rendered mass and its collider.
 
-- Swimming: posed on the bed she rises and holds at 1.25 m under the surface
-  (`body.where` y −2.02 under a surface at −0.77, `inmedium`, `atmediumband`, hold
-  `swim`). Ground following under a medium hold pinned a swimmer to the bed she rises
-  from, so it no longer runs there, and a kit may carry a Medium hold in a world with no
-  medium, so the Moth's swim is in her own document and every world she is worn in.
-- The steady level is set by the authored starting water plus ice, shared across the
-  river's and aquifer's cells above the river's bed. `world.fields` reports each store's
-  total; `hydroIce` plus `hydroWater` stays constant through melt and transport.
-- The pool follows the river: with the clock at 60 times speed on the debug world the
-  pool's level rose from 1.60 to 2.14 over the melt and the gauge float rose with the
-  aquifer, in a Vulkan capture. From the spawn the falls show on the north-west wall.
-  `water.speed 60` runs the cycle sixty times faster. The subsequent area fix pass
-  made ice a finite lattice store: `hydroClock` now reports actual melt, and
-  `hydroIce` plus `hydroWater` is conserved by exact transfers.
+`waterBasin` constructs the pool, plunge basin and reservoir chamber. `waterViews`
+projects the chain's scalar gauges into spatial field surfaces and ordinary medium
+queries; these are views of the stores, not extra conserved supply. The reservoir's
+float reads aquifer fill and rises over the same chamber floor and height scale as
+its surface. A cream pavilion with teal structure and orange shade covers a glazed
+inspection window in the dry terrace. The pool uses the standard `waterMaterial`,
+through the ordinary palette and glass path: the engine has no water shading path.
+The chamber and pool have modelled wall openings joined by a submerged passage;
+its field surface reads the same aquifer gauge. Their elevations share the flow
+model's datum. Stream foam and brush edges are material paints on one moving sheet
+per segment, so decorative strokes no longer require separate animated bake groups.
 
-Cost, on a machine other lanes were loading (counts are the evidence): the chain is 72
-cell visits a lattice step and the pool 1,600; the water adds two of the world's 1,428
-rules; the three height rows make the engine create its 64 MB brick pool (by the code,
-`SdfWorldTables.EnsureBrickPool`; not measured apart). Against the same world without the
-water documents (the floor's slabs and the wall's bowl kept), the water's creations add 172
-bake groups (7,478 to 7,650), 6.4 million level-0 triangles (47.6 to 54.0 million), 105 MB of
-vertex arrays and 1.0 GB of the mesh region in use (1.67 to 2.68 GB): every animated shape is a
-group of its own, and the stream's 1.4 cm foam bars bake at a millimetre cell. A cold bake
-of the world is 7,650 groups, 54 million triangles and 78 s on Direct3D 12 and about
-115 s on Vulkan; a warm Direct3D 12 World holds 12.4 GiB private (14.3 cold) and the
-cold Vulkan World 15.7. A frame at the pool is 157 ms and at the spawn 160 ms (the
-tick, about 150 ms, is the world's own, not the water's). The debug world's compile
-validates in 4.78 GB peak against 3.77 GB without the scenery. The
-[water packet](open-items.md#water) records what each system showed.
+Height fields publish immutable sampled values in `SdfProgram`; the geometry key
+and the bake read that same owned snapshot. This applies to opaque and glass fields.
+The glass pass integrates absorption from every material before the opaque hit,
+so the inspection pane transmits the reservoir's water colour. Reflection and
+refraction still use the nearest interface.
 
-The pool's field row uses the standard's `waterMaterial`, through the same palette
-lowering and glass path as creations. Roughness, coat and glass are authored values;
-the engine supplies no water-specific shading.
+The Moth uses the standard `swimHold` before her ground hold, placing her feet 1.25 m
+under the surface. Her existing motion drivers gate a tread and alternating limb
+strokes on `InMedium`; no second swim controller runs in engine code.
 
-Departures from [the art pack](../game/art/caldera-water-pack/README.md): the falls are a slab
-ribbon with no spray or plunge pocket, the glacier is six hinged lumps, the lake has no
-modelled outlet notch, and the gauge is a post on the bank, not the pavilion over a
-cutaway. The swim has no animation: she floats in her walking pose.
-
+The [art pack](../game/art/caldera-water-pack/README.md) remains the visual target.
+The glacier is six shrinking lobes; crevasses, melt channels, wet rock and the
+reservoir's descending inlet still need fuller art treatment.
+The [water packet](open-items.md#water) owns the remaining measured system work.
 ## The owner's answers
 
 - **The avatar studio stays a pavilion on the south-east lawn**: a photo area

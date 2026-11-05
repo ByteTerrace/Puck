@@ -90,6 +90,10 @@ public static class CliExit {
             ? $"puck: {message}"
             : $"puck {path}: {message}"
         ));
+        // Programming faults need their call site; a one-line refusal cannot tell an author which mechanism broke.
+        if (exception is NullReferenceException or IndexOutOfRangeException or InvalidCastException) {
+            Console.Error.WriteLine(value: exception.StackTrace);
+        }
 
         return Refused;
     }

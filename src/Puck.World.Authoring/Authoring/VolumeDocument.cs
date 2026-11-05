@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
 using Puck.SignedDistance;
 
@@ -17,8 +18,9 @@ public sealed record VolumeDensityStopDocument(float Density, string Color);
 /// (absent, Width), and NoiseDepth, in [0, 1], the share of its density the noise modulates (absent, one: all of
 /// it). Intensity is the luminance, in nits per unit of path, the ramp's colour emits at full density: a ray crossing a
 /// unit of a fully dense, unabsorbing medium of white colour gains that luminance.</summary>
-public sealed record VolumeDocument(string Kind, DocumentVector3 Position, DocumentQuaternion Rotation,
-    DocumentVector3 HalfExtent, IReadOnlyList<VolumeDensityStopDocument> Ramp, string? Parent = null,
+public sealed record VolumeDocument([property: JsonRequired] string Kind, [property: JsonRequired] DocumentVector3 Position,
+    [property: JsonRequired] DocumentQuaternion Rotation, [property: JsonRequired] DocumentVector3 HalfExtent,
+    [property: JsonRequired] IReadOnlyList<VolumeDensityStopDocument> Ramp, string? Parent = null,
     float? Axis = null, float? Width = null, float? Speed = null, uint? Seed = null, int? Steps = null,
     float? Intensity = null, float? Extinction = null, float? PulseAmplitude = null, float? PulseFrequency = null,
     int? IntensityLane = null, bool Enabled = true, float? Coverage = null, float? Softness = null, float? Scatter = null,

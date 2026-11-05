@@ -139,8 +139,8 @@ public sealed partial class SdfProgram {
             }
 
             var shape = m_instructions[cursor];
-            // Sweep's external curve table needs its own content key before it can share a program safely.
-            if (((SdfShapeType)shape.Shape) == SdfShapeType.Sweep) {
+            // Side-table content needs its own shared-part key. Retain instruction-local ownership until then.
+            if (((SdfShapeType)shape.Shape) is SdfShapeType.Sweep or SdfShapeType.SampledRegion) {
                 return false;
             }
             // The authored Detail flag stays part of the shape's identity, in a bit no shape-type id reaches.
