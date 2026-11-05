@@ -398,6 +398,45 @@ public sealed class WorldArtifactBuildLawTests {
         );
     }
     [Fact]
+    public void ATreeWithoutItsOwnGitEntryIsKeyedByItsOwnFilesNotByTheRepositoryAroundIt() {
+        using var checkout = new Checkout();
+
+        // Two extractions of different sources inside one repository, neither carrying a .git entry.
+        foreach (var (tree, library) in new[] { ("archive-a", "namespace Library;\n"), ("archive-b", "namespace Librarz;\n") }) {
+            checkout.Write(name: $"{tree}/Directory.Build.props", text: "<Project />\n");
+            checkout.Write(
+                name: $"{tree}/{WorldArtifactClosure.WorldProject}",
+                text: "<Project Sdk=\"Microsoft.NET.Sdk\"><ItemGroup><ProjectReference Include=\"../Puck.Library/Puck.Library.csproj\" /></ItemGroup></Project>\n"
+            );
+            checkout.Write(name: $"{tree}/src/Puck.World/Program.cs", text: "return 0;\n");
+            checkout.Write(name: $"{tree}/src/Puck.Library/Puck.Library.csproj", text: "<Project Sdk=\"Microsoft.NET.Sdk\" />\n");
+            checkout.Write(name: $"{tree}/{LibrarySource}", text: library);
+        }
+
+        string KeyOf(string tree) {
+            var root = Path.Combine(path1: checkout.Root, path2: tree);
+            var (roots, _) = WorldArtifactClosure.Walk(repositoryRoot: root);
+
+            Assert.True(
+                condition: WorldArtifactKey.TryCompute(buildArguments: ["build"], key: out var key, reason: out var reason, repositoryRoot: root, roots: roots),
+                userMessage: reason
+            );
+
+            return key;
+        }
+
+        var first = KeyOf(tree: "archive-a");
+
+        Assert.Equal(actual: KeyOf(tree: "archive-a"), expected: first);
+        Assert.NotEqual(actual: KeyOf(tree: "archive-b"), expected: first);
+
+        // Build output inside the tree is not an input, and an edited source is.
+        checkout.Write(name: "archive-a/src/Puck.World/obj/Generated.cs", text: "namespace Built;\n");
+        Assert.Equal(actual: KeyOf(tree: "archive-a"), expected: first);
+        checkout.Write(name: $"archive-a/{LibrarySource}", text: "namespace Librarz;\n");
+        Assert.NotEqual(actual: KeyOf(tree: "archive-a"), expected: first);
+    }
+    [Fact]
     public async Task ConcurrentResolutionsOfOneSourceStateShareOneBuild() {
         using var checkout = new Checkout();
         var store = checkout.Store;

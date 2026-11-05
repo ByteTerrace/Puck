@@ -92,7 +92,7 @@ public sealed partial class WorldRenderSettings {
             ceiling = WorldRenderScaleTiers.Scale(tier: WorldRenderScaleTier.ThreeQuarter);
         }
         if (!float.IsFinite(f: scale) || (scale < Math.Min(val1: Floor(view: view), val2: ceiling)) || (scale > ceiling)) {
-            refusal = $"world.render-scale: pin '{scale}' for '{view}' is outside floor {Math.Min(val1: Floor(view: view), val2: ceiling)}..ceiling {ceiling}";
+            refusal = $"pin '{scale}' for '{view}' is outside floor {Math.Min(val1: Floor(view: view), val2: ceiling)}..ceiling {ceiling}";
             return false;
         }
         refusal = null;
@@ -130,7 +130,7 @@ public sealed partial class WorldRenderSettings {
     public bool SetResolution(string view, WorldRenderScaleOperation operation, float scale, out string? refusal) {
         refusal = null;
         if (!HasView(view: view)) {
-            refusal = $"world.render-scale: unknown view '{view}'";
+            refusal = $"unknown view '{view}'";
             return false;
         }
         if ((operation == WorldRenderScaleOperation.Pin) && !CanPin(refusal: out refusal, scale: scale, view: view)) {

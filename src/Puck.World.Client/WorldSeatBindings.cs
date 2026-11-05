@@ -527,7 +527,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             // chord/held source, unbounded — refuse a composed profile past the ceiling by name (the same metric and
             // ceiling the boot-time validator uses) instead, keeping the seat on its prior mapping.
             if (profile.Modifiers.Count > WorldBindingBarCapacity.MaxModifiers) {
-                Console.Error.WriteLine(value: $"[player.bindings] {label} recompose rejected: composes {profile.Modifiers.Count} modifiers, exceeding the {WorldBindingBarCapacity.MaxModifiers}-modifier ceiling; keeping the prior mapping.");
+                WorldClientDiagnostics.Report(channel: "player.bindings", text: $"{label} recompose rejected: composes {profile.Modifiers.Count} modifiers, exceeding the {WorldBindingBarCapacity.MaxModifiers}-modifier ceiling; keeping the prior mapping.");
 
                 return;
             }
@@ -537,7 +537,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             m_effectiveDocuments[slot] = documentBytes;
             m_effectiveChannels[slot] = channelDefinitions;
         } catch (ArgumentException exception) {
-            Console.Error.WriteLine(value: $"[player.bindings] {label} recompose rejected ({exception.Message.ReplaceLineEndings(replacementText: " ")}); keeping the prior mapping.");
+            WorldClientDiagnostics.Report(channel: "player.bindings", text: $"{label} recompose rejected ({exception.Message.ReplaceLineEndings(replacementText: " ")}); keeping the prior mapping.");
 
             return;
         }
@@ -576,7 +576,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         }
 
         foreach (var error in errors) {
-            Console.Error.WriteLine(value: $"[player.bindings] {label} recompose rejected: {error}; keeping the prior mapping.");
+            WorldClientDiagnostics.Report(channel: "player.bindings", text: $"{label} recompose rejected: {error}; keeping the prior mapping.");
         }
 
         return true;
@@ -680,13 +680,13 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
             if (label is not null) {
                 if (droppedCommandCount > 0) {
-                    Console.Error.WriteLine(value: $"[player.bindings] {label}: page \"{page.Id}\" (group \"{row.Group}\") skipped {droppedCommandCount} unregistered command{((droppedCommandCount == 1)
+                    WorldClientDiagnostics.Report(channel: "player.bindings", text: $"{label}: page \"{page.Id}\" (group \"{row.Group}\") skipped {droppedCommandCount} unregistered command{((droppedCommandCount == 1)
                         ? ""
                         : "s")} — its commands are not registered in this composition.");
                 }
 
                 if (droppedChannelFindings is not null) {
-                    Console.Error.WriteLine(value: $"[player.bindings] {label}: page \"{page.Id}\" (group \"{row.Group}\") skipped {droppedChannelFindings.Count} unavailable channel binding{((droppedChannelFindings.Count == 1)
+                    WorldClientDiagnostics.Report(channel: "player.bindings", text: $"{label}: page \"{page.Id}\" (group \"{row.Group}\") skipped {droppedChannelFindings.Count} unavailable channel binding{((droppedChannelFindings.Count == 1)
                         ? ""
                         : "s")} ({string.Join(
                         separator: "; ",
@@ -710,7 +710,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 }
 
                 if (label is not null) {
-                    Console.Error.WriteLine(value: $"[player.bindings] {label}: row [{string.Join(
+                    WorldClientDiagnostics.Report(channel: "player.bindings", text: $"{label}: row [{string.Join(
                         separator: '+',
                         values: row.Members
                     )}] (group \"{row.Group}\") skipped — its channel binding is unavailable ({channelFinding}).");
@@ -724,7 +724,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 !WorldAffordances.IsCommandRegistered(command: command.Command)
             ) {
                 if (label is not null) {
-                    Console.Error.WriteLine(value: $"[player.bindings] {label}: row [{string.Join(
+                    WorldClientDiagnostics.Report(channel: "player.bindings", text: $"{label}: row [{string.Join(
                         separator: '+',
                         values: row.Members
                     )}] (group \"{row.Group}\") skipped — its command is not registered in this composition.");
@@ -789,7 +789,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
         if (survivingHoldPages.Length == 0) {
             if (label is not null) {
-                Console.Error.WriteLine(value: $"[player.bindings] {label}: wheel \"{wheel.Id}\" skipped — none of its hold pages are in this composition.");
+                WorldClientDiagnostics.Report(channel: "player.bindings", text: $"{label}: wheel \"{wheel.Id}\" skipped — none of its hold pages are in this composition.");
             }
 
             return null;
@@ -831,7 +831,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
             if ((keptSectors?.Count ?? 0) >= BindingWheelDefinition.MinSectorsPerRing) {
                 if (label is not null) {
-                    Console.Error.WriteLine(value: $"[player.bindings] {label}: wheel \"{wheel.Id}\" ring \"{ring.Id}\" skipped {dropped.Count} unregistered command{((dropped.Count == 1)
+                    WorldClientDiagnostics.Report(channel: "player.bindings", text: $"{label}: wheel \"{wheel.Id}\" ring \"{ring.Id}\" skipped {dropped.Count} unregistered command{((dropped.Count == 1)
                         ? ""
                         : "s")} ({string.Join(
                         separator: ", ",
@@ -841,7 +841,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
                 keptRings.Add(item: (ring with { Entries = keptSectors! }));
             } else if (label is not null) {
-                Console.Error.WriteLine(value: $"[player.bindings] {label}: wheel \"{wheel.Id}\" ring \"{ring.Id}\" skipped — fewer than {BindingWheelDefinition.MinSectorsPerRing} of its sectors are registered in this composition ({string.Join(
+                WorldClientDiagnostics.Report(channel: "player.bindings", text: $"{label}: wheel \"{wheel.Id}\" ring \"{ring.Id}\" skipped — fewer than {BindingWheelDefinition.MinSectorsPerRing} of its sectors are registered in this composition ({string.Join(
                     separator: ", ",
                     values: dropped
                 )} dropped).");
@@ -854,7 +854,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
         if ((keptRings?.Count ?? 0) == 0) {
             if (label is not null) {
-                Console.Error.WriteLine(value: $"[player.bindings] {label}: wheel \"{wheel.Id}\" skipped — none of its rings survive in this composition.");
+                WorldClientDiagnostics.Report(channel: "player.bindings", text: $"{label}: wheel \"{wheel.Id}\" skipped — none of its rings survive in this composition.");
             }
 
             return null;
@@ -1783,7 +1783,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 errors: errors
             );
             foreach (var error in errors) {
-                Console.Error.WriteLine(value: $"[player.bindings] {label}: {error}");
+                WorldClientDiagnostics.Report(channel: "player.bindings", text: $"{label}: {error}");
             }
         }
     }
