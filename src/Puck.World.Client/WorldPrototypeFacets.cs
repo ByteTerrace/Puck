@@ -206,7 +206,7 @@ public static class WorldPrototypeFacets {
         }
 
         foreach (var notice in catalog.Notices) {
-            Console.Error.WriteLine(value: notice);
+            WorldClientDiagnostics.Report(diagnostic: WorldClientDiagnostic.FromLine(line: notice));
         }
 
         foreach (var row in catalog.Rows) {
@@ -218,7 +218,7 @@ public static class WorldPrototypeFacets {
                 // Unreachable while the server refuses a live definition whose derived face screens pass the boot
                 // reservation (Server.WorldServer.BootDerivedFaceScreens). Named rather than skipped, because a
                 // seated row the renderer silently dropped is exactly the disagreement that gate exists to prevent.
-                Console.Error.WriteLine(value: $"[world.faces: '{row.PlacementId}':'{row.FaceName}' was seated at screen {row.ScreenIndex}, past this renderer's boot-reserved band [{derivedFaceBase}, {(derivedFaceBase + derivedFaceScreens)}) — it cannot be shown]");
+                WorldClientDiagnostics.Report(channel: "world.faces", text: $"'{row.PlacementId}':'{row.FaceName}' was seated at screen {row.ScreenIndex}, past this renderer's boot-reserved band [{derivedFaceBase}, {(derivedFaceBase + derivedFaceScreens)}) — it cannot be shown");
 
                 continue;
             }
