@@ -54,9 +54,10 @@ prototypes {
     streamSegment(id: $"stream-{i}", length: leg.length, arc: i * 24)
   }
   stoneBridge(id: "bridge")
-  floatGauge(id: "reservoir-gauge", height: 3)
+  floatGauge(id: "reservoir-gauge", height: 1.8)
   waterBasin(id: "plunge-basin", half: [10, 10], floorY: -2.4)
-  waterBasin(id: "reservoir-basin", half: [5, 6], floorY: -3.5, stepTops: [])
+  waterBasin(id: "reservoir-basin", half: [5, 6], floorY: -1.9, stepTops: [], openings: [{ position [5, -1.3, 0], half [0.6, 0.6, 1] }])
+  waterBasin(id: "reservoir-passage", half: [1.2, 1], floorY: -1.9, rimY: -0.7, stepTops: [], openings: [{ position [-1.35, -1.3, 0], half [0.6, 0.6, 1] }, { position [1.35, -1.3, 0], half [0.6, 0.6, 1] }])
   reservoirPavilion(id: "reservoir-pavilion")
   impactSpray(id: "falls-spray")
 }
@@ -94,7 +95,7 @@ placements {
   // The reservoir's float gauge beside the pool's steps, its ticks facing the path: the aquifer's fill read off the bank.
   placement "reservoir-gauge" {
     prototype: "reservoir-gauge"
-    position [-35, -3.5, -18]
+    position [-35, -1.9, -18]
     yawDegrees: 270
   }
   placement "plunge-basin" {
@@ -111,6 +112,11 @@ placements {
     position [-39, 0, -18]
     solid
   }
+  placement "reservoir-passage" {
+    prototype: "reservoir-passage"
+    position [-45, 0, -18]
+    solid
+  }
   placement "reservoir-pavilion" {
     prototype: "reservoir-pavilion"
     position [-39, 0, -18]
@@ -125,6 +131,7 @@ placements {
 }
 
 waterViews(views: [
+  { name: "reservoir-passage", rowName: "passageWater", gauge: "aquiferFill", hole [-46, -19, -44, -17], floorY: -1.9, initial: 0, maximumDepth: 1, heightScale: 1.8, cell: 0.5 }
   { name: "plunge", rowName: "plungeWater", gauge: "poolLevel", hole: plungeHole, floorY: -2.4, initial: 1.65, maximumDepth: 2.35, heightScale: 1, cell: 1 }
-  { name: "reservoir", rowName: "reservoirWater", gauge: "aquiferFill", hole: reservoirHole, floorY: -3.5, initial: 0, maximumDepth: 1, heightScale: 3, cell: 1 }
+  { name: "reservoir", rowName: "reservoirWater", gauge: "aquiferFill", hole: reservoirHole, floorY: -1.9, initial: 0, maximumDepth: 1, heightScale: 1.8, cell: 1 }
 ])

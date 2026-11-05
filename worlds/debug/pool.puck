@@ -8,7 +8,7 @@ import "water-site"
 import "../standard/water"
 
 prototypes {
-  waterBasin(id: "pool-basin", half: poolHalf, floorY: poolFloor)
+  waterBasin(id: "pool-basin", half: poolHalf, floorY: poolFloor, openings: [{ position [-10, -1.3, 6], half [0.6, 0.6, 1] }])
 }
 
 placements {

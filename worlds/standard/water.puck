@@ -76,51 +76,46 @@ let stonePalette = [
   { color: "#B3A482", roughness: 0.92, specular: 0.02 }
 ]
 
-// A stretch of stream, `length` metres long (a whole number of ripple spacings) and `width` wide, flowing toward the
-// creation's +Z. A flat turquoise sheet with a white brush edge each side and bars of foam that pulse downstream: each
-// bar is a half sine of the clock, and its phase is its distance along the whole stream (`arc` is where this stretch
-// starts, in metres), so the pulses run on unbroken across stretches that are separate creations.
-template streamSegment(id, length, width = 4.5, arc = 0, spacing = 2, cadence = 0.4, palette = waterPalette, top = 0.1) {
+// A stream's brush edges and moving foam are surface paints, not sub-centimetre mesh features.
+// The ordinary motion system carries the painted sheet; overlapping ends keep adjacent stretches joined.
+template streamSegment(id, length, width = 4.5, arc = 0, spacing = 4, cadence = 0.4, palette = waterPalette, top = 0.1) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
-      palette: palette
+      palette [
+        palette[0] with {
+          paints: concat(
+            map([-1, 1], side => {
+              type: "Box", parent: "sheet", color: palette[1].color,
+              position [side * (width / 2 - 0.2), 0, 0],
+              scale [0.2, 1, length / 2 + spacing]
+            }),
+            map(range(0, 6), k => {
+              type: "Box", parent: "sheet", color: palette[2].color,
+              position [0, 0, (k + 0.5) * length / 6 - length / 2],
+              scale [width / 2 - 0.6, 1, 0.07]
+            })
+          )
+        }
+      ]
       drivers [
         { name: "flow", signal: "time", cadence: cadence, blendInSeconds: 0 }
       ]
       shape Box "sheet" {
         material: 0
-        position [0, top - 0.045, 0]
-        scale [width / 2, 0.045, length / 2]
-      }
-      for side in [-1, 1] {
-        shape Box $"brush-{side}" {
-          material: 1
-          position [side * (width / 2 - 0.2), top - 0.01, 0]
-          scale [0.2, 0.05, length / 2]
-        }
-      }
-      for k in range(0, floor(length / spacing)) {
-        shape Box $"pulse-{k}" {
-          material: 2
-          position [0, top + 0.012, (k + 0.5) * spacing - length / 2]
-          scale [width / 2 - 0.6, 0.014, 0.07]
-          slides [
-            {
-              driver: "flow"
-              axis [0, 0, 1]
-              amplitude: spacing * 0.9
-              phase: 0 - (arc + k * spacing) * 6.283185307179586 / (spacing * 4)
-              wave: "halfSine"
-            }
-          ]
-        }
+        position [0, top - 0.3, 0]
+        scale [width / 2, 0.3, length / 2 + spacing]
+        slides [
+          {
+            driver: "flow", axis [0, 0, 1], amplitude: spacing * 0.9,
+            phase: 0 - arc * 6.283185307179586 / (spacing * 4), wave: "halfSine"
+          }
+        ]
       }
     }
   }
 }
-
 // Each piece turns about its own flow axis as discharge falls, narrowing the sheet from the valley's approach.
 // The caller supplies the endpoint visibility as well as discharge; both are ordinary state-driven motion.
 template fallsRibbon(id, profile, width = 8, standoff = 5, gauge = "meltStrength", visible = "meltVisible", palette = waterPalette) {
@@ -388,7 +383,7 @@ template stoneBridge(id, length = 9, width = 3, rise = 1.1, ramp = 3, palette = 
     }
   }
 }
-template waterBasin(id, half, floorY = -2.4, rimY = -0.4, stepTops = [-1.2, -0.9, -0.6, -0.3]) {
+template waterBasin(id, half, floorY = -2.4, rimY = -0.4, stepTops = [-1.2, -0.9, -0.6, -0.3], openings = []) {
   prototype $"{id}" {
     document {
       name: id
@@ -421,6 +416,14 @@ template waterBasin(id, half, floorY = -2.4, rimY = -0.4, stepTops = [-1.2, -0.9
         material: 1
         position [0, ((floorY - 0.3 + rimY) / 2), 0 - (half[1] + 0.15)]
         scale [half[0] + 0.15 * 2, ((rimY - floorY + 0.3) / 2), 0.15]
+      }
+      for (opening, i) in openings {
+        shape Box $"passage-{i}" {
+          material: 1
+          blend: "Subtraction"
+          position: opening.position
+          scale: opening.half
+        }
       }
       for (top, i) in stepTops {
         shape Box $"step-{i}" {
