@@ -208,7 +208,7 @@ public sealed partial class SdfWorldPassesLawTests {
             reason: () => $"building={rig.World.IsBuildingCandidate} executed={string.Join(separator: ",", values: rendered)}",
             step: () => {
                 rig.Produce();
-                rendered = [.. Executed(work: CadenceWork(rig: rig)).Where(predicate: static part => (part is not (SdfWorldPackage.Parts.Mask or SdfWorldPackage.Parts.Bake)))];
+                rendered = [.. Executed(work: CadenceWork(rig: rig))];
 
                 return rendered.Contains(value: SdfWorldPackage.Parts.Surface);
             },

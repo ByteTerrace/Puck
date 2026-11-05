@@ -34,7 +34,7 @@ public sealed class SdfMeshLibraryLawTests {
         var dresser = bakeRun.Dresser;
 
         dresser.Dress(new SdfFrame(Program: program, ProgramChanged: true, Time: 0, Views: []) { DynamicTransforms = transforms });
-        Assert.True(bake.TryTakeForFrame(0, out var batch));
+        Assert.True(bake.TryTake(bake.Program, out var batch));
         Assert.All(batch!.Lattices, lattice => Assert.Equal(3, lattice.FrameSlot));
     }
     // A body drawn at another size keys the geometry and the skin poses of its own size, since its slots carry the scale

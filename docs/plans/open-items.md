@@ -48,9 +48,11 @@ milestone. The owner requested its baseline and implementation plan, which
 1. [Memory](#memory-on-the-deck-tier) [high, the Deck]: the debug world's
    process plus GPU memory at or under 10 GB on the Deck tier, attribution
    first.
-2. [Lighting and GI](#lighting-and-gi) [high]: under lockstep a moving sun
-   relights the whole probe window every tick, so the sweep's windowed leg
-   cannot run with the day cycle; quantize the sun on a fixed grid.
+2. [Lighting and GI](#lighting-and-gi) [high]: the
+   [graphics architecture plan](graphics-architecture.md)'s G1, the GPU probe
+   trace and relight, which makes the lockstep relight under a moving sun a
+   frame's work; the sun's fixed grid stays the lockstep drain's correctness
+   fix beside it.
 3. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
    M1 read, after the draw-identity fix R2's review found
    ([GPU robustness](#vulkan-regressions-and-gpu-robustness)).
@@ -568,12 +570,18 @@ The custom no-GC runtime port stays later work, on the
 
 ### Bake proportional to change
 
-Owner: specialist (rendering) · high · Next: narrow `SdfMeshBakeClosure` to the
-code that decides mesh contents and key one store for both backends from the HLSL
-source closure of `MeshBake` and `MeshBakeMask`; then cut the collapse
-(`SdfMeshCollapse`), now the bake's largest CPU stage, and the bake frame's own
-cost, toward the owner's bar: one minute at most per backend from an empty
-store (AGENTS.md), and work proportional to change.
+Owner: specialist (rendering) · high · Next: the bake samples through the
+residency's background GPU work
+([B1](graphics-architecture.md#b1-the-completion-driven-bake-service)), so
+the frame-pacing floor is gone and the cold bake is CPU-bound (102 to 125 s on
+Direct3D 12 and 129 s on Vulkan on a busy machine); narrow `SdfMeshBakeClosure` to the code that decides mesh contents and key one
+store for both backends from the HLSL source closure of `MeshBake` and
+`MeshBakeMask`; then cut the collapse (`SdfMeshCollapse`), now the bake's
+largest CPU stage, toward the owner's bar: one minute at most per backend from
+an empty store (AGENTS.md), and work proportional to change. Two bakes of one
+build are not byte-identical (1 to 4 of about 1,306 payloads differ), so a
+product keyed across processes keys on the payload it was built from, never on
+the geometry key alone.
 
 - [high] Each backend still keeps its own store because `SdfMeshBakeIdentity`
   hashes the actual mask/bake kernel bytes. The bake/dresser, view/bake parameter
@@ -584,16 +592,26 @@ store (AGENTS.md), and work proportional to change.
   equivalence, including compiler changes and skin/material/refinement behavior.
   The latest native forest legs have different aggregate triangle counts, so
   source equality alone is not proof of identical products or a halved cold cost.
-- The cold bake fails the one-minute bar on both backends by about double. It
-  is bound twice over. The frame admits one dispatch of at most 2^21 samples, so
-  its 1.1 G samples need at least 530 frames, and a bake frame runs 120 ms or
-  more (produce plus about 40 ms of simulation), so the frame alone costs about
-  65 s. And the contour work saturates every processor: on a busy machine its
-  stages log about 1,500 thread seconds, the collapse
-  (`SdfMeshCollapse.Levels`) about 30% of the workers' CPU, the crossing stage
-  about 20% and the contour (`ExtractRefined`) about 12%. Both halves have to
-  fall: fewer frame costs while baking (or more samples a dispatch once the CPU
-  keeps up) and roughly half the contour CPU.
+- The cold bake fails the one-minute bar on both backends. Its GPU half no
+  longer bounds it: the background GPU work dispatches batches as its slots
+  complete, the whole bake is 6 to 7 s of measured GPU time, and 39 to 47% of
+  the bake's takes find no group owing a lattice. The contour work saturates
+  every processor: its stages log 1,100 to 1,500 thread seconds, the collapse
+  (`SdfMeshCollapse.Levels`, the `land` stage) about 40% of the workers' CPU,
+  the crossing and prepare stages about 15 to 20% each and the contour
+  (`ExtractRefined`) about 10%. Roughly half the contour CPU has to fall.
+- [medium] Every view still renders every frame while a bake is pending
+  (`SdfWorldResidency.IsUnchanged` returns false on `MeshPathBake.Pending`),
+  which the frame-paced bake needed to dispatch and the background GPU work
+  does not; it still needs an upload after any pack that moves what the World
+  set binds (`SdfWorldTables.BindsBackgroundWork`) and a render for each landed
+  mesh. Let a still view stand while the bake runs, uploading without
+  rendering, and measure the frame while baking.
+- [low] The background GPU work submits only at its pumps (the top of a frame
+  and after an upload), so a job completing mid-frame waits for the next
+  frame: moving the pump to a waiter on the slots' fences needs A2's
+  thread-safe submission ([graphics plan](graphics-architecture.md#a1-and-a2-portal-sight-and-direct3d-12-submission)),
+  and pays only once the CPU half stops bounding the bake.
 - [high] A cold bake's private memory climbs far past the Deck tier's 10 GB
   within its first minute, and its allocation is a cost on the frame as well as
   on memory (the frame runs several times its budget with hundreds of
@@ -635,7 +653,7 @@ store (AGENTS.md), and work proportional to change.
   delete them.
 - [low] Each residency's bake guarantees its own progress, so several cold
   residencies under a too-small budget each admit one group past it
-  (`SdfMeshPathBake.cs`, `TryTakeForFrame`, the "admitted alone" branch); the
+  (`SdfMeshPathBake.cs`, `TryTake`, the "admitted alone" branch); the
   process-wide pool's progress rule belongs to the job system's J1.
 - [low · unconfirmed] The bake indexes its `static const float3 SdfBakeTaps[4]`
   by the `[loop]` counter (`sdf-mesh-bake.comp.hlsl:22,94,102`), the shape the
@@ -645,21 +663,18 @@ store (AGENTS.md), and work proportional to change.
   spills, pick each tap's signs from bits (x from 0x9, y from 0xC, z from 0xA,
   bit `tap - 1`). Any edit moves the bake identity, so batch it with the next
   bake-kernel change.
-- [high] A static copy of a prototype bakes on its own: a static group is one
-  instance in world space (`SdfMeshBakeGroup.cs:12-13`, planned at `:299`), so
-  copies that differ only by a rigid transform never share a bake the way
-  dynamic copies do. The lawn's 307 static scenery rows (11 tree variants,
-  shrubs, boulders, flowers and 156 copies of one tuft) add hundreds of unique
-  cold bakes and about a thousand groups to the debug world
-  (`[sdf.mesh-bake] start residency=world`), while its 748 wind-grass parts,
-  dynamic, add only shared groups. Scatter is the floor's whole vocabulary
-  and the plan spreads it over a 400 m floor, so this decides whether the
-  cold-bake bar can hold: bake a static copy in its prototype's frame and
-  share it across copies whose transform is rigid (a uniform scale admitted),
-  as the dynamic path does. The debug world's placement stamper opens a group
-  per placement (`WorldPlacementStamper.cs:752-812`): the lawn has 307
-  placements, the meadow 121, Chess 64 squares, Reversi 68 tiles and dots, the
-  card table 29 spots and the granaries 16 tiles.
+- [medium] A static copy of a rigid creation bakes once in its prototype's
+  frame and shares that bake under a relative matrix
+  (`WorldRigidAssets.Static.cs`, `EmitStaticAssets`: the largest occurrence's
+  scale bakes, each copy takes `Placement.Scale / BakeScale`), and the debug
+  forest's trees, shrubs and tufts take that path
+  ([dense landscapes](dense-landscapes.md#implemented-mechanisms)). A
+  placement whose creation is not a rigid asset (one with a timeline, drivers,
+  effectors, field-changing lanes, cameras or faces) still opens a group per
+  placement in the placement stamper (`WorldPlacementStamper.cs`,
+  `EmitPlacement`). Count the groups a cold `[sdf.mesh-bake] start` plans per
+  unique geometry and name which placements still bake per copy before
+  spending on it.
 - [medium] Static bake grouping depends on spelling, which breaks the
   ergonomic-is-optimal ruling (AGENTS.md):
   - A static group's mesh detail follows the whole group's size, so authors
@@ -1670,12 +1685,15 @@ under-use the language where the shared libraries (`worlds/standard/bounds.puck`
 ### Lighting and GI
 
 Owner: next lighting batch (rendering, principal-grade review) · high · Next:
+the [graphics architecture plan](graphics-architecture.md)'s G1 (the GPU probe
+trace and relight over the uploaded scene hierarchy, with its brief there) and
 the lockstep relight under a moving sun, then light a cold area from the coarser
 levels or the sky term the moment a view arrives (shading-side); the exposure
 meter is the [terrain pass](terrain-pass.md#exposure-at-its-cause)'s step 1, and
 the coverage, enclosure and wrapped-diffuse findings follow it. The
 [illumination plan](illumination.md) holds the research round's decisions and
-the order they land in, and the
+the order they land in, the graphics architecture plan redesigns its step 3
+and owns the coarse levels' connectivity visibility (G3), and the
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) holds
 the fixed poses and the approaches already rejected.
 
@@ -2113,11 +2131,14 @@ allocation tracker or sum of overlapping layers.
 
 Grounded causes and leads:
 
-- Owner: rendering/bake. Per-recorder readback slots reserve full sample capacity
-  when first used; captured cold-run heap paths reach 40 MiB byte arrays through
-  `SdfMeshBakeReadback`. The result destination is now shared per residency.
-  Measure readback demand and consumer lifetimes before sharing/reducing their
-  storage; preserve exact batch identity, CPU consumers and fence-safe reuse.
+- Owner: rendering/bake. The bake's background GPU work holds one readback, one
+  samples buffer and one point table a slot (`SdfGpuWork.SlotCount`), each grown
+  in 4 MiB granules to its largest batch (about 40 MiB of samples) and kept until
+  the tables go, and each completed batch's samples are copied into a pooled
+  managed array of that size on the bake's pool before decoding
+  (`SdfMeshBakeGpuWork.Complete`); `world.residency`'s `gpu-work` line reads the
+  bytes. Measure that line and the pool's arrays on the Deck tier before
+  shrinking or releasing them between bakes.
 - The mesh library budgets meshes residencies still hold and forgets them, so a
   re-plan reloads a second copy (`SdfMeshLibrary.cs:32`, `:285-304`).
 - The GI probe cache is bounded by its window's resident box

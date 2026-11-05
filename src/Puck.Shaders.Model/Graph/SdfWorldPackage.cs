@@ -6,13 +6,13 @@ namespace Puck.Shaders;
 /// <summary>
 /// The <see cref="RenderGraphPackageCatalog.SdfWorld"/> package's declaration: the values and resources every one of its
 /// kernels reads from its pass group, the layout facts its storages are sized by, and the fragment it runs as.
-/// <para>Every compute pass of the fragment but the bake's reads one interface, <see cref="Members"/>, whose pass block
-/// holds the extent and the world values in ordinal name order and whose resources follow; the bake's mask and sampler
-/// read their own (<see cref="BakeMembers"/>), which holds only what the bake reads. A buffer one pass writes and a later
-/// pass reads is two members over the one buffer: a read-write member named with an <c>RW</c> suffix for its writer, and a
-/// read-only member for its readers.</para>
-/// <para>The fragment (<see cref="NativeFragment"/>) is one view of the residency's baked meshes: the bake's instance
-/// masks and field samples while a bake is pending, the shadow cascades' and the view's mesh rasterization, the surface
+/// <para>Every compute pass of the fragment reads one interface, <see cref="Members"/>, whose pass block holds the extent
+/// and the world values in ordinal name order and whose resources follow; the bake's mask and sampler, which run as the
+/// residency's background GPU work rather than in the fragment, read their own (<see cref="BakeMembers"/>), which holds
+/// only what the bake reads. A buffer one pass writes and a later pass reads is two members over the one buffer: a
+/// read-write member named with an <c>RW</c> suffix for its writer, and a read-only member for its readers.</para>
+/// <para>The fragment (<see cref="NativeFragment"/>) is one view of the residency's baked meshes: the shadow cascades'
+/// and the view's mesh rasterization, the surface
 /// pass that writes every pixel's visibility record from them, shading the records into the lit image, then the sky's
 /// field runs and the composite that writes the output. Its scratch is retained, one allocation shared by every frame
 /// slot, and scales with the counts its host resolves: the view's extent, one viewport, and the program's instance-mask
@@ -372,8 +372,8 @@ public static partial class SdfWorldPackage {
         Table(element: ShaderValueType.Uint, name: MeshRegion),
         Table(element: ShaderValueType.Uint, name: MeshIrradiance),
     ];
-    /// <summary>Gets the values the mesh bake's two parts (<see cref="Parts.Mask"/>, <see cref="Parts.Bake"/>) read from
-    /// their own pass block beside the extent: the live program's instance-mask width, the dispatch's lattices and their
+    /// <summary>Gets the values the mesh bake's two kernels, the instance mask and the field sampler, read from their own
+    /// pass block beside the extent: the live program's instance-mask width, the dispatch's lattices and their
     /// count, and the work-counter rows. No other part reads the first three, and the bake reads nothing else of the
     /// frame.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> BakeValues { get; } = [
@@ -435,8 +435,7 @@ public static partial class SdfWorldPackage {
         .. Tables,
     ];
     /// <summary>Gets the fragment a native view runs as: one view's dispatch set, its scratch retained and counted, its
-    /// one output the view's color. While a bake is pending the mask and bake passes sample its lattices
-    /// (<see cref="Parts.Mask"/>, <see cref="Parts.Bake"/>); the cascades and the mesh pass rasterize the frame's mesh
+    /// one output the view's color. The cascades and the mesh pass rasterize the frame's mesh
     /// draws, the pyramid pass reduces the mesh target into the depth pyramid (<see cref="Parts.Pyramid"/>), the surface pass writes every pixel's visibility record from them (<see cref="Parts.Surface"/>), views shades
     /// the records into the lit image (<see cref="Parts.Lit"/>), the sky evaluates its field runs where the lit image's
     /// coverage is below one (<see cref="Parts.Sky"/>), and the composite writes the color (<see cref="Parts.Composite"/>).
@@ -446,19 +445,15 @@ public static partial class SdfWorldPackage {
         InputVersions: [],
         OutputVersions: [Color],
         Passes: [
-            Pass(name: Parts.Mask, outputs: [Parts.InstanceMasks]) with { Members = BakeMembers },
-            Pass(inputs: [Parts.InstanceMasks], name: Parts.Bake, outputs: [Parts.BakeSamples]) with { Members = BakeMembers },
             ShadowRaster(depth: Parts.ShadowNearDepth, exit: Parts.ShadowNearExit, name: Parts.ShadowNear),
             ShadowRaster(depth: Parts.ShadowFarDepth, exit: Parts.ShadowFarExit, name: Parts.ShadowFar),
             ShadowRaster(depth: Parts.ShadowSecondDepth, exit: Parts.ShadowSecondExit, name: Parts.ShadowSecond),
             Raster(depth: Parts.MeshDepth, name: Parts.Mesh, target: Parts.MeshTarget),
             Pass(inputs: [Parts.MeshTarget], name: Parts.Pyramid, outputs: [Parts.MeshPyramid]),
-            // The surface pass reads the bake samples it never touches so the bake pass, whose samples only the host reads
-            // back, stays live in the planned graph.
             Pass(
                 inputs: [
                     Parts.MeshTarget, Parts.MeshPyramid, Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth,
-                    Parts.ShadowNearExit, Parts.ShadowFarExit, Parts.ShadowSecondExit, Parts.BakeSamples,
+                    Parts.ShadowNearExit, Parts.ShadowFarExit, Parts.ShadowSecondExit,
                 ],
                 name: Parts.Surface,
                 outputs: [Parts.Visibility]
@@ -471,18 +466,6 @@ public static partial class SdfWorldPackage {
             Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.Lit, retained: true),
             .. SkyResources,
             Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Color, retained: false),
-            Buffer(
-                count: [Term(MeshBakeBatch, ShaderPipelineCountBasis.InstanceMaskWords)],
-                name: Parts.InstanceMasks,
-                sizeBytes: null,
-                strideBytes: sizeof(uint)
-            ),
-            Buffer(
-                count: null,
-                name: Parts.BakeSamples,
-                sizeBytes: ((((ulong)MeshBakeMaxSamples) * MeshBakeSampleWords) * sizeof(uint)),
-                strideBytes: sizeof(uint)
-            ),
             ShadowDepth(name: Parts.ShadowNearDepth, texels: MeshShadowResolution),
             ShadowDepth(name: Parts.ShadowFarDepth, texels: MeshShadowResolution),
             ShadowDepth(name: Parts.ShadowSecondDepth, texels: MeshShadowResolution),
@@ -603,12 +586,6 @@ public static partial class SdfWorldPackage {
 
     /// <summary>The names of the fragment's passes and versions.</summary>
     public static partial class Parts {
-        /// <summary>The mesh bake's instance-mask pass, selecting each bake lattice's instances.</summary>
-        public const string Mask = "mask";
-        /// <summary>The bake pass, sampling one instance group's field on a lattice for the host to mesh.</summary>
-        public const string Bake = "bake";
-        /// <summary>The bake samples, copied back to the host after the bake pass.</summary>
-        public const string BakeSamples = "bakeSamples";
         /// <summary>The near shadow cascade's raster pass.</summary>
         public const string ShadowNear = "shadow-near";
         /// <summary>The far shadow cascade's raster pass.</summary>
@@ -670,8 +647,6 @@ public static partial class SdfWorldPackage {
         public const string SkyUpper1 = "skyUpper1";
         /// <summary>The third of the sky's upper field runs' images.</summary>
         public const string SkyUpper2 = "skyUpper2";
-        /// <summary>The bake lattices' instance masks.</summary>
-        public const string InstanceMasks = "instanceMasks";
         /// <summary>The mesh visibility target.</summary>
         public const string MeshTarget = "meshTarget";
         /// <summary>The mesh pass's depth attachment.</summary>

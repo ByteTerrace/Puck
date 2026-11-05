@@ -125,6 +125,13 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private int m_dynamicTransformCapacity;
 
     private readonly GpuDeviceServices m_gpu;
+    private readonly SdfGpuWork m_gpuWork;
+
+    /// <summary>Gets the tables' background GPU work: work that is not a frame's, submitted on completion of the last
+    /// rather than once a frame, which binds the latest upload's World set (the mesh bake's sampling among it).</summary>
+    public SdfGpuWork GpuWork => m_gpuWork;
+    // The device's own services, which the background GPU work's clients create their objects through.
+    internal GpuDeviceServices Gpu => m_deviceContext.Services;
 
     private int m_instanceCapacity;
 
@@ -334,11 +341,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             sizeBytes: DummyBufferBytes,
             usage: GpuBufferUsage.Storage
         ));
-        m_meshBakeSamples = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
-            name: NameOf(part: "mesh-bake-samples"),
-            sizeBytes: MeshBakeSampleBytes,
-            usage: GpuBufferUsage.Storage
-        ));
 
         // The program region holds the live program, not the options' reserve: a probed worst case can run to hundreds
         // of megabytes, which a ring holds once per slot. A larger program grows the region by half again.
@@ -377,7 +379,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             byteCount: SdfMeshRegion.DrawBytes,
             region: MeshRegionIndex
         ));
-        m_meshBakePointRegion = scope.Own(created: CreateRegion(byteCount: MeshBakePointRowBytes, region: MeshBakePointRegionIndex));
         m_meshIrradianceRegion = scope.Own(created: CreateRegion(byteCount: (SdfMeshIrradianceProbe.ProbeWords * sizeof(uint)), region: MeshIrradianceRegionIndex));
         m_lightRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_lightRecords), region: LightRegionIndex));
         m_skyRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyRecord), region: SkyRegionIndex));
@@ -460,6 +461,9 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             )));
             m_frameFences[slot] = scope.Own(created: gpu.QueueSubmitter.CreateSubmissionFence());
         }
+        // The background GPU work records and submits through the device's own services: its submissions are no upload
+        // of the tables' ledger.
+        m_gpuWork = scope.Own(created: new SdfGpuWork(gpu: device.Services, name: ObjectOwner));
 
         // The carve-bake baker's per-slot request buffers + static descriptor sets (only when the pool is enabled). Each
         // slot owns a host-visible request buffer (header + up to MaxBrickCarvesPerBake carves) and a set binding that
@@ -582,6 +586,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         // Drain the device BEFORE destroying anything (tolerating an already-lost device, where there is nothing left to
         // drain): the views' submissions, which the tables' own fences cannot see, read every table.
         m_deviceContext.TryWaitIdle();
+        m_gpuWork.Dispose();
         m_meshClaims?.Dispose(); m_meshClaims = null;
         m_meshArena.Dispose();
         DisposeRetired(completed: ulong.MaxValue);
@@ -613,7 +618,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_bindings.DestroyPool(poolHandle: m_pool);
 
         m_dummyBuffer.Dispose();
-        m_meshBakeSamples.Dispose();
         m_storageFiller.Dispose();
         m_sampledFiller.Dispose();
         m_glyphAtlasUpload?.Dispose();
