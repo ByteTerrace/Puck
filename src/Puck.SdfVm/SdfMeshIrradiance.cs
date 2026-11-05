@@ -204,8 +204,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         return totals;
     }
 
-    // A probe whose rays meet back faces more than this share of the time lies inside geometry.
-    private const float InsideShare = 0.25f;
     // The probes one batch takes before it looks again at the camera, the lighting and the budget.
     private const int BatchProbes = 384;
     // A converged frame already waits for the whole window. Larger bounded batches amortize completion/pump latency
@@ -218,17 +216,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private static readonly int DrainWorkers = Math.Max(val1: 1, val2: (Environment.ProcessorCount - 2));
     private static readonly int BackgroundWorkers = Math.Max(val1: 1, val2: (Environment.ProcessorCount / 4));
 
-    // A shadow ray toward a point light ends this far before it, in metres, so a fixture sunk a little into its housing
-    // is not blocked by it.
-    private const float LightBias = 0.02f;
 
     /// <summary>The weight every axis of the meter's reading takes besides its facing (<see cref="TryMeter"/>): the
     /// surround a center-weighted meter still reads.</summary>
     public const float MeterSurround = 0.05f;
 
-    // The meter's sky visibility over the mean open share of a probe's six axes: on open ground the up axis sees the
-    // whole sky, the four sideways axes half of it and the down axis none, a mean of one half.
-    private const float OpenGroundShare = 2f;
 
     // The least wall time between two scene builds while the bake still lands opaque static meshes, so the trace
     // measures what has landed without restarting on every arrival. Presentation only: the scene a frame lights by is
@@ -242,9 +234,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private const int MaxSweeps = 32;
     // The geometry changes the volume remembers; a probe traced before the oldest traces again.
     private const int MaxChanges = 16;
-    // The metres a changed draw's box grows by, and a ray's recorded hit extends by at least, so a hit on the draw's
-    // own face always meets its box.
-    private const float BoxMargin = 1.0e-3f;
     // The lighting versions whose capture times the volume remembers.
     private const int MaxVersionTimes = 4096;
     private const float ConvergedShare = 0.02f;
@@ -736,7 +725,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     // A recorded hit on the box's face lies at its entry: the margin keeps rounding from passing it by. The
                     // sheet test reads the scene up to a sheet's thickness behind the hit (SdfMeshProbeDepth.Surfaces).
                     reach = MathF.Min(x: reach, y: layout.Reach);
-                    if (Meets(direction: direction, high: box.High, low: box.Low, origin: origin, reach: ((reach + MathF.Max(x: BoxMargin, y: (reach * 1.0e-4f))) + SdfMeshIrradianceProbe.DepthSheetThickness))) { return true; }
+                    if (Meets(direction: direction, high: box.High, low: box.Low, origin: origin, reach: ((reach + MathF.Max(x: SdfMeshIrradianceProbe.BoxMargin, y: (reach * SdfMeshIrradianceProbe.BoxMarginShare))) + SdfMeshIrradianceProbe.DepthSheetThickness))) { return true; }
                 }
             }
         }
@@ -799,7 +788,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         var extent = ((Vector3.Abs(value: oriented.HalfX) + Vector3.Abs(value: oriented.HalfY)) + Vector3.Abs(value: oriented.HalfZ));
 
-        box = new Box(High: ((oriented.Center + extent) + new Vector3(value: BoxMargin)), Low: ((oriented.Center - extent) - new Vector3(value: BoxMargin)));
+        box = new Box(High: ((oriented.Center + extent) + new Vector3(value: SdfMeshIrradianceProbe.BoxMargin)), Low: ((oriented.Center - extent) - new Vector3(value: SdfMeshIrradianceProbe.BoxMargin)));
         return true;
     }
 
@@ -930,7 +919,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 var toward = (probePoint - position);
                 var distance = toward.Length();
 
-                if ((distance > 1.0e-3f) && (m_scene is { } scene) && !scene.Unblocked(direction: (toward / distance), maximum: distance, origin: position)) { continue; }
+                if ((distance > SdfMeshIrradianceProbe.MeterCoincident) && (m_scene is { } scene) && !scene.Unblocked(direction: (toward / distance), maximum: distance, origin: position)) { continue; }
 
                 var weight = ((((offset.X > 0f) ? fraction.X : (1f - fraction.X)) * ((offset.Y > 0f) ? fraction.Y : (1f - fraction.Y))) * ((offset.Z > 0f) ? fraction.Z : (1f - fraction.Z)));
 
@@ -980,7 +969,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
 
             luminance = (sum / weights);
-            skyVisibility = Math.Clamp(max: 1f, min: 0f, value: ((OpenGroundShare * open) / total));
+            skyVisibility = Math.Clamp(max: 1f, min: 0f, value: ((SdfMeshIrradianceProbe.OpenGroundShare * open) / total));
 
             return true;
         }
@@ -1745,16 +1734,23 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var scene = snapshot.Scene;
         var geometry = snapshot.Geometry;
         var sweep = snapshot.Sweep;
-        var prepared = traces ? PlaceBatch(candidates, first, count, layout, scene, geometry, hits!, parallel) : null;
+        var fresh = new uint[count];
+        var prepared = traces ? PlaceBatch(candidates, first, count, layout, lows, scene, geometry, hits!, parallel, fresh) : null;
+        SdfMeshProbeGpuWork.Result? relitOutput = null;
 
-        _ = Parallel.For(fromInclusive: 0, toExclusive: count, parallelOptions: parallel, body: index => {
-            var candidate = candidates[(first + index)];
+        try {
+            _ = Parallel.For(fromInclusive: 0, toExclusive: count, parallelOptions: parallel, body: index => {
+                var candidate = candidates[(first + index)];
 
-            results[index] = Process(candidate: candidate, feedback: feedback, geometry: geometry, hits: hits, index: index, layout: layout, lighting: lighting,
-                lights: lights, lows: lows, scene: scene, sweep: sweep, prepared: prepared?[index]);
-        });
+                results[index] = Process(candidate: candidate, feedback: feedback, geometry: geometry, hits: hits, index: index, layout: layout, lighting: lighting,
+                    lights: lights, lows: lows, scene: scene, sweep: sweep, prepared: prepared?[index]);
+            });
+            relitOutput = GpuTrace is not null ? RelightGpu(candidates, first, count, results, lights, lighting, in snapshot, feedback) : null;
+        } finally {
+            if (traces && (GpuTrace is not null)) { FreeUnadoptedGpuHits(candidates: candidates, first: first, fresh: fresh); }
+        }
 
-        using var gpuResult = GpuTrace is not null ? RelightGpu(candidates, first, count, results, lights, lighting, in snapshot, feedback) : null;
+        using var gpuResult = relitOutput;
         if (GpuTrace is not null) { hits?.ReleaseHits(); }
 
         if (gpuResult is not null) {
@@ -1922,11 +1918,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             if (Vector3.Dot(vector1: normal, vector2: direction) > 0f) { backFaces++; }
         }
 
-        return (backFaces > (InsideShare * Rays));
+        return (backFaces > (SdfMeshIrradianceProbe.InsideShare * Rays));
     }
     // A probe's or a camera sample's hit buffer at full reach, and each cube axis's share of the sky its misses see under
     // the hit buffer's quadrature. `inside` receives the share of the rays that met back faces; the measurement is valid
-    // while it is at most InsideShare.
+    // while it is at most SdfMeshIrradianceProbe.InsideShare.
     private static bool TraceHits(Vector3 origin, Layout layout, SdfMeshIrradianceScene scene, Span<uint> hits, Span<float> sky, out float inside) {
         _ = SdfMeshProbeDepth.TraceHits(backFaces: out _, hits: hits, maximum: layout.Reach, origin: origin, scene: scene);
         return SummarizeHits(hits, sky, out inside);
@@ -1949,7 +1945,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         for (var axis = 0; (axis < 6); axis++) { sky[axis] /= AxisTotals[axis]; }
         inside = (backFaces / ((float)SdfMeshProbeDepth.HitCount));
 
-        return (inside <= InsideShare);
+        return (inside <= SdfMeshIrradianceProbe.InsideShare);
     }
     // Shades a probe's or a camera sample's hits under a lighting into its radiance cube. The part the static point and
     // spot lights and emission send (`local`) depends only on the lighting's local version, so a relight whose probe
@@ -1992,7 +1988,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 var toward = (point.Position - origin);
                 var length = toward.Length();
 
-                if ((length >= point.Range) || ((length > LightBias) && !scene.Unblocked(direction: (toward / length), maximum: (length - LightBias), origin: origin))) { continue; }
+                if ((length >= point.Range) || ((length > SdfMeshIrradianceProbe.LightBias) && !scene.Unblocked(direction: (toward / length), maximum: (length - SdfMeshIrradianceProbe.LightBias), origin: origin))) { continue; }
                 lights[(point.Index >> 5)] |= (1u << (point.Index & 31));
             }
         }
@@ -2051,7 +2047,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     var cone = Math.Clamp(value: (Vector3.Dot(vector1: -direction, vector2: light.SpotAxis) + light.SpotOffset), min: 0f, max: 1f);
 
                     if (cone <= 0f) { continue; }
-                    if ((distance > LightBias) && !scene.Unblocked(direction: direction, maximum: (distance - LightBias), origin: lifted)) { continue; }
+                    if ((distance > SdfMeshIrradianceProbe.LightBias) && !scene.Unblocked(direction: direction, maximum: (distance - SdfMeshIrradianceProbe.LightBias), origin: lifted)) { continue; }
                     points += (light.Color * ((((light.Weight * SdfPhotometry.Falloff(distance: distance, range: light.Range)) * (cone * cone)) * lambert) * light.Bounce));
                 }
                 fixedLight += ((reflected * points) * lighting.Gains.Lights);

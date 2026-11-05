@@ -52,8 +52,8 @@ their commits hold the raw output. None is new in this round.
   for `HostStartKind.WindowedWorld`); no reading attributes those bytes yet. The volume's record table is 66 MiB at High, five payload copies
   330 MiB; the CPU cache read 329 MB after a tour.
 
-**What G1 has built** (branch `lane/codex-g1`, read only; its line numbers
-move as the branch does, so recheck them before acting on one). The
+**What G1 built** (now in the runtime; its line numbers
+move as the code does, so recheck them before acting on one). The
 existing CPU hierarchy is exported without a second builder
 (`SdfMeshIrradianceScene.Gpu.cs:20-108`, `ExportGpu`, staged from the scene's
 own arrays) and traced by a compute kernel, one thread per ray, 144 rays of a
@@ -66,8 +66,8 @@ same bounce gather as the CPU (`shade/sdf-probe-lighting.hlsli:33-76`,
 trace, due and stale per probe on the GPU (`passes/sdf-probe-select.comp.hlsl`);
 all of them are clients of the B1 service (`SdfMeshProbeGpuWork.cs`,
 `SdfGpuWork`: `SlotCount` 4, `GpuShare` 0.25 at `src/Puck.SdfVm/SdfGpuWork.cs:139-141`).
-The GPU hit cache holds `GpuHitCapacity = 2 * MaxProbes` probes of 290 words
-(`SdfMeshIrradiance.Gpu.cs:40`), 171 MB at High.
+The GPU hit cache is sized to the published tier (`SdfMeshIrradiance.HitCapacityOf`),
+290 words a slot.
 
 ## The sources, read
 
