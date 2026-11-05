@@ -431,12 +431,16 @@ template grassTuft(id) {
 
 // The fringe uses tile-local coordinates; gusts use the placed world X/Z, continuous across tiles.
 // fringe [x, z, rx², rz²] is the patch's ellipse and clearing [x, z, r²] the circle it leaves bare, both in tile
-// coordinates; the defaults are the courtyard meadow's patch and its northern boulder.
-template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.9, 3.65], clearing = [6.5, 9.8, 2.1]) {
+// coordinates; the defaults are the courtyard meadow's patch and its northern boulder. A tile small on screen sways at
+// the update-rate lever's reduced tiers unless the importer passes reducedRateAtDistance: false.
+template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.9, 3.65], clearing = [6.5, 9.8, 2.1], reducedRateAtDistance = true) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: $"{id}"
+      behavior {
+        reducedRateAtDistance: reducedRateAtDistance
+      }
       palette [
         {
           color: "#698B3E",
