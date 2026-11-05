@@ -575,9 +575,9 @@ The custom no-GC runtime port stays later work, on the
 
 Owner: specialist (rendering) · high · Next: narrow `SdfMeshBakeClosure` to the
 code that decides mesh contents and key one store for both backends from the HLSL
-source closure of `MeshBake` and `MeshBakeMask`; then cut the crossing stage's
-`CloseSheets` and the collapse (`SdfMeshCollapse`), now the bake's largest CPU
-stages, toward the owner's bar: one minute at most per backend from an empty
+source closure of `MeshBake` and `MeshBakeMask`; then cut the collapse
+(`SdfMeshCollapse`), now the bake's largest CPU stage, and the bake frame's own
+cost, toward the owner's bar: one minute at most per backend from an empty
 store (AGENTS.md), and work proportional to change.
 
 - [high] Each backend still keeps its own store because `SdfMeshBakeIdentity`
@@ -589,11 +589,16 @@ store (AGENTS.md), and work proportional to change.
   equivalence, including compiler changes and skin/material/refinement behavior.
   The latest native forest legs have different aggregate triangle counts, so
   source equality alone is not proof of identical products or a halved cold cost.
-- The cold bake fails the one-minute bar on both backends by more than double.
-  Crossings (`CloseSheets`, `CrossingEdges`) and land
-  (`SdfMeshCollapse`) are about three quarters of its thread seconds, and Vulkan
-  spends fewer thread seconds yet takes longer, because its bake frames are
-  slower and the bake is bound by how often a frame admits work.
+- The cold bake fails the one-minute bar on both backends by about double. It
+  is bound twice over. The frame admits one dispatch of at most 2^21 samples, so
+  its 1.1 G samples need at least 530 frames, and a bake frame runs 120 ms or
+  more (produce plus about 40 ms of simulation), so the frame alone costs about
+  65 s. And the contour work saturates every processor: on a busy machine its
+  stages log about 1,500 thread seconds, the collapse
+  (`SdfMeshCollapse.Levels`) about 30% of the workers' CPU, the crossing stage
+  about 20% and the contour (`ExtractRefined`) about 12%. Both halves have to
+  fall: fewer frame costs while baking (or more samples a dispatch once the CPU
+  keeps up) and roughly half the contour CPU.
 - [high] A cold bake's private memory climbs far past the Deck tier's 10 GB
   within its first minute, and its allocation is a cost on the frame as well as
   on memory (the frame runs several times its budget with hundreds of
@@ -615,10 +620,14 @@ store (AGENTS.md), and work proportional to change.
   `--profile gc-verbose` in the same leg as the memory split above, then write
   each into storage its worker owns: one `float` buffer filled once, appends
   without the wrapper, and a projection workspace per worker.
-- Next cuts, largest first: `CloseSheets`' pair scan and face passes still read
-  `FineValue` (slot lookup and interpolation) for every magnitude they test;
-  `SdfMeshCollapse`'s passes re-cost every free place each pass; the answer
-  stage decodes on the workers.
+- Next cuts, largest first: `SdfMeshCollapse` (4.8 M tried collapses for a
+  valley sector's 0.89 M triangles, about 3.5 µs each; skipping places whose
+  neighbourhood no collapse changed saves only a quarter of the tries and no
+  time, so the cost is in the tries that run); the contour's `ExtractRefined`
+  measures every fine cell's corner signs a third time, where `CrossingEdges`
+  already lists the crossed fine cells (`m_crossedFineCells`); the frame thread's
+  `SdfWorldResidency.Capture` and the render graph's per-view recording while
+  hundreds of views stand.
 - [low] The audit counts a chunked mesh's seam edges as open edges: weld the
   joined query view's coincident seam vertices, or skip edges two chunks share,
   so a chunked group's open edges mean holes.
