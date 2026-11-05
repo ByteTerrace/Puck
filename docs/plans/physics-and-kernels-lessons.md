@@ -95,10 +95,11 @@ analytic static sweep (`FixedStaticContactSolver.Sweep` into
 `FixedConvexContact`), about 73 ms over 41,341 queries, or about 1.8 µs a
 query including the sweep's own overhead. The same unit cost over today's
 4,030 queries would be about 7 ms, more than the whole 5.9 ms tick, so a
-walker's query costs less than a rigid piece's GJK query did. The static sweep
-is still the likeliest largest physics share of the idle tick, and no profile
-of the idle tick has been recorded; [brief A](#brief-a-kit-body-contact-work-certify-cheaply-query-exactly-only-what-a-certificate-cannot-settle)
-takes it first.
+walker's query costs less than a rigid piece's GJK query did. Brief A's profile
+of the idle tick (on a loaded machine) put all contact work at 0.31 ms a tick,
+17 % of the tick's managed CPU, with walker queries near 0.08 µs each; the
+[brief](#brief-a-kit-body-contact-work-certify-cheaply-query-exactly-only-what-a-certificate-cannot-settle)
+records what it found and what remains.
 
 Two order-dependent accumulations were fixed just before this round: glass
 optical depth now sums integer-quantized terms with integer atomics
@@ -498,56 +499,33 @@ tested first, so the exact work runs only where the certificate cannot rule a
 push out. It is the same mechanism as the field sweep's bounds queries, Box3D's
 inscribed spheres and Box2D's fat-box margin.
 
-**Invariant.** A collider the certificate skips would have returned no push:
-the certificate's region contains the collider grown by the contact skin, and
-a carried separation (step 3) is a lower bound the body has not yet travelled.
-**Enforcement:** one door. The certificate is compiled with the collider (one
-`FixedStaticCollider` member, or the compiled bounds record `WorldColliderSet`
-already builds) and the solver reads only that member; no caller supplies its
-own. **Where it stops:** the certificate says nothing about colliders it keeps,
-which still take the exact query, and step 4's snap change is outside the
-invariant, a deliberate correction.
+**Invariant.** A collider the certificate skips would have returned no push.
+**Enforcement:** one door, `FixedStaticColliderSet`: the solver takes colliders
+only as sets, static and per-tick alike, and a set compiles each collider's
+`FixedColliderBox` and `FixedColliderFrame` from the collider itself. **Where it
+stops:** the certificates say nothing about the colliders they keep, which take
+the exact query, and the snap change below is outside the invariant, a
+deliberate correction.
 
-**Steps, each with its check.**
+**Where it stands.** Steps 0 to 3 closed (their evidence is in the commits). The
+idle queries' cause was not walkers against the static field: every per-tick
+(attached) collider, the gallery lift's car, was queried by every sweep in the
+world, unculled. With it culled, `physics.contact.queries` fell from 4,030 to
+766 a tick, every state hash unchanged. Carrying separation from pass to pass
+(step 3) skipped 16 queries a tick and was not landed. 160 of the 170 resolves a
+tick are still ground-snap sweeps: `FixedStepUp.TrySnap` runs twice per walking
+body per tick (the support search in `IntegratePlanarAndVerticalVelocity` and
+the crest snap in `ResolveProgramContacts`), ten sweeps each.
 
-0. Attribute the idle physics work. Run `puck bench world` and a sampled
-   thread-time trace of it on the lead machine; record per tick
-   `physics.contact.resolves`, `.queries`, `.convex-queries`, `.supports` and
-   `physics.sweep.*`, and the trace's share for `FixedStaticContactSolver`,
-   `FixedStepUp` and `FixedConvexContact`. Add temporary counts (not
-   committed) splitting queries into main sweep, snap and step-up. **Check:**
-   the shares and counts in the commit body, and a decision recorded there on
-   which of steps 1 to 4 pays.
-1. Pack the bounds pass: one contiguous array of collider centres and padded
-   half-extents (six longs a collider) read by `Misses`, in place of reading
-   the collider record and a nullable extent. **Check:** queries a tick and
-   every state hash identical on `puck bench world` and on
-   `puck test --reproduce` for the water, chess and hall worlds; the trace's
-   bounds share falls.
-2. A tighter certificate per kind: an oriented-box test for box kinds (from
-   `FixedOrientedBox`, which already owns the SAT verdict) and a bounding
-   sphere for the rounded, superellipsoid and cylinder kinds, before
-   `TryGetPush`. **Check:** `physics.contact.queries` falls; every state hash
-   identical, as in step 1. A hash that moves means the certificate is not
-   conservative and is a defect, not a re-record.
-3. Carry each kept collider's proven separation from pass to pass. Within one
-   endpoint resolve the body only translates, so a collider an exact query
-   proved separated by `d` cannot push until the body has moved by more than
-   `d` minus the skin since that query; later passes skip it until the
-   accumulated push reaches that. The exact query reports a lower bound on the
-   separation it proved (the convex query's early-out plane already holds one).
-   **Check:** as step 2.
-4. Replace the snap's bisection with one support-distance query (the convex
-   nearest-point query or the analytic distance) followed by the landing
-   sweep, keeping `TrySnap`'s acceptance rules. **Check:** `physics.sweep.sweeps`
-   a tick falls; the range walkers still follow the ground on the range's
-   slopes (a headless `body.where` trace over their loop); hashes move once and
-   the persisted replays it invalidates are re-recorded in the same change.
-
-Done when the idle queries a tick and the static sweep's trace share have
-fallen by the amount step 0 predicted, with hashes unchanged through step 3.
-A Codex lane can take steps 1 to 3; step 4 and the profile want a lane that
-loads `sdf-authoring` for contact admission.
+**The remaining step.** Replace the snap's bisection with one support-distance
+query (the convex nearest-point query or the analytic distance) followed by the
+landing sweep, keeping `TrySnap`'s acceptance rules, and let the two snaps of one
+tick share it where the body has not moved between them. **Check:**
+`physics.contact.resolves` a tick falls toward the moves' own count; the range
+walkers still follow the ground on the range's slopes (a headless `body.where`
+trace over their loop); hashes move once and the persisted replays it
+invalidates are re-recorded in the same change. It wants a lane that loads
+`sdf-authoring` for contact admission.
 
 ## Brief B: one rigid solver: Soft Step
 
@@ -634,8 +612,9 @@ A Codex lane can take all three steps.
 
 ## Open questions and who settles them
 
-- **The idle tick's physics share.** Brief A's step 0 settles it, on the lead
-  machine in a quiet window, and decides whether lesson 6 is scheduled.
+- **Whether lesson 6 pays.** After brief A the contact work of the idle tick is
+  about 0.2 ms; lesson 6 is not scheduled until a quiet-window profile shows a
+  bounds pass worth vectorising.
 - **Whether contact recycling pays in fixed point.** Settled inside brief B's
   solver by measurement on the step 0 scene, after brief B lands; until then
   lesson 8 is not scheduled.

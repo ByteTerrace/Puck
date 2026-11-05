@@ -38,8 +38,8 @@ public sealed class FieldColliderContactLawTests {
 
         var solver = new FixedStaticContactSolver(ContactSkin: Skin, GroundedThreshold: threshold, MaxIterations: 1);
         var position = V(x: 0.1d, y: 0d, z: 0d);
-        var resolution = solver.Resolve(colliders: [FixedStaticCollider.HalfSpace(point: FixedVector3.Zero, normal: FixedVector3.UnitX)],
-            dynamicColliders: [], position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity,
+        var resolution = solver.Resolve(colliders: new(colliders: [FixedStaticCollider.HalfSpace(point: FixedVector3.Zero, normal: FixedVector3.UnitX)]),
+            dynamicColliders: FixedStaticColliderSet.Empty, position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity,
             volumes: [Capsule() with { Kind = FixedBodyColliderKind.Sphere, Center = FixedVector3.Zero }], up: FixedVector3.UnitY);
         Assert.False(condition: resolution.Grounded);
         Assert.Null(@object: resolution.Support);
@@ -213,7 +213,7 @@ public sealed class FieldColliderContactLawTests {
         var position = V(x: 0d, y: 9.95d, z: 0d);
         var velocity = V(x: 0d, y: -1d, z: 0d);
 
-        var resolution = solver.Resolve(colliders: colliders, dynamicColliders: [], orientation: FixedQuaternion.Identity, position: ref position,
+        var resolution = solver.Resolve(colliders: new(colliders: colliders), dynamicColliders: FixedStaticColliderSet.Empty, orientation: FixedQuaternion.Identity, position: ref position,
             up: FixedVector3.UnitY, velocity: ref velocity, volumes: [Capsule()]);
 
         Assert.True(condition: resolution.Grounded);

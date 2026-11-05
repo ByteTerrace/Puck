@@ -20,8 +20,8 @@ public sealed class GroundSnapLawTests {
 
             return new FixedStaticContactSolver(ContactSkin: FixedQ4816.FromDouble(value: 0.001),
                 GroundedThreshold: FixedQ4816.FromDouble(value: 0.5), MaxIterations: 4)
-                .Resolve(colliders: [FixedStaticCollider.HalfSpace(point: FixedVector3.Zero, normal: normal)],
-                    dynamicColliders: [], position: ref position, velocity: ref velocity,
+                .Resolve(colliders: new(colliders: [FixedStaticCollider.HalfSpace(point: FixedVector3.Zero, normal: normal)]),
+                    dynamicColliders: FixedStaticColliderSet.Empty, position: ref position, velocity: ref velocity,
                     orientation: in orientation, volumes: volumes, up: in up);
         }
     }
