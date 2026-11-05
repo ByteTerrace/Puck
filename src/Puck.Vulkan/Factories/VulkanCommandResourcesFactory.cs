@@ -35,7 +35,7 @@ public sealed class VulkanCommandResourcesFactory : IVulkanCommandResourcesFacto
 
         var poolRequest = new VulkanCommandPoolCreateRequest(
             Device: logicalDevice.Commands,
-            QueueFamilyIndex: logicalDevice.GraphicsQueue.FamilyIndex
+            QueueFamilyIndex: logicalDevice.GraphicsQueueFamilyIndex
         );
         var createPoolResult = m_commandResourcesApi.CreateCommandPool(
             commandPoolHandle: out var commandPoolHandle,

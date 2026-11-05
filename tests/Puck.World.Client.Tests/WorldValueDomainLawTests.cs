@@ -208,6 +208,21 @@ public sealed class WorldValueDomainLawTests {
             },
             Path: "cameras[0].rig.operations[1].active"
         ),
+        // A clearance op reaches the camera as one record of resolved distances, so the validator's judgement is the law for
+        // each of its scalars. The fade band and the close-target band must stay ordered, so each end of a band is tried
+        // only at values that keep it ordered against the other end's default.
+        [WorldValueFields.ClearanceCutaway] = Clear(member: "cutaway", author: static (c, s) => c with { Cutaway = s }),
+        [WorldValueFields.ClearanceEyeRadius] = Clear(member: "eyeRadius", author: static (c, s) => c with { EyeRadius = s }),
+        [WorldValueFields.ClearanceSurfaceSkin] = Clear(member: "surfaceSkin", author: static (c, s) => c with { SurfaceSkin = s }),
+        [WorldValueFields.ClearanceMaxRise] = Clear(member: "maxRise", author: static (c, s) => c with { MaxRise = s }),
+        [WorldValueFields.ClearanceMinimumBoom] = Clear(member: "minimumBoom", author: static (c, s) => c with { MinimumBoom = s }),
+        [WorldValueFields.ClearanceFadeStart] = Clear(member: "fadeStart", author: static (c, s) => c with { FadeStart = s }, controls: [0.5f, 2f]),
+        [WorldValueFields.ClearanceFadeEnd] = Clear(member: "fadeEnd", author: static (c, s) => c with { FadeEnd = s }, controls: [0f, 1.5f]),
+        [WorldValueFields.ClearanceCloseTargetStart] = Clear(member: "closeTargetStartFraction", author: static (c, s) => c with { CloseTargetStartFraction = s }, controls: [0.5f, 1f]),
+        [WorldValueFields.ClearanceCloseTargetFull] = Clear(member: "closeTargetFullFraction", author: static (c, s) => c with { CloseTargetFullFraction = s }, controls: [0f, 0.5f]),
+        [WorldValueFields.ClearanceNearMargin] = Clear(member: "nearMargin", author: static (c, s) => c with { NearMargin = s }),
+        [WorldValueFields.ClearanceRetractionSkin] = Clear(member: "retractionSkin", author: static (c, s) => c with { RetractionSkin = s }),
+        [WorldValueFields.ClearanceObstructedTargetSkin] = Clear(member: "obstructedTargetSkin", author: static (c, s) => c with { ObstructedTargetSkin = s }),
         [WorldValueFields.MarkerRingAlpha] = Marker(author: s => new WorldMarkerStyle(ChipAlpha: 0.9f, Size: 12f, RingAlpha: s, RingColor: new BindableColor(Raw: "#9BA3AB")), present: static a => a.Ring, member: "ringAlpha"),
     };
 
@@ -246,6 +261,35 @@ public sealed class WorldValueDomainLawTests {
         Name: name,
         Operations: [operations],
         Version: WorldCameraProgram.CurrentVersion
+    );
+    // A clearance whose every scalar is a valid literal and whose bands are ordered, the one the cases vary a field of.
+    private static WorldCameraProgramOp.Clearance ClearanceBase => new(
+        Cutaway: new BindableScalar(literal: 0f),
+        EyeRadius: new BindableScalar(literal: 0.1f),
+        SurfaceSkin: new BindableScalar(literal: 0.05f),
+        MaxRise: new BindableScalar(literal: 0.5f),
+        MinimumBoom: new BindableScalar(literal: 1f),
+        FadeStart: new BindableScalar(literal: 1.5f),
+        FadeEnd: new BindableScalar(literal: 0.5f),
+        CloseTargetStartFraction: new BindableScalar(literal: 0.8f),
+        CloseTargetFullFraction: new BindableScalar(literal: 0.3f),
+        NearMargin: new BindableScalar(literal: 0.1f),
+        RetractionSkin: new BindableScalar(literal: 0.1f),
+        ObstructedTargetSkin: new BindableScalar(literal: 0.1f)
+    );
+    private static Case Clear(string member, Func<WorldCameraProgramOp.Clearance, BindableScalar, WorldCameraProgramOp.Clearance> author, float[]? controls = null) => new(
+        Author: s => Fixtures.BuildDocument() with {
+            CamerasRaw = [Camera(name: "probe", rig: new WorldCameraProgram(
+                Name: "probe-rig",
+                Operations: [
+                    new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: LowFov),
+                    author(arg1: ClearanceBase, arg2: s),
+                ],
+                Version: WorldCameraProgram.CurrentVersion
+            ))],
+        },
+        Controls: controls,
+        Path: $"cameras[0].rig.operations[1].{member}"
     );
     private static string Key(WorldValueField field) => $"{field.Owner.Name}.{field.Member}";
     private static WorldValueField FieldOf(string key) => WorldValueFields.All.Single(predicate: field => (Key(field: field) == key));

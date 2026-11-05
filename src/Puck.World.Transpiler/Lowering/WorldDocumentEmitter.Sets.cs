@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.State;
@@ -37,7 +38,7 @@ public static partial class WorldDocumentEmitter {
         }
 
         scope.SourceMap?.Register(
-            jsonPointer: $"{scope.CurrentPointer}/sets/{rows.Count}",
+            jsonPointer: DocumentJsonPointer.Child(index: rows.Count, pointer: DocumentJsonPointer.Child(name: "sets", pointer: scope.CurrentPointer)),
             span: setNode.Span
         );
         rows.AppendNode(item: new JsonObject {

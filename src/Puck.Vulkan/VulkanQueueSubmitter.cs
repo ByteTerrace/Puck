@@ -3,7 +3,9 @@ using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan;
 
-/// <summary>Submits Vulkan command buffers to a graphics queue.</summary>
+/// <summary>Submits Vulkan command buffers to a graphics queue. Every queue it is handed was read through
+/// <see cref="VulkanLogicalDevice.GraphicsQueue"/>, whose read hands the device's open batch to the queue first, so each
+/// submission follows every one made before it.</summary>
 public sealed unsafe class VulkanQueueSubmitter {
     private const uint StructureTypeSubmitInfo = 4;
 
@@ -63,7 +65,7 @@ public sealed unsafe class VulkanQueueSubmitter {
         }
     }
     // Submits a batch's deferred submissions in one vkQueueSubmit, a submit info each with its own waits, arming one
-    // fence for the whole batch (VulkanSubmissionBatch.Flush).
+    // fence for the whole batch (VulkanSubmissionBatch).
     internal static void SubmitBatch(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<VulkanBatchedSubmission> entries, nint fenceHandle) {
         var commandBuffers = 0;
         var waits = 0;
@@ -137,9 +139,6 @@ public sealed unsafe class VulkanQueueSubmitter {
         if (commandBufferHandles.IsEmpty) {
             return;
         }
-        // Work deferred to the device's open batch reaches the queue first (VulkanSubmissionBatch).
-        device.Batch.Flush(device: device);
-
         SubmitCore(
             commandBufferHandles: commandBufferHandles,
             device: device,
@@ -149,22 +148,17 @@ public sealed unsafe class VulkanQueueSubmitter {
             waitValues: waitValues
         );
     }
-    /// <summary>Submits command buffers and signals a fence when execution completes.</summary>
+    /// <summary>Submits command buffers and signals a fence once they, and every submission made to the queue before
+    /// them, have completed; with no command buffers the fence still signals behind the earlier work.</summary>
     /// <param name="device">The command table of the logical device that owns the queue and fence.</param>
     /// <param name="graphicsQueue">The queue that receives the submission.</param>
-    /// <param name="commandBufferHandles">The native command-buffer handles to submit.</param>
+    /// <param name="commandBufferHandles">The native command-buffer handles to submit, or empty.</param>
     /// <param name="fenceHandle">The native fence to signal.</param>
     /// <param name="waitSemaphores">The timeline semaphores the batch waits on before any of its stages run, or empty.</param>
     /// <param name="waitValues">The value each of <paramref name="waitSemaphores"/> must reach, in the same order.</param>
     /// <exception cref="ArgumentException"><paramref name="waitSemaphores"/> and <paramref name="waitValues"/> differ in
     /// length.</exception>
     public void Submit(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint fenceHandle, ReadOnlySpan<nint> waitSemaphores = default, ReadOnlySpan<ulong> waitValues = default) {
-        if (commandBufferHandles.IsEmpty) {
-            return;
-        }
-        // Work deferred to the device's open batch reaches the queue first (VulkanSubmissionBatch).
-        device.Batch.Flush(device: device);
-
         SubmitCore(
             commandBufferHandles: commandBufferHandles,
             device: device,
@@ -183,8 +177,6 @@ public sealed unsafe class VulkanQueueSubmitter {
     /// <param name="semaphore">The native timeline <c>VkSemaphore</c>.</param>
     /// <param name="value">The value the semaphore is set to; greater than every value it was set to before.</param>
     public void Signal(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint semaphore, ulong value) {
-        // Work deferred to the device's open batch reaches the queue first (VulkanSubmissionBatch).
-        device.Batch.Flush(device: device);
         Span<nint> semaphores = [semaphore];
         Span<ulong> values = [value];
 
@@ -211,9 +203,6 @@ public sealed unsafe class VulkanQueueSubmitter {
         if (commandBufferHandles.IsEmpty) {
             return;
         }
-        // Work deferred to the device's open batch reaches the queue first (VulkanSubmissionBatch).
-        device.Batch.Flush(device: device);
-
         SubmitCore(
             commandBufferHandles: commandBufferHandles,
             device: device,

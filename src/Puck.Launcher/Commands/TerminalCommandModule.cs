@@ -10,10 +10,13 @@ internal sealed class TerminalCommandModule(
     ITerminalControl terminal,
     IConsoleSessions? consoles = null
 ) : ICommandModule {
+    private static readonly CommandForms ConsoleForms = CommandForms.Of(TerminalCommandNames.Console, "[on|off]", "[on|off] <player>");
+
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
-            description: "Shows or hides a terminal console. A seat uses console [on|off]; the administrative console uses console [on|off] <player>.",
+            description: $"Shows or hides a terminal console: {ConsoleForms.Spelling}. A seat uses the first form; the administrative console uses the second, naming the player.",
+            forms: ConsoleForms,
             handler: (context, args) => {
                 if (consoles is null) {
                     return CommandResult.Error(output: "[console: no local console sessions are available]");
@@ -28,7 +31,7 @@ internal sealed class TerminalCommandModule(
 
                 if (context.Principal.Kind == PrincipalKind.Seat) {
                     if (args.Count > 1) {
-                        return CommandResult.Error(output: "[console: a seated invocation expects on|off, or no argument to toggle]");
+                        return ConsoleForms.Refuse(args: in args);
                     }
 
                     slot = context.Slot;
@@ -38,7 +41,7 @@ internal sealed class TerminalCommandModule(
                         (args.Count < 1) ||
                         (args.Count > 2)
                     ) {
-                        return CommandResult.Error(output: "[console: administrative use requires an explicit player: console [on|off] <player>]");
+                        return ConsoleForms.Refuse(args: in args);
                     }
 
                     if (
@@ -51,7 +54,7 @@ internal sealed class TerminalCommandModule(
                         value: "off"
                     ))
                     ) {
-                        return CommandResult.Error(output: "[console: administrative use requires an explicit player: console [on|off] <player>]");
+                        return ConsoleForms.Refuse(args: in args);
                     }
 
                     var playerArgument = (args.Count - 1);

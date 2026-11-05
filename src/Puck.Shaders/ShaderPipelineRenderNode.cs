@@ -1761,7 +1761,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             commands: commands,
             slot: slotIndex
         );
-        if (NeedsPreview(spec: selectedResource.Spec)) {
+        var previewed = NeedsPreview(spec: selectedResource.Spec);
+
+        if (previewed) {
             m_preview!.Record(
                 PreviewSource(
                     selected: selectedResource,
@@ -1792,6 +1794,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         );
         // From here the queue owns the write. A later export or readback failure must not reuse this submission slot
         // or roll the committed history back.
+        if (previewed) { m_preview!.Submitted(slot: slotIndex); }
         CommitCadenceFrame();
         m_frame++;
         m_frameLeases.MoveTo(destination: slot.Leases);

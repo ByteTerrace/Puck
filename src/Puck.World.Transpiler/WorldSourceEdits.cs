@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
@@ -82,7 +81,7 @@ public static class WorldSourceEdits {
                 pointer = Parent(pointer: pointer);
             }
             if (pointer.Length == 0) {
-                var sectionPointer = ("/" + Escape(value: Segments(pointer: changed)[0]));
+                var sectionPointer = Child(name: Segments(pointer: changed)[0], pointer: string.Empty);
 
                 if (!Exists(root: original.Json!, pointer: sectionPointer) && Exists(pointer: sectionPointer, root: target)) {
                     if (m_edits.Any(predicate: edit => (edit.Pointer == sectionPointer))) { reason = string.Empty; return true; }
@@ -231,7 +230,7 @@ public static class WorldSourceEdits {
             var additions = new StringBuilder();
 
             // A row only added takes the indentation of the rows already there.
-            if ((appendAt < 0) && m_entries.TryGetValue(key: (pointer + "/0"), value: out var first)) {
+            if ((appendAt < 0) && m_entries.TryGetValue(key: Child(index: 0, pointer: pointer), value: out var first)) {
                 var firstLine = (source.LastIndexOf(value: '\n', startIndex: Math.Max(val1: 0, val2: (first.Span.Offset - 1))) + 1);
                 var firstPrefix = source[firstLine..first.Span.Offset];
 
@@ -379,7 +378,7 @@ public static class WorldSourceEdits {
                 yield break;
             }
             for (var index = 0; (index < first.Count); index++) {
-                foreach (var changed in Changes(before: first[index], after: second[index], pointer: ((pointer + "/") + index.ToString(provider: CultureInfo.InvariantCulture)))) { yield return changed; }
+                foreach (var changed in Changes(before: first[index], after: second[index], pointer: Child(index: index, pointer: pointer))) { yield return changed; }
             }
         } else { yield return pointer; }
     }
@@ -391,7 +390,7 @@ public static class WorldSourceEdits {
 
         for (var index = 0; (index < parts.Length); index++) {
             arraySteps[index] = (value is JsonArray);
-            mapped[index] = (arraySteps[index] ? "0" : Escape(value: parts[index]));
+            mapped[index] = (arraySteps[index] ? "0" : parts[index]);
             value = (TryChild(child: out var child, node: value, segment: parts[index]) ? child : null);
         }
         var fragment = value?.DeepClone();
@@ -406,7 +405,7 @@ public static class WorldSourceEdits {
             // Printed in the source's own layout, so the node reads as its neighbours do.
             var printed = (PuckPrinter.Format(source: decompiled, vocabulary: Lowering.WorldDocumentVocabulary.Instance).Value ?? decompiled);
             var compiled = WorldCompiler.Compile(source: printed);
-            var mappedPointer = ("/" + string.Join(separator: '/', value: mapped));
+            var mappedPointer = mapped.Aggregate(func: static (walked, name) => Child(name: name, pointer: walked), seed: string.Empty);
 
             if (!compiled.Success || !compiled.SourceMap.Snapshot().TryGetValue(key: mappedPointer, value: out var origin)) {
                 reason = $"{pointer} cannot be printed as one authored node";

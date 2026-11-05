@@ -140,13 +140,10 @@ public sealed record WorldViewGraphBudget(long PassPixelsPerFrame = 0, long Byte
 /// <param name="Name">The layout's stable name (the <c>view.override layout</c> override handle; unique within the section).</param>
 /// <param name="Slots">The slots, in order (a null-camera slot binds the next joined seat).</param>
 /// <param name="SeatCount">The joined-seat count this layout composes for, or 0 for the catch-all. Default 0.</param>
-/// <param name="TransitionSeconds">How long the ease into this composition takes when it becomes active. Default 0,
-/// a cut.</param>
-/// <param name="TransitionRenderScale">The render scale (0, 1] applied to every slot mid-transition (a soft dip that
-/// sharpens on settle). It multiplies the render grid inside each view's render-scale ceiling and allocates nothing, so
-/// a view rendering at native scale, which reconstructs nothing, does not dip. Default 1, no dip.</param>
+/// <param name="Transition">The ease into this composition when it becomes active: how long it takes and how far the
+/// render scale dips while it runs. Absent is the neutral <see cref="WorldViewTransition"/>, a cut with no dip.</param>
 public sealed record WorldViewLayout(string Name, IReadOnlyList<WorldViewSlot> Slots, int SeatCount = 0,
-    float TransitionSeconds = 0f, float TransitionRenderScale = 1f) {
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewTransition? Transition = null) {
     private readonly IReadOnlyList<WorldViewSlot> m_slots = (Slots ?? []);
 
     /// <summary>Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason
@@ -157,10 +154,14 @@ public sealed record WorldViewLayout(string Name, IReadOnlyList<WorldViewSlot> S
     }
 }
 /// <summary>The transition envelope of a composition change: how long the ease takes and how far the render scale dips
-/// while it runs. The defaults are neutral, a cut with no dip, as a layout's own envelope's are.</summary>
+/// while it runs. A layout carries one as <see cref="WorldViewLayout.Transition"/> and the built-in seat ladder as
+/// <see cref="WorldViewDefaults.BuiltinTransition"/>; the defaults are neutral, a cut with no dip.</summary>
 /// <param name="Seconds">How long the ease takes, in seconds; 0 is a cut. Default 0.</param>
 /// <param name="RenderScale">The render scale (0, 1] applied to every slot mid-transition; 1 is no dip. Default 1.</param>
-public sealed record WorldViewTransition(float Seconds = 0f, float RenderScale = 1f);
+public sealed record WorldViewTransition(float Seconds = 0f, float RenderScale = 1f) {
+    /// <summary>Gets the neutral envelope, a cut with no dip, which an absent transition reads as.</summary>
+    public static WorldViewTransition Cut { get; } = new();
+}
 /// <summary>The <c>views</c> document section — the seat framing every seat wakes on plus the authored named layouts. A
 /// REQUIRED section every document carries; an empty layout list falls the composer through to the built-in seat
 /// ladder.</summary>

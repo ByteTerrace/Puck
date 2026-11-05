@@ -10,6 +10,9 @@ namespace Puck.Cli;
 /// recorded: git's committed entry for each root in <c>HEAD</c> (a directory's tree id covers every committed file
 /// inside it), and, for every path under a root that <c>git status</c> reports as modified, staged, deleted or
 /// untracked, the path, its status and the SHA-256 of the bytes on disk. Files git ignores are not inputs.
+/// A tree with no <c>.git</c> entry of its own, such as a <c>git archive</c> extraction (even one inside another
+/// repository), has no commit to read: every file under a root, except <c>bin</c> and <c>obj</c> output, is read from
+/// disk as a change.
 /// <para>
 /// Two checkouts that read the same snapshot hold the same content under those roots. The converse does not hold:
 /// the same bytes committed in one checkout and uncommitted in another read differently, so a difference is a reason
@@ -50,6 +53,75 @@ public static class CheckoutContent {
         }
     }
 
+    // A git working tree's top directory holds a .git directory, or a .git file in a linked worktree.
+    private static bool HasOwnGitEntry(string repositoryRoot) {
+        var entry = Path.Combine(
+            path1: repositoryRoot,
+            path2: ".git"
+        );
+
+        return (Directory.Exists(path: entry) || File.Exists(path: entry));
+    }
+    // The tree's own bytes: every file under a root is a change, hashed from disk, with build output (bin, obj) left out
+    // as git leaves it out of a checkout, since the archive carries no ignore rules of its own.
+    private static bool TryReadDisk(string repositoryRoot, IReadOnlyList<string> roots, out Snapshot snapshot, out string reason) {
+        snapshot = new Snapshot(Changes: [], Committed: string.Empty);
+
+        var changes = new SortedDictionary<string, Change>(comparer: StringComparer.Ordinal);
+
+        void Add(string relative) {
+            var content = ContentPin.OfFile(path: Path.Combine(
+                path1: repositoryRoot,
+                path2: relative
+            )).Hex;
+
+            changes[relative] = new Change(Content: content, Entry: $"tree {relative}", Path: relative);
+        }
+
+        try {
+            foreach (var root in roots) {
+                var full = Path.Combine(
+                    path1: repositoryRoot,
+                    path2: root
+                );
+
+                if (File.Exists(path: full)) {
+                    Add(relative: root);
+                } else if (Directory.Exists(path: full)) {
+                    var pending = new Stack<string>();
+
+                    pending.Push(item: root);
+
+                    while (pending.TryPop(result: out var directory)) {
+                        var absolute = Path.Combine(
+                            path1: repositoryRoot,
+                            path2: directory
+                        );
+
+                        foreach (var file in Directory.EnumerateFiles(path: absolute)) {
+                            Add(relative: $"{directory}/{Path.GetFileName(path: file)}");
+                        }
+                        foreach (var child in Directory.EnumerateDirectories(path: absolute)) {
+                            var name = Path.GetFileName(path: child);
+
+                            if (name is not ("bin" or "obj")) {
+                                pending.Push(item: $"{directory}/{name}");
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            reason = $"could not read the tree's files: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+
+        snapshot = new Snapshot(Changes: [.. changes.Values], Committed: string.Empty);
+        reason = string.Empty;
+
+        return true;
+    }
     private static bool TryGit(string repositoryRoot, IReadOnlyList<string> arguments, out string stdout, out string reason) {
         ChildProcessResult result;
 
@@ -87,6 +159,11 @@ public static class CheckoutContent {
     public static bool TryRead(string repositoryRoot, IReadOnlyList<string> roots, out Snapshot snapshot, out string reason) {
         snapshot = new Snapshot(Changes: [], Committed: string.Empty);
 
+        // A tree with no .git entry of its own (a git archive extraction) would make git resolve the enclosing
+        // repository, whose HEAD and status say nothing about this tree's files, so such a tree is read from its disk.
+        if (!HasOwnGitEntry(repositoryRoot: repositoryRoot)) {
+            return TryReadDisk(reason: out reason, repositoryRoot: repositoryRoot, roots: roots, snapshot: out snapshot);
+        }
         if (!TryGit(
             arguments: ["--literal-pathspecs", "ls-tree", "-z", "HEAD", "--", .. roots],
             reason: out reason,
