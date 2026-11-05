@@ -15,12 +15,12 @@ public sealed record WorldDisclosureInput(ulong Tick, string Text, IReadOnlyList
 /// <param name="Forms">Its argument forms (<see cref="CommandRegistry.Usage"/> for a console verb); empty draws loose
 /// words after it, which reach its argument refusals and nothing past them.</param>
 public sealed record WorldDisclosureVerb(string Name, IReadOnlyList<CommandUsage> Forms) {
-    /// <summary>Creates a verb whose forms are spelled as a usage line would spell them after the verb.</summary>
+    /// <summary>Creates a verb whose forms are spelled as a <see cref="CommandForms"/> table spells them after the verb.</summary>
     /// <param name="name">The verb.</param>
-    /// <param name="forms">The forms, each as <see cref="CommandUsage.ToString"/> spells it (empty for no arguments).</param>
+    /// <param name="forms">The forms, each as <see cref="CommandUsage.ParseForm"/> reads it (empty for no arguments).</param>
     /// <returns>The verb.</returns>
     public static WorldDisclosureVerb Spelled(string name, params string[] forms) => new(Forms: [.. forms.Select(selector: form =>
-        ((form.Length == 0) ? new CommandUsage(Tokens: []) : CommandUsage.Parse(description: $"{name} {form}.", verb: name).Single()))], Name: name);
+        ((form.Length == 0) ? new CommandUsage(Tokens: []) : CommandUsage.ParseForm(form: form)))], Name: name);
 }
 
 /// <summary>

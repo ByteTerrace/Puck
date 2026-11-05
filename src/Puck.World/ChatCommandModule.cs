@@ -45,6 +45,8 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldServer m_server = server;
     private readonly WorldOverlayFacts m_facts = facts;
+    private static readonly CommandForms ChatInboxForms = CommandForms.Of(verb: "chat.inbox", "[player]");
+    private static readonly CommandForms ChatReadForms = CommandForms.Of(verb: "chat.read", "[player]");
     private static readonly CommandForms ChatAllowForms = CommandForms.Of(verb: "chat.allow", "<sender-id> [player]");
     private static readonly CommandForms ChatBlockForms = CommandForms.Of(verb: "chat.block", "<sender-id> [player]");
     private static readonly CommandForms ChatLogForms = CommandForms.Of(verb: "chat.log", LogForm);
@@ -520,7 +522,8 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "chat.inbox",
-            description: "Declares this player's OWN chat rows on their owned identity document — a bounded, evicting 'chat-log' row (appended to by chat.log) and a bounded, evicting 'chat-inbox' row (delivered into by a whisper from a sender this player later allows via chat.allow): chat.inbox [player]. [player] defaults to 1. Idempotent — a row already declared is left untouched. Owner-only: context.Principal must hold Drive over the target player's body (the SAME check player.identity uses) — a non-owner is refused by name.",
+            description: $"Declares this player's OWN chat rows on their owned identity document — a bounded, evicting 'chat-log' row (appended to by chat.log) and a bounded, evicting 'chat-inbox' row (delivered into by a whisper from a sender this player later allows via chat.allow): {ChatInboxForms.Spelling}. The player defaults to 1. Idempotent — a row already declared is left untouched. Owner-only: context.Principal must hold Drive over the target player's body (the SAME check player.identity uses) — a non-owner is refused by name.",
+            forms: ChatInboxForms,
             handler: Inbox,
             routing: CommandRouting.Simulation
         );
@@ -559,7 +562,8 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "chat.read",
-            description: "Reads back the acting player's OWN chat-log and chat-inbox rows, oldest entry first: chat.read [player]. [player] defaults to 1. Owner-only, identically to chat.inbox — chat content is private, so an operator needs the same Drive hold to READ a player's chat that every other chat.* verb requires to author it.",
+            description: $"Reads back the acting player's OWN chat-log and chat-inbox rows, oldest entry first: {ChatReadForms.Spelling}. The player defaults to 1. Owner-only, identically to chat.inbox — chat content is private, so an operator needs the same Drive hold to READ a player's chat that every other chat.* verb requires to author it.",
+            forms: ChatReadForms,
             handler: Read,
             routing: CommandRouting.Immediate
         );

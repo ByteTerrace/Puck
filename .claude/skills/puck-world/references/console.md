@@ -94,7 +94,12 @@ shape), and passes it as `forms:`: the factory refuses a description that does n
 `Forms.Refuse(args: in args, got: ...)`, which names the form nearest what was typed (`CommandResult.Usage` is
 internal to `Puck.Commands`). A grammar refusal sets `IsGrammar`; a value refusal is `CommandResult.Error` and never
 inspects its text. A form is pure grammar (no notes, no ` | `); a verb with no arguments refuses through
-`CommandResult.RequireNoArguments`. The
+`CommandResult.RequireNoArguments`. The table is the only source of a verb's grammar: `CommandRegistry.Usage`
+reads it and nothing reads a description, and a description never respells a form beside the table (it names a
+form by its position or its leading word). `WorldCommandModuleRegistrationLawTests` registers every
+`ICommandModule` of the World, launcher, console, client and silo without a device, so a table mismatch in a verb only
+a windowed World or a silo composes (render levers, pointer and stick routers, the SDF verbs, `silo.*`) fails
+there, and it refuses a verb with no table whose description spells a form after its name. The
 description IS the help text — `help [--names] [<prefix>]` prints `name - description` for every
 registered command (only the names with `--names`; only the verbs whose names start with a prefix, ignoring case,
 when one is given; a prefix that matches nothing is refused), which is why descriptions here are long. Both factories take

@@ -1815,17 +1815,17 @@ public sealed partial class CommandRegistry {
             name: name
         ));
     }
-    /// <summary>Gets the argument forms a module-registered command's description spells (the grammar <c>help</c>
-    /// publishes for it), read on each call.</summary>
+    /// <summary>Gets the argument forms a module-registered command declares in its <see cref="CommandForms"/> table
+    /// (the grammar <c>help</c> publishes for it).</summary>
     /// <param name="name">The command name or alias.</param>
-    /// <returns>The forms; empty when the name is unknown, names an authored command, or its description spells
-    /// none.</returns>
+    /// <returns>The forms; empty when the name is unknown, names an authored command, or the command takes no
+    /// argument.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
     public IReadOnlyList<CommandUsage> Usage(string name) {
         ArgumentNullException.ThrowIfNull(name);
 
         return ((m_idByName.TryGetValue(key: name, value: out var id) && !m_definitionById[id].BindingOnly)
-            ? (m_definitionById[id].Forms?.Usages ?? CommandUsage.Parse(description: m_definitionById[id].Description, verb: m_definitionById[id].Name))
+            ? (m_definitionById[id].Forms?.Usages ?? [])
             : []);
     }
     /// <summary>Gets the declared facts for a command name or alias — the affordance-vocabulary lookup
