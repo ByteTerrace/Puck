@@ -207,7 +207,8 @@ than writing a boot line:
   names neither) and holds it until the World exits, waiting for it as long as the CLI's lease wait
   allows. Every start, windowed or headless, then waits for the host admission
   (`puck lease` and the gate wait on the same one): free memory, a commit charge under
-  its share of the commit limit, free disk and, for a windowed start, an idle GPU. The
+  its share of the commit limit, commit headroom that covers the World's expected peak
+  (windowed 18 GB, headless 6 GB) plus what admitted starts still have to grow, free disk and, for a windowed start, an idle GPU. The
   wait is the start's `host-admission` stage, and a start the admission refuses
   launches nothing and releases its leases. `timeoutSeconds` (1–7200, default 900)
   bounds the whole admitted start: build, lease and admission waits and the World's

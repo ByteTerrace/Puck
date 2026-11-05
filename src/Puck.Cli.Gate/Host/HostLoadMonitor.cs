@@ -14,11 +14,18 @@ namespace Puck.Cli.Host;
 /// start, its name and id, or <see langword="null"/> when none runs.</param>
 /// <param name="CommitChargeGb">The system's commit charge, in gigabytes; NaN when the platform reports none.</param>
 /// <param name="CommitLimitGb">The system's commit limit, in gigabytes; NaN when the platform reports none.</param>
-public readonly record struct HostSample(DateTimeOffset At, double CpuPercent, double FreeRamGb, double FreeDiskGb, string? GpuHolder, int ReuseNodes, string? HeavyTestHolder = null, double CommitChargeGb = double.NaN, double CommitLimitGb = double.NaN) {
+/// <param name="Starts">The running processes the host tracks for admission (<see cref="HostProcesses.RunningStart"/>) with
+/// their private bytes, or <see langword="null"/> when the reading lists none.</param>
+public readonly record struct HostSample(DateTimeOffset At, double CpuPercent, double FreeRamGb, double FreeDiskGb, string? GpuHolder, int ReuseNodes, string? HeavyTestHolder = null, double CommitChargeGb = double.NaN, double CommitLimitGb = double.NaN, IReadOnlyList<HostRunningStart>? Starts = null) {
     /// <summary>Gets the commit charge as a percentage of the commit limit: allocations fail at 100 whatever physical memory
     /// is free. NaN when the charge or the limit is unknown.</summary>
     public double CommitPercent => ((double.IsFinite(d: CommitChargeGb) && double.IsFinite(d: CommitLimitGb) && (CommitLimitGb > 0)) ? (100.0 * CommitChargeGb / CommitLimitGb) : double.NaN);
 }
+/// <summary>A running process the host admitted: a World, a test-batch worker or a heavy test run.</summary>
+/// <param name="Id">The process id.</param>
+/// <param name="Kind">What the process is (<see cref="HostProcesses.RunningStart"/>).</param>
+/// <param name="PrivateGb">The process's private bytes, in gigabytes: the commit it holds now.</param>
+public readonly record struct HostRunningStart(int Id, HostStartKind Kind, double PrivateGb);
 /// <summary>The thresholds that turn readings into admission lines. A threshold left out is never judged, so with
 /// none the monitor reports only GPU transitions.</summary>
 /// <param name="CapacityCpuPercent">CAPACITY needs the CPU mean below this.</param>
@@ -38,6 +45,42 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Capa
     /// <param name="reading">The reading.</param>
     /// <returns><see langword="true"/> when the commit charge leaves room for more work or is not judged.</returns>
     public bool CommitHasHeadroom(HostSample reading) => ((CapacityCommitPercent is not { } limit) || double.IsNaN(d: reading.CommitPercent) || (reading.CommitPercent < limit));
+    /// <summary>The commit, in gigabytes, a windowed World is expected to reach in a session of minutes (readings of 12 to
+    /// 18 GB private on the debug world).</summary>
+    public const double WindowedWorldPeakGb = 18;
+    /// <summary>The commit, in gigabytes, a headless World is expected to reach (readings of 4 to 6 GB).</summary>
+    public const double HeadlessWorldPeakGb = 6;
+    /// <summary>The commit, in gigabytes, a heavy test suite is expected to reach (the mesh-irradiance laws reached 9 GB).</summary>
+    public const double HeavySuitePeakGb = 10;
+    /// <summary>The commit, in gigabytes, a replica of a <c>puck test</c> batch is expected to reach (a reproduce run read
+    /// about 8 GB).</summary>
+    public const double ReproduceReplicaPeakGb = 9;
+    /// <summary>The commit, in gigabytes, an ordinary step (a build, a verb that boots no World) is expected to reach.</summary>
+    public const double StepPeakGb = 2;
+    /// <summary>The most a finished start's measured peak raises its kind's expected peak, as a multiple of the default, so
+    /// one outlier cannot make every later start of the kind wait for headroom that never comes.</summary>
+    public const double MeasuredPeakCeilingFactor = 2;
+    /// <summary>The most one start's expected peak counts, as a share of the commit limit, so a machine whose limit is
+    /// near one World's peak still admits that World once nothing else is growing.</summary>
+    public const double PeakShareOfCommitLimit = 0.5;
+
+    /// <summary>Returns the commit, in gigabytes, a start of a kind is expected to reach before a measurement of a finished
+    /// start of the same kind raises it.</summary>
+    /// <param name="kind">The start's kind.</param>
+    /// <returns>The default expected peak.</returns>
+    public static double DefaultPeakGb(HostStartKind kind) => kind switch {
+        HostStartKind.WindowedWorld => WindowedWorldPeakGb,
+        HostStartKind.HeadlessWorld => HeadlessWorldPeakGb,
+        HostStartKind.HeavySuite => HeavySuitePeakGb,
+        HostStartKind.ReproduceReplica => ReproduceReplicaPeakGb,
+        _ => StepPeakGb,
+    };
+    /// <summary>Gets whether a reading's commit headroom (the limit less the charge) covers <paramref name="needGb"/>. A
+    /// threshold left out, or a platform that reports no commit limit, never holds a reading back.</summary>
+    /// <param name="reading">The reading.</param>
+    /// <param name="needGb">The commit, in gigabytes, the start and the growth still to come need.</param>
+    /// <returns><see langword="true"/> when the headroom covers the need or is not judged.</returns>
+    public bool CommitCovers(HostSample reading, double needGb) => ((CapacityCommitPercent is null) || !double.IsFinite(d: reading.CommitLimitGb) || !double.IsFinite(d: reading.CommitChargeGb) || ((reading.CommitLimitGb - reading.CommitChargeGb) >= needGb));
     /// <summary>The free disk, in gigabytes, below which every machine is under pressure. A build and a suite write the
     /// same outputs whatever the machine's size, so this one threshold does not scale.</summary>
     public const double DiskPressureGb = 10;
