@@ -15,6 +15,67 @@ backend. Runtime trace, relight, selection and exposure queries use
 backends. CPU `TraceHits` and `Relight` remain reference/diagnostic paths;
 placement still uses CPU nearest-surface and short clearance queries.
 
+The trace device law also dispatches the production relight kernel with
+miss-only cached hits and 32 shadowing directionals, isolating its any-hit
+light bits. Every bit must equal CPU `Unblocked`, including the empty scene;
+both that output and nearest-hit tracing assert zero overflow. Writable
+fixture buffers are device-local, with explicit upload/copy/readback ordering.
+
+Boolean visibility uses `sdfProbeOccluded` through the same `sdfProbeWalk` node
+and triangle tests as `sdfProbeIntersect`, returning at the first accepted
+triangle. `probeClear` uses that entry for shadows, light bits and the meter.
+The CPU twin is `Unblocked` through `Walk` and `ILeaves` any-hit leaves.
+`Hierarchy.BuildNode` bounds both hierarchies to `StackDepth - 2` edges from
+the root, switching to median splits when only a balanced subtree fits and
+refusing a named hierarchy that cannot fit. Walks check before pushing and
+count `sdf.mesh-gi.stack-overflow`; CPU overflow also throws. GPU jobs reset
+and read the assertion word after the job's logical output under its fence.
+The entry point supplies its generated result stride; retained slot capacity
+can grow without moving that word or causing a readback of unused capacity.
+The device law injects an overdeep hierarchy into a larger output allocation
+and requires the assertion to count it on both backends. Reset copies use
+`CopyWrite`, followed by shader read/write access for the atomic increment.
+`puck mesh scene` reports top/geometry depth and forced median splits. The
+degenerate-bounds scene law reaches depth 62 and compares nearest and any hits
+with brute force, with zero overflow.
+The scene command reuses `LevelsOf(High)` and `SdfMeshProbeDepth.RayDirections`,
+so its comparison traces use the volume's actual finest window and quadrature.
+`world.budget` samples per-level median and maximum lighting ages when read,
+in addition to the work-list cycle's combined ages.
+Both work lists use the existing `Puck.Maths` three-way Morton interleave on
+window-relative cells. Trace/relight class, lighting age and level retain their
+priority; within each eight-cell radial band the order is spatial. A drain
+still lists every cell and uses the same spatial order within each level.
+For changing lighting, selection visits a stable cell phase every 1/4/8
+completed sweeps by level. Phase uses the sweep ordinal, since lighting
+versions can jump by a multiple of the period between sweeps and revisit the
+same phase indefinitely. The sweep holds its initial phase
+and interleave decision across empty or interrupted listings; a newer batch
+lighting never fills the deferred phases within that sweep.
+`sdf-probe-select.comp.hlsl` alone sets the GPU
+due bit; missing geometry, rebase and unwritten publication bypass the phase,
+and lighting age at the level's bound forces it even in the current sweep.
+The bound is the authored age target times that level's interleave and is
+reported in `world.budget`. A sweep beginning under the same lighting version
+as its predecessor visits every phase so bounce propagation cannot stop on an
+unvisited phase. The
+CPU reference uses the same eligibility rule; lockstep always visits all cells.
+Partial interleaved sweeps neither certify convergence nor consume the
+full-window `MaxSweeps` limit.
+The combined ages remain diagnostic totals; `behind` compares each level to
+its own bound and reports the worst relative overrun. Its needed relight rate
+is the sum of each level's probe count divided by that level's bound.
+Relight priority uses age relative to the level's bound before level, capture
+age and spatial band. Overload can exceed the targets; no probe retires on its
+own small change.
+Below the bound, age priority is weighted by 1 inside any residency view's
+frustum and 0.25 outside all of them, and by 1.25 when the probe's last relight
+moved past the existing convergence threshold. Overdue probes ignore these
+weights. Camera snapshots come from the same frame as the work snapshot;
+elsewhere cameras are excluded because their coordinates belong to another
+world. The diagnostic additionally reports the first view's counts, median
+and oldest ages against those outside that frustum at each level.
+
 The runtime streams the existing scene's nodes and leaf indices through a
 `GpuRegion` source, without a second packed hierarchy on the CPU. One admitted
 query owns the shared scene and feedback regions until its fence completes;
@@ -347,9 +408,9 @@ after the main residency's done line; a nested residency's done line is insuffic
   grants relights and traces. A lighting that changes every frame keeps the
   relight cycling over the window; overload lengthens the lighting's age, not
   the frame. Each cycle's start records the window's age (median and oldest,
-  `world.budget` and `Describe`); a cycle older than the budget's `age` counts
+  `world.budget` and `Describe`); a level past its scaled age bound counts
   `behind` and prints `[sdf.mesh-gi] behind` (at most every ten seconds) with
-  the relit and needed rates. A re-traced probe keeps drawing its previous
+  that level, its bound and the relit and needed rates. A re-traced probe keeps drawing its previous
   measurement until its trace lands. Clear the CPU cache and staging volume
   only when the layout changes. On a resize or window move, retain the uploaded
   GPU table **and its old coordinates** until every new slot has a measured

@@ -1094,6 +1094,31 @@ visible until its replacement is ready. Camera exposure queries use the same
 service and shading function. CPU traversal and shading remain the diagnostic
 reference, and CPU nearest-surface and short clearance queries still place probes.
 
+Visibility is an any-hit query: GPU `sdfProbeOccluded` and CPU `Unblocked`
+stop at the first accepted triangle, sharing their nearest-hit walk's node
+and triangle tests. Shadows, light bits and camera visibility use this door.
+The shared scene builder certifies each hierarchy at no more than
+`SdfMeshProbeTrace.StackDepth - 2` edges, forcing median splits when necessary.
+A hierarchy that cannot fit is refused by name. CPU and GPU walks count stack
+overflow as an assertion failure rather than silently ending a walk.
+Within each work priority and eight-cell distance band, probes run in Morton
+cell order to keep neighbouring origins together without changing their rays.
+The budget diagnostic samples median and oldest lighting age per level so a
+coarse window cannot hide the finest window's response time.
+Under changing lighting, the selection kernel interleaves coarse levels by a
+stable cell phase. A level's age bound scales the authored target by its
+interleave; reaching it forces eligibility and age relative to it takes
+priority. Geometry and publication work bypass the gate. Unchanged lighting
+takes whole bounce sweeps. A sweep retains its initial phase across listings,
+even when later batches shade under newer lighting, and a lockstep drain always visits every cell from
+no bounce. These bounds describe demand under the budget, not guaranteed wall
+time when the device is overloaded.
+Below its bound, a probe outside every local view's frustum gets less age
+priority, and a probe whose last light changed gets more. Neither weight
+removes work. Overdue probes ignore both weights. The budget diagnostic
+reports ages inside the first frustum and outside it so the demand weighting
+can be measured independently of whole-window ages.
+
 Software compute is the baseline on both backends; no ray-tracing hardware is
 required. The trace device law requires exact identities and discrete flags,
 scene-scaled float tolerance and independently intersected near ties, with an

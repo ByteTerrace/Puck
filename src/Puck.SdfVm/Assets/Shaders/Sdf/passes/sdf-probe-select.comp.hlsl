@@ -33,8 +33,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float3 placement = 1.5 * spacing + SDF_MESH_IRRADIANCE_CLEARANCE;
         uint hits = cache + 2;
         for (uint box = 0; !trace && box < (uint)limits.y; box++) {
-            float4 low = sdfProbeLighting[5 + 2 * box];
-            float4 high = sdfProbeLighting[6 + 2 * box];
+            float4 low = sdfProbeLighting[SDF_PROBE_SELECT_HEADER_ROWS + 2 * box];
+            float4 high = sdfProbeLighting[SDF_PROBE_SELECT_HEADER_ROWS + 1 + 2 * box];
             if (asuint(low.w) <= geometry) { continue; }
             if (high.w != 0 || all(max(low.xyz, center - placement) <= min(high.xyz, center + placement))) { trace = true; break; }
             float3 toward = (low.xyz + high.xyz) * 0.5 - origin;
@@ -52,7 +52,13 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
     }
     bool rebase = present && !trace && geometry != asuint(state.y);
-    bool due = state.x != 0 || (sdfProbeInput[at] & 2u) != 0 || trace || rebase || sweep != asuint(state.w);
-    bool stale = !due && lighting != asuint(state.z);
+    bool essential = state.x != 0 || (sdfProbeInput[at] & 2u) != 0 || trace || rebase;
+    float4 cadence = sdfProbeLighting[5 + level];
+    float age = asfloat(sdfProbeInput[at + 11]);
+    uint phase = sdfProbeInput[at] >> 2;
+    bool phaseDue = (asuint(cadence.w) + phase) % (uint)cadence.y == 0;
+    bool forced = cadence.z > 0 && age >= cadence.z;
+    bool due = essential || forced || (sweep != asuint(state.w) && (cadence.x == 0 || phaseDue));
+    bool stale = !due && (lighting != asuint(state.z) || sweep != asuint(state.w));
     sdfProbeHitsRW[id.x] = (trace ? 1u : 0u) | (due ? 2u : 0u) | (stale ? 4u : 0u);
 }

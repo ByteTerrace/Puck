@@ -26,8 +26,7 @@ void sdfProbeLightingSetup() {
     }
 }
 bool probeClear(float3 positionWorld, float3 direction, float reach, uint lane) {
-    float distance; float3 normal; uint material; uint2 identity;
-    return !sdfProbeIntersect(positionWorld, direction, reach, lane, distance, normal, material, identity);
+    return !sdfProbeOccluded(positionWorld, direction, reach, lane);
 }
 // One shading mechanism for lattice relight and camera-meter fallback; CPU Shade remains the reference.
 float3 sdfProbeShade(float3 positionWorld, float3 normal, uint material, bool reuse, uint lane, out float3 local) {
