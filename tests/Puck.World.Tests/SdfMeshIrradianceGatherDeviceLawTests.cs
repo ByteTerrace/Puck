@@ -236,11 +236,13 @@ public sealed class SdfMeshIrradianceGatherDeviceLawTests {
         var volumeOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceVolume));
         var levelsOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceLevels));
         var spacingsOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceSpacings));
-        var packed = new uint[(4 * (1 + (2 * SdfMeshIrradianceProbe.Levels)))];
+        var coveragesOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceCoverages));
+        var packed = new uint[(4 * (1 + (3 * SdfMeshIrradianceProbe.Levels)))];
 
         MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: sizeof(uint), start: volumeOffset)).CopyTo(destination: packed);
         MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: (16 * SdfMeshIrradianceProbe.Levels), start: levelsOffset)).CopyTo(destination: packed.AsSpan(start: 4));
         MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: (16 * SdfMeshIrradianceProbe.Levels), start: spacingsOffset)).CopyTo(destination: packed.AsSpan(start: (4 * (1 + SdfMeshIrradianceProbe.Levels))));
+        MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: (16 * SdfMeshIrradianceProbe.Levels), start: coveragesOffset)).CopyTo(destination: packed.AsSpan(start: (4 * (1 + (2 * SdfMeshIrradianceProbe.Levels)))));
 
         var points = new Vector4[(2 * receivers.Length)];
 

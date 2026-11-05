@@ -48,9 +48,9 @@ public static class SdfMeshIrradianceProbe {
     public const float DepthCoverageStart = 0.5f;
     /// <summary>Scales the finest level's closing ramp to complete at three-quarter coverage.</summary>
     public const float DepthCoverageScale = 4f;
-    /// <summary>A coarser level's hit footprint share at which its closing ramp starts: none, since an 8 m probe's taps
-    /// are metres wide and any hit they measured before the receiver is a slab or a wall between them.</summary>
+    /// <summary>The conservative ramp's hit footprint share at which it starts closing: none, since a probe tap metres
+    /// wide inside a building that measured a hit before the receiver measured a slab or a wall between them.</summary>
     public const float CoarseDepthCoverageStart = 0f;
-    /// <summary>Scales a coarser level's closing ramp to complete at an eighth of the footprint blocked.</summary>
+    /// <summary>Scales the conservative ramp to complete at an eighth of the footprint blocked.</summary>
     public const float CoarseDepthCoverageScale = 8f;
 }

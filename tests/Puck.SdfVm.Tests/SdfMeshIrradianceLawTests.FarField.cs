@@ -59,6 +59,69 @@ public sealed partial class SdfMeshIrradianceLawTests {
         Assert.True(condition: (counts.StoreyReads == counts.Receivers), userMessage: counts.ToString());
         Assert.True(condition: (counts.OverOccluded <= (counts.Clear / 100)), userMessage: counts.ToString());
     }
+    /// <summary>THE LAW: the 32 m level keeps a curved surface it sees lit. Over three hills 50 to 140 m in radius,
+    /// 90 to 300 m from the camera, at most one in a hundred corners of the level a receiver reads whose exact segment
+    /// is clear reads at zero visibility, and the receivers read that level nearly whole: its metres-wide taps alias a
+    /// hill's near bulge, which a conservative ramp would take for a blocker and hand the receiver to the finest level's
+    /// boundary probes hundreds of metres away.</summary>
+    [Fact]
+    public void TheCoarsestLevelKeepsACurvedSurfaceItSeesLit() {
+        var hills = new[] { (new Vector3(x: 90f, y: -20f, z: 0f), 50f), (new Vector3(x: 0f, y: -40f, z: 170f), 90f), (new Vector3(x: -260f, y: -60f, z: -60f), 140f) };
+        var frame = StoreyedHall() with {
+            FarDistance = 400f,
+            MeshDraws = [
+                Draw(mesh: Box(low: new Vector3(x: -700f, y: -0.6f, z: -700f), high: new Vector3(x: 700f, y: 0f, z: 700f))),
+                .. hills.Select(selector: static hill => Draw(mesh: Sphere(centre: hill.Item1, radius: hill.Item2))),
+            ],
+        };
+        var volume = new SdfMeshIrradiance();
+
+        _ = Trace(frame: frame, volume: volume);
+        using var scene = volume.DiagnosticScene(frame: frame);
+
+        Assert.NotNull(@object: scene);
+
+        var cells = new (int X, int Y, int Z)[SdfMeshIrradiance.GatherSlots];
+        var weights = new float[SdfMeshIrradiance.GatherSlots];
+        var reports = new SdfMeshProbeReport[SdfMeshIrradiance.GatherSlots];
+        var clear = 0;
+        var overOccluded = 0;
+        var shares = new List<float>();
+
+        foreach (var (centre, radius) in hills) {
+            for (var a = 0; (a < 24); a++) {
+                for (var b = 1; (b < 8); b++) {
+                    var azimuth = ((2f * MathF.PI * a) / 24f);
+                    var elevation = ((MathF.PI * 0.5f * b) / 8f);
+                    var normal = new Vector3(x: (MathF.Cos(x: elevation) * MathF.Cos(x: azimuth)), y: MathF.Sin(x: elevation), z: (MathF.Cos(x: elevation) * MathF.Sin(x: azimuth)));
+                    var point = (centre + (normal * radius));
+
+                    if (point.Y < 0.5f) { continue; }
+                    Assert.True(condition: volume.TryGather(cells: cells, normal: normal, point: point, reports: reports, selection: out var selection, weights: weights));
+                    if (selection.Level != 2) { continue; }
+                    shares.Add(item: selection.Share);
+                    var pushed = (point + (normal * SdfMeshIrradianceProbe.NormalBias));
+
+                    for (var slot = 0; (slot < 8); slot++) {
+                        var report = reports[slot];
+
+                        if (!report.Present || report.Invalid || ((report.Trilinear * report.Facing) <= 0f)) { continue; }
+                        var toward = (pushed - report.Position);
+                        var distance = toward.Length();
+
+                        if ((distance > 1e-3f) && !scene.Unblocked(direction: (toward / distance), maximum: (distance - 1e-3f), origin: report.Position)) { continue; }
+                        clear++;
+                        if (report.Visibility <= 0f) { overOccluded++; }
+                    }
+                }
+            }
+        }
+        var message = string.Create(provider: CultureInfo.InvariantCulture, handler: $"receivers={shares.Count} clear={clear} over-occluded={overOccluded} share-mean={shares.Average():0.###}");
+
+        Assert.True(condition: (shares.Count > 200), userMessage: message);
+        Assert.True(condition: (overOccluded <= (clear / 100)), userMessage: message);
+        Assert.True(condition: (shares.Average() >= 0.95f), userMessage: message);
+    }
 
     private static SdfFrame StoreyedHall() {
         var builder = new SdfProgramBuilder();

@@ -358,10 +358,6 @@ public static class SdfIsaHlsl {
         declarations.Tuning(name: "SDF_MESH_IRRADIANCE_NORMAL_BIAS", value: SdfMeshIrradianceProbe.NormalBias);
         declarations.Tuning(name: "SDF_MESH_IRRADIANCE_BEHIND_SHARE", value: SdfMeshIrradianceProbe.BehindShare);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_SURFACE_REACH", value: SdfMeshIrradianceProbe.SurfaceReach);
-        declarations.Tuning(name: "SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START", value: SdfMeshIrradianceProbe.DepthCoverageStart);
-        declarations.Tuning(name: "SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE", value: SdfMeshIrradianceProbe.DepthCoverageScale);
-        declarations.Tuning(name: "SDF_MESH_IRRADIANCE_COARSE_DEPTH_COVERAGE_START", value: SdfMeshIrradianceProbe.CoarseDepthCoverageStart);
-        declarations.Tuning(name: "SDF_MESH_IRRADIANCE_COARSE_DEPTH_COVERAGE_SCALE", value: SdfMeshIrradianceProbe.CoarseDepthCoverageScale);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE", value: SdfMeshIrradianceProbe.DepthNormalScale);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE", value: SdfMeshIrradianceProbe.DepthSurfaceFade);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP", value: SdfMeshIrradianceProbe.DepthSurfaceJoinGap);

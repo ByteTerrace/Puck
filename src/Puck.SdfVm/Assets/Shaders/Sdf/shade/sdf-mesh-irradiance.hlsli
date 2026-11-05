@@ -60,10 +60,10 @@ float3 sdfMeshProbeOffset(uint address) {
 
     return float3(sdfMeshIrradianceHalf(first, 0u), sdfMeshIrradianceHalf(first, 1u), sdfMeshIrradianceHalf(second, 0u));
 }
-// A level's closing ramp over its taps' blocked share (start, scale). KEEP IN SYNC with SdfMeshProbeCoverage.
+// A level's closing ramp over its taps' blocked share (start, scale), as its table row carries it
+// (SdfMeshIrradianceLevel.Coverage). KEEP IN SYNC with SdfMeshProbeCoverage.Visibility.
 float2 sdfMeshProbeCoverage(uint level) {
-    return ((level == 0u) ? float2(SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START, SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE)
-        : float2(SDF_MESH_IRRADIANCE_COARSE_DEPTH_COVERAGE_START, SDF_MESH_IRRADIANCE_COARSE_DEPTH_COVERAGE_SCALE));
+    return passGroup.meshIrradianceCoverages[level].xy;
 }
 float sdfMeshProbeCoverageVisibility(float blocked, float2 ramp) {
     float coverage = saturate((blocked - ramp.x) * ramp.y);

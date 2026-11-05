@@ -439,7 +439,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         };
 
         (parameters, words) = Trace(volume: new SdfMeshIrradiance(), frame: buried);
-        var slot = SdfMeshIrradiance.SlotOf(dims: parameters.Dims, x: 0, y: 0, z: 0);
+        var slot = SdfMeshIrradiance.SlotOf(dims: parameters.Finest.Dims, x: 0, y: 0, z: 0);
         var deep = words.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (slot * SdfMeshIrradianceProbe.ProbeWords));
 
         Assert.Equal(expected: SdfMeshIrradianceProbe.InvalidFlag, actual: deep[0] & SdfMeshIrradianceProbe.InvalidFlag);
@@ -554,7 +554,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         return (parameters, words);
     }
     private static ReadOnlySpan<uint> Probe(uint[] words, in SdfMeshIrradianceParameters parameters, int x, int y, int z) {
-        var slot = SdfMeshIrradiance.SlotOf(dims: parameters.Dims, x: x, y: y, z: z);
+        var slot = SdfMeshIrradiance.SlotOf(dims: parameters.Finest.Dims, x: x, y: y, z: z);
         var probe = words.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (slot * SdfMeshIrradianceProbe.ProbeWords));
 
         Assert.Equal(expected: SdfMeshIrradiance.KeyOf(x: x, y: y, z: z) | SdfMeshIrradianceProbe.WrittenFlag, actual: probe[0]);
@@ -582,7 +582,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         _ = Trace(frame: frame, volume: volume);
         var (resized, _) = Trace(frame: frame, tier: SdfIndirectTier.Medium, volume: volume);
 
-        Assert.Equal(expected: new Vector3(value: 2f), actual: resized.Spacing);
+        Assert.Equal(expected: new Vector3(value: 2f), actual: resized.Finest.Spacing);
         var view = frame.Views[0];
 
         SdfFrame At(float x) => frame with {
@@ -596,8 +596,8 @@ public sealed partial class SdfMeshIrradianceLawTests {
 
         var (moved, _) = Trace(frame: At(x: 30f), tier: SdfIndirectTier.Medium, volume: volume);
 
-        Assert.Equal(expected: resized.Low, actual: kept.Low);
-        Assert.Equal(expected: (resized.Low.X + 15), actual: moved.Low.X);
+        Assert.Equal(expected: resized.Finest.Low, actual: kept.Finest.Low);
+        Assert.Equal(expected: (resized.Finest.Low.X + 15), actual: moved.Finest.Low.X);
     }
     // A first view another residency renders (a seat crossed into another world, its camera in that world's coordinates)
     // holds the window where it stood and meters no exposure; the window follows the view again once this residency
@@ -616,12 +616,12 @@ public sealed partial class SdfMeshIrradianceLawTests {
 
         exposures.Stage(frame: elsewhere, irradiance: volume, seconds: 0.1d);
 
-        Assert.Equal(expected: here.Low, actual: held.Low);
+        Assert.Equal(expected: here.Finest.Low, actual: held.Finest.Low);
         Assert.Contains(expectedSubstring: "source=elsewhere", actualString: exposures.Describe()[0]);
 
         var (back, _) = Trace(frame: (elsewhere with { Views = [elsewhere.Views[0] with { Elsewhere = false }] }), tier: SdfIndirectTier.Medium, volume: volume);
 
-        Assert.Equal(expected: (here.Low.X + 20), actual: back.Low.X);
+        Assert.Equal(expected: (here.Finest.Low.X + 20), actual: back.Finest.Low.X);
     }
     /// <summary>A lighting-converged frame waits for its scene and window's trace and relights the window from no bounce until it
     /// converges, in one staging, including a cold scene and a replacement: its probes are a function of the scene,
@@ -685,7 +685,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var (parameters, words) = Trace(frame: frame, volume: volume);
 
         Assert.True(condition: parameters.Enabled);
-        Assert.Equal(expected: Vector3.One, actual: parameters.Spacing);
+        Assert.Equal(expected: Vector3.One, actual: parameters.Finest.Spacing);
 
         // The probe at (0.5, 5.5, 0.5), beside the light in the upper room, and the one at (0.5, 1.5, 0.5) under the slab.
         var upper = Probe(parameters: in parameters, words: words, x: 0, y: 5, z: 0);
