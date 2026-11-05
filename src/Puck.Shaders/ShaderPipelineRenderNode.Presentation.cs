@@ -15,7 +15,9 @@ public sealed partial class ShaderPipelineRenderNode {
         var command = BeginFrameCommands(slot: slot);
 
         commands.Clear();
-        if (NeedsPreview(spec: selected.Spec)) {
+        var previewed = NeedsPreview(spec: selected.Spec);
+
+        if (previewed) {
             m_preview!.Record(
                 PreviewSource(
                     selected: selected,
@@ -41,6 +43,7 @@ public sealed partial class ShaderPipelineRenderNode {
             commands: commands,
             fence: m_slots[slot].Fence!
         );
+        if (previewed) { m_preview!.Submitted(slot: slot); }
         m_frameLeases.MoveTo(destination: m_slots[slot].Leases);
         Publish(surface: Output(slot: slot));
         m_outputRefreshRequested = false;
