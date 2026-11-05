@@ -24,6 +24,10 @@ public sealed class SdfSampledSnapshot {
 /// program.
 /// </summary>
 public sealed class SdfSampledField {
+    /// <summary>The scale a producer stores a distance at, 1/√3: the trilinear interpolant of distances so scaled is
+    /// 1-Lipschitz (KEEP IN SYNC with <c>sdfSampledRegion</c>).</summary>
+    public const float DistanceScale = 0.57735026f;
+
     private SdfSampledSnapshot m_current;
 
     /// <summary>Initializes a new instance of the <see cref="SdfSampledField"/> class with its first values.</summary>
@@ -136,6 +140,14 @@ public sealed class SdfSampledSet {
 /// <param name="Field">The field.</param>
 public sealed record SdfSampledBinding(int InstructionIndex, SdfSampledField Field);
 
+/// <summary>A height field a program's instance draws (<see cref="SdfInstanceRange.HeightField"/>): the instance, and the
+/// handle of the field's heights (<see cref="SdfHeightField.Heights"/>) in <see cref="SdfProgram.SampledFields"/>, which a
+/// draw of the instance's baked reference names to be displaced by as it is drawn.</summary>
+/// <param name="Instance">The instance's place in <see cref="SdfProgram.Instances"/>.</param>
+/// <param name="Handle">The heights' handle.</param>
+/// <param name="Field">The height field.</param>
+public sealed record SdfHeightFieldBinding(int Instance, int Handle, SdfHeightField Field);
+
 public sealed partial class SdfProgram {
     // Invariant: no sampled value enters the packed words. A sampled instruction's Data1.z holds its field's handle, an
     // index into m_sampledFields; the values travel beside the program (SdfSampledSet), so publishing a field's values
@@ -146,12 +158,17 @@ public sealed partial class SdfProgram {
     /// <summary>Gets the program's sampled fields, by handle: a sampled instruction's Data1.z holds its field's place here
     /// as uint bits.</summary>
     public IReadOnlyList<SdfSampledField> SampledFields => m_sampledFields;
+    /// <summary>Gets the height fields the program's instances draw, in instance order: a field's reference is the
+    /// instance's sampled instruction and its heights hold a handle of their own, which no instruction samples and the
+    /// mesh identity never hashes.</summary>
+    public IReadOnlyList<SdfHeightFieldBinding> HeightFields { get; private set; } = [];
     /// <summary>Gets the snapshots the program's fields held when it was built, by handle: the set a frame of the program
     /// carries unless its producer captured a newer one (<see cref="SdfSampledSet.Capture"/>).</summary>
     public SdfSampledSet Sampled { get; private set; } = SdfSampledSet.Empty;
 
     // Validates the bindings and writes each sampled instruction's handle: one binding per sampled instruction, each
-    // naming a field of the instruction's own dimensions, handles in first-binding order.
+    // naming a field of the instruction's own dimensions, handles in first-binding order; then gives each height field's
+    // heights a handle after them.
     private void BindSampledFields() {
         var bound = new HashSet<int>();
         var handles = new Dictionary<SdfSampledField, int>(comparer: ReferenceEqualityComparer.Instance);
@@ -184,7 +201,18 @@ public sealed partial class SdfProgram {
                 throw new ArgumentException(message: "A sampled instruction requires its field.");
             }
         }
+        var heightFields = new List<SdfHeightFieldBinding>();
+
+        for (var index = 0; (index < m_instances.Length); index++) {
+            if (m_instances[index].HeightField is not { } heightField) { continue; }
+            if (m_instances[index].IsDynamic) { throw new ArgumentException(message: "A height field is drawn by a static instance."); }
+            if (handles.ContainsKey(key: heightField.Heights)) { throw new ArgumentException(message: "A height field's heights are drawn by one instance, and sampled by no instruction."); }
+            handles.Add(key: heightField.Heights, value: fields.Count);
+            heightFields.Add(item: new SdfHeightFieldBinding(Field: heightField, Handle: fields.Count, Instance: index));
+            fields.Add(item: heightField.Heights);
+        }
         m_sampledFields = [.. fields];
+        HeightFields = [.. heightFields];
         Sampled = SdfSampledSet.Capture(fields: m_sampledFields, previous: null);
     }
 }

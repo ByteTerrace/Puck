@@ -195,6 +195,7 @@ public sealed partial class SdfProgramBuilder {
     private bool m_openInstanceBakesWithPrevious;
     private float m_openInstanceDetail;
     private (Vector3 Low, Vector3 High)? m_openInstanceBox;
+    private SdfHeightField? m_openInstanceHeightField;
     private Vector3 m_openInstanceCenter;
     private int m_openInstanceFirst = -1;
     private bool m_openInstanceIsDynamic;
@@ -313,6 +314,7 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceBakesWithPrevious = false;
         m_openInstanceDetail = 0f;
         m_openInstanceBox = null;
+        m_openInstanceHeightField = null;
         m_openInstanceCenter = center;
         m_openInstanceRadius = radius;
         m_openInstanceSlot = slot;

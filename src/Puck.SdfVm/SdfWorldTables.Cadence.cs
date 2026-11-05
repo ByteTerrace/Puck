@@ -29,6 +29,7 @@ namespace Puck.SdfVm;
 //   - m_dynamicTransformRevision : bumped when packed transform contents or the active row count changes, so the table
 //                          is never re-hashed.
 //   - m_meshRevision     : the mesh draws the mesh and cascade passes rasterize.
+//   - m_frameSampledRevision : the heights the height fields' draws are displaced by, a geometry value.
 //   - m_screenSurfaceRegion, m_screenMappingRegion : the screen-surface sampling table and the mapping and bound flag
 //                          each screen is drawn from.
 //   - m_decalRevision    : the glyph-decal buffer — revision-tracked (it is 820 KB, not re-hashed each frame).
@@ -273,6 +274,7 @@ public sealed partial class SdfWorldTables {
             m_dynamicTransformRevision,
             unchecked((ulong)m_meshRevision),
             m_meshDrawCount,
+            m_frameSampledRevision,
             BoundScreenCount(),
             volumes,
             lights,
@@ -287,7 +289,7 @@ public sealed partial class SdfWorldTables {
         m_tablesSignature = hash.Value;
 
         var geometry = Fnv1aHash.Create();
-        Span<ulong> geometryValues = [m_programGeometryRevision, m_dynamicTransformRevision, unchecked((ulong)m_meshRevision), m_meshDrawCount, BoundScreenCount(), screenSurfaces, screenMappings];
+        Span<ulong> geometryValues = [m_programGeometryRevision, m_dynamicTransformRevision, unchecked((ulong)m_meshRevision), m_meshDrawCount, m_frameSampledRevision, BoundScreenCount(), screenSurfaces, screenMappings];
 
         geometry.Add(values: MemoryMarshal.AsBytes(span: geometryValues));
         m_geometrySignature = geometry.Value;

@@ -48,8 +48,8 @@ Several pieces exist with nothing using them:
 - One shading lever reaches the pass block with no producer:
   `DisableScreenLights`.
 - Sampled fields (`SdfSampledField`) carry data-driven surfaces beside the
-  program without rebuilding it; height fields are their one producer
-  (`WorldFieldEmitter`).
+  program without rebuilding it; height fields (`SdfHeightField`, published by
+  `WorldFieldEmitter`) are their one producer.
 
 The overlay draws rects, rings, wedges, panels, icons and text
 (`OverlayFrameBuilder`), and has no line primitive. `MarkerWriter` projects

@@ -411,16 +411,13 @@ and how a lattice follows a rule (the pool's level). A row with `heightScale` IS
 raises a solid column above the origin that bodies stand on
 (`Puck.Physics.Fields.FieldLatticeSolid`, unioned with the authored solids for contact under the field provider only; the
 analytic provider ignores lattice columns) and
-the renderer shows (`WorldFieldEmitter`: one CPU-baked sampled distance field per
-height field, an `SdfSampledField`, coloured by `color`). A drawn height change
-publishes a new snapshot of that field and rebuilds no program, but it keys a
-new baked mesh for the field's group, so the drawn columns move by whole
-`surfaceStep`s (presentation only; absent, the mesh's own millimetre) and only
-once the value has left the drawn step by a whole step. A row whose value
-changes every lattice step without one (a flowing chain, a level following a
-gauge) rebakes its group forever and stalls lockstep and `world.wait bakes`;
-the standard's hydrology and `waterViews` choose a step
-([sampled fields](../../../../docs/rendering/sdf/handbook/sampled-fields.md)).
+the renderer shows (`WorldFieldEmitter`: one `SdfHeightField` per height field,
+coloured by `color`). A drawn height change publishes the field's heights, which
+the renderer displaces the field's baked reference by as it draws, so it
+rebuilds no program and keys no mesh, and the columns follow the row's full
+value; only a column raised from nothing or lowered to nothing rebakes the
+field's reference
+([sampled fields](../../../../docs/rendering/sdf/handbook/sampled-fields.md#height-fields-move-as-they-are-drawn)).
 A field row's live cells ride the snapshot, never the document; the client's
 state view keeps them (`WorldDocumentStateView.ApplyFieldCells`) and presentation
 reads them through the state mirror like any row: the sampled field bakes from
@@ -450,10 +447,9 @@ order, dependency edges, and pass counts after its cell statistics.
 `layers: 1` is a ground lattice; more layers is a voxel volume and costs
 proportionally. A lattice carries at most 262,144 cells so a full eight-field
 primer (eight lattice rows) remains inside the federation frame; when any row has `heightScale`,
-the XZ footprint and the sum across layers each stay within
-`WorldFieldCapacity.MaxSurfaceCells`, so the padded drawn surface fits one
-sampled lattice, and every drawn surface's voxels together stay within
-`WorldFieldCapacity.MaxSurfaceBytes`.
+the XZ footprint stays within `WorldFieldCapacity.MaxSurfaceCells`, so the padded
+baked reference fits one sampled lattice, and every drawn surface's reference
+voxels and heights together stay within `WorldFieldCapacity.MaxSurfaceBytes`.
 Cell values are sim state beside the population — stepped
 after the rules, checkpointed (`Fields` block), delivered as `FieldCells`
 deltas on the snapshot (`FieldsFull` on a primer) — never document rows, so

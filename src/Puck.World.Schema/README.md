@@ -1423,13 +1423,14 @@ and cell/body pass counts to its ordinary lattice statistics.
 
 A row with `heightScale` IS geometry: its value raises a solid column above the
 lattice origin (unioned with the authored solids for contact) that the
-renderer shows as a CPU-baked sampled distance field (`SdfSampledField`), coloured by `color`. Capacity
+renderer shows as a height field (`SdfHeightField`: a baked reference displaced by the row's heights as it is
+drawn), coloured by `color`. Capacity
 (`WorldFieldCapacity`): `MaxCells` 262,144 (width × depth × layers, so a full
 eight-row primer fits the federation wire's 32 MiB frame), `MaxFields` 8,
 `MaxExtent` 1024 per axis, `MaxLayers` 128, `MaxSurfaceCells` (a
-height-bearing row's XZ footprint, and the cross-layer sum where several
-layers raise, so the drawn surface fits one sampled lattice), `MaxSurfaceBytes`
-(every drawn surface's voxels together), `MaxReactions` 64, `MaxTransformTerms` 64, `MaxPaint` 256. The lattice's
+height-bearing row's XZ footprint, so its baked reference fits one sampled
+lattice), `MaxSurfaceBytes` (every drawn surface's reference voxels and heights
+together), `MaxReactions` 64, `MaxTransformTerms` 64, `MaxPaint` 256. The lattice's
 `cellSize` must quantize to a positive Q48.16 value that keeps the lattice solid's
 contact reach (`FieldLatticeSolid.ReachCells`, 2 cells) inside Q48.16, or the
 document is refused. Read back with `world.fields`; the exact structural cost (cell count × compiled

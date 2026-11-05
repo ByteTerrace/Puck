@@ -42,9 +42,10 @@ scalar gauges (`lakeLevel`, `fallsFlow`, `riverDepth`, `aquiferFill`,
 - *Field surfaces.* Four two-dimensional `waterViews` lattices (the pool in
   `worlds/debug/pool.puck`; the plunge basin, reservoir and passage in
   `worlds/debug/water-scenery.puck`) whose one row is set to a gauge each
-  step and drawn by `WorldFieldEmitter`: a CPU-baked sampled distance field per
-  height field (`Bake`, `Reach = 2`, an `SdfSampledField`), emitted as a `SampledValues` instance
-  with the row's `material` lowered through `WorldSurfaceMaterials.Resolve`,
+  step and drawn by `WorldFieldEmitter`: an `SdfHeightField` per height field,
+  emitted as a `HeightField` instance (its baked reference displaced by its heights,
+  [as built](#field-surfaces-move-at-draw-time)) with the row's `material` lowered
+  through `WorldSurfaceMaterials.Resolve`,
   which carries the palette entry's `glass` (`Glass: entry?.Glass?.ToGlass`).
   The standard's `waterMaterial` declares `glass { depth: 2, ior: 1.333 }`,
   so these four surfaces bake into glass groups (`SdfMeshBakeGroup.Glass`
@@ -445,7 +446,7 @@ its own.
 | 1 | **W2** ([as built](#w2-as-built)). The flow layer, with the constant and lane sources, and the stream, falls and lake moved onto it as static geometry | W2; M1 (the eight stream legs share one geometry) | Two noise evaluations and a gradient per covered pixel, on water pixels only (Vlachos's 2 fetches and 21 ALU on 2010 hardware); the mesh pass loses 8 moving groups and their transform rows | The stream's bake groups go from eight to one shared; the falls' fourteen sheets and the foam paints stop being animated groups; `world.budget` and `[sdf.mesh-bake] done` read the cut | The stream flows and the falls fall in a presented burst with no draw record changing; a settled capture is still; lockstep stills repeat across two Worlds; the meadow's wind shimmer uses the same layer with a wind vector |
 | 2 | **W1.** The medium response on the glass pass (in-scatter, contact ramp) and W4a (probes on glass), with every water surface on `glass` rows | W1, W4 | A probe gather and a few ALU per glass pixel; no new pass | None; the water's four field surfaces already bake as glass | The pool reads turquoise at depth and clear at the margin, with foam at the steps and the bridge piers; the falls sheet transmits the rock; the hall's windows and the lift's glass reflect their rooms; `world.counters gpu pass sdf.world$glass-shade` before and after |
 | 3 | **W3.** The particle pool with an authored emitter and generic motion, collided against a brick derived from the bake, drawn as quads split by the glass target | W3; M1 (the brick), M4 (capacity and the visibility box) | A fixed step over the pool's capacity and a fill-rate bounded by sprite size; the Deck decides the capacity the standard chooses | A pool's buffers at its capacity; a brick per region at the bake's cell | Splash at the plunge pool and droplets at the falls' foot, refracted where they fall behind the surface; leaves in the forest from the same pool; a presented burst at `debug.go pool` with `host.frames` before and after on both backends |
-| 4 | **W2's field source.** A flow row sampled through a sampled field, and the hydrology's derived transfer row | W2 on M3 | One sampled-field read per covered pixel | A row per lattice | The stream bends around the bridge piers with no authored comb; `world.fields` shows the derived row |
+| 4 | **W2's field source.** A flow row sampled through a sampled field, and the hydrology's derived transfer row, read from the frame's sampled table the [field surfaces](#field-surfaces-move-at-draw-time) introduced | W2 on M3 | One sampled-field read per covered pixel | A row per lattice | The stream bends around the bridge piers with no authored comb; `world.fields` shows the derived row |
 | 5 | **W4b.** The bounded screen-space march on glass | W4 | The authored tap count per glass pixel; measured first | None | The bridge reflects in the pool at the 4070's bar; the Deck's count decides whether the standard enables it |
 
 W2 is first because it removes work the water pays today (moving groups,
@@ -555,19 +556,127 @@ whose paler gust patches cross every tile and blade together.
 glass row (W1) needs `sdfApplyFlow` in `sdf-glass.comp.hlsl` before the stream
 moves to glass.
 
+### Field surfaces move at draw time
+
+The field surfaces (the four water views, the hydrology's columns) drew their
+heights through the mesh bake: a height was a voxel value of the sampled field
+the bake hashed, so every height change keyed a new mesh, and `surfaceStep`
+quantized the heights into 2 to 5 cm steps to stop a perpetual rebake. Levels
+jumped. This step replaces that stopgap.
+
+**Outcome.** A height field keeps one mesh while its heights move; its drawn
+surface follows the frame's height snapshot in the vertex stage; a height change
+uploads only the changed values; the bake runs only when a column appears or
+disappears or the lattice changes shape. `surfaceStep` is deleted.
+
+**The design.** A height field is one engine type, `SdfHeightField`
+(`Puck.SignedDistance`), which owns two sampled fields: a *reference* field, the
+columns' distance lattice with every raised column's top at one reference height
+(one cell above the lattice origin), and a *heights* field, a one-voxel-tall
+lattice of the current column heights. `SdfProgramBuilder.HeightField` emits the
+reference as the instance's sampled instruction, which the bake hashes and
+contours as it does any sampled field, and declares the heights as the
+instance's displacement (`SdfProgram.HeightFields`). Only a change of which
+columns are raised republishes the reference, so only that keys a new mesh. The
+heights field is never hashed: its snapshot reaches the render passes through
+the frame's sampled table, `sdfFrameSampled` (`SdfWorldPackage.FrameSampled`),
+a World-group table after the field's tables, laid out as the bake's table is (a
+word per handle naming where its entry starts), each entry a header (the grid's
+dimensions, origin and cell) and the current and previous frames' values. The
+draw record names the handle (`SdfMeshRecord.DisplacementWord`), and the one
+resolver every vertex read passes through, `sdfMeshWorldPosition`,
+`sdfMeshWorldNormal` and `sdfMeshPreviousPosition` in `frame/sdf-mesh.hlsli`,
+maps the reference vertex vertically before the draw's matrix: the top band (the
+cell under the reference top, which holds the top face and its edge rounding)
+translates by the bilinear height over the column centres less the reference,
+and the band below scales from the column base, so walls stay vertical and the
+rounding keeps its reference shape. The normal goes through the map's inverse
+transpose, which on the top face is the sampled height's gradient.
+
+**Invariant and its door.** A field surface's drawn geometry at a frame is a
+function of its mesh key (the reference lattice: extent, cell and raised mask)
+and the frame's height snapshot. The key half is enforced by `SdfHeightField`
+being the only producer of a displacement (`SdfProgramBuilder.HeightField` takes
+one, and only it bakes the reference at the reference height the resolver
+assumes, `SdfHeightField.ReferenceCells`); the snapshot half by the resolver being
+the only path a kernel reads a mesh vertex through (the mesh, shadow and glass
+vertex stages, the surface pass's normal, the glass pass's facing test and the
+resolve's reprojection all call it). Rule 4 holds: bodies and media read the
+lattice's fixed-point cells; the snapshot is presentation, taken from the state
+mirror at the frame.
+
+**Where it stops.** The resolver is exact at every vertex of the reference mesh.
+Inside a merged flat polygon of the reference top (`SdfMeshPlanarMerge` keeps
+only outlines) the drawn surface is linear between displaced vertices, so it is
+exact wherever the bilinear height is affine over the polygon: a uniform level
+(every water view) and a one-row lattice (the hydrology's columns, whose top is a
+strip whose Delaunay triangles span a bake cell along it). A two-dimensional
+lattice with varying heights draws its interior as the linear interpolation of
+its outline: the error is the bilinear's deviation from that plane, up to the
+height range across the polygon. No world authors one; when one does, the
+reference merge keeps the column-centre lines (a pinned-vertex option of the
+merge for displaced groups), measured then. Heights hold the latest state the
+mirror delivered, so a level moves once a lattice step by the store's per-step
+change (well under a millimetre at the debug world's rates). A column that
+appears or disappears draws the previous reference until its rebake lands.
+Displaced draws are dynamic for lighting (`SdfMeshDraw.IsDynamic`), so the
+irradiance volume's static scene leaves them out, as it leaves out bodies: probes
+neither see nor are shadowed by an opaque height field (the water views are
+glass, which the probes skip already), and the scene diagnostics read them as
+unknown. A probe scene that wants them reads `SdfMeshDraw.Displacement` and the
+frame's set (`SdfFrame.Sampled`) through a CPU form of the resolver; the GPU probe
+scene work (`SdfMeshProbeGpuWork`) is untouched.
+
+**Consumers.** Mesh pass and its occlusion (the vertex stage displaces; the
+selection box is the mesh's box with its height range widened to the
+displacement's, `SdfMeshDisplacement.Low`/`High`); shadow cascades (the shadow
+vertex stage displaces); the glass raster and glass shading (the same vertex
+stage, and `sdf-mesh-glass.frag.hlsl` reads displaced corners for facing);
+surface and views (the visibility record's normal comes from the displaced
+triangle and normals); the resolve (`sdfPreviousPoint` reads the previous values
+the table keeps, so a still surface reprojects to itself exactly); picking (a GPU
+readback of the drawn target). Bound for the irradiance volume and the scene
+diagnostics as above.
+
+**Alternatives weighed.** (1) *Per-column transform slots* (the lake's slide, a
+skin member per column): reuses the rig path and its history, but a skin holds
+255 members, each frame packs a slot per column, a draw with members has no box,
+and the slots carry rotation and scale a height never needs; and it gives W2's
+field source nothing. (2) *A height-map grid draw* (a mesh keyed by extent and
+resolution, generated on the CPU, displaced in the vertex stage): exact for any
+heights with two triangles a cell, but it is a second mesher beside the
+contouring and leaves the sampled-field bake for fields with no producer.
+(3) *Keep baking, without the step* (the sampled-fields lane's state): the mesh
+key covers the heights, so a moving level rebakes every frame it moves.
+Chosen: the reference bake and one draw-time table, because it keeps one
+contouring, makes the mesh key exactly the topology, uploads only changed values,
+and gives the light stage (W2's field source, below) the same table.
+
+**Steps and their checks.** (1) `SdfHeightField`, `SdfProgramBuilder.HeightField`,
+`SdfProgram.HeightFields`; the emitter publishes heights unquantized and its bake
+moves into the type: `puck compile worlds/debug/debug.puck --validate` and a
+headless boot. (2) The draw's displacement, the record word, the box, the frame
+table and the resolver: `puck shaders generate --check`, a windowed Direct3D 12
+boot whose presented burst at the pool shows the level gliding with no
+`[sdf.mesh-bake]` restart per height change and `world.wait bakes` settled during
+the melt, and the bytes `sdfFrameSampled` uploads a step. (3) `surfaceStep`, its
+validator and its docs deleted, the standard's values with them: `puck schema
+--check`. (4) A windowed Vulkan boot, `puck test worlds/debug/water-tests.puck
+--reproduce --jobs 1`, and the landing sweep.
+
 ### W2's field source
 
 **Outcome.** The flow vector read from a field row the state system owns: a
 `field` lattice row the author writes, or a derived row the hydrology's
 `FieldLattice.StepFlow` publishes as its per-cell transfer, sampled by the
 layer through a sampled field as the field emitter publishes one, after the
-constant and the lane. Only the mesh bake binds sampled values today (each bake
-job's own `sdfSampledValues` table), so the light stage reading one needs the
-frame's snapshot bound beside its tables. **Invariant.** As W2's: the row is
-state, so the image stays a function of the document and the tick. **Reuse.**
-`SdfSampledField`, `sdfSampledRegion`, `sdfApplyFlow`. **Check.** The stream bends around the
-bridge piers with no authored comb in a presented burst; `world.fields` shows
-the derived row.
+constant and the lane. The light stage reads it from the frame's sampled table
+(`sdfFrameSampled`), the table the height fields' displacement reads, with a
+header of its own grid; the bake's per-job table stays the bake's.
+**Invariant.** As W2's: the row is state, so the image stays a function of the
+document and the tick. **Reuse.** `SdfSampledField`, `sdfFrameSampled`,
+`sdfApplyFlow`. **Check.** The stream bends around the bridge piers with no
+authored comb in a presented burst; `world.fields` shows the derived row.
 
 ### W1. The medium response on glass
 

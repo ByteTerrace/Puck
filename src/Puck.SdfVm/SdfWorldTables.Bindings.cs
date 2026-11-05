@@ -92,6 +92,7 @@ public sealed partial class SdfWorldTables {
         WriteWorldBuffer(buffer: m_dummyBuffer, member: SdfWorldPackage.MeshBakePoints, set: set);
         WriteWorldBuffer(buffer: m_meshIrradiance ?? m_dummyBuffer, member: SdfWorldPackage.MeshIrradiance, set: set);
         WriteWorldBuffer(buffer: m_dummyBuffer, member: SdfWorldPackage.SampledValues, set: set);
+        WriteWorldBuffer(buffer: m_frameSampledRegion.Buffer(slot: slot), member: SdfWorldPackage.FrameSampled, set: set);
         WriteLightAndSkySet(set: set, slot: slot);
 
         var samplers = WorldBinding(member: SdfWorldPackage.Samplers);
@@ -115,14 +116,16 @@ public sealed partial class SdfWorldTables {
         );
     }
 
-    // Writes a ring slot's mesh region, and the dynamic transforms the vertices of a mesh with members ride, into a mesh
-    // pass set of the mesh interface, each only when the set does not already bind that buffer: bound holds, per set, the
-    // buffer objects it was last written with (region, transforms and program), compared by object, since a handle value may
-    // name a new buffer once the old one is released.
+    // Writes a ring slot's mesh region, the dynamic transforms the vertices of a mesh with members ride and the sampled
+    // table a height field's draw is displaced by into a mesh pass set of the mesh interface, each only when the set does
+    // not already bind that buffer: bound holds, per set, the buffer objects it was last written with (region, transforms,
+    // program and sampled table), compared by object, since a handle value may name a new buffer once the old one is
+    // released.
     internal void WriteMeshTables(nint set, int slot, IGpuBuffer?[] bound) {
         WriteMeshBuffer(bound: ref bound[0], buffer: m_meshRegion.Buffer(slot: slot), member: SdfWorldPackage.MeshRegion, set: set);
         WriteMeshBuffer(bound: ref bound[1], buffer: m_dynamicTransformRegion.Buffer(slot: slot), member: SdfWorldPackage.DynamicTransforms, set: set);
         WriteMeshBuffer(bound: ref bound[5], buffer: m_programRegion.Buffer(slot: slot), member: SdfWorldPackage.ProgramWords, set: set);
+        WriteMeshBuffer(bound: ref bound[6], buffer: m_frameSampledRegion.Buffer(slot: slot), member: SdfWorldPackage.FrameSampled, set: set);
     }
     // Writes the work counters a mesh pass's fragments count into, at the mesh interface's binding, when the set does not
     // already bind them.
