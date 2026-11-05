@@ -342,9 +342,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         var renumbered = new uint[source.Length];
 
         for (var triangle = 0; (triangle < source.Length); triangle++) {
-            var place = Array.IndexOf(array: from, value: ((int)source[triangle]));
-
-            renumbered[triangle] = (((place >= 0) && (place < to.Length)) ? (uint)to[place] : source[triangle]);
+            renumbered[triangle] = SdfMeshMaterials.Renumber(material: source[triangle], from: from, to: to);
         }
 
         return renumbered;

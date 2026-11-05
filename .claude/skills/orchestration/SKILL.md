@@ -399,9 +399,9 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   and names any change over 10%. The lead regenerates the tip's report under the
   main checkout's ignored scratch directory (a `tip-sweep` folder) whenever the tip moves, and briefs
   name that path. An output-identity gate (a whole mesh store by hash)
-
-  first runs the baseline twice: the mesh bake is not byte-reproducible run to
-  run, so only a difference outside the baseline's own variation counts. The hard limits are one heavy integration job and one GPU
+  compares every stored payload: the mesh bake is byte-reproducible from its
+  inputs (three cold bakes per backend match), so any difference is a finding.
+  The hard limits are one heavy integration job and one GPU
   leg at a time. A windowed debug World holds a large share of
   the machine's memory within a minute of boot (`host.memory` reads it), so
   only a couple of building lanes fit beside one. Keep windowed capture

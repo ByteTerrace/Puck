@@ -27,14 +27,15 @@ internal static unsafe class SdfMeshStoreCodec {
         }
         // Every shared seam vertex uses exactly the same grid, including its width. A per-piece grid opens cracks.
         var width = ((pieces.Count == 0) ? 4 : PositionWidth(high: high, low: low, pieces: pieces));
+        var canonical = SdfMeshMaterials.Canonical(pieces: pieces, materials: materials);
         using var payload = new MemoryStream();
 
         using (var writer = new BinaryWriter(payload, System.Text.Encoding.UTF8, leaveOpen: true)) {
-            writer.Write(value: materials.Length);
-            foreach (var material in materials) { writer.Write(value: material); }
+            writer.Write(value: canonical.Length);
+            foreach (var material in canonical) { writer.Write(value: material); }
             writer.Write(value: (mesh is { Chunks.Count: > 0 }));
             writer.Write(value: pieces.Count);
-            foreach (var piece in pieces) { WriteMesh(high: high, low: low, mesh: piece, width: width, writer: writer); }
+            foreach (var piece in pieces) { WriteMesh(high: high, low: low, mesh: piece, width: width, writer: writer, from: materials, to: canonical); }
         }
         using var output = new MemoryStream();
 
@@ -108,7 +109,7 @@ internal static unsafe class SdfMeshStoreCodec {
         }
     }
 
-    private static void WriteMesh(BinaryWriter writer, SdfMesh mesh, Vector3 low, Vector3 high, int width) {
+    private static void WriteMesh(BinaryWriter writer, SdfMesh mesh, Vector3 low, Vector3 high, int width, int[] from, int[] to) {
         WriteVector(writer, mesh.BakeCell);
         var positions = mesh.Positions.Span;
 
@@ -146,7 +147,7 @@ internal static unsafe class SdfMeshStoreCodec {
             }
         }
         WritePlane(writer, mesh.Indices.Span, ((positions.Length <= 65536) ? 2 : 4));
-        WriteMaterials(writer, mesh.TriangleMaterials.Span);
+        WriteMaterials(writer, mesh.TriangleMaterials.Span, from, to);
         writer.Write(value: mesh.Members.Length);
         foreach (var member in mesh.Members.Span) {
             writer.Write(value: member.SlotOffset);
@@ -159,7 +160,7 @@ internal static unsafe class SdfMeshStoreCodec {
         foreach (var level in mesh.Levels) {
             writer.Write(value: level.Error);
             WritePlane(writer, level.Indices.Span, ((positions.Length <= 65536) ? 2 : 4));
-            WriteMaterials(writer, level.TriangleMaterials.Span);
+            WriteMaterials(writer, level.TriangleMaterials.Span, from, to);
         }
     }
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
@@ -292,22 +293,23 @@ internal static unsafe class SdfMeshStoreCodec {
     }
     private static uint Quantize(float value, float low, float high, int width) => ((high == low) ? 0 : (uint)Math.Clamp(Math.Round(a: (((((double)value) - low) / (((double)high) - low)) * ((1u << (width * 8)) - 1))), 0, ((1u << (width * 8)) - 1)));
     private static float Expand(uint value, float low, float high, int width) => ((float)(low + (((((double)high) - low) * value) / ((1u << (width * 8)) - 1))));
-    private static void WriteMaterials(BinaryWriter writer, ReadOnlySpan<uint> materials) {
+    private static void WriteMaterials(BinaryWriter writer, ReadOnlySpan<uint> materials, int[] from, int[] to) {
         var width = 1;
 
-        foreach (var material in materials) { if (material > byte.MaxValue) { width = 4; break; } }
-        WritePlane(width: width, words: materials, writer: writer);
+        foreach (var material in materials) { if (SdfMeshMaterials.Renumber(material, from, to) > byte.MaxValue) { width = 4; break; } }
+        WritePlane(width: width, words: materials, writer: writer, from: from, to: to);
     }
-    private static void WritePlane(BinaryWriter writer, ReadOnlySpan<uint> words, int width) {
+    private static void WritePlane(BinaryWriter writer, ReadOnlySpan<uint> words, int width, int[]? from = null, int[]? to = null) {
         writer.Write(value: ((byte)width));
         writer.Write(value: words.Length);
         var bytes = new byte[checked((words.Length * width))];
         var previous = 0U;
 
         for (var index = 0; (index < words.Length); index++) {
-            var delta = unchecked((words[index] - previous));
+            var word = ((from is null) ? words[index] : SdfMeshMaterials.Renumber(words[index], from, to!));
+            var delta = unchecked((word - previous));
 
-            previous = words[index];
+            previous = word;
             for (var plane = 0; (plane < width); plane++) { bytes[((plane * words.Length) + index)] = ((byte)(delta >> (plane * 8))); }
         }
         writer.Write(buffer: bytes);

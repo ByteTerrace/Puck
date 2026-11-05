@@ -235,13 +235,13 @@ public static class MeshCommand {
 
         return new Outcome(Field: field, Label: label, Mesh: mesh, Owner: owner, Refusal: null, Report: ((mesh is null) ? null : SdfMeshAudit.Audit(field: field, mesh: mesh, options: options, shapes: shapes)), Stored: true, ToWorld: toWorld);
     }
-    // Every stored mesh of the group's materials whose vertices lie on its field, whatever identity stored it, oldest
+    // Every stored mesh of the group's material-place count whose vertices lie on its field, whatever identity stored it, oldest
     // first: the bakes of one geometry by each build that baked it.
     private static void History(SdfMeshBakeGroup group, SdfFieldEvaluator field, SdfMeshStore store, SdfMeshAuditOptions options, StringBuilder output) {
         var bakes = new List<(DateTime Written, string Name, SdfMeshAuditReport Report)>();
 
         foreach (var path in store.EntryPaths()) {
-            if (!SdfMeshStore.TryReadFile(materials: out var materials, mesh: out var mesh, path: path) || (mesh is null) || !materials.AsSpan().SequenceEqual(other: group.MaterialOrder) || !LiesOn(field: field, mesh: mesh)) { continue; }
+            if (!SdfMeshStore.TryReadFile(materials: out var materials, mesh: out var mesh, path: path) || (mesh is null) || (materials.Length != group.MaterialOrder.Length) || !LiesOn(field: field, mesh: mesh)) { continue; }
             bakes.Add(item: (File.GetCreationTimeUtc(path: path), Path.GetFileNameWithoutExtension(path: path), SdfMeshAudit.Audit(field: field, mesh: mesh, options: options, shapes: [])));
         }
 

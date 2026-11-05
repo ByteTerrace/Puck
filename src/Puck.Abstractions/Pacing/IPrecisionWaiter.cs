@@ -3,9 +3,9 @@ namespace Puck.Abstractions.Pacing;
 /// <summary>
 /// A platform capability that blocks the calling thread until a short relative duration elapses, using the highest-
 /// resolution wait the platform offers (e.g. a Windows high-resolution waitable timer, ~0.5 ms granularity) instead of
-/// the coarse ~15.6 ms system-tick quantization of a plain sleep. The host pacer uses it for the bulk of an inter-frame
-/// wait and limits deliberate spinning to the final 100 microseconds, so a variable-refresh present cadence is hit
-/// accurately without making busy-waiting a standing frame tax.
+/// the coarse ~15.6 ms system-tick quantization of a plain sleep. The host pacer sleeps on it for the whole remainder of
+/// an inter-frame wait and never spins, so a variable-refresh present cadence is hit accurately without making
+/// busy-waiting a standing frame tax.
 /// </summary>
 public interface IPrecisionWaiter {
     /// <summary>Blocks until <paramref name="duration"/> elapses, using the platform's high-resolution wait.</summary>
