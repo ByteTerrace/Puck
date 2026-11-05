@@ -433,6 +433,14 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   branch's deleted files (`git diff --diff-filter=D` against the integration tip)
   and compares them with what the brief allowed. A deletion the brief didn't name
   is reported to the lead before landing, never merged silently.
+- **Briefs size their checks to the lease they hold.** A heavy suite or a
+  windowed World holds an exclusive lease, so a brief that re-runs the full
+  reproduce set after every step makes every other lane that needs that lease
+  wait: one writer re-running 17-world reproduce runs per step held the heavy
+  lease 20+ minutes at a time while its sibling waited. Per step, run a small
+  representative subset; run the full set once at the end and again at
+  integration. Two lanes that each need the same exclusive lease for long
+  stretches are not parallel work; sequence them or split the lease-bound part.
 - **Workflows are a standing permission (the owner's ruling):** the lead runs the
   Workflow tool whenever a multi-agent orchestration pays for itself (a wave, a
   fan-out of independent reviews or research, a pipeline of write then verify),
