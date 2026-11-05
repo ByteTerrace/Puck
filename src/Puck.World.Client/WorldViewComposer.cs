@@ -281,7 +281,7 @@ public sealed class WorldViewComposer {
         ) {
             ResolveLayoutSlots(layout: overridden);
 
-            return (overridden.Name, "override", (overridden.Transition ?? new WorldViewTransition()));
+            return (overridden.Name, "override", (overridden.Transition ?? WorldViewTransition.Cut));
         }
 
         if (FindBySeatCount(
@@ -290,7 +290,7 @@ public sealed class WorldViewComposer {
         ) is { } sized) {
             ResolveLayoutSlots(layout: sized);
 
-            return (sized.Name, "authored", (sized.Transition ?? new WorldViewTransition()));
+            return (sized.Name, "authored", (sized.Transition ?? WorldViewTransition.Cut));
         }
 
         if (FindBySeatCount(
@@ -299,12 +299,12 @@ public sealed class WorldViewComposer {
         ) is { } catchall) {
             ResolveLayoutSlots(layout: catchall);
 
-            return (catchall.Name, "authored", (catchall.Transition ?? new WorldViewTransition()));
+            return (catchall.Name, "authored", (catchall.Transition ?? WorldViewTransition.Cut));
         }
 
         ResolveBuiltin(joinedCount: joinedCount);
 
-        return (BuiltinName, BuiltinName, (views.BuiltinTransition ?? new WorldViewTransition()));
+        return (BuiltinName, BuiltinName, (views.BuiltinTransition ?? WorldViewTransition.Cut));
     }
 
     /// <summary>Returns the authored layout name at a 1-based document ordinal from the most recent composition, or

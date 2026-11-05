@@ -158,7 +158,10 @@ public sealed record WorldViewLayout(string Name, IReadOnlyList<WorldViewSlot> S
 /// <see cref="WorldViewDefaults.BuiltinTransition"/>; the defaults are neutral, a cut with no dip.</summary>
 /// <param name="Seconds">How long the ease takes, in seconds; 0 is a cut. Default 0.</param>
 /// <param name="RenderScale">The render scale (0, 1] applied to every slot mid-transition; 1 is no dip. Default 1.</param>
-public sealed record WorldViewTransition(float Seconds = 0f, float RenderScale = 1f);
+public sealed record WorldViewTransition(float Seconds = 0f, float RenderScale = 1f) {
+    /// <summary>Gets the neutral envelope, a cut with no dip, which an absent transition reads as.</summary>
+    public static WorldViewTransition Cut { get; } = new();
+}
 /// <summary>The <c>views</c> document section — the seat framing every seat wakes on plus the authored named layouts. A
 /// REQUIRED section every document carries; an empty layout list falls the composer through to the built-in seat
 /// ladder.</summary>

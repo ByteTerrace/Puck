@@ -644,7 +644,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                     return new CommandResult(Output: RenderScaleEcho(view: command.View));
                 }
                 if ((command.Operation == WorldRenderScaleOperation.Pin) && !settings.CanPin(command.View, command.Scale, out refusal)) {
-                    return CommandResult.Error(output: $"[{refusal}]");
+                    return CommandResult.Error(output: $"[world.render-scale: {refusal}]");
                 }
                 var section = (((command.View == "*") && (command.Operation != WorldRenderScaleOperation.Floor))
                     ? WorldSection.Render : WorldSection.Views);
