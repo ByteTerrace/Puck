@@ -109,6 +109,7 @@ public sealed record WorldFieldsSection(
                 (field.Min != trait.Min) ||
                 (field.Max != trait.Max) ||
                 (field.HeightScale != trait.HeightScale) ||
+                (field.SurfaceStep != trait.SurfaceStep) ||
                 (field.Material != trait.Material) ||
                 !string.Equals(
                 a: field.Color,
@@ -294,7 +295,8 @@ public sealed record WorldFieldsSection(
                 Max: trait.Max,
                 Medium: (trait.Medium is not null),
                 Min: trait.Min,
-                Name: row.Name.Value
+                Name: row.Name.Value,
+                SurfaceStep: trait.SurfaceStep
             ));
 
             foreach (var fill in (trait.Paint ?? [])) {
@@ -355,7 +357,8 @@ public sealed record WorldFieldsSection(
                     ? new WorldLatticeMedium()
                     : null),
                         Min: row.Min,
-                        Paint: ((paint.Length == 0) ? null : paint)
+                        Paint: ((paint.Length == 0) ? null : paint),
+                        SurfaceStep: row.SurfaceStep
                     ),
                     Name: CellName.Parse(candidate: row.Name)
                 ));
@@ -424,6 +427,9 @@ public sealed record WorldFieldTopology(
 /// samples each tick at its coupled cell — the same body-coupling ceiling <see cref="WorldReaction.Emit"/>/
 /// <see cref="WorldReaction.Expose"/> resolve against — refused unless <paramref name="HeightScale"/> is greater
 /// than zero (a surface-less medium is meaningless).</param>
+/// <param name="SurfaceStep">The height, in world units, the drawn surface of a row carrying a
+/// <paramref name="HeightScale"/> moves by (<see cref="WorldFieldRow.SurfaceStep"/>); 0 draws it at the baked mesh's own
+/// resolution. Presentation only: bodies and media read the full value.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldStateFieldTrait(
     float Initial = 0f,
@@ -433,7 +439,8 @@ public sealed record WorldStateFieldTrait(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null,
     IReadOnlyList<WorldLatticeFill>? Paint = null,
     WorldLatticeMedium? Medium = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteEntryDocument? Material = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteEntryDocument? Material = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float SurfaceStep = 0f
 ) {
     /// <summary>The initial fills, applied in order over <see cref="Initial"/>.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -481,6 +488,12 @@ public sealed record WorldFieldLatticeDefinition(
 /// is nonzero, or omitted for a neutral white surface.</param>
 /// <param name="Material">Optional surface material using the creation palette vocabulary.</param>
 /// <param name="Medium">Whether this field is a fluid medium (see <see cref="WorldStateFieldTrait.Medium"/>).</param>
+/// <param name="SurfaceStep">The height, in world units, the drawn surface moves by. The renderer redraws a column only
+/// once its raised height has moved a whole step from the height drawn, and then draws it at the nearest whole step, so
+/// a value that changes continuously (a flowing or filling store) rebakes its surface once a step rather than every
+/// lattice step, a value hovering about a step boundary redraws nothing, and a height it returns to draws a mesh already
+/// baked. 0 draws at the baked mesh's own resolution (<c>SdfMeshGeometryBuilder.PositionSteps</c>). Presentation only:
+/// bodies and media read the full value.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldFieldRow(
     string Name,
@@ -490,7 +503,8 @@ public sealed record WorldFieldRow(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float HeightScale = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Medium = false,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteEntryDocument? Material = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteEntryDocument? Material = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float SurfaceStep = 0f
 );
 /// <summary>One initial fill of a lattice row, applied in order over the row's <c>initial</c>. Every kind decides
 /// per CELL with integer hashes and Q48.16 arithmetic only, so a fill is bit-identical on every machine and backend

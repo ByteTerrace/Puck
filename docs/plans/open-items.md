@@ -1090,9 +1090,12 @@ source are the next lanes here; the items below are the system work beside them.
   static and animated placements), and profile bake admission, landing and
   illumination together. The stream is eight placements of one still segment
   and the falls still sheets, their motion the flow layer's shading.
-  The sampled-field fix makes each changed height snapshot a new mesh identity;
-  measure ordinary-rate field updates as well as a paused cold boot. Run costs
-  and before/after evidence live in the water follow-up commits.
+  Each changed height snapshot is a new program and mesh identity, so drawn
+  heights move by an authored `surfaceStep` with hysteresis; the standard's
+  hydrology and pool views still rebake a field surface every few seconds of the
+  melt. A field surface that moves without a program rebuild belongs with the
+  proportional-rebuild item below. Run costs and before/after evidence live in
+  the water follow-up commits.
   The prototype audits also flag normal/topology defects in the glacier, lake and falls
   despite finding no uncovered surface. Inspect those witnesses through the
   existing mesh-audit image output before attributing them to authored style.

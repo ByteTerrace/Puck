@@ -715,6 +715,12 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.heightScale must be finite and non-negative (was {row.HeightScale}).");
             }
 
+            if (!float.IsFinite(f: row.SurfaceStep) || (row.SurfaceStep < 0f)) {
+                errors.Add(item: $"{path}.surfaceStep must be finite and non-negative (was {row.SurfaceStep}).");
+            } else if ((row.SurfaceStep > 0f) && (row.HeightScale <= 0f)) {
+                errors.Add(item: $"{path}.surfaceStep steps a drawn surface, so it requires a heightScale greater than 0.");
+            }
+
             if (
                 row.Medium &&
                 (row.HeightScale <= 0f)

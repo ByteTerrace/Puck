@@ -413,6 +413,12 @@ raises a solid column above the origin that bodies stand on
 analytic provider ignores lattice columns) and
 the renderer shows (`WorldFieldEmitter`: one CPU-baked distance brick per
 height field, coloured by `color`, uploaded through the engine's brick pool).
+Every drawn height change is a new program and a new baked mesh, so the drawn
+columns move by whole `surfaceStep`s (presentation only; absent, the mesh's own
+millimetre) and only once the value has left the drawn step by a whole step. A
+row whose value changes every lattice step without one (a flowing chain, a
+level following a gauge) rebakes forever and stalls lockstep and
+`world.wait bakes`; the standard's hydrology and `waterViews` choose a step.
 A field row's live cells ride the snapshot, never the document; the client's
 state view keeps them (`WorldDocumentStateView.ApplyFieldCells`) and presentation
 reads them through the state mirror like any row: the brick bakes from the
