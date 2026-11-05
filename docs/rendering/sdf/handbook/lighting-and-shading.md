@@ -169,8 +169,10 @@ in the frame.
 - **Probes.** A probe sits at the centre of a world cell: 1 m apart in a
   48×16×48 window at High, 2 m apart in a
   32×12×32 window at Medium, each probe 144 rays. Two coarser levels nest
-  about it at every tier, 32×12×32 windows of 8 m and 32 m cells, which reach
-  256 m and 1,024 m. Each level's window centres on the cameras of every view
+  about it at every tier (`SdfMeshIrradiance.LevelsOf`): a storey level of
+  4 m × 2 m × 4 m cells over 32×24×32, a 128 m × 48 m × 128 m window whose 2 m
+  vertical spacing stands a probe plane in every storey 2.4 m or taller, and a
+  32×12×32 window of 32 m cells reaching 1,024 m. Each level's window centres on the cameras of every view
   the residency renders when they fit in its middle, and on the first view's
   alone when they do not, and is toroidal: a cell's probe lives in the slot its
   coordinates name modulo the window's size, keyed by the cell, so a camera move
@@ -221,25 +223,36 @@ in the frame.
   tap cannot extend a finite block over the opening. There are no whole-sphere
   lattice-ray planes, front/back fallback or neighbour separation vetoes.
   Gather multiplies visibility by trilinear share and a smooth distance fade from
-  zero on/behind the receiver's tangent plane to one half a probe spacing in front. A squared
+  zero on/behind the receiver's tangent plane to one half the cell's extent along
+  the normal in front (half the spacing for a cube). A squared
   cosine concentrated near-floor probes into repeated spots. Normal bias is 5 cm;
   surface fade is 2 cm, independent of spacing.
-  Support ends at 1.5 times the spacing diagonal plus normal bias, while sky
-  still traces to lighting reach. Subtexel geometry remains a sampling limit.
-- **Every surface reads a level.** A receiver reads the finest level whose
-  probes measured it: a finer level answers past its window as far as its
-  boundary probes' support reaches, then the level whose window holds the
-  receiver answers (the coarsest past every window). A coarser level never
-  answers inside a finer window: at that distance its angular support is metres
-  wide and would see through a thin wall a finer probe measured. Where none of
-  the level's probes measured the receiver, the same probes answer past their
-  measured reach, blocked only by the surfaces they measured, and where those
-  answer nothing either, the finest level's boundary probes do. A surface the
-  camera sees never reads the absence of a measurement as black, while a wall a
-  probe saw still hides what lies behind it. Such an extended read gives no
-  traced static light any visibility. Probes behind the receiver's plane keep a
-  small share at the finest level alone; a coarser level's depth test cannot
-  resolve the receiver's own wall.
+  Support ends at 1.5 cell diagonals plus normal bias, while sky still traces to
+  lighting reach. Subtexel geometry remains a sampling limit. Each level carries
+  its coverage ramp in its table row. The storey level's closes on almost any
+  blocked share (from zero, complete at an eighth): its probes stand in every
+  room, and a hit a tap metres wide measured before the receiver is a slab or a
+  wall. The finest and 32 m levels let a half-blocked tap read visible: a 1 m
+  probe for thin objects, a 32 m probe because its taps alias a curved hill's
+  near bulge, which the conservative ramp read as a blocker on one clear corner
+  in six.
+- **Every surface reads a level, in the share its probes measured.** A
+  receiver's stages run finest first: each finer level whose boundary probes'
+  support reaches it past their window, the level whose window holds it (the
+  coarsest past every window), the same probes past their measured reach,
+  blocked only by the surfaces they measured, and the finest level's boundary
+  probes the same way. A coarser level never answers inside a finer window: at
+  that distance its angular support is metres wide and would see through a thin
+  wall a finer probe measured. The first stage that answers is chosen in its
+  share, its weight over the same eight probes' weight before visibility; the
+  rest comes from the next stage over other probes, so a single corner measured
+  across a slab never stands for a whole receiver, and only the last stage that
+  answers is normalized to what remains. A surface the camera sees never reads
+  the absence of a measurement as black, while a wall a probe saw still hides
+  what lies behind it. A traced static light's visibility scales with the share
+  read within measured reach. Probes behind the receiver's plane keep a small
+  share at the finest level alone; a coarser level's depth test cannot resolve
+  the receiver's own wall.
   [Mesh GI](../../../../.claude/skills/rendering/references/mesh-gi.md) owns the
   exact CPU/HLSL rule and record. `world.probe` marks changing or pending
   publication reads unsettled, naming the GPU and live windows separately.

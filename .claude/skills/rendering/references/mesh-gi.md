@@ -31,36 +31,52 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   of a cold debug-world bake. A lockstep frame still waits for the whole bake.
   `world.wait bakes` still waits for all geometry; an initial
   `world.exposure` reading with `meter=none` is not a backend-parity result.
-- The volume has three levels (`SdfMeshIrradianceProbe.Levels`): the tier's
-  window, then two 32×12×32 windows of 8 m and 32 m cells
-  (`SdfMeshIrradiance.LevelSpacing`), their slots after the finer levels' in one
-  table, each described by a `meshIrradianceLevels` row (first cell, packed
-  dims) and a spacing in `meshIrradianceVolume` (zero until the level first
-  publishes). Each level publishes on its own once every slot of its window is
-  measured. A receiver reads the finest level whose probes measured it
-  (`Select`, `sdfMeshProbesAt`): a finer level answers past its window's
-  boundary probes as far as their surface maps reach
-  (`SdfMeshIrradiance.SurfaceReachOf`), then the level whose window holds the
-  receiver (the coarsest past every window) answers. An 8 m level cannot
-  resolve rooms a few metres tall: its probes stand in the slabs and on both
-  sides of the walls, so a wall it answers reads black where every coarse probe
-  is hidden and the outdoors where one grazes through. At the High tier the
-  finest window about the middle of the gallery hall ends just short of its
-  west wall (`body.pose 31.25 4.57 28.52 273`, `world.indirect high`). A black
-  or blown far wall is a level choice, which `world.probe` names (`level=`),
-  not a GPU/CPU disagreement. Never let a coarser level answer inside a finer window: at 25 m a
-  32 m probe's angular tap is metres wide, its patch test cannot resolve a thin
-  wall the fine probe measured, and the wall law reads visibility 1 through it.
-  Where the level's bounded gather is zero, the same probes answer unbounded
-  (`SdfMeshProbeDepth.Visibility(bounded: false)`): a miss no longer rejects a
-  receiver past its reach, but a measured hit still blocks. Where those answer
-  nothing either, the finest level's boundary probes answer unbounded, so a far
-  room's wall reads the measured room's light. Those reads report `measured=0`
-  in `world.probe` and give traced static lights zero visibility. They replace
-  the earlier rule that a receiver with no answering probe reads black: far
-  gallery walls and outdoor shaded faces past the old 64 m window drew pure
-  black. `SdfMeshIrradianceGatherDeviceLawTests` runs both gathers on one
-  published volume and requires the same slots and weights on both backends.
+- The volume has three levels (`SdfMeshIrradianceProbe.Levels`), a table per
+  tier (`SdfMeshIrradiance.LevelsOf`, rows of `SdfMeshIrradianceLevel`: a
+  spacing per axis and a window's dims): the tier's window, a storey level of
+  4×2×4 m cells over 32×24×32 and a 32×12×32 window of 32 m cells, their slots
+  after the finer levels' in one table, each described by a
+  `meshIrradianceLevels` row (first cell, packed dims, ten bits each) and a
+  `meshIrradianceSpacings` row (xyz spacing, zero until the level first
+  publishes); `meshIrradianceVolume` is the enabled flag. Each level publishes
+  on its own once every slot of its window is measured. Every rule that sizes
+  by spacing takes the vector: `Lattice`, `Beyond` and
+  `sdfMeshIrradianceBeyond` divide per axis, `SurfaceReachOf` is 1.5 cell
+  diagonals, `Place` searches a cell whose half extent is per axis.
+  A receiver's stages run finest first (`Select`, `sdfMeshProbesAt`): each finer
+  level whose boundary probes' surface maps reach it past their window
+  (`SdfMeshIrradiance.SurfaceReachOf`), then the level whose window holds it
+  (the coarsest past every window) bounded, the same probes unbounded
+  (`SdfMeshProbeDepth.Visibility(bounded: false)`: a miss no longer rejects a
+  receiver past its reach, but a measured hit still blocks), then the finest
+  level's boundary probes unbounded. The first stage that answers is chosen in
+  its share: its weight over the same cage's front weight before visibility
+  (trilinear × the facing fade without the behind floor, over every present
+  probe, invalid ones included), clamped to one. The rest comes from the next
+  stage over another cage, normalized to the rest; a later stage of the chosen
+  level reads the same probes and is skipped, so every receiver inside the
+  finest window keeps one gather. Where no remainder answers, the chosen stage
+  is normalized to the whole. The receiver reads sixteen slots
+  (`SdfMeshIrradiance.GatherSlots`: the chosen cage, then the remainder's),
+  pre-scaled so they sum to one; a traced static light's visibility is the
+  weight of the lit slots of bounded stages. `world.probe` prints `level=`,
+  `measured=`, `share=`, `remainder-level=` and `remainder-measured=`, and the
+  remainder's eight corners after the chosen eight. An isotropic 8 m level could
+  not resolve rooms a few metres tall: it had a probe plane in every other
+  4.5 m storey, so the storeys between read one corner across a slab
+  normalized to the whole. At the High tier the finest window about the middle
+  of the gallery hall ends just short of its west wall (`body.pose 31.25 4.57
+  28.52 273`, `world.indirect high`). A black or blown far wall is a level
+  choice, which `world.probe` names, not a GPU/CPU disagreement. Never let a
+  coarser level answer inside a finer window: at 25 m a 32 m probe's angular
+  tap is metres wide, its patch test cannot resolve a thin wall the fine probe
+  measured, and the wall law reads visibility 1 through it. A receiver with no
+  answering probe never reads black: far gallery walls and outdoor shaded faces
+  past a window drew pure black under that rule.
+  `SdfMeshIrradianceGatherDeviceLawTests` runs both gathers on one published
+  volume and requires the same sixteen slots, weights, share and measured flags
+  on both backends; `SdfMeshIrradianceLawTests.FarField.cs` holds the four-storey
+  hall's segment-test counts.
 - Each level's window centres on the box of the cameras of every view the
   residency renders when it fits in the window's middle, and on the first view's
   camera alone when it does not (`WindowLow`).
@@ -152,15 +168,23 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   The flat-surface law also rejects radial-distance interpolation: it returned
   48% visibility for a coplanar receiver at radius 1.2 m and angle 89 degrees.
   No radial moments or squared-distance field remain. Misses supply no blocker.
-  Coverage closes from half to three-quarter support; a minority hit cannot
-  extend a finite block over the footprint. Tests remain confined to these four
+  Each level's table row carries its coverage ramp (`SdfMeshIrradianceLevel.Coverage`,
+  written into the pass block's `meshIrradianceCoverages` rows and read by
+  `sdfMeshProbeCoverage(level)`). The finest and 32 m levels close from half to
+  three-quarter support, so a minority hit cannot extend a finite block over the
+  footprint; the storey level closes from zero to an eighth
+  (`SdfMeshProbeCoverage.Coarse`): its probes stand in every room, and the soft
+  half of the tolerant ramp let corners across a slab answer at map visibility
+  0.1 to 0.5. Over curved terrain a 32 m probe's minority tap is the hill's own
+  near bulge: the conservative ramp darkened 238 of 1,469 clear corners on
+  three hills (`SdfMeshIrradianceLawTests.TheCoarsestLevelKeepsACurvedSurfaceItSeesLit`), the tolerant 6. Tests remain confined to these four
   angular taps: no 26-ray whole-sphere planes, neighbour separation, suspect sets
   or cross-probe vetoes return. Keep `SdfMeshProbeDepth.Visibility` and
   `sdfMeshProbeDepthVisibility` together, including signed normal decoding,
   seam reflection, patch compatibility, gaps and coverage. Projection/addressing
   reuse `SdfOctahedral` / `field/sdf-octahedral.hlsli`.
 - Gather weight is the cell's trilinear share times
-  `max(smoothstep(0, spacing / 2, dot(normal, probe - receiver)), BehindShare)` times depth visibility.
+  `max(smoothstep(0, |spacing * normal| / 2, dot(normal, probe - receiver)), BehindShare)` times depth visibility.
   This continuous positive-hemisphere weight turns down probes behind a surface
   without switching the whole gather between front and back sets. It also
   prevents grazing depth uncertainty behind a thin wall from admitting a bright
@@ -279,8 +303,8 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   words with a warmed one's.
 - A record is 235 words (940 bytes): 19 header/cube/light/origin words, 144
   packed first-hit surface words and 72 packed normal-gradient words.
-  Medium's three levels hold 36,864 probes in 33.046875 MiB; High's 61,440 in
-  55.078125 MiB. The CPU cache holds each probe's hit buffer beside it: 510
+  Medium's three levels hold 49,152 probes in 44.0625 MiB; High's 73,728 in
+  66.09375 MiB. The CPU cache holds each probe's hit buffer beside it: 510
   geometry words and 40 light words a probe, 2,200 bytes (`world.budget` prints the
   bytes), about twice the record.
   The table starts at one inert record and both
@@ -288,7 +312,7 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   existing frame-ring retirement; increment the binding revision when its buffer
   changes. Keep the old table and coordinates until every new slot is measured.
   Five full payloads (device, two uploads, native shadow, CPU volume) total
-  165.234375 MiB at Medium or 275.390625 MiB at High, before headers, cache,
+  220.3125 MiB at Medium or 330.46875 MiB at High, before headers, cache,
   batches and temporary retired buffers. Upload buffers can shrink after small flushes;
   live `world.probe` GI diagnostics report actual device/upload/shadow/header
   and CPU-volume bytes. Cache blocks hold 244 words (976 bytes) per probe.
