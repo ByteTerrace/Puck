@@ -276,7 +276,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // a scene of SDF_LOCAL_REFLECTANCE albedo, within SDF_LOCAL_ADAPTATION_RANGE stops: a dim ceiling lifts
             // and a sunlit floor compresses, while a dark paint under the same light stays dark. It precedes the
             // display-referred terms below.
-            float incoming = dot((radiance + indirect), float3(0.2126, 0.7152, 0.0722));
+            float incoming = dot((radiance + indirect), SDF_LUMINANCE);
             float localGain = 1.0;
 
             if ((passGroup.localAdaptation > 0.0) && (passGroup.meterLuminance > 0.0) && (incoming > 0.0)) {

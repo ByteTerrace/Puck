@@ -24,6 +24,22 @@ public static class SdfMeshIrradianceProbe {
     public const int OffsetWord = 17;
     /// <summary>The least distance in metres between a probe and any surface.</summary>
     public const float Clearance = 0.1f;
+    /// <summary>The share of a probe's rays meeting back faces past which the probe lies inside geometry.</summary>
+    public const float InsideShare = 0.25f;
+    /// <summary>The exposure meter's sky visibility over the mean open share of a probe's six axes: on open ground the up
+    /// axis sees the whole sky, the four sideways axes half of it and the down axis none, a mean of one half.</summary>
+    public const float OpenGroundShare = 2f;
+    /// <summary>The distance in metres within which the meter's camera stands at a probe and casts no visibility ray to
+    /// it.</summary>
+    public const float MeterCoincident = 1.0e-3f;
+    /// <summary>The distance in metres a shadow ray toward a point light ends before the light, so a fixture sunk a little
+    /// into its housing is not blocked by it.</summary>
+    public const float LightBias = 0.02f;
+    /// <summary>The distance in metres a changed draw's box grows by, and a ray's recorded hit extends by at least, so a
+    /// hit on the draw's own face always meets its box.</summary>
+    public const float BoxMargin = 1.0e-3f;
+    /// <summary>The share of a recorded hit's distance the hit extends by where that exceeds <see cref="BoxMargin"/>.</summary>
+    public const float BoxMarginShare = 1.0e-4f;
     /// <summary>The first word of the traced light visibility bits, one bit per lights-table record.</summary>
     public const int LightsWord = 13;
     /// <summary>The number of light visibility words.</summary>
