@@ -15,7 +15,7 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfWorldPassesLawTests {
     // Whether the mesh part and the near and second cascades bound their pipelines in a view's latest completed frame.
     private static (bool Mesh, bool Near, bool Second) StagesOf(SdfFrame frame) {
-        var gpu = new FakeGpuDevice();
+        var gpu = new FakeGpuDevice(trackObjects: true) { DistinctBuffers = true };
         var pipelines = SdfTestPipelines.Cache();
         using var view = new SdfTestView(
             device: gpu,

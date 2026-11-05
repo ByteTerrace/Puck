@@ -161,10 +161,11 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
 
         SdfMeshPathBake.RunFirst(work: () => {
             var length = readback.Length;
-            var bytes = ArrayPool<byte>.Shared.Rent(minimumLength: Math.Max(val1: 1, val2: length));
+            byte[]? bytes = null;
 
             try {
                 try {
+                    bytes = ArrayPool<byte>.Shared.Rent(minimumLength: Math.Max(val1: 1, val2: length));
                     readback.Read(destination: bytes.AsSpan(start: 0, length: length));
                 } finally {
                     readback.Release();
@@ -174,7 +175,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
                 m_bake.Abandon(batch: batch);
                 throw;
             } finally {
-                ArrayPool<byte>.Shared.Return(array: bytes);
+                if (bytes is not null) { ArrayPool<byte>.Shared.Return(array: bytes); }
             }
         });
     }
