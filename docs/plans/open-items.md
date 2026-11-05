@@ -1048,7 +1048,7 @@ Next: what the water as a forcing workload showed
 ([C3 as built](debug-world-composition.md#c3-as-built)); each item is a system
 the water strained, measured, and not yet fixed.
 
-- [medium] Route to the mesh lane: `WorldFieldEmitter.Prepare` increments its
+- [medium] Route to the mesh lane: `WorldFieldEmitter.AdvanceBricks` increments its
   program revision only for a field's first ready brick, not later uploads
   (`src/Puck.World.Client/WorldFieldEmitter.cs:231`). `SdfMeshGeometryBuilder.Append`
   hashes instruction words and selected side tables, not sampled brick contents
@@ -1063,13 +1063,6 @@ the water strained, measured, and not yet fixed.
   no spill row; extend the exact-transfer seam to bounded scalar stores before
   using spill as conserved storage.
 
-- [medium] A lattice row's look is one albedo (`WorldFieldEmitter.cs:363`,
-  `SdfMaterial(Albedo: …)`): the pool reads as a flat cyan fill, with none of the
-  roughness, reflection, depth colour or transparent shallows
-  [the art pack](../game/art/caldera-water-pack/README.md) asks for. The fix is an
-  authored material on the row's `field` trait (the palette vocabulary: roughness,
-  specular, coat, glass), through `WorldStateFieldTrait`, `WorldFieldRow`, the
-  validator and `puck schema`; the water then owns no look in C#.
 - [medium] The water's creations add 172 bake groups, 6.4 million level-0
   triangles and 1.0 GB of the mesh region in use to the debug world (a World
   without the water documents: 7,478 groups, 47.6 M triangles, 1.67 GB used; with

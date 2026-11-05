@@ -334,8 +334,11 @@ tick, about 150 ms, is the world's own, not the water's). The debug world's comp
 validates in 4.78 GB peak against 3.77 GB without the scenery. The
 [water packet](open-items.md#water) records what each system showed.
 
-Departures from [the art pack](../game/art/caldera-water-pack/README.md): the water is
-one flat turquoise (the lattice emitter gives a row one albedo), the falls are a slab
+The pool's field row uses the standard's `waterMaterial`, through the same palette
+lowering and glass path as creations. Roughness, coat and glass are authored values;
+the engine supplies no water-specific shading.
+
+Departures from [the art pack](../game/art/caldera-water-pack/README.md): the falls are a slab
 ribbon with no spray or plunge pocket, the glacier is six hinged lumps, the lake has no
 modelled outlet notch, and the gauge is a post on the bank, not the pavilion over a
 cutaway. The swim has no animation: she floats in her walking pose.
