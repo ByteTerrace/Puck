@@ -12,7 +12,7 @@ namespace Puck.World;
 /// </summary>
 internal sealed class WorldPassthroughCommandModule(WorldSourcePassthrough passthrough) : ICommandModule {
     private const string Verb = "source.passthrough";
-    private const string Form = "[open <instance> <windowTitle...> | close <instance>]";
+    private static readonly CommandForms SourcePassthroughForms = CommandForms.Of(verb: Verb, "open <instance> <windowTitle...>", "close <instance>");
 
     private CommandResult Handler(CommandContext context, WireArgs args) {
         if (
@@ -66,7 +66,7 @@ internal sealed class WorldPassthroughCommandModule(WorldSourcePassthrough passt
             );
         }
 
-        return CommandResult.Usage(form: Form, got: ((args.Count > 0) ? args[0].ToString() : null), verb: Verb);
+        return SourcePassthroughForms.Refuse(args: in args, got: ((args.Count > 0) ? args[0].ToString() : null));
     }
 
     /// <inheritdoc/>
@@ -74,7 +74,8 @@ internal sealed class WorldPassthroughCommandModule(WorldSourcePassthrough passt
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
-            description: "The local user's host passthrough: source.passthrough open <instance> <windowTitle...> opens the window capture a shown views.graphs pane draws as a passthrough source, once the captured window's title contains <windowTitle> (compared without regard to case), so the local user names the window that will take their input; its pane's mapping then takes the Passthrough destination (world.view.panes). A click on the pane gives the window the keyboard, pointer events over the pane reach it at the pane's mapped client point, keys and text go to it instead of the game, each release goes where its press went, and Control+Alt+Escape returns the keyboard to the game. source.passthrough close <instance> closes one; with no argument it echoes where the keyboard is and each opened source's window, captured frame, client area and DPI scale. Only the host's own console may run it, as typed text: no binding, seat, peer, addon, schedule or world document can open a passthrough source or send it input. A source whose pane stops showing the window it was opened on is closed. Refused as unknown by a boot with no window.",
+            description: $"The local user's host passthrough: {SourcePassthroughForms.Spelling}. open opens the window capture a shown views.graphs pane draws as a passthrough source, once the captured window's title contains <windowTitle> (compared without regard to case), so the local user names the window that will take their input; its pane's mapping then takes the Passthrough destination (world.view.panes). A click on the pane gives the window the keyboard, pointer events over the pane reach it at the pane's mapped client point, keys and text go to it instead of the game, each release goes where its press went, and Control+Alt+Escape returns the keyboard to the game. close closes one; with no argument it echoes where the keyboard is and each opened source's window, captured frame, client area and DPI scale. Only the host's own console may run it, as typed text: no binding, seat, peer, addon, schedule or world document can open a passthrough source or send it input. A source whose pane stops showing the window it was opened on is closed. Refused as unknown by a boot with no window.",
+            forms: SourcePassthroughForms,
             handler: Handler,
             name: Verb
         );

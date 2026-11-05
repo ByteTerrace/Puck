@@ -56,9 +56,41 @@ public sealed record CommandUsage(IReadOnlyList<CommandUsageToken> Tokens) {
         return forms;
     }
 
+    /// <summary>Reads one declared form (<see cref="CommandForms"/>), whose every word is grammar: unlike a description,
+    /// a declared form has no prose after it, so a bare word is a literal and a word that is no placeholder stays a
+    /// literal spelled as written.</summary>
+    /// <param name="form">The form as it is spelled after the verb.</param>
+    /// <returns>The form's tokens.</returns>
+    public static CommandUsage ParseForm(string form) {
+        ArgumentNullException.ThrowIfNull(argument: form);
+
+        return new CommandUsage(Tokens: [.. Split(text: form, start: 0, prose: false).Select(selector: static entry =>
+            (Token(word: entry.Word) ?? new CommandUsageToken(Group: [], Kind: CommandUsageTokenKind.Word, Names: [entry.Word], Repeats: false)))]);
+    }
+
+    /// <summary>Gets the fewest words a line may carry after the verb to fit this form: every token but an optional
+    /// group.</summary>
+    public int MinimumWords => Tokens.Count(predicate: static token => (token.Kind != CommandUsageTokenKind.Optional));
+    /// <summary>Gets the most words a line may carry after the verb to fit this form, or <see cref="int.MaxValue"/> when
+    /// a placeholder repeats.</summary>
+    public int MaximumWords => Widest(tokens: Tokens);
+
     /// <summary>Returns the form as its description spells it, after the verb.</summary>
     /// <returns>The spelling.</returns>
     public override string ToString() => Spell(tokens: Tokens);
+
+    private static int Widest(IReadOnlyList<CommandUsageToken> tokens) {
+        var total = 0L;
+
+        foreach (var token in tokens) {
+            if (token.Repeats) { return int.MaxValue; }
+            var width = ((token.Kind == CommandUsageTokenKind.Optional) ? Widest(tokens: token.Group) : 1);
+
+            if (width == int.MaxValue) { return int.MaxValue; }
+            total += width;
+        }
+        return ((int)Math.Min(val1: total, val2: int.MaxValue));
+    }
 
     private static bool IsBoundary(char c) => (char.IsWhiteSpace(c: c) || (c is '(' or '`' or '"' or '\''));
     private static string Spell(IReadOnlyList<CommandUsageToken> tokens) => string.Join(separator: ' ', values: tokens.Select(selector: static token => token.Kind switch {
@@ -93,8 +125,8 @@ public sealed record CommandUsage(IReadOnlyList<CommandUsageToken> Tokens) {
         return forms;
     }
     // Splits the text from start into words, keeping a bracketed group whole and noting a word whose trailing
-    // punctuation ends the form; stops at a line break.
-    private static List<(string Word, bool Ends)> Split(string text, int start) {
+    // punctuation ends the form; stops at a line break. A declared form (prose false) has no trailing punctuation to read.
+    private static List<(string Word, bool Ends)> Split(string text, int start, bool prose = true) {
         var words = new List<(string Word, bool Ends)>();
         var word = new StringBuilder();
         var depth = 0;
@@ -105,7 +137,7 @@ public sealed record CommandUsage(IReadOnlyList<CommandUsageToken> Tokens) {
             if ((depth == 0) && ((c == ' ') || (c == '\n'))) {
                 if (word.Length > 0) {
                     var spelled = word.ToString();
-                    var trimmed = spelled.TrimEnd(trimChars: ['.', ',', ';', ':', ')', '`', '"']);
+                    var trimmed = (prose ? spelled.TrimEnd(trimChars: ['.', ',', ';', ':', ')', '`', '"']) : spelled);
                     var ends = (trimmed.Length != spelled.Length);
 
                     if (trimmed.Length > 0) { words.Add(item: (trimmed, ends)); }

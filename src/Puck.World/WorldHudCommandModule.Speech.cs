@@ -4,9 +4,10 @@ using Puck.World.Audio;
 namespace Puck.World;
 
 internal sealed partial class WorldHudCommandModule {
+    private static readonly CommandForms AudioRenderForms = CommandForms.Of(verb: "audio.render", "<panelId> <elementId> <output.wav>");
     private CommandResult RenderSpeech(WireArgs args) {
         if (args.Count != 3) {
-            return CommandResult.Usage(form: "<panelId> <elementId> <output.wav>", verb: "audio.render");
+            return AudioRenderForms.Refuse();
         }
         var panelId = args[0].ToString();
         var elementId = args[1].ToString();

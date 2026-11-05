@@ -13,10 +13,11 @@ internal sealed class WorldDebugViewCommandModule(WorldDiagnostics diagnostics, 
     private static readonly string ModeForm = $"[{string.Join('|', DebugViewModes.Names)}|next|toggle <mode>]";
     private const string ReportForm = "report [colliders|contacts|all] [--json]";
     private static readonly string ViewForm = $"{ModeForm} [focus|pins-only] [--amber]";
+    private static readonly CommandForms WorldDebugViewForms = CommandForms.Of(verb: "world.debug-view", ReportForm, ViewForm);
 
     public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(name: "world.debug-view", bindability: CommandBindability.Bindable,
-                description: $"world.debug-view {ViewForm} — colliders and contacts preserve the scene; default is exterior marks and pins. report [colliders|contacts|all] [--json] evaluates on demand, even off or headless; incomplete inputs are unknown. goto <finding-id> moves only the operator camera. world.view.pick <view-or-instance> finding <id> reads a retained causal record even while off; primary resolves to the first seat's rendered instance. Run report first to populate findings. Findings name snapshot, tick, revision, provenance, expected relation, measurements, budget, coverage and lifetime. Amber is off by default.",
+                description: $"{WorldDebugViewForms.Spelling} — colliders and contacts preserve the scene; default is exterior marks and pins. report [colliders|contacts|all] [--json] evaluates on demand, even off or headless; incomplete inputs are unknown. goto <finding-id> moves only the operator camera. world.view.pick <view-or-instance> finding <id> reads a retained causal record even while off; primary resolves to the first seat's rendered instance. Run report first to populate findings. Findings name snapshot, tick, revision, provenance, expected relation, measurements, budget, coverage and lifetime. Amber is off by default.", forms: WorldDebugViewForms,
                 handler: (context, args) => Execute(context, args), routing: CommandRouting.Immediate);
     }
 
@@ -27,7 +28,7 @@ internal sealed class WorldDebugViewCommandModule(WorldDiagnostics diagnostics, 
             for (var i = 1; i < args.Count; i++) {
                 if (args.Is(i, "--json")) { json = true; }
                 else if (args[i].ToString() is "colliders" or "contacts" or "all") { view = args[i].ToString(); }
-                else { return CommandResult.Usage(form: ReportForm, got: args[i].ToString(), verb: "world.debug-view"); }
+                else { return WorldDebugViewForms.Refuse(args: in args, got: args[i].ToString()); }
             }
             var reports = (view == "all" ? new[] { "colliders", "contacts" } : [view]).Select(diagnostics.Report).ToArray();
             return new CommandResult(Output: json
@@ -56,14 +57,14 @@ internal sealed class WorldDebugViewCommandModule(WorldDiagnostics diagnostics, 
             name = diagnostics.Mode == args[1].ToString() ? "off" : args[1].ToString();
             index = 2;
         }
-        if (!DebugViewModes.TryParse(name, out var mode)) { return CommandResult.Usage(form: ViewForm, got: name, verb: "world.debug-view"); }
+        if (!DebugViewModes.TryParse(name, out var mode)) { return WorldDebugViewForms.Refuse(args: in args, got: name); }
         var presentation = "default";
         var amber = false;
         while (index < args.Count) {
             var option = args[index++].ToString();
             if (option == "--amber") { amber = true; }
             else if (option is "focus" or "pins-only" && presentation == "default") { presentation = option; }
-            else { return CommandResult.Usage(form: ViewForm, got: option, verb: "world.debug-view"); }
+            else { return WorldDebugViewForms.Refuse(args: in args, got: option); }
         }
         if (index != args.Count) { return CommandResult.Error("[world.debug-view: unexpected arguments]"); }
         diagnostics.Mode = DebugViewModes.Name(mode);

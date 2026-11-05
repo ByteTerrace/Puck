@@ -14,7 +14,7 @@ namespace Puck.World;
 /// <param name="server">The authority whose live definition the read-back names.</param>
 /// <param name="theme">The presentation's theme resolver.</param>
 internal sealed class WorldThemeCommandModule(WorldServer server, WorldThemeResolve theme) : ICommandModule {
-    private const string Form = "contrast high|normal|toggle";
+    private static readonly CommandForms WorldThemeForms = CommandForms.Of(verb: "world.theme", "[contrast high|normal|toggle]");
 
     private CommandResult Describe() => new(Output: $"[world.theme: source={((server.Definition.ThemeRaw is null)
         ? "engine-default"
@@ -27,7 +27,8 @@ internal sealed class WorldThemeCommandModule(WorldServer server, WorldThemeReso
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.theme",
-            description: "Reads the overlay theme's source and the contrast preference, or sets the preference: world.theme [contrast high|normal|toggle]. The source is document (the world authors or imports a theme) or engine-default (the engine's neutral theme, which a world that authors none draws). High contrast raises every scrim to at least WorldThemeCapacity.HighContrastScrimAlpha opaque, so overlay text stays legible over any scene. Presentation only and this process's own: the document is untouched and nothing reaches the simulation.",
+            description: $"Reads the overlay theme's source and the contrast preference, or sets the preference: {WorldThemeForms.Spelling}. The source is document (the world authors or imports a theme) or engine-default (the engine's neutral theme, which a world that authors none draws). High contrast raises every scrim to at least WorldThemeCapacity.HighContrastScrimAlpha opaque, so overlay text stays legible over any scene. Presentation only and this process's own: the document is untouched and nothing reaches the simulation.",
+            forms: WorldThemeForms,
             handler: (_, args) => {
                 if (args.Count == 0) {
                     return Describe();
@@ -40,7 +41,7 @@ internal sealed class WorldThemeCommandModule(WorldServer server, WorldThemeReso
                         value: "contrast"
                     )
                 ) {
-                    return CommandResult.Usage(form: Form, verb: "world.theme");
+                    return WorldThemeForms.Refuse();
                 }
 
                 bool? high = (args.Is(
@@ -61,7 +62,7 @@ internal sealed class WorldThemeCommandModule(WorldServer server, WorldThemeReso
                             : null)));
 
                 if (high is not { } resolved) {
-                    return CommandResult.Usage(form: Form, verb: "world.theme");
+                    return WorldThemeForms.Refuse();
                 }
 
                 theme.HighContrast = resolved;

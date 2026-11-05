@@ -101,7 +101,7 @@ public sealed partial class WorldHistoryCommandModule {
     }
     private CommandResult Save(WireArgs args) {
         if (args.Count != 3) {
-            return CommandResult.Usage(form: SaveForm, verb: Command);
+            return WorldHistoryForms.Refuse(args: in args);
         }
 
         var name = args[1].ToString();
@@ -127,7 +127,7 @@ public sealed partial class WorldHistoryCommandModule {
             (fraction < 0f) ||
             (fraction > 1f)
         ) {
-            return CommandResult.Usage(form: ScrubForm, verb: Command);
+            return WorldHistoryForms.Refuse(args: in args);
         }
 
         // With no window there is no tick to name; the seek names why.
@@ -137,7 +137,7 @@ public sealed partial class WorldHistoryCommandModule {
     }
     private CommandResult Switch(WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Usage(form: SwitchForm, verb: Command);
+            return WorldHistoryForms.Refuse(args: in args);
         }
 
         var name = args[1].ToString();

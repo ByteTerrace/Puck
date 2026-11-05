@@ -1184,16 +1184,6 @@ lowers it to the same JSON as before, except where the look changes on purpose.
     claims exact 1-Lipschitz for every radius, while the Valley packet and
     `hazards.md` keep the CPU/GPU small-radius disagreement open. One of them
     is wrong.
-- [low] Console verb forms are still spelled twice in many modules: a
-  `CommandResult.Usage(form: "...")` literal repeats the form its
-  description prints, so the two can drift. Examples:
-  `src/Puck.World.Console/WorldTimelineCommandModule.cs` (`world.timeline`),
-  `WorldMachineCommandModule.cs`, `WorldStateCommandModule.cs`
-  (`<row> <key> <value> [add]`), `src/Puck.World/WorldCompareCommandModule.cs`,
-  `WorldRenderLeverCommandModule.cs`, `WorldAnnotationCommandModule.cs`,
-  `WorldEditorCommandModule.cs`, `ProbeCommandModule.cs`. Hoist each form to
-  one constant that the description and `Usage` both read, as
-  `CommandRegistry`'s `WireAckForm` does.
 
 Engine defaults that carry a look or a rule of play, which the authors rule
 wants authored with a neutral engine default (each one sits in C# or HLSL,
