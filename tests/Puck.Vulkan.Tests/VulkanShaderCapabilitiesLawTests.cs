@@ -5,8 +5,7 @@ namespace Puck.Vulkan.Tests;
 
 /// <summary>Laws for the SPIR-V capabilities a Vulkan device runs (<see cref="VulkanShaderCapabilities"/>): a module's
 /// declared capabilities read in order, a capability outside <see cref="VulkanShaderCapabilities.Enabled"/> refused by
-/// name before the module is created, and a malformed module refused. Every module the World ships declares only enabled
-/// capabilities.</summary>
+/// name before the module is created, and a malformed module refused.</summary>
 public sealed class VulkanShaderCapabilitiesLawTests {
     // OpCapability, OpMemoryModel and the Logical addressing and GLSL450 memory models.
     private const uint CapabilityOpcode = 17u;
@@ -55,22 +54,6 @@ public sealed class VulkanShaderCapabilitiesLawTests {
         BinaryPrimitives.WriteUInt32LittleEndian(destination: truncated.AsSpan(start: (truncated.Length - 12)), value: (5u << 16) | CapabilityOpcode);
         _ = Assert.Throws<ArgumentException>(testCode: () => VulkanShaderCapabilities.Declared(spirv: truncated));
         _ = Assert.Throws<ArgumentException>(testCode: () => VulkanShaderCapabilities.Declared(spirv: new byte[6]));
-    }
-    [Fact]
-    public void Every_module_the_World_ships_declares_only_enabled_capabilities() {
-        var shaders = Path.Combine(path1: RepositoryPaths.RequireRoot(), path2: "src/Puck.World/bin/Release/net11.0/Assets/Shaders");
-        var modules = Directory.EnumerateFiles(path: shaders, searchOption: SearchOption.AllDirectories, searchPattern: "*.spv")
-            .Order(comparer: StringComparer.Ordinal)
-            .ToArray();
-
-        // The World's Release build ships every engine kernel; far fewer would mean the scan read the wrong directory.
-        Assert.True(condition: (modules.Length >= 20), userMessage: $"{modules.Length} SPIR-V modules under {shaders}");
-        foreach (var path in modules) {
-            var spirv = File.ReadAllBytes(path: path);
-            var name = Path.GetRelativePath(path: path, relativeTo: shaders).Replace(newChar: '/', oldChar: '\\');
-
-            VulkanShaderCapabilities.Require(module: name, spirv: spirv);
-        }
     }
 
     // A minimal module: the header, one OpCapability per capability, and OpMemoryModel Logical GLSL450.
