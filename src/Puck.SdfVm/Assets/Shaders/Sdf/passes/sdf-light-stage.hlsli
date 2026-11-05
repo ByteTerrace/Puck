@@ -172,6 +172,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             shadeSurface.toon = sdfToonStyle(shadeMaterial);
             shadeSurface.ambientOcclusion = ambientOcclusion;
             shadeSurface.shadowVisibility = shadowVisibility;
+            shadeSurface.cascaded = ((passGroup.meshShadowCount > 0u) && !worldSoftShadowsDisabled());
             shadeSurface.probed = meshIndirect;
             shadeSurface.probes = probes;
 

@@ -1910,15 +1910,31 @@ public sealed class SdfMeshIrradiance : IDisposable {
             if (!reuseLocal) { local[axis] /= AxisTotals[axis]; }
             radiance[axis] = ((radiance[axis] / AxisTotals[axis]) + local[axis]);
         }
-        if (lights.IsEmpty || reuseLocal) { return; }
-        lights.Clear();
-        // A light past its range lights nothing here and stays unseen; one at the probe's origin is seen.
-        foreach (var point in lighting.Points) {
-            var toward = (point.Position - origin);
-            var length = toward.Length();
+        if (lights.IsEmpty) { return; }
+        if (!reuseLocal) {
+            lights.Clear();
+            // A light past its range lights nothing here and stays unseen; one at the probe's origin is seen.
+            foreach (var point in lighting.Points) {
+                var toward = (point.Position - origin);
+                var length = toward.Length();
 
-            if ((length >= point.Range) || ((length > LightBias) && !scene.Unblocked(direction: (toward / length), maximum: (length - LightBias), origin: origin))) { continue; }
-            lights[(point.Index >> 5)] |= (1u << (point.Index & 31));
+                if ((length >= point.Range) || ((length > LightBias) && !scene.Unblocked(direction: (toward / length), maximum: (length - LightBias), origin: origin))) { continue; }
+                lights[(point.Index >> 5)] |= (1u << (point.Index & 31));
+            }
+        }
+        // A shadowing directional's bit is the probe's own ray toward it, at the hits' reach, and a moving sun moves it, so it
+        // is marked on every relight, a reused local part's bits included: a view with no cascade reads it for the light's
+        // visibility (sdfLightResponse, through sdfMeshLightVisibility).
+        for (var light = 0; (light < lighting.Lights.Length); light++) {
+            var index = lighting.LightIndices[light];
+
+            if (((uint)index) >= (32u * SdfMeshIrradianceProbe.LightWords)) { continue; }
+
+            var bit = (1u << (index & 31));
+
+            lights[(index >> 5)] &= ~bit;
+            if (lighting.Lights[light].CastsShadow && !scene.Unblocked(direction: lighting.Lights[light].Direction, maximum: layout.Reach, origin: origin)) { continue; }
+            lights[(index >> 5)] |= bit;
         }
     }
     // The radiance a hit sends back along its ray, in the views pass's units (albedo times the light a surface receives),
@@ -2044,7 +2060,8 @@ public sealed class SdfMeshIrradiance : IDisposable {
             return true;
         }
     }
-    /// <summary>Reads a traced static light's visibility using the published gather, as the views shader does: the
+    /// <summary>Reads a traced static light's or a shadowing directional's visibility using the published gather, as the
+    /// views shader does (a directional's only in a view with no cascade): the
     /// weight of the slots read bounded by their probes' measured reach whose probe sees the light, so it scales with
     /// the measured share of the answer and is zero where no measured probe answers.</summary>
     /// <param name="point">The receiver position.</param>
@@ -2629,6 +2646,8 @@ public sealed class SdfMeshIrradiance : IDisposable {
         public bool Feedback { get; init; }
         public required SdfIndirectGains Gains { get; init; }
         public required SdfLight[] Lights { get; init; }
+        // Each directional light's index in the frame's lights table, beside it in Lights.
+        public required int[] LightIndices { get; init; }
         public required SdfProgram Program { get; init; }
         public required SdfMaterial[] Materials { get; init; }
         public required TracedLight[] Points { get; init; }
@@ -2664,6 +2683,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
         // Captures a frame's lighting; the materials are the previous capture's while the program is the same one.
         public static Lighting Capture(SdfFrame frame, Lighting? previous, int version, int localVersion) {
             var lights = new List<SdfLight>();
+            var indices = new List<int>();
             var points = new List<TracedLight>();
             var records = frame.Lights.Records;
 
@@ -2672,6 +2692,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
                 if ((light.Kind == SdfLightKind.Directional) && (light.Weight > 0f)) {
                     lights.Add(item: light with { Direction = SdfLights.UnitDirection(direction: light.Direction) });
+                    indices.Add(item: index);
                 } else if (light.IsTraced && (light.Weight > 0f) && (light.Param > 0f)) {
                     points.Add(item: new TracedLight(Bounce: light.Bounce, Color: light.Color, Index: index, Position: light.Direction, Range: light.Param, SpotAxis: light.SpotAxis, SpotOffset: light.SpotOffset, Weight: light.Weight));
                 }
@@ -2703,6 +2724,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
                 Feedback = ((sources & SdfIndirectSources.Feedback) != 0),
                 Gains = frame.IndirectGains,
                 Lights = [.. lights],
+                LightIndices = [.. indices],
                 Program = frame.Program,
                 Materials = (ReferenceEquals(objA: previous?.Program, objB: frame.Program) ? previous!.Materials : [.. frame.Program.Materials]),
                 Points = [.. points],

@@ -426,7 +426,8 @@ void sdfMeshIrradianceAt(SdfMeshProbes probes, float3 direction, out float skyVi
     skyVisibility = (sky / total);
     radiance = (reflected / total);
 }
-// The visibility of a light of the lights table at the surface: the weight of the gathered probes read bounded by their
+// The visibility of a light of the lights table at the surface (a traced point or spot light, or a shadowing directional
+// in a view with no cascade): the weight of the gathered probes read bounded by their
 // measured reach whose centre sees it, so a fixture lights nothing through the wall or slab between them and its light
 // scales with the measured share of the answer; zero where no measured probe takes part. KEEP IN SYNC with
 // SdfMeshIrradiance.LightVisibility.

@@ -33,8 +33,9 @@ struct SdfLightSource {
 
 // The surface a light answers at: its point, lit normal and camera ray, its material and the cel style it shades with
 // (sdfToonStyle), its ambient occlusion (a wrapped material's already relaxed toward 1), each stable slot's shadow
-// visibility, and the irradiance volume's probes about it, which occlude a traced point or spot light (probed is false
-// while the volume is off, and every such light goes unoccluded).
+// visibility, whether the view's cascades drew it, and the irradiance volume's probes about it, which occlude a traced
+// point or spot light, and a shadowing directional in a view with no cascade (probed is false while the volume is off,
+// and every such light goes unoccluded).
 struct SdfShadeSurface {
     float3 position;
     float3 normal;
@@ -43,6 +44,7 @@ struct SdfShadeSurface {
     SdfToonStyle toon;
     float ambientOcclusion;
     float4 shadowVisibility;
+    bool cascaded;
     bool probed;
     SdfMeshProbes probes;
 };
@@ -160,7 +162,9 @@ bool sdfLightAt(uint index, out SdfLightSource light) {
 #endif
 }
 // What `light` adds at `surface`:
-// - a directional its wrapped Lambert term and its own GGX lobe under its shadow visibility;
+// - a directional its wrapped Lambert term and its own GGX lobe under its shadow visibility: its cascades', or in a view
+//   with no cascade a shadowing directional's (its Shadows flag) share of the probes about the surface that see it
+//   (sdfMeshLightVisibility), so a view without cascades never lights every face turned toward the sun;
 // - a point or spot its wrapped Lambert term and its own GGX lobe under the windowed inverse square and the spot's cone
 //   (sdfPointReach), ambient occlusion and, for a static light the irradiance volume traced (its Shadows flag,
 //   SdfLight.IsTraced), the share of the probes about the surface that see it (sdfMeshLightVisibility);
@@ -182,7 +186,9 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface)
 
     if (light.kind == SDF_LIGHT_DIRECTIONAL) {
         float lambert = sdfWrapDiffuse(dot(normal, light.position), surface.material.wrap);
-        float occlusion = sdfLightVisibility(light.index, surface.shadowVisibility, surface.ambientOcclusion);
+        float occlusion = ((!surface.cascaded && surface.probed && (light.record.Shadows != 0u) && (light.index >= 0))
+            ? sdfMeshLightVisibility(surface.probes, (uint)light.index)
+            : sdfLightVisibility(light.index, surface.shadowVisibility, surface.ambientOcclusion));
 
         if (sdfToonEnabled(surface.toon)) {
             response.diffuse = light.color * light.weight * sdfToonBand(surface.toon, lambert, occlusion);

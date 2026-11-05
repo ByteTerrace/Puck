@@ -37,5 +37,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         gatherResults[uint2(id.x, row)] = float4(probes.weight[4u * row], probes.weight[(4u * row) + 1u], probes.weight[(4u * row) + 2u], probes.weight[(4u * row) + 3u]);
         gatherResults[uint2(id.x, 4u + row)] = float4(slots[4u * row], slots[(4u * row) + 1u], slots[(4u * row) + 2u], slots[(4u * row) + 3u]);
     }
-    gatherResults[uint2(id.x, 8u)] = float4(probes.share, (probes.measured ? 1.0 : 0.0), (probes.remainderMeasured ? 1.0 : 0.0), 0.0);
+    // The law's light 0 is its sun, a shadowing directional a view with no cascade reads from the probes.
+    gatherResults[uint2(id.x, 8u)] = float4(probes.share, (probes.measured ? 1.0 : 0.0), (probes.remainderMeasured ? 1.0 : 0.0), sdfMeshLightVisibility(probes, 0u));
 }
