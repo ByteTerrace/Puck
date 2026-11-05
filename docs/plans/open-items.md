@@ -1081,10 +1081,6 @@ the water strained, measured, and not yet fixed.
   envelope did it) leaves the last value to be added every step, and the water
   is no longer conserved. A transform that moves a store into a cell (`take`)
   would make the hand-off exact; the hydrology's gauges are clamped meanwhile.
-- [low] A keyed list an imported fragment extends appends after the basis's rows
-  (`documents-composition.md` merge rules), so a hold that must lead the Moth's
-  list (the swim) is authored in her own document, where a fragment cannot
-  reach it. A `before` position on a keyed row would let a fragment order itself.
 - [low] `world.counters` has no lattice source: the chain's work shows only in
   `world.budget`'s per-region cell visits, and the conserved quantity only in
   `world.fields`' `total`.

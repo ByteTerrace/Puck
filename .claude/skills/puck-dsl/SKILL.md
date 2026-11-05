@@ -30,6 +30,11 @@ A document's `schema:` field selects its vocabulary, never the filename.
 
 ## Grammar that bites
 
+- A keyed row layered over a basis may carry `$before: "target-name"` to lead a
+  surviving row, including from an imported fragment. `WorldDocumentBasis.MergeList`
+  consumes it after drops and appends; missing targets and cyclic positions refuse.
+  Ordinary rows keep their order. This is document composition, not a runtime hold option.
+
 - **One spelling per shape, at every depth.** A literal container is always a
   block with no colon (`host { }`, `cameras [ ]`, `variables [ ]`,
   `arrays [ ]`), inside an object literal too

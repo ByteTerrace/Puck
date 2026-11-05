@@ -27,6 +27,15 @@ Compilation checks the source; vocabulary validation checks whether the
 resulting content is admitted. Native cartridge compilation and shader
 compilation add their own target requirements.
 
+## Positioning composed rows
+
+When extending a basis's keyed list, a row may carry `$before: "target-name"`
+to precede a surviving row. For example, an imported fragment can add
+`swimHold() with { $before: "ground" }` to a kit's holds. The ordinary keyed
+merge consumes the position after merging rows; absent targets and cycles
+refuse. Rows without positions retain their order. See `WorldDocumentBasis`
+for the composition contract.
+
 ## Pinning file assets
 
 Every relative path a world document names resolves beside the document that
