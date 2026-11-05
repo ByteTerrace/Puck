@@ -21,18 +21,17 @@ namespace Puck.World;
 /// over authoring is the ordinary <see cref="WorldCapability.Mutate"/> hold over
 /// <see cref="WorldSection.Properties"/>/<see cref="WorldSection.Interactions"/> the row verb already checks.</remarks>
 internal sealed class WorldInteractionCommandModule(IServerLink link) : ICommandModule {
+    private static readonly CommandForms WorldPropertiesForms = CommandForms.Of(verb: "world.properties", "[bodyIndex]");
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.properties",
-            description: "Reads the property registry back (Immediate): with no argument, the declared vocabulary; with a 0-based body index, which of those registered properties are currently ON for that carrier (a nonzero cell at key=<bodyIndex> in the property's own row): world.properties [bodyIndex].",
+            description: $"Reads the property registry back (Immediate): with no argument, the declared vocabulary; with a 0-based body index, which of those registered properties are currently ON for that carrier (a nonzero cell at key=<bodyIndex> in the property's own row): {WorldPropertiesForms.Spelling}.",
+            forms: WorldPropertiesForms,
             handler: (_, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Usage(
-                        form: "[bodyIndex]",
-                        verb: "world.properties"
-                    );
+                    return WorldPropertiesForms.Refuse();
                 }
 
                 int? bodyIndex = null;

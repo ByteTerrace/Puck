@@ -14,10 +14,13 @@ internal sealed class WorldSdfCommandModule(WorldSdfDocumentEmitter documents, W
     private static readonly System.Text.Json.JsonSerializerOptions RigJson = new() { IncludeFields = true };
     private readonly WorldSdfDocumentEmitter m_documents = documents;
     private readonly WorldRenderProbe m_renderProbe = renderProbe;
+    private static readonly CommandForms WorldSdfDumpForms = CommandForms.Of(verb: "world.sdf.dump", "<path>");
+    private static readonly CommandForms WorldSdfLoadForms = CommandForms.Of(verb: "world.sdf.load", "<path>");
+    private static readonly CommandForms WorldSdfRigForms = CommandForms.Of(verb: "world.sdf.rig", "[registration] [shape]");
 
     private CommandResult DumpHandler(CommandContext context, WireArgs args) {
         if (args.Count != 1) {
-            return CommandResult.Usage(form: "<path>", verb: "world.sdf.dump");
+            return WorldSdfDumpForms.Refuse();
         }
 
         var words = m_renderProbe.Residency?.CopyLiveProgramWords();
@@ -43,7 +46,7 @@ internal sealed class WorldSdfCommandModule(WorldSdfDocumentEmitter documents, W
     }
     private CommandResult LoadHandler(CommandContext context, WireArgs args) {
         if (args.Count != 1) {
-            return CommandResult.Usage(form: "<path>", verb: "world.sdf.load");
+            return WorldSdfLoadForms.Refuse();
         }
 
         var path = args[0].ToString();
@@ -83,24 +86,26 @@ internal sealed class WorldSdfCommandModule(WorldSdfDocumentEmitter documents, W
         }
         if ((args.Count > 2) || !int.TryParse(args[0].ToString(), out var registration) ||
             !creations.TryRegistrationRig(registration: registration, state: out var rig, shapeName: ((args.Count == 2) ? args[1].ToString() : null))) {
-            return CommandResult.Usage(form: "[registration] [shape]", verb: "world.sdf.rig");
+            return WorldSdfRigForms.Refuse();
         }
         return new CommandResult(Output: System.Text.Json.JsonSerializer.Serialize(value: rig, options: RigJson));
     }
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithWireArgs(bindability: CommandBindability.Unbindable, name: "world.sdf.rig", description: "Lists live creation registrations, or reads one placement/body rig including driver phase, weight and continuation: world.sdf.rig [registration] [shape].", handler: RigHandler);
+        yield return CommandDefinition.WithWireArgs(bindability: CommandBindability.Unbindable, name: "world.sdf.rig", description: $"Lists live creation registrations, or reads one placement/body rig including driver phase, weight and continuation: {WorldSdfRigForms.Spelling}.", forms: WorldSdfRigForms, handler: RigHandler);
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.sdf.dump",
-            description: "Writes the live packed GPU program as little-endian uint32 words: world.sdf.dump <path>. Replaces the destination file. Excludes reserved capacity and dynamic transforms. Diagnostic output follows the current SdfProgram layout, not a loadable or durable asset format. Requires an initialized renderer; does not mutate the world.",
+            description: $"Writes the live packed GPU program as little-endian uint32 words: {WorldSdfDumpForms.Spelling}. Replaces the destination file. Excludes reserved capacity and dynamic transforms. Diagnostic output follows the current SdfProgram layout, not a loadable or durable asset format. Requires an initialized renderer; does not mutate the world.",
+            forms: WorldSdfDumpForms,
             handler: DumpHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.sdf.load",
-            description: $"Loads a puck.sdf.v1 geometry document FILE and composes it into the live scene: world.sdf.load <path>. The file is refused outright past {SdfDocumentDecoder.MaxDocumentBytes} byte(s) (checked before it is read). The whole document is then decoded and dry-validated (schema tag, no unknown or omitted members — 'materials'/'ops' must be present, an explicit [] is the way to author/load an empty one — no duplicate keys, every number finite, every op/enum name recognized, every material reference inside the document's own palette, every builder call it replays into a throwaway builder first) before it replaces what is currently composed; an invalid document is refused whole and the previously loaded one (if any) keeps rendering unchanged. Echoes the op/material counts and the FNV-1a hash of the file's raw bytes (identity is over the received bytes, computed before decoding).",
+            description: $"Loads a puck.sdf.v1 geometry document FILE and composes it into the live scene: {WorldSdfLoadForms.Spelling}. The file is refused outright past {SdfDocumentDecoder.MaxDocumentBytes} byte(s) (checked before it is read). The whole document is then decoded and dry-validated (schema tag, no unknown or omitted members — 'materials'/'ops' must be present, an explicit [] is the way to author/load an empty one — no duplicate keys, every number finite, every op/enum name recognized, every material reference inside the document's own palette, every builder call it replays into a throwaway builder first) before it replaces what is currently composed; an invalid document is refused whole and the previously loaded one (if any) keeps rendering unchanged. Echoes the op/material counts and the FNV-1a hash of the file's raw bytes (identity is over the received bytes, computed before decoding).",
+            forms: WorldSdfLoadForms,
             handler: LoadHandler
         );
     }

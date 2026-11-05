@@ -5,9 +5,10 @@ using Puck.World.Server;
 namespace Puck.World;
 
 public sealed partial class WorldStateCommandModule {
+    private static readonly CommandForms WorldStateHashForms = CommandForms.Of(verb: "world.state.hash", "[capture|pose|world|authoritative]");
     private static CommandResult DescribeHash(WorldServer server, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Usage(form: "[capture|pose|world|authoritative]", verb: "world.state.hash");
+            return WorldStateHashForms.Refuse();
         }
         var token = args.Count == 0 ? "capture" : args[0].ToString();
         var scope = token switch {
@@ -18,7 +19,7 @@ public sealed partial class WorldStateCommandModule {
             _ => (WorldStateHashScope?)null,
         };
         if (scope is null) {
-            return CommandResult.Usage(form: "[capture|pose|world|authoritative]", got: token, verb: "world.state.hash");
+            return WorldStateHashForms.Refuse(got: token);
         }
         ulong tick;
         ulong hash;

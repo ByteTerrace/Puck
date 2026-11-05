@@ -23,6 +23,7 @@ namespace Puck.World;
 /// <see cref="PresentPacingControl"/>, read by the frame source each captured frame.
 /// </summary>
 internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPacingControl pacing, WorldServer server, IServerLink link, WorldOverlayFacts facts, PlayerRoster roster) : ICommandModule {
+    private static readonly CommandForms WorldTargetForms = CommandForms.Of(verb: "world.target", "[<hz>|display|vrr]");
     // A ranked camera's listing: every candidate's anchor kind in rank order, then the candidate currently winning
     // for each joined seat (a seat-relative list can win differently per seat).
     private string CameraAnchorCandidates(WorldCamera camera) {
@@ -166,7 +167,8 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.target",
-            description: "Sets the continuous presentation target live: world.target [<hz>|display]. <hz> is any positive finite number, capped by the effective display ceiling. 'display' (or 'vrr') uses verified VRR bounds when advertised and otherwise the active signal timing. Presentation only; present-mode switching remains a boot option.",
+            description: $"Sets the continuous presentation target live: {WorldTargetForms.Spelling}. <hz> is any positive finite number, capped by the effective display ceiling. 'display' (or 'vrr') uses verified VRR bounds when advertised and otherwise the active signal timing. Presentation only; present-mode switching remains a boot option.",
+            forms: WorldTargetForms,
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: $"[world.target: {DescribeTarget(target: pacing.TargetHertz)}]");
@@ -202,7 +204,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     !double.IsFinite(d: hz) ||
                     (hz <= 0.0)
                 ) {
-                    return CommandResult.Usage(form: "[<hz>|display|vrr] (<hz> a positive finite number)", got: args[0].ToString(), verb: "world.target");
+                    return WorldTargetForms.Refuse(got: args[0].ToString());
                 }
 
                 // The echo formats INSIDE the completion — after the lever has applied (or been refused).

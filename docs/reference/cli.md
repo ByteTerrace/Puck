@@ -1092,10 +1092,17 @@ CAPACITY cpu=<percent> freeRAM=<GB> freeDisk=<GB> reuseNodes=<count>
   itself. The classifier uses the running executable or managed entry assembly;
   a `dotnet run` wrapper does not count; its World child counts once it starts.
   Canary `--list` and `--plan`, parity/counters `compare`, and help count no GPU work.
+- Each line also carries `commit=<percent>` where the platform reports a commit
+  limit: the commit charge as a share of that limit. Windows reads the memory
+  status's page-file total and what is left of it; Linux reads `Committed_AS`
+  and `CommitLimit`, and only under strict overcommit (`vm.overcommit_memory` 2),
+  since the kernel enforces no limit otherwise.
 - `PRESSURE` appears when free memory falls under `--pressure-ram` or free
   disk under `--pressure-disk`, and again when those reasons change.
 - Otherwise `CAPACITY` appears when the CPU mean falls under `--capacity-cpu`
-  with free memory over `--capacity-ram`, and `LOADED` when that ends without
+  with free memory over `--capacity-ram` and the commit charge under
+  `--capacity-commit` percent of the commit limit (default 75: allocation fails
+  at the limit while physical memory is still free), and `LOADED` when that ends without
   pressure. Both wait for a full CPU window. `PRESSURE` wins over `CAPACITY`
   within one reading.
 - Each line marks a transition: while a state holds, `--watch` prints nothing
@@ -1110,8 +1117,11 @@ Free disk below 10GB is pressure on every machine, because a build writes the
 same outputs whatever the machine's size. A hypothetical machine with 16GB and
 six logical processors therefore has capacity with CPU below 50% and more than
 5GB free, and is under pressure below 2GB. Options override these
-defaults, and `puck gate` and `puck affected` admit their heavy steps by the
-same machine thresholds. A machine that cannot report its installed memory is
+defaults, and `puck gate` and `puck affected` admit their heavy steps, `puck lease heavy`
+and `puck lease gpu` their commands, and the MCP server's `puck_world_start` its World
+(a windowed World as a device step, a headless one as an ordinary step) by the
+same machine thresholds, through one admission (`HostAdmission`), waiting after the
+lease is held. A machine that cannot report its installed memory is
 judged as a 16GB one. The [orchestration skill](../../.claude/skills/orchestration/SKILL.md)
 documents what an agent does on each line. `reuseNodes` counts MSBuild nodes a build or restore left running because
 it ran without `-nodeReuse:false`.
@@ -4452,6 +4462,18 @@ in `gate` and `affected`, a multi-world `puck test`, the World build store's
 windowed World the MCP server starts all pass the ancestor recognizer
 (`ProcessInspection.IsAncestor`), so a command run under `puck lease <name>`
 that takes the same lease waits on a sibling, never on itself.
+
+`puck lease heavy` and `puck lease gpu` also pass the host admission once they hold their lease
+and before the command runs, the one `gate`, `affected` and the MCP server's World start wait on
+([`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s thresholds): free memory
+over the capacity threshold, a commit charge under its share of the commit limit, free disk
+over the pressure threshold, and, for `gpu`, an idle GPU (for `heavy`, no other process running a
+heavy test suite). The wait is bounded by what `--wait` has left, so `--wait 0` refuses at once
+(exit 2, lease released) when the machine has no headroom; wait lines go to standard error
+(`gate: waiting for host capacity before lease heavy <holder> (at most N minutes): no memory
+headroom: commit 82% of limit (admission needs under 75%).`) and a heartbeat repeats them
+while it lasts. `lease build` and `lease quiet` take no admission of their own: a World build
+holds its own limits, and a quiet window settles on the same readings.
 
 ### `puck lease list`—who holds what and who waits
 

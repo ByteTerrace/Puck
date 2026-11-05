@@ -15,6 +15,21 @@ namespace Puck.World;
 /// presentation controls operate on accepted instances and never compile on the command thread.</summary>
 internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes,
     WorldViewGraphHost? pipelines = null, WorldRenderProbe? renderProbe = null) : ICommandModule {
+    private static readonly CommandForms PipelineLoadForms = CommandForms.Of(verb: "pipeline.load", "<name> <source>");
+    private static readonly CommandForms PipelineReloadForms = CommandForms.Of(verb: "pipeline.reload", "[name]");
+    private static readonly CommandForms PipelineWatchForms = CommandForms.Of(verb: "pipeline.watch", "<name> [on|off]");
+    private static readonly CommandForms PipelineTimeForms = CommandForms.Of(verb: "pipeline.time", "<name> [pause|resume|set <seconds>|scale <rate>]");
+    private static readonly CommandForms PipelineStepForms = CommandForms.Of(verb: "pipeline.step", "<name>");
+    private static readonly CommandForms PipelineResetForms = CommandForms.Of(verb: "pipeline.reset", "<name>");
+    private static readonly CommandForms PipelineSentinelsForms = CommandForms.Of(verb: "pipeline.sentinels", "<name> on|off");
+    private static readonly CommandForms PipelineOutputForms = CommandForms.Of(verb: "pipeline.output", "<name> <output>");
+    private static readonly CommandForms PipelineSetForms = CommandForms.Of(verb: "pipeline.set", "<name> <pass> <json>");
+    private static readonly CommandForms PipelineCommitForms = CommandForms.Of(verb: "pipeline.commit", "<name>");
+    private static readonly CommandForms PipelineOverridesForms = CommandForms.Of(verb: "pipeline.overrides", "<name>");
+    private static readonly CommandForms PipelineCaptureForms = CommandForms.Of(verb: "pipeline.capture", "<name> <path>");
+    private static readonly CommandForms PipelineWaitForms = CommandForms.Of(verb: "pipeline.wait", "<name> compiled|installed|captured [seconds]", "<name> submitted|counted <frames> [seconds]", "<name> resized <width> <height> [seconds]");
+    private static readonly CommandForms PipelineInspectForms = CommandForms.Of(verb: "pipeline.inspect", "<name>");
+    private static readonly CommandForms PipelineBudgetForms = CommandForms.Of(verb: "pipeline.budget", "<name> [<bytes>|device]");
     // Long enough for a cold cross-backend compile of a small pipeline; a script names a longer bound explicitly.
     private const int DefaultWaitSeconds = 30;
 
@@ -58,6 +73,15 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         CommandDefinition.WithWireArgs(
             name: name,
             description: description,
+            handler: handler,
+            bindability: CommandBindability.Unbindable,
+            routing: CommandRouting.Immediate
+        );
+    private static CommandDefinition Immediate(CommandForms forms, string description, Func<CommandContext, WireArgs, CommandResult> handler) =>
+        CommandDefinition.WithWireArgs(
+            name: forms.Verb,
+            description: description,
+            forms: forms,
             handler: handler,
             bindability: CommandBindability.Unbindable,
             routing: CommandRouting.Immediate
@@ -121,15 +145,13 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             name: "pipeline.load",
-            description: "pipeline.load <name> <source> — author a views.graphs row naming a graph document, a one-off shader source, or a shader package directory, relative to the world document. Accepted rows compile in the background; pipeline.status reports the result.",
+            description: $"{PipelineLoadForms.Spelling} — author a views.graphs row naming a graph document, a one-off shader source, or a shader package directory, relative to the world document. Accepted rows compile in the background; pipeline.status reports the result.",
+            forms: PipelineLoadForms,
             bindability: CommandBindability.Unbindable,
             routing: CommandRouting.Simulation,
             handler: (context, args) => {
                 if (args.Count != 2) {
-                    return CommandResult.Usage(
-                    form: "<name> <source>",
-                    verb: "pipeline.load"
-                );
+                    return PipelineLoadForms.Refuse();
                 }
                 return link.Submit(
                     mutation: new WorldMutation.UpsertViewGraph(
@@ -145,14 +167,11 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Immediate(
-            "pipeline.reload",
-            "pipeline.reload [name] — compile a complete candidate in the background; keep the last good pipeline on errors.",
+            forms: PipelineReloadForms,
+            description: $"{PipelineReloadForms.Spelling} — compile a complete candidate in the background; keep the last good pipeline on errors.",
             (_, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Usage(
-                    form: "[name]",
-                    verb: "pipeline.reload"
-                );
+                    return PipelineReloadForms.Refuse();
                 }
                 if (pipelines is null) { return CommandResult.Error(output: "[pipeline.reload: requires a rendered host]"); }
                 pipelines.Reconcile(
@@ -184,14 +203,11 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Immediate(
-            "pipeline.watch",
-            "pipeline.watch <name> [on|off] — watch the graph document, shaders and includes; compile changes after a quiet period.",
+            forms: PipelineWatchForms,
+            description: $"{PipelineWatchForms.Spelling} — watch the graph document, shaders and includes; compile changes after a quiet period.",
             (_, args) => {
                 if (args.Count is < 1 or > 2) {
-                    return CommandResult.Usage(
-                    form: "<name> [on|off]",
-                    verb: "pipeline.watch"
-                );
+                    return PipelineWatchForms.Refuse();
                 }
                 var name = args[0].ToString();
 
@@ -214,10 +230,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                         index: 1,
                         value: "off"
                     )) { entry.Unwatch(); } else {
-                        return CommandResult.Usage(
-                        form: "<name> [on|off]",
-                        verb: "pipeline.watch"
-                    );
+                        return PipelineWatchForms.Refuse();
                     }
                 }
                 return new CommandResult($"[pipeline.watch: {name} {((entry.WatchPath is null)
@@ -226,14 +239,11 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Immediate(
-            "pipeline.time",
-            "pipeline.time <name> [pause|resume|set <seconds>|scale <rate>] — control the presentation clock and feedback advancement.",
+            forms: PipelineTimeForms,
+            description: $"{PipelineTimeForms.Spelling} — control the presentation clock and feedback advancement.",
             (_, args) => {
                 if (args.Count is < 1 or > 3) {
-                    return CommandResult.Usage(
-                    form: "<name> [pause|resume|set <seconds>|scale <rate>]",
-                    verb: "pipeline.time"
-                );
+                    return PipelineTimeForms.Refuse(args: in args);
                 }
                 var name = args[0].ToString();
 
@@ -271,29 +281,20 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                         index: 1,
                         value: "scale"
                     )) { entry.ClockScale = value; } else {
-                        return CommandResult.Usage(
-                        form: "<name> set <seconds>|scale <rate>",
-                        verb: "pipeline.time"
-                    );
+                        return PipelineTimeForms.Refuse(args: in args);
                     }
                 } else if (args.Count != 1) {
-                    return CommandResult.Usage(
-                    form: "<name> [pause|resume|set <seconds>|scale <rate>]",
-                    verb: "pipeline.time"
-                );
+                    return PipelineTimeForms.Refuse(args: in args);
                 }
                 return new CommandResult($"[pipeline.time: {name} {Clock(entry: entry)}]");
             }
         );
         yield return Immediate(
-            "pipeline.step",
-            "pipeline.step <name> — pause and advance exactly one pipeline frame by 1/60 second.",
+            forms: PipelineStepForms,
+            description: $"{PipelineStepForms.Spelling} — pause and advance exactly one pipeline frame by 1/60 second.",
             (_, args) => {
                 if (args.Count != 1) {
-                    return CommandResult.Usage(
-                    form: "<name>",
-                    verb: "pipeline.step"
-                );
+                    return PipelineStepForms.Refuse();
                 }
                 var name = args[0].ToString();
 
@@ -308,14 +309,11 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Immediate(
-            "pipeline.reset",
-            "pipeline.reset <name> — reset time and feedback resources to their declared initial values.",
+            forms: PipelineResetForms,
+            description: $"{PipelineResetForms.Spelling} — reset time and feedback resources to their declared initial values.",
             (_, args) => {
                 if (args.Count != 1) {
-                    return CommandResult.Usage(
-                    form: "<name>",
-                    verb: "pipeline.reset"
-                );
+                    return PipelineResetForms.Refuse();
                 }
                 var name = args[0].ToString();
 
@@ -330,8 +328,8 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Immediate(
-            "pipeline.sentinels",
-            "pipeline.sentinels <name> on|off — write each frame-block word's echo sentinel in place of the frame values and config, so an echo pass shows whether every member reads back exactly.",
+            forms: PipelineSentinelsForms,
+            description: $"{PipelineSentinelsForms.Spelling} — write each frame-block word's echo sentinel in place of the frame values and config, so an echo pass shows whether every member reads back exactly.",
             (_, args) => {
                 if (
                     (args.Count != 2) ||
@@ -343,10 +341,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                         value: "off"
                     ))
                 ) {
-                    return CommandResult.Usage(
-                    form: "<name> on|off",
-                    verb: "pipeline.sentinels"
-                );
+                    return PipelineSentinelsForms.Refuse();
                 }
                 var name = args[0].ToString();
 
@@ -364,14 +359,11 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Immediate(
-            "pipeline.output",
-            "pipeline.output <name> <output> — preview a named image version as the instance's output; pipeline.commit makes it authored.",
+            forms: PipelineOutputForms,
+            description: $"{PipelineOutputForms.Spelling} — preview a named image version as the instance's output; pipeline.commit makes it authored.",
             (_, args) => {
                 if (args.Count != 2) {
-                    return CommandResult.Usage(
-                    form: "<name> <output>",
-                    verb: "pipeline.output"
-                );
+                    return PipelineOutputForms.Refuse();
                 }
                 var name = args[0].ToString();
 
@@ -391,14 +383,11 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Immediate(
-            "pipeline.set",
-            "pipeline.set <name> <pass> <json> — preview parameter overrides for a pass: each field replaces the pass's current value, null returns a field to the source's default, and the result binds through the pass's config schema. pipeline.commit makes the preview authored; pipeline.overrides shows it beside the committed values.",
+            forms: PipelineSetForms,
+            description: $"{PipelineSetForms.Spelling} — preview parameter overrides for a pass: each field replaces the pass's current value, null returns a field to the source's default, and the result binds through the pass's config schema. pipeline.commit makes the preview authored; pipeline.overrides shows it beside the committed values.",
             (context, args) => {
                 if (args.Count < 3) {
-                    return CommandResult.Usage(
-                    form: "<name> <pass> <json>",
-                    verb: "pipeline.set"
-                );
+                    return PipelineSetForms.Refuse();
                 }
                 var name = args[0].ToString();
 
@@ -432,15 +421,13 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         );
         yield return CommandDefinition.WithWireArgs(
             name: "pipeline.commit",
-            description: "pipeline.commit <name> — commit the instance's previewed overrides, time scale and output into its views.graphs row. The commit names the row revision and the installed source it was previewed against, and is refused by name when either has moved; world.save then writes it.",
+            description: $"{PipelineCommitForms.Spelling} — commit the instance's previewed overrides, time scale and output into its views.graphs row. The commit names the row revision and the installed source it was previewed against, and is refused by name when either has moved; world.save then writes it.",
+            forms: PipelineCommitForms,
             bindability: CommandBindability.Unbindable,
             routing: CommandRouting.Simulation,
             handler: (context, args) => {
                 if (args.Count != 1) {
-                    return CommandResult.Usage(
-                    form: "<name>",
-                    verb: "pipeline.commit"
-                );
+                    return PipelineCommitForms.Refuse();
                 }
                 if (pipelines is null) { return CommandResult.Error(output: "[pipeline.commit: requires a rendered host]"); }
                 var name = args[0].ToString();
@@ -466,14 +453,11 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Immediate(
-            "pipeline.overrides",
-            "pipeline.overrides <name> — show the instance's committed overrides, time scale and output beside its uncommitted preview, each bound parameter with the value its pass holds, the row revision the preview is based on, and the source identity of the installed graph.",
+            forms: PipelineOverridesForms,
+            description: $"{PipelineOverridesForms.Spelling} — show the instance's committed overrides, time scale and output beside its uncommitted preview, each bound parameter with the value its pass holds, the row revision the preview is based on, and the source identity of the installed graph.",
             (_, args) => {
                 if (args.Count != 1) {
-                    return CommandResult.Usage(
-                    form: "<name>",
-                    verb: "pipeline.overrides"
-                );
+                    return PipelineOverridesForms.Refuse();
                 }
                 var name = args[0].ToString();
 
@@ -493,14 +477,11 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Immediate(
-            "pipeline.capture",
-            "pipeline.capture <name> <path> — capture the selected output on the next produced frame, including a paused frame.",
+            forms: PipelineCaptureForms,
+            description: $"{PipelineCaptureForms.Spelling} — capture the selected output on the next produced frame, including a paused frame.",
             (_, args) => {
                 if (args.Count != 2) {
-                    return CommandResult.Usage(
-                    form: "<name> <path>",
-                    verb: "pipeline.capture"
-                );
+                    return PipelineCaptureForms.Refuse();
                 }
                 var name = args[0].ToString();
 
@@ -526,16 +507,11 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Immediate(
-            "pipeline.wait",
-            $"pipeline.wait <name> compiled|installed|captured [seconds] | pipeline.wait <name> submitted|counted <frames> [seconds] | pipeline.wait <name> resized <width> <height> [seconds] — hold only this session until the instance's latest compilation completes, its compiled candidate is installed, it has submitted that many frames since its last reset (or since boot, never reset), the work counts of that many submissions since its last reset (or boot) have completed and pipeline.inspect shows them, its latest capture is written, or the host has requested that output extent and the instance has installed its graph at that extent. A reload, a row edit or a resize is not a step: a paused instance (pipeline.time pause, or time scale zero) builds and installs it too, reaching installed and resized, and keeps showing its last image until a step, resume or reset renders the new graph. The wait lasts at most seconds (default {DefaultWaitSeconds}, 1..{WorldViewGraphHost.MaxWaitSeconds}) of presentation time. Exactly one '[pipeline: <name> wait <phase> …]' outcome follows on stderr: reached, failed, unsupported (a shader tool is absent), or timed out.",
+            forms: PipelineWaitForms,
+            description: $"{PipelineWaitForms.Spelling} — hold only this session until the instance's latest compilation completes, its compiled candidate is installed, it has submitted that many frames since its last reset (or since boot, never reset), the work counts of that many submissions since its last reset (or boot) have completed and pipeline.inspect shows them, its latest capture is written, or the host has requested that output extent and the instance has installed its graph at that extent. A reload, a row edit or a resize is not a step: a paused instance (pipeline.time pause, or time scale zero) builds and installs it too, reaching installed and resized, and keeps showing its last image until a step, resume or reset renders the new graph. The wait lasts at most seconds (default {DefaultWaitSeconds}, 1..{WorldViewGraphHost.MaxWaitSeconds}) of presentation time. Exactly one '[pipeline: <name> wait <phase> …]' outcome follows on stderr: reached, failed, unsupported (a shader tool is absent), or timed out.",
             (context, args) => {
-                const string Form = "<name> compiled|installed|captured [seconds] | <name> submitted|counted <frames> [seconds] | <name> resized <width> <height> [seconds]";
-
                 if (args.Count is < 2 or > 5) {
-                    return CommandResult.Usage(
-                    form: Form,
-                    verb: "pipeline.wait"
-                );
+                    return PipelineWaitForms.Refuse(args: in args);
                 }
                 if (pipelines is null) { return CommandResult.Error(output: "[pipeline.wait: requires a rendered host]"); }
                 var name = args[0].ToString();
@@ -609,10 +585,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                     extent = (((uint)width), ((uint)height));
                     next = 4;
                 } else {
-                    return CommandResult.Usage(
-                        form: Form,
-                        verb: "pipeline.wait"
-                    );
+                    return PipelineWaitForms.Refuse(args: in args);
                 }
                 var seconds = DefaultWaitSeconds;
 
@@ -649,14 +622,11 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Immediate(
-            "pipeline.inspect",
-            "pipeline.inspect <name> — show the bytes the instance owns beside the active graph's steady-state bytes, the peak a reload of it would reach and the budget, then its ordered passes, typed resources and named outputs, the GPU work each pass recorded in the newest completed submission, the device's memory profile, and the residency policy the selector chooses for the instance's parameter region.",
+            forms: PipelineInspectForms,
+            description: $"{PipelineInspectForms.Spelling} — show the bytes the instance owns beside the active graph's steady-state bytes, the peak a reload of it would reach and the budget, then its ordered passes, typed resources and named outputs, the GPU work each pass recorded in the newest completed submission, the device's memory profile, and the residency policy the selector chooses for the instance's parameter region.",
             (_, args) => {
                 if (args.Count != 1) {
-                    return CommandResult.Usage(
-                    form: "<name>",
-                    verb: "pipeline.inspect"
-                );
+                    return PipelineInspectForms.Refuse();
                 }
                 var name = args[0].ToString();
 
@@ -687,14 +657,11 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Immediate(
-            "pipeline.budget",
-            $"pipeline.budget <name> [<bytes>|device] — show the instance's memory budget in bytes: the device's (1/{ShaderPipelineMemoryBudget.DeviceLocalShare} of its device-local memory, or {ShaderPipelineMemoryBudget.UnreportedBytes} when it reports none), a cap that only lowers it, and the installed graph's owned, steady-state and reload-peak bytes. A byte count sets the cap; device clears it. A replacement whose peak does not fit is refused by name before it allocates, and the installed graph keeps running; lowering the cap never frees it.",
+            forms: PipelineBudgetForms,
+            description: $"{PipelineBudgetForms.Spelling} — show the instance's memory budget in bytes: the device's (1/{ShaderPipelineMemoryBudget.DeviceLocalShare} of its device-local memory, or {ShaderPipelineMemoryBudget.UnreportedBytes} when it reports none), a cap that only lowers it, and the installed graph's owned, steady-state and reload-peak bytes. A byte count sets the cap; device clears it. A replacement whose peak does not fit is refused by name before it allocates, and the installed graph keeps running; lowering the cap never frees it.",
             (_, args) => {
                 if (args.Count is < 1 or > 2) {
-                    return CommandResult.Usage(
-                    form: "<name> [<bytes>|device]",
-                    verb: "pipeline.budget"
-                );
+                    return PipelineBudgetForms.Refuse();
                 }
                 var name = args[0].ToString();
 
@@ -719,10 +686,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                     ) {
                         entry.Node.BudgetCapBytes = cap;
                     } else {
-                        return CommandResult.Usage(
-                        form: "<name> [<bytes>|device]",
-                        verb: "pipeline.budget"
-                    );
+                        return PipelineBudgetForms.Refuse();
                     }
                 }
                 var node = entry.Node;
@@ -738,11 +702,8 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             "pipeline.status",
             "pipeline.status — show authored sources and quality tiers, pending compilation, last results, watches, clocks and each instance's work counters.",
             (_, args) => {
-                if (args.Count != 0) {
-                    return CommandResult.Usage(
-                    form: string.Empty,
-                    verb: "pipeline.status"
-                );
+                if (CommandResult.RequireNoArguments(args: in args, verb: "pipeline.status") is { } refusal) {
+                    return refusal;
                 }
                 var rows = (server.Definition.Views.Graphs ?? []);
                 var result = new StringBuilder(value: $"[pipeline.status: {rows.Count} row(s)");

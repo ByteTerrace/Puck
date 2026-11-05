@@ -4,6 +4,7 @@ namespace Puck.World;
 
 public sealed partial class WorldReplayCommandModule {
     private const string ScopeForm = "[<name> [capture|drive|cancel|reset]]";
+    private static readonly CommandForms ReplayScopeForms = CommandForms.Of(verb: "replay.scope", ScopeForm);
 
     private CommandResult Scope(WireArgs args, Principal principal) {
         if (args.Count == 0) { return new CommandResult(Output: string.Join(separator: '\n', values: m_tape.Scopes.Select(selector: scope => scope.Describe()))); }
@@ -12,10 +13,10 @@ public sealed partial class WorldReplayCommandModule {
 
         if (scope is null) { return CommandResult.Error(output: $"[replay.scope: no scope '{name}']"); }
         if (args.Count == 1) { return new CommandResult(Output: scope.Describe()); }
-        if (args.Count != 2) { return CommandResult.Usage(form: ScopeForm, verb: "replay.scope"); }
+        if (args.Count != 2) { return ReplayScopeForms.Refuse(); }
         var request = args[1].ToString() switch { "capture" => 4, "drive" => 1, "cancel" => 2, "reset" => 3, _ => 0 };
 
-        if (request == 0) { return CommandResult.Usage(form: ScopeForm, verb: "replay.scope"); }
+        if (request == 0) { return ReplayScopeForms.Refuse(); }
         m_tape.RequestScope(principal: principal, request: request, scope: scope);
         return new CommandResult(Output: $"[replay.scope: {name} requested {args[1]}]");
     }

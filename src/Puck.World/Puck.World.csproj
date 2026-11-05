@@ -23,9 +23,9 @@
     <ItemGroup Condition="'$(PuckRecordMethods)' == 'true'">
         <AssemblyMetadata Include="PuckRecordMethods" Value="true" />
     </ItemGroup>
-    <!-- A debug World keeps about 3 GB of large-object arrays live (baked meshes, the irradiance scene's hierarchy) and
-         frees large arrays in bursts; without it the GC holds freed regions committed and leaves the large object heap
-         uncompacted, about 2 GB of commit and private bytes on a windowed debug World. Measured with host.memory. -->
+    <!-- Presentation builds and replaces large managed workspaces (irradiance hierarchies, probe caches and decoded
+         mesh arrays). ConserveMemory reduces retention of freed LOH regions after these bursts. Published mesh
+         payloads use the host allocator; host.memory reports those separately from managed commitment. -->
     <ItemGroup>
         <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
     </ItemGroup>

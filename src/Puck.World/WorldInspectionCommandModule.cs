@@ -6,11 +6,13 @@ namespace Puck.World;
 
 /// <summary>The editor's presentation-only inspector and observational timestamp toggles.</summary>
 internal sealed partial class WorldInspectionCommandModule(WorldEditorSeats seats, WorldGpuTiming timing, WorldRenderProbe? probe = null, WorldInspector? inspector = null, WorldCursorFeed? cursor = null, IGpuWorkRegistry? gpu = null) : ICommandModule {
+    private static readonly CommandForms WorldInspectForms = CommandForms.Of(verb: "world.inspect", "on|off|toggle");
+    private static readonly CommandForms WorldGpuTimingForms = CommandForms.Of(verb: "world.gpu-timing", "on|off|timeline");
     private CommandResult Inspect(CommandContext context, WireArgs args) {
         if (inspector is null) { return CommandResult.Error(output: "[world.inspect: requires GPU presentation]"); }
         if (args.Count != 0) {
             if ((args.Count != 1) || (!args.Is(index: 0, value: "on") && !args.Is(index: 0, value: "off") && !args.Is(index: 0, value: "toggle"))) {
-                return CommandResult.Usage(form: "[on|off|toggle]", verb: "world.inspect");
+                return WorldInspectForms.Refuse();
             }
             seats.SetInspector(slot: context.Slot, enabled: (args.Is(index: 0, value: "toggle")
                 ? !seats.InspectorEnabled(slot: context.Slot)
@@ -24,7 +26,7 @@ internal sealed partial class WorldInspectionCommandModule(WorldEditorSeats seat
         if (args.Count != 0) {
             if ((args.Count == 1) && args.Is(index: 0, value: "timeline")) { return new CommandResult(Output: timing.DescribeTimeline()); }
             if ((args.Count != 1) || (!args.Is(index: 0, value: "on") && !args.Is(index: 0, value: "off"))) {
-                return CommandResult.Usage(form: "[on|off|timeline]", verb: "world.gpu-timing");
+                return WorldGpuTimingForms.Refuse();
             }
             timing.Set(enabled: args.Is(index: 0, value: "on"));
         }
@@ -32,13 +34,13 @@ internal sealed partial class WorldInspectionCommandModule(WorldEditorSeats seat
     }
 
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithWireArgs(name: "world.cost", description: "Reads live placement cost: world.cost [<placement>]; world.cost top [<n>]. Prints exclusive words and separate shared program overhead. world.cost sky reads the sky, composite and environment passes and their layer rows from each node's latest completed submission.",
+        yield return CommandDefinition.WithWireArgs(name: "world.cost", description: $"Reads live placement cost: {WorldCostForms.Spelling}. Prints exclusive words and separate shared program overhead. world.cost sky reads the sky, composite and environment passes and their layer rows from each node's latest completed submission.", forms: WorldCostForms,
             handler: Cost, routing: CommandRouting.Immediate, bindability: CommandBindability.Bindable);
-        yield return CommandDefinition.WithWireArgs(name: "world.inspect", description: "Shows the acting seat's pointer, camera, counts and reload diagnostics: world.inspect on|off|toggle; bare prints the same text as its panel.",
+        yield return CommandDefinition.WithWireArgs(name: "world.inspect", description: $"Shows the acting seat's pointer, camera, counts and reload diagnostics: {WorldInspectForms.Spelling}; bare prints the same text as its panel.", forms: WorldInspectForms,
             handler: Inspect, routing: CommandRouting.Immediate, bindability: CommandBindability.Bindable);
         yield return CommandDefinition.WithWireArgs(name: "world.explain", description: "Requests the acting seat or pane's pointer pixel once through its shared GPU picker and, after its fence, reports the pixel's material. A missing pixel names its refusal; no simulation state changes.",
             handler: Explain, routing: CommandRouting.Immediate, bindability: CommandBindability.Unbindable);
-        yield return CommandDefinition.WithWireArgs(name: "world.gpu-timing", description: "Enables observational per-pass timestamps: world.gpu-timing on|off; bare prints completed window means in milliseconds; timeline prints each node's latest timed submission as a span on the queue's clock, ordered, with the idle gap before it. Off by default, and recording while dynamic resolution reads the world views' GPU frame time from them; off then stops only the readout. Timings never judge correctness.",
+        yield return CommandDefinition.WithWireArgs(name: "world.gpu-timing", description: $"Enables observational per-pass timestamps: {WorldGpuTimingForms.Spelling}; bare prints completed window means in milliseconds; timeline prints each node's latest timed submission as a span on the queue's clock, ordered, with the idle gap before it. Off by default, and recording while dynamic resolution reads the world views' GPU frame time from them; off then stops only the readout. Timings never judge correctness.", forms: WorldGpuTimingForms,
             handler: Timing, routing: CommandRouting.Immediate, bindability: CommandBindability.Bindable);
     }
 }

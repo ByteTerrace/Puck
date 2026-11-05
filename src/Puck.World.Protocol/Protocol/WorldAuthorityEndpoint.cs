@@ -194,16 +194,25 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     }
     /// <summary>Reads one entity's authoritative heading (<see cref="EntitySnapshot.Heading"/>) in this authority's
     /// coordinate frame — what a heading-framed movement composition rotates against.</summary>
-    public bool TryEntityHeading(int index, out float heading) {
+    public bool TryEntityHeading(int index, out float heading) => TryEntityHeading(heading: out heading, index: index, poseEpoch: out _);
+    /// <summary>Reads one entity's authoritative heading and its pose-discontinuity counter, which moves when the entity
+    /// is activated, teleported or snapped by a correction (<see cref="EntityContinuityKind"/>).</summary>
+    /// <param name="index">The entity's 0-based index.</param>
+    /// <param name="heading">The heading in radians about world up, or zero when the entity is not active.</param>
+    /// <param name="poseEpoch">The counter, or zero when the entity is not active.</param>
+    /// <returns>Whether the entity is active in this authority.</returns>
+    public bool TryEntityHeading(int index, out float heading, out int poseEpoch) {
         if (
             (((uint)index) < WorldBodiesLimits.CapacityCeiling) &&
             m_mirror.IsActive(index: index)
         ) {
             heading = m_mirror.Heading(index: index);
+            poseEpoch = m_mirror.PoseEpoch(index: index);
             return true;
         }
 
         heading = 0f;
+        poseEpoch = 0;
         return false;
     }
     /// <summary>Reads one entity directly in this authority's coordinate frame. Movement composition uses this

@@ -9,7 +9,7 @@ internal sealed partial class WorldInspectionCommandModule {
     public Action<CommandResult>? Report { get; set; }
 
     private CommandResult Explain(CommandContext context, WireArgs args) {
-        if (args.Count != 0) { return CommandResult.Usage(form: "", verb: "world.explain"); }
+        if (CommandResult.RequireNoArguments(args: in args, verb: "world.explain") is { } refusal) { return refusal; }
         if ((cursor is null) || (gpu is null)) { return CommandResult.Error(output: "[world.explain: requires GPU presentation]"); }
         var result = cursor.Explain(context.Slot, DescribeExplanation);
 

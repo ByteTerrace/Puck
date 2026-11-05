@@ -242,10 +242,9 @@ public sealed partial class WorldCreationInstances {
                     start: rootSlot
                 ).CopyTo(destination: previous);
 
-                // A body's pose holds between its rated packs, except on the frame its slots change owner or the whole
-                // table is owed (WorldCreationInstances.Rates).
+                // A pose holds between its rated packs, except on the frame its slots change owner or the whole table is
+                // owed (WorldCreationInstances.Rates, whose one decision gives a placed creation only the held tier).
                 var mayHold = (
-                    (live.BodyIndex is not null) &&
                     packedBefore &&
                     !moved.Everything &&
                     !m_owners.Reseats(owner: index) &&
@@ -269,7 +268,7 @@ public sealed partial class WorldCreationInstances {
                     );
                     live.RateSeconds += deltaSeconds;
                     live.RateOwed = true;
-                    m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesHeld);
+                    if (live.BodyIndex is not null) { m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesHeld); }
                     WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.RateHeld);
                     WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsRetained);
                 } else {
@@ -298,10 +297,10 @@ public sealed partial class WorldCreationInstances {
                         shapeCount: shapeCount,
                         transforms: transforms
                     );
+                    RecordPose(deltaSeconds: deltaSeconds, live: live);
+                    WidenMotionReach(live: live, placementScale: placementScale, rootPosition: transforms[rootSlot].Position, shapeCount: shapeCount, transforms: transforms, rootSlot: rootSlot);
                     if (live.BodyIndex is not null) {
                         m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesPosed);
-                        RecordPose(deltaSeconds: deltaSeconds, live: live);
-                        WidenMotionReach(live: live, placementScale: placementScale, rootPosition: transforms[rootSlot].Position, shapeCount: shapeCount, transforms: transforms, rootSlot: rootSlot);
                         posed = true;
                     }
                     live.RateSeconds = 0f;

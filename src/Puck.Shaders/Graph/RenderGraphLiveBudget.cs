@@ -70,8 +70,8 @@ public sealed class RenderGraphLiveBudget {
             .Append(value: " draws");
     }
 
-    /// <summary>Appends the runtime's live budget: one summary of its latest frame, then one row per instance in
-    /// schedule order, each introduced by <c>; </c>.</summary>
+    /// <summary>Appends the runtime's live budget: one summary line of its latest frame, then one line per instance in
+    /// schedule order, so a line filter can pick one instance out of a many-instance frame.</summary>
     /// <param name="runtime">The runtime whose latest schedule is read.</param>
     /// <param name="into">The builder the text is appended to.</param>
     /// <exception cref="ArgumentNullException"><paramref name="runtime"/> or <paramref name="into"/> is
@@ -102,7 +102,7 @@ public sealed class RenderGraphLiveBudget {
         for (var index = 0; (index < rows.Count); index++) {
             var row = rows[index];
 
-            _ = into.Append(value: "; ")
+            _ = into.Append(value: Environment.NewLine)
                 .Append(value: row.Instance)
                 .Append(value: ' ')
                 .Append(value: StatusOf(status: row.Status))

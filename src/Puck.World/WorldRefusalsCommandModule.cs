@@ -10,15 +10,17 @@ namespace Puck.World;
 /// compiled-in data, not live server state, so this module needs nothing <see cref="Program"/>'s composition root
 /// would have to wire.</summary>
 internal sealed class WorldRefusalsCommandModule : ICommandModule {
+    private static readonly CommandForms WorldRefusalsForms = CommandForms.Of(verb: "world.refusals", "[door]");
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.refusals",
-            description: "Echoes the engine's declared refusal catalog (Immediate; reads compiled-in data, never simulation state — zero per-tick cost, and the doors themselves pay nothing for it): world.refusals [door]. Each row reads `<door>/<id> [protocol-fault|verdict] <condition>`, the bracket adding `, unsupported` for a refusal classified as an intentionally unsupported operation (acceptance law 6 enumerates those) — door is the refusing surface's stable name, id is the enum member a door's refusal path is required to name (never free text), kind separates 'the input is not even legible' (protocol-fault) from 'the input is legible and a rule refused what it means' (verdict), and condition is the one-line trigger. Sourced by reflecting over every RefusalAttribute-tagged enum member in this build (RefusalCatalog) — never a hand-kept second list, so an unlisted reason cannot be constructed at a covered door, and every listed reason is exactly what that door's own throw sites can select from (see RefusalAttribute's remarks for what this does and does not guarantee). With a door token, lists only that door's rows; an unknown door is refused by name.",
+            description: $"Echoes the engine's declared refusal catalog (Immediate; reads compiled-in data, never simulation state — zero per-tick cost, and the doors themselves pay nothing for it): {WorldRefusalsForms.Spelling}. Each row reads `<door>/<id> [protocol-fault|verdict] <condition>`, the bracket adding `, unsupported` for a refusal classified as an intentionally unsupported operation (acceptance law 6 enumerates those) — door is the refusing surface's stable name, id is the enum member a door's refusal path is required to name (never free text), kind separates 'the input is not even legible' (protocol-fault) from 'the input is legible and a rule refused what it means' (verdict), and condition is the one-line trigger. Sourced by reflecting over every RefusalAttribute-tagged enum member in this build (RefusalCatalog) — never a hand-kept second list, so an unlisted reason cannot be constructed at a covered door, and every listed reason is exactly what that door's own throw sites can select from (see RefusalAttribute's remarks for what this does and does not guarantee). With a door token, lists only that door's rows; an unknown door is refused by name.",
+            forms: WorldRefusalsForms,
             handler: (context, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Usage(form: "[door]", got: args[1].ToString(), verb: "world.refusals");
+                    return WorldRefusalsForms.Refuse(got: args[1].ToString());
                 }
 
                 var filter = ((args.Count == 1)

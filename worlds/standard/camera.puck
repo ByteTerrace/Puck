@@ -58,6 +58,12 @@ template cameraFeel() {
   cameraResponse()
 
   views {
+    // The ease into or out of the seat ladder no authored layout selects; an authored layout brings its own envelope.
+    builtinTransition {
+      renderScale: 0.5
+      seconds: 0.6
+    }
+
     seatControl {
       boom: cameraBoom
     }
@@ -125,10 +131,14 @@ template chaseCamera(rig, pivotOffset = [0, 1, 0], fadeCloseTarget = [0, 1.74, 0
       name: rig
       version: "puck.camera.program.v1"
       operations [
-        selectProgram(key: "state.cameraClearance", cases: [
-          { value: 0, program: $"{rig}-fade" }
-          { value: 1, program: $"{rig}-cutaway" }
-        ], default: $"{rig}-fade")
+        selectProgram(
+          key: "state.cameraClearance",
+          cases: [
+            { value: 0, program: $"{rig}-fade" }
+            { value: 1, program: $"{rig}-cutaway" }
+          ],
+          default: $"{rig}-fade"
+        )
       ]
     }
 

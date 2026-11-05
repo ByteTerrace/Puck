@@ -10,7 +10,7 @@ public static partial class DocumentLowering {
 
     private static string? ValueChild(DocumentScope scope, string member) =>
         ((scope.Annotations.GetValueOrDefault(key: ValuePointerKey) is ValueLocation location)
-            ? ((location.Pointer + "/") + Puck.Assets.Documents.DocumentJsonPointer.Escape(value: member))
+            ? Puck.Assets.Documents.DocumentJsonPointer.Child(name: member, pointer: location.Pointer)
             : null);
     private static T AtValuePointer<T>(DocumentScope scope, string? pointer, Func<T> lower, int indexOffset = 0) {
         if (pointer is null) { return lower(); }

@@ -13,7 +13,9 @@ namespace Puck.World.Client;
 // rigidly, so the body moves smoothly while its limbs hold; the next full pack advances by every second the holds
 // carried past. A body nothing may show or read (no camera, no shadow cascade, no consumer of its parts) holds until
 // something may (HeldHertz), and its next full pack is a continuity cut, as a teleport's is, rather than an advance over
-// everything it held. The bodies that take a tier together alternate their phase by half its period, so their packs
+// everything it held. A placed creation (a row-rooted registration) decides through the same function (BodyHertz): it
+// holds wherever nothing may show or read it, and takes the reduced tiers only where its creation's author allows them
+// (CreationBehaviorDocument.ReducedRateAtDistance), updating every frame otherwise. The bodies that take a tier together alternate their phase by half its period, so their packs
 // spread over the period's frames. The levers and the step flags are this frame's (PresentAt, before the pack); the
 // views and shadow cascades are the frame just dressed, a frame's lag the tiers do not notice, so a camera cut shows a
 // held body's held pose for one frame.
@@ -98,11 +100,21 @@ public sealed partial class WorldCreationInstances {
         }
     }
 
-    // The rate a body updates at: its largest pixels per metre over the views that may see the sphere it reaches, held
-    // when nothing may show or read its pose (Shown), and every frame while the lever is off or no view is known yet.
-    private int BodyHertz(Registration live, Vector3 center, float radius) => (((m_rates & SdfUpdateRates.Bodies) == 0)
-        ? SdfUpdateRateTiers.EveryFrameHertz
-        : TierOf(center: center, live: live, pixelsPerMetre: BodyPixelsPerMetre(center: center, radius: radius), radius: radius));
+    // The rate a registration updates at: a body's largest pixels per metre over the views that may see the sphere it
+    // reaches, held when nothing may show or read its pose (Shown), and every frame while the lever is off or no view is
+    // known yet. A row-rooted registration (a placed creation) takes the reduced tiers only where its creation's author
+    // allows them (CreationBehaviorDocument.ReducedRateAtDistance); otherwise only the held tier, updating every frame
+    // wherever anything may show or read it, so the lever changes how visible scenery animates only by the author's leave.
+    private int BodyHertz(Registration live, Vector3 center, float radius) {
+        if ((m_rates & SdfUpdateRates.Bodies) == 0) {
+            return SdfUpdateRateTiers.EveryFrameHertz;
+        }
+
+        var hertz = TierOf(center: center, live: live, pixelsPerMetre: BodyPixelsPerMetre(center: center, radius: radius), radius: radius);
+        var reduces = ((live.BodyIndex is not null) || (live.Creation.EngineDocument.Behavior?.ReducedRateAtDistance == true));
+
+        return ((reduces || (hertz == SdfUpdateRateTiers.HeldHertz)) ? hertz : SdfUpdateRateTiers.EveryFrameHertz);
+    }
     private int TierOf(Registration live, Vector3 center, float radius, float pixelsPerMetre) => SdfUpdateRateTiers.BodyHertz(
         pixelsPerMetre: pixelsPerMetre,
         shownElsewhere: ((pixelsPerMetre <= 0f) && Shown(center: center, live: live, radius: radius))

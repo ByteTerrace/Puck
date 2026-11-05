@@ -5,6 +5,7 @@ using Puck.Commands;
 namespace Puck.World;
 
 internal sealed partial class WorldViewCommandModule {
+    private static readonly CommandForms WorldViewTraceForms = CommandForms.Of(verb: "world.view.trace", "begin <firstTick> <lastTick> [measureFirstTick]", "--json", "write <path>", "end");
     private CommandResult Trace(WireArgs args) {
         if (presentationProbe is not { } probe) { return CommandResult.Error(output: "[world.view.trace: no presentation observer is registered]"); }
         if (args.Count == 1 && args.Is(index: 0, value: "--json")) { return new CommandResult(Output: probe.ReadJson()); }
@@ -35,6 +36,6 @@ internal sealed partial class WorldViewCommandModule {
             catch (ArgumentOutOfRangeException exception) { return CommandResult.Error(output: $"[world.view.trace: {exception.Message}]"); }
             return new CommandResult(Output: $"[world.view.trace: armed {first}..{last} measure={measureFirst ?? first}]");
         }
-        return CommandResult.Usage(form: "begin <firstTick> <lastTick> [measureFirstTick] | --json | write <path> | end", verb: "world.view.trace");
+        return WorldViewTraceForms.Refuse(args: in args);
     }
 }

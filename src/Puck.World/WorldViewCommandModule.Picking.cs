@@ -8,6 +8,8 @@ using Puck.World.Client;
 namespace Puck.World;
 
 internal sealed partial class WorldViewCommandModule {
+    private static readonly CommandForms WorldViewPointerForms = CommandForms.Of(verb: "world.view.pointer", "[<client-x> <client-y>|clear]");
+    private static readonly CommandForms WorldViewPickForms = CommandForms.Of(verb: "world.view.pick", "[<view-or-instance>] [<x> <y>]", "[<view-or-instance>] finding <id>");
     // How long a pick holds a session that carries no call deadline before it refuses as unanswered.
     private static readonly TimeSpan UnboundedPickWait = TimeSpan.FromSeconds(value: 10);
 
@@ -28,7 +30,7 @@ internal sealed partial class WorldViewCommandModule {
         if ((args.Count != 2) ||
             !float.TryParse(s: args[0].ToString(), provider: CultureInfo.InvariantCulture, result: out var x) ||
             !float.TryParse(s: args[1].ToString(), provider: CultureInfo.InvariantCulture, result: out var y)) {
-            return CommandResult.Usage(form: "[<client-x> <client-y>|clear]", verb: "world.view.pointer");
+            return WorldViewPointerForms.Refuse();
         }
         return (feed.TryOverridePointer(point: new Vector2(x: x, y: y))
             ? new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.view.pointer: override={x},{y}]"))
@@ -45,7 +47,7 @@ internal sealed partial class WorldViewCommandModule {
     }
     private CommandResult Pick(WireArgs args, TextCommandSession? session) {
         if (args.Count > 3) {
-            return CommandResult.Usage(form: "[<view-or-instance>] [<x> <y>|finding <id>]", verb: "world.view.pick");
+            return WorldViewPickForms.Refuse(args: in args);
         }
         // A view is named by its first argument when one or three are given; with none, or just a point, the pick
         // addresses the presented world view (the first seat's rendered instance).

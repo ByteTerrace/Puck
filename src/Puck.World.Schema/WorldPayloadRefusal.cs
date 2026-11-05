@@ -172,6 +172,82 @@ public sealed record WorldPayloadRefusal(string Path, string Pointer, DocumentVa
             .Where(predicate: member => (((member.Access & WorldModelAccess.Required) != 0) && !node.ContainsKey(propertyName: member.Name)))
             .Select(selector: static member => member.Name)];
     }
+    // The refusal of a member the object at the end of `steps` does not have: the serializer names a CLR type for it, so
+    // the refusal is read from the model's own shape instead (the last step is the unmapped member, its parent the
+    // object that refused it). The words name the closest members the object does have, or all of them when none is
+    // close; null when the last step is a member of its parent (or the parent keeps unmapped members as data).
+    private static string? UnknownMemberWords(Type root, List<Step> steps, JsonNode? document) {
+        if (
+            (steps.Count == 0) || steps[^1].IsIndex ||
+            (TypeAt(document: document, root: root, steps: steps[..^1]) is not { } declared) ||
+            (DocumentJsonPointer.At(root: document, pointer: PointerOf(steps: steps[..^1])) is not JsonObject node) ||
+            !node.ContainsKey(propertyName: steps[^1].Text)
+        ) {
+            return null;
+        }
+
+        var type = (Nullable.GetUnderlyingType(nullableType: declared) ?? declared);
+
+        if (WorldModelShape.Of(type: type) is not { } shape) {
+            return null;
+        }
+
+        type = (ArmOf(node: node, shape: shape, type: type) ?? type);
+
+        var arm = (WorldModelShape.Of(type: type) ?? shape);
+        var members = arm.Members;
+
+        if (!arm.Described || (arm.Kind != JsonTypeInfoKind.Object) || members.Any(predicate: static member => ((member.Access & WorldModelAccess.ExtensionData) != 0)) ||
+            members.Any(predicate: member => (member.Name == steps[^1].Text))) {
+            return null;
+        }
+
+        var accepted = members
+            .Where(predicate: static member => ((member.Access & (WorldModelAccess.Write | WorldModelAccess.Ignored)) == WorldModelAccess.Write))
+            .Select(selector: static member => member.Name)
+            .ToArray();
+        var near = Nearest(name: steps[^1].Text, candidates: accepted);
+        var listed = ((near.Length > 0) ? near : ((accepted.Length <= MaxListedMembers) ? accepted : []));
+
+        return ((listed.Length == 0)
+            ? "unknown member"
+            : $"unknown member; {((near.Length > 0) ? "nearest" : "valid")} members: {string.Join(separator: ", ", values: listed.Select(selector: static name => $"'{name}'"))}");
+    }
+    private const int MaxListedMembers = 12;
+    private const int MaxNearMembers = 3;
+    // The candidates spelled within a third of the name's length (at least two edits) of it, closest first.
+    private static string[] Nearest(string name, string[] candidates) {
+        var limit = Math.Max(val1: 2, val2: (name.Length / 3));
+
+        return [.. candidates
+            .Select(selector: candidate => (Candidate: candidate, Distance: EditDistance(a: name.ToLowerInvariant(), b: candidate.ToLowerInvariant())))
+            .Where(predicate: pair => (pair.Distance <= limit))
+            .OrderBy(keySelector: static pair => pair.Distance)
+            .ThenBy(keySelector: static pair => pair.Candidate, comparer: StringComparer.Ordinal)
+            .Take(count: MaxNearMembers)
+            .Select(selector: static pair => pair.Candidate)];
+    }
+    // The Levenshtein distance between two names.
+    private static int EditDistance(string a, string b) {
+        var previous = new int[(b.Length + 1)];
+        var current = new int[(b.Length + 1)];
+
+        for (var j = 0; (j <= b.Length); j++) {
+            previous[j] = j;
+        }
+        for (var i = 1; (i <= a.Length); i++) {
+            current[0] = i;
+            for (var j = 1; (j <= b.Length); j++) {
+                current[j] = Math.Min(
+                    val1: Math.Min(val1: (previous[j] + 1), val2: (current[(j - 1)] + 1)),
+                    val2: (previous[(j - 1)] + ((a[(i - 1)] == b[(j - 1)]) ? 0 : 1))
+                );
+            }
+            (previous, current) = (current, previous);
+        }
+
+        return previous[b.Length];
+    }
     // The refusal of a member read through the strict enum converter, which accepts exactly the declared names: the
     // names it accepts against what the document holds, or null when the member is not read that way or holds a name.
     private static string? EnumWords(Type root, List<Step> steps, JsonNode? document) {
@@ -258,7 +334,9 @@ public sealed record WorldPayloadRefusal(string Path, string Pointer, DocumentVa
             try {
                 document = JsonNode.Parse(json: json);
                 expected = ((steps.Count > 0) ? ExpectedAt(document: document, root: type, steps: steps) : null);
-                if (MissingAt(document: document, root: type, steps: steps) is { Count: > 0 } missing) {
+                if (UnknownMemberWords(document: document, root: type, steps: steps) is { } unknown) {
+                    detail = unknown;
+                } else if (MissingAt(document: document, root: type, steps: steps) is { Count: > 0 } missing) {
                     detail = MissingWords(missing: missing);
                 } else if (EnumWords(document: document, root: type, steps: steps) is { } words) {
                     detail = words;
