@@ -1087,12 +1087,6 @@ the water strained, measured, and not yet fixed.
   and 5 cm brush edges bake at a millimetre cell
   (`worlds/standard/water.puck`, `streamSegment`); which shape owns the triangles
   is unmeasured (`puck mesh audit --prototype` selected no groups).
-- [medium] The debug world's compile validates 3.77 GB peak working set without
-  the water scenery and 4.78 GB with it (`puck compile worlds/debug/debug.puck
-  --validate`; each document alone is under 200 MB). The 1 GB is in the falls,
-  glacier, lake and bridge creations, not in the eight stream segments, the
-  hydrology rules or the lattices, so it grows with a creation's extent or kind
-  rather than its shape count; the validate stage that holds it is not yet found.
 - [low] Investigate the reported operator attachment loss on `world.reset`.
   `WorldGrants.EndSessionsForRebuild` ends observation sessions, while
   `WorldControlCommandModule` owns a separate local console endpoint; do not

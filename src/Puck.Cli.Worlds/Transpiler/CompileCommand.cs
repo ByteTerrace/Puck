@@ -369,6 +369,7 @@ public static partial class CompileCommand {
         ) { Description = "Watch the source file and its imported dependencies for changes and recompile automatically." };
         var strictOption = new Option<bool>(name: "--strict") { Description = "Treat warnings as errors." };
         var validateOption = new Option<bool>(name: "--validate") { Description = "Validate semantic engine schema rules on the emitted document. A world source validated without --output writes nothing." };
+        var measureOption = new Option<bool>(name: "--measure") { Description = "Report elapsed time, process peak working set and managed allocation for this invocation." };
         var assetsOption = new Option<bool>(name: "--update-assets") { Description = "Explicitly refresh the source's asset hash lock after successful compilation and validation." };
         var treeOption = new Option<string?>(name: "--tree") { Description = "Mirror the sources, which must lie under this directory, into the --output directory outside it. With no source paths, select every world .puck source (one whose schema: is the world vocabulary's, or absent) and every .world.json under this directory recursively, in ordinal order. Each world document is written where its source sits relative to the tree with its compiled world (.puckb) beside it, every pipeline source they name ships compiled as a shader package in the store (packages/) at the output's root, a .world.json source ships as it stands with its compiled world unless the .puck source of its exact name emits that name, every other file of the tree (a package manifest, fonts, tunes, cartridges and their sources, pipeline sources) is copied to the same place, and every other *.world.json, *.puckb and stored package under --output is removed, so the output is the tree as a bootable package." };
         var checkOption = new Option<bool>(name: "--check") { Description = "With --tree, compile into a scratch directory and compare it with --output instead of writing there: exit 1 naming every file a fresh run writes that --output lacks or holds with other bytes, and every document, compiled world or stored package --output holds that the run does not write. Writes nothing under --output." };
@@ -383,6 +384,7 @@ public static partial class CompileCommand {
             watchOption,
             strictOption,
             validateOption,
+            measureOption,
             assetsOption,
             treeOption,
             writtenOption,
@@ -410,6 +412,7 @@ public static partial class CompileCommand {
             }
         });
         command.SetAction(action: parseResult => {
+            using var measurement = parseResult.GetValue(measureOption) ? new CompilationMeasurement() : null;
             var paths = (parseResult.GetValue(argument: pathArgument) ?? []);
 
             if ((paths.Length == 0) && (parseResult.GetValue(option: treeOption) is { } sourceTree)) {
