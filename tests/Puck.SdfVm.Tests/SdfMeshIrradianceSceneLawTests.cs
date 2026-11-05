@@ -12,6 +12,24 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfMeshIrradianceSceneLawTests {
     [Fact]
+    public void DegenerateBoundsReachTheDepthLimitWithoutLosingNearestOrAnyHits() {
+        // Zero-area point triangles span almost the entire FP32 exponent range. Every SAH cost ties at zero,
+        // so the first bin peels one seven-triangle group at a time until only balanced splits can fit.
+        var positions = new Vector3[69 * 7 * 3];
+        for (var group = 0; group < 69; group++) {
+            var point = new Vector3(MathF.ScaleB(1, -148 + 4 * group), 0, 0);
+            Array.Fill(positions, point, group * 21, 21);
+        }
+        var degenerate = new SdfMesh(positions: positions, indices: Enumerable.Range(0, positions.Length).Select(static i => (uint)i).ToArray());
+        SdfMeshDraw[] draws = [.. Draws(Sheet(8, 3), Cube()), Draw(degenerate, Matrix4x4.Identity, 90)];
+        using var scene = SdfMeshIrradianceScene.Build(draws);
+        Assert.Equal(SdfMeshProbeTrace.StackDepth - 2, scene.GeometryDepth);
+        Assert.InRange(scene.TopDepth, 0, SdfMeshProbeTrace.StackDepth - 2);
+        Assert.True(scene.MedianSplits > 0);
+        AnswersAsTheSearch(scene, draws);
+        Assert.Equal(0, scene.Counters.Read(SdfMeshIrradiance.StackOverflow));
+    }
+    [Fact]
     public void NearestSurfaceAgreesWithAnIndependentWorldTriangleSearch() {
         var draws = Draws(Sheet(8, 3), Cube());
         var scene = SdfMeshIrradianceScene.Build(draws)!;

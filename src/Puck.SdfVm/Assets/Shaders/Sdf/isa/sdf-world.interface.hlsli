@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/1bc308dcec45c7ca4f2ed26b00b3b3f394e1ddfbece4c2f176453880609b0097). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/2d97c55837a6135f84ff2f04865427a7392c8999bd17b499ca678ee7ca9155f5). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -99,7 +99,7 @@ struct SdfWorldFrame {
 // The World group: descriptor set 1, register space 1.
 [[vk::binding(0, 1)]] StructuredBuffer<uint4> sdfWords : register(t0, space1);
 [[vk::binding(1, 1)]] StructuredBuffer<float4> sdfDynamicTransforms : register(t1, space1);
-[[vk::binding(2, 1)]] StructuredBuffer<float> sdfBrickPool : register(t2, space1);
+[[vk::binding(2, 1)]] StructuredBuffer<uint> sdfSampledValues : register(t2, space1);
 [[vk::binding(3, 1)]] StructuredBuffer<float4> sdfMeshBakePoints : register(t3, space1);
 [[vk::binding(4, 1)]] Texture2D<float4> sdfGlyphAtlas : register(t4, space1);
 [[vk::binding(5, 1)]] SamplerState samplers[2] : register(s5, space1);
@@ -230,9 +230,12 @@ struct SdfWorldPass {
     [[vk::offset(1004)]] uint viewportCount;
     [[vk::offset(1008)]] uint workCounterRow;
     [[vk::offset(1012)]] uint workCounterRowDetail;
+    [[vk::offset(1016)]] uint _pad1016;
+    [[vk::offset(1020)]] uint _pad1020;
+    [[vk::offset(1024)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaDADAA89D : register(b0, space3);
-#define passGroup passGroupIsaDADAA89D
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaC5DBDB82 : register(b0, space3);
+#define passGroup passGroupIsaC5DBDB82
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<float> reactivityRW : register(u3, space3);

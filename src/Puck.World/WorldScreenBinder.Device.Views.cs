@@ -9,7 +9,6 @@ public sealed partial class WorldScreenBinder {
     // showing what the feed's level shows.
     private ViewResidency CreateSessionResidency(SessionFeed feed, string name, SdfCompositionFrameSource source, WorldScreenResolution resolution) {
         var residency = new SdfWorldResidency(
-            brickPoolVoxelCapacity: 0,
             screenSources: new FeedScreenSources(
                 feed: feed
             ),

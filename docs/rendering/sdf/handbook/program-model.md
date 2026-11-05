@@ -61,8 +61,8 @@ a fresh chain.
 
 **Shapes** are the only instructions that actually measure distance: a sphere,
 box, torus, capsule, cylinder, the lifted 2D family (rounded rectangle, polygon,
-star, trapezoid, ellipse), a glyph sampled from a font atlas, a sampled brick
-(see [Bricks and baking](bricks-and-baking.md)). A shape reads the current transformed point, computes its own
+star, trapezoid, ellipse), a glyph sampled from a font atlas, a sampled field
+(see [Sampled fields](sampled-fields.md)). A shape reads the current transformed point, computes its own
 primitive distance, and hands that up as a *candidate*.
 
 **Field ops** reshape the distance *already accumulated*, not the point.

@@ -42,8 +42,8 @@ scalar gauges (`lakeLevel`, `fallsFlow`, `riverDepth`, `aquiferFill`,
 - *Field surfaces.* Four two-dimensional `waterViews` lattices (the pool in
   `worlds/debug/pool.puck`; the plunge basin, reservoir and passage in
   `worlds/debug/water-scenery.puck`) whose one row is set to a gauge each
-  step and drawn by `WorldFieldEmitter`: a CPU-baked distance brick per
-  height field (`Bake`, `Reach = 2`), emitted as a `SampledValues` instance
+  step and drawn by `WorldFieldEmitter`: a CPU-baked sampled distance field per
+  height field (`Bake`, `Reach = 2`, an `SdfSampledField`), emitted as a `SampledValues` instance
   with the row's `material` lowered through `WorldSurfaceMaterials.Resolve`,
   which carries the palette entry's `glass` (`Glass: entry?.Glass?.ToGlass`).
   The standard's `waterMaterial` declares `glass { depth: 2, ior: 1.333 }`,
@@ -358,11 +358,11 @@ the 2060.
 2. **The flow vector as an authored field row.** A `field` lattice row the
    author writes (or a derived row the hydrology's `StepFlow` publishes as a
    per-cell transfer, which the lattice computes today and discards),
-   sampled by the layer through the brick the field emitter already
-   uploads. **Adopted as W2's second source**, after the constant and the
+   sampled by the layer through a sampled field like the one the field
+   emitter already publishes. **Adopted as W2's second source**, after the constant and the
    lane: it is what makes a river bend around a rock without an artist's
    comb, and it is a state product rather than a texture. Its cost is one
-   brick sample per covered pixel.
+   sampled-field read per covered pixel.
 3. **Flow by moving geometry** (today's slides and swings). Each moving
    sheet is a bake group and a transform row, the foam restarts with the
    wave, and the falls' fourteen sheets exist only to fold. **Rejected** as
@@ -445,7 +445,7 @@ its own.
 | 1 | **W2** ([as built](#w2-as-built)). The flow layer, with the constant and lane sources, and the stream, falls and lake moved onto it as static geometry | W2; M1 (the eight stream legs share one geometry) | Two noise evaluations and a gradient per covered pixel, on water pixels only (Vlachos's 2 fetches and 21 ALU on 2010 hardware); the mesh pass loses 8 moving groups and their transform rows | The stream's bake groups go from eight to one shared; the falls' fourteen sheets and the foam paints stop being animated groups; `world.budget` and `[sdf.mesh-bake] done` read the cut | The stream flows and the falls fall in a presented burst with no draw record changing; a settled capture is still; lockstep stills repeat across two Worlds; the meadow's wind shimmer uses the same layer with a wind vector |
 | 2 | **W1.** The medium response on the glass pass (in-scatter, contact ramp) and W4a (probes on glass), with every water surface on `glass` rows | W1, W4 | A probe gather and a few ALU per glass pixel; no new pass | None; the water's four field surfaces already bake as glass | The pool reads turquoise at depth and clear at the margin, with foam at the steps and the bridge piers; the falls sheet transmits the rock; the hall's windows and the lift's glass reflect their rooms; `world.counters gpu pass sdf.world$glass-shade` before and after |
 | 3 | **W3.** The particle pool with an authored emitter and generic motion, collided against a brick derived from the bake, drawn as quads split by the glass target | W3; M1 (the brick), M4 (capacity and the visibility box) | A fixed step over the pool's capacity and a fill-rate bounded by sprite size; the Deck decides the capacity the standard chooses | A pool's buffers at its capacity; a brick per region at the bake's cell | Splash at the plunge pool and droplets at the falls' foot, refracted where they fall behind the surface; leaves in the forest from the same pool; a presented burst at `debug.go pool` with `host.frames` before and after on both backends |
-| 4 | **W2's field source.** A flow row sampled through the field brick, and the hydrology's derived transfer row | W2 on M3 | One brick sample per covered pixel | A row per lattice | The stream bends around the bridge piers with no authored comb; `world.fields` shows the derived row |
+| 4 | **W2's field source.** A flow row sampled through a sampled field, and the hydrology's derived transfer row | W2 on M3 | One sampled-field read per covered pixel | A row per lattice | The stream bends around the bridge piers with no authored comb; `world.fields` shows the derived row |
 | 5 | **W4b.** The bounded screen-space march on glass | W4 | The authored tap count per glass pixel; measured first | None | The bridge reflects in the pool at the 4070's bar; the Deck's count decides whether the standard enables it |
 
 W2 is first because it removes work the water pays today (moving groups,
@@ -524,10 +524,14 @@ and the geometry, the cascades and the surface pass stand. No `sdf-*` kernel
 reads the Frame group's `time` or `timeDelta`: `puck search -M 0
 "frameGroup\.(time|timeDelta)" src/Puck.SdfVm/Assets/Shaders/Sdf` finds
 nothing. Where it stops: a lane-driven flow is as deterministic as the lane's
-expression, and a lane reads zero on any placement without lanes (static and
-animated placements supply none), so the per-instance phase the brief
-imagined for the stream legs has no carrier there; the world-space pattern
-static copies shade in makes it unnecessary, since no two legs repeat.
+value. A body lane (0 to 3) reads zero on a placement without one, so the
+per-instance phase the brief imagined for the stream legs has no carrier
+there; the world-space pattern static copies shade in makes it unnecessary,
+since no two legs repeat. A world lane (4 to 7, `render.lanes`) reads the same
+on every surface, static copies included: the host resolves it from state at
+the presented tick (`WorldEnvironmentResolve`, the sky's binding path) and it
+enters the kernels through one pass value, `worldLanes`, read only by `sdfLane`
+(`frame/sdf-lanes.hlsli`), as `flowClock` enters through one.
 
 **The water on it.** In the standard (`worlds/standard/water.puck`), the
 stream segment is one still sheet wearing `streamFlowLayer`; its slide, its
@@ -535,9 +539,13 @@ brush-edge paints and its foam paints are gone (a paint on a static placement
 is world-space, so they could not ride a shared copy). The debug world places
 the one `stream` prototype eight times, alternate legs 2 cm higher so the
 overlapping ends at each bend never share a plane, a shorter leg starting back
-along the leg before it. The falls is fourteen still sheets wearing
-`fallsFlowLayer`, one downward velocity that runs down every sheet at its own
-slope; it lost the fold by `meltStrength` and keeps the visibility park. The
+along the leg before it. The falls is fourteen sheets wearing `fallsFlowLayer`,
+one world-space downward velocity that runs down every sheet at its own slope.
+Each sheet folds about its own flow axis by `meltStrength` (edge-on to the
+valley at zero), so the falls narrows as the melt ebbs, and its foam coverage
+follows world lane 4, which the debug world binds to `state.meltStrength`
+(`water-scenery.puck`), so the foam thins with it; the visibility park removes
+the edge-on ribbon when the melt ends. The
 lake keeps its level slide, a state gauge's legitimate rig use, and wears
 `lakeFlowLayer`, world-space breeze ripples. The meadow's grass
 (`windMeadowTile` in `foliage.puck`) wears `meadowWind`, a world-space flow
@@ -545,19 +553,19 @@ whose paler gust patches cross every tile and blade together.
 
 **Not yet.** The glass pass does not run the layer, so a water surface on a
 glass row (W1) needs `sdfApplyFlow` in `sdf-glass.comp.hlsl` before the stream
-moves to glass. The falls no longer narrows as discharge falls: a coverage or
-tilt driven by the gauge needs a lane, and an animated placement supplies
-none.
+moves to glass.
 
 ### W2's field source
 
 **Outcome.** The flow vector read from a field row the state system owns: a
 `field` lattice row the author writes, or a derived row the hydrology's
 `FieldLattice.StepFlow` publishes as its per-cell transfer, sampled by the
-layer through the brick the field emitter already uploads, after the constant
-and the lane. **Invariant.** As W2's: the row is state, so the image stays a
-function of the document and the tick. **Reuse.** The field emitter's brick,
-`sdfSampledRegion`, `sdfApplyFlow`. **Check.** The stream bends around the
+layer through a sampled field as the field emitter publishes one, after the
+constant and the lane. Only the mesh bake binds sampled values today (each bake
+job's own `sdfSampledValues` table), so the light stage reading one needs the
+frame's snapshot bound beside its tables. **Invariant.** As W2's: the row is
+state, so the image stays a function of the document and the tick. **Reuse.**
+`SdfSampledField`, `sdfSampledRegion`, `sdfApplyFlow`. **Check.** The stream bends around the
 bridge piers with no authored comb in a presented burst; `world.fields` shows
 the derived row.
 

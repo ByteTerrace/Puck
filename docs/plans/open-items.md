@@ -1090,23 +1090,13 @@ source are the next lanes here; the items below are the system work beside them.
   static and animated placements), and profile bake admission, landing and
   illumination together. The stream is eight placements of one still segment
   and the falls still sheets, their motion the flow layer's shading.
-  The sampled-field fix makes each changed height snapshot a new mesh identity;
-  measure ordinary-rate field updates as well as a paused cold boot. Run costs
-  and before/after evidence live in the water follow-up commits.
+  Drawn heights move by an authored `surfaceStep` with hysteresis, and each
+  step publishes a new snapshot of the field's `SdfSampledField` without
+  rebuilding the program, so only that field's group rebakes. Run costs and
+  before/after evidence live in the water follow-up commits.
   The prototype audits also flag normal/topology defects in the glacier, lake and falls
   despite finding no uncovered surface. Inspect those witnesses through the
   existing mesh-audit image output before attributing them to authored style.
-- [medium] Make packed-program rebuilding proportional to changed emissions.
-  `WorldFieldEmitter.AdvanceBricks` correctly publishes changed sampled geometry,
-  but `SdfProgramBuilder.Build` constructs and analyzes the whole `SdfProgram`
-  again. Frequent field changes therefore repeat whole-world compilation.
-  The geometry identity does not force this: `SdfMeshGeometryBuilder` hashes
-  the voxel contents and ignores their packed address, so it would key the same
-  meshes from any immutable store. Storing the snapshot inside the one packed
-  `SdfProgram` word array does: a changed value is a new program, packed,
-  validated and uploaded whole. Profile in an isolated run,
-  then reuse unchanged compilation through one generic program path. Preserve
-  snapshot ownership, side-table relocation and geometry-key completeness.
 - [low] Investigate the reported operator attachment loss on `world.reset`.
   `WorldGrants.EndSessionsForRebuild` ends observation sessions, while
   `WorldControlCommandModule` owns a separate local console endpoint; do not
@@ -1267,25 +1257,9 @@ lowers it to the same JSON as before, except where the look changes on purpose.
   `tests/Shared/World/Fixtures.cs:963`. Put the fixture below the World test
   dependencies so physics and World laws can use one accepted-transfer adapter.
 
-- [medium] The rot sweep found three places where code and its own
+- [medium] The rot sweep found two places where code and its own
   documentation disagree. `puck docs links` does not read XML comments, so
-  none of these is checked yet.
-  - **The external brick pool is dead.** No in-tree producer requests a carve
-    brick bake (`ISdfBrickBakeService.RequestBrickBake`'s only callers are
-    tests), and `WorldFieldEmitter.AdvanceBricks` now publishes height fields
-    as inline sampled values in the program words (`SdfProgramBuilder.SampledValues`)
-    and never calls `UploadBrick`. Every residency still allocates the 64 MB
-    pool (`SdfWorldRenderSpec.BrickPoolVoxelCapacity`,
-    `SdfWorldTables.DefaultBrickPoolVoxelCapacity`), and the pool's second
-    sampled-region path survives in `sdfBrickVoxel` (the `SDF_SAMPLED_REGIONS`
-    arm, `field/sdf-shapes.hlsli:471`), `SdfWorldTables.BrickBake.cs`,
-    `sdf-brick-bake.comp.hlsl`, `SdfBrickBake`, `SdfBrickPoolLayout`, the
-    `sdfBrickPool` world-interface member and the brick budget in
-    `WorldDefinitionValidator.Topology.cs:585`. Delete the pool with its
-    kernel, interfaces, service, budget and `bricks-and-baking.md` chapters,
-    and rename `ISdfFrameSource.AdvanceBricks` for what it now does. Removing
-    the interface member changes the bake kernels' bytecode, so the change
-    rebakes every stored mesh once.
+  neither is checked yet.
   - **The rule host's effect skip.** `documents-rules.md` says a
     `setState`/`addState` effect is submitted only when it could move the
     destination, but the code that enforces this was not found.
@@ -1749,6 +1723,20 @@ the fixed poses and the approaches already rejected.
   `SdfMeshProbeRelight.OutputWords` prefix and publication copies the device
   buffer. Preserve the source output's readback-token/fence ownership through
   commit; do not trade that lifetime guarantee for fewer copied bytes.
+
+- [medium] GPU probe work still duplicates memory and copies.
+  - The probe service's feedback region keeps a CPU copy as large as the
+    volume (`trace-feedback-shadow-bytes`, 46 MB at Medium) beside the
+    volume's own words (`SdfMeshProbeGpuWork.TryTake`). Read it from the
+    volume instead, keeping the snapshot's timing.
+  - `RecordCommit` records one buffer copy per probe because the source
+    interleaves records; one scatter dispatch replaces them.
+  - The bloom kernels (`sdf-bloom-down`, `sdf-bloom-apply`) and the overlay
+    keep literal luminance weights instead of the generated `SDF_LUMINANCE`.
+  - `SdfMeshProbeGpuWork.Abandon` leaves the scene carry to the next
+    completion.
+  - Relight, select, meter and cache have no CPU/GPU parity law; only
+    `world.probe`'s relight reference compares them.
 
 - [high] Night lighting, from the owner's walkthrough at the lawn's trees:
   - **The jump to night is wrong.** Forcing midnight

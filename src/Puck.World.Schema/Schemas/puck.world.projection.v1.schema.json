@@ -11041,6 +11041,65 @@
           "additionalProperties": false,
           "default": null,
           "title": "WorldRenderShadowCoverage"
+        },
+        "lanes": {
+          "description": "The world\u0027s render lanes: up to four bindable scalars (a literal, a state.\u003Crow\u003E binding, or keys on a clock), resolved at each frame\u0027s presented tick and read by every surface and volume as render lanes 4 to 7 (SdfLanes), so a static placement sharing one baked mesh follows world state without a slot. Absent or a missing entry reads zero; world.lighting echoes them as authored.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "title": "BindableScalar",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "clock": {
+                    "type": "string"
+                  },
+                  "keys": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "type": "number"
+                        },
+                        "value": {
+                          "type": "number"
+                        },
+                        "ease": {
+                          "type": "string",
+                          "enum": [
+                            "Linear",
+                            "Smooth",
+                            "Step"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "at",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "clock",
+                  "keys"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
         }
       },
       "additionalProperties": false,
@@ -32177,7 +32236,7 @@
                       "default": null
                     },
                     "emissiveLane": {
-                      "description": "The render lane in [0, 3] whose saturated value scales Emissive at shading time, read from each inhabited body\u0027s own look lanes; a placement without lanes reads zero, and null keeps the emissive static.",
+                      "description": "The render lane whose saturated value scales Emissive at shading time: 0 to 3 an inhabited body\u0027s own look lanes (a placement without them reads zero), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the emissive static.",
                       "type": [
                         "integer",
                         "null"
@@ -32609,7 +32668,7 @@
                           "default": null
                         },
                         "lane": {
-                          "description": "The render lane in [0, 3] whose value scales the velocity, read from an inhabited body\u0027s look lanes; a placement without lanes reads zero and stands still. Null keeps the velocity constant.",
+                          "description": "The render lane whose value scales the velocity: 0 to 3 an inhabited body\u0027s look lanes (a placement without them reads zero and stands still), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the velocity constant.",
                           "type": [
                             "integer",
                             "null"
@@ -32625,6 +32684,14 @@
                           ],
                           "default": null,
                           "title": "SdfFlowFrame"
+                        },
+                        "coverageLane": {
+                          "description": "The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.",
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
                         }
                       },
                       "required": [
@@ -32644,6 +32711,11 @@
                   "additionalProperties": false,
                   "default": null,
                   "title": "PaletteEntryDocument"
+                },
+                "surfaceStep": {
+                  "description": "The height, in world units, the drawn surface moves by. The renderer redraws a column only once its raised height has moved a whole step from the height drawn, and then draws it at the nearest whole step, so a value that changes continuously (a flowing or filling store) rebakes its surface once a step rather than every lattice step, a value hovering about a step boundary redraws nothing, and a height it returns to draws a mesh already baked. 0 draws at the baked mesh\u0027s own resolution (SdfMeshGeometryBuilder.PositionSteps). Presentation only: bodies and media read the full value.",
+                  "type": "number",
+                  "default": 0
                 }
               },
               "required": [

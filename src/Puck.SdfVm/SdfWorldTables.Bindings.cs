@@ -5,7 +5,7 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 // What a view's pass binds of the tables: the World set of the ring slot the frame's upload wrote, holding every table's
-// buffer in that slot (the lights and the sky's among them), the brick pool, the samplers, the glyph atlas and the mesh atlases; and what it binds at a member
+// buffer in that slot (the lights and the sky's among them), the sampled-values filler, the samplers, the glyph atlas and the mesh atlases; and what it binds at a member
 // of its pass set whose storage it does not touch. The tables own one World set per ring slot and write each when a view
 // first binds it after what they bind moved (the binding revision), which happens only in a frame's pack or upload or a
 // host call between frames. A view binds only the set of the slot the frame's upload took, and that upload waited the
@@ -75,8 +75,8 @@ public sealed partial class SdfWorldTables {
         WriteWorldSet(set: set, slot: m_currentSlot);
         foreach (var (member, buffer) in overrides) { WriteWorldBuffer(buffer: buffer, member: member, set: set); }
     }
-    // Writes a ring slot's World set: each table's buffer in the slot, the brick pool, the samplers and the glyph atlas,
-    // with the sampled filler at an image not set, and the unused-member buffer at the bake's point table, which only
+    // Writes a ring slot's World set: each table's buffer in the slot, the samplers and the glyph atlas, with the sampled
+    // filler at an image not set, and the unused-member buffer at the bake's point table and sampled values, which only
     // background work binds (WriteBackgroundWorldSet).
     private void WriteWorldSet(nint set, int slot) {
         WriteWorldBuffer(buffer: m_programRegion.Buffer(slot: slot), member: SdfWorldPackage.ProgramWords, set: set);
@@ -90,8 +90,8 @@ public sealed partial class SdfWorldTables {
         WriteWorldBuffer(buffer: m_volumeRegion.Buffer(slot: slot), member: SdfWorldPackage.Volumes, set: set);
         WriteWorldBuffer(buffer: m_meshRegion.Buffer(slot: slot), member: SdfWorldPackage.MeshRegion, set: set);
         WriteWorldBuffer(buffer: m_dummyBuffer, member: SdfWorldPackage.MeshBakePoints, set: set);
-        WriteWorldBuffer(buffer: m_gpuMeshIrradiance ?? m_meshIrradianceRegion.Buffer(slot: slot), member: SdfWorldPackage.MeshIrradiance, set: set);
-        WriteWorldBuffer(buffer: m_brickPoolBuffer, member: SdfWorldPackage.BrickPool, set: set);
+        WriteWorldBuffer(buffer: m_meshIrradiance ?? m_dummyBuffer, member: SdfWorldPackage.MeshIrradiance, set: set);
+        WriteWorldBuffer(buffer: m_dummyBuffer, member: SdfWorldPackage.SampledValues, set: set);
         WriteLightAndSkySet(set: set, slot: slot);
 
         var samplers = WorldBinding(member: SdfWorldPackage.Samplers);

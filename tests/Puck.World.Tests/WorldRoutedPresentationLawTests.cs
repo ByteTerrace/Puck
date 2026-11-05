@@ -256,7 +256,6 @@ public sealed partial class WorldRoutedPresentationLawTests {
             TargetWidth: 64U
         );
         using var residency = new SdfWorldResidency(
-            brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: frame),
             height: 36U,
             kernels: SdfTestPipelines.Kernels(),

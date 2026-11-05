@@ -4,20 +4,24 @@ using Xunit;
 namespace Puck.SignedDistance.Tests;
 
 public sealed class SdfProgramSideTableLawTests {
+    // A sampled instruction names its field by a handle, never its values: no voxel enters the packed words, so a field
+    // publishing new values moves no program word, while the program's set and a fresh capture hold the newest snapshot.
+    // Relocation and excerpt rebind the same field.
     [Fact]
-    public void SampledSnapshotsSurviveProducerMutationRelocationAndExcerpt() {
+    public void ASampledFieldsValuesStayOutOfTheProgramWordsThroughPublishingRelocationAndExcerpt() {
         float[] values = [-1, 1, 2, 3, 4, 5, 6, 7];
-        var expected = values.ToArray();
+        var field = new SdfSampledField(dimX: 2, dimY: 2, dimZ: 2, values: values);
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(new(Vector3.One));
         var mark = builder.MarkEmission();
         builder.BeginInstance(Vector3.One, 2).ResetPoint()
-            .SampledValues(Vector3.Zero, 1, 2, 2, 2, 0, material, values).EndInstance();
+            .SampledValues(boxMin: Vector3.Zero, cellSize: 1f, field: field, boundaryFloor: 0f, material: material).EndInstance();
         var retained = builder.RetainEmission(mark);
         var capacity = builder.MeasureCapacity();
         values[0] = 99;
         var original = builder.Build();
         Assert.True(capacity.Words >= original.PartCompilationWordCapacity);
+        Assert.Equal(-1f, original.Sampled[0].Values[0]);
         builder.Clear();
         builder.AddMaterial(new(Vector3.One));
         builder.BeginInstance(Vector3.Zero, 1).ResetPoint().Sphere(1, material).EndInstance();
@@ -28,12 +32,21 @@ public sealed class SdfProgramSideTableLawTests {
             var index = Enumerable.Range(0, program.Instructions.Count)
                 .Single(i => program.Instructions[i].Op == SdfOp.ShapeBlend &&
                     (SdfShapeType)program.Instructions[i].Shape == SdfShapeType.SampledRegion);
-            Assert.Equal(expected, program.SideTableValues(index).ToArray());
-            var address = BitConverter.SingleToUInt32Bits(program.Instructions[index].Data1.Z);
-            Assert.NotEqual(0u, address & 0x80000000u);
-            var words = program.Words.Slice((int)(address & 0x7fffffffu), expected.Length).ToArray();
-            Assert.Equal(expected, words.Select(BitConverter.UInt32BitsToSingle).ToArray());
+            var handle = (int)BitConverter.SingleToUInt32Bits(program.Instructions[index].Data1.Z);
+
+            Assert.Same(field, program.SampledFields[handle]);
+            Assert.True(program.SideTableValues(index).IsEmpty);
         }
+
+        var words = original.Words.ToArray();
+        var published = field.Publish(values: [5, 5, 5, 5, 5, 5, 5, 5]);
+        var captured = SdfSampledSet.Capture(fields: original.SampledFields, previous: original.Sampled);
+
+        Assert.Equal(words, original.Words.ToArray());
+        Assert.NotSame(original.Sampled, captured);
+        Assert.Same(published, captured[0]);
+        Assert.Same(captured, SdfSampledSet.Capture(fields: original.SampledFields, previous: captured));
+        _ = Assert.Throws<ArgumentException>(() => field.Publish(values: [1, 2, 3]));
     }
 
     [Fact]

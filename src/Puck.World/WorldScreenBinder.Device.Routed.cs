@@ -124,7 +124,7 @@ public sealed partial class WorldScreenBinder {
 
         return residency;
     }
-    // A routed scene's residency: built like the world's own, with its brick pool and the full quality its frame carries,
+    // A routed scene's residency: built like the world's own, with the full quality its frame carries,
     // and its work counted under the scene's name in world.counters. Its instances are sized to the world's own (the count
     // a view's scratch is sized by), so the view the seat renders through follows it in place at the crossing, with no
     // frame held, whenever the scene fits; a scene that needs more grows its tables, and the view rebuilds against it.

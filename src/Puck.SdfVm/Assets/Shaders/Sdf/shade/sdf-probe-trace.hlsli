@@ -3,11 +3,21 @@
 #define SDF_PROBE_TRACE_HLSLI
 #include "../isa/sdf-render.hlsli"
 #include "../field/sdf-octahedral.hlsli"
+#ifndef SDF_PROBE_RESULT_STRIDE
+#error Probe traversal requires its entry point's generated result stride.
+#endif
 
 // Separate stacks for the top hierarchy and the geometry it enters. Depth-major addressing keeps a wave's
 // pushes adjacent, and avoids dynamically indexed thread-local arrays on Vulkan.
 groupshared uint sdfProbeTopStack[SDF_PROBE_STACK_DEPTH * SDF_PROBE_GROUP_SIZE];
 groupshared uint sdfProbeGeometryStack[SDF_PROBE_STACK_DEPTH * SDF_PROBE_GROUP_SIZE];
+
+// The service resets and reads the assertion word after this job's payload, independently of retained slot capacity.
+void sdfProbeStackOverflow() {
+    uint probes, stride;
+    sdfProbeOrigins.GetDimensions(probes, stride);
+    InterlockedAdd(sdfProbeHitsRW[probes * SDF_PROBE_RESULT_STRIDE], 1u);
+}
 
 float3 sdfProbeVector(uint word) {
     return asfloat(uint3(sdfProbeScene[word], sdfProbeScene[word + 1], sdfProbeScene[word + 2]));
@@ -63,7 +73,8 @@ bool sdfProbeTriangleHit(float3 origin, float3 direction, float3 v0, float3 e1, 
     distance = dot(e2, q) * inverse;
     return distance > 1.0e-4 && distance < maximum;
 }
-bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane, out float distance, out float3 normal, out uint material, out uint2 identity) {
+// One walk for nearest-hit and boolean visibility. The latter ends at its first accepted two-sided triangle.
+bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, bool anyHit, out float distance, out float3 normal, out uint material, out uint2 identity) {
     distance = maximum; normal = 0; material = 0;
     identity = uint2(0xffffffffu, 0xffffffffu);
     uint root = sdfProbeScene[0];
@@ -79,9 +90,12 @@ bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane
         if (count == 0) {
             uint first, second;
             sdfProbeChildren(node, origin, inverse, distance, first, second);
+            if (top + (first != 0 ? 1u : 0u) + (second != 0 ? 1u : 0u) > SDF_PROBE_STACK_DEPTH) {
+                sdfProbeStackOverflow();
+                return anyHit;
+            }
             if (second != 0) { sdfProbeTopStack[(top++) * SDF_PROBE_GROUP_SIZE + lane] = second; }
             if (first != 0) { sdfProbeTopStack[(top++) * SDF_PROBE_GROUP_SIZE + lane] = first; }
-            if (top > SDF_PROBE_STACK_DEPTH - 2) { break; }
             continue;
         }
         uint entry = link >> SDF_PROBE_NODE_COUNT_BITS;
@@ -101,9 +115,12 @@ bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane
                 if (innerCount == 0) {
                     uint first, second;
                     sdfProbeChildren(inner, localOrigin, localInverse, distance, first, second);
+                    if (depth + (first != 0 ? 1u : 0u) + (second != 0 ? 1u : 0u) > SDF_PROBE_STACK_DEPTH) {
+                        sdfProbeStackOverflow();
+                        return anyHit;
+                    }
                     if (second != 0) { sdfProbeGeometryStack[(depth++) * SDF_PROBE_GROUP_SIZE + lane] = second; }
                     if (first != 0) { sdfProbeGeometryStack[(depth++) * SDF_PROBE_GROUP_SIZE + lane] = first; }
-                    if (depth > SDF_PROBE_STACK_DEPTH - 2) { break; }
                     continue;
                 }
                 [loop] for (uint t = 0; t < innerCount; t++) {
@@ -112,6 +129,7 @@ bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane
                     sdfProbeTriangle(instance, primitive, v0, e1, e2);
                     float hit;
                     if (sdfProbeTriangleHit(localOrigin, localDirection, v0, e1, e2, distance, hit)) {
+                        if (anyHit) { return true; }
                         distance = hit; hitInstance = instance; hitTriangle = primitive;
                     }
                 }
@@ -132,6 +150,13 @@ bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane
     uint materials = sdfProbeScene[hitInstance + SDF_PROBE_GEOMETRY_WORD + 2];
     material = sdfProbeScene[hitInstance + SDF_PROBE_GEOMETRY_WORD + 3] + (materials == 0xffffffffu ? 0 : sdfMeshRegion[materials + hitTriangle]);
     return true;
+}
+bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane, out float distance, out float3 normal, out uint material, out uint2 identity) {
+    return sdfProbeWalk(origin, direction, maximum, lane, false, distance, normal, material, identity);
+}
+bool sdfProbeOccluded(float3 origin, float3 direction, float maximum, uint lane) {
+    float distance; float3 normal; uint material; uint2 identity;
+    return sdfProbeWalk(origin, direction, maximum, lane, true, distance, normal, material, identity);
 }
 uint2 sdfProbeHit(float3 origin, float3 direction, float maximum, uint lane, out uint2 identity) {
     float distance; float3 normal; uint material;

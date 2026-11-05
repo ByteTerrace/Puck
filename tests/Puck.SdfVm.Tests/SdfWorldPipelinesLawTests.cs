@@ -8,7 +8,7 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>
 /// Laws for <see cref="SdfWorldPipelines"/> over <see cref="FakeGpuDevice"/>: a set leases one pass-pipeline cache entry
-/// per up-front kernel (the brick baker only when asked for and present), which the cache creates and counts once and
+/// per up-front kernel, which the cache creates and counts once and
 /// persists the device's cache once for; a reload leases only the pipelines whose bytecode changed; the cache holds at
 /// most <see cref="GpuPassPipelineCache.BuildConcurrency"/> creations in the driver however many entries build; a set
 /// disposed while creations are in the driver waits for those alone and creates no more; and creations failing together
@@ -133,21 +133,6 @@ public sealed class SdfWorldPipelinesLawTests {
         Assert.Equal(expected: 1, actual: reload.ChangedPipelines);
     }
     [Fact]
-    public void ASetWithABrickPoolAddsTheBrickBakePipelineItsKernelCarries() {
-        var gpu = new FakeGpuDevice();
-        var cache = new GpuPassPipelineCache();
-
-        using var pipelines = SdfTestPipelines.Build(
-            cache: cache,
-            device: gpu,
-            includeBrickPipelines: true,
-            kernels: SdfTestPipelines.Kernels(mask: 1).With(bytecode: new byte[] { 1 }, kernel: SdfKernel.BrickBake)
-        );
-
-        Assert.True(condition: pipelines.IncludesBrickPipelines);
-        Assert.Equal(expected: 15L, actual: Created(cache: cache));
-    }
-    [Fact]
     public async Task TheCacheHoldsAtMostItsConcurrencyInTheDriverAndBuildsEveryPipeline() {
         using var driver = new SteppedDriver();
         var gpu = new FakeGpuDevice() {
@@ -157,7 +142,6 @@ public sealed class SdfWorldPipelinesLawTests {
         using var pipelines = SdfWorldPipelines.Acquire(
             cache: cache,
             device: gpu,
-            includeBrickPipelines: false,
             kernels: SdfTestPipelines.Kernels(mask: 1)
         );
         var started = new List<string>();
@@ -190,7 +174,6 @@ public sealed class SdfWorldPipelinesLawTests {
         var pipelines = SdfWorldPipelines.Acquire(
             cache: cache,
             device: gpu,
-            includeBrickPipelines: false,
             kernels: SdfTestPipelines.Kernels(mask: 1)
         );
 
@@ -244,7 +227,6 @@ public sealed class SdfWorldPipelinesLawTests {
         var pipelines = SdfWorldPipelines.Acquire(
             cache: cache,
             device: gpu,
-            includeBrickPipelines: false,
             kernels: SdfTestPipelines.Kernels(mask: 1)
         );
         var failure = await Assert.ThrowsAsync<AggregateException>(testCode: () => pipelines.WaitAsync(cancellationToken: CancellationToken.None));

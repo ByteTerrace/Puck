@@ -337,7 +337,7 @@ public sealed partial class ShaderInterface {
     /// <summary>Returns the HLSL name of the struct generated for the pushed index.</summary>
     /// <param name="interfaceName">The interface's hyphenated name.</param>
     /// <returns>The interface name in upper camel case followed by <c>PushedIndex</c>, such as
-    /// <c>SdfBricksPushedIndex</c>.</returns>
+    /// <c>SdfMeshPushedIndex</c>.</returns>
     public static string PushedIndexTypeName(string interfaceName) {
         ArgumentNullException.ThrowIfNull(argument: interfaceName);
 

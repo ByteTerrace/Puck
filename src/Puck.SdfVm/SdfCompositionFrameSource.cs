@@ -102,6 +102,8 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private float m_interpolationAlpha;
     private Vector3 m_packedParkPosition;
     private SdfProgram? m_program;
+    // The snapshots of the held program's sampled fields the latest frame carried.
+    private SdfSampledSet? m_sampled;
     // The words the held program differs in from the one held before it, when its background build measured them.
     private SdfProgramDelta? m_programDelta;
     private float m_time;
@@ -639,9 +641,12 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             width: width
         );
 
+        // The held program's fields as they stand after every emitter's PrepareFrame published this frame's values: a field
+        // that moved makes a new set, and the program stands.
+        m_sampled = SdfSampledSet.Capture(fields: m_program!.SampledFields, previous: (m_sampled ?? m_program.Sampled));
         dressed.PickMap = ComposePickMap();
         dressed.SlotClips = ComposeSlotClips();
-        dressed = dressed with { MeshAssetSlots = m_meshAssetSlots, MeshInstances = m_meshInstances };
+        dressed = dressed with { MeshAssetSlots = m_meshAssetSlots, MeshInstances = m_meshInstances, Sampled = m_sampled };
         dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
         if (Frames == 0) { Console.Error.WriteLine(value: $"[world.render] envelope: {m_program!.Instances.Count} instances, {m_program.MaterialCount} materials, {m_program.Words.Length} program words, {m_transforms.Length} dynamic slots, {m_meshAssetSlots.Count} geometry assets, {m_meshInstances.Count} rigid copies"); }
         Frames++;

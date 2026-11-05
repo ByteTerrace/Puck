@@ -67,8 +67,8 @@ price what the mesh pipeline costs instead:
   world.
 - **Field scope depth rises from 2 to 4.** Scopes are evaluated only by the
   bake and CPU queries.
-- **Machine budgets are bytes.** Mesh residency, the geometry cache and brick
-  pools are sized from the machine and evicted by size and age, never cleared
+- **Machine budgets are bytes.** Mesh residency and the geometry cache are
+  sized from the machine and evicted by size and age, never cleared
   wholesale and never refused on a miss.
 - **Performance is read, not ledgered.** The targets at the highest quality:
   the RTX 2060 and RTX 4070 at 60 FPS, every frame under 16.7 ms, and the Steam
@@ -1014,19 +1014,15 @@ composed view is an `sdf.world` instance of the render graph that runs the
 package's passes, mask through composite, over the residency's tables into its own
 output. The graph places each output into its seat rect with the `place`
 package. Everything a frame's views have in common is therefore shared by
-construction: the brick pool, the program upload, the glyph atlas, screen
-sources, lights, decals and volumes. Camera views carry their restricted
+construction: the program upload, the mesh bake and its meshes, the glyph atlas,
+screen sources, lights, decals and volumes. Camera views carry their restricted
 quality in their own pass blocks and sample screen images through their own
 instance's reads. Separate residencies per seat have these costs:
 
-- A seat residency with no brick pool draws carves through the uncarved-hull
-  fallback. The seats would visibly differ from the first one, which keeps
-  the baked bricks.
-- A pool per seat residency, with every bake requested on each, costs N times
-  the pool memory and N times the bake dispatches.
-- Seat residencies binding the first residency's pool read-only need a
-  cross-residency hazard and ordering design. That design is P14's `sdf.bricks`
-  buffer edge, not split-screen's.
+- Each seat residency would upload its own program and tables, costing N times
+  the table memory and N times the uploads.
+- Each would plan its own mesh bake; the shared mesh library spares the
+  re-bake, but every seat would still hold its own region of the same meshes.
 
 N seats cost N instances' passes rather than one dispatch whose Z dimension is
 N, and the counted work shows that cost. Layered views return only if the
@@ -1093,6 +1089,31 @@ records through fence-completed, scene/window-checked copies; old data remains
 visible until its replacement is ready. Camera exposure queries use the same
 service and shading function. CPU traversal and shading remain the diagnostic
 reference, and CPU nearest-surface and short clearance queries still place probes.
+
+Visibility is an any-hit query: GPU `sdfProbeOccluded` and CPU `Unblocked`
+stop at the first accepted triangle, sharing their nearest-hit walk's node
+and triangle tests. Shadows, light bits and camera visibility use this door.
+The shared scene builder certifies each hierarchy at no more than
+`SdfMeshProbeTrace.StackDepth - 2` edges, forcing median splits when necessary.
+A hierarchy that cannot fit is refused by name. CPU and GPU walks count stack
+overflow as an assertion failure rather than silently ending a walk.
+Within each work priority and eight-cell distance band, probes run in Morton
+cell order to keep neighbouring origins together without changing their rays.
+The budget diagnostic samples median and oldest lighting age per level so a
+coarse window cannot hide the finest window's response time.
+Under changing lighting, the selection kernel interleaves coarse levels by a
+stable cell phase. A level's age bound scales the authored target by its
+interleave; reaching it forces eligibility and age relative to it takes
+priority. Geometry and publication work bypass the gate. Unchanged lighting
+takes whole bounce sweeps. A sweep retains its initial phase across listings,
+even when later batches shade under newer lighting, and a lockstep drain always visits every cell from
+no bounce. These bounds describe demand under the budget, not guaranteed wall
+time when the device is overloaded.
+Below its bound, a probe outside every local view's frustum gets less age
+priority, and a probe whose last light changed gets more. Neither weight
+removes work. Overdue probes ignore both weights. The budget diagnostic
+reports ages inside the first frustum and outside it so the demand weighting
+can be measured independently of whole-window ages.
 
 Software compute is the baseline on both backends; no ray-tracing hardware is
 required. The trace device law requires exact identities and discrete flags,

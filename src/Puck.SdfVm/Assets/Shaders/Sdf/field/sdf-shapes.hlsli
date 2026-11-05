@@ -451,60 +451,47 @@ float sdfGlyph(float3 p, float4 data0, float4 data1) {
 #endif
 // === end SDF_SHAPE_GLYPH ============================================================================================
 
-// === SDF_SHAPE_SAMPLED_REGION: a baked carve-union field sampled O(1) =================================================
-// The settled-carve UNION distance field (min_i(|p-c_i|-r_i)), baked once into a cubic-voxel brick and composed as ONE
-// ordinary Subtraction-blend instance so a sample stops paying O(carve-count). data0 = (boxMin.xyz, cellSize); data1 =
-// (smooth, packedDims, brickWordOffset, boundaryFloor). Stored values are pre-scaled c/lambda (lambda = sqrt(3) folded in
-// at BAKE time), which makes the trilinear interpolant 1-Lipschitz and march-safe with NO stepScale change and an
-// unchanged zero set. Manual trilinear interpolation uses eight explicit loads and ordered, noncontracting arithmetic,
-// so the same voxel values and fractional coordinate interpolate identically across SPIR-V/DXIL; the baked VALUES
-// carry the familiar +-1-LSB WorldLsbExact class. KEEP IN SYNC with SdfProgramBuilder.SampledRegion.
-// One brick voxel, clamped to the brick's own [0, dims-1] lattice so the trilinear stencil never reads past the brick's
-// words (clamp-to-edge). Sound because the brick's zero set sits strictly inside the box by the bake margin, so the
-// clamped border half-voxel is always deep-positive far field. Linear index is x-fastest: base + i + j*dx + k*dx*dy —
-// KEEP IN SYNC with the bake kernel's write ordering (sdf-brick-bake.comp).
-float sdfBrickVoxel(uint baseWord, uint3 dims, int3 coord) {
-    int3 c = clamp(coord, int3(0, 0, 0), (int3(dims) - int3(1, 1, 1)));
-
-    uint index = (baseWord & 0x7fffffffu) + (uint)c.x + ((uint)c.y * dims.x) + ((uint)c.z * dims.x * dims.y);
-    if ((baseWord & 0x80000000u) != 0u) { return asfloat(sdfWords[index >> 2][index & 3u]); }
+// === SDF_SHAPE_SAMPLED_REGION: a sampled distance field ==================================================================
+// A cubic-voxel lattice of distances sampled by manual trilinear interpolation. data0 = (boxMin.xyz, cellSize); data1 =
+// (smooth, packedDims, handle, boundaryFloor). The values are not program words: sdfSampledValues holds a directory of one
+// word per handle (the word the field's snapshot starts at, 0xFFFFFFFF for none) and then the snapshots, which each mesh
+// bake job writes from the snapshots its groups hashed (SdfMeshBakeGpuWork), so a lattice samples exactly the values its
+// mesh is keyed by. Stored values are pre-scaled 1/lambda (lambda = sqrt(3)), which makes the interpolant 1-Lipschitz with
+// no stepScale change. Eight explicit loads and ordered, noncontracting arithmetic interpolate the same voxel values alike
+// across SPIR-V and DXIL. KEEP IN SYNC with SdfProgramBuilder.SampledValues and SdfMeshBakeGpuWork's sampled table.
 #ifdef SDF_SAMPLED_REGIONS
-    return sdfBrickPool[index];
-#else
-    return SDF_FAR_DISTANCE;
-#endif
+// One voxel, clamped to the lattice's own [0, dims-1] so the stencil never reads past its snapshot (clamp-to-edge): the
+// zero set lies strictly inside the box by the bake margin, so the clamped border half-voxel is far field. The index is
+// x-fastest: base + i + j*dx + k*dx*dy, as SdfSampledSnapshot lays it out.
+float sdfSampledVoxel(uint baseWord, uint3 dims, int3 coord) {
+    int3 c = clamp(coord, int3(0, 0, 0), (int3(dims) - int3(1, 1, 1)));
+    uint index = baseWord + (uint)c.x + ((uint)c.y * dims.x) + ((uint)c.z * dims.x * dims.y);
+
+    return asfloat(sdfSampledValues[index]);
 }
 // A precise result of the lerp intrinsic can still lower to SPIR-V FMix, whose arithmetic need not match DXIL's.
 // Spell every operation and mark each intermediate so both backends retain the same subtraction, product and sum.
-float sdfBrickInterpolate(float left, float right, float weight) {
+float sdfSampledInterpolate(float left, float right, float weight) {
     precise float difference = (right - left);
     precise float weighted = (weight * difference);
     precise float result = (left + weighted);
 
     return result;
 }
-float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
-    // High bit names immutable program words; clear names the engine's external brick pool.
-    // The instruction and its inline voxel values travel together through every bake submission.
-    uint encodedWord = asuint(data1.z);
-    bool inlineValues = ((encodedWord & 0x80000000u) != 0u);
-    uint numVoxels = 0u;
-    uint stride;
-    if (inlineValues) {
-        sdfWords.GetDimensions(numVoxels, stride);
-        numVoxels *= 4u;
-    } else {
-#ifdef SDF_SAMPLED_REGIONS
-        sdfBrickPool.GetDimensions(numVoxels, stride);
 #endif
-        if (numVoxels <= 1u) { return SDF_FAR_DISTANCE; }
-    }
+float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
+#ifdef SDF_SAMPLED_REGIONS
+    uint words = 0u;
+    uint stride;
+    sdfSampledValues.GetDimensions(words, stride);
+    uint handle = asuint(data1.z);
+    if (handle >= words) { return SDF_FAR_DISTANCE; }
+    uint baseWord = sdfSampledValues[handle];
     float cellSize = data0.w;
     uint packedDims = asuint(data1.y);
     uint3 dims = uint3((packedDims & SDF_SAMPLED_REGION_DIM_MASK), ((packedDims >> 10) & SDF_SAMPLED_REGION_DIM_MASK), ((packedDims >> 20) & SDF_SAMPLED_REGION_DIM_MASK));
-    uint baseWord = (encodedWord & 0x7fffffffu);
     uint voxelCount = dims.x * dims.y * dims.z;
-    if (any(dims == 0u) || baseWord > numVoxels || voxelCount > numVoxels - baseWord
+    if (any(dims == 0u) || baseWord > words || voxelCount > words - baseWord
         || !isfinite(cellSize) || cellSize <= 0.0 || !all(isfinite(p)) || !all(isfinite(data0.xyz))) { return SDF_FAR_DISTANCE; }
     float3 boxMin = data0.xyz;
     float3 extent = (float3(dims) * cellSize);
@@ -512,44 +499,42 @@ float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
     float3 local = ((p - boxMin) / cellSize);
     if (!all(isfinite(local))) { return SDF_FAR_DISTANCE; }
 
-    // OUTSIDE the box: dist(p, box) + boundaryFloor is a valid (scaled) lower bound on distance to any interior zero
-    // — positive, so a Subtraction compose stays saturated and the accumulator is exact.
-    // Discontinuous at the box face, but legal under Boolean composition and the surface is strictly interior (margin),
-    // so no rendered seam can exist.
+    // Outside the box: dist(p, box) + boundaryFloor is a valid (scaled) lower bound on the distance to any interior zero.
+    // Discontinuous at the box face, but legal under Boolean composition: the surface is strictly interior by the margin.
     if (any(local < 0.0) || any(local > float3(dims))) {
         float3 outside = max((boxMin - p), (p - (boxMin + extent)));
 
         return (length(max(outside, 0.0)) + data1.w);
     }
 
-    // Sample CENTRES sit at integer voxel indices (voxel i is centred at local = i + 0.5), so the trilinear stencil
-    // works in (local - 0.5) space; the half-voxel inset means the border half-voxel clamps to the edge voxel (deep far
-    // field there by the bake margin, so the clamp is never surface-critical).
+    // Sample centres sit at integer voxel indices (voxel i is centred at local = i + 0.5), so the stencil works in
+    // (local - 0.5) space; the border half-voxel clamps to the edge voxel.
     float3 sampleCoord = (local - 0.5);
     float3 baseF = floor(sampleCoord);
     float3 f = (sampleCoord - baseF);
     int3 b = int3(baseF);
 
-    float c000 = sdfBrickVoxel(encodedWord, dims, (b + int3(0, 0, 0)));
-    float c100 = sdfBrickVoxel(encodedWord, dims, (b + int3(1, 0, 0)));
-    float c010 = sdfBrickVoxel(encodedWord, dims, (b + int3(0, 1, 0)));
-    float c110 = sdfBrickVoxel(encodedWord, dims, (b + int3(1, 1, 0)));
-    float c001 = sdfBrickVoxel(encodedWord, dims, (b + int3(0, 0, 1)));
-    float c101 = sdfBrickVoxel(encodedWord, dims, (b + int3(1, 0, 1)));
-    float c011 = sdfBrickVoxel(encodedWord, dims, (b + int3(0, 1, 1)));
-    float c111 = sdfBrickVoxel(encodedWord, dims, (b + int3(1, 1, 1)));
+    float c000 = sdfSampledVoxel(baseWord, dims, (b + int3(0, 0, 0)));
+    float c100 = sdfSampledVoxel(baseWord, dims, (b + int3(1, 0, 0)));
+    float c010 = sdfSampledVoxel(baseWord, dims, (b + int3(0, 1, 0)));
+    float c110 = sdfSampledVoxel(baseWord, dims, (b + int3(1, 1, 0)));
+    float c001 = sdfSampledVoxel(baseWord, dims, (b + int3(0, 0, 1)));
+    float c101 = sdfSampledVoxel(baseWord, dims, (b + int3(1, 0, 1)));
+    float c011 = sdfSampledVoxel(baseWord, dims, (b + int3(0, 1, 1)));
+    float c111 = sdfSampledVoxel(baseWord, dims, (b + int3(1, 1, 1)));
 
-    // Interpolate x, then y, then z, with contraction disabled on each operation inside sdfBrickInterpolate.
-    float c00 = sdfBrickInterpolate(c000, c100, f.x);
-    float c10 = sdfBrickInterpolate(c010, c110, f.x);
-    float c01 = sdfBrickInterpolate(c001, c101, f.x);
-    float c11 = sdfBrickInterpolate(c011, c111, f.x);
-    float c0 = sdfBrickInterpolate(c00, c10, f.y);
-    float c1 = sdfBrickInterpolate(c01, c11, f.y);
-    float result = sdfBrickInterpolate(c0, c1, f.z);
+    // Interpolate x, then y, then z, with contraction disabled on each operation inside sdfSampledInterpolate.
+    float c00 = sdfSampledInterpolate(c000, c100, f.x);
+    float c10 = sdfSampledInterpolate(c010, c110, f.x);
+    float c01 = sdfSampledInterpolate(c001, c101, f.x);
+    float c11 = sdfSampledInterpolate(c011, c111, f.x);
+    float c0 = sdfSampledInterpolate(c00, c10, f.y);
+    float c1 = sdfSampledInterpolate(c01, c11, f.y);
 
-    return result;
-
+    return sdfSampledInterpolate(c0, c1, f.z);
+#else
+    return SDF_FAR_DISTANCE;
+#endif
 }
 // === end SDF_SHAPE_SAMPLED_REGION ====================================================================================
 
@@ -784,7 +769,7 @@ float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
             break;
         // A sampled brick where the pool is bound (the bake), else the conservative union-hull fallback — so a kernel
         // without the pool sees SDF_FAR_DISTANCE and the Subtraction compose leaves the accumulator untouched (uncarved
-        // hull, never a hole). sdfSampledRegion self-guards on SDF_SAMPLED_REGIONS, so this case is a plain call.
+        // far distance, never a hole). sdfSampledRegion self-guards on SDF_SAMPLED_REGIONS, so this case is a plain call.
         case SDF_SHAPE_SAMPLED_REGION:  result = sdfSampledRegion(p, data0, data1); break;
     }
 

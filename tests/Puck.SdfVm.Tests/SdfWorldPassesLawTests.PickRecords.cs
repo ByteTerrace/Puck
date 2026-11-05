@@ -20,8 +20,7 @@ public sealed partial class SdfWorldPassesLawTests {
         builder.ResetPoint().Sphere(material: material, radius: 1f);
         var current = Frame() with { Program = builder.Build() };
         using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
-            residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
-                frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
+            residency: new SdfWorldResidency(frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 

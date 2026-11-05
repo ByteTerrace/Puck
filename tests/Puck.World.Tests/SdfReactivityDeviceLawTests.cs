@@ -72,7 +72,7 @@ public sealed class SdfReactivityDeviceLawTests {
             regionCopy: new GpuRegionCopyPass(bytecodeExtension: extension, pipelines: pipelines),
             meshRaster: new SdfMeshRasterPass(bytecodeExtension: extension, pipelines: pipelines));
         using var residency = new SdfWorldResidency(pipelines: catalog, frameSource: new Source(frame: frame),
-            kernels: catalog.LoadDeployed(bytecodeExtension: extension), name: "world", width: Extent, height: Extent, brickPoolVoxelCapacity: 0);
+            kernels: catalog.LoadDeployed(bytecodeExtension: extension), name: "world", width: Extent, height: Extent);
         var passes = new SdfWorldPasses(resolve: _ => new SdfWorldView(Residency: residency, View: 0));
         var probe = new ProbeFactory(inner: passes);
         var packages = new RenderGraphPackageRecorders(regionCopy: catalog.RegionCopy);

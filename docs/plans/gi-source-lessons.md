@@ -52,8 +52,8 @@ their commits hold the raw output. None is new in this round.
   for `HostStartKind.WindowedWorld`); no reading attributes those bytes yet. The volume's record table is 66 MiB at High, five payload copies
   330 MiB; the CPU cache read 329 MB after a tour.
 
-**What G1 has built** (branch `lane/codex-g1`, read only; its line numbers
-move as the branch does, so recheck them before acting on one). The
+**What G1 built** (the integrated starting point at `ada4c3034b`; its line
+numbers move, so recheck them before acting on one). The
 existing CPU hierarchy is exported without a second builder
 (`SdfMeshIrradianceScene.Gpu.cs:20-108`, `ExportGpu`, staged from the scene's
 own arrays) and traced by a compute kernel, one thread per ray, 144 rays of a
@@ -123,39 +123,16 @@ Each names the general mechanism it is an instance of (M1 to M4 are the
 
 ### 1. G1's traversal at its two cheap points
 
-The code. `probeClear` answers a boolean by running the closest-hit walk
-(`shade/sdf-probe-lighting.hlsli:28-30` calls `sdfProbeIntersect`), which keeps
-descending after the first hit to shorten `distance`. It serves the
-directional shadow ray at every hit (`:64`) and the probe's own light bits
-(`passes/sdf-probe-relight.comp.hlsl:62`). The CPU already has the boolean
-walk: `SdfMeshIrradianceScene.Unblocked` runs `Walk` with any-hit leaves whose
-`Visit` returning true ends the walk (`SdfMeshIrradianceScene.cs:341,358`).
-Every source with a shadow ray takes the early exit. Occluded rays are most of
-the sun's rays indoors, and an any-hit walk stops at the first triangle on the
-segment instead of proving it nearest, so the saving falls on the relight's
-largest ray class; the size is the step's measurement, not this memo's.
-
-The overflow. Both walks end silently when the stack fills: the CPU `Walk`
-returns at `top > stack.Length - 2` (`SdfMeshIrradianceScene.cs:381`, a
-64-entry stack at `:69`) and G1 copied it (`shade/sdf-probe-trace.hlsli:84,106`,
-`SDF_PROBE_STACK_DEPTH` 64 at `isa/sdf-render.hlsli:15` on the branch). An
-unfinished closest-hit walk returns whatever it found so far, often a miss,
-and a miss is sky: a leak through a wall, which Puck treats as a defect. A
-near-first depth-first walk holds at most one pending sibling per level, so a
-stack of 64 suffices for any hierarchy shallower than about 62 levels, and the
-binned builder has no depth bound (`MaxSplits` at `:633` bounds triangle
-splitting, not tree depth). Wicked ends silently too; Brixelizer's design
-answers it by making the budget's exhaustion hand the ray to a coarser
-representation, never a miss. Puck's form is cheaper still: the builder knows
-every hierarchy's depth, so the depth bound is enforced where the hierarchy is
-made and the walks need no fallback.
-
-The order. A trace batch takes probes in priority order (finest level and
-nearest first, `List`, `SdfMeshIrradiance.cs:1569`). Wicked sorts surfel rays
-by Morton code of origin before tracing because incoherent rays thrash the
-node cache; Puck's 144 rays of one probe already share an origin and a wave,
-so only the batch's probe order is left to sort, by Morton cell within a
-priority band.
+Implemented: boolean visibility enters the shared GPU walk through
+`sdfProbeOccluded`, matching CPU `Unblocked`'s any-hit leaves. The shared
+builder certifies both hierarchy depths and forces median splits before a
+stack can truncate a walk; overflow is counted. Work lists use Morton cell
+order within their priority bands. The
+[mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) owns
+the contracts and checks. The sources motivate these changes: any-hit stops
+at the first accepted shadow blocker, builder certification removes the silent
+overflow class, and nearby origins improve hierarchy locality. Their measured
+cost belongs to the implementation commits, not an estimate in this memo.
 
 ### 2. Light each surface sample once
 
@@ -195,19 +172,17 @@ probe, on the four-storey hall harness and the debug world's fixed poses.
 
 ### 3. Spend relights where light changes and views look
 
-`Work` lists relights oldest lighting first, finest level and nearest
-(`SdfMeshIrradiance.cs:1426-1520`). Under a moving sun every probe is stale at
-every version, so the 32 m and storey levels (36,864 of High's 73,728 probes)
-take half of every cycle although views read the finest level wherever it
-answers. Godot relights every Nth surface voxel per frame
+Under a moving sun every probe becomes stale at every version; previously
+the 32 m and storey levels took half of every cycle although views read the
+finest level wherever it answers. Godot relights every Nth surface voxel per frame
 (`gi.cpp:1293-1300`); Wicked gives far surfels a re-trace period up to 8 frames
 and cuts out-of-view probes to a tenth of their rays; RTXGI pauses a converged
-volume. Puck keeps exact relights and changes only the order: a per-level
-interleave and a view weight inside an age bound per level, so a coarse probe
-is relit within k cycles, never retired. The baffled-rooms and red-to-green
-laws (`SdfMeshIrradianceLawTests.Relight.cs`) are the guard that no probe
-retires on its own small change; the lockstep drain relights everything and is
-untouched.
+volume. Implemented: Puck keeps exact relights, interleaves levels and weights
+view demand and last change inside age bounds. Stable lighting takes full
+sweeps and overdue probes bypass the phase. The mesh-GI reference owns that
+selection contract and its budget diagnostics. The baffled-rooms and
+red-to-green laws guard against retiring probes on their own small changes;
+lockstep still relights every probe from no bounce.
 
 ### Considered and not taken
 
@@ -248,43 +223,6 @@ Each brief names the invariant, the one place that enforces it and where the
 guarantee stops, the mechanisms it reuses, and a mechanical check per step. No
 brief grants a GPU leg; the lead schedules legs under `puck lease gpu`.
 
-### L1. G1 traversal corrections
-
-**Family.** The G1 lane itself, as a course correction before its step 2
-closes; otherwise the first commit after G1 lands on `lead/velocity`.
-
-**Outcome.** A visibility query walks with any-hit leaves on both CPU and GPU;
-no hierarchy deeper than its walk's stack can be built; a trace batch's probes
-run in Morton order within each priority band.
-
-**Invariant and enforcement.** A probe ray's answer is the scene's nearest hit
-within its reach, or a miss only when no triangle lies there. Enforced at one
-door: `SdfMeshIrradianceScene`'s builder records the depth of each geometry
-hierarchy and of the top level (each walk has its own stack, on the CPU and in
-G1's two groupshared stacks), and no hierarchy deeper than `StackDepth - 2`
-leaves the builder: a node range switches to median splits once the levels
-left above that bound are only as many as a balanced split of its primitives
-needs, and a scene that still cannot fit is refused by name. The walks keep their stack check as an assertion that
-counts (`sdf.mesh-gi.stack-overflow`) rather than a silent return. The
-guarantee stops at float traversal itself: a ray grazing an edge may hit on
-one side of it, as the trace device law already tolerates.
-
-**Reuse.** `SdfMeshProbeTrace.StackDepth` (G1's constant, shared by CPU and GPU on its branch), the
-CPU's `ILeaves` any-hit path, the device law
-`SdfMeshIrradianceTraceDeviceLawTests`. No second traversal: the any-hit walk
-is `sdfProbeIntersect`'s loop with an early return, sharing its node and
-triangle tests.
-
-**Steps and checks.** (1) `sdfProbeOccluded` beside `sdfProbeIntersect`;
-`probeClear` calls it. Check: the device law's light bits equal on both
-backends; `GpuRelightNanoseconds` per relit probe before and after at the
-teal corner with the sun moving. (2) The depth bound in the builder. Check: a
-law building a hierarchy over a deliberately degenerate triangle set reaches
-the bound and still answers every ray as the brute-force nearest test does;
-`puck mesh scene` on the debug world prints the deepest hierarchy. (3) Morton
-order within a band. Check: `GpuTraceNanoseconds` per ray for a full High
-window, hits unchanged by the device law.
-
 ### L2. Shared hit lighting
 
 **Family.** A Claude `specialist` or Codex at high effort; principal-grade
@@ -321,36 +259,14 @@ lockstep still at `debug.go gallery` repeats across two Worlds within the
 gather's residue; `[sdf.mesh-gi] done … seconds=` for a full relight under a
 moving sun.
 
-### L3. Relight order by level, view and change
-
-**Family.** The lane that takes G1's step 3, as part of it.
-
-**Outcome.** The GPU work list orders relights by an interleave per level, a
-view weight and the probe's last change, inside an age bound per level that
-`world.budget` reports.
-
-**Invariant and enforcement.** Every probe is relit within its level's age
-bound of a lighting change, and no probe is skipped for its own small change.
-Enforced in the selection kernel (`sdf-probe-select.comp.hlsl` on the branch),
-the one place that marks a probe due: a coarse probe's due bit is gated by
-its phase, `(version + phase) % k == 0`, and forced once its age reaches the
-bound. The lockstep drain bypasses the gate by listing every probe, as it
-does today. The guarantee stops at the budget: overload still lengthens every
-age, now in proportion to each level's interleave.
-
-**Steps and checks.** (1) The interleave. Check: under a moving sun, the
-finest level's median and oldest age in `world.budget` before and after; the
-relight laws (baffled rooms, red-to-green) pass unchanged. (2) The view
-weight from the residency's view cameras. Check: the age of probes inside the
-first view's frustum against the rest.
-
 ## Sequencing against G1
 
 G1's own order stands (trace on the GPU, relight and publication on the GPU,
-the work list on the GPU, the CPU trace out of the frame's path). L1 goes into
-the G1 lane now, since it edits G1's kernels and its CPU twin. L2's step 0 runs
+the work list on the GPU, the CPU trace out of the frame's path). The traversal
+contracts are owned by the mesh-GI reference. L2's step 0 runs
 now in parallel: it reads the CPU path and touches only the mesh-scene verb or
-a scratch harness. L3 is part of G1's step 3. L2's steps 1 and 2 follow G1's
+a scratch harness. Relight selection and ordering are owned by the mesh-GI
+reference. L2's steps 1 and 2 follow G1's
 step 3, because they change the relight kernel and the trace's output. Lesson
 4 (slot-by-slot publication) follows G1's step 2, which rewrites publication;
 lesson 5's attribution of the 18 GB is a reading any lane can take now with
@@ -361,8 +277,7 @@ reflections on glass) read the same volume and are unaffected by any of these.
 
 - **How far the hits fold into entries, and at what error** is L2's step 0,
   run by the lane that takes it; it decides whether steps 1 and 2 run.
-- **What the any-hit walk saves** is L1's step 1 reading on the 4070; the
-  2060 and the Deck readings come with G2's measurement.
+- **The 2060 and Deck traversal readings** come with G2's measurement.
 - **What fills a G1 World's 18 GB** is a `world.residency` reading and a heap
   walk on the G1 build, owned by the lead's next memory pass; no cap is set
   before it.

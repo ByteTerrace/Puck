@@ -22,7 +22,7 @@ public sealed partial class RenderGraphSchedulerLawTests {
         Reads: (reads ?? []),
         Refresh: (refresh ?? RenderGraphRefresh.EveryFrame)
     );
-    // The world's brick pool: world-scoped work whose output is a buffer the views read.
+    // World-scoped work whose output is a buffer the views read.
     private static RenderGraphInstance Bricks(RenderGraphRead[]? reads = null) => Instance(
         name: "bricks",
         output: ShaderPipelineResourceKind.Buffer,

@@ -20,7 +20,8 @@ namespace Puck.World.Client.Tests;
 /// Laws for the field lattice as a row the state mirror reads: a field row's cells are the delivered lattice cells, cell
 /// <c>i</c> at element <c>i</c>, refreshed as one read when a snapshot moves them and not at all when it does not, with
 /// no allocation once warm; a field row reaches a pass's region with the same bytes under every residency policy; a
-/// height field's brick is baked from the mirror's row slot, once per move; and the colors a program bakes (a palette's
+/// height field's sampled values are baked from the mirror's row slot, published once per move without moving the
+/// program revision; and the colors a program bakes (a palette's
 /// surface, fill, weathering and inset colors, a height field's color, a text screen's ink) are registered in the
 /// mirror at install and followed through it.
 /// </summary>
@@ -122,7 +123,7 @@ public sealed class WorldFieldRowLawTests {
             tick: 0UL
         );
 
-        // The manifest registers the height field's row whole, which its brick reads; any other field reads through a
+        // The manifest registers the height field's row whole, which its sampled values are baked from; any other field reads through a
         // binding its reader registers, as a pass's array does.
         var bump = mirror.SlotOf(
             binding: Whole(row: "bump"),
@@ -191,7 +192,7 @@ public sealed class WorldFieldRowLawTests {
         Assert.Equal(expected: 0L, actual: (GC.GetAllocatedBytesForCurrentThread() - allocated));
     }
     [Fact]
-    public void RegionalRowsKeepTheirOwnCellsAndBrickExtentsAcrossAnUnrelatedReshape() {
+    public void RegionalRowsKeepTheirOwnCellsAndSampledExtentsAcrossAnUnrelatedReshape() {
         var first = new WorldFieldsSection(Name: "first",
             Lattice: new WorldFieldLatticeDefinition(Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f), CellSize: 1f, Width: 2, Depth: 1),
             Fields: [new WorldFieldRow(Name: "first-level", Max: 1f, HeightScale: 1f, Color: "#204060")]);
@@ -226,11 +227,10 @@ public sealed class WorldFieldRowLawTests {
         client.DeliverDefinition(definition: definition, version: default);
         client.DeliverSnapshot(snapshot: new WorldSnapshot(Tick: 0UL, Revision: 0, StepTicks: 1UL,
             Entries: ReadOnlyMemory<EntitySnapshot>.Empty, FieldCells: writes));
-        var bakes = new RecordingBrickBakes();
         var emitter = new WorldFieldEmitter(client: client);
 
-        for (var step = 0; (step < 4); step++) { emitter.AdvanceBricks(bakes: bakes); }
-        Assert.Equal(expected: new[] { (4, 4, 3), (5, 5, 4) }, actual: bakes.Dimensions);
+        for (var step = 0; (step < 4); step++) { emitter.PrepareFrame(); }
+        Assert.Equal(expected: new[] { (4, 4, 3), (5, 5, 4) }, actual: Emitted(emitter: emitter).SampledFields.Select(selector: static field => (field.DimX, field.DimY, field.DimZ)).ToArray());
 
         first = first with { Lattice = first.Lattice with { Width = 4 } };
         definition = definition with { StateRaw = WorldFieldsSection.ToStateSection(composite: [first, second]) };
@@ -330,29 +330,28 @@ public sealed class WorldFieldRowLawTests {
         Assert.Equal(expected: readings[GpuResidencyPolicy.Staged], actual: readings[GpuResidencyPolicy.Ring]);
         Assert.Equal(expected: readings[GpuResidencyPolicy.Staged], actual: readings[GpuResidencyPolicy.InPlace]);
     }
-    /// <summary>A height field's brick is baked from the client's mirror: a snapshot raising a cell uploads one brick
-    /// whose voxels see the raised column, a frame with nothing moved uploads nothing, and a snapshot writing the value a
-    /// cell already holds uploads nothing.</summary>
+    /// <summary>A height field's sampled values are baked from the client's mirror and published as snapshots of one
+    /// field: the first frame publishes the flat lattice, a frame with nothing moved publishes nothing, a snapshot raising
+    /// a cell publishes one snapshot whose voxels see the raised column, and a snapshot writing the value a cell already
+    /// holds publishes nothing.</summary>
     [Fact]
-    public void AHeightFieldsBrickIsBakedFromItsMirrorRowOncePerMove() {
+    public void AHeightFieldsValuesArePublishedFromItsMirrorRowOncePerMove() {
         var definition = Document();
         var client = ClientFixtures.Client(definition: definition);
         var emitter = new WorldFieldEmitter(client: client);
-        var bakes = new RecordingBrickBakes();
 
         client.DeliverDefinition(definition: definition, version: default);
-        emitter.AdvanceBricks(bakes: bakes);
+        emitter.PrepareFrame();
 
-        // The first advance bakes the zero lattice: a flat field, every voxel the empty-space bound.
-        Assert.Single(collection: bakes.Uploads);
-        Assert.All(
-            collection: bakes.Uploads[0],
-            action: static voxel => Assert.True(condition: (voxel > 0f))
-        );
+        // The first frame bakes the zero lattice: a flat field, every voxel the empty-space bound.
+        var field = Assert.Single(collection: Emitted(emitter: emitter).SampledFields);
+        var flat = field.Current;
 
-        emitter.AdvanceBricks(bakes: bakes);
-        emitter.AdvanceBricks(bakes: bakes);
-        Assert.Single(collection: bakes.Uploads);
+        Assert.All(collection: flat.Values.ToArray(), action: static voxel => Assert.True(condition: (voxel > 0f)));
+
+        emitter.PrepareFrame();
+        emitter.PrepareFrame();
+        Assert.Same(expected: flat, actual: field.Current);
 
         client.DeliverSnapshot(snapshot: new WorldSnapshot(
             Tick: 1UL,
@@ -361,14 +360,14 @@ public sealed class WorldFieldRowLawTests {
             Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
             FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: One) }
         ));
-        emitter.AdvanceBricks(bakes: bakes);
+        emitter.PrepareFrame();
 
-        Assert.Equal(expected: 2, actual: bakes.Uploads.Count);
+        var raised = field.Current;
+
+        Assert.NotSame(expected: flat, actual: raised);
+        Assert.Same(expected: field, actual: Assert.Single(collection: Emitted(emitter: emitter).SampledFields));
         // Cell 5 is column (x 1, z 1), raised two units; the voxel at its centre on the origin layer is inside it.
-        Assert.Contains(
-            collection: bakes.Uploads[1],
-            filter: static voxel => (voxel < 0f)
-        );
+        Assert.Contains(collection: raised.Values.ToArray(), filter: static voxel => (voxel < 0f));
 
         client.DeliverSnapshot(snapshot: new WorldSnapshot(
             Tick: 2UL,
@@ -377,16 +376,15 @@ public sealed class WorldFieldRowLawTests {
             Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
             FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: One) }
         ));
-        emitter.AdvanceBricks(bakes: bakes);
-        emitter.AdvanceBricks(bakes: bakes);
+        emitter.PrepareFrame();
+        emitter.PrepareFrame();
 
-        Assert.Equal(expected: 2, actual: bakes.Uploads.Count);
+        Assert.Same(expected: raised, actual: field.Current);
     }
-    /// <summary>The field emitter's program revision moves exactly when its live program changes, which names a height
-    /// field's brick only once its first upload is ready. Attaching the engine's brick service to a world that holds no
-    /// field, or to one whose field has no ready brick yet, leaves the revision unmoved, so the first frame's program is
-    /// never rebuilt unchanged and a still view renders once; the field's first ready brick moves it; and a new service,
-    /// which forgets every ready brick, moves it again.</summary>
+    /// <summary>The field emitter's program revision moves exactly when its live program changes: a world that holds no
+    /// field never moves it, so the first frame's program is never rebuilt unchanged; a field's first bake, which makes the
+    /// field the program names, moves it once; and a drawn height change, which publishes a new snapshot of that field,
+    /// leaves it standing.</summary>
     [Fact]
     public void TheFieldProgramRevisionMovesOnlyWhenTheLiveProgramChanges() {
         var bare = Fixtures.BuildDocument();
@@ -396,28 +394,29 @@ public sealed class WorldFieldRowLawTests {
         bareClient.DeliverDefinition(definition: bare, version: default);
         var unattached = Revision(emitter: bareEmitter);
 
-        bareEmitter.AdvanceBricks(bakes: new RecordingBrickBakes());
+        bareEmitter.PrepareFrame();
         Assert.Equal(expected: unattached, actual: Revision(emitter: bareEmitter));
 
         var definition = Document();
         var client = ClientFixtures.Client(definition: definition);
         var emitter = new WorldFieldEmitter(client: client);
-        var bakes = new RecordingBrickBakes();
 
         client.DeliverDefinition(definition: definition, version: default);
         var start = Revision(emitter: emitter);
 
-        // The first advance uploads the field's brick, which no program names until the upload is ready.
-        emitter.AdvanceBricks(bakes: bakes);
-        Assert.Single(collection: bakes.Uploads);
-        Assert.Equal(expected: start, actual: Revision(emitter: emitter));
+        emitter.PrepareFrame();
+        var made = Revision(emitter: emitter);
 
-        emitter.AdvanceBricks(bakes: bakes);
-        var ready = Revision(emitter: emitter);
-
-        Assert.NotEqual(actual: ready, expected: start);
-        emitter.AdvanceBricks(bakes: new RecordingBrickBakes());
-        Assert.NotEqual(expected: ready, actual: Revision(emitter: emitter));
+        Assert.NotEqual(actual: made, expected: start);
+        client.DeliverSnapshot(snapshot: new WorldSnapshot(
+            Tick: 1UL,
+            Revision: 0,
+            StepTicks: 1UL,
+            Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
+            FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: One) }
+        ));
+        emitter.PrepareFrame();
+        Assert.Equal(expected: made, actual: Revision(emitter: emitter));
     }
     /// <summary>Every color a program or a decal bakes is registered in the mirror at install, beside the height
     /// field's row: a palette entry's color, fill and bleed, a weathering deposit's and an inset stop's color, the height
@@ -602,26 +601,11 @@ public sealed class WorldFieldRowLawTests {
         return revision[0];
     }
 
-    // A brick service that completes every upload at once and keeps each upload's voxels.
-    private sealed class RecordingBrickBakes : ISdfBrickBakeService {
-        private readonly ulong[] m_serials = new ulong[SdfBrickPoolLayout.MaxBricks];
+    // The program the emitter's live frame emits.
+    private static SdfProgram Emitted(WorldFieldEmitter emitter) {
+        var builder = new SdfProgramBuilder();
 
-        public List<float[]> Uploads { get; } = [];
-        public List<(int X, int Y, int Z)> Dimensions { get; } = [];
-
-        public bool BrickBakeAvailable => true;
-
-        public BrickBakeStatus GetBrickState(int slot) => new(
-            Serial: m_serials[slot],
-            State: ((m_serials[slot] == 0UL)
-                ? BrickBakeState.Empty
-                : BrickBakeState.Ready)
-        );
-        public void RequestBrickBake(int slot, BrickBakeRequest request) => throw new InvalidOperationException(message: "A field brick is uploaded, never requested.");
-        public void UploadBrick(int slot, int dimX, int dimY, int dimZ, ReadOnlySpan<float> voxels) {
-            Uploads.Add(item: voxels.ToArray());
-            Dimensions.Add(item: (dimX, dimY, dimZ));
-            m_serials[slot]++;
-        }
+        emitter.Emit(builder: builder, context: new SdfEmitContext(Probe: false, Time: 0f, RenderOrigin: Vector3.Zero, ParkPosition: Vector3.Zero, SlotBase: 0));
+        return builder.Build();
     }
 }

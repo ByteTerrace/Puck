@@ -157,8 +157,8 @@ its wrong answers would look exactly like right ones.
   `TransformDynamic`.
 - **Both readings** refuse the shapes whose exact cores need runtime
   trigonometry or texture sampling: regular polygon and star (`atan2`), glyph
-  (a texture sample) and a sampled brick, whose pool is an engine resource the
-  evaluator cannot reach. They admit the rest, including the ellipse and a
+  (a texture sample) and a sampled field, whose values travel beside the program
+  rather than in it. They admit the rest, including the ellipse and a
   `Path`, which reads the program's own compiled edge table.
 
 `SdfFieldEvaluator.IsSupportedOp` and `IsSupportedShape` are the single

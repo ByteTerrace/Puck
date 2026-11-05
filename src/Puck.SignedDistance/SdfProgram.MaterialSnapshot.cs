@@ -11,6 +11,18 @@ public sealed partial class SdfProgram {
 
     private bool? m_hasGlass;
     private bool? m_hasFlow;
+    private bool? m_readsWorldLanes;
+
+    /// <summary>Gets whether any material of the program reads a world lane (<see cref="SdfLanes.FirstWorld"/> and
+    /// above) through its emission, weathering or flow: a frame of such a program carries the world's lanes in its pass
+    /// block, and a frame of any other carries zero for its materials, so its views stand while the world's state moves.
+    /// Measured once, on first read.</summary>
+    public bool ReadsWorldLanes => (m_readsWorldLanes ??= m_materialsView.Any(predicate: static material =>
+        IsWorldLane(lane: material.EmissiveLane) ||
+        ((material.Weathering is { } weathering) && IsWorldLane(lane: weathering.Lane)) ||
+        ((material.Flow is { } flow) && (IsWorldLane(lane: flow.Lane) || IsWorldLane(lane: flow.CoverageLane)))));
+
+    private static bool IsWorldLane(int? lane) => (lane >= SdfLanes.FirstWorld);
 
     /// <summary>Gets whether any material of the program carries a flow layer (<see cref="SdfMaterial.Flow"/>): a frame
     /// of such a program carries the flow clock in its pass block, and a frame of any other carries zero, so its

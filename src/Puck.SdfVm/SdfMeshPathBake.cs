@@ -68,6 +68,35 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
     /// the dynamic-transform table lays a slot out, which the bake kernel reads in place of the frame's transforms; no
     /// rows for a group that reads no slot.</summary>
     public (int First, ReadOnlyMemory<Vector4> Rows)[] Poses { get; init; } = [];
+    /// <summary>Gets the snapshots the batch's lattices sample, each at its field's handle in the program the batch samples:
+    /// the ones its groups' geometries hashed (<see cref="SdfMeshBakeGroup.SampledSnapshots"/>), one snapshot a handle.</summary>
+    public (int Handle, SdfSampledSnapshot Snapshot)[] Sampled { get; init; } = [];
+    /// <summary>Gets the handles of the program the batch samples (<see cref="SdfProgram.SampledFields"/>), which its sampled
+    /// table's directory holds a word for.</summary>
+    public int SampledHandles { get; init; }
+    /// <summary>Gets the words of the batch's sampled table (<see cref="WriteSampled"/>), at least one.</summary>
+    public int SampledWords {
+        get {
+            var words = SampledHandles;
+
+            foreach (var (_, snapshot) in Sampled) { words = checked(words + snapshot.Count); }
+            return Math.Max(val1: 1, val2: words);
+        }
+    }
+    /// <summary>Writes the table the bake kernel reads sampled values from (<c>SdfWorldPackage.SampledValues</c>): a word a
+    /// handle, the word its snapshot starts at or <c>0xFFFFFFFF</c> for a handle the batch samples none of, then each
+    /// snapshot's voxels as float bits.</summary>
+    /// <param name="table">The table, at least <see cref="SampledWords"/> words.</param>
+    public void WriteSampled(Span<uint> table) {
+        table[..SampledHandles].Fill(value: uint.MaxValue);
+        var cursor = SampledHandles;
+
+        foreach (var (handle, snapshot) in Sampled) {
+            table[handle] = (uint)cursor;
+            System.Runtime.InteropServices.MemoryMarshal.Cast<float, uint>(span: snapshot.Values).CopyTo(destination: table[cursor..]);
+            cursor += snapshot.Count;
+        }
+    }
     /// <summary>Gets the input prefix the batch reads: explicit points at their sample offsets, then saved poses after
     /// all samples. Grid samples without poses need no input rows, including trailing grid samples.</summary>
     public int InputRows {
@@ -251,6 +280,8 @@ public sealed partial class SdfMeshPathBake {
     private readonly Stopwatch m_clock = new();
 
     private SdfProgram? m_program;
+    // The sampled set the groups were planned at: a frame carrying another restarts the groups that read a moved field.
+    private SdfSampledSet m_sampled = SdfSampledSet.Empty;
 
 
 
@@ -364,7 +395,7 @@ public sealed partial class SdfMeshPathBake {
     internal FrameAccess PrepareFrame(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(frame);
         using (EnterFrameGate()) {
-            if (!ReferenceEquals(frame.Program, m_program)) { Restart(frame); }
+            if (!ReferenceEquals(frame.Program, m_program) || !ReferenceEquals(frame.Sampled, m_sampled)) { Restart(frame); }
             m_demandTransforms = frame.DynamicTransforms;
             m_demandCopies = frame.MeshInstances;
             if (!SameCopyLayout(frame)) { IndexCopies(frame); }
@@ -485,6 +516,7 @@ public sealed partial class SdfMeshPathBake {
             lattices.Clear();
             tickets.Clear();
             m_takenPoses.Clear();
+            m_takenSampled.Clear();
             var samples = 0;
             var taps = 0;
             // A slice's lattices come first, within the same batch, so a long bake never holds a diagnostic back.
@@ -499,6 +531,8 @@ public sealed partial class SdfMeshPathBake {
                 lattices.Add(item: next);
                 tickets.Add(item: new SliceTicket(Generation: slice.Generation, Lattice: lattice, Slice: slice));
                 m_takenPoses.Add(item: (0, ReadOnlyMemory<Vector4>.Empty));
+                // A slice samples any instance, so it reads every field at the bake's set.
+                for (var handle = 0; (handle < m_sampled.Count); handle++) { m_takenSampled[handle] = m_sampled[handle]; }
             }
             var candidates = m_candidates;
             var pending = false;
@@ -538,6 +572,9 @@ public sealed partial class SdfMeshPathBake {
 
                 var group = m_groups[index];
                 var next = group.Next!.Value;
+
+                // A batch reads one snapshot a handle: a group whose geometry hashed another waits for a later batch.
+                if (!SamplesAlike(group: group)) { continue; }
 
                 // A lattice past the dispatch's remaining samples waits, and a smaller one behind it fills them: a
                 // dispatch that stops at the first lattice too large for it leaves half its samples unused.
@@ -589,6 +626,7 @@ public sealed partial class SdfMeshPathBake {
                 lattices.Add(item: next);
                 tickets.Add(item: group);
                 m_takenPoses.Add(item: (group.PoseFirst, group.PoseRows));
+                foreach (var (handle, snapshot) in group.SampledSnapshots) { m_takenSampled[handle] = snapshot; }
             }
             if (pending) {
                 if (lattices.Count == 0) { m_idleTakes++; }
@@ -600,7 +638,12 @@ public sealed partial class SdfMeshPathBake {
                 }
             }
             if (lattices.Count == 0) { return false; }
-            batch = new SdfMeshBakeBatch(Lattices: [.. lattices], Tickets: [.. tickets]) { Bake = this, Poses = [.. m_takenPoses] };
+            batch = new SdfMeshBakeBatch(Lattices: [.. lattices], Tickets: [.. tickets]) {
+                Bake = this,
+                Poses = [.. m_takenPoses],
+                Sampled = [.. m_takenSampled.Select(selector: static entry => (entry.Key, entry.Value))],
+                SampledHandles = (m_program?.SampledFields.Count ?? 0),
+            };
             m_batches++;
             foreach (var lattice in batch.Lattices) {
                 m_dispatches++;
@@ -629,6 +672,16 @@ public sealed partial class SdfMeshPathBake {
     }
 
     private readonly List<(int First, ReadOnlyMemory<Vector4> Rows)> m_takenPoses = [];
+    // The snapshots the batch being taken samples, by handle.
+    private readonly Dictionary<int, SdfSampledSnapshot> m_takenSampled = [];
+
+    // Whether a group's snapshots agree with the batch being taken, handle by handle.
+    private bool SamplesAlike(Group group) {
+        foreach (var (handle, snapshot) in group.SampledSnapshots) {
+            if (m_takenSampled.TryGetValue(key: handle, value: out var taken) && !ReferenceEquals(objA: taken, objB: snapshot)) { return false; }
+        }
+        return true;
+    }
     // The groups a take may take a lattice of, by priority, reused take to take.
     private readonly List<(float Priority, int Index)> m_candidates = [];
 
@@ -866,44 +919,57 @@ public sealed partial class SdfMeshPathBake {
         WatchSettle(group: group, index: index);
         m_doneThrough = Math.Min(val1: m_doneThrough, val2: index);
     }
-    // Starts the bake of a new program: one group per dynamic slot and per run of static instances baked together (one
-    // rigid copy), each starting at the coarse lattice over its bounding box. The meshes of the previous program keep
-    // drawing until their group's new mesh lands.
+    // Starts the bake of a new program, or of the groups of the same program that read a field the frame's sampled set
+    // moved: one group per dynamic slot and per run of static instances baked together (one rigid copy), each starting at
+    // the coarse lattice over its bounding box. The meshes of the previous groups keep drawing until each new mesh lands.
     private void Restart(SdfFrame frame) {
         var restarted = Stopwatch.GetTimestamp();
         var previous = m_groups.ToDictionary(keySelector: static group => group.Selector);
         var identity = Identity.Value;
+        var resampled = ReferenceEquals(objA: frame.Program, objB: m_program);
+        var program = frame.Program;
+        var sampled = frame.Sampled;
+        var plan = (resampled
+            ? new List<Group>(collection: m_groups)
+            :(((m_prepared is { } prepared) && ReferenceEquals(objA: prepared.Program, objB: program) && (prepared.FarDistance == frame.FarDistance)) ? prepared.Groups : null));
 
         m_allResident = false;
         m_demandTransforms = frame.DynamicTransforms;
-        m_program = frame.Program;
+        m_program = program;
+        m_sampled = sampled;
         m_groups.Clear();
         m_doneThrough = 0;
-        // A slice samples one program: a new one takes every lattice again.
+        // A slice samples one program and set: a new one takes every lattice again.
         m_slice?.Reset();
 
-        // The plan a build already made off the frame's thread (PlanAhead), with each group this restart cannot keep that
-        // read the transforms planned again at the frame's; otherwise the whole plan.
-        if ((m_prepared is { } plan) && ReferenceEquals(objA: plan.Program, objB: frame.Program) && (plan.FarDistance == frame.FarDistance)) {
+        // The same program whose set moved keeps every group but those that read a moved field; a new program takes the
+        // plan a build already made off the frame's thread (PlanAhead), with each group this restart cannot keep that read
+        // the transforms or a moved field planned again at the frame's; otherwise the whole plan.
+        if (plan is not null) {
             _ = SdfMeshBakeGroup.Refresh(
                 create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
                 farDistance: frame.FarDistance,
-                groups: plan.Groups,
-                program: frame.Program,
-                stale: group => !(previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, identity: identity, old: old)),
+                groups: plan,
+                program: program,
+                sampled: sampled,
+                stale: (resampled
+                    ? static _ => false
+                    : group => !(previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, identity: identity, old: old))),
                 transforms: frame.DynamicTransforms
             );
-            m_groups.AddRange(collection: plan.Groups);
+            m_groups.AddRange(collection: plan);
         } else {
             m_groups.AddRange(collection: SdfMeshBakeGroup.Plan(
                 create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
                 farDistance: frame.FarDistance,
-                program: frame.Program,
+                program: program,
+                sampled: sampled,
                 transforms: frame.DynamicTransforms
             ));
         }
 
-        m_prepared = null;
+        // A plan made ahead for a program still building stands through a restart of the same program's moved fields.
+        if (!resampled) { m_prepared = null; }
 
         // A program rebuilt with a group's instructions unchanged keeps that group, its bake and any lattice in flight; only
         // a group whose geometry moved bakes again (Keeps).
@@ -917,9 +983,16 @@ public sealed partial class SdfMeshPathBake {
         for (var index = 0; (index < m_groups.Count); index++) {
             var group = m_groups[index];
 
+            // A group the moved set did not touch stays the group it was, whatever it is doing.
+            if (previous.TryGetValue(key: group.Selector, value: out var old) && ReferenceEquals(objA: old, objB: group)) {
+                Replace(group: old, index: index);
+                if (!old.Done && (old.Leader is null) && (old.Replaces is null)) { _ = leaders.TryAdd(key: old.Sealed, value: old); }
+                continue;
+            }
             group.Owner = this;
             group.TakeDemandBox();
-            if (previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, identity: identity, old: old)) {
+            if ((old is not null) && Keeps(group: group, identity: identity, old: old)) {
+                old.AdoptSampled(planned: group);
                 Replace(group: old, index: index);
                 if (!old.Done && (old.Leader is null) && (old.Replaces is null)) { _ = leaders.TryAdd(key: old.Sealed, value: old); }
                 continue;
@@ -944,6 +1017,7 @@ public sealed partial class SdfMeshPathBake {
                 Library.TryTake(geometry: old.Sealed, identity: identity, materials: group.MaterialOrder, mesh: out var renumber)
             ) {
                 old.Renumber(materials: group.MaterialOrder, mesh: renumber);
+                old.AdoptSampled(planned: group);
                 old.ResidentAt = 0;
                 Replace(group: old, index: index);
                 continue;

@@ -15,6 +15,8 @@
 // debiting exactly what the water cell receives. Ice plus water is conserved even if a rule firing is refused or a
 // destination fills. The authored clock sets the remaining-volume target; a blocked transfer retains its supply.
 // hydroSpeed scales simulated elapsed ticks and flow; 1 is the authored pace. Exponent 1 is constant-rate melt.
+// The chain's columns are drawn in steps of `surfaceStep` metres, so water flowing every tick rebakes their surface once
+// a step; the stores keep their full values.
 //
 // The gauges are state rows the world's visuals bind to: `lakeLevel` (the lake's last cell's water), `fallsFlow` (the falls'
 // top cell's water, the discharge), `riverDepth` (the river's last cell's water) and `aquiferFill` (the aquifer's last
@@ -47,7 +49,7 @@ function hydrologyLast(stages, kind) = hydrologyFirst(stages, kind) +
   reduce(filter(stages, stage => stage.kind == kind), 0, (count, stage) => count + stage.count) -
   1
 
-template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, meltSeconds = 10800, meltExponent = 1, rateHz = 30, waterPerCell = 10, rate = 0.000625, fullHead = 1.8, poolBase = 0, poolLevelMax = 100) {
+template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, meltSeconds = 10800, meltExponent = 1, rateHz = 30, waterPerCell = 10, rate = 0.000625, fullHead = 1.8, poolBase = 0, poolLevelMax = 100, surfaceStep = 0.05) {
   let meltTicks = meltSeconds * rateHz
   let cells = hydrologyCells(stages)
   let sourceCount = length(filter(cells, c => c.kind == "source"))
@@ -88,6 +90,7 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
           min: 0
           max: 4
           heightScale: 1
+          surfaceStep: surfaceStep
           color: "#3FB8C4"
           paint: map(range(0, length(cells)), i => {
             $type: "rect"
@@ -108,6 +111,7 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
           min: 0
           max: 4
           heightScale: 1
+          surfaceStep: surfaceStep
           color: "#B9A78A"
           paint: map(range(0, length(cells)), i => {
             $type: "rect"

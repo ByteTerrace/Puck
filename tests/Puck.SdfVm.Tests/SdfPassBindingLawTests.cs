@@ -131,7 +131,7 @@ public sealed class SdfPassBindingLawTests {
     public void EachDeployedKernelBindsALightOrSkyTableOnlyWhenItsPassReadsIt() {
         var kernels = SdfKernelSet.Load(bytecodeExtension: ".spv");
 
-        foreach (var kernel in SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel != SdfKernel.BrickBake))) {
+        foreach (var kernel in SdfKernelSet.Kernels) {
             var reflected = SpirvInterfaceReader.Read(module: kernels[kernel].Span);
 
             // The kernel's bindings are its interface's, stamp included.

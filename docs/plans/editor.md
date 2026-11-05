@@ -47,9 +47,9 @@ Several pieces exist with nothing using them:
   views show it, but a session screen's residency and a routed scene's never do.
 - One shading lever reaches the pass block with no producer:
   `DisableScreenLights`.
-- The GPU carve bake (`SdfWorldTables.RequestBrickBake`, the `sdf.bricks`
-  pass) has no producer. The brick pool itself is live: height fields upload
-  their bricks into it (`WorldFieldEmitter`), and the bake samples them.
+- Sampled fields (`SdfSampledField`) carry data-driven surfaces beside the
+  program without rebuilding it; height fields are their one producer
+  (`WorldFieldEmitter`).
 
 The overlay draws rects, rings, wedges, panels, icons and text
 (`OverlayFrameBuilder`), and has no line primitive. `MarkerWriter` projects
@@ -521,7 +521,7 @@ dynamic resolution is the one quality input that reads the timing.
 **Status:** built ([World guide](../../src/Puck.World/README.md)): `world.cost`
 for step 1, the optional `world.gpu-timing` readout for step 2, and the
 `pixel=` line of `world.cost` with the inspector's `steps=` and `queries=` for
-step 3. [E13](#e13--carving-and-the-brick-bake) extends `world.cost` with a
+step 3. [E13](#e13--carving-and-its-sampled-bake) extends `world.cost` with a
 placement's carves.
 
 ### E11 — Save edits back to source
@@ -578,10 +578,10 @@ and handles an empty selection explicitly.
 **Depends on:** E2 for placement isolation; E4 and E8 for inspection; E13 for
 the carve exhibit.
 
-### E13 — Carving and the brick bake
+### E13 — Carving and its sampled bake
 
-**Problem:** a builder cannot dig into terrain or carve a hole, and the GPU
-bake built to make dense carving cheap has nothing to bake.
+**Problem:** a builder cannot dig into terrain or carve a hole, and dense
+carving needs a cache once its carves settle.
 
 **Delivers:** carves as document data: sphere subtractions, one row per brush
 dab, in a section or a placement facet the package settles against the
@@ -591,27 +591,25 @@ existing vocabulary first. `world.carve [<radius>]` carves at the pointer's hit
 reverts the entire stroke.
 The static solid field includes the carves, so collision follows them, and
 each carve extends past every point a body can reach (the phantom-surface
-caution in the rendering skill). Presentation settles, bakes, swaps, and
-invalidates the carves' bins through the shared field/bake invalidation path
-and the engine job system, with residency supplying demand and priority, as
-[the handbook](../rendering/sdf/handbook/bricks-and-baking.md#settle-bake-swap-and-invalidate)
-describes. `world.budget` prices carves and bricks, `world.cost` names a
+caution in the rendering skill). Presentation settles each carve bin, bakes its carve union on the CPU into a
+sampled field ([sampled fields](../rendering/sdf/handbook/sampled-fields.md),
+composed by subtraction in place of the bin's carve instances), and re-emits a
+bin analytic when a carve lands in it, through the shared field/bake
+invalidation path and the engine job system, with residency supplying demand
+and priority. `world.budget` prices carves and baked bins, `world.cost` names a
 placement's carves, and `world.carves` echoes the carve count and the baked and
 analytic bins.
 
 **Touches:** `Puck.World.Schema`, `Puck.World.Server` (the static field),
 `Puck.World.Client` (`WorldFramePresenter`, the shared invalidation consumer),
-`Puck.SdfVm` (`SdfWorldTables.BrickBake.cs`).
+`Puck.SignedDistance` (`SdfSampledField`).
 
 **Check:** a collision law that a point inside a carve reads outside the solid
 field; shared invalidation checks over the fake device (a bin with enough settled carves
-requests one bake and emits one brick after `Ready`, a new carve in a baked
-bin re-emits it analytic in the same rebuild; red leg: a bin below the
+bakes one sampled field and emits it in place of its carves, a new carve in a
+baked bin re-emits it analytic in the same rebuild; red leg: a bin below the
 threshold never bakes). Canary `carve-bake`: a carved region's capture agrees
-before and after its bin bakes. This supplies the check for the
-GPU carve bake, the half of the rendering plan's brick-baking capability row that
-has none (a height field's host-baked brick is held by
-`SdfWorldTablesUploadLawTests.AHostBakedBrickLandsInItsPoolSlotAndTheSlotTurnsReady`).
+before and after its bin bakes.
 
 **Depends on:** E1 and E2 for the pointer's surface hit, E3 for one step per
 stroke, and the shared field/bake invalidation and
@@ -672,7 +670,7 @@ source file. The JSON delta over the source as its basis remains the fallback a
 refusal offers, never the default.
 
 **Carving is built.** Digging and carving are builder features with no other
-home, and the brick bake is what makes hundreds of carves affordable, so E13
+home, and the sampled bake is what makes hundreds of carves affordable, so E13
 builds a carve brush whose dabs are document rows and feeds the bake from them.
 
 **The editor camera is a view override, not Free Cam.** Free Cam possesses a
@@ -749,7 +747,7 @@ bindings are authored in `worlds/standard/editor.puck`.
     a `Path` profile and a sweep certify no gain. Whether to iterate an exact
     distance, change the zero set or refuse such scales at authoring is the
     owner's call.
-- [E13](#e13--carving-and-the-brick-bake): a carve brush whose dabs are document
+- [E13](#e13--carving-and-its-sampled-bake): a carve brush whose dabs are document
   rows, one authored edit per stroke, using shared field/bake invalidation and
   the engine job system for bake work.
 - Time travel's remainder (E14's scrubbing is built):

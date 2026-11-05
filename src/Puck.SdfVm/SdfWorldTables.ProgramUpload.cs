@@ -6,7 +6,7 @@ namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldTables {
     /// <summary>Re-uploads the scene program (the host's <c>ProgramChanged</c> path — e.g. a rebuilt overworld scene).
-    /// Program and instance buffers grow on demand once the device is idle. Persistent images, baked bricks,
+    /// Program and instance buffers grow on demand once the device is idle. Persistent images,
     /// screen bindings and pipelines remain in place. Palette-value edits keep transport and geometry signatures;
     /// material reassignment or any other field/layout change invalidates them.</summary>
     /// <param name="program">The scene program to upload.</param>
@@ -26,12 +26,6 @@ public sealed partial class SdfWorldTables {
         }
 
         EnsureDynamicTransformCapacity(program.RequiredDynamicTransformCapacity);
-
-        // Baking and rendering are SPLIT: pool-less tables (BrickPoolVoxelCapacity 0) still accepts a SampledRegion
-        // program. It cannot BAKE (RequestBrickBake stays a loud rejection — nothing to write into), but it RENDERS the
-        // region via the shader's conservative uncarved-hull fallback (sdfSampledRegion detects the single-float filler
-        // by element count and returns SDF_FAR_DISTANCE, so the Subtraction never bites). Only the pool's own capacity
-        // (checked in RequestBrickBake) is the frozen envelope now — not the program's shape declaration.
 
         // The program words go through their region like every other table, so a frame in flight keeps reading the words
         // its slot was sent; only growing a capacity waits for the device to go idle.

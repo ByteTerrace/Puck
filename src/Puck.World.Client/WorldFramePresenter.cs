@@ -1575,8 +1575,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         return frame;
     }
 
-    /// <inheritdoc/>
-    public void AdvanceBricks(ISdfBrickBakeService bakes) => m_fields.AdvanceBricks(bakes: bakes);
     /// <summary>Sets the display extent the next frame's graph is prepared against, as the host resizes its display:
     /// <see cref="PrepareGraph"/> places panes and publishes pane mappings over it before the world
     /// producer captures that frame. Own cameras and viewports use this extent even when a camera export asks the shared
@@ -2248,6 +2246,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state at,
             // never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.
             Clock = m_client.StateMirror.Presented,
+            // render.lanes at the presented tick, resolved with the sky through the state mirror.
+            WorldLanes = lighting.Lanes,
             DiagnosticSource = m_diagnosticSource,
         };
 

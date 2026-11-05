@@ -59,7 +59,6 @@ public sealed partial class SdfProgramBuilder {
             Materials: m_materials.Count,
             Paints: m_materials.Sum(selector: material => (material.Paints?.Count ?? 0)),
             PathEdges: pathEdges,
-            SampledVectors: m_sampledValues.Sum(entry => (entry.Values.Count + 3) / 4),
             RigidLeaves: checked((2 * shapes)),
             Segments: segments,
             SweepCurves: m_sweepCurves.Count,

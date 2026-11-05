@@ -25,8 +25,8 @@ namespace Puck.SignedDistance.Queries;
 // query and contact consumers require physical clearance. Scalable primitives must bake anisotropy into a native shape
 // spelling (CreationGeometry does this for boxes, spheres/ellipsoids, axially symmetric cylinders/cones, and planes).
 // Both readings reject two shapes whose EXACT cores need runtime trig (RegularPolygon/Star: atan2 in sdfStar2D), one
-// needing texture sampling (Glyph), and SampledRegion, whose brick pool is an engine resource this evaluator cannot
-// access — every other shape in <see cref="SdfShapeType"/> is supported, a Path through the program's own edge table
+// needing texture sampling (Glyph), and SampledRegion, whose values travel beside the program rather than in it
+// (SdfSampledSet) — every other shape in <see cref="SdfShapeType"/> is supported, a Path through the program's own edge table
 // (SdfFieldEvaluator.Path.cs). The constructor throws <see cref="ArgumentException"/> naming the FIRST disqualifying instruction's op
 // or shape, rather than silently constructing an evaluator that would answer wrong for part of the program.
 //

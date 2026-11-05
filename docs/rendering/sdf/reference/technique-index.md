@@ -28,7 +28,7 @@ It intentionally omits implementation chronology and review provenance.
 | Rasterized coverage with temporal reconstruction | Shipped; no partial silhouette coverage | [Antialiasing and filtering](antialiasing-and-filtering.md) |
 | Temporal reconstruction | Shipped as a per-view quality: a jittered sample a frame, resolved over the view's own history | [Temporal reconstruction](../handbook/frame-rendering.md#temporal-reconstruction) |
 | Bound-preserving procedural noise | Shipped as `NoiseDisplace` (integer-hash lattice fBm, quintic-slope derivative bound folded into the step clamp) | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
-| Sampled carve bricks | Shipped as an invalidatable render cache, not a core representation | [Level of detail and bounds](lod-and-bounds.md) |
+| Sampled distance fields | Shipped for data-driven surfaces (height fields), their values beside the program and keyed into the mesh identity | [Sampled fields](../handbook/sampled-fields.md) |
 | Global voxel or clipmap representation | Not a current fit; requires a distinct content-source boundary | [Rejected and conditional SDF techniques](negative-results-and-rejections.md) |
 | MTSDF alpha for marchable glyphs | Preferred field channel | [Text and glyphs](text-and-glyphs.md) |
 | Glyph decals for dense reading text | Shipped material-level tier | [Text and glyphs](text-and-glyphs.md) |

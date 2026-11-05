@@ -39,7 +39,7 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         sky.Add(new SdfSkyPanorama { Intensity = 1, Screen = 0 }, "live", visibility: SdfSkyVisibility.Lighting);
         var frameSource = new PanoramaFrame(sky: sky);
         using var residency = new SdfWorldResidency(pipelines, frameSource, pipelines.LoadDeployed(bytecodeExtension: extension),
-            "panorama", 4, 4, screenSources: new PanoramaScreen(), brickPoolVoxelCapacity: 0);
+            "panorama", 4, 4, screenSources: new PanoramaScreen());
         var views = new SdfWorldPasses(_ => new SdfWorldView(Residency: residency, View: 0));
         using var environment = new SdfSkyEnvironmentPasses(views: views);
 

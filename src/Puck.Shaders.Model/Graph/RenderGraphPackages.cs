@@ -221,10 +221,6 @@ public sealed class RenderGraphPackageCatalog {
     /// from the instance's camera, run as the fragment <see cref="SdfWorldPackage.NativeFragment"/> declares. The screens it
     /// shows are the instance's reads, not ports.</summary>
     public const string SdfWorld = "sdf.world";
-    /// <summary>The id of the world's SDF brick pool: brick uploads and carve bakes into one pool the world's views
-    /// read. It is world-scoped, one instance for the world, and its output is a buffer, so the views reach it over
-    /// buffer edges.</summary>
-    public const string SdfBricks = "sdf.bricks";
     /// <summary>The residency's shared sky environment producer. Its SDF host supplies the typed two-pass fragment.</summary>
     public const string SkyEnvironment = "sdf.environment";
     /// <summary>The id of the unified overlay: the console, HUD, toasts and cursor drawn over its input.</summary>
@@ -370,13 +366,6 @@ public sealed class RenderGraphPackageCatalog {
         )]);
     }
 
-    /// <summary>Gets the port <see cref="SdfBricks"/> writes: the brick pool, one 32-bit float distance per voxel,
-    /// counted by <see cref="ShaderPipelineCountBasis.BrickPoolVoxels"/>.</summary>
-    public static RenderGraphPackagePort BrickPool { get; } = RenderGraphPackagePort.Buffer(
-        access: RenderGraphPortAccess.ComputeWrite,
-        count: [new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.BrickPoolVoxels])],
-        strideBytes: sizeof(float)
-    );
     /// <summary>Gets the config schema of <see cref="SdfFilmGrain"/>: the peak offset, the cell size, the seed and the
     /// flicker rate.</summary>
     public static IReadOnlyDictionary<string, ShaderConfigField> SdfFilmGrainConfig { get; } = new ReadOnlyDictionary<string, ShaderConfigField>(dictionary: new Dictionary<string, ShaderConfigField>(comparer: StringComparer.Ordinal) {
@@ -617,7 +606,7 @@ public sealed class RenderGraphPackageCatalog {
     public static IReadOnlyList<string> ImageConversions { get; } = [
         Puck.Abstractions.Sources.ImageSourceConversion.ScRgbImagePass,
     ];
-    /// <summary>Gets the engine's own packages: <see cref="SdfWorld"/>, <see cref="SdfBricks"/>, <see cref="Overlay"/>,
+    /// <summary>Gets the engine's own packages: <see cref="SdfWorld"/>, <see cref="SkyEnvironment"/>, <see cref="Overlay"/>,
     /// <see cref="Place"/>, the <see cref="SourceConversions"/>, the <see cref="ImageConversions"/> and the post-process package
     /// <see cref="SdfFilmGrain"/>.</summary>
     public static RenderGraphPackageCatalog Engine { get; } = new(packages: EnginePackages());
@@ -643,13 +632,6 @@ public sealed class RenderGraphPackageCatalog {
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
             Members: SdfWorldPackage.Members,
             Summary: "The SDF world as the instance's camera sees it."
-        ),
-        new RenderGraphPackage(
-            Id: SdfBricks,
-            Inputs: [],
-            Outputs: [BrickPool],
-            Members: [],
-            Summary: "The world's SDF brick pool: brick uploads and carve bakes, which the views read over a buffer edge."
         ),
         new RenderGraphPackage(
             Id: Overlay,

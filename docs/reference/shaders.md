@@ -466,7 +466,6 @@ offers:
 | Package | Ports | Renders |
 |---|---|---|
 | `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a native fragment (`SdfWorldPackage.NativeFragment`): the bake's mask and sampling passes while the residency's bake is pending, the shadow cascades and the mesh raster, then surface and views over the render grid, then the sky and the composite at the output extent, over retained counted scratch. Surface writes each pixel's visibility record from the mesh target, its occlusion and the cascades' shadows, and views shades its hits into the lit image, premultiplied by coverage and each hit's fog transmittance, every light answering through one interface and the stage adding each light's summed rim and specular totals once; neither queries the field. The sky evaluates its field runs only where the lit image leaves a pixel or a neighbour uncovered, and the composite adds the fog's in-scatter to the lit image (toward the gradient it reads from the residency's environment map), puts it over the sky's runs by its coverage, then integrates the bounded media over the surface and sky shares, each clipped at its own end, into the output. A view below a native render ceiling puts `resolve` between views and the sky (`SdfWorldPackage.Fragment`): it reconstructs the lit image and each output pixel's surface transport (the fog's in-scatter weight and the coverage over the ray distance, read from each sample's own record with the color's weights) from the render grid. A view whose quality asks for temporal reconstruction runs `SdfWorldPackage.TemporalFragment` at any ceiling: views also writes a render-extent reactivity buffer, and `resolve` reads it and the previous frame's history color and surface (each a history version at the output extent) and writes this frame's history beside the lit image, so the history never holds the sky. The screens it shows are the instance's reads, not ports. |
-| `sdf.bricks` | no input, one buffer output written by compute | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
 | `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
 | `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, or, with `sharpen` set, a contrast-adaptive sharpen of the source by `sharpness` there (exact at sharpness 0), otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes `letterboxColor` outside the rect instead of the base, 0 by default), `letterboxColor` (linear RGBA, `(0.015, 0.016, 0.02, 1)` by default; the matte around an engaged screen's framed picture writes the screen route's `display.fill` here), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source), `sharpen` (0 by default), `sharpness`, `tonemap` (1 puts the reconstructed source through the filmic curve inside the rect, never the base or the letterbox color, 0 by default), `crop` (the part of the source the rect shows, left, top, width and height as fractions of the source, each edge rounded to a source pixel, the whole source by default; a crop of the rect's own pixel extent is an exact copy, which is how a seat view framing its engaged screen shows only its matte) and `fidelity` (0 to 1, 0 by default: that share of the rect is the source reconstructed at sharpness 0, past the sharpen and the tone map, so a seat view framing its engaged screen at 1 is an exact copy of its native-scale source). A host that places panes per frame (`IRenderGraphPlacements`) overrides the rect, the sharpness, the sharpen switch, the letterbox color, the crop and the fidelity, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
 | `sdf.film-grain` | one fragment-sampled image input, one color-attachment image output | Film grain over the input: the engine's [post-process package](#post-process-packages), a per-pixel integer-hashed offset keyed on the engine tick. Its stages, `fullscreen.vert` and `sdf-film-grain.frag` in `Assets/Shaders/Sdf/passes`, compile at build, and `PostProcessPackage` records it. |
@@ -551,7 +550,7 @@ that reads its own output reads a `history` version's previous frame, exactly
 as a pipeline does.
 
 A buffer edge is an external buffer version bound to another instance's buffer
-output, such as a view reading the brick pool `sdf.bricks` publishes. The
+output, such as a view reading a buffer another instance publishes. The
 planner treats it as it treats an external image: the first read in a frame
 starts from the host's state and records a buffer barrier into the read state,
 and a read after a pass of the same graph wrote the buffer records a buffer
@@ -1308,7 +1307,7 @@ layout; the `pipeline-echo` canary runs one on both backends with
 fails it. The `interface-echo` canary runs one echo per shipped interface
 family the same way: the ink simulation, visualize and finish passes (finish's
 blocks, the extent alone, are also the `source-*` conversion
-packages' and the SDF brick baker's, `sdf.bricks`), the package canary's tint,
+packages'), the package canary's tint,
 the `sdf.film-grain` post-process package, the `place` and `overlay` packages,
 and the SDF engine's per-view pass, `sdf.world`. Each echo document declares
 its target's blocks, a package's declared values as config fields, and
@@ -1369,17 +1368,16 @@ a `Mismatch` on both backends that names both strides.
 
 An interface constructed with `pushesIndex: true` declares that its pipeline
 pushes one 4-byte index, the one value a grouped pipeline can push. The SDF
-engine's brick baker (`SdfWorldInterfaces.BrickBake`, the
-interface `sdf-bricks` of the `sdf.bricks` package) is the one shipped
-interface that declares it: it pushes each dispatch's slice ordinal. After the
+engine's mesh pass (`SdfWorldInterfaces.Mesh`, the interface `sdf-mesh`)
+declares it: each draw call pushes its draw and level of detail. After the
 groups its include declares:
 
 ```hlsl
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
-struct SdfBricksPushedIndex {
+struct SdfMeshPushedIndex {
     [[vk::offset(0)]] uint index;
 };
-[[vk::push_constant]] ConstantBuffer<SdfBricksPushedIndex> pushedIndex : register(b0, space4);
+[[vk::push_constant]] ConstantBuffer<SdfMeshPushedIndex> pushedIndex : register(b0, space4);
 ```
 
 The struct is named for the interface (`ShaderInterface.PushedIndexTypeName`),
@@ -1565,8 +1563,7 @@ block's word 0 lands at) and a run table.
 (`GpuRegion.CopyPipeline`). `GpuRegionCopyPass` makes it one entry a device of
 the [pass-pipeline cache](#the-pass-pipeline-cache), built on the thread pool,
 and every owner leases that pipeline rather than creating its own: the SDF
-engine records every region's copy with it, its brick staging into the brick
-pool included. It is counted under `gpu.pass-pipelines` with every other pass
+engine records every region's copy with it. It is counted under `gpu.pass-pipelines` with every other pass
 pipeline.
 
 A shader pipeline instance owns every host-written region its graph reads. A
@@ -1871,8 +1868,7 @@ more pieces of vocabulary:
   host resolves: output `Extent` pixels, `RenderExtent` pixels (the allocation
   ceiling for a package with separate grids), program `Instances`, `ProgramWords`,
   `Viewports`, `DynamicTransforms`, the `InstanceMaskWords` of one instance mask
-  the host derives from its instances, and the `BrickPoolVoxels` of the world's
-  SDF brick pool. A buffer of four floats a viewport plus twelve a viewport and
+  the host derives from its instances. A buffer of four floats a viewport plus twelve a viewport and
   instance is
   `[{ "per": ["Viewports"], "elements": 4 }, { "per": ["Viewports", "Instances"], "elements": 12 }]`
   floats. A term names at least one basis and each basis once, and no two terms

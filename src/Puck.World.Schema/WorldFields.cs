@@ -109,6 +109,7 @@ public sealed record WorldFieldsSection(
                 (field.Min != trait.Min) ||
                 (field.Max != trait.Max) ||
                 (field.HeightScale != trait.HeightScale) ||
+                (field.SurfaceStep != trait.SurfaceStep) ||
                 (field.Material != trait.Material) ||
                 !string.Equals(
                 a: field.Color,
@@ -294,7 +295,8 @@ public sealed record WorldFieldsSection(
                 Max: trait.Max,
                 Medium: (trait.Medium is not null),
                 Min: trait.Min,
-                Name: row.Name.Value
+                Name: row.Name.Value,
+                SurfaceStep: trait.SurfaceStep
             ));
 
             foreach (var fill in (trait.Paint ?? [])) {
@@ -355,7 +357,8 @@ public sealed record WorldFieldsSection(
                     ? new WorldLatticeMedium()
                     : null),
                         Min: row.Min,
-                        Paint: ((paint.Length == 0) ? null : paint)
+                        Paint: ((paint.Length == 0) ? null : paint),
+                        SurfaceStep: row.SurfaceStep
                     ),
                     Name: CellName.Parse(candidate: row.Name)
                 ));
@@ -424,6 +427,9 @@ public sealed record WorldFieldTopology(
 /// samples each tick at its coupled cell — the same body-coupling ceiling <see cref="WorldReaction.Emit"/>/
 /// <see cref="WorldReaction.Expose"/> resolve against — refused unless <paramref name="HeightScale"/> is greater
 /// than zero (a surface-less medium is meaningless).</param>
+/// <param name="SurfaceStep">The height, in world units, the drawn surface of a row carrying a
+/// <paramref name="HeightScale"/> moves by (<see cref="WorldFieldRow.SurfaceStep"/>); 0 draws it at the baked mesh's own
+/// resolution. Presentation only: bodies and media read the full value.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldStateFieldTrait(
     float Initial = 0f,
@@ -433,7 +439,8 @@ public sealed record WorldStateFieldTrait(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null,
     IReadOnlyList<WorldLatticeFill>? Paint = null,
     WorldLatticeMedium? Medium = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteEntryDocument? Material = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteEntryDocument? Material = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float SurfaceStep = 0f
 ) {
     /// <summary>The initial fills, applied in order over <see cref="Initial"/>.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -481,6 +488,12 @@ public sealed record WorldFieldLatticeDefinition(
 /// is nonzero, or omitted for a neutral white surface.</param>
 /// <param name="Material">Optional surface material using the creation palette vocabulary.</param>
 /// <param name="Medium">Whether this field is a fluid medium (see <see cref="WorldStateFieldTrait.Medium"/>).</param>
+/// <param name="SurfaceStep">The height, in world units, the drawn surface moves by. The renderer redraws a column only
+/// once its raised height has moved a whole step from the height drawn, and then draws it at the nearest whole step, so
+/// a value that changes continuously (a flowing or filling store) rebakes its surface once a step rather than every
+/// lattice step, a value hovering about a step boundary redraws nothing, and a height it returns to draws a mesh already
+/// baked. 0 draws at the baked mesh's own resolution (<c>SdfMeshGeometryBuilder.PositionSteps</c>). Presentation only:
+/// bodies and media read the full value.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldFieldRow(
     string Name,
@@ -490,7 +503,8 @@ public sealed record WorldFieldRow(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float HeightScale = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Medium = false,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteEntryDocument? Material = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteEntryDocument? Material = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float SurfaceStep = 0f
 );
 /// <summary>One initial fill of a lattice row, applied in order over the row's <c>initial</c>. Every kind decides
 /// per CELL with integer hashes and Q48.16 arithmetic only, so a fill is bit-identical on every machine and backend
@@ -716,15 +730,39 @@ public static class WorldFieldCapacity {
     public const int MaxExtent = 1024;
     /// <summary>The most fields a section may declare.</summary>
     public const int MaxFields = 8;
-    /// <summary>The most layers along +Y — one render brick's edge.</summary>
+    /// <summary>The most layers along +Y.</summary>
     public const int MaxLayers = 128;
     /// <summary>The most paint rows a section may declare.</summary>
     public const int MaxPaint = 256;
     /// <summary>The most reactions a section may declare.</summary>
     public const int MaxReactions = 64;
-    /// <summary>The most cells of surface a height field may raise above the origin — the render brick's edge less
-    /// the voxel below the origin and the one above the top.</summary>
-    public const int MaxSurfaceCells = 126;
+    /// <summary>The most cells a height-bearing lattice spans along X or Z, and the most cells of surface a height field
+    /// may raise above the origin: the drawn surface's sampled lattice (<see cref="SurfaceVoxels"/>) holds at most
+    /// <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxSampledRegionDim"/> voxels an axis, which a column's border
+    /// voxels, the voxel below the origin and the one above the top must fit beside.</summary>
+    public const int MaxSurfaceCells = (Puck.SignedDistance.SdfProgramBuilder.MaxSampledRegionDim - 3);
+    /// <summary>The most bytes the drawn surfaces of every height field of a world's regions sample together, four a
+    /// voxel of each field's <see cref="SurfaceVoxels"/>: each surface's snapshot lives in the client, and a mesh bake
+    /// copies the snapshots its groups read into its job.</summary>
+    public const long MaxSurfaceBytes = ((64L * 1024) * 1024);
+
+    /// <summary>Returns the voxel lattice a height field of a region is drawn through: the lattice's columns padded one
+    /// voxel on each side along X and Z, and along +Y one voxel below the origin, the tallest column any of the region's
+    /// height fields can raise, and one above.</summary>
+    /// <param name="region">The region.</param>
+    /// <returns>The voxels along each axis.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="region"/> is <see langword="null"/>.</exception>
+    public static (int X, int Y, int Z) SurfaceVoxels(WorldFieldsSection region) {
+        ArgumentNullException.ThrowIfNull(argument: region);
+
+        var lattice = region.Lattice;
+        var tallest = 0f;
+
+        foreach (var row in region.Fields) {
+            tallest = MathF.Max(x: tallest, y: ((row.Max * row.HeightScale) * lattice.Layers));
+        }
+        return ((lattice.Width + 2), (((int)MathF.Ceiling(x: (tallest / lattice.CellSize))) + 3), (lattice.Depth + 2));
+    }
     /// <summary>The most conditions or writes one transform reaction may declare.</summary>
     public const int MaxTransformTerms = 64;
 }

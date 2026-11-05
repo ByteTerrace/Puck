@@ -1,4 +1,5 @@
 #include "../isa/sdf-probe-relight.interface.hlsli"
+#define SDF_PROBE_RESULT_STRIDE SDF_PROBE_RELIGHT_RESULT_WORDS
 #include "../shade/sdf-probe-lighting.hlsli"
 
 groupshared float3 probeVarying[6 * SDF_PROBE_GROUP_SIZE];
@@ -26,7 +27,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         probeLocal[axis * SDF_PROBE_GROUP_SIZE + lane] = 0;
     }
     for (uint w = lane; w < SDF_MESH_IRRADIANCE_LIGHT_WORDS; w += SDF_PROBE_GROUP_SIZE) {
-        probeVisible[w] = reuse ? sdfProbeInput[input + 5 + 36 + w] : 0;
+        probeVisible[w] = reuse ? sdfProbeInput[input + SDF_PROBE_RELIGHT_PREVIOUS_WORD + 36 + w] : 0;
     }
     GroupMemoryBarrierWithGroupSync();
     for (uint texel = lane; valid && texel < SDF_PROBE_HIT_COUNT; texel += SDF_PROBE_GROUP_SIZE) {
@@ -57,7 +58,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
             float length = sqrt(dot(toward, toward));
             visible = length < position.w;
             direction = toward / max(length, 0.0001);
-            reach = length - 0.02;
+            reach = length - SDF_MESH_IRRADIANCE_LIGHT_BIAS;
         }
         if (visible && mode.z != 0 && reach > 0) { visible = probeClear(origin, direction, reach, lane); }
         uint bit = 1u << (index & 31);
@@ -72,8 +73,8 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
             local += probeLocal[lane * SDF_PROBE_GROUP_SIZE + i];
         }
         float total = sdfProbeLighting[9 + lane / 4][lane % 4];
-        local = reuse ? asfloat(uint3(sdfProbeInput[input + 5 + 18 + 3 * lane],
-            sdfProbeInput[input + 5 + 19 + 3 * lane], sdfProbeInput[input + 5 + 20 + 3 * lane])) : local / total;
+        uint previous = input + SDF_PROBE_RELIGHT_PREVIOUS_WORD + 18 + 3 * lane;
+        local = reuse ? asfloat(uint3(sdfProbeInput[previous], sdfProbeInput[previous + 1], sdfProbeInput[previous + 2])) : local / total;
         varying = varying / total + local;
         [unroll] for (uint c = 0; c < 3; c++) {
             sdfProbeHitsRW[output + 3 * lane + c] = asuint(varying[c]);

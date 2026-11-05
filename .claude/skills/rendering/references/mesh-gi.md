@@ -15,16 +15,85 @@ backend. Runtime trace, relight, selection and exposure queries use
 backends. CPU `TraceHits` and `Relight` remain reference/diagnostic paths;
 placement still uses CPU nearest-surface and short clearance queries.
 
+The trace device law also dispatches the production relight kernel with
+miss-only cached hits and 32 shadowing directionals, isolating its any-hit
+light bits. Every bit must equal CPU `Unblocked`, including the empty scene;
+both that output and nearest-hit tracing assert zero overflow. Writable
+fixture buffers are device-local, with explicit upload/copy/readback ordering.
+
+Boolean visibility uses `sdfProbeOccluded` through the same `sdfProbeWalk` node
+and triangle tests as `sdfProbeIntersect`, returning at the first accepted
+triangle. `probeClear` uses that entry for shadows, light bits and the meter.
+The CPU twin is `Unblocked` through `Walk` and `ILeaves` any-hit leaves.
+`Hierarchy.BuildNode` bounds both hierarchies to `StackDepth - 2` edges from
+the root, switching to median splits when only a balanced subtree fits and
+refusing a named hierarchy that cannot fit. Walks check before pushing and
+count `sdf.mesh-gi.stack-overflow`; CPU overflow also throws. GPU jobs reset
+and read the assertion word after the job's logical output under its fence.
+The entry point supplies its generated result stride; retained slot capacity
+can grow without moving that word or causing a readback of unused capacity.
+The device law injects an overdeep hierarchy into a larger output allocation
+and requires the assertion to count it on both backends. Reset copies use
+`CopyWrite`, followed by shader read/write access for the atomic increment.
+`puck mesh scene` reports top/geometry depth and forced median splits. The
+degenerate-bounds scene law reaches depth 62 and compares nearest and any hits
+with brute force, with zero overflow.
+The scene command reuses `LevelsOf(High)` and `SdfMeshProbeDepth.RayDirections`,
+so its comparison traces use the volume's actual finest window and quadrature.
+`world.budget` samples per-level median and maximum lighting ages when read,
+in addition to the work-list cycle's combined ages.
+Both work lists use the existing `Puck.Maths` three-way Morton interleave on
+window-relative cells. Trace/relight class, lighting age and level retain their
+priority; within each eight-cell radial band the order is spatial. A drain
+still lists every cell and uses the same spatial order within each level.
+For changing lighting, selection visits a stable cell phase every 1/4/8
+completed sweeps by level. Phase uses the sweep ordinal, since lighting
+versions can jump by a multiple of the period between sweeps and revisit the
+same phase indefinitely. The sweep holds its initial phase
+and interleave decision across empty or interrupted listings; a newer batch
+lighting never fills the deferred phases within that sweep.
+`sdf-probe-select.comp.hlsl` alone sets the GPU
+due bit; missing geometry, rebase and unwritten publication bypass the phase,
+and lighting age at the level's bound forces it even in the current sweep.
+The bound is the authored age target times that level's interleave and is
+reported in `world.budget`. A sweep beginning under the same lighting version
+as its predecessor visits every phase so bounce propagation cannot stop on an
+unvisited phase. The
+CPU reference uses the same eligibility rule; lockstep always visits all cells.
+Partial interleaved sweeps neither certify convergence nor consume the
+full-window `MaxSweeps` limit.
+The combined ages remain diagnostic totals; `behind` compares each level to
+its own bound and reports the worst relative overrun. Its needed relight rate
+is the sum of each level's probe count divided by that level's bound.
+Relight priority uses age relative to the level's bound before level, capture
+age and spatial band. Overload can exceed the targets; no probe retires on its
+own small change.
+Below the bound, age priority is weighted by 1 inside any residency view's
+frustum and 0.25 outside all of them, and by 1.25 when the probe's last relight
+moved past the existing convergence threshold. Overdue probes ignore these
+weights. Camera snapshots come from the same frame as the work snapshot;
+elsewhere cameras are excluded because their coordinates belong to another
+world. The diagnostic additionally reports the first view's counts, median
+and oldest ages against those outside that frustum at each level.
+
 The runtime streams the existing scene's nodes and leaf indices through a
 `GpuRegion` source, without a second packed hierarchy on the CPU. One admitted
 query owns the shared scene and feedback regions until its fence completes;
 they therefore have one staging slot. Service slots independently retain their
 outputs through readback release. GPU hit-cache allocations carry nonrepeating
-tokens, checked by selection before reuse. A relight commits records only after
-`Stands` accepts their scene/window, then frame upload copies the ready slots
-into the published GPU table. The CPU retains depth/sky and diagnostic lighting,
-and releases full hit arrays after their device-cache upload. Exposure reads
-the GPU meter's small answer rather than traversing the hierarchy on the frame.
+tokens, checked by selection before reuse. The cache is sized to the published
+tier (`HitCapacityOf`: the window's cells plus two fresh slots per probe a drain
+batch places). A placed probe's trace job copies its hits into a fresh cache
+slot on the device (the first trace and the trial traces into separate slots,
+`PlaceBatch`); its relight adopts the slot it keeps (`AdoptGpuHits`) and the
+cache pass stamps the token, so hits read back for the CPU's surface map are
+never uploaded again. A relight commits records only after `Stands` accepts
+their scene/window, then frame upload copies the ready slots into the published
+GPU table. The CPU retains depth/sky and diagnostic lighting, and releases full
+hit arrays once the batch is relit. Exposure reads the GPU meter's small answer
+rather than traversing the hierarchy on the frame. A job whose scene's meshes
+are not resident within `AdmissionWait` is cancelled like an obsolete one, so it
+never holds the coordinator or the meter behind it without bound.
 
 `SdfWorldResidency.LightingPending` latches convergence after preparation for
 the whole frame, including the final meter. `SdfWorldPasses.WaitingOf` feeds it
@@ -315,7 +384,11 @@ after the main residency's done line; a nested residency's done line is insuffic
   At a camera cut the meter reads `fresh`: a sample is reused only from the very
   position, so the reading after a teleport depends on where the camera stands,
   not where it stood. `SdfViewExposures` keeps a cut owed until a reading
-  arrives and snaps to that first reading.
+  arrives and snaps to that first reading. The runtime meters on the GPU
+  asynchronously (`ScheduleGpuMeters`, at most every `LightingInterval`, at once
+  after a cut): each view reads its own latest row wherever its camera now
+  stands, so a moving camera stays `probes` or `camera-trace`, never `held`; a
+  `fresh` read answers only from a row asked after the view's cut revision.
   This camera sample never writes the volume or relaxes surface visibility.
   If the scene is unavailable or the camera is inside opaque geometry, retain
   the previous exposure, local-adaptation meter and sky visibility. The authored
@@ -335,9 +408,9 @@ after the main residency's done line; a nested residency's done line is insuffic
   grants relights and traces. A lighting that changes every frame keeps the
   relight cycling over the window; overload lengthens the lighting's age, not
   the frame. Each cycle's start records the window's age (median and oldest,
-  `world.budget` and `Describe`); a cycle older than the budget's `age` counts
+  `world.budget` and `Describe`); a level past its scaled age bound counts
   `behind` and prints `[sdf.mesh-gi] behind` (at most every ten seconds) with
-  the relit and needed rates. A re-traced probe keeps drawing its previous
+  that level, its bound and the relit and needed rates. A re-traced probe keeps drawing its previous
   measurement until its trace lands. Clear the CPU cache and staging volume
   only when the layout changes. On a resize or window move, retain the uploaded
   GPU table **and its old coordinates** until every new slot has a measured
@@ -357,7 +430,7 @@ after the main residency's done line; a nested residency's done line is insuffic
 - A record is 235 words (940 bytes): 19 header/cube/light/origin words, 144
   packed first-hit surface words and 72 packed normal-gradient words.
   Medium's three levels hold 49,152 probes in 44.0625 MiB; High's 73,728 in
-  66.09375 MiB. The GPU runtime releases the CPU hit array after upload, keeping
+  66.09375 MiB. The GPU runtime releases the CPU hit array once the batch is relit, keeping
   depth/sky and diagnostic lighting (`ProbeBlock` and `LightBlock`); the CPU
   reference keeps the full hits too. `world.budget` derives the retained block
   cost from those types. A level's cache holds its window grown by the
@@ -367,10 +440,16 @@ after the main residency's done line; a nested residency's done line is insuffic
   the three levels). `world.residency`'s `probe-cache-*` line reads it. A batch's
   depth/sky and light blocks stay alive while any kept probe names them, so
   bytes per kept probe can exceed their nominal payload.
-  Publication starts with one inert record and fits the published tier.
-  Reuse `GpuRegion` grow/shrink and
-  existing frame-ring retirement; increment the binding revision when its buffer
-  changes. Keep the old table and coordinates until every new slot is measured.
+  The published table (`SdfWorldTables.PublishMeshIrradiance`) is copied on the
+  device from the feedback table; no frame uploads it from the host. It fits
+  the published volume exactly, is cleared before its first copies, retires
+  through the frame ring and increments the binding revision when replaced;
+  until the volume first publishes into a residency's tables the World set
+  binds the dummy buffer and the parameters are disabled. Keep the old table
+  and coordinates until every new slot is measured. A device reattach brings
+  new tables with no table: nothing publishes until a completed relight carries
+  the volume's full snapshot into the new feedback, then every slot republishes
+  at once (`RepublishAll`).
   The GPU feedback table and the published table are distinct: a relight reads
   completed prior batches, while views retain their last complete window.
   Feedback has a CPU shadow for reset snapshots; hierarchy staging streams

@@ -2478,7 +2478,7 @@ public static partial class CreationCanonicalizer {
             } else if (shape.Blend is SdfBlendOp.Morph) {
                 if (shape.Morph is not { } morph) {
                     errors.Add(item: new(Message: "blend 'Morph' needs a morph facet naming its lane and range.", Path: $"shapes[{i}].morph"));
-                } else if ((morph.Lane < 0) || (morph.Lane > 3) || !float.IsFinite(f: morph.From) || !float.IsFinite(f: morph.To) || (morph.From == morph.To)) {
+                } else if (!SdfLanes.IsSlotLane(lane: morph.Lane) || !float.IsFinite(f: morph.From) || !float.IsFinite(f: morph.To) || (morph.From == morph.To)) {
                     errors.Add(item: new(Message: "morph requires a lane in [0, 3] and finite, differing from and to values.", Path: $"shapes[{i}].morph"));
                 }
             } else if (shape.Steps is not null) {

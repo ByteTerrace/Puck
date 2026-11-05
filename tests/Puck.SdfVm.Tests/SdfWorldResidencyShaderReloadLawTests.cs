@@ -259,7 +259,6 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
         );
 
         return new SdfWorldResidency(
-            brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: frame),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(mask: 1),
