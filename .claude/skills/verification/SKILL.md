@@ -282,6 +282,14 @@ once started, the World runs from the store and no longer locks the checkout.
 
 ## Build before you test
 
+A `git archive <commit> | tar -x` tree (a bisect's or an old commit's) has no
+`.git`, and one extracted inside a worktree resolves Git through the enclosing
+repository, so `puck test` there keys its World build by that repository, not
+by the tree: a second tree reuses the first tree's World and boots the wrong
+code (it showed as a refused document member the old build lacked). Build the
+tree's `src/Puck.World` and pass `--world-artifact <tree>/src/Puck.World/bin/Release/net11.0/Puck.World.dll`;
+`puck bench world` needs neither, since it runs the tree's own build in process.
+
 When a brief isolates build outputs with `--artifacts-path`, give semantic
 formatting that same closure: set `ArtifactsPath` to its absolute directory and
 `UseArtifactsOutput=true` in the environment of `puck format`. Otherwise its

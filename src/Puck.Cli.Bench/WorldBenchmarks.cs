@@ -73,7 +73,7 @@ internal static class WorldBenchmarks {
 
         var allocationSamples = new long[SampleTicks];
         var elapsedTicksSamples = new long[SampleTicks];
-        var countsBefore = ReadContactWork();
+        var countsBefore = ReadTickWork();
         long simulatedBodyVisits = 0, dynamicPairVisits = 0, eventOverlapTests = 0, regionBodyTests = 0;
 
         for (var tick = 0; (tick < SampleTicks); tick++) {
@@ -87,7 +87,7 @@ internal static class WorldBenchmarks {
             regionBodyTests += server.Events.RegionBodyTests;
         }
 
-        var countsAfter = ReadContactWork();
+        var countsAfter = ReadTickWork();
 
         Array.Sort(array: allocationSamples);
         Array.Sort(array: elapsedTicksSamples);
@@ -102,9 +102,9 @@ internal static class WorldBenchmarks {
         rows.Add(item: ("world: dynamic broadphase pair visits / tick", $"{(dynamicPairVisits / ((double)SampleTicks)):F1}"));
         rows.Add(item: ("world: event overlap / region body tests / tick", $"{(eventOverlapTests / ((double)SampleTicks)):F1} / {(regionBodyTests / ((double)SampleTicks)):F1}"));
 
-        // The contact work behind the tick, as deterministic counts: what a timing row is read beside.
-        for (var kind = 0; (kind < ContactWorkKinds.Length); kind++) {
-            rows.Add(item: ($"world: {ContactWorkKinds[kind].Name} per tick", $"{((countsAfter[kind] - countsBefore[kind]) / ((double)SampleTicks)):F1}"));
+        // The body and contact work behind the tick, as deterministic counts: what a timing row is read beside.
+        for (var kind = 0; (kind < TickWork.Length); kind++) {
+            rows.Add(item: ($"world: {TickWork[kind].Kind.Name} per tick", $"{((countsAfter[kind] - countsBefore[kind]) / ((double)SampleTicks)):F1}"));
         }
 
         MeasureValueWrite(
@@ -498,35 +498,28 @@ internal static class WorldBenchmarks {
         return ((samples[(samples.Length / 2)] * 1000.0) / Stopwatch.Frequency);
     }
 
-    // The analytic solver's work, the certified sweep's work and the immutable field's bounds work it spends, in report
-    // order.
-    private static readonly WorkKind[] ContactWorkKinds = [
-        FixedStaticContactWork.Resolves,
-        FixedStaticContactWork.Queries,
-        FixedStaticContactWork.ConvexQueries,
-        FixedStaticContactWork.Supports,
-        FixedContactSweepWork.Sweeps,
-        FixedContactSweepWork.BoundsQueries,
-        SdfBoundsCache.Evaluations,
-        SdfBoundsCache.Instructions,
-        SdfBoundsCache.Rotations,
-        SdfFieldEvaluator.PointEvaluations,
-        SdfFieldEvaluator.PointInstructions,
+    // The deterministic work behind a tick, in report order: the bodies the population steps and the parked ones a field
+    // change woke or left asleep, the analytic solver's work, the certified sweep's work and the immutable field's bounds
+    // work it spends.
+    private static readonly (IWorkCounterSource Source, WorkKind Kind)[] TickWork = [
+        (Puck.World.Server.WorldBodyWork.Process, Puck.World.Server.WorldBodyWork.Advances),
+        (Puck.World.Server.WorldBodyWork.Process, Puck.World.Server.WorldBodyWork.FieldWakes),
+        (Puck.World.Server.WorldBodyWork.Process, Puck.World.Server.WorldBodyWork.FieldObserved),
+        (FixedStaticContactWork.Process, FixedStaticContactWork.Resolves),
+        (FixedStaticContactWork.Process, FixedStaticContactWork.Queries),
+        (FixedStaticContactWork.Process, FixedStaticContactWork.ConvexQueries),
+        (FixedStaticContactWork.Process, FixedStaticContactWork.Supports),
+        (FixedContactSweepWork.Process, FixedContactSweepWork.Sweeps),
+        (FixedContactSweepWork.Process, FixedContactSweepWork.BoundsQueries),
+        (SdfBoundsCache.ProcessWork, SdfBoundsCache.Evaluations),
+        (SdfBoundsCache.ProcessWork, SdfBoundsCache.Instructions),
+        (SdfBoundsCache.ProcessWork, SdfBoundsCache.Rotations),
+        (SdfFieldEvaluator.PointWork, SdfFieldEvaluator.PointEvaluations),
+        (SdfFieldEvaluator.PointWork, SdfFieldEvaluator.PointInstructions),
     ];
 
-    private static long[] ReadContactWork() => [
-        FixedStaticContactWork.Process.Read(kind: FixedStaticContactWork.Resolves),
-        FixedStaticContactWork.Process.Read(kind: FixedStaticContactWork.Queries),
-        FixedStaticContactWork.Process.Read(kind: FixedStaticContactWork.ConvexQueries),
-        FixedStaticContactWork.Process.Read(kind: FixedStaticContactWork.Supports),
-        FixedContactSweepWork.Process.Read(kind: FixedContactSweepWork.Sweeps),
-        FixedContactSweepWork.Process.Read(kind: FixedContactSweepWork.BoundsQueries),
-        SdfBoundsCache.ProcessWork.Read(kind: SdfBoundsCache.Evaluations),
-        SdfBoundsCache.ProcessWork.Read(kind: SdfBoundsCache.Instructions),
-        SdfBoundsCache.ProcessWork.Read(kind: SdfBoundsCache.Rotations),
-        SdfFieldEvaluator.PointWork.Read(kind: SdfFieldEvaluator.PointEvaluations),
-        SdfFieldEvaluator.PointWork.Read(kind: SdfFieldEvaluator.PointInstructions),
-    ];
+    private static long[] ReadTickWork() => Array.ConvertAll(array: TickWork, converter: static entry =>
+        (entry.Source.TryRead(kind: entry.Kind, value: out var value) ? value : throw new InvalidOperationException(message: $"{entry.Source.Name} does not count {entry.Kind.Name}.")));
     private static void PrintTable(List<(string Name, string Value)> rows) {
         var nameWidth = rows.Max(selector: row => row.Name.Length);
 

@@ -76,6 +76,8 @@ public sealed class FieldLattice {
     private readonly FixedQ4816[] m_min;
     private readonly string[] m_names;
     private readonly FixedVector3 m_origin;
+    private readonly FixedVector3 m_readMaximum;
+    private readonly FixedVector3 m_readMinimum;
     private readonly FixedQ4816[] m_scratch;
     private readonly int m_stepEveryTicks;
     private readonly ulong[] m_valueRevisions;
@@ -170,6 +172,15 @@ public sealed class FieldLattice {
         }
 
         m_bodyCouplingCeiling += (m_cellSize * FixedQ4816.FromInteger(value: m_layers));
+
+        var reach = (m_cellSize * FixedQ4816.FromInteger(value: FieldLatticeSolid.ReachCells));
+
+        m_readMinimum = new FixedVector3(X: (m_origin.X - reach), Y: ((m_origin.Y - m_cellSize) - reach), Z: (m_origin.Z - reach));
+        m_readMaximum = new FixedVector3(
+            X: ((m_origin.X + (m_cellSize * FixedQ4816.FromInteger(value: m_width))) + reach),
+            Y: ((m_origin.Y + m_bodyCouplingCeiling) + reach),
+            Z: ((m_origin.Z + (m_cellSize * FixedQ4816.FromInteger(value: m_depth))) + reach)
+        );
 
         m_reactionSets = CompileReactionSets(reactions: input.Reactions);
         RecomputePassCounts();
@@ -1204,7 +1215,7 @@ public sealed class FieldLattice {
         FixedQ4816? best = null;
 
         for (var field = 0; (field < m_values.Length); field++) {
-            if (m_isMedium[field] || (m_heightScale[field] == FixedQ4816.Zero)) {
+            if (!IsSolidField(field: field)) {
                 continue;
             }
 
@@ -1235,6 +1246,9 @@ public sealed class FieldLattice {
 
         return best;
     }
+    // A field raises solid columns when it bears height and is no medium (a medium provides immersion, not contact).
+    // ColumnHeight and BodyReadRevision read this one predicate, so contact and the stamp of what contact reads agree.
+    private bool IsSolidField(int field) => (!m_isMedium[field] && (m_heightScale[field] != FixedQ4816.Zero));
     /// <summary>Describes the lattice for a console read-back.</summary>
     /// <returns>One line.</returns>
     public string Describe() {
@@ -1999,4 +2013,26 @@ public sealed class FieldLattice {
     /// installing the saved values.</summary>
     /// <param name="field">The field index.</param>
     public ulong ValueRevision(int field) => m_valueRevisions[field];
+    /// <summary>Gets a derived invalidation stamp over the cells a body can read: every medium field, which
+    /// <see cref="MediumSurface"/> floats a body against, and, when <paramref name="solids"/> holds, every solid field,
+    /// which <see cref="ColumnHeight"/> raises into contact. A field neither reads (a store, a tag source) never moves
+    /// it. It only increases, so equality with an earlier reading proves no such cell changed since.</summary>
+    /// <param name="solids">Whether the caller's contact reads this lattice's solid columns.</param>
+    /// <returns>The stamp; meaningful only compared with an earlier reading of the same lattice.</returns>
+    public ulong BodyReadRevision(bool solids) {
+        var revision = 0UL;
+
+        for (var field = 0; (field < m_values.Length); field++) {
+            if (m_isMedium[field] || (solids && IsSolidField(field: field))) { revision = unchecked((revision + m_valueRevisions[field])); }
+        }
+        return revision;
+    }
+    /// <summary>Gets the least corner of the box outside which no body reads this lattice; see
+    /// <see cref="ReadMaximum"/>.</summary>
+    public FixedVector3 ReadMinimum => m_readMinimum;
+    /// <summary>Gets the greatest corner of the box outside which no body reads this lattice: the coupling volume
+    /// <see cref="TryBodyCellOf"/> resolves a body in (so every position <see cref="MediumSurface"/> answers for), from
+    /// the cell under the origin where a solid column's box starts up to the tallest surface a field can raise, grown on
+    /// every side by the <see cref="FieldLatticeSolid.ReachCells"/> cells a solid's answer reads. World units.</summary>
+    public FixedVector3 ReadMaximum => m_readMaximum;
 }

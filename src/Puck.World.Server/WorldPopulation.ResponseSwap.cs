@@ -63,7 +63,7 @@ public sealed partial class WorldPopulation {
         if (local && (m_baseContactField is WorldColliderSet rebuilt)) { rebuilt.FoldRows(box: ref box, definition: definition, rows: rows); }
         RebindSolidConsumers(
             previousNavigation: previousNavigation,
-            reach: ((local && !box.Unbounded && (m_baseContactField is WorldColliderSet swapped)) ? (box, FieldWakeMargin(colliders: swapped)) : null)
+            reach: ((local && !box.Unbounded && (m_baseContactField is WorldColliderSet)) ? (box, FieldWakeMargin()) : null)
         );
         return true;
     }
@@ -107,6 +107,6 @@ public sealed partial class WorldPopulation {
 
         ObserveFieldChange(contactFieldVersion: version, sleepersBefore: sleepersBefore);
         m_sleepFieldVersion = version;
-        m_sleepFieldTerms = m_contactFieldTerms;
+        RecordSleepFieldObservation(known: true);
     }
 }

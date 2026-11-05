@@ -816,11 +816,14 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 - An attached placement can also `respond` to state: the shown prototype and
   its colliders swap while its attachment stays intact. The lift's car doors
   and indicator use this; `inhabit` and `faceSources` still refuse `respond`.
-- A moving carrier or a solid response swap wakes only the parked rigid bodies
-  whose bounds, grown by the contact reach (two contact skins) and the rigid
-  support probe's travel, meet the box its changed colliders cover; any other contact-field
-  change wakes every one. A ride or a door that lags the tick shows as
-  `world.counters physics.bodies` advances per tick far above the idle count
+- A moving carrier, a solid response swap or a field lattice's step wakes only
+  the parked rigid bodies whose bounds, grown by the contact reach (two contact
+  skins) and the rigid support probe's travel, meet the box its changed
+  colliders or the changed lattice's read bounds cover; an install or a
+  half-space wakes every one. A lattice cell no body reads (a store, a solid
+  under the analytic provider) wakes nothing. A ride, a door or a flowing
+  lattice that lags the tick shows as `world.counters physics.bodies` (and `puck
+  bench world`'s `physics.bodies.advances`) per tick far above the idle count
   ([server README](../../../src/Puck.World.Server/README.md)).
 
 ## Route adjacent work

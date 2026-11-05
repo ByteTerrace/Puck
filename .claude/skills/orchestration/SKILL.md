@@ -387,7 +387,13 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   touches the World compares load-independent per-tick counters (body
   advances, contact queries, rules evaluations, draw records changed) on a
   headless boot against the integration tip, and a jump stops the landing
-  until it is explained. An output-identity gate (a whole mesh store by hash)
+  until it is explained. The tool is `puck sweep --no-scenarios --baseline
+  <tip report.json>`: its headless leg reads `world.counters physics` and
+  `world.counters state` and turns a counter red when it moves more than 50%
+  (`relative:0.5` in `worlds/debug/sweep.json`); a lane runs it before hand-back
+  and names any change over 10%. The lead regenerates the tip's report under the
+  main checkout's `.claude/scratch/tip-sweep/` whenever the tip moves, and briefs
+  name that path. An output-identity gate (a whole mesh store by hash)
   first runs the baseline twice: the mesh bake is not byte-reproducible run to
   run, so only a difference outside the baseline's own variation counts. The hard limits are one heavy integration job and one GPU
   leg at a time. A windowed debug World holds a large share of

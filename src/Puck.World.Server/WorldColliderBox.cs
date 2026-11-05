@@ -3,8 +3,9 @@ using Puck.Physics;
 
 namespace Puck.World.Server;
 
-/// <summary>A world-axis box grown over the padded bounds of the colliders folded into it: the reach of a change to
-/// the contact field, so a sleeping body whose bounds miss it provably cannot meet anything that changed.</summary>
+/// <summary>A world-axis box grown over the padded bounds of the colliders and field lattices folded into it: the reach
+/// of a change to what a body reads, so a sleeping body whose bounds miss it provably cannot meet anything that
+/// changed.</summary>
 internal struct WorldColliderBox {
     /// <summary>Gets a value indicating whether any collider was folded.</summary>
     public bool Any { readonly get; private set; }
@@ -36,7 +37,10 @@ internal struct WorldColliderBox {
         ((position.Y + reach) >= Minimum.Y) && ((position.Y - reach) <= Maximum.Y) &&
         ((position.Z + reach) >= Minimum.Z) && ((position.Z - reach) <= Maximum.Z))));
 
-    private void Fold(FixedVector3 minimum, FixedVector3 maximum) {
+    /// <summary>Grows the box over a world-axis box.</summary>
+    /// <param name="minimum">The least corner, in metres.</param>
+    /// <param name="maximum">The greatest corner, in metres; at least <paramref name="minimum"/> on every axis.</param>
+    public void Fold(FixedVector3 minimum, FixedVector3 maximum) {
         if (!Any) {
             Minimum = minimum;
             Maximum = maximum;
