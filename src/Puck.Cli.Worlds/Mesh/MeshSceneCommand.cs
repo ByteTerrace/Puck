@@ -120,7 +120,7 @@ public static class MeshSceneCommand {
         var copy = new SdfMesh(indices: target.Mesh.Indices.ToArray(), normals: target.Mesh.Normals.ToArray(), positions: target.Mesh.Positions.ToArray(), triangleMaterials: target.Mesh.TriangleMaterials.ToArray());
         var replaced = new List<SdfMeshDraw>(collection: draws) { [changed] = target with { Mesh = copy } };
         var moved = new List<SdfMeshDraw>(collection: draws) { [changed] = target with { ObjectToWorld = (target.ObjectToWorld * Matrix4x4.CreateTranslation(position: new Vector3(x: 0f, y: 0.001f, z: 0f))) } };
-        var center = Center(mesh: target.Mesh);
+        var center = ((target.Mesh.PositionLow + target.Mesh.PositionHigh) * 0.5f);
         var output = Console.Out;
         var triangles = draws.Sum(selector: static draw => ((long)draw.Mesh.TriangleCount));
 
@@ -196,17 +196,6 @@ public static class MeshSceneCommand {
         using var process = Process.GetCurrentProcess();
 
         return process.TotalProcessorTime.TotalSeconds;
-    }
-    private static Vector3 Center(SdfMesh mesh) {
-        var low = new Vector3(value: float.PositiveInfinity);
-        var high = new Vector3(value: float.NegativeInfinity);
-
-        foreach (var position in mesh.Positions.Span) {
-            low = Vector3.Min(value1: low, value2: position);
-            high = Vector3.Max(value1: high, value2: position);
-        }
-
-        return ((low + high) * 0.5f);
     }
     // The index-th of count directions spread evenly over the sphere (a spherical Fibonacci lattice).
     private static Vector3 Fibonacci(int index, int count) {

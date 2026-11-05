@@ -588,6 +588,12 @@ public sealed partial class SdfFieldEvaluator {
 
             return Clamp(value: (((Int128)Scaled(magnitude: axis, factor: Gain)) - Radius));
         }
+        // The most CheapPointReach can fall, in raws, between two points whose largest axis distances from any centre
+        // differ by at most `move` raws: the gain is at most MaxGain, the floor in Scaled adds one raw, and the clamp only
+        // narrows a difference.
+        public static long CheapPointReachFall(long move) => ((MaxGain * move) + 1L);
+        // The largest gain a certificate holds (RepresentableGain), which bounds how fast its cheap reach changes.
+        private const long MaxGain = 2L;
         // Whether every candidate interval's lower end over the box is at least threshold raws.
         public bool BoxClears(in BoxQuery query, Int128 threshold) {
             var least = Least(inverseGain: BoxInverseGain, required: ((threshold + BoxRadius) + SpreadRaws(factor: BoxSpread, omega: query.Spread)));
@@ -657,7 +663,7 @@ public sealed partial class SdfFieldEvaluator {
         private static long Clamp(Int128 value) => ((long)Int128.Clamp(max: (long.MaxValue / 2L), min: (long.MinValue / 2L), value: value));
         // Certificate representation only: valid fields remain readable when the gain has no safe raw form.
         private static bool RepresentableGain(double gain) =>
-            ((gain > 0.0) && (gain <= 2.0) &&
+            ((gain > 0.0) && (gain <= MaxGain) &&
              (Math.Floor(d: ((gain * (1.0 - DoublePadding)) * Q32)) >= 1.0) &&
              (Math.Ceiling(a: (((1.0 + DoublePadding) / gain) * Q32)) < ((double)ulong.MaxValue)));
         private static ulong GainBits(double gain) => ((ulong)Math.Floor(d: ((gain * (1.0 - DoublePadding)) * Q32)));

@@ -335,7 +335,7 @@ public static class SdfMeshAudit {
             }
         }
 
-        var (crossings, missing) = Missing(cell: cell, field: field, flagged: flagged, indices: indices, options: options, positions: positions);
+        var (crossings, missing) = Missing(cell: cell, field: field, flagged: flagged, indices: indices, mesh: mesh, options: options, positions: positions);
         var clusters = Cluster(cell: cell, flagged: flagged)
             .Take(count: options.Clusters)
             .Select(selector: cluster => cluster with { Shapes = Nearest(count: options.Shapes, probes: cluster.Probes, shapes: shapes) })
@@ -514,18 +514,11 @@ public static class SdfMeshAudit {
     }
     // The field's zero set on a lattice over the mesh's box: each lattice edge whose ends differ in sign holds a crossing,
     // refined by bisection and flagged where no triangle lies within a cell of it.
-    private static (int Crossings, int Missing) Missing(SdfFieldEvaluator field, ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, float cell, SdfMeshAuditOptions options, List<Sample> flagged) {
+    private static (int Crossings, int Missing) Missing(SdfFieldEvaluator field, SdfMesh mesh, ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, float cell, SdfMeshAuditOptions options, List<Sample> flagged) {
         if ((positions.Length == 0) || !(cell > 0f)) { return (0, 0); }
 
-        var low = new Vector3(value: float.MaxValue);
-        var high = new Vector3(value: float.MinValue);
-
-        foreach (var position in positions) {
-            low = Vector3.Min(value1: low, value2: position);
-            high = Vector3.Max(value1: high, value2: position);
-        }
-        low -= new Vector3(value: (3f * cell));
-        high += new Vector3(value: (3f * cell));
+        var low = (mesh.PositionLow - new Vector3(value: (3f * cell)));
+        var high = (mesh.PositionHigh + new Vector3(value: (3f * cell)));
 
         var extent = (high - low);
         var spacing = MathF.Max((MathF.Max(extent.X, MathF.Max(extent.Y, extent.Z)) / (Math.Max(options.MissingSamples, 2) - 1)), (1.5f * cell));

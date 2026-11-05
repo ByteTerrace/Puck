@@ -246,22 +246,22 @@ public sealed partial class SdfWorldTables {
             destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
     }
     // Observes and packs one record through the same door for full and incremental staging.
-    private void StageMeshDraw(int index, in SdfMeshDraw draw, Span<uint> record, ReadOnlySpan<byte> old, bool incremental = false) {
+    private void StageMeshDraw(int index, in SdfMeshDraw draw, Span<uint> record, ReadOnlySpan<byte> old, ref StagingTally tally, bool incremental = false) {
         var observation = m_meshHistory.Observe(draw: in draw, index: index, reseat: MeshTransformWasReseated(in draw));
         var packedWords = SdfMeshRecord.DrawWords;
         if (incremental) {
             var work = SdfMeshRegion.WriteDrawIncremental(draw: in draw, previous: in m_stagedDraws[index],
                 placement: m_meshArena.Placements[draw.Mesh], generation: observation.Generation, record: record);
             packedWords = work.PackedWords;
-            if (work.NormalComputed) { SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.NormalMatricesComputed); }
-            if (work.SelectionComputed) { SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.SelectionBoxesComputed); }
+            if (work.NormalComputed) { tally.Normals++; }
+            if (work.SelectionComputed) { tally.Selections++; }
         } else {
             SdfMeshRegion.WriteDraw(draw: in draw, placement: m_meshArena.Placements[draw.Mesh], generation: observation.Generation, record: record);
-            SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.NormalMatricesComputed);
-            SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.SelectionBoxesComputed);
+            tally.Normals++;
+            tally.Selections++;
         }
-        SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.RecordsPacked);
-        SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.RecordBytesPacked, amount: (packedWords * sizeof(uint)));
+        tally.Records++;
+        tally.RecordBytes += (packedWords * sizeof(uint));
         if (observation.Seed) {
             m_seededMeshDraws.Add(length: 1, start: index);
             return;
@@ -271,8 +271,27 @@ public sealed partial class SdfWorldTables {
 
         if ((offset > (old.Length - MeshMatrixBytes)) || !matrix.SequenceEqual(other: old.Slice(length: MeshMatrixBytes, start: offset))) {
             m_changedMeshMatrices.Add(length: 1, start: index);
-            SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.MatricesChanged);
-            SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.MatrixBytesChanged, amount: MeshMatrixBytes);
+            tally.Matrices++;
+        }
+    }
+    // The staging work of one pass over draw records, counted locally and published once: an interlocked count per
+    // record and kind was a measurable share of staging thousands of records a frame.
+    private struct StagingTally {
+        public long Normals;
+        public long Selections;
+        public long Records;
+        public long RecordBytes;
+        public long Matrices;
+
+        public readonly void Publish() {
+            var work = SdfMeshHistory.ProcessWork;
+
+            work.Add(kind: SdfMeshHistory.NormalMatricesComputed, amount: Normals);
+            work.Add(kind: SdfMeshHistory.SelectionBoxesComputed, amount: Selections);
+            work.Add(kind: SdfMeshHistory.RecordsPacked, amount: Records);
+            work.Add(kind: SdfMeshHistory.RecordBytesPacked, amount: RecordBytes);
+            work.Add(kind: SdfMeshHistory.MatricesChanged, amount: Matrices);
+            work.Add(kind: SdfMeshHistory.MatrixBytesChanged, amount: (Matrices * MeshMatrixBytes));
         }
     }
     // Packs a complete newly staged list and retires vanished cells while retaining their generation lifetimes.
@@ -282,11 +301,14 @@ public sealed partial class SdfWorldTables {
             offset: 0
         );
 
+        var tally = new StagingTally();
+
         for (var index = 0; (index < draws.Count); index++) {
             var draw = draws[index];
 
-            StageMeshDraw(index: index, draw: in draw, record: words.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords)), old: old);
+            StageMeshDraw(index: index, draw: in draw, record: words.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords)), old: old, tally: ref tally);
         }
+        tally.Publish();
         m_meshHistory.RetireAfter(count: draws.Count);
 
         var bytes = (((ulong)Math.Max(val1: 1, val2: draws.Count)) * MeshMatrixBytes);

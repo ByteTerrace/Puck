@@ -42,54 +42,76 @@ public sealed partial class SdfFieldEvaluator {
         material = 0;
         instructionsWalked = 0;
 
-        // Outside the frame some step of the evaluation can leave the carrier, so the position is refused, never wrapped.
-        if (
-            !m_hasShape ||
-            !position.TryDelta(
-            delta: out var worldPosition,
-            origin: FixedPosition.Zero
-        ) ||
-            !IsInFrame(point: worldPosition)
-        ) {
+        if (!TryWorldPoint(position: position, worldPosition: out var worldPosition)) {
             return false;
         }
 
+        var candidate = FillPointReaches(margin: 0L, reaches: out var reaches, worldPosition: worldPosition);
+
+        (distance, material, instructionsWalked) = WalkPoint(candidate: candidate, reaches: reaches, worldPosition: worldPosition);
+
+        return true;
+    }
+
+    // The world point a position reads at, refused when the program declares no shape or the point leaves the frame:
+    // outside the frame some step of the evaluation can leave the carrier, so the position is refused, never wrapped.
+    private bool TryWorldPoint(FixedPosition position, out FixedVector3 worldPosition) {
+        if (!m_hasShape) {
+            worldPosition = FixedVector3.Zero;
+
+            return false;
+        }
+
+        return (position.TryDelta(delta: out worldPosition, origin: FixedPosition.Zero) && IsInFrame(point: worldPosition));
+    }
+    // Fills the thread's reach scratch with each cullable instance's cheap reach from a point, lowered by a margin in raws,
+    // and answers the primer's candidate, the instance of least reach (minus one when the program is not primeable).
+    // A reach lowered by m raws is still a lower bound at every point whose cheap reach is at most m raws less, which
+    // lets one prepass serve every point of a neighbourhood: the cull only ever skips on a reach at or above its
+    // threshold, and a smaller reach only skips less, which leaves the walk's answer as it is.
+    private int FillPointReaches(FixedVector3 worldPosition, long margin, out ReadOnlySpan<FixedQ4816> reaches) {
         var cullBounds = m_cullBounds;
-        var reaches = (((PointReachScratch is { } scratch) && (scratch.Length >= cullBounds.Length))
-            ? scratch
+        var scratch = (((PointReachScratch is { } held) && (held.Length >= cullBounds.Length))
+            ? held
             : (PointReachScratch = CreateReachScratch(length: cullBounds.Length, work: PointWork, arrays: PointScratchArraysCreated, bytes: PointScratchPayloadCreated)));
-        var primer = PointPrimer.None;
-        var walked = 0L;
-        var powerWork = new PowerWork();
+        var candidate = -1;
 
         for (var bound = 0; (bound < cullBounds.Length); bound++) {
-            reaches[bound] = FixedQ4816.FromRawBits(value: cullBounds[bound].Reach.CheapPointReach(point: worldPosition));
+            scratch[bound] = FixedQ4816.FromRawBits(value: (cullBounds[bound].Reach.CheapPointReach(point: worldPosition) - margin));
 
-            if (m_primeable && ((primer.Candidate < 0) || (reaches[bound] < reaches[primer.Candidate]))) {
-                primer.Candidate = bound;
+            if (m_primeable && ((candidate < 0) || (scratch[bound] < scratch[candidate]))) {
+                candidate = bound;
             }
         }
 
         PointWork.Add(kind: PointPrepassBounds, amount: cullBounds.Length);
+        reaches = scratch.AsSpan(start: 0, length: cullBounds.Length);
+
+        return candidate;
+    }
+    // Walks the whole program at one point over reaches FillPointReaches filled, and counts the evaluation.
+    private (FixedQ4816 Distance, int Material, int InstructionsWalked) WalkPoint(FixedVector3 worldPosition, ReadOnlySpan<FixedQ4816> reaches, int candidate) {
+        var primer = PointPrimer.None;
+        var walked = 0L;
+        var powerWork = new PowerWork();
+
+        primer.Candidate = candidate;
 
         var (resultDistance, resultMaterial) = WalkPoints(
             end: m_instructions.Length,
             first: 0,
             primer: ref primer,
             powerWork: ref powerWork,
-            reaches: reaches.AsSpan(start: 0, length: cullBounds.Length),
+            reaches: reaches,
             walked: ref walked,
             worldPosition: worldPosition
         );
 
-        distance = resultDistance;
-        material = resultMaterial;
-        instructionsWalked = ((int)walked);
         PointWork.Count(kind: PointEvaluations);
         PointWork.Add(amount: walked, kind: PointInstructions);
         powerWork.Publish();
 
-        return true;
+        return (resultDistance, resultMaterial, ((int)walked));
     }
 
     // Walks [first, end) at one point from the far seed and answers the distance and material. With reaches, it tests
