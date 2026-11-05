@@ -6,7 +6,7 @@ namespace Puck.SdfVm;
 /// recorded when <c>puck shaders generate</c> wrote the declarations.</summary>
 public static class SdfIsaFingerprint {
     /// <summary>The whole instruction set's fingerprint.</summary>
-    public const uint Value = 0x40B50CC4u;
+    public const uint Value = 0xE1A5EA11u;
     /// <summary>The field's instruction set's fingerprint, which the mesh bake's interface carries.</summary>
     public const uint Field = 0xF688D43Cu;
 }

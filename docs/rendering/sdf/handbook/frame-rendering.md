@@ -682,18 +682,22 @@ place:
 
 | Pass | Does |
 |---|---|
-| `glass-clear` | Zeroes the **glass sums**, two words a render-grid pixel: a signed distance sum and a face count. |
-| `glass` | Rasterizes the glass draws through the mesh vertex stage into the **glass target** (the nearest glass front face's ray parameter, draw and triangle, as the mesh target holds a hit) through a reversed-Z depth of its own. Every face, front or back, that lies before the pixel's opaque hit (read from the visibility record) adds its ray distance to the sums, a front face subtracting, a back face adding, and its face count, with atomics, so the sums hold the distance the ray travels through glass whatever order the faces draw in. |
-| `glass-shade` | Writes the lit image again, copying every pixel no glass front face lies before, and shading the rest: the glass surface's normal and material are resolved from the target as the surface pass resolves an opaque hit; the light behind is the lit image, read where the ray bent by Snell's law leaves the glass and carries on, parallel to the pixel's ray, to the opaque hit's depth, and absorbed over the distance through the glass by Beer–Lambert; the sky reflects by Fresnel from the environment map under the sky's reflection gain, and each light adds its highlight through the one GGX lobe; frost spreads the read over a disc of taps whose radius grows with the roughness and the distance behind the glass. |
+| `glass-clear` | Zeroes the **glass sums**, eight words a render-grid pixel: a signed distance sum, a face count and three 64-bit optical depth sums. |
+| `glass` | Rasterizes the glass draws through the mesh vertex stage into the **glass target** (the nearest glass front face's ray parameter, draw and triangle, as the mesh target holds a hit) through a reversed-Z depth of its own. Every face, front or back, that lies before the pixel's opaque hit (read from the visibility record) adds its ray distance to the sums, a front face subtracting, a back face adding, its face count, and its own material's absorption times its distance to the opaque hit, a front face adding and a back face subtracting. Every sum is integer arithmetic with atomics, so the sums hold the same words whatever order the faces draw in. |
+| `glass-shade` | Writes the lit image again, copying every pixel no glass front face lies before, and shading the rest: the glass surface's normal and material are resolved from the target as the surface pass resolves an opaque hit; the light behind is the lit image, read where the ray bent by Snell's law leaves the glass and carries on, parallel to the pixel's ray, to the opaque hit's depth, and absorbed by Beer–Lambert over the optical depth the sums hold; the sky reflects by Fresnel from the environment map under the sky's reflection gain, and each light adds its highlight through the one GGX lobe; frost spreads the read over a disc of taps whose radius grows with the roughness and the distance behind the glass. |
 
-The distance through the glass is the sums' matched distance plus the opaque
-hit's distance for each unmatched front face, never more than the distance from
-the nearest front face to the opaque hit: a hollow shell absorbs over both its
-walls, a solid holding an opaque object over the glass before it, and a thin
-pane over its thickness alone. Absorption is `exp(−σ · distance)` per channel
-with `σ = −ln(tint) / depth`, so light through one depth of the glass is the
-tint and light through two is the tint squared: thicker reads deeper, never a
-stacked blend. The glass pixel's coverage is the light behind's, darkened by
+The distance through the glass, which the refraction travels, is the sums'
+matched distance plus the opaque hit's distance for each unmatched front face,
+never more than the distance from the nearest front face to the opaque hit: a
+hollow shell absorbs over both its walls, a solid holding an opaque object over
+the glass before it, and a thin pane over its thickness alone. Absorption is
+`exp(−σ · distance)` per channel with `σ = −ln(tint) / depth`, integrated
+through every glass material before the opaque hit, so light through one depth
+of the glass is the tint and light through two is the tint squared: thicker
+reads deeper, never a stacked blend, and water seen through a clear pane keeps
+the water's colour. A pair of faces cancels its shared distance to the opaque hit
+exactly in the integer sums, so glass against the far sky absorbs as it does
+against a near wall (`SdfGlassSumsDeviceLawTests`). The glass pixel's coverage is the light behind's, darkened by
 the glass's luminous transmittance, so the sky the composite puts behind a
 clear pane shows through at the pixel's own direction. The reflection and the
 highlights pass through the atmosphere over the glass's own distance; the light
@@ -712,9 +716,9 @@ and its taint rules see glass as any surface: the glass passes read nothing
 external. A debug view's image passes through the glass pass unshaded, and the
 pick reads the visibility record, the opaque hit behind the glass.
 
-The limits: one glass layer a pixel, the nearest front face before the opaque
-hit, so glass seen through glass shades as the opaque image behind the nearer
-pane; the sky seen through glass is not refracted and is darkened rather than
+The limits: the nearest front face before the opaque hit alone reflects and
+refracts, so glass seen through glass absorbs through both but bends and
+reflects at the nearer pane alone; the sky seen through glass is not refracted and is darkened rather than
 tinted; refraction reads a screen-space neighbour, so what lies off screen or
 behind a nearer surface reads the pixel's own sample; an eye inside a glass
 solid sees no front face, so the pixel passes through untinted; the glass
