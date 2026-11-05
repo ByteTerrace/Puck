@@ -179,6 +179,16 @@ had just written, a second retry loop in a change built to remove one among
 them, so duplicates were created about as fast as they were found; naming the
 mechanism up front is cheaper than the review that catches it.
 
+A brief asks for the fix at the cause and never lists a stopgap as an
+acceptable direction (AGENTS.md: the proper fix is always preferred). A lane
+takes the cheapest option a brief offers: a rebake brief that listed
+"quantize the change" as one shape got whole-step water levels (`surfaceStep`)
+that visibly jump, when the cause was that a moved surface needed a new mesh at
+all. When the lead does not yet know the proper fix, the brief asks the lane
+to find it and say why, or names it as a design step before the code; a
+mitigation that lands in the meantime is recorded as one, beside the open item
+that removes it.
+
 A performance sweep partitions its lanes by target type or method, never by
 benchmark scenario: two scenarios share hot code, so lanes split by scenario
 rewrite the same method twice. ASP.NET's agent effort produced pairs of PRs
