@@ -4114,15 +4114,11 @@ export type WorldBodyContactPolicy = {
    */
   rigidSubstepCeiling?: number;
   /**
-   * Below this linear speed (world units/second) a grounded rigid body counts toward the resting hold window (RigidRestHoldSeconds). Non-negative; the default reproduces the engine's original hard-coded threshold.
+   * Below this speed (world units/second) of its fastest point, the centre's linear speed plus its angular speed times its bounding radius, a grounded rigid body counts toward the resting hold window (RigidRestHoldSeconds). It scales with each body's live scale, so a long piece turning slowly about its centre stays awake while its ends still move. Non-negative.
    */
-  rigidRestLinearSpeed?: number;
+  rigidRestSpeed?: number;
   /**
-   * Below this angular speed (radians/second) a grounded rigid body counts toward the resting hold window, on the same terms as RigidRestLinearSpeed. Non-negative.
-   */
-  rigidRestAngularSpeed?: number;
-  /**
-   * How long a rigid body must stay under both rest thresholds while grounded before the resting latch actually closes — long enough that crossing a contact skin's noise band for one tick never freezes a body mid-roll. Non-negative.
+   * How long a rigid body must stay under the rest speed while grounded before the resting latch actually closes — long enough that crossing a contact skin's noise band for one tick never freezes a body mid-roll. Non-negative.
    */
   rigidRestHoldSeconds?: number;
   /**

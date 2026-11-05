@@ -413,9 +413,10 @@ independent authored costs. `rigidSubstepCeiling` (default 8, maximum 32)
 bounds a rigid body's own per-tick continuous-collision substep count against
 an authored `rigidSubstepTravelFraction` (default 0.5) — the count itself is
 derived per body per tick from speed and collider size, never authored
-directly. `rigidRestLinearSpeed`/`rigidRestAngularSpeed`/`rigidRestHoldSeconds`
-(defaults 0.05/0.1/0.25) are the thresholds and hold window a grounded rigid
-body's `Resting` fact latches against. `rigidManifoldIterations` (default 4,
+directly. `rigidRestSpeed`/`rigidRestHoldSeconds` (defaults 0.05/0.25) are the
+threshold on the fastest point's speed (linear plus angular times bounding
+radius) and the hold window a grounded rigid body's `Resting` fact latches
+against. `rigidManifoldIterations` (default 4,
 maximum 16) bounds the sequential-impulse passes a box or capsule's own ground
 support manifold (up to four box corners, or two capsule cap points, fewer
 once tilted enough — `FixedRigidWitness.SupportManifold`) resolves over each
