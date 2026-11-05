@@ -213,7 +213,7 @@ public sealed partial class GpuKernelCounters : IGpuWorkReadback, IDisposable {
             commandBufferHandle: commandBuffer,
             destinationAccessMask: GpuAccess.HostRead,
             destinationStageMask: GpuStage.Host,
-            sourceAccessMask: GpuAccess.TransferWrite,
+            sourceAccessMask: GpuAccess.CopyWrite,
             sourceStageMask: GpuStage.Transfer
         );
     }

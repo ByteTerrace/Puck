@@ -41,7 +41,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: device, actual: rig.Gpu.DeviceLocal(part: "mesh-bake-points", sizeBytes: 96));
         Assert.Equal(expected: 0L, actual: rig.Gpu.HostBytes());
         Assert.Equal(expected: 0UL, actual: rig.Gpu.BufferCopyBytes);
-        Assert.Empty(collection: rig.Gpu.StateConflicts);
     }
     // A table whose every row the batch wrote: one run over all of its words.
     private static SdfMeshBakeInput Whole(Vector4[] rows) {

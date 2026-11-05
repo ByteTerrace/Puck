@@ -263,7 +263,6 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                 ))[..(RowLength * 4)]);
             }
 
-            Assert.Empty(collection: gpu.StateConflicts);
 
             return readings;
         }

@@ -20,29 +20,30 @@ buffers and images, shared-surface export, and queue submission. Swapchains and 
 `Puck.DirectX.Presentation`, mirroring the split between `Puck.Vulkan` and
 `Puck.Vulkan.Presentation`.
 
-Compute, graphics, and readback use one legacy resource-barrier model on the
-same direct queue. Texture owners register their initial state and remove it
-on disposal; the one recorder, `DirectXGpuRecorder`, carries that state across
-compute and graphics passes. Buffer states are tracked per command list,
-because Direct3D 12 returns every buffer to `COMMON` after each `ExecuteCommandLists`. One
-submission of several lists carries a buffer's state from each list to the next, so a buffer
-transitions in only one list of a submission: a shader pipeline's copy list hands a copied
-package region to its readers, and a host buffer port's copied buffer is handed over by its
-readers' planned barriers in the pass lists submitted after it. A buffer's
-first transition in a list starts from the state its declared prior access
-implies, so callers declare the access that actually preceded it: every graph
-pass, an SDF view's passes among them, takes each access's prior state from its
-plan (`ShaderPipelineAccess`), which records every pass's ordered accesses with
-the prior state and barrier. A read through a
-read-write binding is declared with the write the binding permits, because
-the buffer must stay in `UNORDERED_ACCESS` for it. An upload-heap buffer stays
-in `GENERIC_READ` for its whole life. A write followed by another access in
-`UNORDERED_ACCESS` records a UAV barrier on that buffer alone.
-`tests/Puck.DirectX.Tests` checks these barrier decisions without a device.
-Sampled images permit both pixel and compute shader reads. Global UAV barriers
-order repeated image writes, and raw UAV views clear storage buffers. Temporary clear
-descriptors retire with their fenced command buffers, including reload and reset.
+Image transitions take their before layout from the caller. Private textures start
+in COMMON; render-graph access plans and the owners of standalone images carry
+their actual layouts across reuse and reset. Shader-readable images permit
+pixel and compute reads. Render-pass callers put attachments in their declared
+attachment layouts; ending a pass applies its color attachment's final layout.
 
+Buffers use enhanced access barriers, without persistent resource states or a
+decay assumption between command lists. Device creation checks
+EnhancedBarriersSupported. Stage and access declarations supply the dependency
+scopes. A buffer's host/first-use source uses ALL/COMMON: a prior command list in
+the same execution may already have accessed it. Fixed-state upload and readback
+heaps use global dependencies. Image layout transitions remain legacy barriers.
+The two barrier types never transition the same resource. Pending image barriers
+flush before an enhanced dependency, preserving recording order.
+[Microsoft's specification](https://microsoft.github.io/DirectX-Specs/d3d/D3D12EnhancedBarriers.html)
+defines this interoperation and the lack of buffer layouts.
+
+The submitter collects a render-graph batch into one ExecuteCommandLists and one
+completion signal. Each deferred fence refers to that completion until its own
+wait drains it. External waits split a pending batch before the waiting work;
+idle waits, exports, uploads, readbacks and presentation flush pending work first.
+The submission.directx source in world.counters counts lists, native executes and
+completion signals through the neutral submitter; presentation and host-copy
+submissions are outside that source.
 ## Key features
 
 - *Source-generated bindings, not hand-written P/Invoke:* CsWin32 emits the
@@ -71,8 +72,7 @@ The layering mirrors `Puck.Vulkan` so the two backends read the same way:
 | `Interfaces/` | `IDirectX*Api` | The contracts—the dependency-injection / mocking seam. |
 | `Apis/` | `DirectXNative*Api` | Thin implementations that marshal to the generated DXGI / D3D12 entry points. |
 
-The neutral-contract implementations (`DirectXGpu*`) and the resource-state
-tracking (`DirectXBufferStates`, `DirectXResourceStates`) sit at the project root.
+The neutral-contract implementations (`DirectXGpu*`) sit at the project root.
 So do the four builders every call site uses, in `Puck.DirectX` and its
 presentation project alike: `DirectXBarriers.Transition` (a whole-resource
 transition, no flags), `DirectXDescriptorHeaps.Create` (node mask zero; type,
@@ -81,8 +81,7 @@ format-less row-major buffer with no heap flags; size, heap type, initial state
 and resource flags vary), and `DirectXTextures.Create` (a single-mip,
 single-sample 2D texture on a default heap; extent, format, heap flags, initial
 state, resource flags and optimized clear value vary). `DirectXTextures.OfUsage`
-and `InitialStateOf` give an image the flags, clear value and initial state its
-declared `GpuImageUsage` needs, and `DirectXGpuImage` takes both from them.
+gives an image its flags and optimized clear value; private images start in COMMON.
 `DirectXGpuExportableImage` states its own flags (simultaneous access, and a
 render target or storage image by its access) and the surface upload its own copy-destination
 state to `CreateCommitted`. A depth attachment's
@@ -94,8 +93,7 @@ mismatched clear; `Create` refuses a depth attachment.
 A Direct3D 12 render pass is data: `DirectXGpuRenderPass` holds the
 description's DXGI formats, which a pipeline state object is created for, and
 `DirectXGpuFramebuffer` owns the render-target and depth-stencil views of the
-images it binds. `DirectXGpuRecorder.BeginRenderPass` transitions each
-attachment into its attachment state, clears an attachment that clears with
+images it binds. `DirectXGpuRecorder.BeginRenderPass` clears an attachment that clears with
 `ClearRenderTargetView` or `ClearDepthStencilView` (a clear inside a render
 pass is disallowed; a depth attachment clears to its
 `GpuDepthAttachment.ClearDepth`), begins a first-class render pass whose
@@ -208,14 +206,7 @@ ordinary `UPLOAD`-heap buffer.
 A device that will not answer the architecture query reports the default
 profile, which selects the staged copy.
 
-A staged region's copy writes its destination as a UAV, and the buffer barrier
-after it moves the buffer into the state its readers need.
-`DirectXBufferStates.RequiredState` reads the barrier's stages: a shader read by
-the fragment stage needs `ALL_SHADER_RESOURCE` (`NON_PIXEL_SHADER_RESOURCE |
-PIXEL_SHADER_RESOURCE`), which covers a compute read too, and a compute-only
-read keeps `NON_PIXEL_SHADER_RESOURCE`. What the profile is for, and how a
-policy is chosen from it, is described under
-[the Vulkan memory profile](vulkan.md#memory-profile).
+A staged region's copy writes its destination as a UAV; its buffer barrier orders the readers after those writes. See [the Vulkan memory profile](vulkan.md#memory-profile) for policy selection.
 
 ---
 
@@ -559,7 +550,7 @@ teardown leak reads
 ## Verification
 
 `tests/Puck.DirectX.Tests` checks the backend's device-free decisions: which
-barrier a buffer transition records, and how the lazily created device context
+how the lazily created device context
 reports a device the host cannot create. Its device laws run on a software
 (WARP) device without the debug layer, and skip on a host without one: the
 teardown's memory entries and the shader-visible heaps

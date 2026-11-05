@@ -224,7 +224,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         );
 
         var toShaderResource = DirectXBarriers.Transition(
-            after: DirectXResourceStates.ShaderRead,
+            after: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE,
             before: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
             resource: texture
         );
@@ -238,10 +238,11 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             commandList: commandList
         );
         m_commandsFaulted = false;
-        m_textureState = DirectXResourceStates.ShaderRead;
+        m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
 
         var executable = ((ID3D12CommandList*)commandList);
 
+        ((IGpuDeviceContext)m_deviceContext).Services.QueueSubmitter.FlushBatch();
         ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)->ExecuteCommandLists(
             NumCommandLists: 1,
             ppCommandLists: &executable

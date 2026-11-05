@@ -12,11 +12,10 @@ namespace Puck.DirectX;
 /// state a vertex, index, constant, shader-resource or indirect-argument use needs, so no transition ever moves it. A
 /// host-visible device-local buffer is mapped the same way on a <c>GPU_UPLOAD</c> heap, the adapter's memory the host
 /// writes through its aperture, which exists only where the device reports GPU upload heaps; like a default-heap
-/// buffer it is created in <see cref="DeviceLocalState"/>, from which a read promotes it. A
+/// buffer it is created in <see cref="DeviceLocalState"/>. A
 /// device-local buffer is a default-heap buffer created in <see cref="DeviceLocalState"/> that allows unordered access
-/// when it declares <see cref="GpuBufferUsage.Storage"/>; a shader's write promotes it to <c>UNORDERED_ACCESS</c>, and
-/// an indirect dispatch reading it records the transition into <c>INDIRECT_ARGUMENT</c>
-/// (<see cref="DirectXBufferStates"/>). A draw binds a buffer by its GPU virtual address
+/// when it declares <see cref="GpuBufferUsage.Storage"/>; enhanced barriers order shader, copy and indirect accesses
+/// without persistent buffer layouts (<see cref="DirectXGpuRecorder.TransitionBuffer"/>). A draw binds a buffer by its GPU virtual address
 /// (<see cref="DirectXGpuRecorder.BindVertexBuffer"/>), so no usage needs a view of its own.
 /// </summary>
 /// <param name="deviceContext">The device context every buffer is created on.</param>
@@ -178,8 +177,7 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
             bufferHandle: ((nint)buffer),
             mapped: mapped,
             memory: deviceContext.Memory,
-            sizeBytes: sizeBytes,
-            state: state
+            sizeBytes: sizeBytes
         );
     }
 }

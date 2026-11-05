@@ -37,6 +37,7 @@ public sealed class SurfaceEncoder : IDisposable {
     private nint m_sampler;
     private nint m_set;
     private IGpuImage? m_target;
+    private GpuImageLayout m_targetLayout;
     private IGpuSurfaceUpload? m_upload;
 
     /// <summary>Initializes a new instance of the <see cref="SurfaceEncoder"/> class, leasing its pipeline, which builds
@@ -206,7 +207,7 @@ public sealed class SurfaceEncoder : IDisposable {
         recorder.TransitionImageLayout(
             command,
             target.ImageHandle,
-            GpuImageLayout.Undefined,
+            m_targetLayout,
             GpuImageLayout.RenderTarget,
             GpuAccess.None,
             GpuAccess.ColorAttachmentWrite,
@@ -252,6 +253,7 @@ public sealed class SurfaceEncoder : IDisposable {
         }
         recorder.EndCommandBuffer(commandBufferHandle: command);
         gpu.QueueSubmitter.SubmitAndWait(commandBufferHandles: [command]);
+        m_targetLayout = GpuImageLayout.ShaderReadOnly;
 
         return m_readback!.Read(
             bytesPerPixel: 4,
@@ -420,6 +422,7 @@ public sealed class SurfaceEncoder : IDisposable {
         m_framebuffer = null;
         m_target?.Dispose();
         m_target = null;
+        m_targetLayout = GpuImageLayout.Undefined;
     }
 
     /// <summary>Creates a constant buffer holding the encode block for a display output

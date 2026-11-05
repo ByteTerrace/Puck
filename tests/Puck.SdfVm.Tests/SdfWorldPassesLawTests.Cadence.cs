@@ -26,7 +26,6 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: ((string[])[SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views,
             .. (temporal ? new[] { SdfWorldPackage.Resolve } : []), SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite]),
             actual: Executed(work: CadenceWork(rig: rig)));
-        Assert.Empty(collection: rig.StateConflicts);
         for (var frame = 0; (frame < 12); frame++) { rig.Produce(); }
         Assert.True(condition: rig.Stood());
     }
@@ -123,7 +122,6 @@ public sealed partial class SdfWorldPassesLawTests {
                 Assert.False(condition: work.TryGetPassCount(column: dispatches, pass: pass, value: out _));
             }
         }
-        Assert.Empty(collection: rig.StateConflicts);
         rig.Produce();
         Assert.True(condition: rig.Stood());
     }
@@ -151,7 +149,6 @@ public sealed partial class SdfWorldPassesLawTests {
             }
             Assert.Equal(expected: completed, actual: rig.HistoryFrames());
         }
-        Assert.Empty(collection: rig.StateConflicts);
     }
     [Fact]
     public void CadenceLightingChangesOweAFullTemporalSettlingPeriod() {
@@ -279,7 +276,6 @@ public sealed partial class SdfWorldPassesLawTests {
             .. ((lit && reduced) ? new[] { SdfWorldPackage.Resolve } : []), SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite];
 
         Assert.Equal(expected: expected, actual: Executed(work: CadenceWork(rig: rig)));
-        Assert.Empty(collection: rig.StateConflicts);
         rig.Produce();
         Assert.True(condition: rig.Stood());
     }

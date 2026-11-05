@@ -244,15 +244,11 @@ portals).** Every external source in its file is marked summary-only by its
 own ledger, so none is cited here as evidence. Its code claims were checked
 one by one:
 
-- Held: `DirectXGpuRecorder.TransitionImageLayout` takes the prior state
-  from a process-global `DirectXResourceStates` table and uses the caller's
-  `oldLayout` only as a fallback (`DirectXGpuRecorder.cs`, the `Get` and
-  `Set` calls in `TransitionImageLayout` and `TransitionTo`), which makes
-  parallel recording on Direct3D 12 unsafe until the caller's layout is
-  used; `DirectXGpuQueueSubmitter.BeginBatch` and `FlushBatch` are empty,
-  with the comment that a default-heap buffer decays to `COMMON` at every
-  `ExecuteCommandLists` (`DirectXGpuQueueSubmitter.cs`), while Vulkan's
-  submitter flushes one batch (`VulkanGpuQueueSubmitter.FlushBatch`);
+- Resolved by A2: `DirectXGpuRecorder.TransitionImageLayout` now takes the
+  caller's `oldLayout` alone. `DirectXGpuQueueSubmitter` batches lists and
+  completion signals; enhanced buffer dependencies remove the former
+  per-execute decay assumption. Vulkan keeps its existing batching.
+- Held:
   `SdfMeshDresser.Dress` walks every binding whenever a portal clip is or
   was active (`portalPath`, `SdfMeshDresser.cs`); `WorldPortalVisibility.Sees`
   tests a widened frustum alone (`Margin = 0.1f`); `residency.Submit` and
@@ -609,9 +605,12 @@ frame's geometry; moving occluders carry the readback delay. Camera changes
 restore demand immediately. Settled captures and non-occlusion cull modes bypass
 the delayed test. Evidence belongs to the implementation commit.
 
-**A2 outcome.** `DirectXGpuRecorder.TransitionImageLayout` uses the caller's
+**A2 implemented; integration checks pending.** `DirectXGpuRecorder.TransitionImageLayout` uses the caller's
 `oldLayout` as the before state (the callers already pass it) and the
-tracking table goes with the buffer-decay assumption, so
+tracking table is removed with the buffer-decay assumption. Enhanced buffer
+access barriers order work across lists; fixed-state upload/readback heaps use
+global dependencies. Host/first-use buffer declarations conservatively include
+earlier accesses within the same execution. Thus
 `DirectXGpuQueueSubmitter.BeginBatch` and `FlushBatch` collect the batch's
 lists into one `ExecuteCommandLists` and one signal, as Vulkan's submitter
 does. Invariant: a transition's before state is the one the submission order

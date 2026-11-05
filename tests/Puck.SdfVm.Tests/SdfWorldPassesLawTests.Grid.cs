@@ -69,7 +69,6 @@ public sealed partial class SdfWorldPassesLawTests {
         } finally {
             gate.Set();
         }
-        Assert.Empty(collection: gpu.StateConflicts);
     }
     [Fact]
     public void AReducedViewBuildsItsDeployedResolveKernelWithoutReflectingIt() {

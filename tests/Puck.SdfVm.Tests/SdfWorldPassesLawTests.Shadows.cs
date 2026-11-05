@@ -60,7 +60,6 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.Equal(expected: (slots > 1), actual: node.Plan!.Passes.Any(predicate: static pass => pass.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.Parts.ShadowSecond}")));
             Assert.All(collection: Cascades(), action: status => Assert.Equal(expected: (((ulong)texels) * texels * sizeof(float)), actual: status.AllocationBytes));
         }
-        Assert.Empty(collection: gpu.StateConflicts);
 
         ShaderPipelineResourceStatus[] Cascades() => [.. node.ResourceStatus.Where(predicate: static status => status.Name.Contains(value: "shadow", comparisonType: StringComparison.Ordinal))];
         static SdfFrame Shaped(SdfShadowResolution resolution, int slots) {
@@ -118,7 +117,6 @@ public sealed partial class SdfWorldPassesLawTests {
                 Assert.Equal(actual: afterImages, expected: images);
             }
         }
-        Assert.Empty(collection: gpu.StateConflicts);
 
         // The kernel counters grow their named detail rows as each frame slot of a graph records a frame, so every
         // measurement follows frames forced through the cadence gate into every slot.

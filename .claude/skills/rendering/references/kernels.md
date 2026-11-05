@@ -274,25 +274,19 @@ SPIR-V capability [DrawParameters](https://github.khronos.org/SPIRV-Registry/ext
 Enabling the device feature alone still refuses the module before a pipeline
 can be created.
 
-On Direct3D 12 an indirect argument buffer read by a vertex shader needs both
-`INDIRECT_ARGUMENT` and shader-resource state. Growing the per-draw history
-clears its new tail through UAV access, transitions it to `COPY_DEST`, copies
-the previous history and then makes it shader-readable/writable. `TransferWrite`
-names the storage clear; `CopyWrite` names the copy destination.
-The retired history source is first used by the copy in a new recording;
-do not declare a current-recording UAV state for it. A global barrier includes
-transfer reads for Vulkan, and Direct3D 12 implicitly promotes its decayed
-COMMON state to COPY_SOURCE. The
-[legacy barrier documentation](https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-resource-barriers-to-synchronize-resource-states-in-direct3d-12)
-and [Dawn's buffer state implementation](https://dawn.googlesource.com/dawn/+/c0064c5a73bfeff720c15d8d09c5b87a48e51160/src/dawn/native/d3d12/BufferD3D12.cpp)
-agree on buffer decay and promotion; these are legacy-barrier rules, not
-enhanced-barrier rules. Hardware validation still checks the actual use.
+On Direct3D 12 an indirect argument buffer read by a vertex shader declares both
+indirect and shader-resource access. Buffers use enhanced access barriers, so a
+new command list never assumes decay between lists in one batch. Growing the
+per-draw history orders its UAV clear, copy and shader accesses. `TransferWrite`
+names the storage clear (CLEAR_UNORDERED_ACCESS_VIEW synchronization); `CopyWrite`
+names the copy destination (COPY synchronization). Readback copies also declare
+`CopyWrite`. See the [backend contract](../../../../docs/rendering/directx.md)
+and [enhanced barrier specification](https://microsoft.github.io/DirectX-Specs/d3d/D3D12EnhancedBarriers.html).
 
 Motion history can be copied twice without a shader reading it in between,
 especially in an unread routed world. `SdfWorldTables.Motion.BeginHistoryCopy`
 orders prior shader writes/reads and transfer writes before copy reads/writes;
-its source/destination transitions use COMMON as Direct3D 12's first state,
-with current-recording states supplied by its tracker. A shader-read-only
+its source/destination declarations feed the backend's access barriers. A shader-read-only
 dependency misses the earlier copy. The
 [Vulkan synchronization specification](https://docs.vulkan.org/spec/latest/chapters/synchronization.html)
 and [LunarG's validation guide](https://www.lunarg.com/wp-content/uploads/2024/01/Guide-to-Vulkan-Synchronization-Validation-FINAL-01-18-2024.pdf)
