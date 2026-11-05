@@ -44,7 +44,7 @@
     { "name": "traversal-falls", "line": "world.state traversalFalls", "parse": "cells", "leg": "headless", "compare": { "*": "exact" } },
     { "name": "chess-scope", "line": "replay.scope chess-demo", "parse": "words", "leg": "headless", "red": ["status == -1"], "compare": { "inputs": "exact" } },
     { "name": "rule-failures", "line": "world.rule.failures", "parse": "text", "recheck": true, "amber": ["text != [world.rule.failures: none]"], "compare": { "text": "exact" } },
-    { "name": "colliders", "line": "world.debug-view report colliders --json", "parse": "report", "timeoutSeconds": 120, "red": ["findings.red > 0"], "amber": ["coverage.complete == false", "findings.unknown > 0"], "compare": { "findings.*": "exact", "comparisons.*": "exact", "coverage.tested": "exact" } },
+    { "name": "colliders", "line": "world.debug-view report colliders --json", "parse": "report", "timeoutSeconds": 120, "pending": "coverage.pending > 0", "maxAsks": 8, "red": ["findings.red > 0"], "amber": ["coverage.complete == false", "findings.unknown > 0"], "compare": { "findings.*": "exact", "comparisons.*": "exact", "coverage.tested": "exact" } },
     { "name": "contacts", "line": "world.debug-view report contacts --json", "parse": "report", "timeoutSeconds": 120, "red": ["findings.red > 0"], "amber": ["coverage.complete == false", "findings.unknown > 0"], "compare": { "findings.*": "exact", "coverage.tested": "exact" } },
     {
       "name": "budget",
