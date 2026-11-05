@@ -115,12 +115,10 @@ let daySkyHours = [
   { hour: 19.5, stops: nightStops, luminance: 0, night: 1, stars: 1 }
 ]
 
-// One degree in radians, pi / 180. A decimal literal stays exact through the products below, where the quotient
-// `3.141592653589793 / 180` is a double whose products round in double, so the two spellings key the light directions
-// differently in their last digits.
-let sunRadiansPerDegree = 0.017453292519943295
-// Fifteen degrees in radians, one hour of the sun's turn (pi / 12), written out for the same reason.
-let sunRadiansPerHour = 0.2617993877991494
+// One degree in radians, pi / 180.
+let sunRadiansPerDegree = 3.141592653589793 / 180
+// Fifteen degrees in radians, one hour of the sun's turn (pi / 12).
+let sunRadiansPerHour = 3.141592653589793 / 12
 
 // The sun's hour angle at clock hour `h`: zero at noon, a quarter turn at six.
 function sunHourAngle(h) = (h - 12) * sunRadiansPerHour

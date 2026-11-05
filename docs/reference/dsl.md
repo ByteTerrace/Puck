@@ -342,14 +342,26 @@ The two evaluators fold a name differently, on purpose:
   rule language's `Q48.16` fixed point to agree with it bit-for-bit would quantize the authored value to 1/65536
   for no gain: the folded number is document DATA, baked into JSON at compile time, and never simulation state. The
   double fold already agrees with the fixed-point one exactly on whole numbers.
-- A fractional literal lowers as the decimal its text spells, to the 28 significant digits a `decimal` holds, and
-  stays exact through arithmetic that is closed over finite decimals: a sign, `+`, `-`, `*`, a `/` whose exact
+- **The reason: an author and the engine work without friction or surprise** (the owner's criterion: "I don't care
+  what format we use, as long as the engine and authors are able to work without friction/surprise"). Two spellings
+  of one number must fold to one value, so no author pastes a literal where an expression reads better, and no
+  literal and the quotient it was copied from key a document differently. The rule that follows is chosen for that,
+  not for the arithmetic's own sake.
+- A fractional literal of at most 15 significant digits (`DecimalValues.ExactLiteralDigits`) lowers as the decimal its
+  text spells; one of 16 or more significant digits lowers as the `double` it spells. Fifteen is `DBL_DIG`, the
+  count every decimal of which survives a round trip through a 53-bit `double`, so a literal of 15 digits or fewer is
+  a decimal an author chose and stays exact. Sixteen is the first count a `double` needs to be told apart from its
+  neighbours, and a double's round-trip spelling is 16 or 17 digits, so such a literal is a pasted double, not an
+  author's decimal: `0.2617993877991494` is the value `3.141592653589793 / 12` computes, and `x * 0.2617993877991494`
+  and `x * (3.141592653589793 / 12)` fold to one number. (A 16-digit literal an author did mean as an exact decimal
+  becomes the nearest `double`, which agrees with it to 15 digits.) A literal stays exact through arithmetic that is
+  closed over finite decimals: a sign, `+`, `-`, `*`, a `/` whose exact
   quotient is a finite decimal (`1 / 4`, `1 / 65536`, `0.3 / 2`), and a unit whose scale is a power of ten (`ms`,
   `cm`, `mm`, `%`) or a whole multiple (`min`, `h`). So `x * (1 / 65536)` and `x * 0.0000152587890625` fold to one
   value, as `0.1 + 0.2` and `0.3` do. A result a `decimal` would overflow on or round, a product or a conversion too
   small for its scale included, is computed in `double` instead, which keeps its magnitude. A quotient with no finite
   decimal (`1 / 3`, `pi / 12`), a fractional remainder, a folded function and degrees into radians are always
-  computed in `double`, so a pasted literal of such a quotient's digits is a different number from the quotient; a
+  computed in `double`, and the pasted digits of such a quotient are the same `double`; a
   decimal field reads such a result at its 15 significant digits, the same on every runtime. One value has one
   spelling: `1.50` lowers as `1.5`, `2.0` and `1.5e3` lower as the integers they are, and a computed double is
   written as the plain decimal of its shortest round-trip digits, never with an exponent, so `1 / 3 / 100000` writes
