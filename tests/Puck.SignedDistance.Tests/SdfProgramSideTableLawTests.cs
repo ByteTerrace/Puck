@@ -5,6 +5,38 @@ namespace Puck.SignedDistance.Tests;
 
 public sealed class SdfProgramSideTableLawTests {
     [Fact]
+    public void SampledSnapshotsSurviveProducerMutationRelocationAndExcerpt() {
+        float[] values = [-1, 1, 2, 3, 4, 5, 6, 7];
+        var expected = values.ToArray();
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(new(Vector3.One));
+        var mark = builder.MarkEmission();
+        builder.BeginInstance(Vector3.One, 2).ResetPoint()
+            .SampledValues(Vector3.Zero, 1, 2, 2, 2, 0, material, values).EndInstance();
+        var retained = builder.RetainEmission(mark);
+        var capacity = builder.MeasureCapacity();
+        values[0] = 99;
+        var original = builder.Build();
+        Assert.True(capacity.Words >= original.PartCompilationWordCapacity);
+        builder.Clear();
+        builder.AddMaterial(new(Vector3.One));
+        builder.BeginInstance(Vector3.Zero, 1).ResetPoint().Sphere(1, material).EndInstance();
+        builder.AppendEmission(retained);
+        var relocated = builder.Build();
+        var excerpt = relocated.Excerpt(Enumerable.Range(0, relocated.Instructions.Count).ToArray());
+        foreach (var program in new[] { original, relocated, excerpt }) {
+            var index = Enumerable.Range(0, program.Instructions.Count)
+                .Single(i => program.Instructions[i].Op == SdfOp.ShapeBlend &&
+                    (SdfShapeType)program.Instructions[i].Shape == SdfShapeType.SampledRegion);
+            Assert.Equal(expected, program.SideTableValues(index).ToArray());
+            var address = BitConverter.SingleToUInt32Bits(program.Instructions[index].Data1.Z);
+            Assert.NotEqual(0u, address & 0x80000000u);
+            var words = program.Words.Slice((int)(address & 0x7fffffffu), expected.Length).ToArray();
+            Assert.Equal(expected, words.Select(BitConverter.UInt32BitsToSingle).ToArray());
+        }
+    }
+
+    [Fact]
     public void EachSideTableShapeReadsItsEntrysValuesWhereverItsProgramPackedIt() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));

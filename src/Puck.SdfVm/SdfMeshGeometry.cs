@@ -294,12 +294,14 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
                 break;
         }
 
-        var table = (((instruction.Op == SdfOp.ShapeBlend) && (((SdfShapeType)instruction.Shape) is SdfShapeType.ConvexPolygon or SdfShapeType.Sweep or SdfShapeType.Path))
+        var table = (((instruction.Op == SdfOp.ShapeBlend) && (((SdfShapeType)instruction.Shape) is SdfShapeType.ConvexPolygon or SdfShapeType.Sweep or SdfShapeType.Path or SdfShapeType.SampledRegion))
             ? program.SideTableValues(instructionIndex: index)
             : []);
 
         if (!table.IsEmpty) {
-            instruction = (instruction with { Data0 = (instruction.Data0 with { X = 0f }) });
+            instruction = ((SdfShapeType)instruction.Shape == SdfShapeType.SampledRegion)
+                ? instruction with { Data1 = instruction.Data1 with { Z = 0f } }
+                : instruction with { Data0 = instruction.Data0 with { X = 0f } };
             Hash(source: MemoryMarshal.AsBytes(span: table));
         }
 
