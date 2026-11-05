@@ -1076,7 +1076,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // Construction creates exactly the pools admission declares, including compact-history copies.
         Assert.Equal(
             actual: rig.Gpu.PoolsCreated.CountBy(keySelector: static pool => pool).ToDictionary(),
-            expected: SdfWorldTables.DescriptorPools(brickPool: false).CountBy(keySelector: static pool => pool).ToDictionary()
+            // The final admitted pool belongs to the residency's bake client, absent from standalone tables.
+            expected: SdfWorldTables.DescriptorPools(brickPool: false)[..^1].CountBy(keySelector: static pool => pool).ToDictionary()
         );
 
         var pools = rig.Gpu.PoolsCreated.Count;

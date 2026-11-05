@@ -143,10 +143,11 @@ public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceC
 
 /// <summary>
 /// The Direct3D 12 <see cref="IGpuSubmissionFence"/>: a monotonic <c>ID3D12Fence</c> + auto-reset event (the same
-/// pair <c>DirectXDeviceContext.WaitIdle</c> uses), signaled on the queue right after the fenced execute.
+/// pair <c>DirectXDeviceContext.WaitIdle</c> uses), signaled on the queue right after the fenced execute. A drained fence
+/// is replaced before its next value could equal the device-loss sentinel <c>UINT64_MAX</c>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-internal sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
+public sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
     // The device the fence is on; the context owns it, and a removal is read from it.
     private readonly nint m_device;
 
@@ -159,14 +160,11 @@ internal sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
     private long m_aliasGeneration;
     private long m_generation;
 
-    internal DirectXGpuSubmissionFence(ID3D12Device* device) {
+    /// <summary>Creates a reusable submission fence on the caller-owned device.</summary>
+    /// <param name="device">The device, retained by the caller until the fence is disposed.</param>
+    public DirectXGpuSubmissionFence(ID3D12Device* device) {
         m_device = ((nint)device);
-        device->CreateFence(
-            Flags: default,
-            InitialValue: 0,
-            ppFence: out ID3D12Fence* fence
-        );
-        m_fence = ((nint)fence);
+        Renew();
         m_fenceEvent = PInvoke.CreateEvent(
             bInitialState: false,
             bManualReset: false,
@@ -212,9 +210,12 @@ internal sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
     }
 
     /// <summary>Queues a signal for the just-executed submission; the caller must have drained any prior one first.</summary>
-    internal void Arm(ID3D12CommandQueue* commandQueue) {
+    /// <param name="commandQueue">The queue the submission was executed on.</param>
+    public void Arm(ID3D12CommandQueue* commandQueue) {
         if (m_deferred is null) { RequireDrained(); }
         m_deferred = null;
+        // Also retries a renewal that failed after the preceding Wait drained the old native fence.
+        if (m_nextValue == ulong.MaxValue) { Renew(); }
 
         m_pendingValue = m_nextValue++;
         DirectXCommandCalls.Signal(
@@ -262,6 +263,16 @@ internal sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
         );
         m_pendingValue = 0UL;
         m_generation++;
+        if (m_nextValue == ulong.MaxValue) { Renew(); }
+    }
+
+    // Only called with no submission outstanding. Create before releasing the old fence, so failed allocation leaves
+    // a valid, drained object; the old completion value can never satisfy a submission in the new sequence.
+    private void Renew() {
+        ((ID3D12Device*)m_device)->CreateFence(Flags: default, InitialValue: 0, ppFence: out ID3D12Fence* fence);
+        if (m_fence != 0) { _ = ((IUnknown*)m_fence)->Release(); }
+        m_fence = (nint)fence;
+        m_nextValue = 1;
     }
     /// <inheritdoc/>
     public void Dispose() {

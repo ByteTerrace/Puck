@@ -110,22 +110,21 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     public void TheDescriptorPoolsTheTablesStateAreThePoolsTheyCreate(int brickPoolVoxelCapacity) {
         using var rig = new Rig(brickPoolVoxelCapacity: brickPoolVoxelCapacity);
 
-        // The tables reserve every region's copy sets first, in one pool, the mesh region's, the mesh bake's points, the
-        // irradiance volume's and, with a brick pool, the brick staging's included, then create their own pool; no
-        // region creates one. The two pools are the ones they state, in the other order.
+        // Tables create region-copy, strided-history-copy and World pools. Admission also reserves the bake client's
+        // pool, which the residency creates after the tables; a standalone tables fixture has no bake client.
         var brickPool = (brickPoolVoxelCapacity > 0);
         var copyPool = GpuRegionCopyPool.SizesOf(
-            regionCount: (brickPool ? 14 : 13),
+            regionCount: (brickPool ? 13 : 12),
             slotCount: SdfWorldTables.FrameRingSize
         );
 
         Assert.Equal(
-            expected: [copyPool, SdfWorldTables.DescriptorPoolSizes(brickPool: brickPool)],
+            expected: [copyPool, GpuBufferStridedCopy.PoolSizes(frameSlotCount: SdfWorldTables.FrameRingSize, recordingCount: 2), SdfWorldTables.DescriptorPoolSizes(brickPool: brickPool)],
             actual: rig.Gpu.PoolsCreated
         );
         Assert.Equal(
-            expected: [SdfWorldTables.DescriptorPoolSizes(brickPool: brickPool), copyPool],
-            actual: SdfWorldTables.DescriptorPools(brickPool: brickPool)
+            expected: [SdfWorldTables.DescriptorPoolSizes(brickPool: brickPool), copyPool, GpuBufferStridedCopy.PoolSizes(frameSlotCount: SdfWorldTables.FrameRingSize, recordingCount: 2)],
+            actual: SdfWorldTables.DescriptorPools(brickPool: brickPool)[..^1]
         );
     }
     [Fact]
@@ -165,7 +164,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
 
         Assert.StartsWith(
             actualString: refusal.Message,
-            expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'SDF world tables' needs {demand} view and {samplers} sampler descriptors in 2 pool(s) and is refused: "
+            expectedStartString: $"[{GpuDescriptorHeapBudget.RefusalCode}] 'SDF world tables' needs {demand} view and {samplers} sampler descriptors in {SdfWorldTables.DescriptorPools(brickPool: false).Length} pool(s) and is refused: "
         );
         Assert.Empty(collection: gpu.PoolsCreated);
 
@@ -218,7 +217,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         var report = rig.Report();
 
         Assert.Contains("work bricks executed: dispatches=1", report, StringComparison.Ordinal);
-        Assert.Contains("descriptor-writes=2 uploads.host-visible=56", report, StringComparison.Ordinal);
+        Assert.Contains("descriptor-writes=3 uploads.host-visible=68", report, StringComparison.Ordinal);
         Assert.Contains("work upload executed: dispatches=0", report, StringComparison.Ordinal);
     }
     // The tables render no view of their own, so a frame of no views is refused by name before anything is packed, and the
@@ -283,7 +282,8 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         var sample = new GpuWorkSample();
         long before;
 
-        using (var rig = new Rig(ledger: ledger)) {
+        var gpu = new FakeGpuDevice();
+        using (var rig = new Rig(ledger: ledger, device: gpu)) {
             rig.Render();
             rig.Render();
             Assert.True(condition: ledger.TryReadCompleted(sample: sample));
@@ -294,7 +294,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         ledger.Invalidate();
         Assert.False(condition: ledger.TryReadCompleted(sample: sample));
 
-        using (var rig = new Rig(ledger: ledger)) {
+        using (var rig = new Rig(ledger: ledger, device: gpu)) {
             rig.Render();
             rig.Render();
             Assert.True(condition: ledger.TryReadCompleted(sample: sample));
@@ -336,32 +336,18 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         return builder.Build();
     }
 
-    // The first upload of single-view tables, and a still one after it: the tables' first two submissions. The fake's default memory profile stages every region, so the first upload copies all
-    // eleven host-written tables (program, dynamic transforms, screen surfaces, volumes,
-    // decals, screen mappings, the one-record mesh region, the mesh bake's points, the lights and the sky's block and layers) behind one barrier ordering the earlier views' reads of their
-    // destinations before the copies write them, the first binding the copy pipeline and each its own set with no push constants, then
-    // transitions each copied buffer for its readers; the still upload repeats the first's inputs, so it owes no copy and
-    // binds nothing. The fillers pass runs on the first upload alone, the fillers' first transitions and clears, and the
-    // bricks pass on neither, since the tables have no brick pool. Outside every pass: the command buffer, and on the first
-    // upload the first write of both ring slots' World sets. The upload pass counts the regions' host-visible writes too:
-    // on the first upload every region's whole first copy (the 820 KB decal table and the bake points table of one float4 a dispatch sample among them), each with its header and one
-    // run-table entry. The previous-transform table is seeded device-to-device behind a memory barrier, which orders
-    // earlier copies and readers of the history before it, and four buffer barriers, adding one counted copy and no
-    // host-visible bytes. This fixture has no mesh draws to seed. The default sky fogs, so upload
-    // projects the CPU candidate once. The render graph owns map dispatches, descriptors and kernel counter readbacks;
-    // the separate environment laws run that actual producer. The first upload includes the 256-byte packed sky block.
-    // Other fixture tables contribute 851,948 bytes. The irradiance table is created holding one probe record and is
-    // fitted to the published window only when probes land (SdfWorldTables.FitMeshIrradiance); this fixture traces no
-    // probe, so its first copy is that one zeroed record, whose size follows the live record layout.
+    // The staged first upload and the unchanged upload after it, observed through the actual recorder. Background bake
+    // points are the client's storage and contribute no frame upload. The fixture has no mesh draws or brick pool;
+    // history seeds one transform, and irradiance starts with one zeroed probe, sized from its live layout.
     private static readonly string FirstUpload =
-        $"work submission=1 revision=1\nwork fillers executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=4 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=2 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0 vertices=0 draws.indirect=0\nwork bricks skipped\nwork upload executed: dispatches=12 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=2 barriers.buffer=16 binds.pipeline=1 binds.descriptor-set=12 push-constants=0 descriptor-writes=24 uploads.host-visible={((851948 + (SdfWorldPackage.MeshBakeMaxSamples * 16)) + (SdfMeshIrradianceProbe.ProbeWords * sizeof(uint)))} clears=0 copies=1 march.steps=0 texels.written=0 copies.buffer-bytes=48 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0 vertices=0 draws.indirect=0\nwork environment executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=1 environment.projection-texels=4096 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0 vertices=0 draws.indirect=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0 vertices=0 draws.indirect=0\n";
+        $"work submission=1 revision=1\nwork fillers executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=4 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=2 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0 vertices=0 draws.indirect=0\nwork bricks skipped\nwork upload executed: dispatches=11 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=2 barriers.buffer=15 binds.pipeline=1 binds.descriptor-set=11 push-constants=0 descriptor-writes=33 uploads.host-visible={(852072 + (SdfMeshIrradianceProbe.ProbeWords * sizeof(uint)))} clears=0 copies=1 march.steps=0 texels.written=0 copies.buffer-bytes=48 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0 vertices=0 draws.indirect=0\nwork environment executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=1 environment.projection-texels=4096 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0 vertices=0 draws.indirect=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0 vertices=0 draws.indirect=0\n";
 
     private const string StillUpload =
         "work submission=2 revision=1\nwork fillers skipped\nwork bricks skipped\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0 vertices=0 draws.indirect=0\nwork environment skipped\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0 vertices=0 draws.indirect=0\n";
 
     private sealed class Rig : IDisposable {
-        public Rig(GpuWorkLedger? ledger = null, int brickPoolVoxelCapacity = 0, bool holdFences = false, bool distinctBuffers = false) {
-            var gpu = new FakeGpuDevice(holdFences: holdFences, trackObjects: distinctBuffers) { DistinctBuffers = distinctBuffers };
+        public Rig(GpuWorkLedger? ledger = null, int brickPoolVoxelCapacity = 0, bool holdFences = false, bool distinctBuffers = false, FakeGpuDevice? device = null) {
+            var gpu = device ?? new FakeGpuDevice(holdFences: holdFences, trackObjects: distinctBuffers) { DistinctBuffers = distinctBuffers };
 
             Gpu = gpu;
 

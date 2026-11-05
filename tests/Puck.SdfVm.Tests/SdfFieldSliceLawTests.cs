@@ -73,6 +73,8 @@ public sealed class SdfFieldSliceLawTests {
     // Answers the slice's lattices frame by frame until its completion runs, and returns how many frames that took.
     private static int Drive(SdfMeshPathBake bake, SdfMeshDresser dresser, Func<Vector3, float> instances, Func<Vector3, float> world, Func<bool> done, SdfFrame? frame = null) {
         var frames = 0;
+        // An empty program still supplies the field identity required by TryTake.
+        frame ??= new SdfFrame(Program: new SdfProgramBuilder().Build(), ProgramChanged: true, Time: 0f, Views: []);
 
         while (!done()) {
             Assert.True(condition: (frames < 64), userMessage: "the slice never completed");
@@ -104,7 +106,7 @@ public sealed class SdfFieldSliceLawTests {
         Assert.True(condition: bake.Pending);
         Assert.False(condition: bake.Probe(slice: new SdfFieldSlice(axis: SdfAxis.X, bands: 0.1f, centre: Vector2.Zero, half: 1f, offset: 0f, resolution: 16)));
 
-        // No program: every lattice samples the unowned segments alone, here the sphere.
+        // An empty program: every lattice samples the unowned segments alone, here the sphere.
         _ = Drive(bake: bake, dresser: dresser, done: () => (completions > 0), instances: Far, world: Sphere);
 
         Assert.Equal(expected: 1, actual: completions);
@@ -142,17 +144,18 @@ public sealed class SdfFieldSliceLawTests {
         var dresser = bakeRun.Dresser;
         var frame = Frame(half: new Vector3(value: 0.25f));
         var completions = 0;
-        // Past one reference frame's share of evaluations: a chunk's lattice with gradients is a whole share
-        // (SdfMeshPathBake.LatticeTaps), so the slice's two chunks sample over several frames.
+        // The slice spans multiple lattices, all before the group's lattice in the batch.
         var slice = new SdfFieldSlice(axis: SdfAxis.Y, bands: 0.05f, centre: Vector2.Zero, completed: _ => completions++, half: 1.2f, offset: 0.1f, resolution: 512);
 
         _ = dresser.Dress(frame: frame);
         Assert.True(condition: bake.Probe(slice: slice));
         Assert.True(condition: bake.TryTake(batch: out var first, field: bake.Program));
-        // The slice's lattice first, every instance in its mask; the box's group waits.
+        // Every slice lattice precedes the box's group, even when the whole slice fits in one batch.
         var lattice = first.Lattices[0];
 
-        Assert.Single(collection: first.Lattices);
+        Assert.Equal((2 * slice.Chunks) + 1, first.Lattices.Length);
+        Assert.All(first.Lattices[..^1], request => Assert.True(request.Gradients));
+        Assert.False(first.Lattices[^1].Gradients);
         Assert.Equal(expected: -1, actual: lattice.Selector);
         Assert.Equal(expected: 1, actual: lattice.Instances);
         Assert.True(condition: lattice.Gradients);
@@ -160,10 +163,7 @@ public sealed class SdfFieldSliceLawTests {
         bake.Abandon(batch: first);
         Assert.True(condition: bake.TryTake(batch: out var again, field: bake.Program));
         Assert.Equal(expected: lattice.Points, actual: again.Lattices[0].Points);
-
-        var frames = Drive(bake: bake, dresser: dresser, done: () => (completions > 0), frame: frame, instances: Gauge, world: Far);
-
-        Assert.True(condition: (frames >= ((2 * slice.Chunks) - 1)), userMessage: $"{frames} frames for {slice.Chunks} chunks");
+        bake.Complete(batch: again, samples: Answer(batch: again, instances: Gauge, world: Far));
         Assert.Equal(expected: 1, actual: completions);
         // The box's group still bakes after the slice.
         Assert.True(condition: bake.Pending);

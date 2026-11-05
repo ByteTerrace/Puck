@@ -463,7 +463,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         }
         // The background GPU work records and submits through the device's own services: its submissions are no upload
         // of the tables' ledger.
-        m_gpuWork = scope.Own(created: new SdfGpuWork(gpu: device.Services, name: ObjectOwner));
+        m_gpuWork = scope.Own(created: new SdfGpuWork(device: device, name: ObjectOwner));
 
         // The carve-bake baker's per-slot request buffers + static descriptor sets (only when the pool is enabled). Each
         // slot owns a host-visible request buffer (header + up to MaxBrickCarvesPerBake carves) and a set binding that
