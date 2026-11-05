@@ -95,11 +95,14 @@ state {
       layers: 1,
       stepEveryTicks: 8,
       reactions: [
-        transform(when: [
-          { field: poolWater, comparison: GreaterOrEqual, value: 0 }
-        ], then: [
-          { field: poolWater, op: Set, value { row: "poolLevel" } }
-        ])
+        transform(
+          when: [
+            { field: poolWater, comparison: GreaterOrEqual, value: 0 }
+          ],
+          then: [
+            { field: poolWater, op: Set, value { row: "poolLevel" } }
+          ]
+        )
       ]
     )
   ]

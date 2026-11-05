@@ -114,6 +114,10 @@ authority handoff) and identity facts carried across a crossing are built
 
 ### 3. Water and fields
 
+Both rows are built in composition lane C3 ([as built](debug-world-composition.md#c3-as-built)):
+the pool is a medium lattice a body swims in, and the chain from glacier to aquifer is a
+conserved flow on a lattice, with the pool fed by its river.
+
 | Feature | Source | Support | Place and why | Size |
 |---|---|---|---|---|
 | A pool whose `field` lattice is a medium: swimming, buoyancy, depth rows read from regions | `modules/dive.puck` (`lattices field(name: "pool"...)`, `bond: Medium` holds, `dive-depth-*` rules); canaries `dive-medium`, `medium-submersion` | wire ([documents-motion](../../.claude/skills/puck-world/references/documents-motion.md)); standard: a swim hold row the Moth refines, as `abilities.puck` holds `dashAbility` | A courtyard pool; the first `field` lattice and `Medium` hold in the debug world, and the base the climate wing's wetness and puddles stand on | medium |

@@ -235,7 +235,7 @@ no files and run beside each other.
 | C1 The floor's ground cover (done, [as built](#c1-as-built)) | The meadow's families spread west across the south lawn to the spawn and the approach; the lawn's painterly turf, paths, boulders, shrubs, flowers and trees from the standard | Now, beside J1 and the bake and memory work; it is R2's and R1's forcing load | `debug.go stage`, a full turn and a walk to the entrance: grouped trees, boulders and paths read in B's values on both backends; `world.budget` and `world.counters` draws and bake groups against the meadow's; `host.frames` at the spawn before and after; `puck mesh audit --cpu` for the new families |
 | C1a Continuous forest | Connected southern woodland, road, overlapping canopy, shrubs and grass; reusable standard families, debug-owned layout | The dense-landscape plan, L0 to L5; grow the workload once sharing and stable identity support it | Under-canopy walk, road bend, relieved bank, overhead and nested views; area/density work counts, full frame and memory/bake targets on both backends |
 | C2 The hall in B's vocabulary | The shell as stepped cream and ochre modules on teal arches with the lift tower, shades and roof terraces; indoors the three stacked east wings and the atrium's arch; every function kept (four floors, stairs, lift, exhibits, portals, tables) | Parallel with C1; the blockout first, cladding after the terrain pass's step 6 lands its palette | `debug.go gallery`, `lift`, `stairs`, `boardroom`, `portals`: every `debug.go` spot and traversal goal still reached; the hall's tests pass; stills at the sweep's hall stops compared tolerantly with the build before |
-| C3 Water | The falls, the stream, the bridge and the pool, with the medium and the flow lattice; a swim hold the Moth refines in the standard | After C1 (the banks are its families); the field workload | `debug.go pool` (new) and a swim: depth rows change with depth, the body floats and surfaces; the flow lattice's source tops up and spills (`world.counters`); from the spawn the falls show on the north-west wall; the stream's phase is continuous across its creations |
+| C3 Water (done, [as built](#c3-as-built)) | The falls, the stream, the bridge and the pool, with the medium and the flow lattice; a swim hold the Moth refines in the standard | After C1 (the banks are its families); the field workload | `debug.go pool` (new) and a swim: depth rows change with depth, the body floats and surfaces; the flow lattice's source tops up and spills (`world.counters`); from the spawn the falls show on the north-west wall; the stream's phase is continuous across its creations |
 | C4 The creature garden | The garden's pond plot: pack, swarm, school, stalker, crawling, rumor | Now, ahead of T2; its 128 bodies are the parallel tick's forcing case | 128 bodies through the garden painting; `puck bench world` on the garden; `puck test --workers 1,2,0` once T0 exists, bit-identical across counts; the rate tiers hold the unseen bodies |
 | C5 The arcade room and the pass | Lane 1's state-bound pass and compare studio, then lane 7's tetromino, snake and rulepush on level 1's east end | Ahead of R1, with lane 5's second seat | The drawn state grid on a pane; an HLSL edit to the pass visible under 30 s; tetromino at about 109,000 work units a tick within the rule budget (`world.budget`) |
 | C6 The north terraces | The quilt's four shards, the closed seam, the pitched seam, `border` composition, the identity gate, planted with the standard's families | With residency step 2 | Walk the four shards from the hall's rear door with no visible seam; a body past the closed border is carried back; the night field's fact opens the gate; shadows and foliage agree across a seam in a still |
@@ -280,6 +280,65 @@ not a baseline: a quiet baseline wants a back-to-back reading in a settle window
 Captures at the stage, the turn and the lawn walk read the grouped trees,
 terracotta boulders and paths alike on both backends, and `puck test --reproduce`
 passes on the meadow, hall and noclip scenarios.
+
+### C3 as built
+
+The water is one conserved cycle ([water.puck](../../worlds/debug/water.puck) over
+the standard's [hydrology](../../worlds/standard/hydrology.puck)): a glacier on the
+north-west wall melts over three hours into a lake in a bowl cut into the rim, the
+lake's outlet falls down the face, the stream runs 186 m from the falls' foot to the
+pool, and the river drains into an aquifer that fills, gives water back and settles
+against it. The cycle is a 24-cell chain on a flow lattice hidden under the floor
+(source, lake, sill, falls, river and aquifer stages, each a run of cells at a bed
+elevation), driven by an integer melt clock in simulation ticks, so a reproduce run
+repeats it. The scenery binds the chain's gauges (the glacier's lumps hinge into the
+rock with the clock, the lake follows its level, the falls fold into the wall as
+their flow ebbs) and a float gauge on the pool's bank reads the aquifer.
+[The pool](../../worlds/debug/pool.puck) is a 20 m square basin the floor opens for
+(`paintedGround` takes `holes`), 2.4 m deep, holding a medium lattice whose surface
+follows the river's depth; `debug.go pool` stands a body on the path's end facing the
+water. The Moth's swim is the standard's `swimHold` leading her hold list: she floats
+with her feet 1.25 m under the surface, which leaves her shoulders at it.
+
+Measured on the running debug world (Direct3D 12 captures at the pool, the falls from
+the spawn and a swim; a Vulkan capture of the pool, and of the level rising with the
+gauge float):
+
+- Swimming: posed on the bed she rises and holds at 1.25 m under the surface
+  (`body.where` y −2.02 under a surface at −0.77, `inmedium`, `atmediumband`, hold
+  `swim`). Ground following under a medium hold pinned a swimmer to the bed she rises
+  from, so it no longer runs there, and a kit may carry a Medium hold in a world with no
+  medium, so the Moth's swim is in her own document and every world she is worn in.
+- The cycle at 60 times speed on a lab world carrying the same documents: the glacier is
+  gone at three hours (the clock saturates at 324,000 ticks), the falls' top cell reads
+  2 raw units, the lake stands at its sill (0.40005), the river runs low while the
+  aquifer fills (depth 0.11 at 0.75 h, 0.45 at 2.7 h), peaks at 0.727 and settles at 0.680, and the
+  aquifer's last cell reads 0.93 of its fill. The chain's total, `world.fields`' `total`,
+  is 21.57535 against 1.8 at the start plus the glacier's 19.775390625, so nothing is
+  lost. The steady level is set by that total: the water the chain starts with and the
+  glacier adds, shared across the river's and the aquifer's cells above the river's bed.
+- The pool follows the river: with the clock at 60 times speed on the debug world the
+  pool's level rose from 1.60 to 2.14 over the melt and the gauge float rose with the
+  aquifer, in a Vulkan capture. From the spawn the falls show on the north-west wall.
+  `world.state.cell.set hydroClock $value 162000` puts the glacier at half and
+  `water.speed 60` runs the cycle sixty times faster.
+
+Cost, on a machine other lanes were loading (counts are the evidence): the chain is 72
+cell visits a lattice step and the pool 1,600; the water adds two of the world's 1,428
+rules; the three height rows make the engine create its 64 MB brick pool (by the code,
+`SdfWorldTables.EnsureBrickPool`; not measured apart). A cold bake
+of the world is 7,650 groups, 54 million triangles and 78 s on Direct3D 12 and about
+115 s on Vulkan; a warm Direct3D 12 World holds 12.4 GiB private (14.3 cold) and the
+cold Vulkan World 15.7. A frame at the pool is 157 ms and at the spawn 160 ms (the
+tick, about 150 ms, is the world's own, not the water's). The debug world's compile
+validates in 4.78 GB peak against 3.77 GB without the scenery. The
+[water packet](open-items.md#water) records what each system showed.
+
+Departures from [the art pack](../game/art/caldera-water-pack/README.md): the water is
+one flat turquoise (the lattice emitter gives a row one albedo), the falls are a slab
+ribbon with no spray or plunge pocket, the glacier is six hinged lumps, the lake has no
+modelled outlet notch, and the gauge is a post on the bank, not the pavilion over a
+cutaway. The swim has no animation: she floats in her walking pose.
 
 ## The owner's answers
 

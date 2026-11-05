@@ -46,9 +46,9 @@ function hydrologyFirst(stages, kind) = reduce(stages, { at: 0, found: -1 }, (ru
   at: run.at + stage.count
   found: (run.found < 0 and stage.kind == kind) ? run.at : run.found
 }).found
-function hydrologyLast(stages, kind) = hydrologyFirst(stages, kind) + reduce(
-  filter(stages, stage => stage.kind == kind), 0, (count, stage) => count + stage.count
-) - 1
+function hydrologyLast(stages, kind) = hydrologyFirst(stages, kind) +
+  reduce(filter(stages, stage => stage.kind == kind), 0, (count, stage) => count + stage.count) -
+  1
 
 template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, meltSeconds = 10800, rateHz = 30, waterPerCell = 10, rate = 0.005, stepEveryTicks = 8, fullHead = 1.8, poolBase = 0, poolLevelMax = 100) {
   let meltTicks = meltSeconds * rateHz
@@ -70,11 +70,14 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
         layers: 1,
         stepEveryTicks: stepEveryTicks,
         reactions: [
-          transform(when: [
-            { field: hydroSource, comparison: GreaterOrEqual, value: 1 }
-          ], then: [
-            { field: hydroWater, op: Add, value { row: "hydroMeltStep" } }
-          ])
+          transform(
+            when: [
+              { field: hydroSource, comparison: GreaterOrEqual, value: 1 }
+            ],
+            then: [
+              { field: hydroWater, op: Add, value { row: "hydroMeltStep" } }
+            ]
+          )
           flow(field: hydroWater, rate: { row: "hydroRate" }, over: [hydroBed])
         ]
       )
@@ -161,7 +164,7 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
     when $tick >= 0
     mode: Level
     hydroClock += advance
-    if $tick % stepEveryTicks == 0 {
+    if ($tick % stepEveryTicks) == 0 {
       hydroMeltStep = carried * meltTick
       hydroBucket = 0
     } else {

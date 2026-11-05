@@ -404,9 +404,13 @@ to body-level chemistry), `flow` (moves a field downhill, mass-conserving,
 over the combined surface height of itself plus its `over` terrain fields;
 each cell donates an equal share of its previous-step value to each of the
 lattice's active-axis directions; an optional `spillRow` catches an edge
-cell's outward share — without one, edges are walls). A row with `heightScale` IS geometry: its value
+cell's outward share — without one, edges are walls; every edge cell with water spills, whatever its height).
+`world.fields` prints each row's `total`, the conserved quantity. A row's `rate` and a transform's
+terms may be `{ row: <slot> }`, read at each step, which is how a rule (the hydrology's melt) moves a lattice
+and how a lattice follows a rule (the pool's level). A row with `heightScale` IS geometry: its value
 raises a solid column above the origin that bodies stand on
-(`Puck.Physics.Fields.FieldLatticeSolid`, unioned with the authored solids for contact) and
+(`Puck.Physics.Fields.FieldLatticeSolid`, unioned with the authored solids for contact under the field provider only; the
+analytic provider ignores lattice columns) and
 the renderer shows (`WorldFieldEmitter`: one CPU-baked distance brick per
 height field, coloured by `color`, uploaded through the engine's brick pool).
 A field row's live cells ride the snapshot, never the document; the client's

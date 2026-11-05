@@ -20,12 +20,15 @@ let valleySink = 0.3
 // A sector's main mass in its own frame (author +Z out from the ring's centre), on its axis: the distance from the centre
 // of the wall's face at height y, from the mass's ellipse (exponent 2) as terrainMass places it. The face stands this far
 // out at the floor (the sector's foot) and leans back as it rises, to the mass's centre at the peak.
-function sectorFace(sector, y) = (sector.foot + sector.radial * squareRoot(1 - valleySink * valleySink)) - sector.radial * squareRoot(
-  1 - ((y + (sector.peak / (1 - valleySink)) * valleySink) / (sector.peak / (1 - valleySink))) *
-    ((y + (sector.peak / (1 - valleySink)) * valleySink) / (sector.peak / (1 - valleySink)))
-)
+function sectorFace(sector, y) = (sector.foot + sector.radial * squareRoot(1 - valleySink * valleySink)) -
+  sector.radial * squareRoot(
+    1 -
+      ((y + (sector.peak / (1 - valleySink)) * valleySink) / (sector.peak / (1 - valleySink))) *
+        ((y + (sector.peak / (1 - valleySink)) * valleySink) / (sector.peak / (1 - valleySink)))
+  )
 // The height of the same face at distance r from the centre, on the side facing it.
 function sectorHeight(sector, r) = (sector.peak / (1 - valleySink)) * squareRoot(
-  1 - ((r - (sector.foot + sector.radial * squareRoot(1 - valleySink * valleySink))) / sector.radial) *
-    ((r - (sector.foot + sector.radial * squareRoot(1 - valleySink * valleySink))) / sector.radial)
+  1 -
+    ((r - (sector.foot + sector.radial * squareRoot(1 - valleySink * valleySink))) / sector.radial) *
+      ((r - (sector.foot + sector.radial * squareRoot(1 - valleySink * valleySink))) / sector.radial)
 ) - (sector.peak / (1 - valleySink)) * valleySink

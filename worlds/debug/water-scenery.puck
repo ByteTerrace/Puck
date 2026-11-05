@@ -17,8 +17,8 @@ let glacierHeights = [300, 309, 316, 308, 298, 292]
 let glacierLumps = map(range(0, 6), i => {
   position [glacierLateral[i], glacierHeights[i], sectorFace(wallSector, glacierHeights[i]) - 6]
   radii [12 + (i % 3) * 2, 8 + (i % 2) * 2, 9]
-  hinge [glacierLateral[i], glacierHeights[i], sectorFace(wallSector, glacierHeights[i]) + 14]
-  turn: 1.1 + (i % 3) * 0.1
+  hinge [glacierLateral[i], glacierHeights[i], sectorFace(wallSector, glacierHeights[i]) + 30]
+  turn: 1.7 + (i % 3) * 0.1
 })
 
 // The stream leaves the falls' foot, 205 m from the centre toward compass 315, and runs in legs of 24 m, each a bearing
