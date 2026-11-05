@@ -43,7 +43,8 @@ namespace Puck.World.Server;
 /// <param name="SleepIdleTicks">The consecutive idle engine ticks accumulated toward the authored sleep floor.</param>
 /// <param name="LastContactFieldVersion">The contact-field version observed by the body's latest advance.</param>
 /// <param name="ContactFieldObservationCurrent">Whether that observation matched the population's field at
-/// checkpoint capture. Versions are process-local, so this semantic edge is what a restore preserves.</param>
+/// checkpoint capture; always <see langword="true"/> for an awake body, which overwrites its observation before any
+/// read. Versions are process-local, so this semantic edge is what a restore preserves.</param>
 /// <param name="PlanarFollowerSeeded">Whether the planar dynamics follower has consumed its first target.</param>
 /// <param name="VerticalFollowerSeeded">Whether the vertical dynamics follower has consumed its first target.</param>
 /// <param name="Tether">The body-local tether continuation state.</param>
