@@ -40,6 +40,12 @@ public sealed class WorldInfinityBudgetLawTests {
         Assert.Contains(actualString: before, expectedSubstring: $"world: infinity views: 1 of {WorldInfinityViewPlan.MaxViews}");
         Assert.Contains(actualString: before, expectedSubstring: $"session: infinity views: 1 of {WorldInfinityViewPlan.MaxViews}");
         Assert.Contains(fallback.Reason, before);
+        // Each root's plan and each section is a line of its own, so a line filter can narrow the sheet.
+        var lines = before.Split(separator: Environment.NewLine);
+
+        Assert.Single(collection: lines, predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world: infinity views:"));
+        Assert.Single(collection: lines, predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "session: infinity views:"));
+        Assert.Single(collection: lines, predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "state "));
         // Another camera of the same root updates the entry rather than charging another scene plan.
         probe.RegisterInfinityPlan(first, "world", WorldInfinityViewPlan.Empty);
         var updated = Budget();
