@@ -1753,6 +1753,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
                 return true;
             case PortalSight.Small:
+            case PortalSight.Hidden:
                 return false;
             case PortalSight.Seen:
                 footprint = footprint with { Refresh = ViewRefresh(consumer: footprint.Consumer, coverage: coverage.Height, producer: footprint.Producer, glass: glass, rates: frame.Rates) };
@@ -1815,6 +1816,16 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             coverage: out coverage,
             producer: producer
         );
+
+        if (sight == PortalSight.Seen && m_runtime?.SettledCapturePath is null &&
+            RenderSettings is { Cull: SdfMeshCullLevel.Occlusion } && Pickers is { } passes && ViewScenes is { } scenes &&
+            scenes.PortalGlass(consumer, producer, out var screen) == WorldPortalGlass.Found &&
+            (m_cameras.TryGetValue(consumer, out var camera) || scenes.TryVisibilityCamera(consumer, out camera))) {
+            var slab = WorldPortalVisibility.Slab(screen!);
+            if (passes.PortalOccluded(consumer, screen!.Index, in camera, slab.Origin, slab.Right, slab.Up, slab.Thickness)) {
+                return PortalSight.Hidden;
+            }
+        }
 
         return (((sight == PortalSight.Seen) && HoldsGlass(rates: frame.Rates, pixels: Math.Max(pixels.Width * coverage.Width, pixels.Height * coverage.Height), producer: producer))
             ? PortalSight.Small

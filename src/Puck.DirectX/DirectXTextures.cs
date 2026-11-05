@@ -66,19 +66,6 @@ public static unsafe class DirectXTextures {
                 _ => throw new ArgumentOutOfRangeException(actualValue: format, message: "A sampled depth image is D32Float.", paramName: nameof(format)),
             })
             : (format, format));
-    /// <summary>Gets the state a texture with declared usages is created in, and rests in until its first barrier: a
-    /// storage image in <c>UNORDERED_ACCESS</c>, a render target in <c>RENDER_TARGET</c>, a depth stencil in
-    /// <c>DEPTH_WRITE</c>, and a texture only ever sampled in the shader-read state.</summary>
-    /// <param name="usage">The declared usages.</param>
-    /// <returns>The initial resource state.</returns>
-    public static D3D12_RESOURCE_STATES InitialStateOf(GpuImageUsage usage) =>
-        (((usage & GpuImageUsage.Storage) != 0)
-            ? D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS
-            : (((usage & GpuImageUsage.ColorAttachment) != 0)
-                ? D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET
-                : (((usage & GpuImageUsage.DepthAttachment) != 0)
-                    ? D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_WRITE
-                    : DirectXResourceStates.ShaderRead)));
     /// <summary>Creates a committed 2D texture.</summary>
     /// <param name="device">The device.</param>
     /// <param name="format">The texture format.</param>

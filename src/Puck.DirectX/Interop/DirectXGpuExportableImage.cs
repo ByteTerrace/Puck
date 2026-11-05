@@ -107,10 +107,6 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
         // The resource is counted from here on, so a failure below releases everything made so far, the count
         // included, before it propagates.
         try {
-            DirectXResourceStates.Register(
-                resource: m_resource,
-                state: initialState
-            );
 
             DirectXSimultaneousAccessResources.Register(resourceHandle: m_resource);
 
@@ -196,7 +192,6 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
 
     // Releases every object the image holds, each one only if it was made, and counts the resource's release.
     private void ReleaseResources(bool drainQueue) {
-        DirectXResourceStates.Forget(resource: m_resource);
         DirectXSimultaneousAccessResources.Withdraw(resourceHandle: m_resource);
 
         if (
@@ -255,6 +250,7 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
     /// <remarks>Queues <c>ID3D12CommandQueue::Signal</c> on the shared fence; a foreign-written texture, which has no
     /// shared fence, drains the queue.</remarks>
     public ulong CompleteWrite() {
+        ((IGpuDeviceContext)m_deviceContext).Services.QueueSubmitter.FlushBatch();
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this

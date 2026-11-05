@@ -12,8 +12,8 @@ namespace Puck.DirectX;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXCommandBufferState {
-    /// <summary>Gets the buffer states explicit transitions recorded in this command list's current recording; the recorder resets it when a recording begins.</summary>
-    public DirectXBufferStates BufferStates { get; } = new();
+    /// <summary>The enhanced barrier interface retained by its command pool.</summary>
+    public nint EnhancedCommandList;
 
     /// <summary>Gets the barriers an open run (<c>IGpuRecorder.BeginBarriers</c>) holds for one <c>ResourceBarrier</c>
     /// call.</summary>

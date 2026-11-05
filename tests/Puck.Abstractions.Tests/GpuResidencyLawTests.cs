@@ -1186,7 +1186,6 @@ public sealed class GpuResidencyLawTests {
         recording.Record(handsToReaders: true, region: region, slot: 1);
         gpu.Services.QueueSubmitter.Submit(commandBufferHandles: [recording.Finish()]);
         first.Dispose();
-        Assert.Empty(collection: gpu.StateConflicts);
         Assert.False(condition: region.OwesCarry);
         Assert.Equal(expected: 64UL, actual: gpu.BufferCopyBytes);
         Assert.Equal(expected: ((long)((HeaderBytes + (2 * RunEntryBytes)) + 8)), actual: gpu.HostBytes());
@@ -1197,7 +1196,6 @@ public sealed class GpuResidencyLawTests {
         recording.Record(handsToReaders: true, region: region, slot: 0);
         Assert.False(condition: region.OwesCopy);
         gpu.Services.QueueSubmitter.Submit(commandBufferHandles: [recording.Finish()]);
-        Assert.Empty(collection: gpu.StateConflicts);
         Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: 0).BufferHandle));
 
         // Owing the whole region outgrows the staging buffer created for 64 bytes.
@@ -1450,7 +1448,6 @@ public sealed class GpuResidencyLawTests {
             Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: slot).BufferHandle)[..256]);
         }
 
-        Assert.Empty(collection: gpu.StateConflicts);
         replaced.Dispose();
     }
     [Fact]

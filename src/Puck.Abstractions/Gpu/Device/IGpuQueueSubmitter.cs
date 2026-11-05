@@ -9,9 +9,7 @@ namespace Puck.Abstractions.Gpu;
 /// them to the queue together, in their order, with their waits: a frame's render-graph nodes reach the queue in one
 /// call rather than one each. Anything that must see the deferred work first flushes it: waiting on a fence a deferred
 /// submission arms, <see cref="SubmitAndWait"/>, the device context's wait for idle, and every other submission to the
-/// device's queue. Every fence a batch's submissions arm signals once the whole batch retires. A backend whose queue
-/// boundaries carry meaning may submit as it goes instead (Direct3D 12, whose buffers decay to <c>COMMON</c> at the end of
-/// every <c>ExecuteCommandLists</c>).</para>
+/// device's queue. Every fence a batch's submissions arm signals once the whole batch retires. An external wait may split the batch before the waiting submission.</para>
 /// </summary>
 public interface IGpuQueueSubmitter {
     /// <summary>Adds a wait to the list the next submission carries: that submission, and on Direct3D 12 everything

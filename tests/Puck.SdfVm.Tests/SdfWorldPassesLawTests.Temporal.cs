@@ -616,7 +616,6 @@ public sealed partial class SdfWorldPassesLawTests {
         public SdfWorldResidency? Second { get; }
         public SdfWorldResidency Selected { get; set; }
         public SdfFrame SourceFrame { get => m_sourceFrame; set => m_sourceFrame = value; }
-        public IReadOnlyList<string> StateConflicts => m_gpu.StateConflicts;
         public int ViewIndex { get; set; }
 
         public uint OutputExtent { get; set; } = Extent;

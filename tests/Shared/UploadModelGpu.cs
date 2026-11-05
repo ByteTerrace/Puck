@@ -16,9 +16,7 @@ namespace Puck.Testing;
 /// buffer's stride. Both modes copy uints bit-exactly; packed regions alias their request and source-data bindings. The
 /// dispatch must carry exactly the groups the count needs, and nothing pushes constants to the copy. The copy runs when it
 /// is recorded, which is its execution order only when the command buffers are submitted in the order they were recorded,
-/// so the model also replays each submission's buffer transitions in submission order as Direct3D 12 tracks them
-/// (<see cref="StateConflicts"/>). A buffer clear zeroes its bytes and a buffer copy copies them, both at record time, and a
-/// readback buffer reads its bytes back. A disposed buffer is forgotten. Everything else is <see cref="FakeGpuDevice"/>.
+/// and does not model concurrent execution. A buffer clear zeroes its bytes, a copy copies them, and a readback reads them. A disposed buffer is forgotten. Everything else is <see cref="FakeGpuDevice"/>.
 /// <para>Shader modules and pipelines are created on the thread pool, several at once
 /// (<c>GpuPassPipelineCache.BuildConcurrency</c>), so handles come from an interlocked counter and the copy kernel is
 /// identified by the handles of the modules built from its bytecode and the pipelines built from those modules, each a
@@ -38,9 +36,7 @@ internal sealed class UploadModelGpu :
 
     private readonly Dictionary<(nint Set, uint Binding), nint> m_bindings = [];
     private readonly Dictionary<nint, MemoryBuffer> m_buffers = [];
-    private readonly List<string> m_stateConflicts = [];
     private readonly List<UploadModelBufferBarrier> m_bufferBarriers = [];
-    private readonly Dictionary<nint, List<BufferTransition>> m_transitions = [];
 
     private readonly FakeGpuDevice m_inner;
 
@@ -107,12 +103,6 @@ internal sealed class UploadModelGpu :
     public int UploadCopies { get; private set; }
     /// <summary>Gets the raw buffer-copy bytes recorded since the last tally reset.</summary>
     public ulong BufferCopyBytes { get; private set; }
-    /// <summary>Gets every device-local buffer transition that declared another state than the one the command buffers
-    /// before it in the same submission left its buffer in, as Direct3D 12 reports it: a buffer's state carries from one
-    /// command list to the next of one submission and decays only between submissions, and a list's first transition
-    /// of a buffer starts from the state its declared source access names (<c>DirectXBufferStates.RequiredState</c>).
-    /// A host-visible buffer never transitions there, so it is not tracked.</summary>
-    public IReadOnlyList<string> StateConflicts => m_stateConflicts;
     /// <summary>Gets every buffer barrier recorded, in recording order, with the accesses and stages it names.</summary>
     public IReadOnlyList<UploadModelBufferBarrier> BufferBarriers => m_bufferBarriers;
 
@@ -265,12 +255,6 @@ internal sealed class UploadModelGpu :
         _ = m_readsOrdered.Remove(item: commandBufferHandle);
         _ = m_bufferReadsOrdered.RemoveWhere(match: entry => (entry.CommandBuffer == commandBufferHandle));
 
-        if (m_transitions.TryGetValue(
-            key: commandBufferHandle,
-            value: out var transitions
-        )) {
-            transitions.Clear();
-        }
     }
     void IGpuRecorder.EndCommandBuffer(nint commandBufferHandle) { }
     void IGpuRecorder.BeginDebugGroup(nint commandBufferHandle, string label) { }
@@ -303,22 +287,6 @@ internal sealed class UploadModelGpu :
     }
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
-        if (!m_transitions.TryGetValue(
-            key: commandBufferHandle,
-            value: out var transitions
-        )) {
-            transitions = [];
-            m_transitions.Add(
-                key: commandBufferHandle,
-                value: transitions
-            );
-        }
-
-        transitions.Add(item: new BufferTransition(
-            After: StateOf(access: destinationAccessMask, stages: destinationStageMask),
-            Buffer: bufferHandle,
-            Declared: StateOf(access: sourceAccessMask, stages: sourceStageMask)
-        ));
         m_bufferBarriers.Add(item: new UploadModelBufferBarrier(
             Buffer: bufferHandle,
             DestinationAccess: destinationAccessMask,
@@ -409,87 +377,6 @@ internal sealed class UploadModelGpu :
 
         return buffer;
     }
-    // The Direct3D 12 state an access needs, as DirectXBufferStates.RequiredState reads it: a write is unordered access,
-    // an indirect read the argument state, a copy's read the copy-source state, a shader read the non-pixel state and
-    // the pixel state too when a fragment stage reads, and anything else common.
-    private static BufferState StateOf(GpuAccess access, GpuStage stages) {
-        if (0 != (access & GpuAccess.CopyWrite)) {
-            return BufferState.CopyDestination;
-        }
-        if (0 != (access & (GpuAccess.TransferWrite | GpuAccess.ShaderWrite))) {
-            return BufferState.UnorderedAccess;
-        }
-
-        if (0 != (access & GpuAccess.IndirectCommandRead)) {
-            return BufferState.IndirectArgument;
-        }
-
-        if (0 != (access & GpuAccess.TransferRead)) {
-            return BufferState.CopySource;
-        }
-
-        if (0 != (access & GpuAccess.ShaderRead)) {
-            return ((0 != (stages & GpuStage.FragmentShader))
-                ? BufferState.NonPixelShaderResource | BufferState.PixelShaderResource
-                : BufferState.NonPixelShaderResource);
-        }
-
-        return BufferState.Common;
-    }
-    // Replays one submission's buffer transitions in submission order. Each command list holds the states its own
-    // transitions leave, its first transition of a buffer starting from the declared state, and hands them to the next
-    // list; a transition that holds a read state already covering its target records nothing, as Direct3D 12's does.
-    private void Replay(ReadOnlySpan<nint> commandBufferHandles) {
-        var carried = new Dictionary<nint, BufferState>();
-
-        for (var index = 0; (index < commandBufferHandles.Length); index++) {
-            if (!m_transitions.TryGetValue(
-                key: commandBufferHandles[index],
-                value: out var transitions
-            )) {
-                continue;
-            }
-
-            var held = new Dictionary<nint, BufferState>();
-
-            foreach (var transition in transitions) {
-                if (
-                    !m_buffers.TryGetValue(
-                        key: transition.Buffer,
-                        value: out var buffer
-                    ) ||
-                    buffer.HostVisible
-                ) {
-                    continue;
-                }
-
-                if (!held.TryGetValue(
-                    key: transition.Buffer,
-                    value: out var before
-                )) {
-                    before = transition.Declared;
-
-                    if (
-                        carried.TryGetValue(
-                            key: transition.Buffer,
-                            value: out var actual
-                        ) &&
-                        (actual != before)
-                    ) {
-                        m_stateConflicts.Add(item: $"command buffer {index} of a submission of {commandBufferHandles.Length} transitions buffer 0x{transition.Buffer:x} from {before}, but the command buffers before it left the buffer in {actual}");
-                    }
-                }
-
-                held[transition.Buffer] = (((before == transition.After) || ((transition.After != BufferState.UnorderedAccess) && ((before & transition.After) == transition.After)))
-                    ? before
-                    : transition.After);
-            }
-
-            foreach (var (bufferHandle, state) in held) {
-                carried[bufferHandle] = state;
-            }
-        }
-    }
     private nint NextHandle() => ((nint)Interlocked.Increment(location: ref m_nextHandle));
     private MemoryBuffer Single(bool hostVisible, ulong sizeBytes, string? part = null) => m_buffers.Values.Single(predicate: buffer =>
         (!buffer.Uniform &&
@@ -500,7 +387,6 @@ internal sealed class UploadModelGpu :
     void IGpuQueueSubmitter.AddExternalWait(GpuExternalWait wait) => m_inner.Services.QueueSubmitter.AddExternalWait(wait: wait);
     IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() => m_inner.Services.QueueSubmitter.CreateSubmissionFence();
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) {
-        Replay(commandBufferHandles: commandBufferHandles);
         m_inner.Services.QueueSubmitter.Submit(commandBufferHandles: commandBufferHandles);
     }
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
@@ -511,40 +397,23 @@ internal sealed class UploadModelGpu :
         if (FencedSubmissionsBeforeRefusal > 0) {
             FencedSubmissionsBeforeRefusal--;
         }
-        Replay(commandBufferHandles: commandBufferHandles);
         m_inner.Services.QueueSubmitter.Submit(
             commandBufferHandles: commandBufferHandles,
             fence: fence
         );
     }
     void IGpuQueueSubmitter.SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
-        Replay(commandBufferHandles: commandBufferHandles);
         m_inner.Services.QueueSubmitter.SubmitAndWait(commandBufferHandles: commandBufferHandles);
     }
     void IGpuQueueSubmitter.BeginBatch() => m_inner.Services.QueueSubmitter.BeginBatch();
     void IGpuQueueSubmitter.FlushBatch() => m_inner.Services.QueueSubmitter.FlushBatch();
-
-    // The Direct3D 12 buffer states the replay tracks, as their D3D12_RESOURCE_STATES bits combine.
-    [Flags]
-    private enum BufferState {
-        Common = 0,
-        NonPixelShaderResource = 1,
-        PixelShaderResource = 2,
-        UnorderedAccess = 4,
-        IndirectArgument = 8,
-        CopySource = 16,
-        CopyDestination = 32,
-    }
-    // One recorded buffer transition: the state its declared source access names, and the state its target access
-    // needs.
-    private readonly record struct BufferTransition(nint Buffer, BufferState Declared, BufferState After);
 
     IGpuCommandPool IGpuCommandPoolFactory.Create(in GpuObjectName name) => new CommandPool(
         handle: NextHandle(),
         inner: m_inner.Services.CommandPoolFactory.Create(name: name)
     );
 
-    // A command pool of the wrapped device with a command buffer handle of its own, so the replay tells a submission's
+    // A command pool of the wrapped device with a command buffer handle of its own, so the model tells a submission's
     // command buffers apart.
     private sealed class CommandPool(nint handle, IGpuCommandPool inner) : IGpuCommandPool {
         public nint CommandBufferHandle => handle;

@@ -47,7 +47,6 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
             format: dxgiFormat,
             usage: usage
         );
-        var initialState = DirectXTextures.InitialStateOf(usage: usage);
         var (resourceFormat, viewFormat) = DirectXTextures.FormatsOf(format: dxgiFormat, usage: usage);
 
         m_resource = ((nint)DirectXTextures.Create(
@@ -57,15 +56,11 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
             flags: flags,
             format: resourceFormat,
             height: height,
-            initialState: initialState,
+            initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON,
             memory: deviceContext.Memory,
             width: width
         ));
         m_memory = deviceContext.Memory;
-        DirectXResourceStates.Register(
-            resource: m_resource,
-            state: initialState
-        );
         m_imageViewHandle = DirectXImageViews.Register(view: new DirectXImageView {
             Format = viewFormat,
             ResourceHandle = m_resource,
@@ -92,7 +87,6 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
         }
 
         m_disposed = true;
-        DirectXResourceStates.Forget(resource: m_resource);
 
         DirectXImageViews.Release(handle: m_imageViewHandle);
 

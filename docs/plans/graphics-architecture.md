@@ -243,15 +243,11 @@ portals).** Every external source in its file is marked summary-only by its
 own ledger, so none is cited here as evidence. Its code claims were checked
 one by one:
 
-- Held: `DirectXGpuRecorder.TransitionImageLayout` takes the prior state
-  from a process-global `DirectXResourceStates` table and uses the caller's
-  `oldLayout` only as a fallback (`DirectXGpuRecorder.cs`, the `Get` and
-  `Set` calls in `TransitionImageLayout` and `TransitionTo`), which makes
-  parallel recording on Direct3D 12 unsafe until the caller's layout is
-  used; `DirectXGpuQueueSubmitter.BeginBatch` and `FlushBatch` are empty,
-  with the comment that a default-heap buffer decays to `COMMON` at every
-  `ExecuteCommandLists` (`DirectXGpuQueueSubmitter.cs`), while Vulkan's
-  submitter flushes one batch (`VulkanGpuQueueSubmitter.FlushBatch`);
+- Resolved by A2: `DirectXGpuRecorder.TransitionImageLayout` now takes the
+  caller's `oldLayout` alone. `DirectXGpuQueueSubmitter` batches lists and
+  completion signals; enhanced buffer dependencies remove the former
+  per-execute decay assumption. Vulkan keeps its existing batching.
+- Held:
   `SdfMeshDresser.Dress` walks every binding whenever a portal clip is or
   was active (`portalPath`, `SdfMeshDresser.cs`); `WorldPortalVisibility.Sees`
   tests a widened frustum alone (`Margin = 0.1f`); `residency.Submit` and
@@ -638,27 +634,35 @@ stale product.
 over an existing pyramid, a specified result); a `specialist` for A2, since
 the layout change touches every Direct3D 12 transition.
 
-**A1 outcome.** `WorldViewGraphHost.PortalSightOf` reads, beside the frustum
-and size tests, a per-screen bit a one-workgroup kernel writes from the
-consumer's farthest-depth pyramid a frame earlier; a skipped view holds its
-last image. Invariant: a glass whose slab the pyramid says is wholly behind
-the consumer's depth demands nothing; enforced in the one decision that
-schedules a session view (`PortalSightOf`, the rendering skill's "one
-decision schedules a session view"). Check: from the forest pose,
-`world.budget`'s live frame line shows no hall session rendered; turning
-toward a painting in the hall shows it fresh on its first visible frame in a
-presented burst; GPU time at the pose against the current reading.
+**A1 implemented.** `WorldViewGraphHost.PortalSightOf` consumes `SdfPortalSight`:
+the mesh pass tests portal slabs through `sdfOcclusionMaySee` against its existing
+farthest-depth pyramid, in one additional workgroup. Frame-slot fences own the
+readback; a changed camera/slab or replaced view/program retains demand, as do
+unknown answers. A skipped view retains its published image. The invariant is
+enforced at `PortalSightOf` for both footprints and filmed roots: a wholly hidden
+slab demands no session render. The guarantee stops at the earlier completed
+frame's geometry; moving occluders carry the readback delay. Camera changes
+restore demand immediately. Settled captures and non-occlusion cull modes bypass
+the delayed test. Evidence belongs to the implementation commit.
 
-**A2 outcome.** `DirectXGpuRecorder.TransitionImageLayout` uses the caller's
+**A2 implemented.** `DirectXGpuRecorder.TransitionImageLayout` uses the caller's
 `oldLayout` as the before state (the callers already pass it) and the
-tracking table goes with the buffer-decay assumption, so
+tracking table is removed with the buffer-decay assumption. Enhanced buffer
+access barriers order work across lists; fixed-state upload/readback heaps use
+global dependencies. Host/first-use buffer declarations conservatively include
+earlier accesses within the same execution. Thus
 `DirectXGpuQueueSubmitter.BeginBatch` and `FlushBatch` collect the batch's
 lists into one `ExecuteCommandLists` and one signal, as Vulkan's submitter
 does. Invariant: a transition's before state is the one the submission order
 implies; enforced by taking it from the caller alone (no global table to
-race). Check: GPU-based validation clean at every standard stop;
-`ExecuteCommandLists` and signal counts per frame; the native submission
-time at the spawn against the 2 ms reading, in a quiet window.
+race). The guarantee stops at the caller's access declarations: the backend
+does not repair a wrong declaration by guessing from another recording.
+Basic API validation, D3D12/Vulkan windowed runs, submission counts and the
+headless integration-counter comparison passed; evidence is in the implementation
+and integration-verification commits. Full GPU-based validation at the standard
+stops remains an explicit qualification item: the attempted run did not complete.
+The submission comparison isolates batching with an unbatched control; it reduces
+native executes and signals without claiming a reduction in shader work.
 
 ### Owned questions
 

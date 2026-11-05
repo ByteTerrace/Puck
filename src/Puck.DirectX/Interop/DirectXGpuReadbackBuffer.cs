@@ -1,12 +1,11 @@
 using System.Runtime.Versioning;
-using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.System.Com;
 
 namespace Puck.DirectX.Interop;
 
 /// <summary>
 /// A Direct3D 12 readback-heap buffer implementing <see cref="IGpuReadbackBuffer"/>: permanently mapped, and permanently in
-/// <c>COPY_DEST</c>, which the resource-state tracker starts it at, so no transition ever moves it.
+/// <c>COPY_DEST</c>; access dependencies never transition this fixed-state heap.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuReadbackBuffer : IGpuReadbackBuffer {
@@ -32,10 +31,6 @@ public sealed unsafe class DirectXGpuReadbackBuffer : IGpuReadbackBuffer {
         }
 
         m_buffer = bufferHandle;
-        DirectXResourceStates.Register(
-            resource: m_buffer,
-            state: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST
-        );
         m_mapped = mapped;
         SizeBytes = sizeBytes;
     }
@@ -70,7 +65,6 @@ public sealed unsafe class DirectXGpuReadbackBuffer : IGpuReadbackBuffer {
         m_mapped = null;
 
         if (0 != m_buffer) {
-            DirectXResourceStates.Forget(resource: m_buffer);
             _ = ((IUnknown*)m_buffer)->Release();
             m_buffer = 0;
         }

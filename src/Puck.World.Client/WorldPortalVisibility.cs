@@ -78,7 +78,7 @@ public static class WorldPortalVisibility {
 
     // Visibility and coverage bound the same sampled solid. WorldScreenStamper seats its front at Origin and its
     // back one full depth behind; the back and sides sample the image as well as the front.
-    private static (Vector3 Origin, Vector3 Right, Vector3 Up, Vector3 Thickness) Slab(WorldScreen glass) {
+    internal static (Vector3 Origin, Vector3 Right, Vector3 Up, Vector3 Thickness) Slab(WorldScreen glass) {
         var right = (Vector3.Normalize(value: glass.Right) * glass.HalfWidth);
         var up = (Vector3.Normalize(value: glass.Up) * glass.HalfHeight);
         var thickness = (Vector3.Normalize(value: Vector3.Cross(vector1: right, vector2: up)) * glass.HalfDepth);

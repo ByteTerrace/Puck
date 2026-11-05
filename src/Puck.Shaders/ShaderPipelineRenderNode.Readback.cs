@@ -47,7 +47,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 sourceBufferHandle: buffer.BufferHandle, sizeBytes: readback.SizeBytes, sourceOffsetBytes: readback.SourceOffsetBytes,
                 destinationOffsetBytes: readback.DestinationOffsetBytes);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: readback.Destination.BufferHandle,
-                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
+                sourceAccessMask: GpuAccess.CopyWrite, sourceStageMask: GpuStage.Transfer,
                 destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host);
             resource.SetOverride(instance: instance, state: transfer);
             return;
