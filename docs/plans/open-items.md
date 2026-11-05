@@ -2030,8 +2030,8 @@ colliders report's only red findings left are the valley's relief
 
 ### Derived products are caches
 
-Owner: delivery lane with the machines lane · ordinary · Next: measure deriving
-the `wasm/*/dist` modules against edit-to-running.
+Owner: delivery lane with the machines lane · ordinary · Next: choose how hosts
+without Rust obtain addon caches before removing the committed `wasm/*/dist` modules.
 
 A derived product is a cache, never the truth
 ([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)):
@@ -2043,9 +2043,14 @@ derived products, removed from git and built on demand.
 - Stop committing the built addon guests: the eleven `wasm/*/dist/*.wasm`
   modules are compiled from the Rust crates beside them, and a derived product
   is a cache ([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
-  Deriving them on a miss puts the Rust `wasm32` toolchain on every machine and
-  CI job that loads an addon, so measure that cost against edit-to-running
-  first. A hand-written fixture module (the transpiler sample's 8-byte
+  A measured Windows run with Rust 1.96.0 and the `wasm32-unknown-unknown` target
+  already installed built all eleven declared variants offline into an empty
+  scratch target in 6.942 seconds; repeating the same variants took 3.613 seconds.
+  Both fit the 30-second edit-to-running bar, before the engine build and boot;
+  neither includes installing Rust or its target. The committed modules were
+  untouched. A miss still requires that toolchain on each host, so the remaining
+  decision is toolchain availability and prewarming/provisioning caches.
+  A hand-written fixture module (the transpiler sample's 8-byte
   `Samples/addons/rules.wasm`) is source.
 
 ### Test runner and replay
