@@ -52,6 +52,7 @@ The reference game's remaining engineering, its creatures and scale, the finder 
 - [Port the experimental worlds' features](port-experimental.md)—the inventory of what the quarantined quilt, island, games and districts have that the debug world lacks, with each feature's source, support (wire, standard or gap), place and size, grouped into port lanes.
 - [Companion custody protocol](companion-redesign.md)—the specification the companion decision's build follows, and the model that checks it; steps 6 to 10 remain.
 - [The hub, player saves and the player menu](hub-and-saves.md)—the design memo for the release's shape: the account as the player save, minimal identities, a character's avatar claim and each world's clamp, the hub as the reserved destination, player-safe travel, the Start menu over the host escape, solo-only pause, durable images and machine save RAM, and the build order.
+- [Physics and kernels: lessons from Box3D and OpenBLAS](physics-and-kernels-lessons.md)—the research round on what Box3D, Box2D v3 and the BLAS lineage teach Puck's fixed-point physics: the live contact and rigid paths and their measured counts, the opened sources and where they disagree, nine ranked lessons each named by its general mechanism (cheap certificates before exact contact queries, one Soft Step rigid solver in place of two, the implicit gyroscopic term, wake and islands proportional to change, order-free reductions for the parallel tick), and a brief for each of the top three.
 
 ## [The valley, the moons and the flight between](valley-and-moons.md)
 
