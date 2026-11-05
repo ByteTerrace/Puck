@@ -534,7 +534,6 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 return (gpu.UploadCopies >= 3);
             }
         );
-        Assert.Empty(collection: gpu.StateConflicts);
     }
     /// <summary>A converter the runtime makes for CPU pixels a producer holds outside the set (a camera's or a capture's CPU
     /// tier, a capture fill) runs the conversion its descriptor names on a node of its own: once its graph installs, each

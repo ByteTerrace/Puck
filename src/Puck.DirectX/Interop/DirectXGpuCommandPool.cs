@@ -33,7 +33,15 @@ public sealed unsafe class DirectXGpuCommandPool : IGpuCommandPool {
             commandList: commandList
         );
 
+        var result = ((IUnknown*)commandList)->QueryInterface(ppvObject: out ID3D12GraphicsCommandList7* enhanced);
+        if (result.Failed) {
+            _ = ((IUnknown*)commandList)->Release();
+            _ = ((IUnknown*)commandAllocator)->Release();
+            throw new DirectXException(operation: "ID3D12GraphicsCommandList7", result: result.Value);
+        }
+
         m_token = GCHandle.Alloc(value: new DirectXCommandBufferState {
+            EnhancedCommandList = (nint)enhanced,
             Allocator = ((nint)commandAllocator),
             CommandList = ((nint)commandList),
         });
@@ -52,6 +60,11 @@ public sealed unsafe class DirectXGpuCommandPool : IGpuCommandPool {
 
         if (m_token.IsAllocated) {
             var state = ((DirectXCommandBufferState)m_token.Target!);
+
+            if (0 != state.EnhancedCommandList) {
+                _ = ((IUnknown*)state.EnhancedCommandList)->Release();
+                state.EnhancedCommandList = 0;
+            }
 
             if (0 != state.CommandList) {
                 _ = ((IUnknown*)state.CommandList)->Release();

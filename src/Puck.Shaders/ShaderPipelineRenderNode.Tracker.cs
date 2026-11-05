@@ -14,10 +14,6 @@ namespace Puck.Shaders;
 public sealed partial class ShaderPipelineRenderNode {
     private const GpuStage ShaderStages = GpuStage.ComputeShader | GpuStage.FragmentShader;
 
-    // The state a reset leaves every owned instance in: contents discarded, and any earlier access, including a
-    // downstream reader of a published image, possibly still in flight.
-    private static ShaderPipelineAccessState Discarded => ShaderPipelineAccessState.Host(layout: GpuImageLayout.Undefined);
-
     // A package-owned published buffer can be updated by an imported ComputeReadWrite port between submissions.
     // Preserve its contents and reacquire through the existing override on its first actual access, even when earlier
     // passes stand. Subsequent passes use their precise planned barriers as usual.
@@ -428,7 +424,7 @@ public sealed partial class ShaderPipelineRenderNode {
             for (var instance = 0; (instance < resource.Count); instance++) {
                 resource.SetOverride(
                     instance: instance,
-                    state: Discarded
+                    state: ShaderPipelineAccessState.Host(layout: FrameEnd(resource, instance).Layout)
                 );
                 resource.Initialized[instance] = false;
             }

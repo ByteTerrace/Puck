@@ -825,8 +825,11 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   where nothing shows it is a demand that bypasses this decision: `world.budget`'s live frame line
   names each instance's demand (`root` for a filmed root), and `world.rates` lists held views as
   `@held`. A settled capture (`IRenderGraphInstances.SettledCapturePath`) turns the graph host's
-  levers off. Walls are not tested: occlusion of a glass is open work in
-  [visibility](../../../docs/plans/visibility.md#v5-multi-view-and-shadow-work).
+  levers off. `SdfPortalSight` supplies completed per-consumer slab tests from the mesh pass's existing
+  farthest-depth pyramid. `SdfMeshOcclusion` dispatches one additional workgroup through `sdfOcclusionMaySee`
+  and reads its result only after the frame-slot fence. A changed camera or slab, unknown result, or replaced
+  view/program retains demand. Occlusion is presentation evidence from an earlier completed frame;
+  moving occluders carry that delay. Settled captures and non-occlusion cull modes bypass it.
 - **A program's bake plan is made on its build thread.** The composition
   source hands each program its background build finishes to
   `ISdfFrameSource.ObserveBuilds`, the residency plans it there

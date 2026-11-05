@@ -107,7 +107,6 @@ public sealed class GpuKernelCountersLawTests {
         Assert.Equal(actual: sample.GetOutsidePassCount(column: Column(kind: GpuWork.Clears)), expected: 1L);
         Assert.Equal(actual: sample.GetOutsidePassCount(column: Column(kind: GpuWork.Copies)), expected: 1L);
         Assert.Equal(actual: sample.GetOutsidePassCount(column: Column(kind: GpuWork.BufferBarriers)), expected: 3L);
-        Assert.Empty(collection: gpu.StateConflicts);
     }
     // The clear is ordered before every compute and fragment addition, those additions before the copy, and the copy
     // before the host's read of the readback, each by its own barrier.

@@ -68,7 +68,6 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.True(producer.ReadbackFence!.IsSignaled);
         answer.Read(actual);
         Assert.Equal(secondBytes.AsSpan(12, 20).ToArray(), actual.AsSpan(4, 20).ToArray());
-        Assert.Empty(gpu.StateConflicts);
     }
 
     [Fact]

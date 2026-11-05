@@ -49,7 +49,7 @@ public static class DirectXGpuFormats {
     internal static bool TryToResourceState(GpuImageLayout layout, out D3D12_RESOURCE_STATES resourceState) {
         switch (layout) {
             case GpuImageLayout.ShaderReadOnly:
-                resourceState = DirectXResourceStates.ShaderRead;
+                resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
                 return true;
             case GpuImageLayout.External:
                 resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;

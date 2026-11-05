@@ -291,6 +291,12 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_memoryProfile = m_deviceApi.GetMemoryProfile(deviceHandle: m_device.Handle);
         m_capabilities = m_deviceApi.GetDeviceCapabilities(deviceHandle: m_device.Handle);
         EnsureShaderModelFloor(deviceHandle: m_device.Handle);
+        var barriers = default(D3D12_FEATURE_DATA_D3D12_OPTIONS12);
+        ((ID3D12Device*)m_device.Handle)->CheckFeatureSupport(
+            D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS12, &barriers, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS12));
+        if (!barriers.EnhancedBarriersSupported) {
+            throw new InvalidOperationException("Direct3D 12 buffer synchronization requires enhanced barriers; update the runtime and GPU driver.");
+        }
         m_bindings.CreateDeviceHeaps(
             capabilities: m_capabilities,
             device: ((ID3D12Device*)m_device.Handle)
@@ -525,6 +531,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             return;
         }
 
+        Services.QueueSubmitter.FlushBatch();
         DirectXCommandCalls.SignalAndWait(
             calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device.Handle)),
             fence: ((ID3D12Fence*)m_idleFence),

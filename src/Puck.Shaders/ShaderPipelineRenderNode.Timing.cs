@@ -188,7 +188,7 @@ public sealed partial class ShaderPipelineRenderNode {
         }
         if (resolved) {
             m_gpu.Recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: target.Readback!.BufferHandle,
-                sourceStageMask: GpuStage.Transfer, sourceAccessMask: GpuAccess.TransferWrite,
+                sourceStageMask: GpuStage.Transfer, sourceAccessMask: GpuAccess.CopyWrite,
                 destinationStageMask: GpuStage.Host, destinationAccessMask: GpuAccess.HostRead);
         }
     }

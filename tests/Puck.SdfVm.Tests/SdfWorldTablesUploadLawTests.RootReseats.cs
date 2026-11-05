@@ -84,7 +84,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     private static void RenderRootCut(Rig rig, SdfFrame frame) {
         rig.Engine.Pack(frame);
         rig.Engine.SubmitUpload();
-        Assert.Empty(rig.Gpu.StateConflicts);
     }
 
     private static uint RootCutGeneration(Rig rig) => MemoryMarshal.Cast<byte, uint>(rig.Gpu.DeviceLocal(sizeBytes: rig.Engine.MeshRegionBytes, part: "mesh-region"))[SdfMeshRecord.SelectionWord + 11];

@@ -1,5 +1,4 @@
 using System.Runtime.Versioning;
-using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.System.Com;
 
 namespace Puck.DirectX.Interop;
@@ -24,12 +23,9 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
     /// <param name="memory">The device-local counts a GPU-upload-heap buffer was counted into, whose release this owner
     /// counts, or <see langword="null"/>; an upload-heap buffer was counted into none, so its release counts
     /// nothing.</param>
-    /// <param name="state">The state the buffer was created in, which the resource-state tracker starts it at:
-    /// <see cref="DirectXGpuBufferFactory.HostVisibleState"/> on an upload heap,
-    /// <see cref="DirectXGpuBufferFactory.DeviceLocalState"/> on a GPU upload heap.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bufferHandle"/> is zero.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="mapped"/> is <see langword="null"/>.</exception>
-    public DirectXGpuStorageBuffer(nint bufferHandle, ulong sizeBytes, void* mapped, GpuDeviceMemoryWork? memory = null, D3D12_RESOURCE_STATES state = DirectXGpuBufferFactory.HostVisibleState) {
+    public DirectXGpuStorageBuffer(nint bufferHandle, ulong sizeBytes, void* mapped, GpuDeviceMemoryWork? memory = null) {
         ArgumentOutOfRangeException.ThrowIfZero(value: bufferHandle);
 
         if (mapped is null) {
@@ -40,10 +36,6 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
         }
 
         m_buffer = bufferHandle;
-        DirectXResourceStates.Register(
-            resource: m_buffer,
-            state: state
-        );
         m_mapped = mapped;
         m_memory = memory;
         SizeBytes = sizeBytes;
@@ -99,7 +91,6 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
         m_mapped = null;
 
         if (0 != m_buffer) {
-            DirectXResourceStates.Forget(resource: m_buffer);
             DirectXDeviceMemory.CountReleased(
                 memory: m_memory,
                 resource: m_buffer

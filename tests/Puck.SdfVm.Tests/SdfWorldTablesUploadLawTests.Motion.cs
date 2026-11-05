@@ -39,7 +39,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         rig.Rebuild();
         rig.Render(time: 0f);
         Assert.Equal(expected: Current(), actual: Previous());
-        Assert.Empty(collection: rig.Gpu.StateConflicts);
     }
     // A frame held for a capture under the motion view keeps the motion it was presented with: its still uploads copy
     // nothing and move neither pose revision, a pose moved during the hold still advances them, and a still upload
@@ -86,7 +85,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         rig.Engine.DebugMode = 0;
         rig.Render(time: 0f);
         Assert.Equal(expected: Current(), actual: Previous());
-        Assert.Empty(collection: rig.Gpu.StateConflicts);
     }
     [Fact]
     public void PreviousMeshMatricesKeepTheLastConsumedDrawAndLeaveUnmovedDrawsUntouched() {
@@ -118,7 +116,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: ((long)((GpuRegion.CopyHeaderWords + 2) * sizeof(uint))), actual: rig.Gpu.HostBytes());
         rig.Render(time: 0f, meshDraws: Draws(a: movedFirst, b: movedSecond));
         Assert.Equal(expected: 0UL, actual: rig.Gpu.BufferCopyBytes);
-        Assert.Empty(collection: rig.Gpu.StateConflicts);
     }
     // A slot that changed owner has no previous pose of its own: changed program geometry in the same tables seeds every
     // previous row, a reseated slot seeds its own, and an ordinary move beside it keeps its motion. The pose revisions
@@ -160,7 +157,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         rig.Render(time: 0f);
         Assert.Equal(expected: Current(), actual: Previous());
         Assert.Equal(expected: (still + 3), actual: rig.Engine.PoseRevision);
-        Assert.Empty(collection: rig.Gpu.StateConflicts);
     }
     // A draw is continuous by identity, not by index: a list reordered at the same count, or a new draw at an index
     // another held, reads as still rather than as the other draw's motion.
@@ -184,7 +180,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             new(Identity: "b", Material: 0, Mesh: mesh, ObjectToWorld: second), new(Identity: "c", Material: 0, Mesh: mesh, ObjectToWorld: third),
         ]);
         Assert.Equal(expected: new[] { second, third }, actual: PreviousMatrices(rig: rig, draws: 2));
-        Assert.Empty(collection: rig.Gpu.StateConflicts);
     }
     // The previous mesh table holds matrices at a compact 16-word stride. Growth reserves twice the needed matrices.
     private static Matrix4x4[] PreviousMatrices(Rig rig, int draws) {

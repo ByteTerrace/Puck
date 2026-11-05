@@ -113,6 +113,5 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: RenderGraphInstanceStatus.Rendered, actual: view.Runtime.Latest!.Instances[0].Status);
         _ = view.Produce(context: in context);
         Assert.Equal(expected: RenderGraphInstanceStatus.Waiting, actual: view.Runtime.Latest!.Instances[0].Status);
-        Assert.Empty(collection: gpu.StateConflicts);
     }
 }
