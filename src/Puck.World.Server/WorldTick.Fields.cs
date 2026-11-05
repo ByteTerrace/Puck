@@ -13,7 +13,8 @@ public sealed partial class WorldTick : IFieldLatticeHost {
     internal string DescribeFields() => ((Host.Population.FieldRegions.Count == 0) ? "[world.fields: none]"
         : $"[world.fields: {string.Join(separator: "; ", values: Host.Population.FieldRegions.Select(selector: region => $"{region.Name}: {region.Lattice.Describe()}"))}]");
 
-    /// <summary>Clears departed exposure outputs and advances each physical region on its own cadence.</summary>
+    /// <summary>Clears departed exposure outputs, advances each physical region on its own cadence, and settles the
+    /// parked bodies on the cells that changed (<see cref="WorldPopulation.ObserveFieldSteps"/>).</summary>
     public void StepFields(ulong tick) {
         var regions = Host.Population.FieldRegions;
 
@@ -37,6 +38,7 @@ public sealed partial class WorldTick : IFieldLatticeHost {
                 m_steppingRegion.Step(bodyCount: Host.Population.Capacity, host: this, tick: tick);
             }
         } finally { m_steppingRegion = null; }
+        Host.Population.ObserveFieldSteps();
     }
 
     private static bool HasExposureRegion(IReadOnlyList<WorldFieldRegion> regions, StateHandle row, in FixedVector3 position) {

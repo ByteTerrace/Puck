@@ -140,7 +140,12 @@ public sealed partial class WorldPopulation {
         });
 
         var residue = body.CaptureIntegrationResidue();
-        var contactFieldObservationCurrent = (residue.LastContactFieldVersion == ContactFieldVersion);
+        // Only a parked rigid body or an asleep one compares its observation with the field, to decide whether to wake;
+        // an awake body overwrites it (ParkRigidIsland, UpdateSleepEligibility) before any read. Its observation is
+        // current by construction, so the image never carries a stale stamp that would tie a body's continuation to
+        // field changes elsewhere in the world (a scoped replay compares that image across drives).
+        var observes = ((residue.RigidSleepRootPlusOne != 0) || (residue.AsleepSinceTick != 0UL));
+        var contactFieldObservationCurrent = (!observes || (residue.LastContactFieldVersion == ContactFieldVersion));
 
         residue = residue with {
             // Contact-field versions are process-local rebuild counters. A population checkpoint retains only

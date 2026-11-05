@@ -921,22 +921,32 @@ written into one of its own registers, a parked peer resuming, or a bump to
 `WorldPopulation.ContactFieldVersion`. That version sums
 three independently-increasing counters—a document install/adjacency
 reconfigure, `WorldColliderSet.RefreshAttached` finding an attached row at a
-new pose, and the field lattice's own `Revision`—so an unchanged sum proves
-none of them moved since a sleeping body last observed it. A parked rigid
-island wakes on that bump only where the change can reach it: when only attached
-rows moved, `PrepareBodyStep` wakes the sleepers whose broadphase radius,
-grown by the set's contact reach (two contact skins and a fixed-point step,
-`WorldColliderSet.ContactReach`) and a rigid support probe's travel
-(`collision.bodyContacts.rigidSubstepMinimumTravel`), meets the box the moved
-colliders swept (before and after the move,
-`WorldColliderSet.TakeAttachedChange`), and a response swap that rebuilds the
-analytic set wakes only the rigid bodies within that same reach of the changed
-rows' colliders (`InstallResponseSolids`, old and new colliders). Every other sleeper observes
-the new version without waking; a document install, a field step, a half-space
-or a change already owed wakes them all, as does any change for a non-rigid
-sleeper. Waking every rigid island on each tick a carrier moves costs the debug
-world about 500 rigid advances a tick against 14 idle. `world.counters
-physics.bodies` counts the advances and the field wakes and observations.
+new pose, and each field lattice's `BodyReadRevision`, which moves only for a
+cell a body reads (a medium cell, which a body floats against, and a solid cell
+when the field provider unions the lattices' solid columns; a store or a solid
+under the analytic provider never moves it)—so an unchanged sum proves none of
+them moved since a sleeping body last observed it. A parked rigid island wakes
+on that bump only where the change can reach it
+(`WorldPopulation.ObserveContactFieldChange`): attached rows that moved fold the
+box their colliders swept (before and after the move,
+`WorldColliderSet.TakeAttachedChange`), a region whose body-read cells changed
+folds its read bounds (`FieldLattice.ReadMinimum`/`ReadMaximum`: the coupling
+volume grown by a solid's two-cell reach), and only the sleepers whose
+broadphase radius, grown by the contact reach (two contact skins and a
+fixed-point step, `FixedWorldCollision.ContactReach`) and a rigid support
+probe's travel (`collision.bodyContacts.rigidSubstepMinimumTravel`), meets that
+box wake. The lattices' own step is settled right after `WorldTick.StepFields`
+(`ObserveFieldSteps`), so a tick ends with no sleeper behind its lattices. A
+response swap that rebuilds the analytic set wakes only the rigid bodies within
+that same reach of the changed rows' colliders (`InstallResponseSolids`, old and
+new colliders). Every other sleeper observes the new version without waking; a
+document install, a half-space or a change already owed wakes them all, as does
+any change for a non-rigid sleeper. Waking every rigid island on each change
+would cost the debug world about 550 rigid advances a tick against about 70
+idle: its hydrology lattice changes every eight ticks and a carrier moves on
+every ride. `world.counters
+physics.bodies` and `puck bench world` count the advances and the field wakes
+and observations.
 `body.where` trails
 `asleep=<tick>` for a sleeping body (absent otherwise); `world.status` echoes
 the population-wide `sleeping` count. A rigid kit's own rest latch
