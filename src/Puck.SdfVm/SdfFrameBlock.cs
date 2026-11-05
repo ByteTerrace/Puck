@@ -65,6 +65,7 @@ public static partial class SdfFrameBlock {
     private static readonly int MeterLuminance = Offset(member: SdfWorldPackage.MeterLuminance);
     private static readonly int LocalAdaptation = Offset(member: SdfWorldPackage.LocalAdaptation);
     private static readonly int SkyPeakLuminance = Offset(member: SdfWorldPackage.SkyPeakLuminance);
+    private static readonly int FlowClock = Offset(member: SdfWorldPackage.FlowClock);
     private static readonly int MeshDraws = Offset(member: SdfWorldPackage.MeshDraws);
     private static readonly int NearDistance = Offset(member: SdfWorldPackage.NearDistance);
     private static readonly int ScreenCount = Offset(member: SdfWorldPackage.ScreenCount);
@@ -206,6 +207,7 @@ public static partial class SdfFrameBlock {
         WriteSingle(block: block, offset: MeterLuminance, value: (tables.Exposures?.MeteredOf(view: view) ?? 0f));
         WriteSingle(block: block, offset: LocalAdaptation, value: ((frame.Exposure.Mode == SdfExposureMode.Auto) ? Math.Clamp(value: frame.Exposure.Local, min: 0f, max: 1f) : 0f));
         WriteSingle(block: block, offset: SkyPeakLuminance, value: (tables.Exposures?.SkyPeakLuminance ?? 0f));
+        WriteSingle(block: block, offset: FlowClock, value: FlowClockOf(frame: frame));
         for (var slot = 0; (slot < SdfShadowSlots.MaxSlots); slot++) {
             WriteUInt32(block: block, offset: (ShadowSlots + (slot * sizeof(int))), value: unchecked((uint)lights.ShadowSlots[slot]));
         }
@@ -244,6 +246,10 @@ public static partial class SdfFrameBlock {
     }
 
 
+    // The flow layer's clock at the frame's presented tick (SdfFlow.Clock): the one value the flow layer's phase enters the
+    // kernels through. Zero for a program with no flow, so its views stand while nothing else changes.
+    private static float FlowClockOf(SdfFrame frame) =>
+        (frame.Program.HasFlow ? SdfFlow.Clock(seconds: frame.Clock.Integrate(modulus: SdfFlow.ClockPeriodSeconds, ratePerSecond: 1d)) : 0f);
     // The offset a pass-block member lies at.
     private static int Offset(string member) =>
         ((int)Layout.BlockOffsetOf(member: member));

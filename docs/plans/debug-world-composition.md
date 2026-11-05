@@ -295,9 +295,10 @@ is the conserved total. `water.speed 60` accelerates the clock and transport tog
 
 The scenery comes from [standard water families](../../worlds/standard/water.puck).
 The glacier contracts uniformly about its cradle using `CreationDocument.SizeBy`
-and the authored linear fraction; zero parks the creation. The falls' motion reads
-melt strength and its endpoint visibility, rather than mistaking a cell's retained
-water depth for discharge. Impact spray is a state-scaled cloud volume. The lake's
+and the authored linear fraction; zero parks the creation. The falls is fourteen
+still sheets down the wall's profile, parked by its endpoint visibility; its
+shading falls down each sheet through the standard's flow layer
+([water rendering, W2](water-rendering.md#w2-as-built)). Impact spray is a state-scaled cloud volume. The lake's
 outlet is a terrain subtraction, shared by the rendered mass and its collider.
 
 `waterBasin` constructs the pool, plunge basin and reservoir chamber. `waterViews`
@@ -309,8 +310,9 @@ inspection window in the dry terrace. The pool uses the standard `waterMaterial`
 through the ordinary palette and glass path: the engine has no water shading path.
 The chamber and pool have modelled wall openings joined by a submerged passage;
 its field surface reads the same aquifer gauge. Their elevations share the flow
-model's datum. Stream foam and brush edges are material paints on one moving sheet
-per segment, so decorative strokes no longer require separate animated bake groups.
+model's datum. The stream is eight placements of one still 24 m segment, alternate
+legs 2 cm higher so their overlapping ends never share a plane; its flow and foam
+are the segment's flow layer, and the lake's breeze ripples are another.
 
 Height fields publish immutable sampled values in `SdfProgram`; the geometry key
 and the bake read that same owned snapshot. This applies to opaque and glass fields.

@@ -112,6 +112,10 @@ public static partial class SdfWorldPackage {
     /// local adaptation scales the view's sky share by so that it reaches display white (<c>SdfExposure.SkyPeakTarget</c>)
     /// rather than clipping; zero scales nothing (<c>float</c>).</summary>
     public const string SkyPeakLuminance = "skyPeakLuminance";
+    /// <summary>The pass-group value holding the flow clock: the presented time reduced by the flow layer's clock period,
+    /// over that period, in [-1/2, 1/2] (<c>SdfFlow.Clock</c>), integrated on the host from the frame's presented tick
+    /// so no kernel reads a clock; zero for a frame whose program carries no flow layer (<c>float</c>).</summary>
+    public const string FlowClock = "flowClock";
     /// <summary>The stable shadow slots' light indices; an empty slot holds −1 (<c>int4</c>).</summary>
     public const string ShadowSlots = "shadowSlots";
     /// <summary>The configured stable shadow slot count (<c>uint</c>).</summary>
@@ -304,6 +308,7 @@ public static partial class SdfWorldPackage {
         Value(name: MeterLuminance, type: ShaderValueType.Float),
         Value(name: LocalAdaptation, type: ShaderValueType.Float),
         Value(name: SkyPeakLuminance, type: ShaderValueType.Float),
+        Value(name: FlowClock, type: ShaderValueType.Float),
         Value(name: ShadowSlots, type: ShaderValueType.Int4),
         Value(name: ShadowSlotCount, type: ShaderValueType.Uint),
         Value(name: ShadowFadeCount, type: ShaderValueType.Uint),

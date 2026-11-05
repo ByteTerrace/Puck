@@ -152,6 +152,11 @@
 #define SDF_GLASS_DEPTH_DISTANCE_SCALE 32768.0
 #define SDF_GLASS_ABSORPTION_SCALE     65536.0
 
+// The flow layer's clock period in seconds (SdfFlow.ClockPeriodSeconds) and its control word (SdfProgram.FlowLaneMask, SdfProgram.FlowWorldFrame).
+#define SDF_FLOW_CLOCK_PERIOD 4096.0
+#define SDF_FLOW_LANE_MASK    0x000000FFu
+#define SDF_FLOW_WORLD_FRAME  0x00000100u
+
 // The sky's environment map (SdfSkyEnvironment) and the volume table's capacity (SdfProgramBuilder.MaxVolumes).
 #define SDF_SKY_ENVIRONMENT_SIZE         64
 #define SDF_SKY_ENVIRONMENT_COEFFICIENTS 9u

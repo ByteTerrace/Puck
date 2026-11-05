@@ -488,11 +488,25 @@ template grassTuft(id) {
   }
 }
 
+// The meadow's wind as a world-space flow layer: paler gust patches run across every tile and blade together, along the
+// way the gust swings travel. Features are about eight metres; one cycle's travel stays under a third of one along the flow.
+let meadowWind = {
+  velocity [-2.5, 0, -1.6]
+  scale: 0.12
+  stretch: 2
+  cycle: 2
+  coverage: 0.3
+  softness: 0.2
+  surface { color: "#C2D47F", roughness: 0.8, metal: 0 }
+  frame: World
+  seed: 3
+}
+
 // The fringe uses tile-local coordinates; gusts use the placed world X/Z, continuous across tiles.
 // fringe [x, z, rx², rz²] is the patch's ellipse and clearing [x, z, r²] the circle it leaves bare, both in tile
 // coordinates; the defaults are the courtyard meadow's patch and its northern boulder. A tile small on screen sways at
 // the update-rate lever's reduced tiers unless the importer passes reducedRateAtDistance: false.
-template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.9, 3.65], clearing = [6.5, 9.8, 2.1], reducedRateAtDistance = true) {
+template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.9, 3.65], clearing = [6.5, 9.8, 2.1], reducedRateAtDistance = true, wind = meadowWind) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -505,37 +519,43 @@ template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.9, 3
           color: "#698B3E",
           roughness: 0.9,
           specular: 0.025,
-          wrap: 0.45
+          wrap: 0.45,
+          flow: wind
         }
         {
           color: "#79964A",
           roughness: 0.9,
           specular: 0.025,
-          wrap: 0.45
+          wrap: 0.45,
+          flow: wind
         }
         {
           color: "#849C4F",
           roughness: 0.9,
           specular: 0.025,
-          wrap: 0.45
+          wrap: 0.45,
+          flow: wind
         }
         {
           color: "#9EB75C",
           roughness: 0.85,
           specular: 0.035,
-          wrap: 0.55
+          wrap: 0.55,
+          flow: wind
         }
         {
           color: "#A5BA63",
           roughness: 0.85,
           specular: 0.035,
-          wrap: 0.55
+          wrap: 0.55,
+          flow: wind
         }
         {
           color: "#91AB50",
           roughness: 0.85,
           specular: 0.035,
-          wrap: 0.55
+          wrap: 0.55,
+          flow: wind
         }
       ]
       drivers [

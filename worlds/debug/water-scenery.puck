@@ -1,7 +1,8 @@
 // What the water looks like in the debug world, from the standard's scenery (../standard/water.puck): the falls and the
 // glacier on the north-west wall, the lake in its bowl on the rim, the stream from the falls' foot to the pool, and the
 // stone bridge over it. Everything here is a look bound to the gauges water.puck keeps: the glacier contracts about its
-// cradle as the melt clock runs, the lake rises and falls with its level, the falls fold into the wall as the flow ebbs.
+// cradle as the melt clock runs, the lake rises and falls with its level, the falls park when the melt runs dry. The
+// stream and the falls stand still; their shading flows (the standard's flow layers).
 import "../standard/water"
 import "valley-form"
 import "water-site"
@@ -20,9 +21,9 @@ let glacierLumps = map(range(0, 6), i => {
   radii [12 + (i % 3) * 2, 8 + (i % 2) * 2, 9]
 })
 
-// The stream leaves the falls' foot, 205 m from the centre toward compass 315, and runs in legs of 24 m, each a bearing
-// from compass north: it winds east then south to the pool's north bank. A leg is one creation whose pulses start where the
-// leg before left off.
+// The stream leaves the falls' foot, 205 m from the centre toward compass 315, and runs in legs, each a bearing from compass
+// north: it winds east then south to the pool's north bank. Every leg is a placement of one 24 m segment; a shorter leg
+// ends where it should and starts back along the leg before it.
 let streamLegs = [
   { bearing: 100, length: 24 }
   { bearing: 120, length: 24 }
@@ -33,14 +34,16 @@ let streamLegs = [
   { bearing: 154, length: 24 }
   { bearing: 154, length: 18 }
 ]
-// A leg's start point, and its middle.
+// The length of the one stream segment every leg places.
+let streamSegmentLength = 24
+// A leg's start point, and where its segment is centred: half a segment back from the leg's end.
 function legStart(i) = [
   -143 + reduce(range(0, i), 0, (sum, k) => sum + sine(streamLegs[k].bearing * compassRadians) * streamLegs[k].length),
   144 + reduce(range(0, i), 0, (sum, k) => sum + cosine(streamLegs[k].bearing * compassRadians) * streamLegs[k].length)
 ]
-function legMiddle(i) = [
-  legStart(i)[0] + sine(streamLegs[i].bearing * compassRadians) * streamLegs[i].length / 2,
-  legStart(i)[1] + cosine(streamLegs[i].bearing * compassRadians) * streamLegs[i].length / 2
+function legCentre(i) = [
+  legStart(i)[0] + sine(streamLegs[i].bearing * compassRadians) * (streamLegs[i].length - streamSegmentLength / 2),
+  legStart(i)[1] + cosine(streamLegs[i].bearing * compassRadians) * (streamLegs[i].length - streamSegmentLength / 2)
 ]
 
 // The bridge crosses the stream at the start of the fifth leg, its length across the flow.
@@ -50,9 +53,7 @@ prototypes {
   fallsRibbon(id: "falls", profile: fallsProfile, width: 8, standoff: 8)
   glacierMass(id: "glacier", lumps: glacierLumps, origin: glacierOrigin)
   lakeSurface(id: "lake", radius: lakeSite.radius)
-  for (leg, i) in streamLegs {
-    streamSegment(id: $"stream-{i}", length: leg.length, arc: i * 24)
-  }
+  streamSegment(id: "stream", length: streamSegmentLength)
   stoneBridge(id: "bridge")
   floatGauge(id: "reservoir-gauge", height: 1.8)
   waterBasin(id: "plunge-basin", half: [10, 10], floorY: -2.4)
@@ -85,10 +86,11 @@ placements {
       lakeSite.radial * cosine(wallSector.compass * compassRadians)
     ]
   }
+  // Alternate legs ride 2 cm higher, so the overlapping ends at each bend never share a plane.
   for (leg, i) in streamLegs {
     placement $"stream-{i}" {
-      prototype: $"stream-{i}"
-      position [legMiddle(i)[0], 0, legMiddle(i)[1]]
+      prototype: "stream"
+      position [legCentre(i)[0], (i % 2) * 0.02, legCentre(i)[1]]
       yawDegrees: leg.bearing + 180
     }
   }

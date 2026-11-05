@@ -64,7 +64,7 @@ public sealed partial class SdfProgram {
     public const uint BoundModeStatic = 1;
     /// <summary>The material float4 stride, written by PackMaterials and read by the kernels' <c>sdfMaterialLoad</c>
     /// (<c>SDF_MATERIAL_VECTORS_PER_ENTRY</c>).</summary>
-    public const int MaterialVectorsPerEntry = 27;
+    public const int MaterialVectorsPerEntry = 31;
     /// <summary>The paint table's float4 stride, written by PackPaints and read by the views pass's paint layer
     /// (<c>SDF_PAINT_VECTORS_PER_ENTRY</c>): the frame origin and shape, the rotation, the residual scale, the shape's
     /// two data vectors, the color and stroke, the slot and bound center, the bound half-extents, then
@@ -78,6 +78,12 @@ public sealed partial class SdfProgram {
     /// <summary>The dynamic slot word of a paint in the frame of the slot that owns the hit
     /// (<c>SDF_PAINT_WINNING_FRAME</c>).</summary>
     public const uint PaintWinningFrame = uint.MaxValue;
+    /// <summary>The bits of a flow's control word (material row 30.w) holding its lane plus one, zero for a constant flow
+    /// (<c>SDF_FLOW_LANE_MASK</c>).</summary>
+    public const uint FlowLaneMask = 0xFFu;
+    /// <summary>The bit of a flow's control word saying its velocity is in world space rather than the surface's object
+    /// frame (<c>SDF_FLOW_WORLD_FRAME</c>).</summary>
+    public const uint FlowWorldFrame = 0x100u;
     /// <summary>The second-highest bit of a rigid leaf's shape index: the leaf rides a fold run, described by the slot
     /// that follows it (<c>SDF_RIGID_LEAF_FOLDED</c>).</summary>
     public const uint RigidLeafFoldedFlag = 0x40000000u;

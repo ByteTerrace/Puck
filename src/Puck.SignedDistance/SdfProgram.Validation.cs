@@ -320,7 +320,8 @@ public sealed partial class SdfProgram {
                 !SdfMaterialLayers.IsValid(
                 inset: material.Inset,
                 weathering: material.Weathering,
-                paints: material.Paints
+                paints: material.Paints,
+                flow: material.Flow
             )
             ) {
                 throw new ArgumentOutOfRangeException(
