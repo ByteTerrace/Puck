@@ -22,19 +22,17 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var bake = bakeRun.Bake;
         var dresser = bakeRun.Dresser;
         var frame = SettleFrame(groups: 1, memberGap: PosedGap, offset: 0f, program: SettleProgram(groups: 1, memberGap: PosedGap, scale: 4f), time: 0f);
-        var index = 0L;
         var full = false;
 
         TestLiveness.Until(reason: bake.Describe, step: () => {
             _ = dresser.Dress(frame: frame);
-            if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
+            if (bake.TryTake(batch: out var batch, field: bake.Program)) {
                 if (batch.InputRows > SdfWorldPackage.MeshBakeMaxSamples) {
                     Assert.True(condition: (batch.InputRows > batch.Samples));
                     var points = new Vector4[batch.InputRows];
                     Assert.True(condition: batch.WritePoints(table: points));
                     full = true;
                 }
-                bake.Record(batch: batch);
                 bake.Complete(batch: batch, samples: AnswerPosed(batch: batch, empty: false, memberGap: PosedGap, scale: 4f));
             }
             return !bake.Pending;
@@ -201,8 +199,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
 
         TestLiveness.Until(reason: bake.Describe, step: () => {
             _ = dresser.Dress(frame: frame);
-            if (bake.TryTakeForFrame(batch: out var batch, frame: next++)) {
-                bake.Record(batch: batch);
+            if (bake.TryTake(batch: out var batch, field: bake.Program)) {
                 bake.Complete(batch: batch, samples: AnswerPosed(batch: batch, empty: empty));
             }
 

@@ -36,15 +36,12 @@ public sealed partial class SdfMeshBakeClosure {
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", ".ctor"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "PrepareFrame"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "PlanAhead"),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "Stage"),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "TryTakeForFrame"),
-        // Input values and addresses are semantic; allocation and upload transport are not.
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "WritePoints"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "TryTake"),
+        // Input values and addresses are semantic; allocation, upload and dispatch transport are not.
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "PointRuns"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "get_InputRows"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "PoseBase"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "Complete"),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeReadback", ".ctor"),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeReadback", "Poll"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBlock", "Write"),
         // The library is a cache boundary, but normalization runs before it persists the product.
         ("Puck.SdfVm", "Puck.SdfVm.SdfMesh", "NativeCopy"),
@@ -59,7 +56,6 @@ public sealed partial class SdfMeshBakeClosure {
         "Puck.SdfVm.SdfKernelInterfaces",
         "Puck.SdfVm.SdfMeshBakeClosure",
         "Puck.SdfVm.SdfMeshBakeIdentity",
-        "Puck.SdfVm.SdfMeshBakeInputTransport",
         "Puck.SdfVm.SdfMeshLibrary",
         "Puck.SdfVm.SdfMeshStore",
         "Puck.SdfVm.SdfWorldInterfaces",

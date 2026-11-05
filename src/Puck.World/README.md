@@ -1038,7 +1038,7 @@ Facts a script needs:
   and `(X, Y)` on a z cut; the placement form centres on the placement's
   authored position over 1.25 times its creation's reach. The mesh bake's
   sampler, the one field walk, reads the residency's program at every sample
-  with its gradient, a frame's bake share at a time and before any pending
+  with its gradient, in the bake's background GPU work and before any pending
   group; outside an instance's influence sphere it answers the sphere's bound.
   Where the answered field stops rising away from the surface (at least 2% of
   the outside samples rise slower than a tenth of a metre a metre), the samples

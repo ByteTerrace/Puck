@@ -23,7 +23,7 @@ public sealed partial class SdfWorldTables {
     private const int MeshRegionIndex = 6;
     private const int ProgramRegionIndex = 0;
     // The per-frame regions RegionAt names.
-    private const int RegionCount = 13;
+    private const int RegionCount = 12;
     private const int ScreenMappingRegionIndex = 5;
     private const int ScreenSurfaceRegionIndex = 2;
     private const int VolumeRegionIndex = 3;
@@ -80,7 +80,7 @@ public sealed partial class SdfWorldTables {
             copySets: m_regionCopyPool.Region(index: region),
             memory: GpuResidency.RingMemory(profile: profile),
             name: RegionName(region: region),
-            policy: ((region is MeshRegionIndex or MeshBakePointRegionIndex or MeshIrradianceRegionIndex)
+            policy: ((region is MeshRegionIndex or MeshIrradianceRegionIndex)
                 ? GpuResidencyPolicy.Staged
                 : GpuResidency.Select(
                     byteCount: ((ulong)byteCount),
@@ -138,13 +138,12 @@ public sealed partial class SdfWorldTables {
 
     /// <summary>Gets the bytes of the buffers the tables' regions hold, by the memory they live in
     /// (<see cref="GpuRegion.OwnedBytes"/>): every per-frame table, the previous transform tables, the mesh region,
-    /// the shared mesh-bake destination and the brick staging with a brick pool. Read at the time asked, since a region
+    /// and the brick staging with a brick pool. Read at the time asked, since a region
     /// grows by being replaced. View-local readbacks remain charged to their recorders.</summary>
     public GpuMemoryBytes TableBytes {
         get {
             var bytes = (new GpuMemoryBytes(DeviceLocal: (((m_previousDynamicTransforms.SizeBytes + m_previousMeshTransforms.SizeBytes) + m_shadowHandoffBuffer.SizeBytes) + ScreenEmission.SizeBytes), HostVisible: 0));
             bytes += m_meshHistoryCopies.OwnedBytes;
-            bytes += new GpuMemoryBytes(DeviceLocal: m_meshBakeSamples.SizeBytes, HostVisible: 0);
 
             for (var index = 0; (index < RegionCount); index++) {
                 if (RegionAt(index: index) is { } region) {
@@ -170,7 +169,6 @@ public sealed partial class SdfWorldTables {
         LightRegionIndex => m_lightRegion,
         SkyRegionIndex => m_skyRegion,
         SkyLayerRegionIndex => m_skyLayerRegion,
-        MeshBakePointRegionIndex => m_meshBakePointRegion,
         MeshIrradianceRegionIndex => m_meshIrradianceRegion,
         _ => m_shadowHandoffRegion,
     };
@@ -187,7 +185,6 @@ public sealed partial class SdfWorldTables {
         SkyRegionIndex => "sky",
         SkyLayerRegionIndex => "sky-layers",
         ShadowHandoffRegionIndex => "shadow-handoffs",
-        MeshBakePointRegionIndex => "mesh-bake-points",
         MeshIrradianceRegionIndex => "mesh-irradiance",
         _ => "brick-staging",
     });

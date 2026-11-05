@@ -203,9 +203,7 @@ Find the existing mechanism before adding one: `puck references`,
 
 ## Which dispatch owns the code
 
-A view is a chain of separate dispatches: `mask` → `bake` (only while the
-residency's bake is pending: `sdf-mesh-bake-mask`, `sdf-mesh-bake`, the one
-`mapCore` call site) → `shadow-near`, `shadow-far`, `shadow-second` (graphics,
+A view is a chain of separate dispatches: `shadow-near`, `shadow-far`, `shadow-second` (graphics,
 the cascades) → `mesh` (graphics, in two occlusion phases with the occlusion
 kernel between them, `SdfMeshOcclusion`) → `pyramid` (the ambient occlusion's
 depth pyramid from the mesh target) → `surface` (each pixel's visibility record from the mesh
@@ -219,6 +217,17 @@ lit image's place. The surface and
 views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
 `passes/sdf-pixel-entry.hlsli`) and call no field query. The table in
 [kernels](references/kernels.md#the-frame) says what each writes.
+
+The mesh bake's two kernels (`sdf-mesh-bake-mask`, `sdf-mesh-bake`, the one
+`mapCore` call site) are no pass of a view: they run as the residency's
+background GPU work (`SdfGpuWork`, its bake client `SdfMeshBakeGpuWork`), a
+ring of slots each submitted on its own fence and refilled when a slot's job
+completes and its readback is released, pumped on the frame thread at the top
+of each frame and after each upload. A job binds the latest upload's World set
+with its own point table and runs only while the tables' uploaded program is
+the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
+`world.gpu-timing` does not see it; the bake's done line carries its
+`gpu-work=[…]` counts, each job's GPU time measured by its own timestamps.
 
 - **AO and soft shadows are estimated in the surface pass and filtered in
   views.** The estimates (`sdfMeshAmbient`, `sdfMeshShadow` and their shared
@@ -839,7 +848,7 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   A completed mesh is still pending until `Dress` includes it: a load can finish
   between dressing and preparation, and testing only the worker would certify
   the partial mesh list. `IRenderGraphPackageFactory.WaitingOf` keeps a rendered
-  package incomplete while its bake passes and readbacks continue. The host
+  package incomplete while its residency's bake is pending. The host
   holds that tick; exposure adapts once the complete frame supplies its meter.
   A capture freezes the authored frame, then dresses newly completed meshes.
 - Lockstep irradiance waits for both the current static scene's build and its

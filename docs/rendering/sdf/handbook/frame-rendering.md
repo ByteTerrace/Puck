@@ -289,9 +289,10 @@ millisecond of the period is the floor holding.
 
 ## What each pass costs
 
-The passes scale with different things. `mask` and `bake` scale with the
-field evaluations a frame's lattices take, which `SdfMeshPathBake.FrameBudget`
-bounds, and run only while a bake is pending. The three cascades and `mesh`
+The passes scale with different things. The bake's two kernels are no pass of
+the frame: they run as the residency's background GPU work, at most
+`SdfGpuWork.GpuShare` of the GPU's time by each job's measured timestamps, and
+only while a bake is pending ([the bake](#the-bake)). The three cascades and `mesh`
 scale with the triangles drawn and the fragments they cover. `surface` and
 `views` scale with the render grid's pixels: every pixel runs the same fixed
 occlusion and shadow filter taps, and a hit pixel's lighting scales with the
@@ -897,26 +898,26 @@ at full strength returns the source codes.
 ## The bake
 
 `SdfMeshPathBake`, one per residency, bakes the residency's program into meshes
-while a bake is pending, and the mask and bake passes run only then. A group is
+while a bake is pending, sampling through the residency's background GPU work
+(`SdfGpuWork`, its bake client `SdfMeshBakeGpuWork`) rather than any pass of a
+view. A group is
 the instances one rigid frame moves: every active instance riding one
 dynamic-transform slot, or one static copy, the run of a placement copy's shape
 instances that bake with the first (`SdfInstanceRange.BakesWithPrevious`, which
 the static stamper sets on every shape of a copy after its first); the segments
-no instance owns form one more group. The mask pass runs `sdf-mesh-bake-mask`,
-which writes each lattice's group selection into its instance mask words (a run
-selected as `-(first + 1)`, its length in the high half of the lattice's mode
-word), and the bake pass runs
-`sdf-mesh-bake`, which samples up to sixteen lattices a frame through the
-interpreter, one call site, with only the group's instances in the walk
-(`sdfMapOmitWorldSegments` drops the unowned segments from it). A frame's
-lattices stay within its share of field evaluations (`SdfMeshPathBake.FrameTaps`,
-a gradient sample counting five), so a frame that bakes keeps its budget. The
-share is of a 60 Hz frame: a frame presented over longer takes as many shares as
-whole 60 Hz frames it spans, up to eight (`SdfMeshPathBake.FrameBudget`), so a
-slow display, a remote desktop's ten frames a second among them, bakes at the
-rate a 60 Hz one does, while a display at 60 Hz or faster takes one share a frame.
-Every lattice is sized by one share, so the meshes do not depend on the frame
-rate. A frame
+no instance owns form one more group. A job of the background work is one batch
+(`SdfMeshPathBake.TryTake`): `sdf-mesh-bake-mask` writes each lattice's group
+selection into its instance mask words (a run selected as `-(first + 1)`, its
+length in the high half of the lattice's mode word), and `sdf-mesh-bake`
+samples up to 240 lattices through the interpreter, one call site, with only
+the group's instances in the walk (`sdfMapOmitWorldSegments` drops the unowned
+segments from it). The work keeps a ring of slots, each submitted on its own
+fence and refilled once its job completed and its samples were copied off, and
+takes at most `SdfGpuWork.GpuShare` of the GPU's time by each job's own
+timestamps, so a cold bake samples as fast as its groups ask for lattices
+rather than one batch a rendered frame. Every lattice is chunked to
+`SdfMeshPathBake.LatticeTaps` field evaluations (a gradient sample counting
+five), so the meshes depend on neither the chunking nor the frame rate. A take
 takes its lattices in the groups' order, not round robin, so the groups finish in
 order and each lands in the shared mesh library (`SdfMeshLibrary`) as it finishes: a
 body that crosses into another world mid-bake leaves the groups it finished there,
@@ -1118,9 +1119,9 @@ Moth's shins). The inner band of the Moth's face opening still shows jagged
 slivers at the fine spacing ([open item](../../../plans/rendering.md#bake-quality)).
 
 The material is then sampled where a field hit would read it, at points lifted
-half a millimetre off the surface, in rounds the bake writes into the tables'
-point table (`SdfWorldTables.WriteMeshBakePoints`, World member
-`sdfMeshBakePoints`) ahead of the frame's upload and `sdf-mesh-bake` samples as
+half a millimetre off the surface, in rounds a job writes into its slot's
+point table (`SdfMeshBakeBatch.PointRuns`, bound at World member
+`sdfMeshBakePoints` in the slot's own World set) and `sdf-mesh-bake` samples as
 points lattices (`SdfMeshMaterialCut`). The first round samples each quad's four
 quarter centres and each vertex. A quad whose vertices agree keeps one material
 when its quarters agree too, and splits into its quarters otherwise, so a
@@ -1321,15 +1322,15 @@ Only new geometry bakes. The bake reports its residency, groups,
 dispatches, samples, groups loaded, triangles, vertices and wall time on stderr
 when it starts and finishes (`[sdf.mesh-bake] start residency=… baking=…
 loading=…`, `done residency=… loaded=…`).
-It counts a batch as work when a bake pass records it: a frame that takes a
-batch no pass records, as while the boot's pipelines build, dispatches nothing,
-and its lattices go to the next frame. A batch remembers the bake that took it,
-and the package polls every bake pass's readbacks at the start of each frame,
-so a batch dispatched by a view that then leaves the frame, or follows another
-residency, still answers its own bake. A recorded batch whose readback never
-arrives, as when the view's graph rebuilds mid-bake, is dispatched again, and the line reports those samples as
-`discarded`, so `samples` less `discarded` is the same on every run of one
-build. Until a group's first mesh lands, the group draws nothing.
+It counts a batch as work when the background work takes it. A batch remembers
+the bake that took it and holds its slot until its samples are copied off, so no
+view's coming or going strands it. A batch handed back unanswered (a recording
+that failed, the tables disposed mid-bake) returns its lattices to their groups,
+which dispatch them again, and the line reports those samples as `discarded`,
+so `samples` less `discarded` counts the samples that answered. The done line's
+`gpu-work=[…]` field counts the jobs, their measured GPU time, the wall time a
+job was in flight and the share of it the GPU spent on them. Until a group's
+first mesh lands, the group draws nothing.
 
 The walk merges the world-segment list with the selected instances' ranges and
 has no second path: a program with no instance lists every segment as a world

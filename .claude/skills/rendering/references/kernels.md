@@ -126,7 +126,10 @@ wave-summed atomic a wave into the row `workCounterRow` names,
 to the slot's readback behind the last; `world.counters gpu` reads them as
 `march.steps` and `texels.written`, per-backend deterministic. Generated
 `puckCountShapes` adds `sdfWorkShapes` and `sdfWorkGradients` to the same row as
-`shapes.evaluated` and `shapes.gradients`; only the bake evaluates shapes. The
+`shapes.evaluated` and `shapes.gradients`; only the bake evaluates shapes, and
+it runs as background GPU work with counters of its own that nothing reads
+back, so no view's node counts its steps or shapes (its done line counts its
+samples and taps). The
 sky and composite passes also count `sky.evaluations`, `sky.hashes` and
 `sky.texture-loads` into their named layer rows through `puckCountDetail`. A
 new counting site adds to `sdfWorkSteps` beside the evaluation it counts. The
@@ -136,9 +139,7 @@ of its passes. The upload and the view's passes, in order:
 
 | Label | Kernel | Does |
 |---|---|---|
-| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, screen surfaces, screen mappings, volumes, decals, mesh draws, the bake's points, the irradiance volume, the lights, active shadow handoff controls, and the sky's block and layers) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, quality and levers, the light count, the shadow slot table and the curvature shading are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
-| `mask` | `sdf-mesh-bake-mask.comp` | Writes each of the frame's bake lattices' instance selection; only while a bake is pending (`Skips`). |
-| `bake` | `sdf-mesh-bake.comp` | Samples the frame's lattices through `mapCore` (the one GPU field walk) into `bakeSamples`, which the host reads back and contours, or draws as a field slice (`SdfFieldSlice`); only while a bake or a slice is pending. |
+| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, screen surfaces, screen mappings, volumes, decals, mesh draws, the irradiance volume, the lights, active shadow handoff controls, and the sky's block and layers) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, quality and levers, the light count, the shadow slot table and the curvature shading are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
 | `shadow-near`, `shadow-far`, `shadow-second` | `sdf-mesh-shadow.vert`, `sdf-mesh-shadow.frag` | One selection emits entry and solid/thin exit arguments. Entry is unculled; solid exit culls front faces, thin/clipped exit is unculled. One counted call per argument phase. 2048, 1024 or 512 texels a side by the shadow tier; skip a frame with no draw or no cascade of their own. |
 | `mesh` | `sdf-mesh.vert`, `sdf-mesh.frag` | Rasterizes the view's mesh visibility; skips a frame with no mesh draws, its target and depth barriers with it (`Skips`). |
 | `pyramid` | `sdf-mesh-pyramid.comp` | Reduces the mesh target into the ambient occlusion's depth pyramid (`frame/sdf-mesh-pyramid.hlsli`): levels one to four, each texel one actual pixel's ray parameter and coordinate; skips a frame with no mesh draws. It is not the draw-occlusion pyramid `SdfMeshOcclusion` builds between the mesh pass's phases (farthest forward depth per block), and neither replaces the other ([visibility plan](../../../../docs/plans/visibility.md#where-visibility-stands)). |
@@ -239,10 +240,8 @@ per frame slot. A dispatch that only reads a buffer binds it read-only: a
 read-write binding would keep the buffer in `UNORDERED_ACCESS` on Direct3D 12
 and cost a transition before every reader. The interface binds the visibility
 records twice, read-write for the surface pass and read-only for views, the
-resolve and the composite. The surface pass reads the bake samples it never
-touches so the bake pass, whose samples only the host reads back, stays live in
-the planned graph. A new pass, a new scratch resource, or a binding-kind change
-edits the fragment, and `SdfPassPlanLawTests` holds the planned order, the
+resolve and the composite. A new pass, a new scratch resource, or a binding-kind
+change edits the fragment, and `SdfPassPlanLawTests` holds the planned order, the
 between-pass buffer transitions, each buffer's size at every capacity and the
 mesh pass's attachments to its own tables, so the law moves in the same change.
 The host-written tables are regions, not scratch: the residency's upload

@@ -12,8 +12,8 @@ The bake measures a gradient with four tetrahedral taps of `mapCore` around a
 sample, at a spacing tied to the lattice's own cell, and only at the corners of
 cells whose corners disagree in sign: the samples `SdfDualContouring` reads a
 normal at. A cell's normal reads its own eight corners, so no other sample needs
-one. A gradient sample costs five field evaluations, which the bake's frame
-budget (`SdfMeshPathBake.FrameTaps`) counts as five. A dynamic group's taps are
+one. A gradient sample costs five field evaluations, which the bake's batch
+and lattice bounds (`SdfMeshPathBake.BatchTaps`, `LatticeTaps`) count as five. A dynamic group's taps are
 carried through its slot's transform with the sample, so its gradient comes
 back in the group's own frame.
 

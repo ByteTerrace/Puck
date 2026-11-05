@@ -29,7 +29,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
 
             bake.Demand.Observe(frame: frame, height: 1080);
             _ = dresser.Dress(frame: frame);
-            Assert.True(condition: bake.TryTakeForFrame(batch: out var batch, frame: 0));
+            Assert.True(condition: bake.TryTake(batch: out var batch, field: bake.Program));
             Assert.Equal(expected: 2, actual: batch.Lattices.Length);
 
             return batch.Lattices[0].Selector;

@@ -23,24 +23,6 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     private const uint Extent = 64;
 
     [Fact]
-    public void BakeInputsGrowPastTheSampleBudgetToCarrySavedPoses() {
-        using var rig = new Rig();
-
-        rig.Render();
-        rig.Render();
-        var points = new Vector4[(SdfWorldPackage.MeshBakeMaxSamples + 7)];
-
-        points[^1] = Vector4.One;
-
-        var runs = new Puck.Abstractions.Gpu.GpuUploadRuns(capacity: 2);
-
-        runs.Add(length: 4, start: (4 * (points.Length - 1)));
-        rig.Engine.WriteMeshBakePoints(input: new SdfMeshBakeInput(Rows: points, Runs: runs));
-        rig.Render();
-        rig.Render();
-        Assert.DoesNotContain(expectedSubstring: "work upload executed: dispatches=0", actualString: rig.Report());
-    }
-    [Fact]
     public void TheUploadPassesArePinned() {
         Assert.Equal(
             expected: ["fillers", "bricks", "upload", "environment"],
