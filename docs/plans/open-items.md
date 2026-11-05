@@ -1696,9 +1696,14 @@ the fixed poses and the approaches already rejected.
   snapped key in place of its wall-clock `LightingInterval`, leaving one policy.
   The sky-only tolerance (`SkyMatches`, `:1086,1097`) compares against the
   previous capture too, so lockstep's sky bounce also depends on history; the
-  same quantization removes it. A drain relights the whole window (61,440
-  probes at High) from no bounce, up to 32 passes, and that from-no-bounce
-  invariant stays. Prove it by `sdf.mesh-gi.relit` per tick and drains per 100
+  same quantization removes it. A drain relights the whole window from no
+  bounce until a pass moves nothing, and that from-no-bounce invariant stays.
+  Measured in the debug world at High: with the day running at its authored
+  1/1440 per second, every lockstep tick advanced `sdf.mesh-gi.relit` by
+  1,032,192 (73,728 probes × 14 passes); with the day pinned, 100 stationary
+  lockstep ticks relit nothing, and each window move (a `debug.go`, a tier
+  switch) relit the same 1,032,192 once, which a walk crossing a window's band
+  repeats. Prove it by `sdf.mesh-gi.relit` per tick and drains per 100
   ticks under lockstep with the day cycle running, and by two lockstep runs
   started at different ticks capturing an identical still at one tick.
 - From step 1: stretching the far cascade to cover the valley costs too much,
@@ -1727,9 +1732,6 @@ the fixed poses and the approaches already rejected.
 - [low] A teleport brings cached cells relit long ago back into the window, and
   the next cycle prints `behind` with their age; they are stale, but the line
   reads as overload.
-- [low] The CPU cache holds about twice the bytes a probe it held before the
-  hit buffer, and keeps every cell a window visited until the layout changes;
-  its byte bound is the [memory item's](#memory-on-the-deck-tier).
 - [medium · unmeasured] The debug world's night floor (EV 2, keyed on `day`)
   lengthens every point and spot light's range by about five stops of
   exposure, day and night, since ranges follow the darkest exposure any key
@@ -1832,24 +1834,11 @@ the fixed poses and the approaches already rejected.
   [far-field memo](far-field-irradiance.md)'s three changes (every storey of
   the gallery hall now reads the storey level, measured, with every answering
   corner clear at `world.probe 12 4.5k+0.06 28.5 0 1 0`). What remains:
-  - At the finest window's edge, wall receivers show a sawtooth one probe row
-    tall where the finer-level stage ends at `SurfaceReachOf` and the next
-    level takes over at once (`body.pose 64 4.57 28.52 273`,
-    `view.override camera look 68 6.8 28.52 10 6.0 28.52`, `world.debug-view
-    indirect`, the left window band near x = 44). The share blend eases the
-    level boundary inside a stage, not this cut between stages; a fade of the
-    finer stage's share over its reach's last metre would.
-  - Past the storey level's 128 m window the 32 m level answers indoor
-    receivers, and its 16 m taps reach across slabs: in the four-storey hall
-    law, receivers at the hall's end 62 to 70 m from its camera take the storey
-    level's share and the 32 m level's remainder, 238 corners exact-blocked,
-    reading up to 1.2 times an outdoor ground receiver's sky
-    (`SdfMeshIrradianceLawTests.FarField.cs`, far-exact-blocked). The 32 m
-    level keeps the tolerant coverage ramp because the conservative one
-    darkened one clear corner in six on curved hills, the valley view's
-    blotches (`TheCoarsestLevelKeepsACurvedSurfaceItSeesLit`); a test that
-    tells a slab a 16 m tap grazes from a hill's near bulge would let it have
-    both.
+  - The 32 m level still answers 18 corners across a slab at the four-storey
+    hall's end (`far-exact-blocked`, down from 238 before the sheet test): taps
+    that never met the slab, so the sheet ramp cannot close them. The share
+    blend bounds them; a per-probe visibility lattice (option 8) would remove
+    them.
   - The level table is engine data (`SdfMeshIrradiance.LevelsOf`); the memo
     asked that a world may choose it beside `render.indirect`'s tier. The
     `(8, 2, 8)` m over 32×48×32 alternative keeps the 8 m band outdoors at 60 %
@@ -2114,9 +2103,13 @@ Grounded causes and leads:
   storage; preserve exact batch identity, CPU consumers and fence-safe reuse.
 - The mesh library budgets meshes residencies still hold and forgets them, so a
   re-plan reloads a second copy (`SdfMeshLibrary.cs:32`, `:285-304`).
-- The GI probe cache has no byte bound (`SdfMeshIrradiance.ProbeCache`,
-  `SdfMeshIrradiance.cs:2266`).
-  Its reader also retries with `Thread.SpinWait` while a cache entry is being
+- The GI probe cache is bounded by its window's resident box
+  (`SdfMeshIrradiance.Resident`, `ProbeCache.Retain`), but a batch's hit and
+  light blocks stay alive while any kept probe names them: after a tour the main
+  residency held 70,158 probes in 329 MB of blocks, about 4.7 KB a probe against
+  2,200 nominal. Re-home the kept probes of mostly forgotten blocks when
+  `Retain` compacts, measured by `world.residency`'s `probe-cache-blocks`.
+  The cache's reader also retries with `Thread.SpinWait` while a cache entry is being
   published. Replace that custom busy wait with stable publication or an
   appropriate host wait; measure its frequency before attributing frame stalls.
 - A prewarmed mesh store may ship in a player's build (AGENTS.md), so a player
@@ -2155,7 +2148,7 @@ Grounded causes and leads:
   than the shared array pool; the decoded mesh arrays before native publication
   remain a separate transient to remove.
 - Order of shrinkage once attributed: the unattributed bucket, the crossing's
-  spike and the tour's growth (the unbounded probe cache), GI's managed working
+  spike and the tour's growth (the probe cache's retained blocks), GI's managed working
   set, then the mesh copies (release normals and levels 1 and 2 after landing
   where no CPU reader needs them, and drop the chunked parent's second index
   copy).
@@ -2169,8 +2162,8 @@ Grounded causes and leads:
 2. GI on the same demand points, after the job-system memo names GI's work
    units: the probe window follows every view, not `Views[0]`
    (`SdfMeshIrradiance.cs:456-458`, `WindowCamera`); the irradiance scene and
-   its pending gate are scoped to what the window reaches; `ProbeCache`'s byte
-   bound is the [memory item](#memory-on-the-deck-tier)'s.
+   its pending gate are scoped to what the window reaches; `ProbeCache`'s
+   retained blocks are the [memory item](#memory-on-the-deck-tier)'s.
 3. Mapped demand through portal faces, replacing the blanket baking share
    (`WorldViewGraphHost.ResetFootprints`). A window nobody sees still demands
    everything about its camera; mapped demand weighs it by its glass.

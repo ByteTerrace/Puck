@@ -420,13 +420,16 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   cells); a receiver's stages run finest first (finer levels within their
   surface maps' reach, the holding level bounded, the same probes unbounded,
   the finest level's boundary probes), and the first that answers counts only in
-  its share, its weight over the cage's front weight before visibility, the rest
-  coming from the next stage over another cage. Sixteen pre-scaled slots; each
-  level's row carries its coverage ramp, the storey level's closing on almost
-  any measured hit, the finest and 32 m levels' tolerant. Only the finest
-  level keeps the behind-plane floor. Nothing a camera sees reads an unmeasured
-  surface as black. `SdfMeshIrradianceGatherDeviceLawTests` holds the GPU and
-  CPU gathers to the same slots, weights and share.
+  its share, its weight over the cage's front weight before visibility (a finer
+  level past its window easing out over its reach's outer half), the rest
+  coming from the next stage over another cage. Sixteen pre-scaled slots. One
+  closing rule at every level: taps on solids close as a majority, taps a coarse
+  level's trace marked sheets (the curvature half's low bit) at almost any share.
+  Only the finest level keeps the behind-plane floor. Nothing a camera sees reads
+  an unmeasured surface as black. A view with no cascade (a session view, or
+  `world.shadows off`) reads a shadowing directional's visibility from the probes'
+  light bits. `SdfMeshIrradianceGatherDeviceLawTests` holds the GPU and CPU
+  gathers to the same slots, weights, share and sun visibility.
   Relocation (`SdfMeshIrradiance.Place`) keeps a probe clear of geometry within
   its own cell; every lookup uses its recorded offset. Placement takes the nearest clear exit; its short rejection rays
   stop at one spacing, with no openness score. Debug with `world.probe` after bakes and GI settle;

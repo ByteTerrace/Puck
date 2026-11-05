@@ -1058,8 +1058,9 @@ the global illumination slices of P6.
 meshes.** The frame walks no field, and worlds are mostly static, so bounce
 lighting is cached rather than retraced per pixel. Each residency shares one
 three-level nested volume (`SdfMeshIrradianceProbe.Levels == 3`) among its views.
-The finest window uses the tier's spacing and dimensions; the two coarser
-32×12×32 windows use 8 m and 32 m cells. The CPU traces a hierarchy of static
+The finest window uses the tier's spacing and dimensions; the storey level's
+32×24×32 window uses 4 m × 2 m × 4 m cells and the coarsest 32×12×32 window
+32 m cells (`SdfMeshIrradiance.LevelsOf`). The CPU traces a hierarchy of static
 mesh draws; views and later bounce sweeps gather the eight probes around a
 receiver through the same visibility rule. Moving bodies receive this light
 and cast none into the static volume.
@@ -1067,8 +1068,12 @@ and cast none into the static volume.
 Each toroidal window reuses cell-keyed slots and publishes only once all its
 slots are measured. Its centre encloses the residency's view cameras when
 they fit within the window's middle, otherwise it follows the first camera.
-Full demand-point windowing, scene scope and a byte-bounded probe cache are
-open work in [residency step 2](../plans/open-items.md#residency-and-streaming).
+The CPU probe cache is a cache of its window: each level keeps the probes of its
+window grown by the band that holds the window still (an eighth of it a side),
+and forgets the rest when the window moves, so the cache is bounded by
+residency, not by where the camera has been. Full demand-point windowing and
+scene scope are open work in
+[residency step 2](../plans/open-items.md#residency-and-streaming).
 A still cell reuses its measurement until the lighting or geometry changes.
 [The handbook](../rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
 owns its layout, costs and limits.
@@ -1110,7 +1115,7 @@ answers inside a finer window: its wider angular footprint could miss a thin
 wall the fine level measures. If the selected level's bounded gather has no
 support, the same probes extrapolate past measured reach: a measured surface
 still blocks, while a missed ray no longer invents a far blocker. This read
-reports `measured=0` and supplies no traced positional-light visibility. It
+reports `measured=0` and supplies no traced light visibility. It
 estimates unmeasured light rather than painting every far surface black.
 
 **A level answers only in the share it measured.** The chain's first stage
@@ -1118,18 +1123,39 @@ that answers contributes its share: its weight over the same cage's front
 weight before visibility, clamped to one. The rest comes from the next stage
 over another cage, and only the last stage that answers is normalized to what
 remains; a receiver reads sixteen probe slots, pre-scaled by their stages'
-shares. Each level's table row carries its coverage ramp. The storey level's
-closes on almost any measured hit, since its probes stand in every room and a
-hit its metres-wide taps measured before the receiver is a slab or a wall; the
-error it makes is darkening, which the next stage lights, never another room's
-light. The 32 m level keeps the finest level's tolerant ramp: over open ground
-its taps alias a curved surface's near bulge, and the conservative ramp
-darkened one clear corner in six there. Levels are a table per tier with a spacing per axis: the middle level's
+shares. A finer level answering past its window keeps its whole share over
+the inner half of its surface reach and eases to none at the reach, so the next
+stage takes a receiver over across a band rather than at a line one probe row
+tall. Levels are a table per tier with a spacing per axis: the middle level's
 4 m × 2 m × 4 m cells put a probe plane in every storey 2.4 m or taller,
 which no isotropic coarse level does (an 8 m level had one in every other
 4.5 m storey, and its single corner across a slab lit a whole storey). The
 [far-field memo](../plans/far-field-irradiance.md) holds the measurement and
 the research behind this rule.
+
+**A coarse tap on a sheet closes; a coarse tap on a solid's near side does
+not.** One visibility rule holds at every level: the taps that block a receiver
+on solids close it only as a majority, and the taps on sheets close it at
+almost any share. The trace marks a coarse level's hit a sheet when the scene's
+exact distance shows no solid thicker than 2 m behind it (a surface lies within
+0.45 of that thickness of the point half of it inside): a slab, a wall or a
+slab's edge is a sheet, with another space beyond it; a hill's near bulge, which
+a coarse probe's metres-wide taps alias in front of the slope it sees, is a
+solid. A conservative ramp at every coarse tap darkened one clear corner in six
+on curved hills; a tolerant one let the 32 m level light a storey through its
+slab. Measured along the normal alone, a slab seen edge-on reads twelve metres
+thick, so the test is the solid's medial thickness, not its depth along a ray.
+The finest level marks no sheets: its half-metre taps resolve slabs themselves,
+and its minority tap on a thin finite object (a railing, a hanging sign) lies
+beside the receiver's segment.
+
+**A view with no cascade takes the sun's visibility from the volume.** A view
+that draws no directional cascade (a session or screen camera's reduced quality,
+or `world.shadows off`) reads each shadowing directional light's visibility from
+the probes about the surface, as a traced point light's: every probe records
+whether its own ray toward the light is clear, recomputed on each relight, and
+the surface takes the weight of the measured probes that see it. Without it the
+100 klx sun lit every interior face turned toward it.
 
 **Relocation takes the nearest clear candidate.** An embedded or too-near
 centre first tries an exit from the nearest surface, then quarter-cell grid

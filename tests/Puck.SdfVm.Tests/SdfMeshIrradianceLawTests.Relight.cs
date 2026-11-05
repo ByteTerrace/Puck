@@ -36,7 +36,9 @@ public sealed partial class SdfMeshIrradianceLawTests {
     private static uint[] Locked(SdfFrame frame, SdfIndirectTier tier) {
         var words = Array.Empty<uint>();
 
-        _ = new SdfMeshIrradiance().Stage(bakePending: false, frame: (frame with { ConvergesLighting = true }), tier: tier, write: memory => words = memory.ToArray());
+        using var volume = new SdfMeshIrradiance();
+
+        _ = volume.Stage(bakePending: false, frame: (frame with { ConvergesLighting = true }), tier: tier, write: memory => words = memory.ToArray());
         return words;
     }
 
@@ -48,7 +50,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
     [Theory]
     public async Task ASpentTraceBudgetWaitsUnderEitherClockUntilLightingConverges(bool tickLocked) {
         var frame = Frame() with { TickLocked = tickLocked, IndirectBounces = 0, IndirectBudget = new SdfIndirectBudget(Relight: 0, Trace: 1, Age: 0f) };
-        var volume = new SdfMeshIrradiance();
+        var volume = Volume();
 
         for (var stage = 0; (stage < 20); stage++) {
             _ = volume.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.Medium, write: _ => { });
@@ -98,7 +100,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
     [Fact]
     public void BounceAroundBafflesReachesTheFarRoomWhoseProbesWereRelitFirst() {
         var frame = BaffledRooms();
-        var (parameters, landed) = Trace(frame: frame, tier: SdfIndirectTier.Medium, volume: new SdfMeshIrradiance());
+        var (parameters, landed) = Trace(frame: frame, tier: SdfIndirectTier.Medium, volume: Volume());
         var locked = Locked(frame: frame, tier: SdfIndirectTier.Medium);
         // The cell about (3, 1, 3) m, in the first room.
         var far = Cube(probe: Probe(parameters: in parameters, words: landed, x: 1, y: 0, z: 1));
@@ -116,11 +118,11 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var position = new Vector3(x: 0f, y: 5.3f, z: 0f);
         var red = Frame() with { Lights = Lamp(color: SdfPhotometry.UnitLuminance(color: Vector3.UnitX), position: position) };
         var green = red with { Lights = Lamp(color: SdfPhotometry.UnitLuminance(color: Vector3.UnitY), position: position) };
-        var volume = new SdfMeshIrradiance();
+        var volume = Volume();
 
         _ = Trace(frame: red, tier: SdfIndirectTier.Medium, volume: volume);
         var (parameters, turned) = Trace(frame: green, tier: SdfIndirectTier.Medium, volume: volume);
-        var (_, fresh) = Trace(frame: green, tier: SdfIndirectTier.Medium, volume: new SdfMeshIrradiance());
+        var (_, fresh) = Trace(frame: green, tier: SdfIndirectTier.Medium, volume: Volume());
         // The cell about (1, 5, 1) m, beside the lamp in the upper room.
         var after = Cube(probe: Probe(parameters: in parameters, words: turned, x: 0, y: 2, z: 0));
         var clean = Cube(probe: Probe(parameters: in parameters, words: fresh, x: 0, y: 2, z: 0));
@@ -150,7 +152,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
 
         var origin = frame.Views[0].Camera.Position;
         var moved = (origin + new Vector3(x: 0.05f, y: 0f, z: 0f));
-        var volume = new SdfMeshIrradiance();
+        var volume = Volume();
 
         _ = volume.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: _ => { });
         Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out _, position: origin, skyVisibility: out _, source: out var source));
@@ -167,7 +169,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var relit, position: moved, skyVisibility: out _, source: out _));
         Assert.Equal(expected: traces, actual: volume.Counters.Read(kind: SdfMeshIrradiance.CameraTraces));
 
-        var fresh = new SdfMeshIrradiance();
+        var fresh = Volume();
 
         _ = fresh.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: _ => { });
         Assert.True(condition: fresh.TryMeter(forward: Vector3.UnitX, luminance: out var traced, position: origin, skyVisibility: out _, source: out _));
@@ -193,11 +195,11 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var gains = new SdfIndirectGains(Emission: 0f, Feedback: 1f, Lights: 0f, Screens: 0f, Sky: 1f);
         var red = Frame() with { IndirectGains = gains, IndirectSources = gains.Sources, Lights = new SdfLights(), Sky = UniformSky(color: new Vector3(x: 1000f, y: 0f, z: 0f)) };
         var blue = red with { Sky = UniformSky(color: new Vector3(x: 1000f, y: 0f, z: 0.5f)) };
-        var volume = new SdfMeshIrradiance();
+        var volume = Volume();
 
         _ = Trace(frame: red, tier: SdfIndirectTier.Medium, volume: volume);
         var (parameters, changed) = Trace(frame: blue, tier: SdfIndirectTier.Medium, volume: volume);
-        var (_, fresh) = Trace(frame: blue, tier: SdfIndirectTier.Medium, volume: new SdfMeshIrradiance());
+        var (_, fresh) = Trace(frame: blue, tier: SdfIndirectTier.Medium, volume: Volume());
         var after = Cube(probe: Probe(parameters: in parameters, words: changed, x: 0, y: 2, z: 0));
         var clean = Cube(probe: Probe(parameters: in parameters, words: fresh, x: 0, y: 2, z: 0));
 

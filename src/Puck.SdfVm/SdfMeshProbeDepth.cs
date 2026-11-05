@@ -24,6 +24,13 @@ public static class SdfMeshProbeDepth {
     /// <summary>The material a hit records when the scene's exceeds sixteen bits; it shades as the default material.</summary>
     public const int UnknownMaterial = ushort.MaxValue;
 
+    // The low bit of a texel's curvature half: its hit is on a sheet (Surfaces). A reader masks it off before decoding the
+    // curvature. KEEP IN SYNC with sdfMeshProbeDepthVisibility.
+    private const uint SheetBit = 1u;
+    // The sheet query's radius as a share of the depth it runs at: short of the hit's own surface, half a thickness away,
+    // by a margin the packed normal's error stays inside.
+    private const float SheetQueryShare = 0.9f;
+
     private static readonly Vector3[] HitDirections = BuildDirections();
     private static readonly float[] HitWeights = BuildWeights();
 
@@ -94,12 +101,13 @@ public static class SdfMeshProbeDepth {
     /// <param name="origin">The relocated probe position.</param>
     /// <param name="reach">The receiver support radius, in metres.</param>
     /// <param name="surfaces">Receives the packed surface map.</param>
+    /// <param name="sheets">Whether the map marks the hits on sheets, as a coarse level's does.</param>
     /// <returns>The number of closest-hit rays issued.</returns>
-    public static int Trace(SdfMeshIrradianceScene scene, Vector3 origin, float reach, Span<uint> surfaces) {
+    public static int Trace(SdfMeshIrradianceScene scene, Vector3 origin, float reach, Span<uint> surfaces, bool sheets) {
         Span<uint> hits = stackalloc uint[HitWords];
         var rays = TraceHits(backFaces: out _, hits: hits, maximum: reach, origin: origin, scene: scene);
 
-        Surfaces(hits: hits, reach: reach, surfaces: surfaces);
+        Surfaces(hits: hits, origin: origin, reach: reach, scene: scene, sheets: sheets, surfaces: surfaces);
         return rays;
     }
     // A unit normal's two signed octahedral bytes, in a surface word's high sixteen bits.
@@ -113,14 +121,27 @@ public static class SdfMeshProbeDepth {
     }
     /// <summary>Derives the surface map views test receivers against from a probe's hit buffer: each texel's hit within
     /// the receiver support radius as an FP16 ray distance beside its two signed octahedral normal bytes, a negative
-    /// distance marking a miss within that reach, then one FP16 normal-gradient curvature per texel.</summary>
+    /// distance marking a miss within that reach, then one FP16 normal-gradient curvature per texel, whose low bit marks a
+    /// hit on a sheet: a surface the scene holds no solid behind thicker than
+    /// <see cref="SdfMeshIrradianceProbe.DepthSheetThickness"/> (a slab, a wall), measured as any surface within 0.45 of
+    /// that thickness of the point half of it behind the hit. The near side of a solid (a hill, a plinth) reads no surface
+    /// there but its own, half the thickness away; a slab's top, its underside or its edge does.</summary>
+    /// <param name="scene">The static mesh hierarchy the hits were traced against.</param>
+    /// <param name="origin">The probe position the hits were traced from.</param>
     /// <param name="hits">The probe's hit buffer, traced at least as far as <paramref name="reach"/>.</param>
     /// <param name="reach">The receiver support radius, in metres.</param>
     /// <param name="surfaces">Receives the packed surface map.</param>
-    public static void Surfaces(ReadOnlySpan<uint> hits, float reach, Span<uint> surfaces) {
+    /// <param name="sheets">Whether the map marks the hits on sheets (<see cref="SdfMeshIrradianceLevel.Sheets"/>); when
+    /// false, every hit reads as a solid's near side.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="scene"/> is <see langword="null"/>.</exception>
+    public static void Surfaces(SdfMeshIrradianceScene scene, Vector3 origin, ReadOnlySpan<uint> hits, float reach, Span<uint> surfaces, bool sheets) {
+        ArgumentNullException.ThrowIfNull(scene);
         Span<Vector3> points = stackalloc Vector3[(Size * Size)];
         Span<Vector3> normals = stackalloc Vector3[(Size * Size)];
+        Span<bool> sheet = stackalloc bool[(Size * Size)];
+        var depth = (0.5f * SdfMeshIrradianceProbe.DepthSheetThickness);
 
+        sheet.Clear();
         surfaces.Slice(start: (Size * Size)).Clear();
 
         for (var texel = 0; (texel < Directions.Length); texel++) {
@@ -137,6 +158,9 @@ public static class SdfMeshProbeDepth {
             surfaces[texel] = packed | BitConverter.HalfToUInt16Bits(value: ((Half)distance));
             points[texel] = (direction * ((float)((Half)distance)));
             normals[texel] = Normal(word: packed);
+            // The exact hit, then the point half a sheet's thickness behind it along the normal turned toward the probe.
+            sheet[texel] = (sheets && scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out _, point: ((origin + (direction * distance)) - (normals[texel] * depth)),
+                radius: (SheetQueryShare * depth), surface: out _));
         }
         // Fit normal gradients once from the texel's local angular neighbourhood. Even a gather with only one
         // hit tap can then distinguish a plane from curvature; a lone hit in the whole neighbourhood is unsupported.
@@ -161,7 +185,7 @@ public static class SdfMeshProbeDepth {
                 }
             }
             var curvature = ((variance > 1e-8f) ? (covariance / variance) : float.NaN);
-            var bits = ((uint)BitConverter.HalfToUInt16Bits(value: ((Half)curvature)));
+            var bits = ((((uint)BitConverter.HalfToUInt16Bits(value: ((Half)curvature))) & ~SheetBit) | (sheet[texel] ? SheetBit : 0u));
 
             surfaces[(Directions.Length + (texel >> 1))] |= (bits << (16 * (texel & 1)));
         }
@@ -179,12 +203,11 @@ public static class SdfMeshProbeDepth {
     /// <c>sdfMeshProbeDepthVisibility</c>; there are no cross-probe or whole-sphere plane vetoes.</summary>
     /// <param name="surfaces">The packed surface map of one probe.</param>
     /// <param name="toward">Receiver minus probe position, after normal bias.</param>
-    /// <param name="coverage">The probe level's closing ramp over the taps' blocked share.</param>
     /// <param name="bounded">Whether a receiver past a measured miss's reach is unsupported (zero); when false, only
     /// measured surfaces block, so a receiver past every probe's reach is extrapolated wherever no measured surface lies
     /// before it.</param>
-    /// <returns>Visibility from zero to one.</returns>
-    public static float Visibility(ReadOnlySpan<uint> surfaces, Vector3 toward, SdfMeshProbeCoverage coverage, bool bounded = true) {
+    /// <returns>Visibility from zero to one, the taps' blocked shares closed by <see cref="SdfMeshProbeCoverage"/>.</returns>
+    public static float Visibility(ReadOnlySpan<uint> surfaces, Vector3 toward, bool bounded = true) {
         var distance = toward.Length();
 
         if (!(distance > 0f)) { return 1f; }
@@ -197,6 +220,7 @@ public static class SdfMeshProbeDepth {
         Span<Vector3> normals = stackalloc Vector3[4];
         Span<float> weights = stackalloc float[4];
         Span<float> curvatures = stackalloc float[4];
+        Span<bool> sheets = stackalloc bool[4];
         var firstCode = uint.MaxValue;
         var firstNormal = Vector3.Zero;
         var planar = true;
@@ -204,6 +228,7 @@ public static class SdfMeshProbeDepth {
         var planeHigh = float.NegativeInfinity;
         var planeSum = 0f;
         var planeWeight = 0f;
+        var sheetWeight = 0f;
 
         weights.Clear();
 
@@ -223,10 +248,12 @@ public static class SdfMeshProbeDepth {
                 continue;
             }
             points[corner] = (Directions[index] * depth);
-            var packedCurvature = surfaces[(Directions.Length + (index >> 1))];
-            var curvature = ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)(packedCurvature >> (16 * (index & 1))))));
+            var packedCurvature = ((ushort)(surfaces[(Directions.Length + (index >> 1))] >> (16 * (index & 1))));
+            var curvature = ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)(packedCurvature & ~SheetBit))));
 
             if (!float.IsFinite(f: curvature)) { continue; }
+            sheets[corner] = ((packedCurvature & SheetBit) != 0u);
+            sheetWeight += (sheets[corner] ? weight : 0f);
             var code = (word >> 16);
 
             if (firstCode == uint.MaxValue) {
@@ -247,10 +274,12 @@ public static class SdfMeshProbeDepth {
         // This is the exact planar form of the quadratic. Flat walls dominate CPU bounce reads and pixels.
         if (planar && (planeWeight > 0f) && ((planeHigh - planeLow) <= (0.5f * SdfMeshIrradianceProbe.DepthSurfaceJoinGap))) {
             var gap = (Vector3.Dot(vector1: firstNormal, vector2: toward) - (planeSum / planeWeight));
+            var closed = Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade));
 
-            return coverage.Visibility(blocked: (planeWeight * Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade))));
+            return SdfMeshProbeCoverage.Visibility(blocked: (planeWeight * closed), sheets: (sheetWeight * closed));
         }
         var blocked = 0f;
+        var blockedSheets = 0f;
 
         for (var corner = 0; (corner < 4); corner++) {
             if (weights[corner] <= 0f) { continue; }
@@ -293,9 +322,12 @@ public static class SdfMeshProbeDepth {
             var gradient = (linear + ((2f * quadratic) * hit));
             var gap = Vector3.Dot(vector1: Vector3.Normalize(value: gradient), vector2: (toward - hit));
 
-            blocked += (weights[corner] * Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade)));
+            var share = (weights[corner] * Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade)));
+
+            blocked += share;
+            blockedSheets += (sheets[corner] ? share : 0f);
         }
-        return coverage.Visibility(blocked: blocked);
+        return SdfMeshProbeCoverage.Visibility(blocked: blocked, sheets: blockedSheets);
     }
 
     private static Vector3[] BuildDirections() {

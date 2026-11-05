@@ -23,7 +23,8 @@ namespace Puck.World.Tests;
 /// floors, ceilings and walls blend the storey level's share with another stage's, including walls under the roof slab
 /// a coarse corner reaches across. Each receiver must answer from the same sixteen slots (the chosen and remainder stages' levels and cells), each
 /// slot's weight within <see cref="WeightTolerance"/> of the CPU's, with the same share and each stage measured or not
-/// alike.</summary>
+/// alike, and the same visibility of the sun, which a view with no cascade reads from the probes: shaded under the hall's
+/// slabs, sunlit outside.</summary>
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfMeshIrradianceGatherDeviceLawTests {
@@ -48,7 +49,7 @@ public sealed class SdfMeshIrradianceGatherDeviceLawTests {
     private readonly record struct Receiver(Vector3 Point, Vector3 Normal);
 
     private static void Verify(GpuDeviceServices services, string extension) {
-        var volume = new SdfMeshIrradiance();
+        using var volume = new SdfMeshIrradiance();
         var (parameters, words) = Trace(volume: volume, frame: Hall());
         var receivers = Receivers();
         var results = Run(extension: extension, parameters: parameters, receivers: receivers, services: services, words: words);
@@ -56,6 +57,8 @@ public sealed class SdfMeshIrradianceGatherDeviceLawTests {
         var weights = new float[SdfMeshIrradiance.GatherSlots];
         var levels = new int[SdfMeshIrradianceProbe.Levels];
         var blended = 0;
+        var shaded = 0;
+        var sunlit = 0;
 
         Assert.True(condition: parameters.Window(level: 0).Present && parameters.Middle.Present && parameters.Far.Present);
         for (var level = 1; (level < levels.Length); level++) { levels[level] = (levels[(level - 1)] + parameters.Window(level: (level - 1)).Count); }
@@ -84,8 +87,15 @@ public sealed class SdfMeshIrradianceGatherDeviceLawTests {
             Assert.True(condition: (MathF.Abs(x: (flags.X - selection.Share)) <= WeightTolerance), userMessage: $"{label}: share {flags.X} on the GPU");
             Assert.True(condition: ((flags.Y == 1f) == selection.Measured), userMessage: $"{label}: measured differs");
             Assert.True(condition: ((flags.Z == 1f) == selection.RemainderMeasured), userMessage: $"{label}: remainder measured differs");
+
+            var sun = volume.LightVisibility(lightIndex: 0, normal: receiver.Normal, point: receiver.Point);
+
+            Assert.True(condition: (MathF.Abs(x: (flags.W - sun)) <= WeightTolerance), userMessage: $"{label}: the sun's visibility is {flags.W} on the GPU and {sun} on the CPU");
+            if (sun <= 0f) { shaded++; }
+            if (sun >= 0.99f) { sunlit++; }
         }
         Assert.True(condition: (blended > 0), userMessage: "no receiver blends two stages");
+        Assert.True(condition: ((shaded > 0) && (sunlit > 0)), userMessage: $"the sun reads shaded at {shaded} receivers and sunlit at {sunlit}");
     }
     // Receivers over the hall's surfaces, an exhibit, the end wall just past the finest window, and floors past each window.
     private static Receiver[] Receivers() {
@@ -236,13 +246,11 @@ public sealed class SdfMeshIrradianceGatherDeviceLawTests {
         var volumeOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceVolume));
         var levelsOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceLevels));
         var spacingsOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceSpacings));
-        var coveragesOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceCoverages));
-        var packed = new uint[(4 * (1 + (3 * SdfMeshIrradianceProbe.Levels)))];
+        var packed = new uint[(4 * (1 + (2 * SdfMeshIrradianceProbe.Levels)))];
 
         MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: sizeof(uint), start: volumeOffset)).CopyTo(destination: packed);
         MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: (16 * SdfMeshIrradianceProbe.Levels), start: levelsOffset)).CopyTo(destination: packed.AsSpan(start: 4));
         MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: (16 * SdfMeshIrradianceProbe.Levels), start: spacingsOffset)).CopyTo(destination: packed.AsSpan(start: (4 * (1 + SdfMeshIrradianceProbe.Levels))));
-        MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: (16 * SdfMeshIrradianceProbe.Levels), start: coveragesOffset)).CopyTo(destination: packed.AsSpan(start: (4 * (1 + (2 * SdfMeshIrradianceProbe.Levels)))));
 
         var points = new Vector4[(2 * receivers.Length)];
 

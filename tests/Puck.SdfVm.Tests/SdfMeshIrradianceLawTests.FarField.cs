@@ -38,16 +38,17 @@ public sealed partial class SdfMeshIrradianceLawTests {
             handler: $"receivers={Receivers} answering={Answering} exact-blocked={Blocked} storey-exact-blocked={StoreyBlocked} far-exact-blocked={FarBlocked} clear={Clear} over-occluded={OverOccluded} planeless-fallbacks={StoreyFallbacks}/{PlanelessReceivers} storey-reads={StoreyReads}");
     }
 
-    /// <summary>THE LAW: the storey level's probes answer every storey of a hall, and no receiver in another room. Over
-    /// the far third of a four-storey hall, every receiver reads the storey level, measured, with two or more answering
-    /// corners; no answering corner of that level stands where the exact segment to its receiver meets a slab or a wall,
-    /// even where a tap only partly saw that slab; and the conservative ramp that closes them darkens at most one in a
-    /// hundred clear corners. The coarsest level, which answers the hall's end past the storey level's window, is not
-    /// held to the segment test: its taps are sixteen metres wide.</summary>
+    /// <summary>THE LAW: the storey level's probes answer every storey of a hall, and no coarse probe answers a receiver in
+    /// another room. Over the far third of a four-storey hall, every receiver reads the storey level, measured, with two
+    /// or more answering corners; no answering corner of that level stands where the exact segment to its receiver meets a
+    /// slab or a wall, even where a tap only partly saw that slab; the coarsest level, which answers the hall's end past
+    /// the storey level's window with taps sixteen metres wide, answers across a slab or a wall at most once in a hundred
+    /// answering corners, those whose four taps never met the slab; and the sheet ramp that closes them darkens at most
+    /// one in a hundred clear corners.</summary>
     [Fact]
     public void ACoarseProbeAnswersNoReceiverAcrossASlabOrAWall() {
         var frame = StoreyedHall();
-        var volume = new SdfMeshIrradiance();
+        var volume = Volume();
         var (parameters, _) = Trace(frame: frame, volume: volume);
         using var scene = volume.DiagnosticScene(frame: frame);
 
@@ -56,14 +57,15 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var counts = Count(parameters: parameters, reads: ReadFar(scene: scene, volume: volume));
 
         Assert.True(condition: (counts.StoreyBlocked == 0), userMessage: counts.ToString());
+        Assert.True(condition: ((counts.FarBlocked * 100) <= counts.Answering), userMessage: counts.ToString());
         Assert.True(condition: (counts.StoreyReads == counts.Receivers), userMessage: counts.ToString());
         Assert.True(condition: (counts.OverOccluded <= (counts.Clear / 100)), userMessage: counts.ToString());
     }
     /// <summary>THE LAW: the 32 m level keeps a curved surface it sees lit. Over three hills 50 to 140 m in radius,
     /// 90 to 300 m from the camera, at most one in a hundred corners of the level a receiver reads whose exact segment
     /// is clear reads at zero visibility, and the receivers read that level nearly whole: its metres-wide taps alias a
-    /// hill's near bulge, which a conservative ramp would take for a blocker and hand the receiver to the finest level's
-    /// boundary probes hundreds of metres away.</summary>
+    /// hill's near bulge, which the sheet ramp would take for a slab and hand the receiver to the finest level's boundary
+    /// probes hundreds of metres away, so the trace must read the bulge as a solid's near side.</summary>
     [Fact]
     public void TheCoarsestLevelKeepsACurvedSurfaceItSeesLit() {
         var hills = new[] { (new Vector3(x: 90f, y: -20f, z: 0f), 50f), (new Vector3(x: 0f, y: -40f, z: 170f), 90f), (new Vector3(x: -260f, y: -60f, z: -60f), 140f) };
@@ -74,7 +76,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
                 .. hills.Select(selector: static hill => Draw(mesh: Sphere(centre: hill.Item1, radius: hill.Item2))),
             ],
         };
-        var volume = new SdfMeshIrradiance();
+        var volume = Volume();
 
         _ = Trace(frame: frame, volume: volume);
         using var scene = volume.DiagnosticScene(frame: frame);
