@@ -266,10 +266,10 @@ public sealed class CliLeaseTests : IDisposable {
     // the quiet window (which settles on the same readings) take no admission of their own.
     [Fact]
     public async Task HeavyAndGpuLeasesAdmitThroughTheHostAdmissionHoldingTheLeaseAndARefusalStartsNothing() {
-        var asked = new List<(string Step, bool Device, bool Heavy, bool Held, TimeSpan? Bound)>();
+        var asked = new List<(string Step, bool Device, bool Heavy, bool Held, TimeSpan? Bound, HostStartKind Kind)>();
         var refuse = false;
-        HostAdmit admit = (_, step, device, heavySuite, bound, _, _, _) => {
-            asked.Add(item: (step, device, heavySuite, Directory.Exists(path: Path.Combine(path1: m_root, path2: (device ? "gpu" : "heavy"))), bound));
+        HostAdmit admit = (_, step, device, heavySuite, kind, bound, _, _, _) => {
+            asked.Add(item: (step, device, heavySuite, Directory.Exists(path: Path.Combine(path1: m_root, path2: (device ? "gpu" : "heavy"))), bound, kind));
 
             return Task.FromResult(result: !refuse);
         };
@@ -281,6 +281,7 @@ public sealed class CliLeaseTests : IDisposable {
         Assert.Equal(expected: 0, actual: await CliRoot.InvokeAsync(args: ["lease", "build", "--holder", "agents-slim", "--", .. args], root: command));
         Assert.Equal(expected: 2, actual: asked.Count);
         Assert.Equal(expected: ("lease heavy agents-slim", false, true, true), actual: (asked[0].Step, asked[0].Device, asked[0].Heavy, asked[0].Held));
+        Assert.Equal(expected: [HostStartKind.HeavySuite, HostStartKind.WindowedWorld], actual: [asked[0].Kind, asked[1].Kind]);
         Assert.InRange(actual: asked[0].Bound!.Value, low: TimeSpan.FromSeconds(seconds: 50), high: TimeSpan.FromSeconds(seconds: 60));
         Assert.Equal(expected: ("lease gpu agents-slim", true, false, true, TimeSpan.Zero), actual: (asked[1].Step, asked[1].Device, asked[1].Heavy, asked[1].Held, asked[1].Bound!.Value));
 

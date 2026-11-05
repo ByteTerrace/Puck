@@ -107,7 +107,7 @@ public static class McpCommand {
                 : new OperatorWorldLaunch(
                     Admit: ((admit is null)
                         ? static (_, _, _, _) => Task.FromResult(result: true)
-                        : (worldCheckout, windowed, stage, token) => admit(bound: null, cancellationToken: token, checkout: worldCheckout, device: windowed, heavySuite: false, progress: Console.Error, stage: stage, step: "puck_world_start")),
+                        : (worldCheckout, windowed, stage, token) => admit(bound: null, cancellationToken: token, checkout: worldCheckout, device: windowed, heavySuite: false, kind: (windowed ? HostStartKind.WindowedWorld : HostStartKind.HeadlessWorld), progress: Console.Error, stage: stage, step: "puck_world_start")),
                     AcquireGpuLease: async (holder, lane, token) => await CliLease.AcquireAsync(
                         ancestor: ancestor,
                         cancellationToken: token,

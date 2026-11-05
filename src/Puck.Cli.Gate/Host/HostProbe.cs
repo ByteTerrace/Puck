@@ -41,6 +41,14 @@ public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<s
 
         return null;
     }
+    // The commit a process holds now (its private bytes); zero when the platform will not say.
+    private static double PrivateGigabytes(Process process) {
+        try {
+            return (process.PrivateMemorySize64 / 1073741824.0);
+        } catch (Exception exception) when ((exception is Win32Exception or InvalidOperationException or NotSupportedException)) {
+            return 0;
+        }
+    }
     private static double FreeRamGb() =>
         ((Puck.Hosting.HostMemory.AvailablePhysicalBytes() is { } available) ? (available / 1073741824.0) : double.NaN);
 
@@ -94,7 +102,7 @@ public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<s
         string? heavy = null;
         var reuse = 0;
         var self = Environment.ProcessId;
-        var running = new List<(int Id, string Name, string CommandLine)>();
+        var running = new List<(int Id, string Name, string CommandLine, double PrivateGb)>();
         var tree = new Dictionary<int, (int Parent, DateTime Started)>();
 
         foreach (var process in Process.GetProcesses()) {
@@ -111,7 +119,7 @@ public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<s
 
                 // The probe never matches itself, whatever its own command line says.
                 if (process.Id != self) {
-                    running.Add(item: (process.Id, process.ProcessName, ProcessInspection.CommandLine(processId: process.Id)));
+                    running.Add(item: (process.Id, process.ProcessName, ProcessInspection.CommandLine(processId: process.Id), PrivateGigabytes(process: process)));
                 }
             }
         }
@@ -119,8 +127,14 @@ public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<s
         // A heavy test run this process started is its own work, never another's hold on the machine.
         var own = HostProcesses.Descendants(processes: tree, root: self);
 
-        foreach (var (id, name, commandLine) in running) {
+        List<HostRunningStart> starts = [];
+
+        foreach (var (id, name, commandLine, privateGb) in running) {
             var label = $"{name} {id.ToString(provider: CultureInfo.InvariantCulture)}";
+
+            if (HostProcesses.RunningStart(commandLine: commandLine, name: name) is { } kind) {
+                starts.Add(item: new HostRunningStart(Id: id, Kind: kind, PrivateGb: privateGb));
+            }
 
             if ((holder is null) && HostProcesses.IsGpuWork(commandLine: commandLine, grammars: gpuVerbGrammars, name: name)) {
                 holder = label;
@@ -144,7 +158,8 @@ public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<s
             FreeRamGb: FreeRamGb(),
             GpuHolder: holder,
             ReuseNodes: reuse,
-            HeavyTestHolder: heavy
+            HeavyTestHolder: heavy,
+            Starts: starts
         );
     }
 }

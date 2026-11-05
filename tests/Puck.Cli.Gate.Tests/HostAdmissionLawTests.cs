@@ -9,7 +9,12 @@ public sealed class HostAdmissionLawTests {
     private static readonly HostLoadThresholds Thresholds = HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6);
 
     // A commit reading is a percentage of a 40 GB commit limit; none is a platform that reports no limit.
-    private static HostSample Sample(double cpu = 0, double ram = 8, double disk = 100, string? gpu = null, string? heavy = null, double? commit = null) => new(At: DateTimeOffset.UnixEpoch, CpuPercent: cpu, FreeDiskGb: disk, FreeRamGb: ram, GpuHolder: gpu, HeavyTestHolder: heavy, ReuseNodes: 42, CommitChargeGb: ((commit is { } percent) ? (percent * 0.4) : double.NaN), CommitLimitGb: ((commit is null) ? double.NaN : 40));
+    private static HostSample Sample(double cpu = 0, double ram = 8, double disk = 100, string? gpu = null, string? heavy = null, double? commit = null, double limit = 40, HostRunningStart[]? starts = null) => new(At: DateTimeOffset.UnixEpoch, CpuPercent: cpu, FreeDiskGb: disk, FreeRamGb: ram, GpuHolder: gpu, HeavyTestHolder: heavy, ReuseNodes: 42, CommitChargeGb: ((commit is { } percent) ? (percent * limit / 100.0) : double.NaN), CommitLimitGb: ((commit is null) ? double.NaN : limit), Starts: starts);
+    private static bool Admits(HostStartKind kind, HostSample reading, HostStartTracker tracker, GateClock clock, int boundSeconds = 25) {
+        using var error = new StringWriter();
+
+        return HostAdmission.Wait("start", (kind == HostStartKind.WindowedWorld), false, () => reading, clock, clock.Advance, error, CancellationToken.None, Thresholds, TimeSpan.FromSeconds(seconds: boundSeconds), null, kind, tracker);
+    }
 
     [Fact]
     public void HostOptionsDefaultToTheAdmissionThresholdsAndStillAllowOverrides() {
@@ -234,12 +239,12 @@ public sealed class HostAdmissionLawTests {
     public void AVerbsWorldStartWaitsAtNinetyPercentCommitAndRunsAtSixtyThroughTheInstalledAdmission() {
         var clock = new GateClock();
         var readings = 0;
-        var asked = new List<(string Step, bool Device, bool Heavy)>();
+        var asked = new List<(string Step, bool Device, bool Heavy, HostStartKind Kind)>();
         using var error = new StringWriter();
-        HostAdmit admit = (checkout, step, device, heavySuite, bound, progress, stage, cancellationToken) => {
-            asked.Add(item: (step, device, heavySuite));
+        HostAdmit admit = (checkout, step, device, heavySuite, kind, bound, progress, stage, cancellationToken) => {
+            asked.Add(item: (step, device, heavySuite, kind));
 
-            return Task.FromResult(result: HostAdmission.Wait(step, device, heavySuite, () => ((readings++ < 2) ? Sample(commit: 90) : Sample(commit: 60)), clock, clock.Advance, error, cancellationToken, Thresholds, bound, stage));
+            return Task.FromResult(result: HostAdmission.Wait(step, device, heavySuite, () => ((readings++ < 2) ? Sample(commit: 90, limit: 64) : Sample(commit: 60, limit: 64)), clock, clock.Advance, error, cancellationToken, Thresholds, bound, stage, kind));
         };
 
         WorldAdmission.Install(admit: admit);
@@ -250,7 +255,7 @@ public sealed class HostAdmissionLawTests {
             WorldAdmission.Wait(step: "test worker", worldArguments: worker, heavySuite: true, cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(expected: 3, actual: readings);
             Assert.Equal(expected: TimeSpan.FromSeconds(seconds: 20), actual: clock.GetElapsedTime(startingTimestamp: 0));
-            Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit 90% of limit (admission needs under 75%).");
+            Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit 90% of limit (admission needs under 75%); commit headroom 6.4GB (admission needs at least 9.0GB");
             Assert.Contains(actualString: error.ToString(), expectedSubstring: "capacity returned for test worker");
 
             // The next replica is admitted on its own reading: 60% starts at once, a windowed boot asks for the GPU.
@@ -258,7 +263,7 @@ public sealed class HostAdmissionLawTests {
             WorldAdmission.Wait(step: "sweep", worldArguments: ["Puck.World.dll", "--world", "worlds/debug", "--headless", "false"], cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(expected: 5, actual: readings);
             Assert.Equal(expected: TimeSpan.FromSeconds(seconds: 20), actual: clock.GetElapsedTime(startingTimestamp: 0));
-            Assert.Equal(expected: [("test worker", false, true), ("test worker", false, true), ("sweep", true, false)], actual: asked);
+            Assert.Equal(expected: [("test worker", false, true, HostStartKind.ReproduceReplica), ("test worker", false, true, HostStartKind.ReproduceReplica), ("sweep", true, false, HostStartKind.WindowedWorld)], actual: asked);
 
             // A machine that never recovers refuses the start at the admission's bound, and the verb's start never happens.
             readings = int.MinValue;
@@ -278,6 +283,113 @@ public sealed class HostAdmissionLawTests {
     [Theory]
     public void AWorldOpensADeviceUnlessItBootsHeadlessOrRunsATestBatch(string[] arguments, bool opens) =>
         Assert.Equal(expected: opens, actual: WorldDevices.OpensDevice(arguments: arguments));
+    // A windowed World is expected to peak at 18 GB. At 60% of a 40 GB limit the charge is 24 GB, under the 75% share, but
+    // the 16 GB of headroom cannot hold it: the start waits, names the peak, and goes ahead once 20 GB are free.
+    [Fact]
+    public void AWindowedStartWaitsWhenTheHeadroomIsBelowItsPeakEvenAtSixtyPercentCommit() {
+        var clock = new GateClock();
+        using var error = new StringWriter();
+
+        Assert.False(condition: HostAdmission.Wait("puck_world_start", true, false, () => Sample(commit: 60), clock, clock.Advance, error, CancellationToken.None, Thresholds, TimeSpan.FromSeconds(seconds: 25), null, HostStartKind.WindowedWorld, new HostStartTracker()));
+        Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit headroom 16.0GB (admission needs at least 18.0GB (18.0GB expected peak of a windowed World plus 0.0GB still to grow in 0 admitted start(s)))");
+        Assert.DoesNotContain(expectedSubstring: "% of limit", actualString: error.ToString());
+        Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: Sample(commit: 50), tracker: new HostStartTracker(), clock: new GateClock()));
+        // The same 60% reading admits a headless World, whose peak is 6 GB.
+        Assert.True(condition: Admits(kind: HostStartKind.HeadlessWorld, reading: Sample(commit: 60), tracker: new HostStartTracker(), clock: new GateClock()));
+    }
+    // A running admitted start counts for what it has left to grow: a World that reached its peak counts for nothing, and
+    // one still at 6 GB holds 12 GB more of the headroom.
+    [Fact]
+    public void ARunningStartCountsOnlyForWhatItHasLeftToGrow() {
+        HostRunningStart[] atPeak = [new(Id: 7, Kind: HostStartKind.WindowedWorld, PrivateGb: 18)];
+        HostRunningStart[] growing = [new(Id: 7, Kind: HostStartKind.WindowedWorld, PrivateGb: 6)];
+
+        // Commit 50% of 40 GB leaves 20 GB: enough for a windowed World beside one that stopped growing, not beside one still at 6 GB.
+        Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: Sample(commit: 50, starts: atPeak), tracker: new HostStartTracker(), clock: new GateClock()));
+        Assert.False(condition: Admits(kind: HostStartKind.WindowedWorld, reading: Sample(commit: 50, starts: growing), tracker: new HostStartTracker(), clock: new GateClock()));
+
+        var demand = new HostStartTracker().Judge(reading: Sample(commit: 50, starts: growing), kind: HostStartKind.WindowedWorld, thresholds: Thresholds, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (30.0, 12.0, 1, false), actual: (demand.NeedGb, demand.GrowthGb, demand.Growing, demand.Covered));
+        // A process that exited stops counting at once: the next reading no longer lists it.
+        var tracker = new HostStartTracker();
+
+        Assert.False(condition: tracker.Judge(reading: Sample(commit: 50, starts: growing), kind: HostStartKind.WindowedWorld, thresholds: Thresholds, clock: new GateClock(), reserve: false).Covered);
+        Assert.True(condition: tracker.Judge(reading: Sample(commit: 50), kind: HostStartKind.WindowedWorld, thresholds: Thresholds, clock: new GateClock(), reserve: false).Covered);
+    }
+    // Two starts asked in a row cannot take the same headroom: the first admitted start holds its peak until its process
+    // shows up, so the second waits, then goes ahead when the process appears (counted at its live size) or the hold passes.
+    [Fact]
+    public void TwoStartsInARowCannotBothBeAdmittedIntoTheSameHeadroom() {
+        var clock = new GateClock();
+        var tracker = new HostStartTracker();
+        var reading = Sample(commit: 40);
+
+        // 24 GB of headroom holds one windowed World and not two.
+        Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: reading, tracker: tracker, clock: clock));
+        Assert.False(condition: Admits(kind: HostStartKind.WindowedWorld, reading: reading, tracker: tracker, clock: clock));
+        Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: reading, tracker: tracker, clock: clock, boundSeconds: 100));
+        Assert.True(condition: (clock.GetElapsedTime(startingTimestamp: 0) >= HostStartTracker.ReservationHold));
+
+        // The first start's process appears at 3 GB: its reservation ends and it counts for the 15 GB it has left, not both.
+        var answered = new HostStartTracker();
+        var asked = Sample(commit: 20, limit: 64);
+
+        Assert.True(condition: answered.Judge(reading: asked, kind: HostStartKind.WindowedWorld, thresholds: Thresholds, clock: clock, reserve: true).Covered);
+        Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb, actual: answered.Judge(reading: asked, kind: HostStartKind.HeadlessWorld, thresholds: Thresholds, clock: clock, reserve: false).GrowthGb);
+
+        var appeared = answered.Judge(reading: Sample(commit: 20, limit: 64, starts: [new(Id: 9, Kind: HostStartKind.WindowedWorld, PrivateGb: 3)]), kind: HostStartKind.HeadlessWorld, thresholds: Thresholds, clock: clock, reserve: false);
+
+        Assert.Equal(expected: (15.0, 1), actual: (appeared.GrowthGb, appeared.Growing));
+        // A start that nothing else holds back is the only one that reserves: one held by the GPU leaves no reservation.
+        var held = new HostStartTracker();
+        using var heldError = new StringWriter();
+
+        Assert.False(condition: HostAdmission.Wait("start", true, false, () => Sample(commit: 20, limit: 64, gpu: "Puck.World 9"), clock, clock.Advance, heldError, CancellationToken.None, Thresholds, TimeSpan.FromSeconds(seconds: 15), null, HostStartKind.WindowedWorld, held));
+        Assert.Equal(expected: 0.0, actual: held.Judge(reading: asked, kind: HostStartKind.HeadlessWorld, thresholds: Thresholds, clock: clock, reserve: false).GrowthGb);
+    }
+    // A finished start's measured peak raises its kind's expected peak, never past twice the default, and a start
+    // still running has not finished.
+    [Fact]
+    public void AFinishedStartsMeasuredPeakRaisesItsKindsExpectedPeakWithinACeiling() {
+        var tracker = new HostStartTracker();
+        var clock = new GateClock();
+
+        Assert.Equal(expected: HostLoadThresholds.HeadlessWorldPeakGb, actual: tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld));
+        _ = tracker.Judge(reading: Sample(starts: [new(Id: 4, Kind: HostStartKind.HeadlessWorld, PrivateGb: 9)]), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
+        _ = tracker.Judge(reading: Sample(starts: [new(Id: 4, Kind: HostStartKind.HeadlessWorld, PrivateGb: 4)]), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
+        Assert.Equal(expected: HostLoadThresholds.HeadlessWorldPeakGb, actual: tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld));
+        _ = tracker.Judge(reading: Sample(), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
+        Assert.Equal(expected: 9.0, actual: tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld));
+        Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb, actual: tracker.ExpectedPeakGb(kind: HostStartKind.WindowedWorld));
+        _ = tracker.Judge(reading: Sample(starts: [new(Id: 5, Kind: HostStartKind.HeadlessWorld, PrivateGb: 30)]), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
+        _ = tracker.Judge(reading: Sample(), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
+        Assert.Equal(expected: (2 * HostLoadThresholds.HeadlessWorldPeakGb), actual: tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld));
+    }
+    // A machine whose commit limit sits near one World's peak still admits it when nothing else grows; a platform with no
+    // commit reading is never judged.
+    [Fact]
+    public void APeakNeverExceedsHalfTheLimitAndAnUnreadableCommitIsNotJudged() {
+        // A 24 GB limit with 4 GB charged: the 18 GB peak counts as 12 GB, covered by 20 GB of headroom.
+        Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: Sample(commit: (400.0 / 24.0), limit: 24), tracker: new HostStartTracker(), clock: new GateClock()));
+        Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: Sample(starts: [new(Id: 1, Kind: HostStartKind.WindowedWorld, PrivateGb: 1)]), tracker: new HostStartTracker(), clock: new GateClock()));
+    }
+    [InlineData("Puck.World.exe", "Puck.World.exe --devices none --world worlds/debug", HostStartKind.WindowedWorld)]
+    [InlineData("dotnet", "dotnet D:\\store\\Puck.World.dll --devices none --headless true", HostStartKind.HeadlessWorld)]
+    [InlineData("dotnet", "dotnet D:\\store\\Puck.World.dll --devices none --test-batch b.json", HostStartKind.ReproduceReplica)]
+    [InlineData("Puck.World.Tests", "", HostStartKind.HeavySuite)]
+    [InlineData("dotnet", "dotnet exec D:\\x\\Puck.World.Presentation.Tests.dll", HostStartKind.HeavySuite)]
+    [InlineData("Puck.World", "", HostStartKind.WindowedWorld)]
+    [Theory]
+    public void TheHostTracksWorldsAndHeavySuitesAsAdmittedStarts(string name, string commandLine, HostStartKind kind) =>
+        Assert.Equal(expected: kind, actual: HostProcesses.RunningStart(name: name, commandLine: commandLine));
+    [InlineData("pwsh", "pwsh -c Puck.World.dll")]
+    [InlineData("dotnet", "dotnet build src/Puck.World/Puck.World.csproj -c Release")]
+    [InlineData("MSBuild", "MSBuild.dll /nodemode:1")]
+    [InlineData("dotnet", "dotnet D:\\x\\Puck.Cli.dll lease heavy")]
+    [Theory]
+    public void ShellsBuildsAndOtherProcessesAreNotTrackedStarts(string name, string commandLine) =>
+        Assert.Null(@object: HostProcesses.RunningStart(name: name, commandLine: commandLine));
     [Fact]
     public void PersistentPressureStopsAtTheBoundAndCancellationStartsNothing() {
         var clock = new GateClock();

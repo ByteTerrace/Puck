@@ -354,7 +354,8 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   `puck_world_start` (windowed as a device step, headless as an ordinary one),
   `gate` and `affected` each wait, after they hold their lease, until the commit
   charge is under its share of the limit (`HostLoadThresholds.CommitCapacityPercent`)
-  beside free memory and disk, and name what holds them
+  and the headroom covers the start's expected peak plus what the Worlds and heavy
+  suites already running have left to grow (`HostStartTracker`), beside free memory and disk, and name what holds them
   ([admission](../../../docs/reference/cli.md#puck-host-loadadmission-lines-for-the-machine)).
   Every verb that boots a World process (`puck test`, `canary`, `sweep`, `motion`,
   `counters`, `parity`, `qualify`, `docs citations`, `verbs`, `bench startup`) waits
@@ -365,13 +366,17 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   GPU lane closes its World between capture batches. A test run that holds
   gigabytes (the mesh-irradiance laws trace a whole hall and reached 9 GB
   private) is a heavy suite: the brief says to run it under `puck lease heavy`
-  and by name, never the whole class beside a windowed World, because admission
-  counts only the memory already charged when a run starts, not the gigabytes it
-  is about to take: a windowed World and such a run peaking together took the
-  machine to 95% of its commit limit.
-  The lead cannot stop another lane's process; it asks the lane. Admission
-  reads memory when a run starts, so two long runs that each pass can still
-  grow into each other: on the lead machine, more than about three lanes that
+  and by name, never the whole class beside a windowed World: a windowed World
+  and such a run peaking together took the machine to 95% of its commit limit.
+  Admission holds a start back until the headroom covers its expected peak and
+  the growth the running Worlds and heavy suites still have left (it reads their
+  live private bytes), so starts admitted at a low charge no longer grow into
+  each other. It cannot see a start another process admits in the same
+  instant, or a process it does not classify (a hand-started `dotnet test` of a
+  suite that is not heavy, a build), and a kind's peak is a conservative
+  default, so a lane whose run outgrows its kind says so under **Found**.
+  The lead cannot stop another lane's process; it asks the lane. On the lead
+  machine, more than about three lanes that
   boot Worlds or heavy suites at once kept commit charge between 80% and 94%
   for hours without speeding anything up. Memory, not CPU, bounds how many
   World-heavy lanes run together; lanes that only read, write documents or
