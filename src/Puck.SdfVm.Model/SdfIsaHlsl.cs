@@ -281,6 +281,18 @@ public static class SdfIsaHlsl {
     private static Declarations DeclareRenderDeclarations() {
         var declarations = new Declarations(builtOn: DeclareField(), guard: SdfRenderHlsl.Guard, include: FileName);
 
+        declarations.Count(name: "SDF_PROBE_HIT_COUNT", value: SdfMeshProbeTrace.HitCount);
+        declarations.Count(name: "SDF_PROBE_HIT_WORDS", value: SdfMeshProbeTrace.HitWords);
+        declarations.Count(name: "SDF_PROBE_UNKNOWN_MATERIAL", value: SdfMeshProbeTrace.UnknownMaterial);
+        declarations.Count(name: "SDF_PROBE_NODE_COUNT_BITS", value: SdfMeshProbeTrace.NodeCountBits);
+        declarations.Count(name: "SDF_PROBE_NODE_WORDS", value: SdfMeshProbeTrace.NodeWords);
+        declarations.Count(name: "SDF_PROBE_ENTRY_WORDS", value: SdfMeshProbeTrace.EntryWords);
+        declarations.Count(name: "SDF_PROBE_NORMAL_WORD", value: SdfMeshProbeTrace.NormalWord);
+        declarations.Count(name: "SDF_PROBE_GEOMETRY_WORD", value: SdfMeshProbeTrace.GeometryWord);
+        declarations.Count(name: "SDF_PROBE_IDENTITY_WORD", value: SdfMeshProbeTrace.IdentityWord);
+        declarations.Count(name: "SDF_PROBE_STACK_DEPTH", value: SdfMeshProbeTrace.StackDepth);
+        declarations.Count(name: "SDF_PROBE_GROUP_SIZE", value: SdfMeshProbeTrace.GroupSize);
+
         declarations.Members<SdfIndirectSources>(prefix: "SDF_INDIRECT_SOURCES");
         declarations.Section(title: "The renderer's capacities, the photometry and the exposure (SdfPhotometry, SdfExposure).");
         declarations.Count(

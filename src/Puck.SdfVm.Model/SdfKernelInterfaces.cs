@@ -40,6 +40,14 @@ namespace Puck.SdfVm;
 /// per draw call.</para>
 /// </summary>
 public sealed class SdfKernelInterfaces {
+    /// <summary>Uploaded irradiance scene nodes, leaves and instance records.</summary>
+    public const string ProbeScene = "sdfProbeScene";
+    /// <summary>Probe origins and reaches, one float4 per probe.</summary>
+    public const string ProbeOrigins = "sdfProbeOrigins";
+    /// <summary>The CPU reference's angular directions, shared by every probe.</summary>
+    public const string ProbeDirections = "sdfProbeDirections";
+    /// <summary>Signed hit distance and packed normal/material words written by the trace.</summary>
+    public const string ProbeHitsWritten = "sdfProbeHitsRW";
     /// <summary>The <see cref="BrickBake"/> request buffer: a three-row header, then the carves.</summary>
     public const string BakeRequest = "bakeRequest";
     /// <summary>The <see cref="BrickBake"/> brick pool the baker writes.</summary>
@@ -114,6 +122,13 @@ public sealed class SdfKernelInterfaces {
 
         Stamp = stamp;
         FieldStamp = fieldStamp;
+        ProbeTrace = new ShaderInterface(name: "sdf-probe-trace", members: [
+            Read(element: ShaderValueType.Uint, name: ProbeScene),
+            Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshRegion),
+            Read(element: ShaderValueType.Float4, name: ProbeOrigins),
+            Read(element: ShaderValueType.Float4, name: ProbeDirections),
+            Written(element: ShaderValueType.Uint, name: ProbeHitsWritten),
+        ], pushesIndex: false);
         WorldParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
             package: RenderGraphPackageCatalog.SdfWorld,
@@ -193,6 +208,7 @@ public sealed class SdfKernelInterfaces {
         );
         MeshLayout = new(shaderInterface: Mesh);
         Includes = [
+            (IncludePath(shaderInterface: ProbeTrace), ProbeTrace),
             (IncludePath(shaderInterface: BloomParameters.Interface), BloomParameters.Interface),
             (IncludePath(shaderInterface: World), World),
             (IncludePath(shaderInterface: MeshBake), MeshBake),
@@ -238,6 +254,8 @@ public sealed class SdfKernelInterfaces {
 
     /// <summary>Gets the instruction set's stamp the interfaces carry.</summary>
     public string Stamp { get; }
+    /// <summary>Gets the software probe trace's resource interface.</summary>
+    public ShaderInterface ProbeTrace { get; }
     /// <summary>The optical scatter filters, independent of scene and bake tables.</summary>
     public ShaderPipelineParameterLayout BloomParameters { get; }
     /// <summary>Gets the field's instruction set's stamp, which <see cref="MeshBake"/> carries in place of

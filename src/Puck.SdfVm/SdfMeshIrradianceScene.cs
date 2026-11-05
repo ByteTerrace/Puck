@@ -66,7 +66,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     // A node range at least this many primitives wide builds its two children in parallel, and a geometry at least
     // this many triangles wide prepares its triangles in parallel chunks of it.
     private const int ParallelPrimitives = 16_384;
-    private const int StackDepth = 64;
+    private const int StackDepth = SdfMeshProbeTrace.StackDepth;
     // The widest subtree of a geometry the top level indexes on its own (Geometry.Braids).
     private const int BraidTriangles = 1024;
 
@@ -93,7 +93,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
     // 28 bytes: the bounds, then one word holding the first index above the count's CountBits.
     private struct Node {
-        private const int CountBits = 3;
+        private const int CountBits = SdfMeshProbeTrace.NodeCountBits;
 
         public Vector3 Low;
         public Vector3 High;
@@ -507,6 +507,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     // carries a normal of the mesh's frame to world space with the winding the transform gives it, its program material
     // base and its mesh's triangle materials.
     private readonly struct Instance {
+        public required SdfMesh Mesh { get; init; }
         public required Geometry Geometry { get; init; }
         public required Matrix4x4 ObjectToWorld { get; init; }
         public required Matrix4x4 WorldToObject { get; init; }
@@ -528,6 +529,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
             if (matrix.GetDeterminant() < 0f) { normalToWorld *= -1f; }
             instance = new Instance {
+                Mesh = draw.Mesh,
                 Geometry = geometry,
                 Identity = matrix.IsIdentity,
                 Material = draw.Material,

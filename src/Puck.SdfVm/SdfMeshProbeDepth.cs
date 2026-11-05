@@ -16,13 +16,13 @@ public static class SdfMeshProbeDepth {
     private const int Size = SdfMeshIrradianceProbe.DepthSize;
 
     /// <summary>The hits one probe holds: one a texel.</summary>
-    public const int HitCount = (Size * Size);
+    public const int HitCount = SdfMeshProbeTrace.HitCount;
     /// <summary>The words one probe's hit buffer takes: per texel, the FP32 ray distance (negative for a back face,
     /// positive infinity for a miss), then the hit's material in the low sixteen bits and its two signed octahedral normal
     /// bytes, turned toward the probe, in the high sixteen, as a surface word packs them.</summary>
-    public const int HitWords = (2 * HitCount);
+    public const int HitWords = SdfMeshProbeTrace.HitWords;
     /// <summary>The material a hit records when the scene's exceeds sixteen bits; it shades as the default material.</summary>
-    public const int UnknownMaterial = ushort.MaxValue;
+    public const int UnknownMaterial = SdfMeshProbeTrace.UnknownMaterial;
 
     // The low bit of a texel's curvature half: its hit is on a sheet (Surfaces). A reader masks it off before decoding the
     // curvature. KEEP IN SYNC with sdfMeshProbeDepthVisibility.

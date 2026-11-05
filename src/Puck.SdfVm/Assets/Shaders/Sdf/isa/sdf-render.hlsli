@@ -2,6 +2,17 @@
 #ifndef SDF_RENDER_HLSLI
 #define SDF_RENDER_HLSLI
 #include "sdf-isa.hlsli"
+#define SDF_PROBE_HIT_COUNT        144u
+#define SDF_PROBE_HIT_WORDS        288u
+#define SDF_PROBE_UNKNOWN_MATERIAL 65535u
+#define SDF_PROBE_NODE_COUNT_BITS  3u
+#define SDF_PROBE_NODE_WORDS       7u
+#define SDF_PROBE_ENTRY_WORDS      2u
+#define SDF_PROBE_NORMAL_WORD      16u
+#define SDF_PROBE_GEOMETRY_WORD    25u
+#define SDF_PROBE_IDENTITY_WORD    29u
+#define SDF_PROBE_STACK_DEPTH      64u
+#define SDF_PROBE_GROUP_SIZE       32u
 
 // Puck.SignedDistance.SdfIndirectSources.
 #define SDF_INDIRECT_SOURCES_NONE     0u
