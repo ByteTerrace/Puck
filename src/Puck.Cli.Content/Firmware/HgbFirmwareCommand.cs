@@ -17,13 +17,12 @@ internal static class HgbFirmwareCommand {
             var success = true;
 
             foreach (var image in images) {
-                success &= GeneratedArtifact.WriteOrVerify(
+                success &= GeneratedArtifact.Write(
                     path: Path.Combine(
                         path1: directory,
                         path2: image.Name
                     ),
                     bytes: image.Bytes,
-                    verify: false,
                     verb: "firmware hgb"
                 );
             }

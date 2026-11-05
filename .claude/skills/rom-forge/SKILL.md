@@ -146,6 +146,11 @@ The generator and shared SM83 emitter live in the core package, so direct embedd
 needs no Forge dependency. `puck firmware hgb --output <dir>` exports cached or
 freshly derived images; there is no committed image or verify mode.
 
+The AGB BIOS remains packaged under the measured native-toolchain exception in
+the derived-products decision. `puck firmware agb` exports from C and ARM sources
+with explicit Clang and ELF-linker paths; it has no verify mode. Runtime hosts
+need neither tool. Reconsider removal only with measured missing-toolchain behavior.
+
 ## Seeing it work
 
 - Compile a cartridge and play it in a world (above). For World integration,

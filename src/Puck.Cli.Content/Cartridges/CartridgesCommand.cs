@@ -21,14 +21,13 @@ public static class CartridgesCommand {
             var success = true;
 
             foreach (var (fileName, bytes) in images) {
-                success &= GeneratedArtifact.WriteOrVerify(
+                success &= GeneratedArtifact.Write(
                     bytes: bytes,
                     path: Path.Combine(
                         path1: directory,
                         path2: fileName
                     ),
-                    verb: "cartridges deck",
-                    verify: false
+                    verb: "cartridges deck"
                 );
             }
 

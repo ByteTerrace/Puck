@@ -2041,10 +2041,6 @@ it is never committed or compared by a gate. The owner's ruling on generated
 bytes: hand-authored bytes are source and stay committed; generated outputs are
 derived products, removed from git and built on demand.
 
-- Generated AGB firmware: `src/Puck.AdvancedGamingBrick/Firmware/puck-agb.bin`
-  is built from the C and ARM sources beside it through `puck firmware agb`.
-  Measure native compilation and the missing-toolchain case against edit-to-running
-  before deciding whether to derive it on a miss. A hand-authored BIOS is source.
 - A compiled world is keyed by every reachable assembly's MVID
   (`src/Puck.World.Schema/CompiledWorld.cs:58-77`), against the decision that a
   derived product's key covers the code that derives it. Narrow it to the deriving
