@@ -790,9 +790,18 @@ derived document's content pin folds every touched file's raw bytes
 pin. Callers that need the effective scalar's authored file, JSON pointer and
 original value supply `WorldDocumentOrigins` to composition. The existing merge
 carries that sidecar through retained fields and file-path relocation; overwritten
-or tombstoned fields contribute no effective origin. This opt-in path bypasses
-unannotated composed images, while ordinary loads keep the existing cache. No
+or tombstoned fields contribute no effective origin. Origins retain immutable
+source scalars and serialize them on demand; weak node keys never retain a
+superseded merge tree. Annotated images share those origin records with their
+readers; an unannotated image must recompose for a provenance reader. No
 provenance is serialized into the world document.
+
+The file composer owns each tree it parses, including a cache hit's fresh parse.
+`WorldDocumentBasis.TryMergeInto` applies successive layers to that accumulator,
+retaining inherited subtrees in place and indexing keyed rows. Only a caller
+requesting the pre-body stack forks a snapshot. The public `TryMerge` clones its
+basis before entering the same mutation path, preserving independent inputs and
+results; cached images store bytes, never caller-owned mutable trees.
 
 `world.save` preserves the derivation of the file it overwrites
 (`SavePreservingBasis`): the delta is taken against the canonical form of the

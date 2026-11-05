@@ -433,6 +433,10 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   branch's deleted files (`git diff --diff-filter=D` against the integration tip)
   and compares them with what the brief allowed. A deletion the brief didn't name
   is reported to the lead before landing, never merged silently.
+- **Workflows are a standing permission (the owner's ruling):** the lead runs the
+  Workflow tool whenever a multi-agent orchestration pays for itself (a wave, a
+  fan-out of independent reviews or research, a pipeline of write then verify),
+  without asking first; the agent-count guidance in the tool still applies.
 - **A wave** fans many small fixes out as several writers and one integrator: a
   scout pass inventories, the lead triages into file-disjoint batches (each
   names its items, the files it may touch, and which batch alone owns the
