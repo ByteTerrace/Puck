@@ -1360,6 +1360,11 @@
                 "default": null,
                 "title": "PaletteEntryDocument"
               },
+              "surfaceStep": {
+                "description": "The height, in world units, the drawn surface of a row carrying a HeightScale moves by (SurfaceStep); 0 draws it at the baked mesh\u0027s own resolution. Presentation only: bodies and media read the full value.",
+                "type": "number",
+                "default": 0
+              },
               "paint": {
                 "description": "The initial fills, applied in order over Initial.",
                 "type": [
