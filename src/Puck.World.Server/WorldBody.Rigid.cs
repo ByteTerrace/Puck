@@ -692,6 +692,27 @@ public sealed partial class WorldBody {
             m_rigidVelocity += (gravity * tickSeconds);
         }
 
+        // The gyroscopic term ω × I·ω, once per rigid step, on the free angular velocity before any contact solve:
+        // without it a non-spherical body's world angular velocity would stay fixed while the body turns, and its
+        // angular momentum would precess about the spin axis.
+        switch (FixedGyroscopicStep.Advance(
+            advanced: out var gyroscopicVelocity,
+            angularVelocity: m_angularVelocity,
+            inverseInertiaXX: rigid.InverseInertiaXX,
+            inverseInertiaYY: rigid.InverseInertiaYY,
+            inverseInertiaZZ: rigid.InverseInertiaZZ,
+            orientation: m_orientation,
+            stepSeconds: tickSeconds
+        )) {
+            case GyroscopicStepOutcome.Applied:
+                m_angularVelocity = gyroscopicVelocity;
+                WorldBodyWork.Process.Add(amount: 1, kind: WorldBodyWork.GyroscopicSteps);
+                break;
+            case GyroscopicStepOutcome.Refused:
+                WorldBodyWork.Process.Add(amount: 1, kind: WorldBodyWork.GyroscopicRefusals);
+                break;
+        }
+
         // Continuous collision, by derived substep count: a fast ball must not tunnel through a thin wall at the
         // authority rate, so the travel this tick is bounded against an authored fraction of the collider's own
         // bounding radius rather than a fixed knob. "Travel" is the fastest a point on the collider's own SURFACE
