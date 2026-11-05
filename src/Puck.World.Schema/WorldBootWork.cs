@@ -10,7 +10,7 @@ namespace Puck.World;
 /// life, never reset; a reader takes a window by reading twice and subtracting. None is part of simulation state:
 /// nothing hashes, exports, or checkpoints them. Kinds whose work a cache can answer are
 /// <see cref="WorkClass.Pacing"/>: document reads, compositions and their reuse, source compiles, parses and cache
-/// hits, curve compiles, compiled-world hits and chunk derivations. The remaining kinds are
+/// hits, curve compiles, asset reads and preparation, compiled-world hits and chunk derivations. The remaining kinds are
 /// <see cref="WorkClass.Deterministic"/>.
 /// <para>
 /// The work sites are static paths shared by every host (the boot loader, the composer, <c>world.reload</c>, the
@@ -92,8 +92,9 @@ public sealed class WorldBootWork : IWorkCounterSource {
     /// solid field and each static scene a frame presenter emits from the prototypes and placements.</summary>
     public static WorkKind ShapeBuilds { get; } = new(name: "world.boot.shape-builds", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting asset loads: one per music, tune, patch or audio document an asset row
-    /// resolves off disk, and one per machine content image a machine host prepares.</summary>
-    public static WorkKind AssetLoads { get; } = new(name: "world.boot.asset-loads", unit: "count", workClass: WorkClass.Deterministic);
+    /// resolves off disk, and one per machine content image a machine host prepares. This counts physical work,
+    /// including validation and compilation work avoided by held products, rather than authored asset rows.</summary>
+    public static WorkKind AssetLoads { get; } = new(name: "world.boot.asset-loads", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the boots whose drawn definition came from a compiled world's <c>DEFN</c> chunk
     /// rather than a fresh draw.</summary>
     public static WorkKind CompiledHits { get; } = new(name: "world.boot.compiled-hits", unit: "count", workClass: WorkClass.Pacing);
