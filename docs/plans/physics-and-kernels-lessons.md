@@ -115,7 +115,7 @@ core architecture of Box3D remains almost identical to Box2D", with some
 convex hull and collision code from Rubikon-Lite, and Catto calls it "alpha
 software". Its README lists the Soft Step solver, island-based sleep,
 continuous collision, "Extensive multithreading and SIMD", "Cross platform
-determinism" and "Recording and replay". Its `src/solver.c` was opened and
+determinism" and "Recording and replay". Its solver source (`solver.c`) was opened and
 carries the Box2D structure: graph-colour overflow, the sleepiest split
 candidate with island-id tie-breaking "for determinism", dynamic-versus-static
 continuous collision, and a Newton-Raphson gyroscopic step. The Box2D posts
@@ -201,8 +201,8 @@ the global maximum separation value. It is not approximate and cannot get
 stuck in a local maximum." Box2D's speculative contact
 (`B2_SPECULATIVE_DISTANCE`, "Box2D uses limited speculative collision. This
 reduces jitter.") makes a contact that is near but not touching a constraint
-the solver lands on exactly, rather than a search. Box2D keeps proxy boxes
-"fattened" by a small margin and found that "keeping the margin small improves
+the solver lands on exactly, rather than a search. Box2D fattens proxy boxes
+by a small margin and found that "keeping the margin small improves
 performance by reducing the number of contacts" (`B2_MAX_AABB_MARGIN`). Goto
 and van de Geijn's packing argument (pack the operand "in a contiguous work
 array" sized to cache and TLB) applies to the bounds pass that runs before
@@ -219,7 +219,7 @@ analytic kinds have closed-form distances. The bound check reads
 `FixedStaticCollider.Center` from the full collider record and the extent from
 a `FixedVector3?[]`, not from a packed bounds array.
 
-**Expected gain.** The 4,030 queries a tick are 98 % kit bodies; brief A
+**Expected gain.** Almost all of the 4,030 queries a tick are kit bodies'; brief A
 reads `physics.contact.resolves`, `.queries`, `.convex-queries` and
 `.supports` per tick (already rows of `puck bench world`,
 `src/Puck.Cli.Bench/WorldBenchmarks.cs:508-513`) to split them into sweeps,
@@ -246,7 +246,8 @@ compile time, one packed bounds array, and a cull ahead of `TryGetPush`.
 
 **What the sources do.** Box2D v3 chose Soft Step: sub-stepping instead of
 iterations, soft constraints as a damped spring tuned in hertz, warm
-starting, and a relax pass that "removes the extra energy" (Solver2D post).
+starting, and a relax pass that solves again without bias or softness to remove
+the energy the soft constraints added (Solver2D post).
 The contact points are computed once per step and updated across substeps from
 anchors held relative to the bodies, so neither the broadphase nor the contact
 points are recomputed inside the solver. Its stages, from `solver.c`:
@@ -280,7 +281,7 @@ with no hash container (`FixedRigidWorld`'s remarks). What does not transfer
 from Box2D is its float discipline, which Puck does not need. What Puck must
 add is that the manifold slots and accumulated impulses are continuation
 state: they ride the checkpoint and the authority hash, as Box2D's replay post
-found when it added "snapshots" that copy "internal data structures" to make
+found when its snapshots had to copy the engine's internal data structures to make
 rollback possible. Hashes move once.
 
 **Cost.** Large: candidate generation from Puck's colliders into
@@ -308,7 +309,7 @@ exists.
 
 **What Puck does.** `AdvanceRigid` holds the world-frame angular velocity
 constant through free flight, changing it only by damping and contact
-(`WorldBody.Rigid.cs:686-692`, `:751`). For a body whose inertia is not
+(`WorldBody.Rigid.cs:682-689`, `:751`). For a body whose inertia is not
 spherical, a constant world ω while the body turns does not conserve angular
 momentum. The debug world's rigid pieces are mostly oblate (361 Go stones, 64
 reversi discs) or slender (32 chess pieces).
@@ -334,7 +335,7 @@ begins touching links two islands by union-find, removal only flags the island
 chosen when a body "wants to sleep". Measured: "Persistent islands are roughly
 an order of magnitude faster than DFS" (pyramids 0.69 ms to 0.01 ms). Sleeping
 islands move to their own solver set and leave the constraint graph
-(`solver_set.c`, `b3TrySleepIsland`). "Islands are not required for
+(`solver_set.c`, `b2TrySleepIsland`). "Islands are not required for
 correctness. They are an optimization." "Sleeping must be done per island, not
 per body." Jolt documents the same per-island rest rule.
 
@@ -462,9 +463,9 @@ Box2D's sleep test uses "the velocity of the farthest point on the body to
 account for rotation" and folds in position correction ("Sleep needs to
 observe position correction as well as true velocity", `solver.c`). Puck's
 rest latch compares linear and angular speed against two separate thresholds
-(`WorldBody.Rigid.cs:612`), so a long piece turning slowly about its centre
+(`WorldBody.Rigid.cs:611-612`, `:884-893`), so a long piece turning slowly about its centre
 can latch while its ends still move. The substep bound already uses linear
-speed plus angular speed times the bounding radius (`:697-705`); the rest
+speed plus angular speed times the bounding radius (`:701-705`); the rest
 latch can read the same quantity. Small; it rides brief C.
 
 ## What does not transfer
@@ -486,8 +487,8 @@ latch can read the same quantity. Small; it rides brief C.
   operating-system semaphore ([job-system memo](engine-job-system.md)). It is
   an anti-lesson.
 - **A parallel union-find over islands:** Box2D tried Jolt's and rejected it,
-  because "its atomic compare-and-swap merging makes constraint order
-  non-deterministic" (islands post); Puck's serial island bookkeeping is the
+  because its atomic compare-and-swap merging made the constraint order
+  nondeterministic (islands post); Puck's serial island bookkeeping is the
   right shape.
 
 ## Brief A: kit-body contact work: certify cheaply, query exactly only what a certificate cannot settle
@@ -498,7 +499,8 @@ push out. It is the same mechanism as the field sweep's bounds queries, Box3D's
 inscribed spheres and Box2D's fat-box margin.
 
 **Invariant.** A collider the certificate skips would have returned no push:
-the certificate's region contains the collider grown by the contact skin.
+the certificate's region contains the collider grown by the contact skin, and
+a carried separation (step 3) is a lower bound the body has not yet travelled.
 **Enforcement:** one door. The certificate is compiled with the collider (one
 `FixedStaticCollider` member, or the compiled bounds record `WorldColliderSet`
 already builds) and the solver reads only that member; no caller supplies its
@@ -528,9 +530,13 @@ invariant, a deliberate correction.
    `TryGetPush`. **Check:** `physics.contact.queries` falls; every state hash
    identical, as in step 1. A hash that moves means the certificate is not
    conservative and is a defect, not a re-record.
-3. Stop relaxing a pass that cannot push: after a pass, re-query only the
-   colliders whose certificates meet the body's box grown by the pass's total
-   push. **Check:** as step 2.
+3. Carry each kept collider's proven separation from pass to pass. Within one
+   endpoint resolve the body only translates, so a collider an exact query
+   proved separated by `d` cannot push until the body has moved by more than
+   `d` minus the skin since that query; later passes skip it until the
+   accumulated push reaches that. The exact query reports a lower bound on the
+   separation it proved (the convex query's early-out plane already holds one).
+   **Check:** as step 2.
 4. Replace the snap's bisection with one support-distance query (the convex
    nearest-point query or the analytic distance) followed by the landing
    sweep, keeping `TrySnap`'s acceptance rules. **Check:** `physics.sweep.sweeps`
@@ -643,7 +649,7 @@ Every page below was opened for this memo.
 Box3D and Box2D:
 - Catto, "Announcing Box3D", https://box2d.org/posts/2026/06/announcing-box3d/
 - Box3D repository and README, https://github.com/erincatto/box3d
-- Box3D `src/solver.c`, https://raw.githubusercontent.com/erincatto/box3d/main/src/solver.c
+- Box3D solver source, https://raw.githubusercontent.com/erincatto/box3d/main/src/solver.c
 - Catto, "Contact Recycling", https://box2d.org/posts/2026/10/contact-recycling/
 - Catto, "Inscribed Spheres", https://box2d.org/posts/2026/09/inscribed-spheres/
 - Catto, "SIMD for Collision", https://box2d.org/posts/2026/07/simd-for-collision/
@@ -655,9 +661,15 @@ Box3D and Box2D:
 - Catto, "Releasing Box2D 3.0", https://box2d.org/posts/2024/08/releasing-box2d-3.0/
 - Catto, "Solver2D", https://box2d.org/posts/2024/02/solver2d/
 - Catto, "Simulation Islands", https://box2d.org/posts/2023/10/simulation-islands/
-- Box2D source: `src/constraint_graph.c`, `src/constraint_graph.h`,
-  `src/solver_set.c`, `src/island.c`, `src/solver.c`, `src/broad_phase.c`,
-  `src/body.c`, `include/box2d/constants.h`, at https://github.com/erincatto/box2d
+- Box2D source, the files opened:
+  - https://raw.githubusercontent.com/erincatto/box2d/main/src/constraint_graph.c
+  - https://raw.githubusercontent.com/erincatto/box2d/main/src/constraint_graph.h
+  - https://raw.githubusercontent.com/erincatto/box2d/main/src/solver_set.c
+  - https://raw.githubusercontent.com/erincatto/box2d/main/src/island.c
+  - https://raw.githubusercontent.com/erincatto/box2d/main/src/solver.c
+  - https://raw.githubusercontent.com/erincatto/box2d/main/src/broad_phase.c
+  - https://raw.githubusercontent.com/erincatto/box2d/main/src/body.c
+  - https://raw.githubusercontent.com/erincatto/box2d/main/include/box2d/constants.h
 - Catto, "Numerical Methods", GDC 2015, https://box2d.org/files/ErinCatto_NumericalMethods_GDC2015.pdf
 
 Independent physics sources:
