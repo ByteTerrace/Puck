@@ -231,11 +231,13 @@ public static class FixedFieldColliderContact {
             for (var iteration = 0; ((iteration < BracketIterations) && ((high - low) > Width)); iteration++) {
                 var width = (high - low);
                 var quarter = FixedQ4816.Min(x: (Width / Two), y: (width / FixedQ4816.FromInteger(value: 4L)));
-                var middle = (halved
+                // Halving a kept end's reading can leave both readings zero, where the secant has no root to aim at and the step bisects.
+                var span = (lowReading - highReading);
+                var middle = ((halved && (span > FixedQ4816.Zero))
                     ? FixedQ4816.Clamp(
                         maximum: (high - quarter),
                         minimum: (low + quarter),
-                        value: (low + ((width * lowReading) / (lowReading - highReading)))
+                        value: (low + ((width * lowReading) / span))
                     )
                     : (low + (width / Two)));
 

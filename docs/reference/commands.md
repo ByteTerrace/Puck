@@ -853,6 +853,16 @@ explicit skipped reasons. `coverage.comparisons` gives red, clean and unknown
 sample counts for each attempted comparison; these count witnesses, while the
 banner counts clustered causes. Missing evaluation is **unknown**, never a zero.
 
+The colliders report reads each collider's boundary witnesses against the
+authored field, which takes minutes in a world of many relieved creations. The
+reads run on half the processors. A call that owes its caller an answer before
+they finish (a control attachment's deadline) answers an unfinished report
+instead: one unknown finding, `coverage.pending` naming the colliders still to
+read, nothing retained. The reads already taken are kept, and the next
+`report colliders` call resumes them and, once none remain, answers the report
+one uninterrupted call would have. A collider-set or field edit in between
+starts the reads over.
+
 `world.debug-view colliders` or `world.debug-view contacts` keeps the beauty
 image and adds at most sixteen causal pins, exterior marks and support calipers.
 The banner counts severities and reports pin overflow, including badges that

@@ -20,11 +20,16 @@ public sealed class SweepWorld : IDisposable {
     private const string CapabilityPattern = "puck-control-*.json";
 
     private readonly SweepBudget m_budget;
-    private readonly LocalControlClient m_client;
+    private readonly string m_attachment;
     private readonly IDisposable? m_lease;
     private readonly MotionWorldProcess? m_process;
 
-    private SweepWorld(LocalControlClient client, MotionWorldProcess? process, IDisposable? lease, string leg, SweepBudget budget) {
+    // A call that passes its deadline closes the session it ran on, since its answer's place in the ordered stream
+    // is unknown; the World lives on, so the next call attaches a session of its own (see Reattach).
+    private LocalControlClient m_client;
+
+    private SweepWorld(string attachment, LocalControlClient client, MotionWorldProcess? process, IDisposable? lease, string leg, SweepBudget budget) {
+        m_attachment = attachment;
         m_budget = budget;
         m_client = client;
         m_lease = lease;
@@ -41,7 +46,8 @@ public sealed class SweepWorld : IDisposable {
     public bool Owned => (m_process is not null);
     /// <summary>Gets the budget every call of this World honours.</summary>
     public SweepBudget Budget => m_budget;
-    /// <summary>Gets whether the attachment has closed: the World exited, or a call failed or timed out.</summary>
+    /// <summary>Gets whether the attachment has closed for good: the World exited, or a call failed and no new session
+    /// could be opened. A call that passes its own deadline leaves the World attached through a new session.</summary>
     public bool Gone => (m_client.IsClosed || (m_process?.HasExited ?? false));
 
     /// <summary>Attaches to a running World by its process id, attachment id or attachment file.</summary>
@@ -140,7 +146,8 @@ public sealed class SweepWorld : IDisposable {
     /// <param name="script">The line or lines.</param>
     /// <param name="timeoutSeconds">How long the whole call may take, at most 120 seconds and at most what the budget
     /// has left.</param>
-    /// <returns>The answer; a refusal when the budget has passed or the attachment failed.</returns>
+    /// <returns>The answer; an unmeasured refusal naming its reason when the budget has passed, the call's deadline
+    /// passed or the attachment failed.</returns>
     public SweepAnswer Run(string script, int timeoutSeconds = 60) {
         if (m_budget.Reason is { } over) {
             return new SweepAnswer(Ok: false, Output: over, Refusals: [$"{script}: {over}"], Unmeasured: true);
@@ -156,7 +163,11 @@ public sealed class SweepWorld : IDisposable {
                 timeoutMilliseconds: Milliseconds(seconds: timeoutSeconds)
             ).GetAwaiter().GetResult();
         } catch (Exception exception) when (IsAttachmentFailure(exception: exception)) {
-            return new SweepAnswer(Ok: false, Output: $"the attachment failed: {exception.Message}", Refusals: [$"{script}: the attachment failed"], Unmeasured: true);
+            var failure = Failure(exception: exception, seconds: timeoutSeconds);
+
+            Reattach();
+
+            return new SweepAnswer(Ok: false, Output: failure, Refusals: [$"{script}: {failure}"], Unmeasured: true);
         }
 
         return SweepEvidence.FromResponse(response: response, script: script);
@@ -187,7 +198,8 @@ public sealed class SweepWorld : IDisposable {
 
             return (response.IsError ? null : response.Png);
         } catch (Exception exception) when (IsAttachmentFailure(exception: exception)) {
-            output = $"the attachment failed: {exception.Message}";
+            output = Failure(exception: exception, seconds: 120);
+            Reattach();
 
             return null;
         }
@@ -245,10 +257,30 @@ public sealed class SweepWorld : IDisposable {
         // A World that composes no renderer refuses the readiness wait by saying so.
         var leg = ((probe.IsError && probe.Output.Contains(comparisonType: StringComparison.Ordinal, value: "composes no renderer")) ? SweepLegs.Headless : SweepLegs.Windowed);
 
-        session = new SweepWorld(budget: budget, client: client, lease: lease, leg: leg, process: process);
+        session = new SweepWorld(attachment: path, budget: budget, client: client, lease: lease, leg: leg, process: process);
         error = string.Empty;
 
         return true;
+    }
+    // Why a call failed: the sweep's own budget, the call's own deadline (the World is still running and its line may
+    // still be working), or a session that broke.
+    private string Failure(Exception exception, int seconds) =>
+        (m_budget.Reason ?? ((exception is OperationCanceledException)
+            ? $"the line did not answer within its {seconds}-second deadline"
+            : $"the attachment failed: {exception.Message}"));
+    // Opens a session in place of the one a failed call closed, so one line that cannot answer never costs the lines
+    // after it: the World's host serves up to four sessions, and a line the old session left running holds only that
+    // host's console, which later lines wait on and answer after.
+    private void Reattach() {
+        if (!m_client.IsClosed || m_budget.Expired || (m_process?.HasExited ?? false)) {
+            return;
+        }
+
+        try {
+            m_client = LocalControlClient.ConnectAsync(attachmentPath: m_attachment, cancellationToken: m_budget.Token).GetAwaiter().GetResult();
+        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or System.Net.Sockets.SocketException or OperationCanceledException or System.Security.Authentication.AuthenticationException) {
+            // The World is gone or refuses sessions: the client stays closed and every later line reads unmeasured.
+        }
     }
     private static bool IsAttachmentFailure(Exception exception) => (exception is IOException or InvalidDataException or System.Text.Json.JsonException or ObjectDisposedException or OperationCanceledException or InvalidOperationException);
     // The call's deadline in milliseconds: at most the attachment's ceiling, and at most what the sweep has left.
