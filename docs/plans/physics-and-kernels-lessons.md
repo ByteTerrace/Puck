@@ -313,14 +313,19 @@ rigid step from `WorldBody.AdvanceRigid` before contact; brief B's integrate
 stage calls the same member. Its law
 (`tests/Puck.Physics.Tests/GyroscopicStepLawTests.cs`) measured what the
 memo had expected to be conservation "within the fixed-point budget": at
-60 Hz implicit Euler's own truncation is first order and dissipative, so a
-disc spun at about 4 rad/s drifts about 2 % in world momentum over 300 steps
-(a slender triaxial block about 14 %), against 44 % and 88 % with world ω
-held constant, and the fixed-point run tracks the exact-arithmetic scheme to
-rounding. Momentum magnitude and energy fall on every step. A
-linearized-midpoint Jacobian (`h/2`) cut the block's drift to about 3 % in a
-double-precision probe, at the cost of the scheme's guaranteed dissipation;
-it is not adopted.
+60 Hz implicit Euler's own truncation is first order and dissipative, and the
+Newton step alone lowers momentum magnitude and energy on every step. So the
+step then scales the corrected ω by one factor `s ≥ 1`, the smaller of
+`|L₀|/|L₁|` and `√(E₀/E₁)`, both free-flight invariants: one is restored
+exactly, the other stays at or below its value before the step, so energy
+never rises and the scheme keeps its stability. Over 300 steps from about
+4 rad/s, a disc's world-momentum drift falls from 2.1 % to 0.8 % and its
+magnitude drift from 2.1 % to 0.08 % (the momentum factor binds); a slender
+triaxial block's falls from 13.9 % to 8.1 %, its magnitude drift from 13.1 %
+to 6.5 % (the energy factor binds). With world ω held constant the drifts are
+44 % and 88 %. What drift remains is the scheme's error in the momentum's
+direction, and the fixed-point run tracks the exact-arithmetic scheme to
+rounding.
 
 ### 4. Wake and islands proportional to change
 
