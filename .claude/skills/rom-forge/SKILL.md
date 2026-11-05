@@ -128,6 +128,13 @@ advancing while it runs; `CartridgeLimits.BlitCellCount` bounds its size.
 
 ## Boot ROMs
 
+The Deck's original diagnostic programs use authored `.deck` selections, prepared by
+`DeckContentProvider` at boot. Their native `.nes` bytes live only in the derived cache;
+`puck cartridges deck --output <dir>` exports them. `DerivedBytes` uses the shared
+`CodeClosure` walker and `ContentAddressedStore`: generator code and explicit inputs key
+each product, corrupt or absent objects derive again, and stderr counts hits, misses and
+derivation milliseconds. Never restore a committed image comparison.
+
 `BootRomBuilder.Build(ConsoleModel)` emits each revision's boot program. The
 handoff counter (`BootDivPrediction`'s tables) is the contract, pinned from
 outside by the `boot-rom-handoff` Post stage against the mooneye `boot_div-*`

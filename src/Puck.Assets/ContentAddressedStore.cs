@@ -157,7 +157,7 @@ public sealed class ContentAddressedStore {
         var pin = ContentPin.Compute(content: content);
         var objectPath = ObjectPath(pin: pin);
 
-        if (!File.Exists(path: objectPath)) {
+        if (!File.Exists(path: objectPath) || ContentPin.Compute(content: File.ReadAllBytes(path: objectPath)) != pin) {
             var tmpPath = Path.Combine(
                 path1: m_tmpDirectory,
                 path2: $"{Guid.NewGuid():n}.tmp"
@@ -172,11 +172,11 @@ public sealed class ContentAddressedStore {
             try {
                 File.Move(
                     destFileName: objectPath,
-                    overwrite: false,
+                    overwrite: true,
                     sourceFileName: tmpPath
                 );
-            } catch (IOException) when (File.Exists(path: objectPath)) {
-                // Lost a race with a concurrent identical Put — the object already landed; discard our temp copy.
+            } catch (IOException) when (File.Exists(path: objectPath) && ContentPin.Compute(content: File.ReadAllBytes(path: objectPath)) == pin) {
+                // An identical concurrent writer already published the object.
                 File.Delete(path: tmpPath);
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                 // The object never landed, so the temp copy left in tmp/ is discarded rather than orphaned there.
@@ -265,6 +265,10 @@ public sealed class ContentAddressedStore {
         }
 
         content = File.ReadAllBytes(path: objectPath);
+        if (ContentPin.Compute(content: content) != pin) {
+            content = [];
+            return false;
+        }
         Used(path: objectPath);
         return true;
     }

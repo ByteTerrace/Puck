@@ -7,8 +7,8 @@ using Puck.HumbleGamingDeck.Forge;
 namespace Puck.HumbleGamingDeck.Forge;
 
 /// <summary>
-/// Publishes the Humble Gaming Deck engine. The Deck mounts native iNES and NES 2.0 images as raw bytes, so no content
-/// provider registers with it and a content folder offers every file it holds.
+/// Publishes the Humble Gaming Deck engine and its diagnostic-program source provider. Native iNES and NES 2.0
+/// images mount directly; authored .deck selections derive their executable images on demand.
 /// </summary>
 public sealed class HumbleGamingDeckExtension : IPuckExtension {
     /// <inheritdoc/>
@@ -18,6 +18,6 @@ public sealed class HumbleGamingDeckExtension : IPuckExtension {
     public void Register(IPuckExtensionRegistry registry) {
         ArgumentNullException.ThrowIfNull(argument: registry);
 
-        registry.AddMachineEngine(engine: new HumbleGamingDeckEngine());
+        registry.AddMachineEngine(engine: new HumbleGamingDeckEngine(), contentProvider: new DeckContentProvider());
     }
 }

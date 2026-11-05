@@ -20,7 +20,7 @@ git-ignored `roms/` at the repository root.
 |---|---|---|---|---|---|---|
 | 6.6, 29.4 | Humble Gaming Brick | `humble-gaming-brick` | `gaming-brick`, `cgb` | 0 | `tetromino.cgb` | `cartridges/cgb`, `cartridges/dmg`, `roms/hgb` |
 | 5, 31.6 | Advanced Gaming Brick | `advanced-gaming-brick` | `advanced-gaming-brick` | 1 | `pip.agb` | `cartridges/agb`, `roms/agb` |
-| 1.4, 30.5 | Humble Gaming Deck | `humble-gaming-deck` | `humble-gaming-deck` | 2 | `colour-bars.nes` | `cartridges/deck`, `roms/hgd` |
+| 1.4, 30.5 | Humble Gaming Deck | `humble-gaming-deck` | `humble-gaming-deck` | 2 | `colour-bars.deck` | `cartridges/deck`, `roms/hgd` |
 
 ## The devices
 
@@ -159,8 +159,8 @@ so a picture that stops drifting is a machine that stopped. The `dmg` folder
 holds `tetromino.dmg`, the game in four shades, and `test-card.dmg`, four shade
 bars drifting the same way (`machine.swap humble-gaming-brick test-card`). The deck's two cartridges in `cartridges/deck/` are built by
 `puck cartridges deck` rather than compiled from a source:
-`colour-bars.nes` shows eight bars that A, B and select tint and start turns
-grey, and `moving-sprite.nes` bounces a ball the d-pad steers
+`colour-bars.deck` shows eight bars that A, B and select tint and start turns
+grey, and `moving-sprite.deck` bounces a ball the d-pad steers
 ([the Deck's hosting page](../../docs/emulation/hgd/hosting.md#test-cartridges)).
 
 ## Devices

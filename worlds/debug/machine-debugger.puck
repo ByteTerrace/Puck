@@ -32,7 +32,7 @@ state {
       eject0 = """{"operation":"content.eject","payload":{"schema":"puck.gaming-brick.content-eject.v1"}}"""
       swap1 = """{"operation":"content.insert","contentName":"pip.agb.puck","payload":{"schema":"puck.advanced-gaming-brick.content-insert.v1"}}"""
       eject1 = """{"operation":"content.eject","payload":{"schema":"puck.advanced-gaming-brick.content-eject.v1"}}"""
-      swap2 = """{"operation":"content.insert","contentName":"moving-sprite.nes","payload":{"schema":"puck.humble-gaming-deck.content-insert.v1"}}"""
+      swap2 = """{"operation":"content.insert","contentName":"moving-sprite.deck","payload":{"schema":"puck.humble-gaming-deck.content-insert.v1"}}"""
       eject2 = """{"operation":"content.eject","payload":{"schema":"puck.humble-gaming-deck.content-eject.v1"}}"""
     }
     table machineDebugger0 {

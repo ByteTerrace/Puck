@@ -282,14 +282,13 @@ the [cartridge forge guide](../emulation/shared/cartridge-forge.md). A full run 
 ## `puck cartridges`—tool-built cartridges
 
 ```sh
-puck cartridges deck --output worlds/debug/cartridges/deck
-puck cartridges deck --output worlds/debug/cartridges/deck --check
+puck cartridges deck --output .claude/scratch/deck
 ```
 
 `deck` writes one `.nes` image per Humble Gaming Deck test cartridge, each assembled by `DeckProgram` in
 `Puck.HumbleGamingDeck.Forge` (see the [Deck's hosting page](../emulation/hgd/hosting.md#test-cartridges)), and
-reports its SHA-256 hash. `--check` rebuilds and compares bytes without creating or repairing the output; missing
-files or different bytes exit 1.
+reports its SHA-256 hash. Worlds use authored `.deck` selections; native images are derived
+on demand and cached by the generator code and selection, never committed or compared by a gate.
 
 ## Automation commands
 
