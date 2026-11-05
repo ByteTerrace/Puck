@@ -71,7 +71,8 @@ let goHomeColumn = map(
 )
 let goHomeRow = map(
   range(0, goStones),
-  i => ((((i < goPerSide) ? i : (i - goPerSide)) - (((i < goPerSide) ? i : (i - goPerSide)) % goTrayWide)) / goTrayWide)
+  i => ((((i < goPerSide) ? i : (i - goPerSide)) - (((i < goPerSide) ? i : (i - goPerSide)) % goTrayWide)) /
+    goTrayWide)
 )
 let goHome = map(range(0, goStones), i => (goHomeRow[i] * goTrayColumns) + goHomeColumn[i])
 let goCodes = map(range(0, goStones), i => (i < goPerSide) ? goBlack : goWhite)
@@ -1071,13 +1072,14 @@ state {
           value: ((i % goSize >= 2 and
             i % goSize <= 16 and
             (i - i % goSize) / goSize >= 2 and
-            (i - i % goSize) / goSize <= 16) ? 20 : 2) + ((i % goSize == 3 or i % goSize == 15 or (i - i % goSize) /
-            goSize == 3 or (i - i % goSize) / goSize == 15) ? 5 : 0) + ((i % goSize == 2 or i % goSize == 16 or (i - i %
-            goSize) / goSize == 2 or (i - i % goSize) / goSize == 16) ? 3 : 0) + (((i % goSize == 3 or
-            i % goSize == 9 or
-            i % goSize == 15) and ((i - i % goSize) / goSize == 3 or
-            (i - i % goSize) / goSize == 9 or
-            (i - i % goSize) / goSize == 15)) ? 3 : 0)
+            (i - i % goSize) / goSize <= 16) ? 20 : 2) +
+            ((i % goSize == 3 or i % goSize == 15 or (i - i % goSize) / goSize == 3 or (i - i % goSize) / goSize == 15) ? 5 :
+              0) +
+            ((i % goSize == 2 or i % goSize == 16 or (i - i % goSize) / goSize == 2 or (i - i % goSize) / goSize == 16) ? 3 :
+              0) +
+            (((i % goSize == 3 or i % goSize == 9 or i % goSize == 15) and
+              ((i - i % goSize) / goSize == 3 or (i - i % goSize) / goSize == 9 or (i - i % goSize) / goSize == 15)) ? 3 :
+              0)
         }
       )
     }

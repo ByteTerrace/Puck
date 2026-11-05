@@ -29,6 +29,7 @@ public sealed partial class WorldFlagCommandModule(IServerLink link, WorldClient
     /// <c>world.flag near</c> flags whatever exhibit the player stands at, in a world that names a spawn point after
     /// each exhibit it stands before.</summary>
     public const string NearToken = "near";
+    private static readonly CommandForms WorldFlagForms = CommandForms.Of(verb: "world.flag", "<exhibit|near> [note…]");
 
     // The id of the declared spawn point nearest the body's presented position, or null when the world declares none.
     private string? NearestSpawnPoint(int body) {
@@ -68,7 +69,7 @@ public sealed partial class WorldFlagCommandModule(IServerLink link, WorldClient
             return CommandResult.Error(output: "[world.flag: flagging requires the host console or a local seat]");
         }
         if (args.Count == 0) {
-            return CommandResult.Usage(form: "<exhibit> [note…]", verb: "world.flag");
+            return WorldFlagForms.Refuse();
         }
         if (!IsExhibitToken(token: args[0])) {
             return CommandResult.Error(output: $"[world.flag: exhibit '{args[0].ToString()}' is not a file-safe token (letters, digits, '-', '_', '.')]");
@@ -226,7 +227,8 @@ public sealed partial class WorldFlagCommandModule(IServerLink link, WorldClient
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.flag",
-            description: "Flags an exhibit that looks wrong: world.flag <exhibit|near> [note…]; near names the spawn point nearest the flagging seat's body. Writes <package>/flags/<exhibit>.json beside the booted document (exhibit, note, tick, the flagging seat, its authoritative pose as body.where reads it, and its render camera) and arms a one-shot capture of the next composed frame to <package>/flags/<exhibit>.png, announced on stderr as world.screenshot's is. The exhibit is a file-safe token (letters, digits, '-', '_', '.'); a caller never names a path. A flag of the same exhibit overwrites the earlier one. Host console or local seat only (the folder is this machine's and a peer has no seat camera here); headless, or while another capture is pending, the record is still written and the echo says no capture was armed. Bindable, so a binding row or an authored command may call it.",
+            description: $"Flags an exhibit that looks wrong: {WorldFlagForms.Spelling}; near names the spawn point nearest the flagging seat's body. Writes <package>/flags/<exhibit>.json beside the booted document (exhibit, note, tick, the flagging seat, its authoritative pose as body.where reads it, and its render camera) and arms a one-shot capture of the next composed frame to <package>/flags/<exhibit>.png, announced on stderr as world.screenshot's is. The exhibit is a file-safe token (letters, digits, '-', '_', '.'); a caller never names a path. A flag of the same exhibit overwrites the earlier one. Host console or local seat only (the folder is this machine's and a peer has no seat camera here); headless, or while another capture is pending, the record is still written and the echo says no capture was armed. Bindable, so a binding row or an authored command may call it.",
+            forms: WorldFlagForms,
             handler: (context, args) => Flag(
                 args: in args,
                 context: context

@@ -14,6 +14,7 @@ namespace Puck.World;
 /// <remarks>Read-only. A board's rows are authored/mutated through the same ordinary state doors (<c>world.row.set
 /// state</c>, rule effects) every other row uses — this module only names which rows belong to which tabletop.</remarks>
 public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
+    private static readonly CommandForms WorldTabletopForms = CommandForms.Of(verb: "world.tabletop", "[placementId]");
     private static void AppendCells(StringBuilder text, WorldStateRow? row, string label) {
         _ = text.Append(value: ' ').Append(value: label).Append(value: '=');
         if (row is null) {
@@ -166,10 +167,11 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
-            description: "Echoes every placement carrying a board facet — its anchored frame (origin, cellSize, width, depth), its occupancy row's live cells, and any bound turn/verdict/move/plan rows, as the caller's own disclosure shows them: world.tabletop [placementId]. With a placement id, echoes only that tabletop.",
+            description: $"Echoes every placement carrying a board facet — its anchored frame (origin, cellSize, width, depth), its occupancy row's live cells, and any bound turn/verdict/move/plan rows, as the caller's own disclosure shows them: {WorldTabletopForms.Spelling}. With a placement id, echoes only that tabletop.",
+            forms: WorldTabletopForms,
             handler: (context, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Usage(form: "[placementId]", verb: "world.tabletop");
+                    return WorldTabletopForms.Refuse();
                 }
 
                 if (!authority.TryResolveReadView(

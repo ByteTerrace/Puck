@@ -45,10 +45,14 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldServer m_server = server;
     private readonly WorldOverlayFacts m_facts = facts;
+    private static readonly CommandForms ChatAllowForms = CommandForms.Of(verb: "chat.allow", "<sender-id> [player]");
+    private static readonly CommandForms ChatBlockForms = CommandForms.Of(verb: "chat.block", "<sender-id> [player]");
+    private static readonly CommandForms ChatLogForms = CommandForms.Of(verb: "chat.log", LogForm);
+    private static readonly CommandForms ChatWhisperForms = CommandForms.Of(verb: "chat.whisper", WhisperForm);
 
     private CommandResult Allow(CommandContext context, WireArgs args) {
         if (args.Count is not (1 or 2)) {
-            return CommandResult.Usage(form: "<sender-id> [player]", verb: "chat.allow");
+            return ChatAllowForms.Refuse();
         }
         if (!SafeName.TryParse(
             candidate: args[0].ToString(),
@@ -111,7 +115,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
     }
     private CommandResult Block(CommandContext context, WireArgs args) {
         if (args.Count is not (1 or 2)) {
-            return CommandResult.Usage(form: "<sender-id> [player]", verb: "chat.block");
+            return ChatBlockForms.Refuse();
         }
         if (!SafeName.TryParse(
             candidate: args[0].ToString(),
@@ -254,7 +258,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             (player < 1) ||
             (player > PlayerRoster.MaxSlots)
         ) {
-            return CommandResult.Usage(form: LogForm, verb: "chat.log");
+            return ChatLogForms.Refuse();
         }
         if (!TryAuthorize(
             context: context,
@@ -438,7 +442,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
     }
     private CommandResult Whisper(CommandContext context, WireArgs args) {
         if (args.Count < 2) {
-            return CommandResult.Usage(form: WhisperForm, verb: "chat.whisper");
+            return ChatWhisperForms.Refuse();
         }
 
         var (whisperSlot, whisperSeatError) = SeatCommandArgs.ResolveSlot(
@@ -449,7 +453,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         );
 
         if (whisperSeatError is not null) {
-            return CommandResult.Usage(form: WhisperForm, verb: "chat.whisper");
+            return ChatWhisperForms.Refuse();
         }
 
         var player = PlayerRoster.DisplayNumber(slot: whisperSlot);
@@ -523,28 +527,32 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "chat.allow",
-            description: "Grants a sender document:<sender-id> Mutate+state:chat-inbox (Set-only) on this player's OWN owned identity document, so that sender's chat.whisper may land in this player's inbox: chat.allow <sender-id> [player]. Requires chat-inbox already declared (chat.inbox first) — refused by name with the remedy otherwise. Idempotent — re-allowing the same sender refreshes the row. Owner-only, identically to chat.inbox.",
+            description: $"Grants a sender document:<sender-id> Mutate+state:chat-inbox (Set-only) on this player's OWN owned identity document, so that sender's chat.whisper may land in this player's inbox: {ChatAllowForms.Spelling}. Requires chat-inbox already declared (chat.inbox first) — refused by name with the remedy otherwise. Idempotent — re-allowing the same sender refreshes the row. Owner-only, identically to chat.inbox.",
+            forms: ChatAllowForms,
             handler: Allow,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "chat.block",
-            description: "Revokes a sender's chat-inbox grant on this player's OWN owned identity document — the sender's NEXT chat.whisper is refused by name: chat.block <sender-id> [player]. Idempotent (no error if the sender was never allowed; the echo names whether a row was actually removed). Owner-only, identically to chat.inbox.",
+            description: $"Revokes a sender's chat-inbox grant on this player's OWN owned identity document — the sender's NEXT chat.whisper is refused by name: {ChatBlockForms.Spelling}. Idempotent (no error if the sender was never allowed; the echo names whether a row was actually removed). Owner-only, identically to chat.inbox.",
+            forms: ChatBlockForms,
             handler: Block,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "chat.log",
-            description: $"Appends one message to the acting player's OWN bounded, evicting chat-log row: chat.log {LogForm}. <player> is REQUIRED and LEADING (never a trailing optional index — free text could otherwise be misread as a player token); <text...> is the raw tail, spaces included, capped at {StateCapacity.MaxTextValueLength} UTF-16 code units. Refuses by name with the remedy (declare chat.inbox first) if chat-log is undeclared. Owner-only, identically to chat.inbox. The echo names the evicted key when the write pushed the row past its {ChatCapacity}-entry capacity.",
+            description: $"Appends one message to the acting player's OWN bounded, evicting chat-log row: {ChatLogForms.Spelling}. <player> is REQUIRED and LEADING (never a trailing optional index — free text could otherwise be misread as a player token); <text...> is the raw tail, spaces included, capped at {StateCapacity.MaxTextValueLength} UTF-16 code units. Refuses by name with the remedy (declare chat.inbox first) if chat-log is undeclared. Owner-only, identically to chat.inbox. The echo names the evicted key when the write pushed the row past its {ChatCapacity}-entry capacity.",
+            forms: ChatLogForms,
             handler: Log,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "chat.whisper",
-            description: $"Delivers text from the acting player's OWN identity to a recipient's chat-inbox row, through the SAME cross-document text delivery door Server.WorldOwnedWorlds.Decide already gates (the real verb — never the identity.deliver dev harness, and the source id is the acting player's OWN identity, never a caller-supplied string): chat.whisper {WhisperForm}. Refuses by name when the recipient has not granted this sender (chat.allow), or has since revoked it (chat.block) — that refusal IS the offline/not-allowed boundary. Owner-only over the SENDING player, identically to chat.inbox.",
+            description: $"Delivers text from the acting player's OWN identity to a recipient's chat-inbox row, through the SAME cross-document text delivery door Server.WorldOwnedWorlds.Decide already gates (the real verb — never the identity.deliver dev harness, and the source id is the acting player's OWN identity, never a caller-supplied string): {ChatWhisperForms.Spelling}. Refuses by name when the recipient has not granted this sender (chat.allow), or has since revoked it (chat.block) — that refusal IS the offline/not-allowed boundary. Owner-only over the SENDING player, identically to chat.inbox.",
+            forms: ChatWhisperForms,
             handler: Whisper,
             routing: CommandRouting.Simulation
         );

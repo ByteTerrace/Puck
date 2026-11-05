@@ -70,6 +70,10 @@ public sealed record CommandDefinition {
     /// registration shape: every argument-bearing verb is wire-native, so wire-nativeness distinguishes nothing.
     /// </remarks>
     public bool AcknowledgementOnly { get; init; }
+    /// <summary>Gets the argument forms this verb declares, or <see langword="null"/> for a verb that takes none or leaves
+    /// its grammar to its description. The description contains <see cref="CommandForms.Spelling"/>, so help and every
+    /// grammar refusal read one spelling.</summary>
+    public CommandForms? Forms { get; init; }
     /// <summary>Gets whether only compiled bindings may dispatch this internal destination. Text commands,
     /// help and author-facing vocabulary do not expose it.</summary>
     public bool BindingOnly { get; init; }
@@ -138,6 +142,8 @@ public sealed record CommandDefinition {
     /// <param name="inputScope">Whether source-driven activation requires ordinary terminal focus.</param>
     /// <param name="held">Whether the verb is HELD (see <see cref="Held"/>): a plain-bound entry delivers both edges.</param>
     /// <param name="audience">Who the command answers (see <see cref="Audience"/>).</param>
+    /// <param name="forms">The verb's declared argument forms, which the description must contain (see <see cref="Forms"/>),
+    /// or <see langword="null"/> for a verb that takes no argument.</param>
     /// <returns>A new <see cref="CommandDefinition"/> backed by a bare-verb text command.</returns>
     public static CommandDefinition Verb(
         string name,
@@ -150,7 +156,8 @@ public sealed record CommandDefinition {
         CommandRouting routing = CommandRouting.Immediate,
         CommandInputScope inputScope = CommandInputScope.Focused,
         bool held = false,
-        CommandAudience audience = CommandAudience.Anyone
+        CommandAudience audience = CommandAudience.Anyone,
+        CommandForms? forms = null
     ) {
         // A composition-root mistake refuses HERE, naming the parameter that was wrong. A null handler used to
         // construct and register happily and then surface as `[boom: handler threw NullReferenceException]` on the
@@ -159,6 +166,7 @@ public sealed record CommandDefinition {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: description);
         ArgumentNullException.ThrowIfNull(argument: handler);
+        RequireDescribedForms(description: description, forms: forms, name: name);
 
         return new CommandDefinition(
             Name: name,
@@ -174,6 +182,7 @@ public sealed record CommandDefinition {
         ) {
             Aliases = (aliases ?? []),
             Audience = audience,
+            Forms = forms,
             Held = held,
             InputScope = inputScope,
             Routing = routing,
@@ -214,6 +223,8 @@ public sealed record CommandDefinition {
     /// <param name="inputScope">Whether source-driven activation requires ordinary terminal focus.</param>
     /// <param name="held">Whether the verb is HELD (see <see cref="Held"/>): a plain-bound entry delivers both edges.</param>
     /// <param name="audience">Who the command answers (see <see cref="Audience"/>).</param>
+    /// <param name="forms">The verb's declared argument forms, which the description must contain (see <see cref="Forms"/>),
+    /// or <see langword="null"/> for a verb that takes no argument.</param>
     /// <returns>A new wire-native <see cref="CommandDefinition"/>.</returns>
     public static CommandDefinition WithWireArgs(
         string name,
@@ -226,13 +237,15 @@ public sealed record CommandDefinition {
         CommandValueKind valueKind = CommandValueKind.Digital,
         CommandInputScope inputScope = CommandInputScope.Focused,
         bool held = false,
-        CommandAudience audience = CommandAudience.Anyone
+        CommandAudience audience = CommandAudience.Anyone,
+        CommandForms? forms = null
     ) {
         // See Verb: the registration is refused where it is written rather than reported as a handler fault on the
         // first line that reaches it.
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: description);
         ArgumentNullException.ThrowIfNull(argument: handler);
+        RequireDescribedForms(description: description, forms: forms, name: name);
 
         var rest = new Argument<string[]>(name: "args") {
             Arity = ArgumentArity.ZeroOrMore,
@@ -264,10 +277,31 @@ public sealed record CommandDefinition {
         ) {
             AcknowledgementOnly = ackOnly,
             Audience = audience,
+            Forms = forms,
             Held = held,
             InputScope = inputScope,
             Routing = routing,
             WireArgsHandler = handler,
         };
+    }
+
+    // A verb's forms belong to that verb and appear in its description, which is what keeps help and the refusals to
+    // one spelling.
+    private static void RequireDescribedForms(string description, CommandForms? forms, string name) {
+        if (forms is null) { return; }
+
+        if (!string.Equals(a: forms.Verb, b: name, comparisonType: StringComparison.Ordinal)) {
+            throw new ArgumentException(
+                message: $"Command '{name}' declares the forms of '{forms.Verb}'.",
+                paramName: nameof(forms)
+            );
+        }
+
+        if (!description.Contains(value: forms.Spelling, comparisonType: StringComparison.Ordinal)) {
+            throw new ArgumentException(
+                message: $"Command '{name}' describes itself without its declared forms; its description must contain '{forms.Spelling}'.",
+                paramName: nameof(description)
+            );
+        }
     }
 }

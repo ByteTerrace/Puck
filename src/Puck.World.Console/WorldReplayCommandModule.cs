@@ -22,6 +22,8 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
     private readonly WorldReplayInspector m_inspector = inspector;
     private readonly WorldInstanceHost m_instances = instances;
     private readonly WorldReplayTape m_tape = tape;
+    private static readonly CommandForms ReplayRecordForms = CommandForms.Of(verb: "replay.record", "<name>");
+    private static readonly CommandForms ReplayVerifyForms = CommandForms.Of(verb: "replay.verify", "<name>");
 
     private CommandResult Cancel(WireArgs args) {
         if (CommandResult.RequireNoArguments(
@@ -62,7 +64,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
     }
     private CommandResult Record(WireArgs args) {
         if (args.Count != 1) {
-            return CommandResult.Usage(form: "<name>", verb: "replay.record");
+            return ReplayRecordForms.Refuse();
         }
 
         var name = args[0].ToString();
@@ -180,7 +182,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
     }
     private CommandResult Verify(WireArgs args) {
         if (args.Count != 1) {
-            return CommandResult.Usage(form: "<name>", verb: "replay.verify");
+            return ReplayVerifyForms.Refuse();
         }
 
         var name = args[0].ToString();
@@ -213,13 +215,15 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
             bindability: CommandBindability.Unbindable,
             name: "replay.scope",
             audience: CommandAudience.Operator,
-            description: "replay.scope [<name> [capture|drive|cancel|reset]] reads an authored scope or requests its next-tick operation. capture retains its fresh rows and bodies once; drive derives an in-memory tape through the real mutation door on its first run, then restores only the scope and checks each recorded tick on later runs. cancel restores a fresh scope. The world and other scopes keep running. Status: 0 idle, 1 recording, 2 replaying, 3 recorded, 4 MATCH, -1 MISMATCH. No recorded hashes or binary tapes are authored or committed.",
+            description: $"{ReplayScopeForms.Spelling} reads an authored scope or requests its next-tick operation. capture retains its fresh rows and bodies once; drive derives an in-memory tape through the real mutation door on its first run, then restores only the scope and checks each recorded tick on later runs. cancel restores a fresh scope. The world and other scopes keep running. Status: 0 idle, 1 recording, 2 replaying, 3 recorded, 4 MATCH, -1 MISMATCH. No recorded hashes or binary tapes are authored or committed.",
+            forms: ReplayScopeForms,
             handler: (context, args) => Scope(args: args, principal: context.Principal)
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.record",
-            description: "Arms deterministic recording (Immediate): replay.record <name> begins capturing the running session's per-tick server-input stream and starting state, and tapes every other row of the process beside it as one set (a row that cannot be taped is named on stderr); replay.stop persists the set. Armed before the world's first step (and before any machine stepped or screen op applied), the tape starts from the definition's boot image; armed later, it starts from an authority checkpoint taken at the arm (without the owned-world catalog) that holds the live sessions, the screen selectors and links and the machine cores. Mounted addon guests keep their captured memory, pending answers and input controllers, so MCP can arm after boot without changing live guests. StartNotCheckpointable names state no checkpoint captures, including an interrupted guest tick: a stepped machine without checkpoint support, a coupled link or rewind history, an engagement in flight, or an edit not yet applied. Grant verb masks ride the shared tape leaf codec.",
+            description: $"Arms deterministic recording (Immediate): {ReplayRecordForms.Spelling} begins capturing the running session's per-tick server-input stream and starting state, and tapes every other row of the process beside it as one set (a row that cannot be taped is named on stderr); replay.stop persists the set. Armed before the world's first step (and before any machine stepped or screen op applied), the tape starts from the definition's boot image; armed later, it starts from an authority checkpoint taken at the arm (without the owned-world catalog) that holds the live sessions, the screen selectors and links and the machine cores. Mounted addon guests keep their captured memory, pending answers and input controllers, so MCP can arm after boot without changing live guests. StartNotCheckpointable names state no checkpoint captures, including an interrupted guest tick: a stepped machine without checkpoint support, a coupled link or rewind history, an engagement in flight, or an edit not yet applied. Grant verb masks ride the shared tape leaf codec.",
+            forms: ReplayRecordForms,
             handler: (_, args) => Record(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
@@ -237,25 +241,29 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.drive",
-            description: "Drives a saved recording INTO THE LIVE SESSION (Immediate to arm; the drive itself runs one recorded tick per live tick, at the world's own rate, so it renders on screen and every read-back verb answers mid-drive): replay.drive <name> [to <tick>] resets the running world to the tape's start through the ordinary world.load door (its embedded definition) and the tape's start checkpoint (or, for a boot-image tape, a fresh server's: document grants, the record-start seats on their pinned profile rates), which restores the sessions, screen selectors and machine cores over the running host, and feeds each recorded tick's authority entries and intents through the server's own doors. Local seat input — device sticks and every body.* drive verb — is masked for the drive's whole span (the recorded intents are the only intents); camera and look stay live. Each tick's live population hash is compared against the recording and the first divergence is narrated on stderr by tick without stopping the drive. At the end (or the <tick>) the world stays where the drive left it and the seats are live again; nothing is recorded. Refuses while recording or already driving, when the live player set differs from the tape's seats, when the tape pins addons and a pumped guest holds state the rebuild door cannot reset, when an engagement is in flight, or when a live coupled machine link stands (screen.unlink it first).",
+            description: $"Drives a saved recording INTO THE LIVE SESSION (Immediate to arm; the drive itself runs one recorded tick per live tick, at the world's own rate, so it renders on screen and every read-back verb answers mid-drive): {ReplayDriveForms.Spelling} resets the running world to the tape's start through the ordinary world.load door (its embedded definition) and the tape's start checkpoint (or, for a boot-image tape, a fresh server's: document grants, the record-start seats on their pinned profile rates), which restores the sessions, screen selectors and machine cores over the running host, and feeds each recorded tick's authority entries and intents through the server's own doors. Local seat input — device sticks and every body.* drive verb — is masked for the drive's whole span (the recorded intents are the only intents); camera and look stay live. Each tick's live population hash is compared against the recording and the first divergence is narrated on stderr by tick without stopping the drive. At the end (or the <tick>) the world stays where the drive left it and the seats are live again; nothing is recorded. Refuses while recording or already driving, when the live player set differs from the tape's seats, when the tape pins addons and a pumped guest holds state the rebuild door cannot reset, when an engagement is in flight, or when a live coupled machine link stands (screen.unlink it first).",
+            forms: ReplayDriveForms,
             handler: (_, args) => Drive(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.fork",
-            description: "Forks a saved recording at a tick into a new live recording (Immediate to arm): replay.fork <name> <tick> <new> drives '<name>' to its first <tick> recorded ticks as fast as the host loop allows (rendering may lag), then hands the seats back to live input and keeps RECORDING into '<new>' — the parent's boot image, ticks 0..<tick>-1 copied verbatim, then the live ticks that follow, with forkedFrom(<name>, <tick>) in the child's header. The child is standalone: replay.verify/inspect/fork all work on it with no parent lookup; replay.stop persists it like any recording. Same refusals as replay.drive, plus <new> must differ from <name>.",
+            description: $"Forks a saved recording at a tick into a new live recording (Immediate to arm): {ReplayForkForms.Spelling} drives '<name>' to its first <tick> recorded ticks as fast as the host loop allows (rendering may lag), then hands the seats back to live input and keeps RECORDING into '<new>' — the parent's boot image, ticks 0..<tick>-1 copied verbatim, then the live ticks that follow, with forkedFrom(<name>, <tick>) in the child's header. The child is standalone: replay.verify/inspect/fork all work on it with no parent lookup; replay.stop persists it like any recording. Same refusals as replay.drive, plus <new> must differ from <name>.",
+            forms: ReplayForkForms,
             handler: (_, args) => Fork(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.verify",
-            description: "Replays a saved recording through a FRESH world and reports MATCH/MISMATCH (Immediate): replay.verify <name> rehydrates the boot-image starting state, re-drives the recorded stream offline, and compares the replayed tail hash against the recorded LIVE tail (a genuine live-vs-replay fidelity check) and each machine core's image digest at the tape's end against the one the recording pinned. Every row taped beside it is re-driven the same way, and every crossing between them is paired by its handoff token; a crossing whose other half is on a remote or untaped authority is NOT VERIFIED, and the verb fails unless every authority matches and every crossing is verified.",
+            description: $"Replays a saved recording through a FRESH world and reports MATCH/MISMATCH (Immediate): {ReplayVerifyForms.Spelling} rehydrates the boot-image starting state, re-drives the recorded stream offline, and compares the replayed tail hash against the recorded LIVE tail (a genuine live-vs-replay fidelity check) and each machine core's image digest at the tape's end against the one the recording pinned. Every row taped beside it is re-driven the same way, and every crossing between them is paired by its handoff token; a crossing whose other half is on a remote or untaped authority is NOT VERIFIED, and the verb fails unless every authority matches and every crossing is verified.",
+            forms: ReplayVerifyForms,
             handler: (_, args) => Verify(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.inspect",
-            description: "Reads a saved recording through the same offline authority drive as replay.verify: replay.inspect <name> [<from>-<to>] [--all] [--poses]. Prints the header, recorded hashes and authority entries, accepted named input events with exact capture time and hold identity, and mode-switch tick/epoch, consumed activations, kept origins and cancellations. Names follow each recorded definition. Default prints changed ticks; --all prints every tick; <from>-<to> clamps the range. --poses also prints each active body's body.where-style pose. Any first replay divergence is named.",
+            description: $"Reads a saved recording through the same offline authority drive as replay.verify: {ReplayInspectForms.Spelling}. Prints the header, recorded hashes and authority entries, accepted named input events with exact capture time and hold identity, and mode-switch tick/epoch, consumed activations, kept origins and cancellations. Names follow each recorded definition. Default prints changed ticks; --all prints every tick; <from>-<to> clamps the range. --poses also prints each active body's body.where-style pose. Any first replay divergence is named.",
+            forms: ReplayInspectForms,
             handler: (_, args) => Inspect(args: args)
         );
         yield return CommandDefinition.WithWireArgs(

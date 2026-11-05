@@ -9,6 +9,8 @@ public static partial class PuckPrinter {
         // A call's parenthesized argument list: as its author broke it, or one argument a line, each but the last
         // keeping its comma, when it does not fit on one.
         private void ArgumentList(IReadOnlyList<ArgumentNode> arguments, int level, bool multiLine = false) {
+            multiLine = (multiLine && KeepsAuthoredLayout(arguments: arguments, level: level));
+
             var everyLine = (!multiLine && (arguments.Count > 0) && !FitsOnOneLine(print: () => ArgumentList(arguments: arguments, level: level)));
 
             m_builder.Append(value: '(');
@@ -21,10 +23,51 @@ public static partial class PuckPrinter {
             }
             m_builder.Append(value: ')');
         }
+        // Whether the line breaks inside a call are a layout its author gave this argument list, which the printer
+        // keeps: every argument on a line of its own, a comment among the arguments, or a break only inside the last
+        // argument (`map(xs, x => {` … `})`, which closes on that argument's last line). A break that falls inside an
+        // earlier argument, or between some arguments and not others, is where a line happened to end; the list
+        // is laid out again, on one line when it fits and one argument a line when it does not. The decision reads
+        // the tree alone, so it is cached per list.
+        private bool KeepsAuthoredLayout(IReadOnlyList<ArgumentNode> arguments, int level) {
+            if (arguments.Count == 0) {
+                return false;
+            }
+            if (m_keepsLayout.TryGetValue(key: arguments, value: out var known)) {
+                return known;
+            }
+
+            var onOwnLine = arguments.Count(predicate: static argument => argument.Trivia.OnNewLine);
+            var keeps = (
+                arguments.Any(predicate: static argument => ((argument.Trivia.Leading.Count > 0) || (argument.Trivia.Trailing is not null))) ||
+                (onOwnLine == arguments.Count) ||
+                ((onOwnLine == 0) && arguments.Take(count: (arguments.Count - 1)).All(predicate: argument => (Capture(expression: argument.Value, level: level).IndexOf(value: '\n') < 0)))
+            );
+
+            m_keepsLayout[arguments] = keeps;
+
+            return keeps;
+        }
+        // Whether an operator chain, written on one line with no layout of its author's inside it, is wider than the
+        // line. Such a chain breaks after its operators, so no group inside it breaks only to keep the chain's first
+        // and last lines in the width (`a and f(` … `) or b`); a chain with a break its author wrote keeps its layout.
+        private bool WrapsPastWidth(ExpressionNode expression, int level) {
+            if (!Wraps) {
+                return false;
+            }
+
+            var text = Capture(expression: expression, level: level);
+
+            return ((text.IndexOf(value: '\n') < 0) && ((Column() + text.Length) > LineWidth));
+        }
+        // Whether an argument starts a line of its own: every one when the printer breaks the list, and the ones its
+        // author put on a line (or gave a comment) when the list keeps that layout.
+        private static bool BreaksBefore(ArgumentNode argument, bool everyLine, bool multiLine) =>
+            (everyLine || (multiLine && (argument.Trivia.OnNewLine || (argument.Trivia.Leading.Count > 0))));
         private void Arguments(IReadOnlyList<ArgumentNode> arguments, int level, bool multiLine = false, bool everyLine = false) {
             for (var index = 0; (index < arguments.Count); index++) {
                 var argument = arguments[index];
-                var breaks = (everyLine || (multiLine && (argument.Trivia.OnNewLine || (argument.Trivia.Leading.Count > 0))));
+                var breaks = BreaksBefore(argument: argument, everyLine: everyLine, multiLine: multiLine);
 
                 if (
                     (index > 0) &&
@@ -49,7 +92,7 @@ public static partial class PuckPrinter {
                 );
                 if (
                     argument.Trivia.Separated &&
-                    (everyLine || ((index + 1) >= arguments.Count) || arguments[(index + 1)].Trivia.OnNewLine || (arguments[(index + 1)].Trivia.Leading.Count > 0))
+                    (((index + 1) >= arguments.Count) || BreaksBefore(argument: arguments[(index + 1)], everyLine: everyLine, multiLine: multiLine))
                 ) {
                     m_builder.Append(value: ',');
                 }
@@ -280,7 +323,7 @@ public static partial class PuckPrinter {
 
                         break;
                     }
-                case BinaryExpressionNode binary when !Fits(node: binary, print: () => Unparenthesized(expression: binary, level: level)): {
+                case BinaryExpressionNode binary when (WrapsPastWidth(expression: binary, level: level) || !Fits(node: binary, print: () => Unparenthesized(expression: binary, level: level))): {
                         BrokenChain(binary: binary, level: level);
 
                         break;

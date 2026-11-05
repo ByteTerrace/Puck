@@ -6,14 +6,14 @@ namespace Puck.World.Client;
 /// definition lives beside the roster and shared command vocabulary so command-level laws can exercise the same
 /// parsing, authority, mutation, and narration path the root command module registers.</summary>
 public static class PlayerAssignmentCommand {
-    /// <summary>The help text shown for <c>player.assign</c>.</summary>
-    public const string Description = "Moves a device between players: player.assign " + Form + " (slot 1..4). Onto an occupied slot the device joins that team; onto an empty slot a keyboard, mouse, or gamepad creates a pending player (a profile must be chosen), while a passive camera is refused because it cannot create a player; onto its own slot a no-op. See world.devices for the tokens.";
+    private static readonly CommandForms PlayerAssignForms = CommandForms.Of(verb: "player.assign", "<keyboardN|mouseN|gamepadN|cameraN> <slot>");
 
-    private const string Form = "<keyboardN|mouseN|gamepadN|cameraN> <slot>";
+    /// <summary>The help text shown for <c>player.assign</c>.</summary>
+    public static readonly string Description = $"Moves a device between players: {PlayerAssignForms.Spelling} (slot 1..4). Onto an occupied slot the device joins that team; onto an empty slot a keyboard, mouse, or gamepad creates a pending player (a profile must be chosen), while a passive camera is refused because it cannot create a player; onto its own slot a no-op. See world.devices for the tokens.";
 
     private static CommandResult Handle(PlayerRoster roster, CommandContext context, in WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Usage(form: Form, verb: "player.assign");
+            return PlayerAssignForms.Refuse();
         }
 
         var deviceToken = args[0].ToString();
@@ -60,6 +60,7 @@ public static class PlayerAssignmentCommand {
             bindability: CommandBindability.Bindable,
             name: PlayerCommandNames.AssignCommand,
             description: Description,
+            forms: PlayerAssignForms,
             handler: (context, args) => Handle(
                 args: in args,
                 context: context,

@@ -17,7 +17,8 @@ bodies {
 
 // The pieces are bodies 8 to 39, piece n body 39 - n, and the seat drives each of them: a seat's `body.pose <x> <y>
 // <z> 0 0 0 <body>` lifts a piece onto a square (chess.md).
-grants: concat(map(range(8, 32), body => { capability: Drive, grantee: "seat1", subject: $"body:{body}" }),
+grants: concat(
+  map(range(8, 32), body => { capability: Drive, grantee: "seat1", subject: $"body:{body}" }),
   [{ capability: Edit, grantee: "seat1", subject: "state:chessInput" }]
 )
 
@@ -754,53 +755,56 @@ replays [
     bodies: range(8, 33)
     seats ["seat1"]
     durationTicks: 37 * chessDemoPlyTicks
-    inputs: map([
-      [11, 27],
-      [53, 45],
-      [12, 28],
-      [52, 36],
-      [6, 21],
-      [36, 27],
-      [21, 27],
-      [62, 52],
-      [27, 33],
-      [57, 42],
-      [2, 20],
-      [51, 43],
-      [1, 18],
-      [48, 40],
-      [33, 43],
-      [60, 51],
-      [3, 1],
-      [50, 43],
-      [20, 41],
-      [59, 60],
-      [5, 26],
-      [54, 38],
-      [15, 31],
-      [61, 54],
-      [2, 3],
-      [42, 36],
-      [26, 17],
-      [60, 61],
-      [31, 38],
-      [45, 38],
-      [4, 20],
-      [54, 45],
-      [41, 34],
-      [43, 34],
-      [3, 51],
-      [58, 51],
-      [13, 29]
-    ], (move, i) => {
-      tick: i * chessDemoPlyTicks
-      principal: "seat1"
-      cells [
-        { row: chessInput, key: from, value: move[0] }
-        { row: chessInput, key: to, value: move[1] }
-        { row: chessInput, key: request, value: 1 }
-      ]
-    })
+    inputs: map(
+      [
+        [11, 27],
+        [53, 45],
+        [12, 28],
+        [52, 36],
+        [6, 21],
+        [36, 27],
+        [21, 27],
+        [62, 52],
+        [27, 33],
+        [57, 42],
+        [2, 20],
+        [51, 43],
+        [1, 18],
+        [48, 40],
+        [33, 43],
+        [60, 51],
+        [3, 1],
+        [50, 43],
+        [20, 41],
+        [59, 60],
+        [5, 26],
+        [54, 38],
+        [15, 31],
+        [61, 54],
+        [2, 3],
+        [42, 36],
+        [26, 17],
+        [60, 61],
+        [31, 38],
+        [45, 38],
+        [4, 20],
+        [54, 45],
+        [41, 34],
+        [43, 34],
+        [3, 51],
+        [58, 51],
+        [13, 29]
+      ],
+      (move, i) => {
+        tick: i * chessDemoPlyTicks
+        principal: "seat1"
+        cells [
+          { row: chessInput, key: from, value: move[0] }
+          { row: chessInput, key: to, value: move[1] }
+          { row: chessInput, key: request, value: 1 }
+        ]
+      }
+    )
   }
 ]
 

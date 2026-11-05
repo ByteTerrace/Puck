@@ -87,7 +87,14 @@ stops at the two factories MISSES the wrapper's registration sites.
   general `world.row.set`/`world.row.remove` door generalizes has no factory of
   its own.
 
-`Bindability` is required (`Unspecified` throws at construction). The
+`Bindability` is required (`Unspecified` throws at construction). A verb with
+arguments declares its forms once, as a `CommandForms` table (`CommandForms.Of(verb, form, ...)`, one form per
+shape), and passes it as `forms:`: the factory refuses a description that does not contain
+`forms.Spelling`, so the description interpolates `{Forms.Spelling}`, and every grammar refusal is
+`Forms.Refuse(args: in args, got: ...)`, which names the form nearest what was typed (`CommandResult.Usage` is
+internal to `Puck.Commands`). A grammar refusal sets `IsGrammar`; a value refusal is `CommandResult.Error` and never
+inspects its text. A form is pure grammar (no notes, no ` | `); a verb with no arguments refuses through
+`CommandResult.RequireNoArguments`. The
 description IS the help text — `help [--names] [<prefix>]` prints `name - description` for every
 registered command (only the names with `--names`; only the verbs whose names start with a prefix, ignoring case,
 when one is given; a prefix that matches nothing is refused), which is why descriptions here are long. Both factories take

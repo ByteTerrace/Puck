@@ -8,11 +8,14 @@ let forestGlades = [
   { x: 65, z: -168, rx: 10, rz: 8 }
   { x: 12, z: -181, rx: 8, rz: 6 }
 ]
-function forestInGlade(x, z, margin = 0) = reduce(forestGlades, false, (inside, g) => inside or (x - g.x) *
-  (x - g.x) /
-  ((g.rx + margin) * (g.rx + margin)) + (z - g.z) * (z - g.z) / ((g.rz + margin) * (g.rz + margin)) < 1)
-function forestInBelt(x, z, margin = 0) = x * x + z * z > (130 - margin + 2.5 * sine(x * 0.09)) * (130 - margin + 2.5 *
-  sine(x * 0.09)) and x * x + z * z < (192 + margin + 3 * cosine(x * 0.07 + z * 0.03)) * (192 + margin + 3 * cosine(
+function forestInGlade(x, z, margin = 0) = reduce(forestGlades, false, (inside, g) => inside or
+  (x - g.x) * (x - g.x) / ((g.rx + margin) * (g.rx + margin)) +
+    (z - g.z) * (z - g.z) / ((g.rz + margin) * (g.rz + margin)) <
+    1)
+function forestInBelt(x, z, margin = 0) = x * x + z * z >
+  (130 - margin + 2.5 * sine(x * 0.09)) * (130 - margin + 2.5 * sine(x * 0.09)) and x * x + z * z < (192 +
+  margin +
+  3 * cosine(x * 0.07 + z * 0.03)) * (192 + margin + 3 * cosine(
   x * 0.07 + z * 0.03
 )) and z < -96 and x < -z * 1.14 and -x < -z * 1.14
 function forestThicket(x, z) = sine(x * 0.19 + z * 0.06) + cosine(z * 0.17 - x * 0.045)

@@ -13,6 +13,8 @@ namespace Puck.World;
 /// row; the server stamps the contributor and owns the deadline, so there is no mutating verb here to stamp them
 /// with.</remarks>
 public sealed class WorldContributionCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
+    private static readonly CommandForms ContributionsForms = CommandForms.Of(verb: "world.contributions", "[placementId]");
+
     private static string Describe(WorldServer server, string? filter) {
         var definition = server.Definition;
         var echo = CommandEcho.Open(verb: "world.contributions");
@@ -88,9 +90,8 @@ public sealed class WorldContributionCommandModule(IWorldConsoleAuthority author
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return authority.CreateOptionalFilterCommand(
             describe: (filter, server) => Describe(filter: filter, server: server),
-            description: "Echoes every contribution slot — the host-authored half (tenure, slotCreationId, link, graceSeconds and its compiled tick count) and the server-stamped half (contributor, retractDeadlineTick) — beside the live reachability of each presence slot's watched link: world.contributions [placementId]. With a placement id, echoes only that slot.",
-            name: "world.contributions",
-            paramName: "placementId"
+            description: $"Echoes every contribution slot — the host-authored half (tenure, slotCreationId, link, graceSeconds and its compiled tick count) and the server-stamped half (contributor, retractDeadlineTick) — beside the live reachability of each presence slot's watched link: {ContributionsForms.Spelling}. With a placement id, echoes only that slot.",
+            forms: ContributionsForms
         );
     }
 }

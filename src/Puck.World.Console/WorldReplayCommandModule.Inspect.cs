@@ -7,10 +7,11 @@ namespace Puck.World;
 /// <see cref="WorldReplayInspector"/>).</summary>
 public sealed partial class WorldReplayCommandModule {
     private const string InspectForm = "<name> [<from>-<to>] [--all] [--poses]";
+    private static readonly CommandForms ReplayInspectForms = CommandForms.Of(verb: "replay.inspect", InspectForm);
 
     private CommandResult Inspect(WireArgs args) {
         if (args.Count < 1) {
-            return CommandResult.Usage(form: InspectForm, verb: "replay.inspect");
+            return ReplayInspectForms.Refuse();
         }
 
         var name = args[0].ToString();
@@ -42,7 +43,7 @@ public sealed partial class WorldReplayCommandModule {
             )) {
                 // A `<from>-<to>` range, both digits, from <= to.
             } else {
-                return CommandResult.Usage(form: InspectForm, verb: "replay.inspect");
+                return ReplayInspectForms.Refuse();
             }
         }
 
