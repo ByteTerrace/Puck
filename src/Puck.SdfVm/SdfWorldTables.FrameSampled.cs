@@ -28,6 +28,15 @@ public sealed partial class SdfWorldTables {
     /// slot: the height values that moved, as this frame's and as the previous frame's. Zero for a frame whose height
     /// fields stood still.</summary>
     public int FrameSampledMovedWords { get; private set; }
+    /// <summary>Gets the words every pack of the frame's sampled table has moved, and how many packs moved any: their
+    /// quotient is the words a moving frame owes.</summary>
+    public (long Words, long Packs) FrameSampledMoved { get; private set; }
+
+    /// <summary>Describes the frame's sampled table: its words, and the words its packs moved (<see cref="FrameSampledMoved"/>,
+    /// the latest pack's last).</summary>
+    /// <returns>One line.</returns>
+    public string DescribeFrameSampled() => string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
+        handler: $"frame-sampled words={(m_frameSampledRegion.ShadowBytes / sizeof(uint))} height-fields={m_frameSampledCurrent.Length} moved-words={FrameSampledMoved.Words} moving-packs={FrameSampledMoved.Packs} last-moved={FrameSampledMovedWords}");
 
     // Packs the frame's sampled table: a word per handle of the frame's program, then each height field's header and its
     // heights this frame and the frame before. A pack whose program and set match the last and whose fields stood still
@@ -94,6 +103,7 @@ public sealed partial class SdfWorldTables {
         }
         if (m_frameSampledRegion.Write(bytes: MemoryMarshal.AsBytes(span: span), offset: 0)) { m_frameSampledRevision++; }
         FrameSampledMovedWords = moved;
+        if (moved > 0) { FrameSampledMoved = ((FrameSampledMoved.Words + moved), (FrameSampledMoved.Packs + 1)); }
         m_frameSampledProgram = program;
         m_frameSampledSet = set;
         // A field that moved this pack owes its previous heights again at the next, when this pack's become them.

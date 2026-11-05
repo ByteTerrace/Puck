@@ -558,16 +558,11 @@ moves to glass.
 
 ### Field surfaces move at draw time
 
-The field surfaces (the four water views, the hydrology's columns) drew their
-heights through the mesh bake: a height was a voxel value of the sampled field
-the bake hashed, so every height change keyed a new mesh, and `surfaceStep`
-quantized the heights into 2 to 5 cm steps to stop a perpetual rebake. Levels
-jumped. This step replaces that stopgap.
-
-**Outcome.** A height field keeps one mesh while its heights move; its drawn
-surface follows the frame's height snapshot in the vertex stage; a height change
-uploads only the changed values; the bake runs only when a column appears or
-disappears or the lattice changes shape. `surfaceStep` is deleted.
+The field surfaces (the four water views, the hydrology's columns) follow their
+rows' full values as they are drawn. A height field keeps one mesh while its
+heights move; its drawn surface follows the frame's height snapshot in the vertex
+stage; a height change uploads only the changed values; the bake runs only when a
+column appears or disappears or the lattice changes shape.
 
 **The design.** A height field is one engine type, `SdfHeightField`
 (`Puck.SignedDistance`), which owns two sampled fields: a *reference* field, the
@@ -646,23 +641,12 @@ field source nothing. (2) *A height-map grid draw* (a mesh keyed by extent and
 resolution, generated on the CPU, displaced in the vertex stage): exact for any
 heights with two triangles a cell, but it is a second mesher beside the
 contouring and leaves the sampled-field bake for fields with no producer.
-(3) *Keep baking, without the step* (the sampled-fields lane's state): the mesh
-key covers the heights, so a moving level rebakes every frame it moves.
+(3) *Bake the heights* (the heights as voxel values of the field the bake
+hashes): the mesh key covers the heights, so a moving level rebakes every frame
+it moves, or draws in quantized steps to hold one mesh.
 Chosen: the reference bake and one draw-time table, because it keeps one
 contouring, makes the mesh key exactly the topology, uploads only changed values,
 and gives the light stage (W2's field source, below) the same table.
-
-**Steps and their checks.** (1) `SdfHeightField`, `SdfProgramBuilder.HeightField`,
-`SdfProgram.HeightFields`; the emitter publishes heights unquantized and its bake
-moves into the type: `puck compile worlds/debug/debug.puck --validate` and a
-headless boot. (2) The draw's displacement, the record word, the box, the frame
-table and the resolver: `puck shaders generate --check`, a windowed Direct3D 12
-boot whose presented burst at the pool shows the level gliding with no
-`[sdf.mesh-bake]` restart per height change and `world.wait bakes` settled during
-the melt, and the bytes `sdfFrameSampled` uploads a step. (3) `surfaceStep`, its
-validator and its docs deleted, the standard's values with them: `puck schema
---check`. (4) A windowed Vulkan boot, `puck test worlds/debug/water-tests.puck
---reproduce --jobs 1`, and the landing sweep.
 
 ### W2's field source
 
