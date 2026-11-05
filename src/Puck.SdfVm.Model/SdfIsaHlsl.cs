@@ -293,6 +293,11 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_INSTANCE_INDEX_WORD", value: SdfMeshProbeTrace.InstanceIndexWord);
         declarations.Count(name: "SDF_PROBE_STACK_DEPTH", value: SdfMeshProbeTrace.StackDepth);
         declarations.Count(name: "SDF_PROBE_GROUP_SIZE", value: SdfMeshProbeTrace.GroupSize);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_OUTPUT_WORDS", value: SdfMeshProbeRelight.OutputWords);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_INPUT_WORDS", value: SdfMeshProbeRelight.InputWords);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_HEADER_ROWS", value: SdfMeshProbeRelight.HeaderRows);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_MATERIAL_ROWS", value: SdfMeshProbeRelight.MaterialRows);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_LIGHT_ROWS", value: SdfMeshProbeRelight.LightRows);
 
         declarations.Members<SdfIndirectSources>(prefix: "SDF_INDIRECT_SOURCES");
         declarations.Section(title: "The renderer's capacities, the photometry and the exposure (SdfPhotometry, SdfExposure).");

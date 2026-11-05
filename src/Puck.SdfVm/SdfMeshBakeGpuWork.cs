@@ -131,7 +131,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         Array.Clear(array: m_block);
         SdfMeshBakeBlock.Write(batch: batch, block: m_block, instanceMaskWordCount: (uint)maskWords, workCounterDetailRow: 0u, workCounterRow: 0u);
         slot.Block.Write<byte>(data: m_block);
-        m_tables.WriteBackgroundWorldSet(points: slot.Points, set: slot.WorldSet);
+        m_tables.WriteBackgroundWorldSet(overrides: [(SdfWorldPackage.MeshBakePoints, slot.Points)], set: slot.WorldSet);
 
         var recorder = recording.Recorder;
         var commandBuffer = recording.CommandBuffer;

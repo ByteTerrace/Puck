@@ -141,6 +141,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public static readonly WorkKind GpuRays = new(name: "sdf.mesh-gi.gpu-rays", unit: "rays", workClass: WorkClass.Pacing);
     /// <summary>Measured GPU time of completed trace submissions, including their hierarchy upload and readback copy.</summary>
     public static readonly WorkKind GpuTraceNanoseconds = new(name: "sdf.mesh-gi.gpu-trace-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
+    /// <summary>Measured GPU time of completed relight submissions and feedback updates.</summary>
+    public static readonly WorkKind GpuRelightNanoseconds = new(name: "sdf.mesh-gi.gpu-relight-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Queued trace jobs cancelled because their scene was replaced before admission.</summary>
     public static readonly WorkKind GpuCancelled = new(name: "sdf.mesh-gi.gpu-cancelled", unit: "jobs", workClass: WorkClass.Pacing);
     /// <summary>Counts each relight cycle whose oldest lighting was past the budget's age target.</summary>
@@ -153,7 +155,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// <summary>Counts each exposure meter reading asked of the volume (<see cref="TryMeter"/>).</summary>
     public static readonly WorkKind Meters = new(name: "sdf.mesh-gi.meters", unit: "readings", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, GpuRays, GpuTraceNanoseconds, GpuCancelled, Behind, CameraTraces, CameraRelights, Meters];
+    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, GpuRays, GpuTraceNanoseconds, GpuRelightNanoseconds, GpuCancelled, Behind, CameraTraces, CameraRelights, Meters];
 
     /// <summary>Gets the kinds the counters count, in report order, for a reader that registers the source before a
     /// volume exists.</summary>
@@ -602,7 +604,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 m_worker = null;
                 throw new InvalidOperationException(message: "The irradiance volume's trace failed.", innerException: faulted.Exception);
             }
+            if (drain && GpuTrace is not null && !m_gpuDraining) { m_yield = true; }
             if ((m_owed || drain) && (m_scene is not null) && (m_lighting is not null) && (m_worker is null or { IsCompleted: true }) && (Granted || drain)) {
+                m_yield = false;
+                m_gpuDraining = drain && GpuTrace is not null;
                 m_worker = Task.Run(action: () => {
                     try { if (drain && GpuTrace is not null) { Drain(); } else { Work(); } }
                     catch (OperationCanceledException) when (GpuTrace is not null) { m_listed = false; }
@@ -1357,6 +1362,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // A level's cell's slot words in the volume, marked changed for the level's next publication.
     private Span<uint> SlotWords(int level, (int X, int Y, int Z) cell) {
         var slot = VolumeSlot(cell: cell, level: level);
+        if (GpuTrace is not null) { m_gpuDirty.Add(slot); }
 
         if (!m_dirtySlots[slot]) {
             m_dirtySlots[slot] = true;
@@ -1693,6 +1699,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 lights: lights, lows: lows, scene: scene, sweep: sweep, prepared: prepared?[index]);
         });
 
+        if (GpuTrace is not null) { RelightGpu(candidates, first, count, results, lights, lighting, in snapshot, feedback); }
+
         m_landed.Clear();
         lock (m_gate) {
             if (!Stands(snapshot: in snapshot)) {
@@ -1802,7 +1810,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         // A listed probe either traced against this geometry or holds hits no change since its own geometry reaches.
         probe = (probe with { Geometry = geometry, LightIndex = index, Moved = false, Sweep = sweep, Lighting = lighting.Version, LocalVersion = lighting.LocalVersion, LitAt = lighting.CapturedAt, Passes = passes, Shading = lights });
-        if (!probe.Invalid) {
+        if (!probe.Invalid && GpuTrace is null) {
             var origin = ((new Vector3(x: (candidate.Cell.X + 0.5f), y: (candidate.Cell.Y + 0.5f), z: (candidate.Cell.Z + 0.5f)) * layout.SpacingOf(level: candidate.Level)) + probe.Offset);
 
             // A rebased probe keeps its hits, but the shadow rays from them toward the point lights may cross the change.
@@ -2142,6 +2150,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     var clear = ((distance <= 1e-3f) || scene.Unblocked(report.Position, (toward / distance), (distance - 1e-3f)));
 
                     description = description.Insert(startIndex: (description.Length - 1), value: $" reference-clear={(clear ? 1 : 0)}");
+                    if (GpuTrace is not null && !m_owed && probes[slot].Hits is not null) {
+                        description = description.Insert(description.Length - 1, DescribeRelightReference(probes[slot], report.Position, scene));
+                    }
                 }
                 lines.Add(item: description);
             }

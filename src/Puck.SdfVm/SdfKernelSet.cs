@@ -77,6 +77,7 @@ public sealed class SdfKernelSet {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="kernel"/> names no kernel.</exception>
     public static string StemOf(SdfKernel kernel) => kernel switch {
         SdfKernel.ProbeTrace => "sdf-probe-trace",
+        SdfKernel.ProbeRelight => "sdf-probe-relight",
         SdfKernel.MeshBakeMask => "sdf-mesh-bake-mask",
         SdfKernel.MeshBake => "sdf-mesh-bake",
         SdfKernel.MeshPyramid => "sdf-mesh-pyramid",
@@ -108,6 +109,7 @@ public sealed class SdfKernelSet {
     public static ShaderInterfaceLayout LayoutOf(SdfKernel kernel) =>
         kernel switch {
             SdfKernel.ProbeTrace => SdfWorldInterfaces.ProbeTraceLayout,
+            SdfKernel.ProbeRelight => SdfWorldInterfaces.ProbeRelightLayout,
             SdfKernel.BrickBake => SdfWorldInterfaces.BrickBakeLayout,
             SdfKernel.MeshBakeMask or SdfKernel.MeshBake => SdfWorldInterfaces.MeshBakeLayout,
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,

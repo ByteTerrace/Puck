@@ -6,6 +6,8 @@ namespace Puck.SdfVm;
 public enum SdfKernel {
     /// <summary>The background probe trace over the uploaded static scene hierarchy.</summary>
     ProbeTrace,
+    /// <summary>Shades cached probe hits against the uploaded hierarchy and feedback volume.</summary>
+    ProbeRelight,
     /// <summary>The mesh bake's instance mask, selecting one bake group's instances.</summary>
     MeshBakeMask,
     /// <summary>The mesh bake's field sampler over one group's lattice: the frame's one walk of the SDF program, run

@@ -7,14 +7,9 @@
 
 float3 sdfSkyPhysicalIrradiance(float3 normal) {
     puckAddWork(passGroup.workCounterRow * PuckWorkRowWords + PuckWorkSkyWord, 1u);
-    float basis[9];
-    sdfSkyEnvironmentBasis(normal, basis);
-    float3 result = 0.0.xxx;
-    [unroll] for (uint k = 0u; k < 9u; k++) {
-        float convolution = ((k == 0u) ? 3.141592653589793 : ((k < 4u) ? 2.0943951023931953 : 0.7853981633974483));
-        result += sdfSkyCoefficients[k].rgb * (basis[k] * convolution);
-    }
-    return max(result, 0.0.xxx);
+    float3 coefficients[9];
+    [unroll] for (uint k = 0u; k < 9u; k++) { coefficients[k] = sdfSkyCoefficients[k].rgb; }
+    return sdfSkyEnvironmentIrradiance(normal, coefficients);
 }
 // Plane zero holds every lighting-visible layer; plane one omits panels for the artistic rough-reflection path.
 float3 sdfSkyMapRadiance(float3 direction, uint plane) {

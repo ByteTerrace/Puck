@@ -1,5 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Buffers;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.SdfVm;
 
@@ -16,6 +18,15 @@ public sealed partial class SdfMeshIrradianceScene {
     /// <param name="placements">The mesh placements of the upload the trace will bind.</param>
     /// <returns>Nodes, leaf indices, braid entries and instance records with absolute word addresses.</returns>
     public uint[] ExportGpu(IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements) {
+        var export = CreateGpuExport(placements);
+        var words = new uint[export.Words];
+        export.Read(0, words);
+        return words;
+    }
+
+    // The runtime stages directly from the scene's existing arrays. Only the small instance/top-level prefix is
+    // packed on the host; geometry nodes and leaf ordinals never gain a second full host copy.
+    internal GpuExport CreateGpuExport(IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements) {
         ArgumentNullException.ThrowIfNull(placements);
         var geometries = new Dictionary<Geometry, (int Nodes, int Triangles)>();
         var words = checked(1 + m_nodes.Length * SdfMeshProbeTrace.NodeWords);
@@ -23,18 +34,20 @@ public sealed partial class SdfMeshIrradianceScene {
         words = checked(words + m_entries.Length * SdfMeshProbeTrace.EntryWords);
         var instances = words;
         words = checked(words + m_instances.Length * SdfMeshProbeTrace.InstanceWords);
+        var prefixWords = words;
         foreach (var geometry in m_geometries.Values) {
             var nodes = words;
             words = checked(words + geometry.Nodes.Length * SdfMeshProbeTrace.NodeWords);
             geometries.Add(geometry, (nodes, words));
             words = checked(words + geometry.Triangles.Length);
         }
-        var result = new uint[words];
+        var result = new uint[prefixWords];
         result[0] = m_nodes.Length == 0 ? 0u : 1u;
         WriteNodes(m_nodes, result.AsSpan(1), 1, entries, SdfMeshProbeTrace.EntryWords);
+        var segments = new List<GpuSegment> { new(0, prefixWords, result, null, null, 0) };
         foreach (var (geometry, address) in geometries) {
-            WriteNodes(geometry.Nodes, result.AsSpan(address.Nodes), address.Nodes, address.Triangles, 1);
-            MemoryMarshal.Cast<int, uint>(geometry.Triangles.AsSpan()).CopyTo(result.AsSpan(address.Triangles));
+            segments.Add(new(address.Nodes, geometry.Nodes.Length * SdfMeshProbeTrace.NodeWords, null, geometry.Nodes, null, address.Triangles));
+            segments.Add(new(address.Triangles, geometry.Triangles.Length, null, null, geometry.Triangles, 0));
         }
         for (var index = 0; index < m_entries.Length; index++) {
             var entry = m_entries[index];
@@ -59,7 +72,59 @@ public sealed partial class SdfMeshIrradianceScene {
             record[SdfMeshProbeTrace.IdentityWord] = instance.Identity ? 1u : 0u;
             record[SdfMeshProbeTrace.InstanceIndexWord] = (uint)index;
         }
-        return result;
+        return new GpuExport(words, Read);
+
+        void Read(int word, Span<uint> destination) {
+            var low = 0;
+            var high = segments.Count;
+            while (low < high) {
+                var middle = (low + high) / 2;
+                if (segments[middle].Word + segments[middle].Count <= word) { low = middle + 1; }
+                else { high = middle; }
+            }
+            Span<uint> nodeWords = stackalloc uint[SdfMeshProbeTrace.NodeWords];
+            while (!destination.IsEmpty) {
+                var segment = segments[low++];
+                var offset = word - segment.Word;
+                var take = Math.Min(destination.Length, segment.Count - offset);
+                var target = destination[..take];
+                if (segment.Words is { } packed) { packed.AsSpan(offset, take).CopyTo(target); }
+                else if (segment.Triangles is { } triangles) { MemoryMarshal.Cast<int, uint>(triangles.AsSpan(offset, take)).CopyTo(target); }
+                else {
+                    while (!target.IsEmpty) {
+                        var index = offset / SdfMeshProbeTrace.NodeWords;
+                        var within = offset % SdfMeshProbeTrace.NodeWords;
+                        WriteNodes(segment.Nodes!.AsSpan(index, 1), nodeWords, segment.Word, segment.Leaves, 1);
+                        var length = Math.Min(target.Length, SdfMeshProbeTrace.NodeWords - within);
+                        nodeWords.Slice(within, length).CopyTo(target);
+                        offset += length;
+                        target = target[length..];
+                    }
+                }
+                word += take;
+                destination = destination[take..];
+            }
+        }
+    }
+
+    private sealed record GpuSegment(int Word, int Count, uint[]? Words, Node[]? Nodes, int[]? Triangles, int Leaves);
+    internal delegate void GpuWordWriter(int word, Span<uint> destination);
+    internal sealed class GpuExport(int words, GpuWordWriter read) : IGpuRegionSource {
+        public int Words { get; } = words;
+        public void Read(int word, Span<uint> destination) => read(word, destination);
+        public void WriteWords(IGpuStorageBuffer buffer, ulong destinationOffsetBytes, int word, int count) {
+            var scratch = ArrayPool<uint>.Shared.Rent(65536);
+            try {
+                while (count > 0) {
+                    var take = Math.Min(count, scratch.Length);
+                    read(word, scratch.AsSpan(0, take));
+                    buffer.Write<uint>(scratch.AsSpan(0, take), destinationOffsetBytes);
+                    word += take;
+                    count -= take;
+                    destinationOffsetBytes += (ulong)take * 4;
+                }
+            } finally { ArrayPool<uint>.Shared.Return(scratch); }
+        }
     }
 
     private static void WriteNodes(ReadOnlySpan<Node> nodes, Span<uint> words, int nodeBase, int leafBase, int leafStride) {

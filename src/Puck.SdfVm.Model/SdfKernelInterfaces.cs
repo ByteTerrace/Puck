@@ -50,6 +50,10 @@ public sealed class SdfKernelInterfaces {
     public const string ProbeHitsWritten = "sdfProbeHitsRW";
     /// <summary>Optional diagnostic instance and triangle ordinals for each traced ray.</summary>
     public const string ProbeIdentitiesWritten = "sdfProbeIdentitiesRW";
+    /// <summary>Captured relighting parameters, followed by material and light records.</summary>
+    public const string ProbeLighting = "sdfProbeLighting";
+    /// <summary>Cached hit words and local light cubes for a relight batch.</summary>
+    public const string ProbeInput = "sdfProbeInput";
     /// <summary>The <see cref="BrickBake"/> request buffer: a three-row header, then the carves.</summary>
     public const string BakeRequest = "bakeRequest";
     /// <summary>The <see cref="BrickBake"/> brick pool the baker writes.</summary>
@@ -132,6 +136,16 @@ public sealed class SdfKernelInterfaces {
             Written(element: ShaderValueType.Uint, name: ProbeHitsWritten),
             Written(element: ShaderValueType.Uint2, name: ProbeIdentitiesWritten),
         ], pushesIndex: false);
+        ProbeRelight = new ShaderInterface(name: "sdf-probe-relight", members: [
+            Read(element: ShaderValueType.Uint, name: ProbeScene),
+            Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshRegion),
+            Read(element: ShaderValueType.Float4, name: ProbeOrigins),
+            Read(element: ShaderValueType.Float4, name: ProbeDirections),
+            Read(element: ShaderValueType.Float4, name: ProbeLighting),
+            Read(element: ShaderValueType.Uint, name: ProbeInput),
+            Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshIrradiance),
+            Written(element: ShaderValueType.Uint, name: ProbeHitsWritten),
+        ], pushesIndex: false);
         WorldParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
             package: RenderGraphPackageCatalog.SdfWorld,
@@ -212,6 +226,7 @@ public sealed class SdfKernelInterfaces {
         MeshLayout = new(shaderInterface: Mesh);
         Includes = [
             (IncludePath(shaderInterface: ProbeTrace), ProbeTrace),
+            (IncludePath(shaderInterface: ProbeRelight), ProbeRelight),
             (IncludePath(shaderInterface: BloomParameters.Interface), BloomParameters.Interface),
             (IncludePath(shaderInterface: World), World),
             (IncludePath(shaderInterface: MeshBake), MeshBake),
@@ -259,6 +274,8 @@ public sealed class SdfKernelInterfaces {
     public string Stamp { get; }
     /// <summary>Gets the software probe trace's resource interface.</summary>
     public ShaderInterface ProbeTrace { get; }
+    /// <summary>Gets the software probe relight's captured input and feedback interface.</summary>
+    public ShaderInterface ProbeRelight { get; }
     /// <summary>The optical scatter filters, independent of scene and bake tables.</summary>
     public ShaderPipelineParameterLayout BloomParameters { get; }
     /// <summary>Gets the field's instruction set's stamp, which <see cref="MeshBake"/> carries in place of
