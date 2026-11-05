@@ -18,7 +18,7 @@ this file is corrected in the same change.
 | Native SM83 compiler for the cgb and dmg targets (code, 2bpp tiles, maps, palettes or shade registers) | `HgbCartridgeCompiler` in `src/Puck.HumbleGamingBrick.Forge` |
 | Native AGB compiler (Thumb code, mode-0 4bpp graphics) | `AgbCartridgeCompiler` in `src/Puck.AdvancedGamingBrick.Forge` |
 | Shared audio compilation | `AudioDocumentCompiler`, `ApuNotePeriod` in the shared forge package; `TuneRom.Build` for world audio |
-| Boot ROMs | `BootRomBuilder`, `BootDivPrediction`, `BootRomLayout` in `Puck.HumbleGamingBrick.Forge`; the native ARM7TDMI firmware in [`Puck.AdvancedGamingBrick/Firmware`](../../../src/Puck.AdvancedGamingBrick/Firmware/README.md) |
+| Boot ROMs | `BootRomBuilder`, `BootDivPrediction`, `BootRomLayout` in `Puck.HumbleGamingBrick`; the native ARM7TDMI firmware in [`Puck.AdvancedGamingBrick/Firmware`](../../../src/Puck.AdvancedGamingBrick/Firmware/README.md) |
 | The in-engine console | `src/Puck.World/ForgeCommandModule.cs` (`forge.new/open/show/set/remove/undo/check/build/save/export/play`) |
 | Shipped sources | `worlds/debug/cartridges/<target>/*.<target>.puck` (one folder per target, `cgb/`, `dmg/` and `agb/`, which a world lists in a machine's `contentFolders`), authored source only; `shared/` holds the modules several targets import, each declaring `schema: "puck.cartridge.v1"` so a world-source walk of the package never takes it for a world module |
 
@@ -140,10 +140,11 @@ handoff counter (`BootDivPrediction`'s tables) is the contract, pinned from
 outside by the `boot-rom-handoff` Post stage against the mooneye `boot_div-*`
 cartridges; never move a table value to make a boot agree with it. The builder
 solves its straight-line tail against the emitted image; never hand-count
-instruction timings into its constants. Runtime packages embed generated images
-(`HgbFirmware.GetImage`) and never reference Forge. Regenerate with
-`puck firmware hgb --output <dir>` (or `puck firmware agb`) and check the bytes
-with `--verify`, which compares without writing.
+instruction timings into its constants. `HgbFirmware.GetImage` derives and calibrates
+images in process on a cache miss, with generator code and revision as its key.
+The generator and shared SM83 emitter live in the core package, so direct embedding
+needs no Forge dependency. `puck firmware hgb --output <dir>` exports cached or
+freshly derived images; there is no committed image or verify mode.
 
 ## Seeing it work
 

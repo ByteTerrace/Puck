@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick.Forge;
+namespace Puck.HumbleGamingBrick;
 
 /// <summary>
 /// The cartridge headers a boot image is verified against. Each one steers a different row of the

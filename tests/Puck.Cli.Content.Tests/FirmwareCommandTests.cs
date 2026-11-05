@@ -41,7 +41,7 @@ public sealed class FirmwareCommandTests {
         Assert.Single(collection: Directory.GetFiles(path: directory.RootPath));
     }
     [Fact]
-    public void HgbGenerationAndVerificationCoverEveryRevision() {
+    public void HgbExportCoversEveryRevision() {
         using var directory = new TemporaryDirectory(prefix: "puck-firmware tests ");
 
         Assert.Equal(
@@ -70,10 +70,7 @@ public sealed class FirmwareCommandTests {
             );
         }
 
-        Assert.Equal(
-            expected: 0,
-            actual: SuiteRoot.Invoke(args: ["firmware", "hgb", "--output", directory.RootPath, "--verify"])
-        );
+
     }
     [Fact]
     public void MissingOrUnknownOptionsAreUsageErrors() {

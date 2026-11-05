@@ -1,4 +1,4 @@
-namespace Puck.GamingBricks.Forge;
+namespace Puck.Assets;
 
 /// <summary>
 /// The label bookkeeping every machine-code emitter in the forge shares, whatever instruction set it encodes: an id

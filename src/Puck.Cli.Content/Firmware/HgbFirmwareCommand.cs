@@ -1,6 +1,5 @@
 using System.CommandLine;
 using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
 
 namespace Puck.Cli.Firmware;
 
@@ -8,18 +7,12 @@ internal static class HgbFirmwareCommand {
     private static bool IsReported(Exception exception) =>
         (exception is ArgumentException or IOException or UnauthorizedAccessException or InvalidOperationException);
 
-    internal static int Run(string output, bool verify) {
+    internal static int Run(string output) {
         try {
             var directory = Path.GetFullPath(path: output);
-            // Finish generation before replacing any checked-in file. A failed calibration cannot leave half a set.
-            // Each revision's image is calibrated by booting its own emulated machines and shares no state with
-            // another's, so the revisions build concurrently and land in model order.
             var images = Enum.GetValues<ConsoleModel>().AsParallel().AsOrdered().Select(selector: static model => (
                 Name: (model.ToString().ToLowerInvariant() + ".bin"),
-                Bytes: BootRomBuilder.Build(
-                mark: BootRomMark.Compatible,
-                model: model
-            )
+                Bytes: HgbFirmware.GetImage(model: model)
             )).ToArray();
             var success = true;
 
@@ -30,7 +23,7 @@ internal static class HgbFirmwareCommand {
                         path2: image.Name
                     ),
                     bytes: image.Bytes,
-                    verify: verify,
+                    verify: false,
                     verb: "firmware hgb"
                 );
             }
@@ -53,15 +46,13 @@ internal static class HgbFirmwareCommand {
 
     public static Command Create() {
         var output = new Option<string>(name: "--output") { Description = "Directory containing one lowercase model-name .bin image per hardware revision.", Required = true };
-        var verify = new Option<bool>(name: "--verify") { Description = "Compare every existing image byte-for-byte without writing files." };
         var command = new Command(
             description: "Build the Puck-compatible HGB boot ROM for every ConsoleModel.",
             name: "hgb"
-        ) { output, verify };
+        ) { output };
 
         command.SetAction(action: result => Run(
-            output: result.GetRequiredValue(option: output),
-            verify: result.GetValue(option: verify)
+            output: result.GetRequiredValue(option: output)
         ));
         return command;
     }

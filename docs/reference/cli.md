@@ -242,13 +242,12 @@ remove it and break every `references` run.
 
 ## `puck firmware`—bundled boot images
 
-Firmware images are generated release inputs. Rebuild them explicitly after changing their maintained source;
-ordinary emulator builds consume the checked-in images without depending on Forge or a native compiler.
+HGB startup images derive and calibrate in process when requested, cached by generator code and revision.
+`puck firmware hgb` exports those images. The AGB command requires the native toolchain.
 From a clean checkout, use `dotnet run --project src/Puck.Cli -c Release -- firmware ...` in place of `puck firmware ...`.
 
 ```sh
-puck firmware hgb --output src/Puck.HumbleGamingBrick/Firmware
-puck firmware hgb --output src/Puck.HumbleGamingBrick/Firmware --verify
+puck firmware hgb --output .claude/scratch/hgb-firmware
 puck firmware agb --source src/Puck.AdvancedGamingBrick/Firmware --output src/Puck.AdvancedGamingBrick/Firmware/puck-agb.bin --clang <clang-executable> --linker <ld.lld-executable>
 puck firmware agb --source src/Puck.AdvancedGamingBrick/Firmware --output src/Puck.AdvancedGamingBrick/Firmware/puck-agb.bin --clang <clang-executable> --linker <ld.lld-executable> --verify
 ```
@@ -261,7 +260,7 @@ no shell, downloaded toolchain, or system C library is involved. Object files an
 fresh run directory that a successful build deletes and a failed one keeps and names (see
 [Conventions](#conventions)). The candidate must be exactly 16 KiB.
 
-Both commands report SHA-256 hashes. `--verify` rebuilds and compares bytes without creating or repairing the output;
+Both commands report SHA-256 hashes. AGB `--verify` rebuilds and compares bytes without creating or repairing the output;
 missing files or different bytes exit 1, and invalid command syntax exits 2. A successful comparison proves reproducible
 generation with that source and toolchain, not hardware compatibility. Emulator and firmware execution tests own that claim.
 
