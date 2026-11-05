@@ -1508,4 +1508,103 @@ internal static class SymmetricSolveClaims {
             reference: Oracles.TrySolveSymmetric3,
             right: right
         );
+    /// <summary><see cref="FixedLinearSolve.TrySolve3"/> against <see cref="Oracles.TrySolveGeneral3"/>'s
+    /// column-replacement Cramer solve over nine independent entries (no symmetry), folded onto
+    /// <see cref="FoldModerate"/>'s lossless band so exact agreement is provable.</summary>
+    /// <param name="left">Lanes 0..8 = the entries in row-major order; lanes 9..11 = rhsX, rhsY, rhsZ; each folded.</param>
+    /// <param name="right">Lane 0 drives the requested output fraction shift.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? General3VsOracle(long[] left, long[] right) {
+        Span<long> operands = stackalloc long[12];
+
+        for (var lane = 0; (lane < 12); ++lane) { operands[lane] = FoldModerate(raw: left[lane]); }
+
+        var shift = OutputShift(raw: right[0]);
+        var subjectOk = FixedLinearSolve.TrySolve3(
+            m00: operands[0],
+            m01: operands[1],
+            m02: operands[2],
+            m10: operands[3],
+            m11: operands[4],
+            m12: operands[5],
+            m20: operands[6],
+            m21: operands[7],
+            m22: operands[8],
+            outputFractionShift: shift,
+            rhsX: operands[9],
+            rhsY: operands[10],
+            rhsZ: operands[11],
+            x: out var sx,
+            y: out var sy,
+            z: out var sz
+        );
+        Span<long> reference = stackalloc long[3];
+        var referenceOk = Oracles.TrySolveGeneral3(
+            m: operands[..9],
+            outputFractionShift: shift,
+            rhs: operands[9..],
+            solution: reference
+        );
+
+        return Compare(
+            label: "general solve3 vs the column-replacement oracle",
+            operandNames: "m00 m01 m02 m10 m11 m12 m20 m21 m22 rhsX rhsY rhsZ",
+            operands: operands,
+            reference: reference,
+            referenceOk: referenceOk,
+            subject: [sx, sy, sz],
+            subjectOk: subjectOk
+        );
+    }
+    /// <summary><see cref="FixedLinearSolve.TrySolve3"/> answers a hand-solved non-symmetric system exactly, and
+    /// refuses with every output zero for a negative output shift, an all-zero operand set, a moderate rank-two matrix
+    /// and a rank-two matrix whose entries force the lossy preconditioning corner, where rounding each entry alone
+    /// would break the exact row dependence and fabricate a finite answer.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? General3PinnedAndRefusals() {
+        static string? Expect(long[] m, long[] rhs, int shift, long[]? expected, string witness) {
+            var ok = FixedLinearSolve.TrySolve3(
+                m00: m[0],
+                m01: m[1],
+                m02: m[2],
+                m10: m[3],
+                m11: m[4],
+                m12: m[5],
+                m20: m[6],
+                m21: m[7],
+                m22: m[8],
+                outputFractionShift: shift,
+                rhsX: rhs[0],
+                rhsY: rhs[1],
+                rhsZ: rhs[2],
+                x: out var x,
+                y: out var y,
+                z: out var z
+            );
+
+            if (expected is null) {
+                return ((!ok && (x == 0L) && (y == 0L) && (z == 0L)) ? null : $"{witness}: expected a refusal with zero outputs, got ok={ok} ({x},{y},{z})");
+            }
+
+            return ((ok && (x == expected[0]) && (y == expected[1]) && (z == expected[2]))
+                ? null
+                : $"{witness}: expected ({expected[0]},{expected[1]},{expected[2]}), got ok={ok} ({x},{y},{z})");
+        }
+
+        // [[2,1,0],[0,3,1],[1,0,4]]·(7,11,17)/25 = (1,2,3); at shift 16 the components round from 458752/25,
+        // 720896/25 and 1114112/25. The transpose solves to a different vector, so a transposed adjugate fails here.
+        return Expect(m: [2, 1, 0, 0, 3, 1, 1, 0, 4], rhs: [1, 2, 3], shift: 16, expected: [18350, 28836, 44564], witness: "the hand-solved non-symmetric system")
+            ?? Expect(m: [2, 1, 0, 0, 3, 1, 1, 0, 4], rhs: [1, 2, 3], shift: -1, expected: null, witness: "a negative output shift")
+            ?? Expect(m: [0, 0, 0, 0, 0, 0, 0, 0, 0], rhs: [0, 0, 0], shift: 16, expected: null, witness: "the all-zero operand set")
+            ?? Expect(m: [1, 2, 3, 4, 5, 6, 5, 7, 9], rhs: [1, 1, 1], shift: 16, expected: null, witness: "the moderate rank-two matrix (row 2 = row 0 + row 1)")
+            ?? Expect(
+                m: [3000000000000000001, 1000000000000000003, 2000000000000000007,
+                    1000000000000000009, 3000000000000000011, 1000000000000000013,
+                    4000000000000000010, 4000000000000000014, 3000000000000000020],
+                rhs: [1, 2, 3],
+                shift: 0,
+                expected: null,
+                witness: "the lossy-corner rank-two matrix (row 2 = row 0 + row 1)"
+            );
+    }
 }

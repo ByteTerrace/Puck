@@ -6,7 +6,7 @@ performance. This memo is the research round's answer. It reads Puck's live
 physics paths, names what the debug world measured, sets each lesson against
 the opened sources (several independent ones per topic, with their
 disagreements), ranks the lessons, and gives a brief for each of the top
-three. Every page cited under [Sources](#sources) was opened for this memo;
+two still open (the gyroscopic term and the rest latch have landed). Every page cited under [Sources](#sources) was opened for this memo;
 a claim that rests on a page that could not be opened is marked so.
 
 Nothing here ran a World or changed engine code. The counts quoted are the
@@ -308,25 +308,20 @@ it gains energy"). Box3D's solver carries the same Newton step, and the
 announcement names the missing term in Unreal's Chaos as one reason Box3D
 exists.
 
-**What Puck does.** `AdvanceRigid` holds the world-frame angular velocity
-constant through free flight, changing it only by damping and contact
-(`WorldBody.Rigid.cs:682-689`, `:751`). For a body whose inertia is not
-spherical, a constant world ω while the body turns does not conserve angular
-momentum. The debug world's rigid pieces are mostly oblate (361 Go stones, 64
-reversi discs) or slender (32 chess pieces).
-
-**Expected gain.** Accuracy: a flicked or tossed disc wobbles and settles as
-it should, and the dissipation the implicit step adds (Catto: "the kinetic
-energy dissipates over time") helps pieces come to rest. Cost per awake rigid
-body is one 3×3 solve a step.
-
-**Determinism.** Exact. The body-local inverse inertia is already stored at
-its own 40-bit placement (`FixedRigidBody.InverseInertia*`,
-`FixedRigidTypes.cs`). The Jacobian is not symmetric, so
-`FixedSymmetricSolve` does not apply; the solve is Cramer's rule with
-`Int128` cofactors rounded once (a new `Puck.Maths` member with its law case).
-
-**Cost.** Small.
+**What Puck does.** Landed: `FixedGyroscopicStep.Advance` (Puck.Physics) is
+this Newton step, solved by `FixedLinearSolve.TrySolve3`, called once per
+rigid step from `WorldBody.AdvanceRigid` before contact; brief B's integrate
+stage calls the same member. Its law
+(`tests/Puck.Physics.Tests/GyroscopicStepLawTests.cs`) measured what the
+memo had expected to be conservation "within the fixed-point budget": at
+60 Hz implicit Euler's own truncation is first order and dissipative, so a
+disc spun at about 4 rad/s drifts about 2 % in world momentum over 300 steps
+(a slender triaxial block about 14 %), against 44 % and 88 % with world ω
+held constant, and the fixed-point run tracks the exact-arithmetic scheme to
+rounding. Momentum magnitude and energy fall on every step. A
+linearized-midpoint Jacobian (`h/2`) cut the block's drift to about 3 % in a
+double-precision probe, at the cost of the scheme's guaranteed dissipation;
+it is not adopted.
 
 ### 4. Wake and islands proportional to change
 
@@ -462,12 +457,11 @@ and edge rules, so it is not proposed there.
 
 Box2D's sleep test uses "the velocity of the farthest point on the body to
 account for rotation" and folds in position correction ("Sleep needs to
-observe position correction as well as true velocity", `solver.c`). Puck's
-rest latch compares linear and angular speed against two separate thresholds
-(`WorldBody.Rigid.cs:611-612`, `:884-893`), so a long piece turning slowly about its centre
-can latch while its ends still move. The substep bound already uses linear
-speed plus angular speed times the bounding radius (`:701-705`); the rest
-latch can read the same quantity. Small; it rides brief C.
+observe position correction as well as true velocity", `solver.c`). Landed:
+Puck's rest latch and its substep bound both read `WorldBody.RigidSurfaceSpeed`
+(linear speed plus angular speed times the bounding radius) against one
+authored threshold, `collision.bodyContacts.rigidRestSpeed`. Folding in
+position correction is not done.
 
 ## What does not transfer
 
@@ -577,38 +571,6 @@ pushed by a rigid one, expressed as a static body in the pair.
 
 This is a specialist lane (physics, with `maths-usage` loaded), several
 commits, re-recording the rigid scenarios once.
-
-## Brief C: the gyroscopic term and the rest latch
-
-**Mechanism.** Integrate a stiff or quadratic term implicitly in the frame
-where its operator is constant (here the body frame, where inertia is fixed),
-one Newton step.
-
-**Invariant.** The gyroscopic correction is applied exactly once per rigid
-step, in the integrate-velocities stage, to free angular velocity before
-contact. **Enforcement:** one method on the rigid integration path called from
-one site (`AdvanceRigid` today; `FixedRigidWorld`'s integrate stage after brief
-B, the same member moved, not copied). **Where it stops:** a singular Jacobian
-(a degenerate inertia) skips the correction, counted, never wrapped.
-
-**Steps.**
-
-1. Add a general 3×3 solve to `Puck.Maths` (Cramer's rule, `Int128`
-   cofactors, one rounding, refusing a zero determinant) with its law case.
-   **Check:** the Maths build and the law against an exact rational oracle.
-2. Apply `ω_b ← ω_b − J⁻¹ (h ω_b × I_b ω_b)` in body coordinates once per step,
-   with `I_b` from the authored mass properties (the inverse inertia is
-   already stored). **Check:** a free-flight disc spun about a tilted axis:
-   world angular momentum `I_world ω` holds within the fixed-point budget and
-   kinetic energy never rises over 300 steps; today's code fails the momentum
-   check. A Physics law, since a running World cannot show an exact
-   conservation result.
-3. Make the rest latch read linear speed plus angular speed times the bounding
-   radius against one threshold, as the substep bound does (lesson 9).
-   **Check:** `puck test --reproduce` on chess, Go and reversi; the chess idle
-   demo still starts; hashes move once and are re-recorded.
-
-A Codex lane can take all three steps.
 
 ## Open questions and who settles them
 
