@@ -937,7 +937,9 @@ public sealed partial class SdfMeshPathBake {
     // Puts a group at an index of the list, under the gate.
     private void Replace(int index, Group group) {
         m_allResident = false;
+        group.Owner = this;
         m_groups[index] = group;
+        WatchSettle(group: group, index: index);
         m_doneThrough = Math.Min(val1: m_doneThrough, val2: index);
     }
     // Starts the bake of a new program: one group per dynamic slot and per run of static instances baked together (one
@@ -991,6 +993,7 @@ public sealed partial class SdfMeshPathBake {
         for (var index = 0; (index < m_groups.Count); index++) {
             var group = m_groups[index];
 
+            group.Owner = this;
             group.TakeDemandBox();
             if (previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, identity: identity, old: old)) {
                 Replace(group: old, index: index);
@@ -1118,6 +1121,7 @@ public sealed partial class SdfMeshPathBake {
         if (replaced) {
             m_productRevision++;
         }
+        WatchSettles();
         m_restartMilliseconds = Stopwatch.GetElapsedTime(startingTimestamp: restarted).TotalMilliseconds;
     }
     // Whether a new program's group stays the group the previous program planned at its selector: the same geometry and
@@ -1937,7 +1941,6 @@ public sealed partial class SdfMeshPathBake {
         group.Mesh = mesh;
         group.ResidentAt = 0;
         m_allResident = false;
-        m_productRevision++;
         _ = m_retiredGroups.RemoveAll(match: static retired => retired.Released);
     }
     // Records the bake's wall time once its last group finishes, and reports it.
@@ -2121,6 +2124,11 @@ public sealed partial class SdfMeshPathBake {
 
         private SdfMesh? m_mesh;
 
+        // The bake whose group list holds the group, set by Restart and Replace, the list's only writers. Every change of
+        // the mesh a listed group draws moves that bake's product revision here, the one door, so the dresser can trust
+        // the revision: a group no list holds yet draws nothing.
+        public SdfMeshPathBake? Owner { get; set; }
+
         public SdfMesh? Mesh {
             get => m_mesh;
             set {
@@ -2128,9 +2136,14 @@ public sealed partial class SdfMeshPathBake {
 
                 m_mesh = (Retired ? null : value);
                 if (Retired) { value?.Release(); }
+                if (!ReferenceEquals(objA: old, objB: m_mesh) && (Owner is { } owner)) { owner.m_productRevision++; }
                 old?.Release();
             }
         }
+        private bool? m_readsOtherSlots;
+
+        // Whether the group's geometry reads a slot besides its own: a skinned group, whose members drift (Settle).
+        public bool ReadsOtherSlots => (m_readsOtherSlots ??= (Dynamic && Geometry.Poses.Keys.Any(predicate: slot => (slot != Slot))));
         public SdfMeshBakeRequest? Next { get; set; }
         public int Refinements { get; set; }
         // The final lattice's contour, its material cut, the points the cut's round samples, and their answers so far.

@@ -169,6 +169,11 @@ public sealed partial class SdfMeshPathBake {
     // changes a mesh, so a worker reading one mid-measure, or finishing a group this measures, orders no mesh differently.
     private void Prioritize() {
         if (Demand.Count == 0) { return; }
+        // With every group done there is nothing to order: the done cursor makes this check constant once the bake ends.
+        lock (m_gate) {
+            while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
+            if (m_doneThrough >= m_groups.Count) { return; }
+        }
         foreach (var group in m_groups) {
             if (group.Done || !group.HasDemandBox) { continue; }
 
