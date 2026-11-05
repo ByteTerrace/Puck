@@ -3,12 +3,15 @@ using Puck.Hosting;
 namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
-    /// <summary>The glass raster pass's writable binding of the glass sums, a member of the mesh interface: five words a
+    /// <summary>The glass raster pass's writable binding of the glass sums, a member of the mesh interface: eight words a
     /// render-extent pixel (<see cref="GlassSumWords"/>), the signed sum of every glass face's ray distance in front of
     /// the opaque hit, in units of <see cref="GlassSumScale"/>, a front face subtracting and a back face adding, and the
     /// count of front faces less back faces, both accumulated atomically. Their sum plus the unmatched front faces'
-    /// opaque distance is the distance the ray travels through glass. Three float words accumulate RGB optical depth,
-    /// each face weighted by its own material's absorption and clipped to the opaque hit.</summary>
+    /// opaque distance is the distance the ray travels through glass. Three 64-bit integers (low word first) accumulate
+    /// RGB optical depth: each face adds its own material's absorption, in steps of <see cref="GlassAbsorptionScale"/>
+    /// a world unit, times its distance to the opaque hit, in steps of <see cref="GlassDepthDistanceScale"/>, a front
+    /// face adding and a back face subtracting. Integer sums leave the same words in any raster order, and a pair of
+    /// faces cancels its shared distance to the opaque hit exactly, however far away that hit is.</summary>
     public const string GlassSumsWritten = "sdfGlassSumsRW";
     /// <summary>The glass sums as the glass shading pass reads them.</summary>
     public const string GlassSums = "sdfGlassSums";
@@ -18,11 +21,20 @@ public static partial class SdfWorldPackage {
     public const string GlassVisibility = "glassVisibility";
     /// <summary>The words one render-extent pixel holds in the glass sums. <c>SdfIsaHlsl</c> generates it as
     /// <c>SDF_GLASS_SUM_WORDS</c>.</summary>
-    public const uint GlassSumWords = 5;
+    public const uint GlassSumWords = 8;
     /// <summary>The steps a world unit a glass face's ray distance is accumulated at, as a whole number: a quarter of a
     /// millimetre, so sixty faces at the far distance's limit sum within a 32-bit word. <c>SdfIsaHlsl</c> generates it as
     /// <c>SDF_GLASS_SUM_SCALE</c>.</summary>
     public const float GlassSumScale = 4096f;
+    /// <summary>The steps a world unit a glass face's distance to the opaque hit is quantized to in the optical depth
+    /// sums: 2^15, so a distance up to 65535 world units (the clamp the raster applies) is below 2^31.
+    /// <c>SdfIsaHlsl</c> generates it as <c>SDF_GLASS_DEPTH_DISTANCE_SCALE</c>.</summary>
+    public const float GlassDepthDistanceScale = 32768f;
+    /// <summary>The steps a unit of absorption (per world unit) is quantized to in the optical depth sums: 2^16, so an
+    /// absorption up to 32767 a world unit (the clamp the raster applies; one millimetre of it passes e^-32) is below
+    /// 2^31 and one face's product with its distance below 2^62. <c>SdfIsaHlsl</c> generates it as
+    /// <c>SDF_GLASS_ABSORPTION_SCALE</c>.</summary>
+    public const float GlassAbsorptionScale = 65536f;
 
     /// <summary>The glass shading pass's interface: the common frame values, the lit image views wrote (sampled), the
     /// glass visibility target (sampled), the visibility records and the glass sums it reads, the reactivity it raises
