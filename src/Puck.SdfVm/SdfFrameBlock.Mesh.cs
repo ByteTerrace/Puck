@@ -52,7 +52,7 @@ public static partial class SdfFrameBlock {
         WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0, temporal: false);
     }
     /// <summary>Writes the irradiance volume the views pass reads (<see cref="SdfMeshIrradiance"/>): whether views read
-    /// it, then each level's window, spacing along each axis and coverage ramp; a disabled volume, or a level not
+    /// it, then each level's window and spacing along each axis; a disabled volume, or a level not
     /// published, writes zero spacing, and views then light as without that level.</summary>
     /// <param name="block">The pass block <see cref="Write"/> filled.</param>
     /// <param name="volume">The volume's parameters.</param>
@@ -60,7 +60,6 @@ public static partial class SdfFrameBlock {
         var offset = Offset(member: SdfWorldPackage.MeshIrradianceVolume);
         var levels = Offset(member: SdfWorldPackage.MeshIrradianceLevels);
         var spacings = Offset(member: SdfWorldPackage.MeshIrradianceSpacings);
-        var coverages = Offset(member: SdfWorldPackage.MeshIrradianceCoverages);
 
         WriteUInt32(block: block, offset: offset, value: (volume.Enabled ? 1u : 0u));
         for (var level = 0; (level < SdfMeshIrradianceProbe.Levels); level++) {
@@ -72,8 +71,6 @@ public static partial class SdfFrameBlock {
             var row = (levels + (level * 16));
 
             WriteRow(block: block, offset: (spacings + (level * 16)), value: (present ? window.Spacing : Vector3.Zero), w: 0f);
-            WriteSingle(block: block, offset: (coverages + (level * 16)), value: window.Coverage.Start);
-            WriteSingle(block: block, offset: ((coverages + (level * 16)) + sizeof(float)), value: window.Coverage.Scale);
             WriteUInt32(block: block, offset: row, value: unchecked((uint)window.Low.X));
             WriteUInt32(block: block, offset: (row + sizeof(uint)), value: unchecked((uint)window.Low.Y));
             WriteUInt32(block: block, offset: (row + (2 * sizeof(uint))), value: unchecked((uint)window.Low.Z));

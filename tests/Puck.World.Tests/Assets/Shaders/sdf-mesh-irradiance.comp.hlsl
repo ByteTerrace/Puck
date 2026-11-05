@@ -8,7 +8,6 @@ struct GatherPass {
     uint meshIrradianceVolume;
     int4 meshIrradianceLevels[3];
     float4 meshIrradianceSpacings[3];
-    float4 meshIrradianceCoverages[3];
     uint indirectSources;
     float4 indirectSourceGains;
 };
@@ -22,7 +21,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     [unroll] for (uint level = 0u; (level < 3u); level++) {
         passGroup.meshIrradianceLevels[level] = asint(gatherParameters[1u + level]);
         passGroup.meshIrradianceSpacings[level] = asfloat(gatherParameters[4u + level]);
-        passGroup.meshIrradianceCoverages[level] = asfloat(gatherParameters[7u + level]);
     }
     passGroup.indirectSources = 0u;
     passGroup.indirectSourceGains = 0.0;

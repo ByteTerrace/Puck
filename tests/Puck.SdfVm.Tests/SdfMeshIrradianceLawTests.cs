@@ -21,7 +21,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var depth = new uint[SdfMeshIrradianceProbe.DepthWords];
 
         foreach (var origin in new Vector3[] { new(x: 2f, y: -0.2f, z: 1f), new(x: 2f, y: 1.8f, z: 1f), new(x: -0.165f, y: 1.8f, z: 1f) }) {
-            _ = SdfMeshProbeDepth.Trace(origin: origin, reach: 5.25f, scene: scene, surfaces: depth);
+            _ = SdfMeshProbeDepth.Trace(origin: origin, reach: 5.25f, scene: scene, sheets: false, surfaces: depth);
             for (var latitude = -80; (latitude <= 80); latitude += 5) {
                 for (var longitude = 0; (longitude < 360); longitude += 5) {
                     var lat = ((latitude * MathF.PI) / 180f);
@@ -33,7 +33,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
                     var toward = ((point + (SdfMeshIrradianceProbe.NormalBias * normal)) - origin);
 
                     if (!scene.Unblocked(origin, Vector3.Normalize(value: toward), (toward.Length() - 0.001f))) { continue; }
-                    var visibility = SdfMeshProbeDepth.Visibility(coverage: SdfMeshProbeCoverage.Finest, surfaces: depth, toward: toward);
+                    var visibility = SdfMeshProbeDepth.Visibility(surfaces: depth, toward: toward);
 
                     Assert.True(condition: (visibility > 0.95f), userMessage: $"sparse sphere origin={origin} receiver={point}: {visibility}");
                 }
@@ -91,7 +91,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var scene = SdfMeshIrradianceScene.Build([Draw(mesh: Sphere(centre: centre, radius: 0.75f))]);
         var depth = new uint[SdfMeshIrradianceProbe.DepthWords];
 
-        _ = SdfMeshProbeDepth.Trace(scene, Vector3.Zero, 5.25f, depth);
+        _ = SdfMeshProbeDepth.Trace(scene, Vector3.Zero, 5.25f, depth, false);
         for (var x = -0.55f; (x <= 0.55f); x += 0.05f) {
             for (var y = -0.55f; (y <= 0.55f); y += 0.05f) {
                 if (((x * x) + (y * y)) >= 0.42f) { continue; }
@@ -100,7 +100,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
                 var pushed = (point + (SdfMeshIrradianceProbe.NormalBias * normal));
 
                 Assert.True(condition: scene.Unblocked(Vector3.Zero, Vector3.Normalize(value: pushed), (pushed.Length() - 0.001f)));
-                var visibility = SdfMeshProbeDepth.Visibility(coverage: SdfMeshProbeCoverage.Finest, surfaces: depth, toward: pushed);
+                var visibility = SdfMeshProbeDepth.Visibility(surfaces: depth, toward: pushed);
 
                 Assert.True(condition: (visibility > 0.95f), userMessage: $"curved receiver ({x}, {y}) visibility={visibility}");
             }
@@ -111,12 +111,12 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var scene = SdfMeshIrradianceScene.Build(draws: [Draw(mesh: Box(low: new Vector3(x: -20f, y: -1.2f, z: -20f), high: new Vector3(x: 20f, y: -1f, z: 20f)))]);
         var depth = new uint[SdfMeshIrradianceProbe.DepthWords];
 
-        _ = SdfMeshProbeDepth.Trace(scene: scene, origin: Vector3.Zero, reach: 5.25f, surfaces: depth);
+        _ = SdfMeshProbeDepth.Trace(scene: scene, origin: Vector3.Zero, reach: 5.25f, sheets: false, surfaces: depth);
         for (var radius = 1f; (radius <= 5f); radius += 0.1f) {
             for (var angle = 0; (angle < 360); angle++) {
                 var radians = ((angle * MathF.PI) / 180f);
                 var toward = new Vector3(x: (radius * MathF.Cos(x: radians)), y: -0.95f, z: (radius * MathF.Sin(x: radians)));
-                var visibility = SdfMeshProbeDepth.Visibility(coverage: SdfMeshProbeCoverage.Finest, surfaces: depth, toward: toward);
+                var visibility = SdfMeshProbeDepth.Visibility(surfaces: depth, toward: toward);
 
                 Assert.True(condition: (visibility > 0.999f), userMessage: $"flat receiver radius={radius} angle={angle} visibility={visibility}");
             }
@@ -127,13 +127,44 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var scene = SdfMeshIrradianceScene.Build([Draw(mesh: Box(new Vector3(x: 1f, y: -10f, z: -10f), new Vector3(x: 1.1f, y: 0.11f, z: 10f)))]);
         var depth = new uint[SdfMeshIrradianceProbe.DepthWords];
 
-        Assert.InRange(SdfMeshProbeDepth.Trace(scene, Vector3.Zero, 2.65f, depth), 1, 256);
+        Assert.InRange(SdfMeshProbeDepth.Trace(scene, Vector3.Zero, 2.65f, depth, false), 1, 256);
         var toward = new Vector3(x: 2f, y: 0.19f, z: 0f);
 
         Assert.False(condition: scene.Unblocked(Vector3.Zero, Vector3.Normalize(value: toward), toward.Length()));
-        var visibility = SdfMeshProbeDepth.Visibility(coverage: SdfMeshProbeCoverage.Finest, surfaces: depth, toward: toward);
+        var visibility = SdfMeshProbeDepth.Visibility(surfaces: depth, toward: toward);
 
         Assert.True(condition: (visibility < 0.05f), userMessage: $"silhouette visibility={visibility}");
+    }
+    /// <summary>THE LAW: a probe's surface map tells a sheet from a solid's near side. A probe stands over a 0.3 m slab
+    /// that ends a metre to its west, beside a hill 50 m in radius whose near side bulges 10 m to its east: every texel
+    /// whose ray meets the slab (its top or its edge) is marked a sheet, and no texel whose ray meets the hill is.</summary>
+    [Fact]
+    public void ASurfaceMapMarksASlabASheetAndAHillsNearSideASolid() {
+        using var scene = SdfMeshIrradianceScene.Build([
+            Draw(mesh: Box(low: new Vector3(x: -20f, y: -1.3f, z: -20f), high: new Vector3(x: -1f, y: -1f, z: 20f))),
+            Draw(mesh: Sphere(centre: new Vector3(x: 60f, y: 0f, z: 0f), radius: 50f)),
+        ]);
+        var surfaces = new uint[SdfMeshIrradianceProbe.DepthWords];
+        var directions = SdfMeshProbeDepth.RayDirections;
+        var slab = 0;
+        var hill = 0;
+
+        _ = SdfMeshProbeDepth.Trace(origin: Vector3.Zero, reach: 30f, scene: scene, sheets: true, surfaces: surfaces);
+        for (var texel = 0; (texel < directions.Length); texel++) {
+            if (!scene.Intersect(direction: directions[texel], distance: out var distance, material: out _, maximum: 30f, normal: out _, origin: Vector3.Zero)) { continue; }
+
+            var sheet = (((surfaces[(directions.Length + (texel >> 1))] >> (16 * (texel & 1))) & 1u) != 0u);
+            var hit = (directions[texel] * distance);
+
+            if (hit.X < 0f) {
+                slab++;
+                Assert.True(condition: sheet, userMessage: $"texel {texel} meets the slab at {hit} unmarked");
+            } else {
+                hill++;
+                Assert.False(condition: sheet, userMessage: $"texel {texel} meets the hill at {hit} marked a sheet");
+            }
+        }
+        Assert.True(condition: ((slab > 0) && (hill > 0)), userMessage: $"slab texels={slab} hill texels={hill}");
     }
     [Fact]
     public void ASealedEnclosureWithALightBeyondItsWallStaysDark() {
@@ -406,7 +437,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         Assert.InRange(actual: offset.Y, high: 0.5f, low: 0f);
         Assert.InRange(actual: MathF.Abs(x: offset.Z), high: 0.5f, low: 0f);
         Assert.InRange(actual: Inside(probe: onFace), high: 0.25f, low: 0f);
-        Assert.True(condition: (SdfMeshProbeDepth.Visibility(coverage: SdfMeshProbeCoverage.Finest, surfaces: beyondEnd[SdfMeshIrradianceProbe.DepthWord..], toward: (Vector3.UnitZ * 0.5f)) > 0.95f));
+        Assert.True(condition: (SdfMeshProbeDepth.Visibility(surfaces: beyondEnd[SdfMeshIrradianceProbe.DepthWord..], toward: (Vector3.UnitZ * 0.5f)) > 0.95f));
 
         // The wall's own face reads the moved probe, and the report names where it stands.
         var reports = new SdfMeshProbeReport[SdfMeshIrradiance.GatherSlots];
@@ -701,8 +732,8 @@ public sealed partial class SdfMeshIrradianceLawTests {
         Assert.True(condition: (Luminance(face: 3, probe: lower) < (0.01f * upperLuminance)));
         var moments = lower.Slice(length: SdfMeshIrradianceProbe.DepthWords, start: SdfMeshIrradianceProbe.DepthWord);
 
-        Assert.True(condition: (SdfMeshProbeDepth.Visibility(coverage: SdfMeshProbeCoverage.Finest, surfaces: moments, toward: new Vector3(x: 0.3f, y: 2.8f, z: -0.2f)) < 0.001f));
-        Assert.Equal(1f, SdfMeshProbeDepth.Visibility(coverage: SdfMeshProbeCoverage.Finest, surfaces: moments, toward: new Vector3(x: 0.3f, y: 2.4f, z: -0.2f)));
+        Assert.True(condition: (SdfMeshProbeDepth.Visibility(surfaces: moments, toward: new Vector3(x: 0.3f, y: 2.8f, z: -0.2f)) < 0.001f));
+        Assert.Equal(1f, SdfMeshProbeDepth.Visibility(surfaces: moments, toward: new Vector3(x: 0.3f, y: 2.4f, z: -0.2f)));
         // The meter reads the lit room lit and the dark room dark.
         Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var lit, position: new Vector3(x: 0.5f, y: 5.5f, z: 0.5f), skyVisibility: out _, source: out _));
         Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var dark, position: new Vector3(x: 0.5f, y: 1.5f, z: 0.5f), skyVisibility: out _, source: out _));
@@ -797,8 +828,8 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var probe = Probe(parameters: in parameters, words: words, x: 0, y: 0, z: 0);
         var depth = probe.Slice(length: SdfMeshIrradianceProbe.DepthWords, start: SdfMeshIrradianceProbe.DepthWord);
 
-        Assert.True(condition: (SdfMeshProbeDepth.Visibility(coverage: SdfMeshProbeCoverage.Finest, surfaces: depth, toward: new Vector3(x: 1f, y: 0f, z: 0f)) < 0.05f));
-        Assert.Equal(1f, SdfMeshProbeDepth.Visibility(coverage: SdfMeshProbeCoverage.Finest, surfaces: depth, toward: new Vector3(x: 0.4f, y: 0f, z: 0f)));
+        Assert.True(condition: (SdfMeshProbeDepth.Visibility(surfaces: depth, toward: new Vector3(x: 1f, y: 0f, z: 0f)) < 0.05f));
+        Assert.Equal(1f, SdfMeshProbeDepth.Visibility(surfaces: depth, toward: new Vector3(x: 0.4f, y: 0f, z: 0f)));
     }
 
     // A long sunlit floor under a camera at its west end, beyond the finest window's reach.

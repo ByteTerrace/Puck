@@ -43,14 +43,20 @@ public static class SdfMeshIrradianceProbe {
     /// such as a downward rim at the ground whose front probes the ground hides, which would otherwise draw black. A coarser
     /// level's probe behind the plane keeps none: its depth test cannot resolve the receiver's own wall.</summary>
     public const float BehindShare = 0.05f;
-    /// <summary>The finest level's hit footprint share below which an edge tap cannot extend a finite block: a 1 m probe's
-    /// taps are half a metre wide, and a tap half blocked by a railing must not shadow the floor beyond it.</summary>
+    /// <summary>The share of a receiver's angular taps blocked by solids at which their block starts closing: a minority
+    /// tap cannot extend a finite block over the footprint, so a tap half on a railing does not shadow the floor beyond it,
+    /// and a coarse probe's metres-wide tap on a hill's near bulge does not shadow the hill's far slope it sees.</summary>
     public const float DepthCoverageStart = 0.5f;
-    /// <summary>Scales the finest level's closing ramp to complete at three-quarter coverage.</summary>
+    /// <summary>Scales the solids' closing ramp to complete at three-quarter coverage.</summary>
     public const float DepthCoverageScale = 4f;
-    /// <summary>The conservative ramp's hit footprint share at which it starts closing: none, since a probe tap metres
-    /// wide inside a building that measured a hit before the receiver measured a slab or a wall between them.</summary>
-    public const float CoarseDepthCoverageStart = 0f;
-    /// <summary>Scales the conservative ramp to complete at an eighth of the footprint blocked.</summary>
-    public const float CoarseDepthCoverageScale = 8f;
+    /// <summary>The share of a receiver's angular taps blocked by sheets at which their block starts closing: none, since
+    /// a measured hit on a sheet before the receiver is a slab or a wall with another space beyond it.</summary>
+    public const float DepthSheetCoverageStart = 0f;
+    /// <summary>Scales the sheets' closing ramp to complete at an eighth of the footprint blocked.</summary>
+    public const float DepthSheetCoverageScale = 8f;
+    /// <summary>The thickness, in metres, below which a surface a probe's ray hit is a sheet (a slab, a wall, a panel)
+    /// rather than the near side of a solid: the solid behind the hit holds no ball of this diameter touching it, which
+    /// the trace measures as a surface within 0.45 of it from the point half of it inside. A sheet's surface word sets
+    /// the low bit of its texel's curvature half.</summary>
+    public const float DepthSheetThickness = 2f;
 }

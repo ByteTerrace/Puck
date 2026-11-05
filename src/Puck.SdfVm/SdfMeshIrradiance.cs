@@ -13,8 +13,7 @@ namespace Puck.SdfVm;
 /// published.</param>
 /// <param name="Dims">The probes along each axis of the window.</param>
 /// <param name="Low">The window's first cell: a probe of cell <c>c</c> sits at <c>(c + 0.5) * Spacing</c>, per axis.</param>
-/// <param name="Coverage">The level's closing ramp over its taps' blocked share.</param>
-public readonly record struct SdfMeshIrradianceWindow(Vector3 Spacing, (int X, int Y, int Z) Dims, (int X, int Y, int Z) Low, SdfMeshProbeCoverage Coverage = default) {
+public readonly record struct SdfMeshIrradianceWindow(Vector3 Spacing, (int X, int Y, int Z) Dims, (int X, int Y, int Z) Low) {
     /// <summary>Gets whether the window holds probes views read.</summary>
     public bool Present => ((Spacing.X > 0f) && (Spacing.Y > 0f) && (Spacing.Z > 0f) && (Dims.X > 0) && (Dims.Y > 0) && (Dims.Z > 0));
     /// <summary>Gets the probes the window holds.</summary>
@@ -102,14 +101,12 @@ public sealed class SdfMeshIrradiance : IDisposable {
     }
 
     // Each tier's levels, finest first. The finest is the tier's own; the storey level's 2 m vertical spacing puts a probe
-    // plane in every storey 2.4 m or taller, which no isotropic coarse level does, over a 128 m by 48 m by 128 m window,
-    // and its probes in every room take any hit before a receiver as a slab or a wall (the conservative ramp); the 32 m
-    // level reaches past it over open ground, where its metres-wide taps alias a curved surface's near bulge, so it keeps
-    // the tolerant ramp.
-    private static readonly SdfMeshIrradianceLevel StoreyLevel = new(Coverage: SdfMeshProbeCoverage.Coarse, Dims: (32, 24, 32), Spacing: new Vector3(x: 4f, y: 2f, z: 4f));
-    private static readonly SdfMeshIrradianceLevel FarLevel = new(Coverage: SdfMeshProbeCoverage.Finest, Dims: (32, 12, 32), Spacing: new Vector3(value: 32f));
-    private static readonly SdfMeshIrradianceLevel[] HighLevels = [new(Coverage: SdfMeshProbeCoverage.Finest, Dims: (48, 16, 48), Spacing: Vector3.One), StoreyLevel, FarLevel];
-    private static readonly SdfMeshIrradianceLevel[] MediumLevels = [new(Coverage: SdfMeshProbeCoverage.Finest, Dims: (32, 12, 32), Spacing: new Vector3(value: 2f)), StoreyLevel, FarLevel];
+    // plane in every storey 2.4 m or taller, which no isotropic coarse level does, over a 128 m by 48 m by 128 m window;
+    // the 32 m level reaches past it.
+    private static readonly SdfMeshIrradianceLevel StoreyLevel = new(Dims: (32, 24, 32), Sheets: true, Spacing: new Vector3(x: 4f, y: 2f, z: 4f));
+    private static readonly SdfMeshIrradianceLevel FarLevel = new(Dims: (32, 12, 32), Sheets: true, Spacing: new Vector3(value: 32f));
+    private static readonly SdfMeshIrradianceLevel[] HighLevels = [new(Dims: (48, 16, 48), Sheets: false, Spacing: Vector3.One), StoreyLevel, FarLevel];
+    private static readonly SdfMeshIrradianceLevel[] MediumLevels = [new(Dims: (32, 12, 32), Sheets: false, Spacing: new Vector3(value: 2f)), StoreyLevel, FarLevel];
 
     /// <summary>Returns a tier's levels, finest first: each one's cell size and its window's probes along each axis.</summary>
     /// <param name="tier">The indirect tier.</param>
@@ -674,9 +671,10 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
                     var reach = MathF.Abs(x: BitConverter.UInt32BitsToSingle(value: hits[(2 * texel)]));
 
-                    // A recorded hit on the box's face lies at its entry: the margin keeps rounding from passing it by.
+                    // A recorded hit on the box's face lies at its entry: the margin keeps rounding from passing it by. The
+                    // sheet test reads the scene up to a sheet's thickness behind the hit (SdfMeshProbeDepth.Surfaces).
                     reach = MathF.Min(x: reach, y: layout.Reach);
-                    if (Meets(direction: direction, high: box.High, low: box.Low, origin: origin, reach: (reach + MathF.Max(x: BoxMargin, y: (reach * 1.0e-4f))))) { return true; }
+                    if (Meets(direction: direction, high: box.High, low: box.Low, origin: origin, reach: ((reach + MathF.Max(x: BoxMargin, y: (reach * 1.0e-4f))) + SdfMeshIrradianceProbe.DepthSheetThickness))) { return true; }
                 }
             }
         }
@@ -777,7 +775,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // it yet places the coarser levels' slots after its own.
     private SdfMeshIrradianceWindow PublishedOf(Layout layout, int level) => (m_levels[level].Published.Present
         ? m_levels[level].Published
-        : new SdfMeshIrradianceWindow(Coverage: layout.Levels[level].Coverage, Dims: layout.DimsOf(level: level), Low: default, Spacing: Vector3.Zero));
+        : new SdfMeshIrradianceWindow(Dims: layout.DimsOf(level: level), Low: default, Spacing: Vector3.Zero));
     // The first cell of a level's window. It centres on the box of the cells of every view's camera this residency
     // renders when that box fits in the window's middle, and on the first view's camera alone when it does not, so each
     // level follows every view as far as its reach allows and a coarser level covers views a finer one cannot. It
@@ -1778,7 +1776,8 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
             if (valid) {
                 // The farthest in-window receiver is a spacing diagonal plus relocation and the normal bias.
-                SdfMeshProbeDepth.Surfaces(hits: hits.Hits(index: index), reach: SurfaceReachOf(spacing: spacing), surfaces: hits.Depth(index: index));
+                SdfMeshProbeDepth.Surfaces(hits: hits.Hits(index: index), origin: (centre + offset), reach: SurfaceReachOf(spacing: spacing), scene: scene,
+                    sheets: layout.Levels[candidate.Level].Sheets, surfaces: hits.Depth(index: index));
             }
             probe = new ProbeData(Geometry: geometry, Hits: hits, HitIndex: index, Inside: inside, Invalid: !valid, Offset: offset);
         } else if (!cache.TryGetValue(key: candidate.Cell, value: out probe)) {
@@ -2322,7 +2321,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
             var fade = ((ahead * ahead) * (3f - (2f * ahead)));
             var facing = float.Lerp(amount: outside, value1: MathF.Max(x: fade, y: ((level == 0) ? SdfMeshIrradianceProbe.BehindShare : 0f)), value2: 1f);
             var trilinear = ((weights.X * weights.Y) * weights.Z);
-            var visibility = (probe.Invalid ? 0f : SdfMeshProbeDepth.Visibility(bounded: depth, coverage: layout.Levels[level].Coverage, surfaces: probe.Depth, toward: (pushed - probePoint)));
+            var visibility = (probe.Invalid ? 0f : SdfMeshProbeDepth.Visibility(bounded: depth, surfaces: probe.Depth, toward: (pushed - probePoint)));
             var weight = ((trilinear * facing) * visibility);
 
             front += (trilinear * float.Lerp(amount: outside, value1: fade, value2: 1f));
@@ -2679,7 +2678,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
         public int TotalCount => OffsetOf(level: SdfMeshIrradianceProbe.Levels);
 
         public SdfMeshIrradianceWindow WindowOf(int level, (int X, int Y, int Z) low) =>
-            new(Coverage: Levels[level].Coverage, Dims: DimsOf(level: level), Low: low, Spacing: SpacingOf(level: level));
+            new(Dims: DimsOf(level: level), Low: low, Spacing: SpacingOf(level: level));
         public static Layout Of(SdfIndirectTier tier, int? bounces, float reach) => new(
             Bounce: ((bounces ?? 1) > 0),
             Levels: ((tier == SdfIndirectTier.High) ? HighLevels : MediumLevels),
