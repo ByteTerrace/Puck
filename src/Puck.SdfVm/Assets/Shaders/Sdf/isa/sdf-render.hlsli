@@ -15,7 +15,7 @@
 #define SDF_PROBE_STACK_DEPTH                     64u
 #define SDF_PROBE_GROUP_SIZE                      32u
 #define SDF_PROBE_RELIGHT_OUTPUT_WORDS            40u
-#define SDF_PROBE_RELIGHT_INPUT_WORDS             280u
+#define SDF_PROBE_RELIGHT_INPUT_WORDS             279u
 #define SDF_PROBE_RELIGHT_HEADER_ROWS             20u
 #define SDF_PROBE_RELIGHT_MATERIAL_ROWS           2u
 #define SDF_PROBE_RELIGHT_LIGHT_ROWS              4u
@@ -24,8 +24,16 @@
 #define SDF_PROBE_CACHE_WORDS                     290u
 #define SDF_PROBE_RELIGHT_RESULT_WORDS            275u
 #define SDF_PROBE_METER_OUTPUT_WORDS              8u
-#define SDF_PROBE_RECORD_INPUT_WORD               45u
+#define SDF_PROBE_RECORD_INPUT_WORD               44u
+#define SDF_PROBE_RELIGHT_PREVIOUS_WORD           4u
+#define SDF_PROBE_SELECT_GROUP_SIZE               64u
 #define SDF_MESH_IRRADIANCE_CLEARANCE             0.1
+#define SDF_MESH_IRRADIANCE_INSIDE_SHARE          0.25
+#define SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE     2.0
+#define SDF_MESH_IRRADIANCE_METER_COINCIDENT      0.001
+#define SDF_MESH_IRRADIANCE_LIGHT_BIAS            0.02
+#define SDF_MESH_IRRADIANCE_BOX_MARGIN            0.001
+#define SDF_MESH_IRRADIANCE_BOX_MARGIN_SHARE      0.0001
 #define SDF_MESH_IRRADIANCE_DEPTH_SHEET_THICKNESS 2.0
 
 // Puck.SignedDistance.SdfIndirectSources.
@@ -46,6 +54,10 @@
 #define SDF_LIGHT_MINIMUM_DISTANCE   0.05
 #define SDF_LUMINANCE_CEILING        65000.0
 #define SDF_WINDOW_ADAPTATION        0.75
+#define SDF_LUMINANCE_RED            0.2126
+#define SDF_LUMINANCE_GREEN          0.7152
+#define SDF_LUMINANCE_BLUE           0.0722
+#define SDF_LUMINANCE                float3(SDF_LUMINANCE_RED, SDF_LUMINANCE_GREEN, SDF_LUMINANCE_BLUE)
 #define SDF_LOCAL_ADAPTATION_RANGE   6.0
 #define SDF_LOCAL_REFLECTANCE        0.4
 #define SDF_REFERENCE_WHITE          0.26041666

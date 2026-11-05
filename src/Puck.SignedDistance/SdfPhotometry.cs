@@ -45,11 +45,18 @@ public static class SdfPhotometry {
     /// <summary>The highest <c>EV100</c> an exposure admits: beyond the brightest sunlit snow.</summary>
     public const float MaximumEv100 = 20f;
 
+    /// <summary>The red primary's share of a linear Rec. 709 colour's luminance (ITU-R BT.709).</summary>
+    public const float LuminanceRed = 0.2126f;
+    /// <summary>The green primary's share of a linear Rec. 709 colour's luminance (ITU-R BT.709).</summary>
+    public const float LuminanceGreen = 0.7152f;
+    /// <summary>The blue primary's share of a linear Rec. 709 colour's luminance (ITU-R BT.709).</summary>
+    public const float LuminanceBlue = 0.0722f;
+
     /// <summary>Returns the luminance of a linear Rec. 709 colour, its Y.</summary>
     /// <param name="color">The linear RGB colour.</param>
     /// <returns>The luminance, in the colour's own units.</returns>
     public static float LuminanceOf(Vector3 color) =>
-        ((0.2126f * color.X) + (0.7152f * color.Y) + (0.0722f * color.Z));
+        ((LuminanceRed * color.X) + (LuminanceGreen * color.Y) + (LuminanceBlue * color.Z));
     /// <summary>Returns a colour scaled to unit luminance, so a light of that colour emits exactly its authored
     /// photometric quantity; a colour of no luminance is returned as it is.</summary>
     /// <param name="color">The linear RGB colour.</param>

@@ -32,7 +32,6 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                 MeshDrawsRevision = revision,
             };
             rig.Engine.Pack(frame: frame);
-            rig.Engine.WriteMeshIrradiance(new uint[] { ((uint)revision) });
             Assert.True(condition: rig.Engine.MeshesResident);
             rig.Engine.SubmitUpload();
             var later = Assert.IsType<FakeGpuDevice.Fence>(@object: rig.Gpu.LastSubmittedFence);

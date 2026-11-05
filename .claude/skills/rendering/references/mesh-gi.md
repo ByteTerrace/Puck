@@ -81,11 +81,19 @@ The runtime streams the existing scene's nodes and leaf indices through a
 query owns the shared scene and feedback regions until its fence completes;
 they therefore have one staging slot. Service slots independently retain their
 outputs through readback release. GPU hit-cache allocations carry nonrepeating
-tokens, checked by selection before reuse. A relight commits records only after
-`Stands` accepts their scene/window, then frame upload copies the ready slots
-into the published GPU table. The CPU retains depth/sky and diagnostic lighting,
-and releases full hit arrays after their device-cache upload. Exposure reads
-the GPU meter's small answer rather than traversing the hierarchy on the frame.
+tokens, checked by selection before reuse. The cache is sized to the published
+tier (`HitCapacityOf`: the window's cells plus two fresh slots per probe a drain
+batch places). A placed probe's trace job copies its hits into a fresh cache
+slot on the device (the first trace and the trial traces into separate slots,
+`PlaceBatch`); its relight adopts the slot it keeps (`AdoptGpuHits`) and the
+cache pass stamps the token, so hits read back for the CPU's surface map are
+never uploaded again. A relight commits records only after `Stands` accepts
+their scene/window, then frame upload copies the ready slots into the published
+GPU table. The CPU retains depth/sky and diagnostic lighting, and releases full
+hit arrays once the batch is relit. Exposure reads the GPU meter's small answer
+rather than traversing the hierarchy on the frame. A job whose scene's meshes
+are not resident within `AdmissionWait` is cancelled like an obsolete one, so it
+never holds the coordinator or the meter behind it without bound.
 
 `SdfWorldResidency.LightingPending` latches convergence after preparation for
 the whole frame, including the final meter. `SdfWorldPasses.WaitingOf` feeds it
@@ -376,7 +384,11 @@ after the main residency's done line; a nested residency's done line is insuffic
   At a camera cut the meter reads `fresh`: a sample is reused only from the very
   position, so the reading after a teleport depends on where the camera stands,
   not where it stood. `SdfViewExposures` keeps a cut owed until a reading
-  arrives and snaps to that first reading.
+  arrives and snaps to that first reading. The runtime meters on the GPU
+  asynchronously (`ScheduleGpuMeters`, at most every `LightingInterval`, at once
+  after a cut): each view reads its own latest row wherever its camera now
+  stands, so a moving camera stays `probes` or `camera-trace`, never `held`; a
+  `fresh` read answers only from a row asked after the view's cut revision.
   This camera sample never writes the volume or relaxes surface visibility.
   If the scene is unavailable or the camera is inside opaque geometry, retain
   the previous exposure, local-adaptation meter and sky visibility. The authored
@@ -418,7 +430,7 @@ after the main residency's done line; a nested residency's done line is insuffic
 - A record is 235 words (940 bytes): 19 header/cube/light/origin words, 144
   packed first-hit surface words and 72 packed normal-gradient words.
   Medium's three levels hold 49,152 probes in 44.0625 MiB; High's 73,728 in
-  66.09375 MiB. The GPU runtime releases the CPU hit array after upload, keeping
+  66.09375 MiB. The GPU runtime releases the CPU hit array once the batch is relit, keeping
   depth/sky and diagnostic lighting (`ProbeBlock` and `LightBlock`); the CPU
   reference keeps the full hits too. `world.budget` derives the retained block
   cost from those types. A level's cache holds its window grown by the
@@ -428,10 +440,16 @@ after the main residency's done line; a nested residency's done line is insuffic
   the three levels). `world.residency`'s `probe-cache-*` line reads it. A batch's
   depth/sky and light blocks stay alive while any kept probe names them, so
   bytes per kept probe can exceed their nominal payload.
-  Publication starts with one inert record and fits the published tier.
-  Reuse `GpuRegion` grow/shrink and
-  existing frame-ring retirement; increment the binding revision when its buffer
-  changes. Keep the old table and coordinates until every new slot is measured.
+  The published table (`SdfWorldTables.PublishMeshIrradiance`) is copied on the
+  device from the feedback table; no frame uploads it from the host. It fits
+  the published volume exactly, is cleared before its first copies, retires
+  through the frame ring and increments the binding revision when replaced;
+  until the volume first publishes into a residency's tables the World set
+  binds the dummy buffer and the parameters are disabled. Keep the old table
+  and coordinates until every new slot is measured. A device reattach brings
+  new tables with no table: nothing publishes until a completed relight carries
+  the volume's full snapshot into the new feedback, then every slot republishes
+  at once (`RepublishAll`).
   The GPU feedback table and the published table are distinct: a relight reads
   completed prior batches, while views retain their last complete window.
   Feedback has a CPU shadow for reset snapshots; hierarchy staging streams

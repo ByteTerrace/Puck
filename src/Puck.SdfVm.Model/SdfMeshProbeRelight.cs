@@ -17,10 +17,14 @@ public static class SdfMeshProbeRelight {
     public const int CacheWords = 2 + SdfMeshProbeTrace.HitWords;
     /// <summary>Six RGB radiance values, six local values and the visibility bits.</summary>
     public const int OutputWords = 36 + SdfMeshIrradianceProbe.LightWords;
-    /// <summary>Flags, allocation token, cache slot, optional upload address, then the previous output.</summary>
+    /// <summary>Flags, allocation token, cache slot, the previous output, then the geometric record.</summary>
     public const int InputWords = RecordInputWord + SdfMeshIrradianceProbe.ProbeWords;
+    /// <summary>The first word of the previous output a relight that reuses its local cube reads.</summary>
+    public const int PreviousWord = 4;
     /// <summary>The geometric record supplied beside the relight inputs.</summary>
-    public const int RecordInputWord = 5 + OutputWords;
+    public const int RecordInputWord = PreviousWord + OutputWords;
+    /// <summary>Threads per selection group.</summary>
+    public const int SelectGroupSize = 64;
     /// <summary>The diagnostic lighting output followed by the GPU-packed publication record.</summary>
     public const int ResultWords = OutputWords + SdfMeshIrradianceProbe.ProbeWords;
     /// <summary>Six axis luminances, sky visibility and source/trace flags in one camera-meter answer.</summary>
