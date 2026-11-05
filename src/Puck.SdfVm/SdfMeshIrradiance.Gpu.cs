@@ -117,7 +117,7 @@ public sealed partial class SdfMeshIrradiance {
             new(layout.SpacingOf(0), 0), new(layout.SpacingOf(1), 0), new(layout.SpacingOf(2), 0),
         };
         for (var level = 0; level < m_levels.Length; level++) {
-            changes.Add(new(interleave ? 1 : 0, SdfMeshProbeRelight.InterleaveOf(level), SdfMeshProbeRelight.AgeBoundOf(level, snapshot.AgeTarget), 0));
+            changes.Add(new(interleave ? 1 : 0, SdfMeshProbeRelight.InterleaveOf(level), SdfMeshProbeRelight.AgeBoundOf(level, snapshot.AgeTarget), BitConverter.Int32BitsToSingle(m_selectionSweep)));
         }
         foreach (var (geometry, boxes) in snapshot.Changes) {
             if (boxes is null) { changes.Add(new(0, 0, 0, BitConverter.Int32BitsToSingle(geometry))); changes.Add(new(0, 0, 0, 1)); }

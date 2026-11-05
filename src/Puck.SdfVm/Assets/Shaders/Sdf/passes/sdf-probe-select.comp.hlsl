@@ -56,7 +56,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float4 cadence = sdfProbeLighting[5 + level];
     float age = asfloat(sdfProbeInput[at + 11]);
     uint phase = sdfProbeInput[at] >> 2;
-    bool phaseDue = (asuint(state.z) + phase) % (uint)cadence.y == 0;
+    bool phaseDue = (asuint(cadence.w) + phase) % (uint)cadence.y == 0;
     bool forced = cadence.z > 0 && age >= cadence.z;
     bool due = essential || forced || (sweep != asuint(state.w) && (cadence.x == 0 || phaseDue));
     bool stale = !due && (lighting != asuint(state.z) || sweep != asuint(state.w));

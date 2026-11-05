@@ -1109,7 +1109,8 @@ Under changing lighting, the selection kernel interleaves coarse levels by a
 stable cell phase. A level's age bound scales the authored target by its
 interleave; reaching it forces eligibility and age relative to it takes
 priority. Geometry and publication work bypass the gate. Unchanged lighting
-takes whole bounce sweeps, and a lockstep drain always visits every cell from
+takes whole bounce sweeps. A sweep retains its initial phase across listings,
+even when later batches shade under newer lighting, and a lockstep drain always visits every cell from
 no bounce. These bounds describe demand under the budget, not guaranteed wall
 time when the device is overloaded.
 Below its bound, a probe outside every local view's frustum gets less age

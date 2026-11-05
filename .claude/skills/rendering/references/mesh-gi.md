@@ -40,13 +40,21 @@ window-relative cells. Trace/relight class, lighting age and level retain their
 priority; within each eight-cell radial band the order is spatial. A drain
 still lists every cell and uses the same spatial order within each level.
 For changing lighting, selection visits a stable cell phase every 1/4/8
-lighting versions by level. `sdf-probe-select.comp.hlsl` alone sets the GPU
+completed sweeps by level. Phase uses the sweep ordinal, since lighting
+versions can jump by a multiple of the period between sweeps and revisit the
+same phase indefinitely. The sweep holds its initial phase
+and interleave decision across empty or interrupted listings; a newer batch
+lighting never fills the deferred phases within that sweep.
+`sdf-probe-select.comp.hlsl` alone sets the GPU
 due bit; missing geometry, rebase and unwritten publication bypass the phase,
 and lighting age at the level's bound forces it even in the current sweep.
 The bound is the authored age target times that level's interleave and is
-reported in `world.budget`. Selection under an unchanged lighting version takes
-a full sweep so bounce propagation cannot stop on an unvisited phase. The
+reported in `world.budget`. A sweep beginning under the same lighting version
+as its predecessor visits every phase so bounce propagation cannot stop on an
+unvisited phase. The
 CPU reference uses the same eligibility rule; lockstep always visits all cells.
+Partial interleaved sweeps neither certify convergence nor consume the
+full-window `MaxSweeps` limit.
 Relight priority uses age relative to the level's bound before level, capture
 age and spatial band. Overload can exceed the targets; no probe retires on its
 own small change.

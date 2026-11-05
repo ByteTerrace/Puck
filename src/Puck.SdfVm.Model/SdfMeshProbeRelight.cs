@@ -11,8 +11,8 @@ public static class SdfMeshProbeRelight {
     /// <summary>A level's overload age target, scaled by its interleave; zero means no authored age target.</summary>
     public static float AgeBoundOf(int level, float target) => target * InterleaveOf(level);
     /// <summary>Eligibility after geometry and publication requirements: force age, otherwise visit the cell's phase.</summary>
-    public static bool RelightDue(int version, int phase, int interleave, float age, float bound) =>
-        (bound > 0 && age >= bound) || ((uint)version + (uint)phase) % (uint)interleave == 0;
+    public static bool RelightDue(int sweep, int phase, int interleave, float age, float bound) =>
+        (bound > 0 && age >= bound) || ((uint)sweep + (uint)phase) % (uint)interleave == 0;
     /// <summary>Two exact allocation-token words followed by the cached hit words.</summary>
     public const int CacheWords = 2 + SdfMeshProbeTrace.HitWords;
     /// <summary>Six RGB radiance values, six local values and the visibility bits.</summary>

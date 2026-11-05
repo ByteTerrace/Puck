@@ -290,6 +290,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // The worker's candidates and a batch's results, kept across batches: one worker runs at a time.
     private readonly List<Candidate> m_candidates = [];
     private int m_selectionLighting;
+    private int m_selectionSweep;
+    private bool m_interleaving;
     private CameraSnapshot[] m_viewCameras = [];
     private ProbeData[] m_results = [];
     private readonly List<float> m_ages = [];
@@ -1537,9 +1539,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private bool Stands(in Snapshot snapshot) =>
         ((snapshot.Geometry == m_geometry) && (snapshot.WindowVersion == m_windowVersion) && (snapshot.Layout == m_layout));
 
-    // The background worker. The bounce is one iteration over the windows: a sweep relights every probe once (those
-    // lacking a trace against the current geometry first, finest level and nearest the camera first, then the oldest
-    // lighting first), each reading the volume about its hits as it stands; when a sweep ends, another starts while any
+    // The background worker. Stable lighting takes whole-window bounce sweeps; changing lighting interleaves coarse
+    // phases, with overdue probes forced. Work takes trace demand first, then relative age, view/change weight and
+    // spatial bands, each probe reading the volume about its hits as it stands; another sweep starts while any
     // probe of it moved past the convergence bound or was relit under a lighting since replaced, so a change anywhere in
     // what a probe reads wakes it through the next sweep, and the iteration stops only when a whole sweep under
     // unchanged inputs moved nothing (or after MaxSweeps). The worker works through its list a batch at a time while the
@@ -1570,9 +1572,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     if (candidates.Count == 0) {
                         m_listed = false;
                         if (stale || m_sweepMoved || (snapshot.Lighting.Version != m_lightingVersion)) {
-                            if (m_sweepsSince < MaxSweeps) {
+                            // A partial interleaved sweep cannot certify bounce convergence or spend a full-sweep limit.
+                            if (m_interleaving || m_sweepsSince < MaxSweeps) {
                                 m_sweep++;
-                                m_sweepsSince++;
+                                if (!m_interleaving) { m_sweepsSince++; }
                                 m_sweepMoved = false;
                                 continue;
                             }
@@ -1685,14 +1688,22 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_reported = true;
         Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] done probes={probes} traced={m_traced} relit={m_relit} rays={m_rays} triangles={snapshot.Scene.TriangleCount} lights={snapshot.Lighting.Points.Length} seconds={m_clock.Elapsed.TotalSeconds:0.000}"));
     }
-    // Lists the windows' probes a worker owes, every one of them for a drain, in the order it takes them: those to trace
-    // first, finest level and nearest the camera first; then those this sweep has not relit, oldest lighting first,
-    // finest level and nearest. Each probe of the windows that holds a relight adds its lighting's age to ages. Returns
-    // whether a probe this sweep already relit holds a lighting since replaced.
+    // Lists eligible probes, every one for a drain. The shared order puts trace demand first, then relight age relative
+    // to its bound with view/change weights, level, capture age and Morton bands. Returns whether lighting or a
+    // deferred phase still owes work, preventing a partial sweep from declaring convergence.
     private bool List(in Snapshot snapshot, bool all, List<Candidate> candidates, List<float>? ages) {
-        // A stable lighting must eventually assess a whole bounce sweep, including every coarse phase.
-        var interleave = !all && m_selectionLighting != snapshot.Lighting.Version;
-        m_selectionLighting = snapshot.Lighting.Version;
+        // Keep one phase for the entire sweep. An empty listing or a later lighting capture must not fill
+        // the deferred coarse phases before the finest level can begin its next sweep.
+        if (all) {
+            m_selectionSweep = 0;
+            m_selectionLighting = snapshot.Lighting.Version;
+            m_interleaving = false;
+        } else if (m_selectionSweep != snapshot.Sweep) {
+            m_interleaving = m_selectionLighting != snapshot.Lighting.Version;
+            m_selectionLighting = snapshot.Lighting.Version;
+            m_selectionSweep = snapshot.Sweep;
+        }
+        var interleave = m_interleaving;
         if (GpuTrace is not null) { return ListGpu(in snapshot, all, candidates, ages, interleave); }
         var stale = false;
         var layout = snapshot.Layout;
@@ -1726,7 +1737,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                             stale |= !current;
                             continue;
                         }
-                        if (interleave && !trace && !rebase && !SdfMeshProbeRelight.RelightDue(lighting.Version, ProbePhase(x, y, z), SdfMeshProbeRelight.InterleaveOf(level), age, bound)) {
+                        if (interleave && !trace && !rebase && !SdfMeshProbeRelight.RelightDue(m_selectionSweep, ProbePhase(x, y, z), SdfMeshProbeRelight.InterleaveOf(level), age, bound)) {
                             stale = true;
                             continue;
                         }
