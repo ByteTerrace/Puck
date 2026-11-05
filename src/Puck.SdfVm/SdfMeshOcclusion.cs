@@ -170,9 +170,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
 
             recorder.ClearStorageBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_visible!.BufferHandle, sizeBytes: m_visible.SizeBytes);
             if (m_seedVisible is { } previous) {
-                // The old buffer's only use in this recording is the copy. The global barrier above makes its prior
-                // compute writes visible to transfer reads on Vulkan; Direct3D 12 promotes its decayed COMMON state
-                // to COPY_SOURCE implicitly. Do not invent a current-recording UAV access for a source transition.
+                // The old buffer's only use in this recording is the copy, and the global barrier above makes its
+                // prior compute writes visible to transfer reads on both backends; it needs no transition of its own.
                 recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_visible.BufferHandle,
                     sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
                     destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);

@@ -120,7 +120,6 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
 
             var executable = ((ID3D12CommandList*)commandList);
 
-            ((IGpuDeviceContext)deviceContext).Services.QueueSubmitter.FlushBatch();
             ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle)->ExecuteCommandLists(
                 NumCommandLists: 1,
                 ppCommandLists: &executable

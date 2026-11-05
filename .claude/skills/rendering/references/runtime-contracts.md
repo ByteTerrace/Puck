@@ -64,7 +64,7 @@ batch retires, so a lease, a retirement or a readback keyed on a node's fence
 completes no earlier than the frame's last submission. Anything that must see
 deferred work first flushes it: a wait on a deferred fence, `SubmitAndWait`,
 the device's wait for idle and every other submission through
-`VulkanQueueSubmitter`. Direct3D 12 batches through `DirectXGpuQueueSubmitter`, with enhanced buffer barriers independent of decay. Its image barriers take the caller-stated layout. External waits split a batch before the waiting work; native uploads, readbacks, exports and presentation flush deferred work first.
+`VulkanQueueSubmitter`. Direct3D 12 batches through `DirectXGpuQueueSubmitter`, with enhanced buffer barriers independent of decay. Its image barriers take the caller-stated layout. Every native queue operation outside the submitter (an upload, a readback, an export's signal, a release's drain, presentation) reaches the queue through `DirectXDeviceContext.CommandQueueHandle`, which splits the batch first: the deferred lists go to the queue and the batch stays open. An external wait splits it the same way. A new path that keeps its own copy of the queue pointer gets around that door.
 
 ## 2. Nothing resolves silently to nothing
 
