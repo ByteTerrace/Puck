@@ -194,6 +194,48 @@ template lakeSurface(id, radius, gauge = "lakeLevel", rest = 0.4, rise = 4, pale
   }
 }
 
+// A float gauge for a store that the gauge `state.<gauge>` reads from zero to one: a teal guide post `height` tall with a
+// pale tick every `tick` metres up its face, and an orange float that rides the post from its foot to its top as the gauge
+// rises, so the store's fill is read off the bank. `height` is at most 4, the longest a slide runs.
+template floatGauge(id, height = 3, tick = 0.5, gauge = "aquiferFill", palette = gaugePalette) {
+  prototype $"{id}" {
+    document {
+      schema: "puck.creation.v1"
+      name: id
+      palette: palette
+      drivers [
+        { name: "fill", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0 }
+      ]
+      shape Box "post" {
+        material: 0
+        position [0, height / 2, 0]
+        scale [0.09, height / 2, 0.09]
+      }
+      for k in range(0, floor(height / tick) + 1) {
+        shape Box $"tick-{k}" {
+          material: 1
+          position [0, k * tick + 0.04, -0.1]
+          scale [0.2, 0.04, 0.015]
+        }
+      }
+      shape Box "float" {
+        material: 2
+        position [0, 0.15, -0.16]
+        scale [0.2, 0.12, 0.07]
+        slides [
+          { driver: "fill", axis [0, 1, 0], amplitude: height - 0.3, phase: 0, wave: "linear" }
+        ]
+      }
+    }
+  }
+}
+// The gauge's teal post, pale ticks and orange float.
+let gaugePalette = [
+  { color: "#2E6F73", roughness: 0.6, specular: 0.1 }
+  { color: "#EAE3CF", roughness: 0.8, specular: 0.02 }
+  { color: "#E8832A", roughness: 0.5, specular: 0.15 }
+]
+
 // A stone footbridge `length` long and `width` across over a stream, its deck `rise` above the ground on two ramps and
 // two piers, with a low parapet each side. Its +Z runs along the bridge. Every shape is a union of boxes, so it collides as
 // it is drawn.

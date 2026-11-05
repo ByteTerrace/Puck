@@ -55,6 +55,7 @@ prototypes {
     streamSegment(id: $"stream-{i}", length: leg.length, arc: i * 24)
   }
   stoneBridge(id: "bridge")
+  floatGauge(id: "reservoir-gauge", height: 3)
 }
 
 placements {
@@ -82,6 +83,12 @@ placements {
       position [legMiddle(i)[0], 0, legMiddle(i)[1]]
       yawDegrees: leg.bearing + 180
     }
+  }
+  // The reservoir's float gauge beside the pool's steps, its ticks facing the path: the aquifer's fill read off the bank.
+  placement "reservoir-gauge" {
+    prototype: "reservoir-gauge"
+    position [poolHole[2] + 1.5, 0, poolCentre[1] - 5]
+    yawDegrees: 90
   }
   placement "bridge" {
     prototype: "bridge"
