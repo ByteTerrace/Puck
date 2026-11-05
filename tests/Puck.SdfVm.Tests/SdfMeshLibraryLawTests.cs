@@ -94,7 +94,7 @@ public sealed class SdfMeshLibraryLawTests {
             var material = field.AddMaterial(new SdfMaterial(Vector3.One));
             var program = field.ResetPoint().Translate(new Vector3(x, 0, 0)).Sphere(material: material, radius: 1).Build();
 
-            for (var index = 0; (index < program.Instructions.Count); index++) { builder.AppendInstruction(index: index, program: program, transforms: []); }
+            for (var index = 0; (index < program.Instructions.Count); index++) { builder.AppendInstruction(index: index, program: program, transforms: [], sampled: SdfSampledSet.Empty); }
             return builder.Geometry;
         }
         var first = Key(0); var recent = Key(1); var incoming = Key(2);
@@ -129,8 +129,8 @@ public sealed class SdfMeshLibraryLawTests {
         var other = new SdfMeshGeometryBuilder(dynamic: true);
         var world = new SdfMeshGeometryBuilder(dynamic: false);
 
-        other.AppendInstance(instance: 0, program: crowded, transforms: []);
-        world.AppendInstruction(index: 0, program: crowded, transforms: []);
+        other.AppendInstance(instance: 0, program: crowded, transforms: [], sampled: SdfSampledSet.Empty);
+        world.AppendInstruction(index: 0, program: crowded, transforms: [], sampled: SdfSampledSet.Empty);
         Assert.NotEqual(expected: crowdedGeometry, actual: other.Geometry);
         Assert.NotEqual(expected: crowdedGeometry.Hash, actual: world.Geometry.Hash);
     }
@@ -209,7 +209,7 @@ public sealed class SdfMeshLibraryLawTests {
         var builder = new SdfMeshGeometryBuilder(dynamic: false);
 
         for (var index = 0; (index < program.Instructions.Count); index++) {
-            builder.AppendInstruction(index: index, program: program, transforms: []);
+            builder.AppendInstruction(index: index, program: program, transforms: [], sampled: SdfSampledSet.Empty);
         }
         // The world group bakes over a box the frame's reach wide, which its geometry holds.
         builder.AppendReach(reach: SdfFrame.DefaultFarDistance);
@@ -285,7 +285,7 @@ public sealed class SdfMeshLibraryLawTests {
     private static (SdfMeshGeometry Geometry, int[] Materials) PlateGeometry(Plate plate) {
         var builder = new SdfMeshGeometryBuilder(dynamic: true);
 
-        builder.AppendInstance(instance: 0, program: plate.Program(), transforms: plate.Transforms());
+        builder.AppendInstance(instance: 0, program: plate.Program(), transforms: plate.Transforms(), sampled: SdfSampledSet.Empty);
 
         return (builder.Geometry, [.. builder.Materials]);
     }
@@ -330,7 +330,7 @@ public sealed class SdfMeshLibraryLawTests {
     private static (SdfMeshGeometry Geometry, int[] Materials) Geometry(SdfProgram program, int instance) {
         var builder = new SdfMeshGeometryBuilder(dynamic: program.Instances[instance].IsDynamic);
 
-        builder.AppendInstance(instance: instance, program: program, transforms: []);
+        builder.AppendInstance(instance: instance, program: program, transforms: [], sampled: SdfSampledSet.Empty);
 
         return (builder.Geometry, [.. builder.Materials]);
     }

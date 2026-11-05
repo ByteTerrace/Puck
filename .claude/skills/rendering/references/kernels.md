@@ -79,7 +79,7 @@ pipelines in and retires the old ones; a failed load or pipeline build keeps
 the previous kernels, and so does a tree whose kernels do not read the host's
 interface: a kernel compiled against another instruction set (its pass block's
 stamp) or binding anything where the host does not place it. Reflecting a DXIL
-kernel needs the `dxcompiler.dll` beside the `dxc` on the path. Scene buffers, images, baked bricks, and world state
+kernel needs the `dxcompiler.dll` beside the `dxc` on the path. Scene buffers, images and world state
 survive; the cadence signature is invalidated. A reload also builds again the
 views kernel if the residency refused it (its creation failed; `NotReadyReason`
 names it), even when the tree leaves its bytecode unchanged: that, or a device
@@ -103,11 +103,9 @@ A view of a program with a glass shape runs the fragment with the glass passes
 revision, so a program gaining its first glass shape rebuilds the view).
 `world.counters gpu` lists them under the instance's name. The frame's first pass to record submits its residency's one
 upload ahead of the instance's submission (`SdfWorldResidency.Submit`), counted
-under the residency as `sdf:<name>` with four passes (`SdfWorldTables.PassLabels`):
+under the residency as `sdf:<name>` with three passes (`SdfWorldTables.PassLabels`):
 `fillers`, the fillers' first transitions and clears on the first upload;
-`bricks`, the brick pool's writes (a queued host-baked brick's staging and copy,
-the brick bake's slices and the barriers around them) when that work is
-pending; `upload`, the region copies; and `environment`, the
+`upload`, the region copies; and `environment`, the
 CPU candidate projection that decides whether the sky's environment map and
 coefficients owe a device refresh: they do when lighting-visible irradiance
 differs by at least 1/255 while ambient, reflections, sky-coloured fog or haze
@@ -300,9 +298,8 @@ history while its mesh can change to one with fewer levels.
 
 No SDF kernel declares a binding or a register by hand. Every per-view kernel
 but the bake's includes `isa/sdf-world.interface.hlsli` (through `passes/sdf-world.hlsli`),
-the mesh bake's two `isa/sdf-mesh-bake.interface.hlsli` (through
-`passes/sdf-bake-world.hlsli`) and the brick baker
-`isa/sdf-bricks.interface.hlsli`, all generated from `SdfKernelInterfaces` and
+and the mesh bake's two `isa/sdf-mesh-bake.interface.hlsli` (through
+`passes/sdf-bake-world.hlsli`), all generated from `SdfKernelInterfaces` and
 owned by `puck shaders generate`; the pass-pipeline cache creates each pipeline from its
 interface's layout (`SdfWorldPipelines.Acquire`), and the tables and recorders write every
 binding by member name. A binding's

@@ -233,7 +233,6 @@ public sealed class ShaderPipelineDispatchLawTests {
             Height: 4,
             Width: 8
         ) {
-            BrickPoolVoxels = 13,
             DynamicTransforms = 5,
             InstanceMaskWords = 2,
             Instances = 7,
@@ -273,7 +272,7 @@ public sealed class ShaderPipelineDispatchLawTests {
                 count: Per(basis: basis),
                 name: basis.ToString()
             ).ResolveSizeBytes(counts: counts) / 4UL)),
-            expected: [32UL, 7UL, 100UL, 3UL, 5UL, 2UL, 13UL, 32UL]
+            expected: [32UL, 7UL, 100UL, 3UL, 5UL, 2UL, 32UL]
         );
         // A count is the sum of its terms, each the product of its bases' units.
         Assert.Equal(

@@ -92,8 +92,8 @@ picker.
 
 ### P14 — The SDF engine as a pass package
 
-The frame-graph package is implemented. Its brick producer and editor levers
-belong to the [editor plan](editor.md). Crossings, Vulkan robustness and GPU
+The frame-graph package is implemented. Its editor levers belong to the
+[editor plan](editor.md). Crossings, Vulkan robustness and GPU
 qualification belong to [cross-backend work](open-items.md#vulkan-regressions-and-gpu-robustness);
 first-use JIT belongs to [boot work](open-items.md#edit-to-running-hot-reload-and-boot).
 The remaining rendering-specific details follow.

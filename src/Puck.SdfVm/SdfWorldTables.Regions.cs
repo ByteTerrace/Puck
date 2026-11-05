@@ -12,12 +12,10 @@ namespace Puck.SdfVm;
 // share (the previous upload's fence has retired the views that read it), records each staged region's copy, then one
 // transition per copied buffer so the views' passes read what it wrote. What an upload records follows the device's
 // policy, so its counts are per-backend-deterministic. Nothing writes a region's buffer directly. Construction reserves
-// every region's copy sets (the brick staging's included) in one copy pool, whatever policy the device selects, so a
+// every region's copy sets in one copy pool, whatever policy the device selects, so a
 // region created or grown at a later frame takes no descriptor range then.
 public sealed partial class SdfWorldTables {
     private const int DynamicTransformWordCount = (DynamicTransformByteLength / sizeof(uint));
-    // The brick staging's index in the reserved copy pool, past the per-frame regions.
-    private const int BrickStagingRegionIndex = RegionCount;
     private const int DecalRegionIndex = 4;
     private const int DynamicTransformRegionIndex = 1;
     private const int MeshRegionIndex = 6;
@@ -35,7 +33,7 @@ public sealed partial class SdfWorldTables {
     // The glyph decal table (Stage 1 only): the leading per-screen descriptor band, then the shared cell region. All
     // zero (every descriptor's gridCols 0) is inert, so a program that declares no decal renders byte-identically.
     private readonly GpuRegion m_decalRegion;
-    // Every region's copy sets, by its index: RegionAt's, then the brick staging's with a brick pool.
+    // Every region's copy sets, by its index (RegionAt's).
     private readonly GpuRegionCopyPool m_regionCopyPool;
     // The upload's owed copies, recorded through the tables' counted recorder into the upload's command buffer.
     private readonly GpuRegionCopyRecording m_regionCopies;
@@ -56,13 +54,10 @@ public sealed partial class SdfWorldTables {
     private long m_movedTransformsSerial;
     private IReadOnlyList<DynamicTransform>? m_movedTransformsTable;
 
-    // The regions the copy pool serves: the per-frame regions, and the brick staging with a brick pool.
-    private static int CopyRegionCount(bool brickPool) =>
-        (RegionCount + (brickPool ? 1 : 0));
     // The one pool of the copy sets the tables reserve for their regions (ReserveRegionCopyPool).
-    private static GpuDescriptorPoolSizes RegionCopyPoolSizes(bool brickPool) =>
+    private static GpuDescriptorPoolSizes RegionCopyPoolSizes =>
         GpuRegionCopyPool.SizesOf(
-            regionCount: CopyRegionCount(brickPool: brickPool),
+            regionCount: RegionCount,
             slotCount: FrameRingSize
         );
     // Region index's region of byteCount bytes under the policy the device's profile selects, its ring in the memory the
@@ -97,7 +92,6 @@ public sealed partial class SdfWorldTables {
             RegionAt(index: index)?.Dispose();
         }
 
-        m_brickRegion?.Dispose();
         m_meshIrradiance?.Dispose();
         m_shadowHandoffBuffer.Dispose();
         m_regionCopyPool.Dispose();
@@ -138,8 +132,8 @@ public sealed partial class SdfWorldTables {
     }
 
     /// <summary>Gets the bytes of the buffers the tables' regions hold, by the memory they live in
-    /// (<see cref="GpuRegion.OwnedBytes"/>): every per-frame table, the previous transform tables, the mesh region,
-    /// and the brick staging with a brick pool. Read at the time asked, since a region
+    /// (<see cref="GpuRegion.OwnedBytes"/>): every per-frame table, the previous transform tables and the mesh region.
+    /// Read at the time asked, since a region
     /// grows by being replaced. View-local readbacks remain charged to their recorders.</summary>
     public GpuMemoryBytes TableBytes {
         get {
@@ -153,10 +147,7 @@ public sealed partial class SdfWorldTables {
                 }
             }
 
-            return ((m_brickRegion is { } brick)
-                ? (bytes + brick.OwnedBytes)
-                : bytes
-            );
+            return bytes;
         }
     }
 
@@ -185,13 +176,11 @@ public sealed partial class SdfWorldTables {
         LightRegionIndex => "lights",
         SkyRegionIndex => "sky",
         SkyLayerRegionIndex => "sky-layers",
-        ShadowHandoffRegionIndex => "shadow-handoffs",
-        _ => "brick-staging",
+        _ => "shadow-handoffs",
     });
-    // Creates the one copy pool of every region the tables may create, the brick staging's with a brick pool, each
-    // region's sets named as its region: the pool its admission states (RegionCopyPoolSizes).
+    // Creates the one copy pool of every region the tables may create, each region's sets named as its region: the pool its admission states (RegionCopyPoolSizes).
     private GpuRegionCopyPool ReserveRegionCopyPool(GpuCreationScope scope) {
-        var regions = new GpuObjectName[CopyRegionCount(brickPool: m_brickPoolEnabled)];
+        var regions = new GpuObjectName[RegionCount];
 
         for (var region = 0; (region < regions.Length); region++) {
             regions[region] = RegionName(region: region);

@@ -1575,8 +1575,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         return frame;
     }
 
-    /// <inheritdoc/>
-    public void AdvanceBricks(ISdfBrickBakeService bakes) => m_fields.AdvanceBricks(bakes: bakes);
     /// <summary>Sets the display extent the next frame's graph is prepared against, as the host resizes its display:
     /// <see cref="PrepareGraph"/> places panes and publishes pane mappings over it before the world
     /// producer captures that frame. Own cameras and viewports use this extent even when a camera export asks the shared

@@ -192,7 +192,6 @@ public sealed class SdfWorldResidencyViewsRefusalLawTests {
 
             Source = new SwitchingFrameSource(frame: Frame(program: Sphere()));
             Residency = new SdfWorldResidency(
-                brickPoolVoxelCapacity: 0,
                 frameSource: Source,
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),

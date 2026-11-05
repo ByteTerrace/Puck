@@ -138,7 +138,6 @@ public sealed partial class WorldViewPaneMappingLawTests {
     public void ASkyEnvironmentReadsAScreenImageAsOftenAsTheMostFrequentViewThatShowsIt() {
         var pipelines = SdfTestPipelines.Cache();
         using var residency = new SdfWorldResidency(
-            brickPoolVoxelCapacity: 0,
             frameSource: new UnusedFrameSource(),
             height: 4,
             kernels: SdfTestPipelines.Kernels(),

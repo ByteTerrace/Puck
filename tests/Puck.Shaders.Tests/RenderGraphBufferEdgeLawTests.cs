@@ -4,29 +4,43 @@ using Puck.Hosting;
 namespace Puck.Shaders.Tests;
 
 /// <summary>
-/// Laws for buffer edges: <c>sdf.bricks</c> writes the world's brick pool as a counted buffer output; a package pass
+/// Laws for buffer edges: a writer package writes a counted buffer output; a package pass
 /// reading that buffer is planned with a buffer barrier into its read state, both within one graph and across instances,
 /// where the buffer is the consumer's external version and each plan states the kind of the instance edge it binds; and
 /// a package port bound to a version of the other kind, or to a buffer of another stride or count, is refused naming the
 /// pass, the version and the port.
 /// </summary>
 public sealed class RenderGraphBufferEdgeLawTests {
-    // A package reading the brick pool, as a view will once the SDF engine reads the pool it is joined to.
-    private const string Reader = "probe.bricks";
+    // A package writing a buffer of one 32-bit word per instance, and a package reading it.
+    private const string Writer = "probe.writer";
+    private const string Reader = "probe.reader";
+
+    private static RenderGraphPackagePort Words { get; } = RenderGraphPackagePort.Buffer(
+        access: RenderGraphPortAccess.ComputeWrite,
+        count: [new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.Instances])],
+        strideBytes: sizeof(float)
+    );
 
     private static RenderGraphPackageCatalog Catalog { get; } = new(packages: [
         .. RenderGraphPackageCatalog.Engine.Packages,
         new RenderGraphPackage(
             Members: [],
+            Id: Writer,
+            Inputs: [],
+            Outputs: [Words],
+            Summary: "A pass writing a counted buffer."
+        ),
+        new RenderGraphPackage(
+            Members: [],
             Id: Reader,
-            Inputs: [RenderGraphPackageCatalog.BrickPool with { Access = RenderGraphPortAccess.ComputeRead }],
+            Inputs: [Words with { Access = RenderGraphPortAccess.ComputeRead }],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
-            Summary: "A view reading the brick pool."
+            Summary: "A view reading the buffer."
         ),
     ]);
 
     private static ShaderPipelineResource Bricks(ShaderPipelineInitialization initialization = ShaderPipelineInitialization.Undefined, uint? strideBytes = 4) => new(
-        Count: [new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.BrickPoolVoxels])],
+        Count: [new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.Instances])],
         Initialization: initialization,
         Kind: ShaderPipelineResourceKind.Buffer,
         Name: "bricks",
@@ -40,7 +54,7 @@ public sealed class RenderGraphBufferEdgeLawTests {
     private static RenderGraphPackagePass Bake(string output = "bricks") => new(
         Name: "bake",
         Outputs: [output],
-        Package: RenderGraphPackageCatalog.SdfBricks
+        Package: Writer
     );
     private static RenderGraphPackagePass View(string input = "bricks") => new(
         Inputs: [input],
@@ -67,7 +81,7 @@ public sealed class RenderGraphBufferEdgeLawTests {
     }
 
     [Fact]
-    public void SdfBricksWritesTheBrickPoolAsACountedBufferOutput() {
+    public void AWriterPackageWritesACountedBufferOutput() {
         var plan = Plan(definition: Graph(
             outputs: ["bricks"],
             packages: Bake(),
@@ -79,11 +93,11 @@ public sealed class RenderGraphBufferEdgeLawTests {
             version: "bricks"
         );
 
-        Assert.Equal(expected: RenderGraphPackageCatalog.SdfBricks, actual: Assert.Single(collection: plan.Steps).Package?.Id);
+        Assert.Equal(expected: Writer, actual: Assert.Single(collection: plan.Steps).Package?.Id);
         Assert.Equal(expected: ShaderPipelineResourceKind.Buffer, actual: plan.KindOf(version: "bricks"));
         Assert.True(condition: write.Use.Writes);
         Assert.Equal(
-            actual: plan.Pipeline.Storages[write.Storage].Declaration.ResolveSizeBytes(counts: new ShaderPipelineStorageCounts(Height: 1, Width: 1) { BrickPoolVoxels = 1024 }),
+            actual: plan.Pipeline.Storages[write.Storage].Declaration.ResolveSizeBytes(counts: new ShaderPipelineStorageCounts(Height: 1, Width: 1) { Instances = 1024 }),
             expected: (1024UL * sizeof(float))
         );
     }
@@ -171,7 +185,7 @@ public sealed class RenderGraphBufferEdgeLawTests {
         Assert.Equal(expected: "RENDERGRAPH_PACKAGE_INPUT", actual: refusal.Code);
         Assert.Equal(expected: "bricks", actual: refusal.Name);
         Assert.Contains(expectedSubstring: "'hud'", actualString: refusal.Message);
-        Assert.Contains(expectedSubstring: "'bricks', carrying Buffer (stride 4, count 1 per BrickPoolVoxels), to input port 0 of package 'overlay', which carries Image.", actualString: refusal.Message);
+        Assert.Contains(expectedSubstring: "'bricks', carrying Buffer (stride 4, count 1 per Instances), to input port 0 of package 'overlay', which carries Image.", actualString: refusal.Message);
     }
     [Fact]
     public void ABufferPortBoundToAnImageIsRefusedByName() {
@@ -184,7 +198,7 @@ public sealed class RenderGraphBufferEdgeLawTests {
         Assert.Equal(expected: "RENDERGRAPH_PACKAGE_OUTPUT", actual: refusal.Code);
         Assert.Equal(expected: "scene", actual: refusal.Name);
         Assert.Contains(expectedSubstring: "'bake'", actualString: refusal.Message);
-        Assert.Contains(expectedSubstring: "'scene', carrying Image, to output port 0 of package 'sdf.bricks', which carries Buffer (stride 4, count 1 per BrickPoolVoxels).", actualString: refusal.Message);
+        Assert.Contains(expectedSubstring: "'scene', carrying Image, to output port 0 of package 'probe.writer', which carries Buffer (stride 4, count 1 per Instances).", actualString: refusal.Message);
     }
     [Fact]
     public void ABufferPortBoundToABufferOfAnotherStrideIsRefusedByName() {
@@ -195,7 +209,7 @@ public sealed class RenderGraphBufferEdgeLawTests {
         )));
 
         Assert.Equal(expected: "RENDERGRAPH_PACKAGE_INPUT", actual: refusal.Code);
-        Assert.Contains(expectedSubstring: "carrying Buffer (stride 8, count 1 per BrickPoolVoxels)", actualString: refusal.Message);
+        Assert.Contains(expectedSubstring: "carrying Buffer (stride 8, count 1 per Instances)", actualString: refusal.Message);
     }
     [Fact]
     public void AMalformedPortIsRefusedByTheCatalog() {

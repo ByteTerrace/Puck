@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Commands;
 using Puck.Abstractions.Gpu;
 using Puck.Shaders;
@@ -10,23 +9,21 @@ namespace Puck.SdfVm;
 /// The device-resident half of one SDF frame source (<see cref="SdfWorldResidency"/>): every table the
 /// <c>sdf.world</c> kernels read that the frame source writes — the program words, dynamic transforms, screen surfaces,
 /// screen mappings, screen lights, bounded volumes, glyph decals and mesh draws, each a <see cref="GpuRegion"/> — with
-/// the glyph atlas, the carve-bake brick pool, the samplers and the pipelines a view's
+/// the glyph atlas, the samplers and the pipelines a view's
 /// passes record with. A view's scratch and output are its render-graph instance's (<see cref="SdfWorldPasses"/>); the
 /// tables are shared by every view of the frame source. Fully backend-neutral through its device's
 /// <see cref="IGpuDeviceContext.Services"/>.
 /// <para>
 /// Each frame the residency packs the frame's rows into the regions host-side (<see cref="Pack"/>), and the first pass
-/// recording of the frame submits one upload (<see cref="SubmitUpload"/>): the owed words of every region, a queued
-/// host-baked brick and the carve bake's slices, fenced, into the next of <see cref="FrameRingSize"/> upload slots, whose
+/// recording of the frame submits one upload (<see cref="SubmitUpload"/>): the owed words of every region, fenced, into
+/// the next of <see cref="FrameRingSize"/> upload slots, whose
 /// buffers every pass of the frame binds. Before an upload rewrites a slot it waits the previous upload's fence, which
 /// signals once every submission queued before it has finished, the views that read the slot two uploads earlier among
 /// them. A rewrite of what every slot shares — a grown program, a grown mesh region, the glyph atlas, a
 /// reloaded kernel — waits the device idle first, since other nodes' submissions read it.
 /// </para>
 /// </summary>
-public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
-    private const int BrickBakeRequestHeaderFloat4Count = 3; // (boxMin+cellSize), (dims+carveCount), (destWordOffset+invLambda) — KEEP IN SYNC with sdf-brick-bake.comp
-    private const uint BrickBakeWorkgroupSize = 64; // sdf-brick-bake.comp's [numthreads(64, 1, 1)]
+public sealed partial class SdfWorldTables : IDisposable {
     private const int DecalBufferCells = (DecalDescriptorCount + (MaxScreenSurfaces * MaxScreenDecalCells));
     // The decal buffer's leading DESCRIPTOR band (one uint4 per screen slot) precedes the shared cell region; a screen's
     // cell run starts at DecalDescriptorCount + screenIndex * MaxScreenDecalCells (KEEP IN SYNC with sdfSampleGlyphDecal).
@@ -37,8 +34,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private const GpuPixelFormat Format = RenderGraphPackageCatalog.WorkingFormat;
     // The glyph atlas's format: RGBA8 coverage and color, as the host rasterizes it.
     private const GpuPixelFormat GlyphAtlasFormat = GpuPixelFormat.R8G8B8A8Unorm;
-    private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
-    private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
     private const int ScreenMappingByteLength = ((sizeof(float) * 4) * 9);
     // A screen's record in the mapping region: its ScreenMappingByteLength mapping, then its ripple record, which the
     // emission and sky-environment change checks leave out because it moves every frame and lights nothing. KEEP IN SYNC
@@ -68,9 +63,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // member.
     private const ulong DummyBufferBytes = (sizeof(uint) * 4);
 
-    /// <summary>The default carve-bake brick pool capacity in voxels (f32 words) — <see cref="SdfBrickPoolLayout.TotalVoxels"/>
-    /// = 16.7M voxels = 64 MB, i.e. <see cref="SdfBrickPoolLayout.MaxBricks"/> slots at full resolution.</summary>
-    public const int DefaultBrickPoolVoxelCapacity = SdfBrickPoolLayout.TotalVoxels;
     /// <summary>The upload ring's depth: how many uploads' regions are resident at once. Each region keeps one buffer per
     /// slot, the frame's passes read the slot its upload wrote, and an upload waits the previous upload's fence before it
     /// rewrites a slot, so the views of the frame before the previous are done with it.</summary>
@@ -92,28 +84,10 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     /// reads rather than hand-syncing a second literal.</summary>
     public const int MaxVolumes = Puck.SignedDistance.SdfProgramBuilder.MaxVolumes;
 
-    // The bake pipeline + per-slot request buffers/sets — created ONLY when the pool is enabled (nothing bakes into a
-    // filler). Each slot owns a host-visible request buffer (header + carve list) and a static descriptor set binding
-    // that buffer + the shared pool (as a UAV). The per-slot state advances one slice per upload (RecordBrickBakeSlices).
-    private readonly IGpuComputePipeline? m_brickBakePipeline;
-
-    // The host-baked brick path: a region staging one brick at a time into the brick pool, its external destination,
-    // and a queue of pending uploads drained one per upload (RecordBrickUpload). Null without a brick pool.
-    private GpuRegion? m_brickRegion;
-
-    private readonly Queue<(int Slot, int Count, float[] Voxels)> m_brickUploads = new();
-
     // The device's region-copy pipeline, leased from the pass-pipeline cache's GpuRegionCopyPass, which every staged
     // region records its copy with; the tables never own it.
     private readonly IGpuComputePipeline m_regionCopyPipeline;
 
-    // The carve-bake brick pool: one persistent device-local f32 buffer the sliced bake writes and the mesh bake samples.
-    // Always allocated (a 1-float filler when the pool is disabled), always bound, since the mesh bake compiles the
-    // sdfBrickPool binding unconditionally (SDF_SAMPLED_REGIONS).
-    private IGpuBuffer m_brickPoolBuffer;
-
-    private readonly bool m_brickPoolEnabled;
-    private readonly int m_brickPoolVoxelCapacity;
     private readonly IGpuBindings m_bindings;
     private readonly IGpuDeviceContext m_deviceContext;
     // What a pass binds at a member whose storage it does not touch: a tiny buffer, a 1x1 storage image resting General,
@@ -184,32 +158,16 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private readonly float[] m_screenRates = new float[MaxScreenSurfaces];
     // The bounded-volume table (views and sky), packed here every frame and written into its region.
     private readonly byte[] m_volumeScratch = new byte[(MaxVolumes * VolumeByteLength)];
-    private readonly IGpuStorageBuffer[] m_brickRequestBuffers = new IGpuStorageBuffer[SdfBrickPoolLayout.MaxBricks];
-    private readonly nint[] m_brickBakeSets = new nint[SdfBrickPoolLayout.MaxBricks];
-    private readonly BrickBakeState[] m_brickStates = new BrickBakeState[SdfBrickPoolLayout.MaxBricks];
-    private readonly ulong[] m_brickSerials = new ulong[SdfBrickPoolLayout.MaxBricks];
-    private readonly int[] m_brickTotalVoxels = new int[SdfBrickPoolLayout.MaxBricks];
-    private readonly int[] m_brickVoxelCursor = new int[SdfBrickPoolLayout.MaxBricks];
-    private readonly Vector4[] m_brickRequestScratch = new Vector4[(BrickBakeRequestHeaderFloat4Count + MaxBrickCarvesPerBake)];
-
-    // The baker's frame block and its block, each the same for every brick slot, written once at construction.
-    private readonly IGpuStorageBuffer? m_brickBakeFrameBlock;
-    private readonly IGpuStorageBuffer? m_brickBakeBlock;
-    private readonly nint m_brickBakeFrameSet;
-
-    // The slice ordinal a bake dispatch pushes.
-    private readonly byte[] m_brickBakeIndex = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
     private SdfProgram m_liveProgram = null!;
 
     internal uint[] CopyLiveProgramWords() => m_liveProgram.Words.ToArray();
 
     /// <summary>Gets or sets the debug-group label wrapping each upload the tables record — the outer scope a GPU capture
-    /// (RenderDoc / PIX / Nsight) shows around its copies, brick upload and bake slices. Presentation-only; defaults to
+    /// (RenderDoc / PIX / Nsight) shows around its copies. Presentation-only; defaults to
     /// <c>world</c> and never affects rendered output.</summary>
     public string DebugLabel { get; set; } = "world";
 
-    /// <summary>Initializes a new instance of the <see cref="SdfWorldTables"/> class: builds every table, the brick pool
-    /// and the samplers against pipelines already built, and uploads the scene program. Creates no pipeline, so it never waits on the driver's pipeline compiler. A
+    /// <summary>Initializes a new instance of the <see cref="SdfWorldTables"/> class: builds every table and the samplers against pipelines already built, and uploads the scene program. Creates no pipeline, so it never waits on the driver's pipeline compiler. A
     /// construction that throws partway has released every object it created before the exception leaves the
     /// constructor.</summary>
     /// <param name="device">The GPU device the tables live on; they record through its services, unwrapped.</param>
@@ -235,10 +193,9 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     /// <param name="occlusion">The device's mesh pass occlusion kernel (<see cref="SdfMeshRasterPass.OcclusionKey"/>),
     /// built on <paramref name="device"/> with the mesh pass's layout. The caller keeps ownership and disposes it after
     /// the tables.</param>
-    /// <param name="options">The construction options (scene program, capacities, brick pool, work ledger).</param>
+    /// <param name="options">The construction options (scene program, capacities, work ledger).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The options enable a brick pool the pipelines were built without, the mesh
-    /// pass pipeline is no graphics pipeline with a render pass, or the occlusion kernel is no compute pipeline.</exception>
+    /// <exception cref="ArgumentException">The mesh pass pipeline is no graphics pipeline with a render pass, or the occlusion kernel is no compute pipeline.</exception>
     /// <exception cref="ObjectDisposedException"><paramref name="pipelines"/> has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The device's descriptor heap cannot admit the tables' pools
     /// (<see cref="CheckAdmission"/>, checked before anything is allocated).</exception>
@@ -257,10 +214,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         );
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(options.Program);
-
-        if ((options.BrickPoolVoxelCapacity > 0) && !pipelines.IncludesBrickPipelines) {
-            throw new ArgumentException(message: "The options enable a brick pool, but the pipelines were built without the brick bake and upload pipelines.");
-        }
 
         // Before anything is allocated, so tables the device's descriptor heap cannot hold are refused with nothing to
         // release, and a holder building through SdfWorldPipelineSource.TryBuild records it as a named refusal.
@@ -294,11 +247,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             val1: options.Program.Instances.Count,
             val2: options.InstanceCapacity
         );
-        m_brickPoolVoxelCapacity = Math.Max(
-            val1: 0,
-            val2: Math.Min(val1: options.BrickPoolVoxelCapacity, val2: ((int)Math.Min(val1: int.MaxValue, val2: Math.Max(val1: SdfBrickPoolLayout.VoxelsPerBrick, val2: (GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (128 * sizeof(float)))))))
-        );
-        m_brickPoolEnabled = (m_brickPoolVoxelCapacity > 0);
 
         // Every object the construction creates joins this scope, so a creation or the program upload that throws releases exactly what was created before it, newest first. Nothing is in flight to drain
         // first: every submission construction makes waits for its completion.
@@ -398,30 +346,10 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             recorder: gpu.Recorder, pipeline: m_regionCopyPipeline, frameSlotCount: FrameRingSize, recordingCount: 2,
             name: NameOf(part: "mesh-history-copy")));
 
-        // The carve-bake brick pool: one persistent DEVICE-LOCAL f32 buffer — device-local so the bake kernel can write it
-        // as a UAV (an upload heap forbids UAVs on Direct3D 12) and the mesh bake samples it as an SRV. Frozen at the
-        // constructed capacity. When the pool is disabled (capacity 0) a single-float filler keeps the always-present
-        // sdfBrickPool binding valid — the kernels compile the binding unconditionally, and sdfSampledRegion detects the
-        // filler by its element count and renders SampledRegion programs via the conservative uncarved-hull fallback
-        // (only RequestBrickBake stays rejected without a pool).
-        m_brickPoolBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
-            name: NameOf(part: "brick-pool"),
-            sizeBytes: sizeof(float),
-            usage: GpuBufferUsage.Storage
-        ));
-        // The carve-bake baker and the host-baked brick staging run only when the pool is enabled (nothing bakes into a
-        // filler). The staging region holds one brick, the most one upload carries, and lands it at the brick's slot.
-        m_brickBakePipeline = (m_brickPoolEnabled
-            ? pipelines.OptionalPipeline(kernel: SdfKernel.BrickBake)
-            : null
-        );
-        m_brickRegion = null;
-
-        // The tables' pool: the World set per ring slot, and with a brick pool the frame set the baker shares and one bake
-        // set per brick slot. The sets allocated from the pool are released with it.
+        // The tables' pool: the World set per ring slot. The sets allocated from the pool are released with it.
         m_pool = m_bindings.CreatePool(
             name: NameOf(part: "descriptors"),
-            sizes: DescriptorPoolSizes(brickPool: m_brickPoolEnabled)
+            sizes: DescriptorPoolSizes
         );
         _ = scope.Own(
             handle: m_pool,
@@ -463,82 +391,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         // The background GPU work records and submits through the device's own services: its submissions are no upload
         // of the tables' ledger.
         m_gpuWork = scope.Own(created: new SdfGpuWork(device: device, name: ObjectOwner));
-
-        // The carve-bake baker's per-slot request buffers + static descriptor sets (only when the pool is enabled). Each
-        // slot owns a host-visible request buffer (header + up to MaxBrickCarvesPerBake carves) and a set binding that
-        // buffer and the shared pool, beside the blocks every bake set shares. These are NOT per ring slot: a bake spans
-        // uploads and RequestBrickBake drains the ring before rewriting a request buffer, and only uploads read them.
-        if (m_brickPoolEnabled) {
-            var frameBlock = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
-                name: NameOf(detail: "frame block", part: "brick-bake"),
-                sizeBytes: ((ulong)UniformBytes(blockBytes: SdfWorldInterfaces.BrickBakeParameters.FrameBlockSizeBytes)),
-                usage: GpuBufferUsage.Uniform
-            ));
-            var frameBlockBytes = new byte[SdfWorldInterfaces.BrickBakeParameters.FrameBlockSizeBytes];
-
-            SdfWorldInterfaces.BrickBakeParameters.WriteFrame(
-                block: frameBlockBytes,
-                frame: 0UL,
-                values: default
-            );
-            frameBlock.Write<byte>(data: frameBlockBytes);
-            m_brickBakeFrameBlock = frameBlock;
-            m_brickBakeFrameSet = m_bindings.AllocateSet(
-                name: NameOf(detail: "frame group", part: "brick-bake"),
-                descriptorSetLayoutHandle: m_brickBakePipeline!.GroupLayoutHandles[((int)FrameGroup)],
-                poolHandle: m_pool
-            );
-            m_bindings.WriteConstantBuffer(
-                arrayElement: 0,
-                binding: 0,
-                bufferHandle: frameBlock.BufferHandle,
-                bufferSize: frameBlock.SizeBytes,
-                descriptorSetHandle: m_brickBakeFrameSet
-            );
-
-            var bakeBlockBytes = new byte[SdfWorldInterfaces.BrickBakeParameters.SizeBytes];
-            var bakeBlock = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
-                name: NameOf(detail: "block", part: "brick-bake"),
-                sizeBytes: ((ulong)UniformBytes(blockBytes: SdfWorldInterfaces.BrickBakeParameters.SizeBytes)),
-                usage: GpuBufferUsage.Uniform
-            ));
-
-            // The block's extent is one slice as one row: the voxels one bake dispatch writes at most.
-            SdfWorldInterfaces.BrickBakeParameters.WriteExtent(
-                block: bakeBlockBytes,
-                height: 1u,
-                width: ((uint)MaxBrickBakeVoxelsPerSlice)
-            );
-            bakeBlock.Write<byte>(data: bakeBlockBytes);
-            m_brickBakeBlock = bakeBlock;
-
-            for (var brick = 0; (brick < SdfBrickPoolLayout.MaxBricks); brick++) {
-                var requestBuffer = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
-                    name: NameOf(detail: "request", index: brick, part: "brick-bake"),
-                    sizeBytes: (((ulong)m_brickRequestScratch.Length) * (sizeof(float) * 4)),
-                    usage: GpuBufferUsage.Storage
-                ));
-
-                m_brickRequestBuffers[brick] = requestBuffer;
-
-                var bakeSet = m_bindings.AllocateSet(
-                    name: NameOf(part: "brick-bake", index: brick),
-                    descriptorSetLayoutHandle: m_brickBakePipeline!.GroupLayoutHandles[((int)PassGroup)],
-                    poolHandle: m_pool
-                );
-
-                m_brickBakeSets[brick] = bakeSet;
-                m_bindings.WriteConstantBuffer(
-                    arrayElement: 0,
-                    binding: 0,
-                    bufferHandle: bakeBlock.BufferHandle,
-                    bufferSize: bakeBlock.SizeBytes,
-                    descriptorSetHandle: bakeSet
-                );
-                WriteInterfaceBuffer(buffer: requestBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfKernelInterfaces.BakeRequest, set: bakeSet);
-                WriteInterfaceBuffer(buffer: m_brickPoolBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfKernelInterfaces.BakePool, set: bakeSet);
-            }
-        }
 
         // The sky's environment, which the World sets bind and the graph's shared producer renders after upload.
         // Its constructor joins each object it creates to the scope, which releases them should a later step throw.
@@ -599,14 +451,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_previousDynamicTransforms.Dispose();
         m_previousMeshTransforms.Dispose();
         m_meshHistoryCopies.Dispose();
-        m_brickBakeFrameBlock?.Dispose();
-        m_brickBakeBlock?.Dispose();
-
-        foreach (var requestBuffer in m_brickRequestBuffers) {
-            requestBuffer?.Dispose();
-        }
-
-        m_brickPoolBuffer.Dispose();
         m_skyEnvironment.Dispose();
         m_screenEmission.Dispose();
 

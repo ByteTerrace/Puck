@@ -98,6 +98,21 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// between two the group reads holds the identity.</summary>
     public Vector4[] PoseRows { get; private set; } = [];
 
+    /// <summary>Gets the snapshots the group bakes through, each with its field's handle in the program the group's lattices
+    /// sample (<see cref="SdfProgram.SampledFields"/>): what its geometry hashed (<see cref="SdfMeshGeometryBuilder.Sampled"/>),
+    /// which a bake job writes into the table its kernel reads, so its samples never read another snapshot.</summary>
+    public (int Handle, SdfSampledSnapshot Snapshot)[] SampledSnapshots { get; private set; } = [];
+
+    /// <summary>Takes the snapshots of a group another program planned at this group's place with the same geometry, whose
+    /// handles are that program's: a group kept from one program into the next samples the next program's handles.</summary>
+    /// <param name="planned">The group the next program planned.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="planned"/> is <see langword="null"/>.</exception>
+    internal void AdoptSampled(SdfMeshBakeGroup planned) {
+        ArgumentNullException.ThrowIfNull(argument: planned);
+
+        SampledSnapshots = planned.SampledSnapshots;
+    }
+
     /// <summary>Gets or sets the low corner of the group's box: its members' bounds when planned, then what the bake's
     /// lattices narrow it to.</summary>
     public Vector3 Low { get; set; }
@@ -114,28 +129,34 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// <param name="transforms">The frame's dynamic transforms.</param>
     /// <param name="farDistance">The frame's far distance, which clamps a bound past it.</param>
     /// <param name="create">Makes a group of a selector and whether it is dynamic.</param>
+    /// <param name="sampled">The frame's sampled set; the program's own (<see cref="SdfProgram.Sampled"/>) when
+    /// <see langword="null"/>.</param>
     /// <returns>The groups, in the order the bake takes them.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="program"/>, <paramref name="transforms"/> or
     /// <paramref name="create"/> is <see langword="null"/>.</exception>
-    public static List<T> Plan<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
+    public static List<T> Plan<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, Func<int, bool, T> create, SdfSampledSet? sampled = null) where T : SdfMeshBakeGroup {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: transforms);
         ArgumentNullException.ThrowIfNull(argument: create);
 
+        sampled ??= program.Sampled;
         return Ordered(
             create: create,
-            groups: PlanGroups(create: create, farDistance: farDistance, program: program, slots: null, snap: null, transforms: transforms),
+            groups: PlanGroups(create: create, farDistance: farDistance, program: program, sampled: sampled, slots: null, snap: null, transforms: transforms),
             program: program,
             reach: Reach(farDistance: farDistance),
+            sampled: sampled,
             transforms: transforms
         );
     }
-    /// <summary>Plans again, at a frame's transforms, the groups of a plan <see cref="Plan{T}"/> made of the same program
-    /// at other transforms that a caller cannot keep as they stand: each dynamic group the predicate names, whose box,
-    /// poses and geometry read the transforms, and each static or world group it names whose geometry reads a slot
-    /// (<see cref="SdfMeshGeometryBuilder.ReadsSlots"/>). Which groups a program has, the instances each holds and their
-    /// order never read a transform, so each group planned again is the one <see cref="Plan{T}"/> makes at the frame's
-    /// transforms, at its place in the list; every other group stays as it was planned.</summary>
+    /// <summary>Plans again, at a frame's transforms and sampled set, the groups of a plan <see cref="Plan{T}"/> made of the
+    /// same program at other transforms or snapshots that a caller cannot keep as they stand: each dynamic group the
+    /// predicate names, whose box, poses and geometry read the transforms, each static or world group it names whose
+    /// geometry reads a slot (<see cref="SdfMeshGeometryBuilder.ReadsSlots"/>), and every group whose geometry hashed a
+    /// snapshot the set no longer holds (<see cref="SdfMeshGeometryBuilder.SampledMatches"/>), whatever the predicate says.
+    /// Which groups a program has, the instances each holds and their order read neither, so each group planned again is
+    /// the one <see cref="Plan{T}"/> makes at the frame's transforms and set, at its place in the list; every other group
+    /// stays as it was planned.</summary>
     /// <typeparam name="T">The group type the caller keeps.</typeparam>
     /// <param name="groups">The plan, changed in place.</param>
     /// <param name="program">The program the plan was made of.</param>
@@ -143,14 +164,16 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// <param name="farDistance">The far distance the plan was made at.</param>
     /// <param name="stale">Whether the caller needs a group planned at the frame's transforms.</param>
     /// <param name="create">Makes a group of a selector and whether it is dynamic.</param>
+    /// <param name="sampled">The frame's sampled set.</param>
     /// <returns>How many groups were planned again.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public static int Refresh<T>(List<T> groups, SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, Func<T, bool> stale, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
+    public static int Refresh<T>(List<T> groups, SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, Func<T, bool> stale, Func<int, bool, T> create, SdfSampledSet sampled) where T : SdfMeshBakeGroup {
         ArgumentNullException.ThrowIfNull(argument: groups);
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: transforms);
         ArgumentNullException.ThrowIfNull(argument: stale);
         ArgumentNullException.ThrowIfNull(argument: create);
+        ArgumentNullException.ThrowIfNull(argument: sampled);
 
         var reach = Reach(farDistance: farDistance);
         var refreshed = 0;
@@ -158,8 +181,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
         for (var index = 0; (index < groups.Count); index++) {
             var group = groups[index];
+            var resampled = !group.Geometry.SampledMatches(sampled: sampled);
 
-            if ((!group.Dynamic && !group.Geometry.ReadsSlots) || !stale(arg: group)) { continue; }
+            if (!resampled && ((!group.Dynamic && !group.Geometry.ReadsSlots) || !stale(arg: group))) { continue; }
             if (group.Dynamic) {
                 (slots ??= []).Add(item: group.Slot);
 
@@ -167,14 +191,14 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             }
 
             groups[index] = (group.IsWorld
-                ? WorldGroup(create: create, program: program, reach: reach, transforms: transforms)!
-                : Replanned(create: create, group: group, program: program, reach: reach, transforms: transforms));
+                ? WorldGroup(create: create, program: program, reach: reach, sampled: sampled, transforms: transforms)!
+                : Replanned(create: create, group: group, program: program, reach: reach, sampled: sampled, transforms: transforms));
             refreshed++;
         }
 
         if (slots is null) { return refreshed; }
 
-        var planned = PlanGroups(create: create, farDistance: farDistance, program: program, slots: slots, snap: null, transforms: transforms);
+        var planned = PlanGroups(create: create, farDistance: farDistance, program: program, sampled: sampled, slots: slots, snap: null, transforms: transforms);
         var bySlot = new Dictionary<int, T>(capacity: planned.Count);
 
         foreach (var group in planned) { bySlot[group.Selector] = group; }
@@ -190,7 +214,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
     // A static group planned again at a frame's transforms: the same instances, members and box, its geometry appended
     // anew.
-    private static T Replanned<T>(T group, SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float reach, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
+    private static T Replanned<T>(T group, SdfProgram program, IReadOnlyList<DynamicTransform> transforms, SdfSampledSet sampled, float reach, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
         var replanned = create(arg1: group.Selector, arg2: false);
 
         replanned.Instances = group.Instances;
@@ -205,7 +229,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
         foreach (var index in group.m_instances) {
             replanned.m_instances.Add(item: index);
-            replanned.Geometry.AppendInstance(instance: index, program: program, transforms: transforms);
+            replanned.Geometry.AppendInstance(instance: index, program: program, sampled: sampled, transforms: transforms);
         }
 
         if (replanned.Clamped) { replanned.Geometry.AppendReach(reach: reach); }
@@ -231,7 +255,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is negative, or a step count is not
     /// positive.</exception>
     /// <param name="instance">The particular instance on a shared motion slot, or null for its first group.</param>
-    public static T? PlanSlot<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, int slot, float positionSteps, float orientationSteps, Func<int, bool, T> create, int? instance = null) where T : SdfMeshBakeGroup {
+    /// <param name="sampled">The frame's sampled set; the program's own (<see cref="SdfProgram.Sampled"/>) when
+    /// <see langword="null"/>.</param>
+    public static T? PlanSlot<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, int slot, float positionSteps, float orientationSteps, Func<int, bool, T> create, int? instance = null, SdfSampledSet? sampled = null) where T : SdfMeshBakeGroup {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: transforms);
         ArgumentNullException.ThrowIfNull(argument: create);
@@ -239,7 +265,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: positionSteps);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: orientationSteps);
 
-        var groups = PlanGroups(create: create, farDistance: farDistance, program: program, slots: new HashSet<int> { slot }, snap: (positionSteps, orientationSteps), transforms: transforms);
+        var groups = PlanGroups(create: create, farDistance: farDistance, program: program, sampled: (sampled ?? program.Sampled), slots: new HashSet<int> { slot }, snap: (positionSteps, orientationSteps), transforms: transforms);
 
         return ((instance is { } first) ? groups.FirstOrDefault(group => (group.FirstInstance == first)) : groups.FirstOrDefault());
     }
@@ -247,7 +273,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     private static float Reach(float farDistance) => MathF.Max(x: 1f, y: farDistance);
     // Plans every group, or with `slots` the groups of those dynamic slots alone, other slots' poses snapped to `snap`'s
     // steps when it is given, each sealed and listed at its first instance.
-    private static List<T> PlanGroups<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float farDistance, IReadOnlySet<int>? slots, (float Position, float Orientation)? snap, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
+    private static List<T> PlanGroups<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, SdfSampledSet sampled, float farDistance, IReadOnlySet<int>? slots, (float Position, float Orientation)? snap, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
         var groups = new List<T>();
         var bySlot = new Dictionary<int, T>();
         var instances = program.Instances;
@@ -331,7 +357,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             // A bound past the reach bakes over the reach instead, which the geometry then holds.
             group.Clamped |= (radius != instance.Radius);
             group.m_instances.Add(item: index);
-            group.Geometry.AppendInstance(instance: index, program: program, transforms: transforms);
+            group.Geometry.AppendInstance(instance: index, program: program, sampled: sampled, transforms: transforms);
         }
 
         foreach (var group in groups) {
@@ -343,7 +369,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     }
     // Puts a whole plan's groups, listed at their first instances, in the order the bake takes them, and adds the world
     // group.
-    private static List<T> Ordered<T>(List<T> groups, SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float reach, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
+    private static List<T> Ordered<T>(List<T> groups, SdfProgram program, IReadOnlyList<DynamicTransform> transforms, SdfSampledSet sampled, float reach, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
         // A union of several static shapes bakes the largest lattice and contours longest, so among groups of equal
         // priority its lattices go first in each frame's round, and its contour overlaps the other groups' sampling rather
         // than running after them.
@@ -356,7 +382,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
         // The segments no instance owns, which every instance group's walk omits, bake as one group of their own, over a
         // cube the frame's far distance wide about the origin.
-        if (WorldGroup(create: create, program: program, reach: reach, transforms: transforms) is { } world) {
+        if (WorldGroup(create: create, program: program, reach: reach, sampled: sampled, transforms: transforms) is { } world) {
             groups.Add(item: world);
         }
 
@@ -390,7 +416,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         return indices;
     }
 
-    // Seals the group: its geometry, its materials, and the pose rows its lattices read.
+    // Seals the group: its geometry, its materials, the pose rows its lattices read and the snapshots they sample.
     private void Seal() {
         if (Dynamic && (Geometry.Poses.Keys.Count(slot => (slot != Slot)) is var members) && (members > SdfMesh.MaxMembers)) {
             throw new InvalidOperationException($"Mesh group at instance {FirstInstance} needs {members} skin members; the representation holds {SdfMesh.MaxMembers}.");
@@ -399,6 +425,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         Sealed = Geometry.Geometry;
         Form = Geometry.Form;
         MaterialOrder = [.. Geometry.Materials];
+        SampledSnapshots = [.. Geometry.Sampled.Select(selector: static entry => (entry.Key, entry.Value))];
 
         var (first, last) = Geometry.PoseSlots;
 
@@ -432,7 +459,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     // The group of the shapes the program's segments outside every instance hold, keyed by every such instruction (the
     // transforms ahead of the first drawn shape place it too) with its absolute materials; null when no segment holds a
     // drawn shape. Its box is the reach about the origin, which its geometry holds.
-    private static T? WorldGroup<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float reach, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
+    private static T? WorldGroup<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, SdfSampledSet sampled, float reach, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
         var instructions = program.Instructions;
         var owned = Owned(program: program);
         var drawn = false;
@@ -446,7 +473,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         var world = create(arg1: WorldSelector, arg2: false);
 
         for (var index = 0; (index < instructions.Count); index++) {
-            if (!owned[index]) { world.Geometry.AppendInstruction(index: index, program: program, transforms: transforms); }
+            if (!owned[index]) { world.Geometry.AppendInstruction(index: index, program: program, sampled: sampled, transforms: transforms); }
         }
 
         world.Geometry.AppendReach(reach: reach);

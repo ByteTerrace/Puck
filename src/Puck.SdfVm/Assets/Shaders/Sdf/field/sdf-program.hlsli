@@ -193,10 +193,9 @@ uint sdfInstanceCountClamped() {
 // implicit-derivative filtering is undefined in a compute kernel's non-uniform control flow, and manual bilinear (sdfGlyphSampleField) reads the true single-channel distance from ALPHA, so a nearest
 // sampler is all it needs.
 
-// The persistent brick pool the SDF_SHAPE_SAMPLED_REGION primitive samples through sdfBrickPool: one float per voxel
-// (f32), a flat device-local buffer the bake kernel writes and every brick instance indexes at its host-baked
-// brickWordOffset (data1.z). Only the kernels that DEFINE SDF_SAMPLED_REGIONS sample it (the mesh bake); every other
-// kernel compiles the conservative union-hull fallback instead.
+// The sampled fields' values the SDF_SHAPE_SAMPLED_REGION primitive reads through sdfSampledValues: a directory of one
+// word per handle (data1.z), then each snapshot's voxels as float bits, written per mesh bake job. Only the kernels that
+// DEFINE SDF_SAMPLED_REGIONS sample it (the mesh bake); every other kernel answers the far distance.
 
 // --- instruction lanes ---
 // A ShapeBlend's shape lane holds its SDF_SHAPE_* type alone.
@@ -258,11 +257,10 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 // (packedUvMin, packedUvMax [each host-baked unorm2x16 of an atlas UV], distanceScale, extrudeHalfDepth); data1 =
 // (smooth [ISA-wide], halfWidth, halfHeight, _). Only the world-views kernel binds the atlas (SDF_GLYPH_ATLAS); every
 // other kernel evaluates the conservative extruded-quad fallback (the glyph is strictly inside its cell). See sdfGlyph.
-// A SAMPLED distance-field brick (SdfShapeType.SampledRegion). data0 = (boxMin.xyz, cellSize); data1 =
-// (smooth [ISA-wide], packedDims [3x10-bit dims, unpacked with SDF_SAMPLED_REGION_DIM_MASK], brickWordOffset [pool base word], boundaryFloor
-// [outside-box lower-bound offset = margin/lambda]). Evaluated by manual trilinear ONLY where the pool is bound
-// (SDF_SAMPLED_REGIONS); every other kernel returns the conservative union-hull fallback (SDF_FAR_DISTANCE, so a
-// Subtraction compose never bites). See sdfSampledRegion.
+// A sampled distance field (SdfShapeType.SampledRegion). data0 = (boxMin.xyz, cellSize); data1 = (smooth [ISA-wide],
+// packedDims [3x10-bit dims, unpacked with SDF_SAMPLED_REGION_DIM_MASK], handle [the field's place in
+// SdfProgram.SampledFields], boundaryFloor [outside-box lower-bound offset = margin/lambda]). Evaluated by manual trilinear
+// only in the kernels that define SDF_SAMPLED_REGIONS; every other kernel answers SDF_FAR_DISTANCE. See sdfSampledRegion.
 // A 45-degree-chamfered rectangle (SdfShapeType.ChamferedRectangle) — the family's shared lane
 // layout: data0 = (halfX, halfY, chamfer c, lift); data1 = (smooth, lift mode, UNUSED, edge-rounding radius r).
 // The extrude lift additionally bevels the cap edges at the same c via sdfExtrudeChamfer2D. c = 0 reduces both the 2D

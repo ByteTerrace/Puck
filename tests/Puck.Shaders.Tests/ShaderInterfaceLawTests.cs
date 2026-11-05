@@ -525,8 +525,8 @@ public sealed class ShaderInterfaceLawTests {
                 """.ReplaceLineEndings(replacementText: "\n")
         );
         Assert.Equal(
-            actual: ShaderInterface.PushedIndexTypeName(interfaceName: "sdf-bricks"),
-            expected: "SdfBricksPushedIndex"
+            actual: ShaderInterface.PushedIndexTypeName(interfaceName: "sdf-mesh"),
+            expected: "SdfMeshPushedIndex"
         );
     }
     [Fact]

@@ -80,7 +80,7 @@ public sealed partial class SdfWorldTables {
         );
 
     /// <summary>Installs a kernel reload prepared by <see cref="SdfWorldPipelines.PrepareReload"/> at a render-thread
-    /// boundary, preserving buffers, images, baked bricks, descriptors and scene state. A reload that changed nothing
+    /// boundary, preserving buffers, images, descriptors and scene state. A reload that changed nothing
     /// installs without a GPU wait; otherwise the device drains and the changed pipelines swap in. The caller disposes the
     /// reload afterwards: a committed reload's pipelines belong to the set.</summary>
     /// <param name="reload">A reload prepared against these tables' pipeline set and its current kernels.</param>
@@ -124,7 +124,7 @@ public sealed partial class SdfWorldTables {
     // The pipeline descriptions every residency shares. A nested holder, so its initializers run after the tables' own
     // statics, whatever order the partial files are compiled in.
     internal static class PipelineLayouts {
-        // The native per-view pipelines share the sdf-world groups; the baker uses sdf-bricks. Optional resolve uses
+        // The native per-view pipelines share the sdf-world groups. Optional resolve uses
         // its own pass group. Mesh draws through sdf-mesh, with one set per frame slot and the view and draw pushed; the
         // mesh pass's occlusion kernel reads the same interface through a compute layout of its own, with sets of its own
         // binding the same resources.
@@ -132,7 +132,6 @@ public sealed partial class SdfWorldTables {
         internal const GpuShaderStage MeshStages = (GpuShaderStage.Vertex | GpuShaderStage.Fragment);
         internal static readonly GpuPipelineLayoutDescription Mesh = SdfWorldInterfaces.MeshLayout.PipelineLayout(stages: MeshStages);
         internal static readonly GpuPipelineLayoutDescription MeshOcclusion = SdfWorldInterfaces.MeshLayout.PipelineLayout(stages: GpuShaderStage.Compute);
-        internal static readonly GpuPipelineLayoutDescription BrickBake = SdfWorldInterfaces.BrickBakeLayout.PipelineLayout(stages: GpuShaderStage.Compute);
         internal static readonly GpuPipelineLayoutDescription Environment = SdfWorldInterfaces.EnvironmentParameters.Layout.PipelineLayout(stages: GpuShaderStage.Compute);
         // One per kernel in SdfKernel order, with the layout and name from the same immutable kernel set.
         internal static readonly PipelineSpec[] Specs = [.. SdfKernelSet.Kernels.Select(selector: static kernel => Spec(kernel: kernel))];
@@ -141,7 +140,6 @@ public sealed partial class SdfWorldTables {
 
         private static PipelineSpec Spec(SdfKernel kernel) =>
             new(
-                Brick: (kernel == SdfKernel.BrickBake),
                 Description: new GpuComputePipelineDescription(
                     Bindings: [],
                     Layout: SdfKernelSet.LayoutOf(kernel: kernel).PipelineLayout(stages: GpuShaderStage.Compute),
@@ -150,7 +148,6 @@ public sealed partial class SdfWorldTables {
                 )
             );
     }
-    /// <summary>One engine pipeline: its description, named by its kernel's stem, and whether only a brick pool needs
-    /// it.</summary>
-    internal readonly record struct PipelineSpec(GpuComputePipelineDescription Description, bool Brick);
+    /// <summary>One engine pipeline: its description, named by its kernel's stem.</summary>
+    internal readonly record struct PipelineSpec(GpuComputePipelineDescription Description);
 }

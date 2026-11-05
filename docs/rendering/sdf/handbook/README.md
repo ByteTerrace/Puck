@@ -17,7 +17,7 @@ course, but each chapter can also be revisited on its own.
 | [Motion and views](motion-and-views.md) | Presentation anchors, camera rigs, views as render-graph instances, transitions, and screen views. |
 | [Queries and determinism](queries-and-determinism.md) | `IWorldQuery`, exact fixed-point evaluation, probes, raycasts, and derived gravity. |
 | [SDF performance](performance.md) | Live cost measurement, occupancy, culling, and render-scale choices. |
-| [Bricks and baking](bricks-and-baking.md) | Sampled distance bricks, march safety, and cache lifecycle; the frame's mesh bake beside them. |
+| [Sampled fields](sampled-fields.md) | Sampled distance fields: values beside the program, how the mesh bake keys and samples them, and sampling safety. |
 
 If you're focused on rendering, read [SDF frame rendering](frame-rendering.md),
 then [Lighting and shading](lighting-and-shading.md), then
@@ -26,7 +26,7 @@ then [Lighting and shading](lighting-and-shading.md), then
 [SDF program model](program-model.md), [Authoring SDF scenes](authoring-scenes.md),
 and [Motion and views](motion-and-views.md). For simulation and physics
 questions, go to [Queries and determinism](queries-and-determinism.md).
-[Bricks and baking](bricks-and-baking.md) assumes you've read the program model
+[Sampled fields](sampled-fields.md) assumes you've read the program model
 and frame rendering chapters.
 
 ## Related references

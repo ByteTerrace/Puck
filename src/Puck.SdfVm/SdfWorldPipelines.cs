@@ -9,7 +9,7 @@ namespace Puck.SdfVm;
 /// <summary>
 /// The compute pipelines an <see cref="SdfWorldTables"/> records with, for one compiled kernel set on one device: one
 /// lease on the composition's pass-pipeline cache (<see cref="GpuPassPipelineCache"/>) a kernel variant, keyed like any
-/// pass by its bytecode and description, the brick baker's included when asked for. Creating a pipeline is where a
+/// pass by its bytecode and description. Creating a pipeline is where a
 /// driver translates the kernel to native code, which can take seconds per pipeline with its cache cold, so every entry
 /// builds on the thread pool, shared with every other holder of the same kernel on the device, and a residency builds
 /// its tables only once the set is ready (<see cref="Poll"/>); the frame thread never waits on the driver's compiler.
@@ -28,15 +28,11 @@ public sealed partial class SdfWorldPipelines : IDisposable {
     private bool m_disposed;
     private SdfKernelSet m_kernels;
 
-    private SdfWorldPipelines(SdfKernelSet kernels, bool includesBrickPipelines, Slot?[] slots) {
+    private SdfWorldPipelines(SdfKernelSet kernels, Slot?[] slots) {
         m_kernels = kernels;
         m_slots = slots;
-        IncludesBrickPipelines = includesBrickPipelines;
     }
 
-    /// <summary>Gets whether the set was acquired for an engine with a brick pool. A kernel set with no brick kernels
-    /// still leases no brick pipeline; the engine then bakes nothing.</summary>
-    public bool IncludesBrickPipelines { get; }
     /// <summary>Gets whether the set has been disposed.</summary>
     public bool IsDisposed => m_disposed;
     /// <summary>Gets the kernel set the installed pipelines were created from; a committed reload replaces it.</summary>
@@ -47,12 +43,10 @@ public sealed partial class SdfWorldPipelines : IDisposable {
     /// <param name="cache">The composition's pass-pipeline cache.</param>
     /// <param name="device">The device the pipelines are created on.</param>
     /// <param name="kernels">The compiled kernel set for the device's backend.</param>
-    /// <param name="includeBrickPipelines">Whether to lease the brick bake pipeline, for an engine with a brick
-    /// pool.</param>
     /// <returns>The set, owned by the caller, which disposes it to release its leases.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="cache"/>, <paramref name="device"/> or
     /// <paramref name="kernels"/> is <see langword="null"/>.</exception>
-    public static SdfWorldPipelines Acquire(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfKernelSet kernels, bool includeBrickPipelines) {
+    public static SdfWorldPipelines Acquire(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfKernelSet kernels) {
         ArgumentNullException.ThrowIfNull(argument: cache);
         ArgumentNullException.ThrowIfNull(argument: device);
         ArgumentNullException.ThrowIfNull(argument: kernels);
@@ -64,10 +58,6 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             foreach (var kernel in BuildOrder(kernels: kernels)) {
                 var spec = specs[((int)kernel)];
                 var bytecode = kernels[kernel];
-
-                if (spec.Brick && (!includeBrickPipelines || bytecode.IsEmpty)) {
-                    continue;
-                }
 
                 slots[((int)kernel)] = new Slot(
                     description: spec.Description,
@@ -87,7 +77,6 @@ public sealed partial class SdfWorldPipelines : IDisposable {
         }
 
         return new SdfWorldPipelines(
-            includesBrickPipelines: includeBrickPipelines,
             kernels: kernels,
             slots: slots
         );

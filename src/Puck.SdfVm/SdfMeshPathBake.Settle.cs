@@ -145,6 +145,7 @@ public sealed partial class SdfMeshPathBake {
             program: frame.Program,
             slot: old.Slot,
             instance: old.FirstInstance,
+            sampled: m_sampled,
             transforms: frame.DynamicTransforms
         )!;
 

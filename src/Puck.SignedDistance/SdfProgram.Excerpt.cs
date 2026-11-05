@@ -22,7 +22,7 @@ public sealed partial class SdfProgram {
         var polygons = new List<(int InstructionIndex, System.Numerics.Vector2[] Vertices)>();
         var sweeps = new List<SdfSweepCurve>();
         var paths = new List<SdfCompiledPath>();
-        var samples = new List<SdfSampledValues>();
+        var samples = new List<SdfSampledBinding>();
 
         foreach (var index in indices) {
             ArgumentOutOfRangeException.ThrowIfNegative(value: index, paramName: nameof(indices));
@@ -39,7 +39,7 @@ public sealed partial class SdfProgram {
             var at = (instructions.Count - 1);
 
             if ((source.Op != SdfOp.ShapeBlend) || (at < 0)) { continue; }
-            foreach (var entry in m_sampledValues) {
+            foreach (var entry in m_sampledBindings) {
                 if (entry.InstructionIndex == index) { samples.Add(entry with { InstructionIndex = at }); }
             }
             if (TryFindConvexPolygonVertices(convexPolygonProfiles: m_convexPolygonProfiles, instructionIndex: index, vertices: out var vertices)) {
@@ -58,7 +58,7 @@ public sealed partial class SdfProgram {
             instructions: instructions,
             materials: m_materialsView,
             paths: paths,
-            sampledValues: samples,
+            sampledBindings: samples,
             screenSurfaces: m_screenSurfaces,
             sweepCurves: sweeps
         );

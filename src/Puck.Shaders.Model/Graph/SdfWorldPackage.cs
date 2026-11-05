@@ -217,8 +217,11 @@ public static partial class SdfWorldPackage {
     public const string ScreenLights = "sdfScreenLights";
     /// <summary>The glyph decal table.</summary>
     public const string DecalCells = "sdfDecalCells";
-    /// <summary>The brick pool, read by the bake.</summary>
-    public const string BrickPool = "sdfBrickPool";
+    /// <summary>The sampled fields' values a mesh bake job reads: a directory of one word per handle
+    /// (<c>Puck.SignedDistance.SdfProgram.SampledFields</c>), each the word its snapshot starts at or <c>0xFFFFFFFF</c> for
+    /// none, then the snapshots' voxel distances as float bits. Each bake job binds its own, written from the snapshots
+    /// its groups hashed; the tables bind a filler.</summary>
+    public const string SampledValues = "sdfSampledValues";
     /// <summary>The bounded-volume table.</summary>
     public const string Volumes = "sdfVolumes";
     /// <summary>The mesh region as a stream of words: the draw records, then the positions and indices the mesh pass
@@ -350,14 +353,14 @@ public static partial class SdfWorldPackage {
         ShaderWorkCounters.DetailRowMember,
     ];
     /// <summary>Gets the World group's tables the field interpreter reads, which the mesh bake samples through: the program
-    /// words, the dynamic transforms, the brick pool, the bake's point table, the glyph atlas and the samplers. They lead
+    /// words, the dynamic transforms, the sampled values, the bake's point table, the glyph atlas and the samplers. They lead
     /// <see cref="Tables"/>, so their bindings are alike in every interface that holds the World group and a table added
     /// after them moves none of them: the bake kernels' bytecode keys the stored meshes, and a binding they read that
     /// moved would move that key (<see cref="BakeMembers"/>).</summary>
     public static IReadOnlyList<ShaderInterfaceMember> FieldTables { get; } = [
         Table(element: ShaderValueType.Uint4, name: ProgramWords),
         Table(element: ShaderValueType.Float4, name: DynamicTransforms),
-        Table(element: ShaderValueType.Float, name: BrickPool),
+        Table(element: ShaderValueType.Uint, name: SampledValues),
         Table(element: ShaderValueType.Float4, name: MeshBakePoints),
         WorldImage(name: GlyphAtlas),
         ShaderInterfaceMember.Sampler(
@@ -367,7 +370,7 @@ public static partial class SdfWorldPackage {
         ),
     ];
     /// <summary>Gets the World group's members: what every pass of every view reads alike, the residency's tables, the
-    /// brick pool, the glyph atlas and the samplers, which the residency binds as one set per upload ring slot, written
+    /// sampled-values filler, the glyph atlas and the samplers, which the residency binds as one set per upload ring slot, written
     /// once and again only when what it binds moves. The field's tables come first (<see cref="FieldTables"/>), and a new
     /// table goes after them.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Tables { get; } = [

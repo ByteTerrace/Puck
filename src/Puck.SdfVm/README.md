@@ -80,8 +80,8 @@ Halton period) over the instance's history color and surface, which survive
 from frame to frame in the graph. The graph
 planner decides every barrier. `place` then places the output in its seat rect,
 copying the texels exactly when the output's scheduled extent equals the rect's
-pixels and resampling them otherwise. The residency counts its upload as four
-passes, `fillers`, `bricks`, `upload` and `environment`, the sky's environment
+pixels and resampling them otherwise. The residency counts its upload as three
+passes, `fillers`, `upload` and `environment`, the sky's environment
 map and its coefficients, rendered only when lighting-visible irradiance changes by at least one display code
 (`SdfWorldTables.PassLabels`), in a
 ledger it owns, so counts survive a rebuild of its tables, and each view's node
@@ -243,8 +243,7 @@ engine records through the services of the device context it renders on
 (`IGpuDeviceContext.Services`). The first lease on an entry starts its build on
 the thread pool through `Puck.Hosting.BackgroundBuild`, and every other holder of
 the same kernel on the device shares it, so a world with many camera views
-builds each kernel once for all of them, and a view without the world's brick
-pool leases every kernel but the baker. The catalog also reads each backend's
+builds each kernel once for all of them. The catalog also reads each backend's
 deployed kernels once, and the cache counts the pipelines and shader modules it
 creates under its own `gpu.pass-pipelines` source rather than in any residency's
 or node's ledger.
@@ -359,7 +358,7 @@ bake kernels the field's, `SdfWorldInterfaces.FieldStamp`): a kernel compiled
 against another instruction set, or binding anything where the host does not
 place it, refuses the reload. Reflecting DXIL needs the `dxcompiler.dll` beside
 the `dxc` on the path.
-Buffers, images, scene programs, animation, and baked bricks remain allocated; only
+Buffers, images, scene programs and animation remain allocated; only
 the frame-reuse signature is reset, so the next frame renders. A binding or layout
 change still needs a rebuilt host. Unchanged bytecode creates no
 pipeline and causes no GPU drain, unless its kernel was refused. Device-loss recovery uses the last

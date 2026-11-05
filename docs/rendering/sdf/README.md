@@ -31,8 +31,7 @@ layout and the field semantics. A GPU result is a presentation result: GPU
 floating-point execution and backend-specific output are not the simulation's
 authoritative state. Conservative bounds still govern the bake's and the
 queries' skips, and the authored instruction stream remains the source
-representation while baked meshes and sampled distance bricks serve as
-invalidatable render caches.
+representation while baked meshes serve as invalidatable render caches.
 
 For the shared shader manifests, pipeline graphs, descriptor bindings, and
 configuration model, see the [`Puck.Shaders` README](../../../src/Puck.Shaders/README.md).

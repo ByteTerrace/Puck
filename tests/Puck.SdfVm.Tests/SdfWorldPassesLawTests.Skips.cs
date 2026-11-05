@@ -23,7 +23,6 @@ public sealed partial class SdfWorldPassesLawTests {
             hostsOnDirectX: false,
             pipelines: pipelines,
             residency: new SdfWorldResidency(
-                brickPoolVoxelCapacity: 0,
                 frameSource: new FixedFrameSource(frame: frame),
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),
@@ -107,7 +106,6 @@ public sealed partial class SdfWorldPassesLawTests {
             hostsOnDirectX: false,
             pipelines: pipelines,
             residency: new SdfWorldResidency(
-                brickPoolVoxelCapacity: 0,
                 frameSource: new CapturingFrameSource(capture: () => current),
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),

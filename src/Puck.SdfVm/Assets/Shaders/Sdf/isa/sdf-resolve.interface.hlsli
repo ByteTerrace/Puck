@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/457a7b62304e0210474037d7294631988af68d3ade7ed272be27d51e54cb6a26). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/19eaca81bedca72e9ce0ebf18c14a3d4b6a0658af03fdbeb9b097226ad0b4d5d). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -99,7 +99,7 @@ struct SdfResolveFrame {
 // The World group: descriptor set 1, register space 1.
 [[vk::binding(0, 1)]] StructuredBuffer<uint4> sdfWords : register(t0, space1);
 [[vk::binding(1, 1)]] StructuredBuffer<float4> sdfDynamicTransforms : register(t1, space1);
-[[vk::binding(2, 1)]] StructuredBuffer<float> sdfBrickPool : register(t2, space1);
+[[vk::binding(2, 1)]] StructuredBuffer<uint> sdfSampledValues : register(t2, space1);
 [[vk::binding(3, 1)]] StructuredBuffer<float4> sdfMeshBakePoints : register(t3, space1);
 [[vk::binding(4, 1)]] Texture2D<float4> sdfGlyphAtlas : register(t4, space1);
 [[vk::binding(5, 1)]] SamplerState samplers[2] : register(s5, space1);
@@ -234,8 +234,8 @@ struct SdfResolvePass {
     [[vk::offset(1020)]] uint _pad1020;
     [[vk::offset(1024)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa35B5CAAE : register(b0, space3);
-#define passGroup passGroupIsa35B5CAAE
+[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsaC5DBDB82 : register(b0, space3);
+#define passGroup passGroupIsaC5DBDB82
 [[vk::binding(1, 3)]] Texture2D<float4> currentColor : register(t1, space3);
 [[vk::binding(2, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);

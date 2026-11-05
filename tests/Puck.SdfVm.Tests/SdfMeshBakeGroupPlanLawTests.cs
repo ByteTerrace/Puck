@@ -47,7 +47,7 @@ public sealed class SdfMeshBakeGroupPlanLawTests {
         Assert.False(Assert.Single(groups, static group => !group.Dynamic && group.FirstInstance == 2).Geometry.ContainsGlyph);
         Assert.True(Assert.Single(groups, static group => group.Dynamic && group.Slot == 0).Geometry.ContainsGlyph);
         Assert.False(Assert.Single(groups, static group => group.Dynamic && group.Slot == 1).Geometry.ContainsGlyph);
-        Assert.Equal(2, SdfMeshBakeGroup.Refresh(groups, program, transforms, 50f, static _ => true, Create));
+        Assert.Equal(2, SdfMeshBakeGroup.Refresh(groups, program, transforms, 50f, static _ => true, Create, SdfSampledSet.Empty));
         Assert.True(Assert.Single(groups, static group => group.Dynamic && group.Slot == 0).Geometry.ContainsGlyph);
         Assert.False(Assert.Single(groups, static group => group.Dynamic && group.Slot == 1).Geometry.ContainsGlyph);
     }
@@ -92,6 +92,7 @@ public sealed class SdfMeshBakeGroupPlanLawTests {
             farDistance: 50f,
             groups: refreshed,
             program: program,
+            sampled: SdfSampledSet.Empty,
             stale: static group => !(group.Dynamic && (group.Slot == 0)),
             transforms: late
         );

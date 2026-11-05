@@ -20,8 +20,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var pipelines = SdfTestPipelines.Cache();
         var current = Frame();
         using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
-            residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
-                frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
+            residency: new SdfWorldResidency(frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
@@ -97,8 +96,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var pipelines = SdfTestPipelines.Cache();
         var current = Frame();
         using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
-            residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
-                frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
+            residency: new SdfWorldResidency(frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
@@ -128,8 +126,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var current = Frame();
         var captured = current.Views[0].Camera;
         using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
-            residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
-                frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
+            residency: new SdfWorldResidency(frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
@@ -197,8 +194,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var pipelines = SdfTestPipelines.Cache();
         var current = Frame();
         using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
-            residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
-                frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
+            residency: new SdfWorldResidency(frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
@@ -261,8 +257,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var pipelines = SdfTestPipelines.Cache();
         var current = Frame();
         using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
-            residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
-                frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
+            residency: new SdfWorldResidency(frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
@@ -295,8 +290,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var pipelines = SdfTestPipelines.Cache();
         var current = Frame();
         using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
-            residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
-                frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
+            residency: new SdfWorldResidency(frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
