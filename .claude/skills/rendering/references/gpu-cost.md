@@ -372,8 +372,9 @@ large blocks.
   cascade or reader of its parts may show holds (`SdfUpdateRateTiers.HeldHertz`).
   Holding what nothing shows is look-neutral and applies everywhere. A lower
   rate for what is visible is the author's to allow (the owner's ruling):
-  distant scenery may animate at a reduced tier only where the world or its
-  package opts in, and the engine default is full rate for anything visible.
+  distant scenery may animate at a reduced tier only where its creation opts
+  in (`behavior.reducedRateAtDistance`, which a package's template can expose),
+  and the engine default is full rate for anything visible.
   New rated work decides through the same floor rather than a schedule of its
   own, reads the frame's flags before it runs (the stamp pool takes them in
   `PresentAt`), and a new reader of a body's parts goes through the pool's part
