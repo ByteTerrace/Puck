@@ -255,7 +255,31 @@ public sealed class RuleLatch {
     /// <summary>Forgets every entry, including the scheduler's own caches and the spent counts.</summary>
     public void Clear() {
         m_byRule.Clear();
+        m_statesFor = null;
         SpentTicks = 0L;
+    }
+
+    // The states of the compiled family States last resolved, by compiled position. A family's array is replaced on
+    // every recompile, so its identity names the resolution; Clear drops the states it holds and the cache with them.
+    private CompiledRule[]? m_statesFor;
+    private RuleState[] m_states = [];
+
+    /// <summary>Returns every rule's state for one compiled family, by compiled position, resolving each name once per
+    /// compiled array rather than once per evaluation.</summary>
+    /// <param name="rules">The compiled family.</param>
+    /// <returns>The states, aligned with <paramref name="rules"/>.</returns>
+    internal RuleState[] States(CompiledRule[] rules) {
+        if (!ReferenceEquals(objA: m_statesFor, objB: rules)) {
+            var states = new RuleState[rules.Length];
+
+            for (var index = 0; (index < rules.Length); index++) {
+                states[index] = Rule(name: rules[index].Name);
+            }
+            m_states = states;
+            m_statesFor = rules;
+        }
+
+        return m_states;
     }
     /// <summary>Forgets scheduler observations while preserving every edge-held binding.</summary>
     /// <remarks>Use this when the backing arena is replaced by an equivalent layout whose row-version counters
@@ -348,8 +372,8 @@ public sealed class RuleLatch {
         }
 
         foreach (var name in m_byRule.Keys) {
-            if (!live.Contains(item: name)) {
-                _ = m_byRule.Remove(key: name);
+            if (!live.Contains(item: name) && m_byRule.Remove(key: name)) {
+                m_statesFor = null;
             }
         }
     }

@@ -491,16 +491,16 @@ The custom no-GC runtime port stays later work, on the
   portal face each tick, with an occupancy dictionary `Observe` or `Forget` per
   pair (`WorldInstanceHost.Adjacency.cs:294-434`), a sixth of a standing tick.
   A body-major loop with a bounds test before the occupancy write cuts it.
-- [low] The rule VM's latch scheduling hashes each rule's name every tick
-  (`RuleLatch.Rule`, `RuleLatch.cs:181-189`, from `RuleEvaluator.cs:385`) and
-  keeps a binding in two dictionaries: `Held` (`TryGetValue` at
-  `RuleEvaluator.cs:523`, `GetValueRefOrAddDefault` at `:579`) and `Scheduling`
-  (`RuleLatch.cs:66`), both walked by `EndSweep` after each swept rule
-  (`RuleLatch.cs:244-257`). Resolve each compiled rule's `RuleState` once, when
-  its family compiles, and keep a binding's edge bit and schedule in one entry
-  of one table. The state hash sorts the bindings and folds only the edge bit
-  (`RuleLatch.cs:109-165`), so the merge leaves it unchanged, provided the
-  hashed, checkpointed bit stays apart from the unhashed schedule cache.
+- [low] The rule VM's latch keeps a binding in two dictionaries: `Held`
+  (`TryGetValue` and `GetValueRefOrAddDefault` in
+  `RuleEvaluator.EvaluateOnceCore`) and `Scheduling` (`RuleState.Binding`),
+  both walked by `RuleLatch.EndSweep` after each swept rule. Keep a binding's
+  edge bit and schedule in one entry of one table. The state hash sorts the
+  bindings and folds only the edge bit (`RuleLatch.AppendStateHash`), so the
+  merge leaves it unchanged, provided the hashed, checkpointed bit stays apart
+  from the unhashed schedule cache. The host's interaction path still resolves
+  its `RuleState` by name per tick (`IRuleOwner.TryEvaluateOwn` carries no
+  state); the evaluator's own family walk reads them from `RuleLatch.States`.
 - [low] `PaintLatticeDraw` rents its draw buffer from `ArrayPool<long>.Shared`
   (`WorldTick.LatticeDraws.cs:51`). That is safe because
   `GeneratorEngine.TryRunBatch` writes every index below `values.Length` on

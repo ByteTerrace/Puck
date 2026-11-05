@@ -338,13 +338,17 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         ArgumentNullException.ThrowIfNull(argument: rules);
 
         var applied = false;
+        var states = latch.States(rules: rules);
 
-        foreach (var rule in rules) {
-            applied |= EvaluateRule(
+        for (var index = 0; (index < rules.Length); index++) {
+            _ = EvaluateRule(
+                applied: out var moved,
+                bindings: states[index],
                 latch: latch,
-                rule: rule,
+                rule: rules[index],
                 stepTicks: stepTicks
             );
+            applied |= moved;
         }
 
         return applied;
@@ -378,10 +382,17 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         ArgumentNullException.ThrowIfNull(argument: latch);
         ArgumentNullException.ThrowIfNull(argument: rule);
 
+        return EvaluateRule(
+            applied: out applied,
+            bindings: latch.Rule(name: rule.Name),
+            latch: latch,
+            rule: rule,
+            stepTicks: stepTicks
+        );
+    }
+    [Replaces(root: typeof(StateArena))]
+    private RuleOutcome EvaluateRule(CompiledRule rule, RuleLatch latch, RuleLatch.RuleState bindings, ulong stepTicks, out bool applied) {
         applied = false;
-
-        var bindings = latch.Rule(name: rule.Name);
-
         bindings.Spent.Visits++;
         if (
             (m_owner is { } owner) &&
