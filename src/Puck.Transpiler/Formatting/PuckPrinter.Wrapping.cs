@@ -21,6 +21,8 @@ public static partial class PuckPrinter {
         // Each group's decision at the column it was decided at, so a group measured inside an enclosing group's
         // measure is laid out once.
         private readonly Dictionary<(object Node, int Column), bool> m_fits = new(comparer: NodeAtColumn.Instance);
+        // Whether each call's argument list keeps the layout its author broke (KeepsAuthoredLayout), by list.
+        private readonly Dictionary<object, bool> m_keepsLayout = new(comparer: ReferenceEqualityComparer.Instance);
 
         // `wraps`: whether the writer adds its own line breaks past LineWidth.
         public Writer(bool wraps) {

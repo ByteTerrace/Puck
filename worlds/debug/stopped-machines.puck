@@ -1,7 +1,10 @@
 // A scenario fixture imports this when none of its claims reads a machine: every device of the debug world stays
 // mounted, engageable and swappable, but the host does not advance it, so a scenario does not pay for emulating
 // cartridges it never looks at. A machine added to the debug world (devices.puck, range.puck) is added here too.
-machines: map([
-  "humble-gaming-brick", "advanced-gaming-brick", "humble-gaming-deck",
-  "range-deck-9", "range-deck-24", "range-deck-50"
-], name => { name: name, running: false })
+machines: map(
+  [
+    "humble-gaming-brick", "advanced-gaming-brick", "humble-gaming-deck",
+    "range-deck-9", "range-deck-24", "range-deck-50"
+  ],
+  name => { name: name, running: false }
+)
