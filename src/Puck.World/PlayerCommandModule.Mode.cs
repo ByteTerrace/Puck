@@ -77,7 +77,7 @@ internal sealed partial class PlayerCommandModule {
     );
     private CommandResult ModeHandler(CommandContext context, WireArgs args) {
         if (args.Count is (< 1 or > 3)) {
-            return CommandResult.Error(output: $"[{ModeCommand}: expected <family> <state> [seat], or <family> [seat] to read back]");
+            return CommandResult.Usage(form: ModeForm, verb: ModeCommand);
         }
 
         var family = args[0].ToString();
@@ -251,7 +251,7 @@ internal sealed partial class PlayerCommandModule {
     // family's authored default, then runs the SAME ApplyMode path player.mode does.
     private CommandResult CameraHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: $"[{CameraCommand}: expected [seat]]");
+            return CommandResult.Usage(form: SeatForm, verb: CameraCommand);
         }
 
         var (slot, error) = SeatCommandArgs.ResolveSlot(
@@ -310,7 +310,7 @@ internal sealed partial class PlayerCommandModule {
     // picture and the other view (the held view of a carried screen, else the room). Presentation only.
     private CommandResult FrameHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: $"[{FrameCommand}: expected [seat]]");
+            return CommandResult.Usage(form: SeatForm, verb: FrameCommand);
         }
 
         var (slot, error) = SeatCommandArgs.ResolveSlot(
@@ -382,14 +382,14 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: FrameCommand,
-            description: $"Switches a seat's view of the screen it is engaged on: player.frame [seat] (seat 1..{PlayerRoster.MaxSlots}, default 1). The framed picture (the screen's picture alone, as an emulator shows it) and the other view trade places: on a screen a body carries whose carry authors a camera (the Humble Gaming Brick in the Moth's hands) the engagement starts on the view that shows the body holding it and the toggle goes to the picture and back, and on any other screen it starts on the picture and the toggle goes back to the room. The choice lasts until the seat leaves the screen, and the device's own controls play in both views. Echoes [player.frame: p<n> view = picture|held|room]; refused by name when the seat engages no screen. Presentation only: nothing reaches the simulation.",
+            description: $"Switches a seat's view of the screen it is engaged on: player.frame {SeatForm} (seat 1..{PlayerRoster.MaxSlots}, default 1). The framed picture (the screen's picture alone, as an emulator shows it) and the other view trade places: on a screen a body carries whose carry authors a camera (the Humble Gaming Brick in the Moth's hands) the engagement starts on the view that shows the body holding it and the toggle goes to the picture and back, and on any other screen it starts on the picture and the toggle goes back to the room. The choice lasts until the seat leaves the screen, and the device's own controls play in both views. Echoes [player.frame: p<n> view = picture|held|room]; refused by name when the seat engages no screen. Presentation only: nothing reaches the simulation.",
             handler: FrameHandler,
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: CameraCommand,
-            description: $"Toggles a seat's Free Cam: player.camera [seat] (seat 1..{PlayerRoster.MaxSlots}, default 1). It resolves the seat's own seatModes state whose target is \"camera\" and flips between that state and the family's default, so a wheel sector or a pad chord composes exactly what player.mode <family> <state> composes — the seat possesses its declared camera body through the ordinary ComposeControl door, its own body intent diverting to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig). Refused by name when the world declares no camera-targeting state.",
+            description: $"Toggles a seat's Free Cam: player.camera {SeatForm} (seat 1..{PlayerRoster.MaxSlots}, default 1). It resolves the seat's own seatModes state whose target is \"camera\" and flips between that state and the family's default, so a wheel sector or a pad chord composes exactly what player.mode <family> <state> composes — the seat possesses its declared camera body through the ordinary ComposeControl door, its own body intent diverting to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig). Refused by name when the world declares no camera-targeting state.",
             handler: CameraHandler,
             routing: CommandRouting.Simulation
         );

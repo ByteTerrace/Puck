@@ -27,7 +27,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.EffectiveCount > 2) {
-            return CommandResult.Error(output: "[body.rig: expected at most 2 values — an optional body index, then an optional shape name]");
+            return CommandResult.Usage(form: RigForm, verb: "body.rig");
         }
         if (!WorldArgs.TryParseIndex(
             args: in args,

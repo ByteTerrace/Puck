@@ -12,6 +12,7 @@ namespace Puck.World;
 /// </summary>
 internal sealed class WorldPassthroughCommandModule(WorldSourcePassthrough passthrough) : ICommandModule {
     private const string Verb = "source.passthrough";
+    private const string Form = "[open <instance> <windowTitle...> | close <instance>]";
 
     private CommandResult Handler(CommandContext context, WireArgs args) {
         if (
@@ -65,7 +66,7 @@ internal sealed class WorldPassthroughCommandModule(WorldSourcePassthrough passt
             );
         }
 
-        return CommandResult.Error(output: $"[{Verb}: expected no argument, open <instance> <windowTitle...> or close <instance>]");
+        return CommandResult.Usage(form: Form, got: ((args.Count > 0) ? args[0].ToString() : null), verb: Verb);
     }
 
     /// <inheritdoc/>

@@ -7,11 +7,13 @@ namespace Puck.World.Client;
 /// parsing, authority, mutation, and narration path the root command module registers.</summary>
 public static class PlayerAssignmentCommand {
     /// <summary>The help text shown for <c>player.assign</c>.</summary>
-    public const string Description = "Moves a device between players: player.assign <keyboardN|mouseN|gamepadN|cameraN> <slot> (slot 1..4). Onto an occupied slot the device joins that team; onto an empty slot a keyboard, mouse, or gamepad creates a pending player (a profile must be chosen), while a passive camera is refused because it cannot create a player; onto its own slot a no-op. See world.devices for the tokens.";
+    public const string Description = "Moves a device between players: player.assign " + Form + " (slot 1..4). Onto an occupied slot the device joins that team; onto an empty slot a keyboard, mouse, or gamepad creates a pending player (a profile must be chosen), while a passive camera is refused because it cannot create a player; onto its own slot a no-op. See world.devices for the tokens.";
+
+    private const string Form = "<keyboardN|mouseN|gamepadN|cameraN> <slot>";
 
     private static CommandResult Handle(PlayerRoster roster, CommandContext context, in WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Error(output: "[player.assign: expected a device token and a slot — player.assign <keyboardN|mouseN|gamepadN|cameraN> <slot 1..4>]");
+            return CommandResult.Usage(form: Form, verb: "player.assign");
         }
 
         var deviceToken = args[0].ToString();

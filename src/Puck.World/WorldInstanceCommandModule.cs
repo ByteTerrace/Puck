@@ -33,6 +33,8 @@ namespace Puck.World;
 /// socket connection to address anything but the boot instance is unbuilt. See
 /// <c>src/Puck.World.Server/WorldPeerHost.cs</c> for where that door lives today.</para></remarks>
 internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Client.WorldSeatAuthorityRouter seatRouter) : ICommandModule {
+    private const string SeatViewForm = "[<seat>] (seat an integer 1..4)";
+    private const string TransferForm = "<source-instance> <body:index|seat|party> <target-instance> | ephemeral <site> <path> | persisted <name> <path>";
     private readonly WorldInstanceHost m_instances = instances;
     private readonly Client.WorldSeatAuthorityRouter m_seatRouter = seatRouter;
 
@@ -57,7 +59,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
     // or 'persisted <name> <path>' — the bare '<target-instance>' form is parsed directly by the handler above
     // instead (never through here), because it alone accepts trailing verification-only modifiers that a Tail-
     // consumed document path here must never be asked to share tokens with.
-    private static bool TryParseDestination(in WireArgs args, int start, string verb, out WorldInstanceHost.TransferDestination destination, out string? error) {
+    private static bool TryParseDestination(in WireArgs args, int start, string verb, out WorldInstanceHost.TransferDestination destination, out CommandResult? error) {
         destination = default;
 
         if (args.Is(
@@ -65,7 +67,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             value: "ephemeral"
         )) {
             if (args.Count < (start + 3)) {
-                error = $"[{verb}: expected 'ephemeral <site> <path>']";
+                error = CommandResult.Usage(form: TransferForm, verb: verb);
 
                 return false;
             }
@@ -84,7 +86,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             value: "persisted"
         )) {
             if (args.Count < (start + 3)) {
-                error = $"[{verb}: expected 'persisted <name> <path>']";
+                error = CommandResult.Usage(form: TransferForm, verb: verb);
 
                 return false;
             }
@@ -98,7 +100,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             return true;
         }
 
-        error = $"[{verb}: expected 'ephemeral <site> <path>' or 'persisted <name> <path>']";
+        error = CommandResult.Usage(form: TransferForm, verb: verb);
 
         return false;
     }
@@ -206,7 +208,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                 }
 
                 if (args.Count > 1) {
-                    return CommandResult.Error(output: "[world.instance.status: too many arguments — expected [<name>]]");
+                    return CommandResult.Usage(form: "[<name>]", got: args[1].ToString(), verb: "world.instance.status");
                 }
 
                 var name = args[0].ToString();
@@ -266,7 +268,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                 }
 
                 if (args.Count > 1) {
-                    return CommandResult.Error(output: $"[world.view: too many arguments — expected [<seat>], seat an integer 1..{WorldSeatBindings.SeatCount}]");
+                    return CommandResult.Usage(form: SeatViewForm, got: args[1].ToString(), verb: "world.view");
                 }
 
                 if (
@@ -277,7 +279,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     (seat < 1) ||
                     (seat > WorldSeatBindings.SeatCount)
                 ) {
-                    return CommandResult.Error(output: $"[world.view: expected a seat number 1..{WorldSeatBindings.SeatCount}]");
+                    return CommandResult.Usage(form: SeatViewForm, got: args[0].ToString(), verb: "world.view");
                 }
 
                 if (m_seatRouter.TryRoute(slot: PlayerRoster.SlotFromDisplay(number: seat)) is not { } seatLocation) {
@@ -327,7 +329,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             description: "Reports every local seat's occupancy for one named instance (world.instance.seats <name>) or EVERY running instance (world.instance.seats, no argument) — the boot instance included, under 'boot'. Per seat: 1..4=<identity-id> when active on an identity, 1..4=pending when active with none chosen yet, 1..4=- when unoccupied. Immediate.",
             handler: (_, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Error(output: "[world.instance.seats: expected an optional instance name]");
+                    return CommandResult.Usage(form: "[<name>]", got: args[1].ToString(), verb: "world.instance.seats");
                 }
 
                 var names = ((args.Count == 1)
@@ -359,10 +361,10 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
         );
         yield return Simulation(
             name: "world.transfer",
-            description: "Queues a same-process transfer: world.transfer <source-instance> <body:index|seat|party> <destination>. body:<index> addresses any zero-based body index; a bare seat number is 1-based within the four local seats; party selects the source world's active local-seat cohort. Destination is an existing instance name, ephemeral <site> <path>, or persisted <name> <path>. The acting principal must hold Drive for each source body, and destination admission must authorize the arrival. Actual capacity, occupancy, grants, and destination resolution are checked at the transfer drain. Reservation precedes detach; a confirmed refusal restores detached members, while an ambiguous commit retains recovery state until resolved. Accepted moves echo their source and destination; refusals echo a reason. A forwarding authority remains alive after its last traveler departs. An ephemeral destination can otherwise reap when empty; persisted destinations remain until explicitly stopped. The existing-name destination also accepts forcejoinrefusal:<ordinal> as a verification-only modifier; every transfer id is minted by its source and never reused. Transfer handshakes are checkpointed host state, not boot-only replay input.",
+            description: "Queues a same-process transfer: world.transfer " + TransferForm + ". body:<index> addresses any zero-based body index; a bare seat number is 1-based within the four local seats; party selects the source world's active local-seat cohort. Destination is an existing instance name, ephemeral <site> <path>, or persisted <name> <path>. The acting principal must hold Drive for each source body, and destination admission must authorize the arrival. Actual capacity, occupancy, grants, and destination resolution are checked at the transfer drain. Reservation precedes detach; a confirmed refusal restores detached members, while an ambiguous commit retains recovery state until resolved. Accepted moves echo their source and destination; refusals echo a reason. A forwarding authority remains alive after its last traveler departs. An ephemeral destination can otherwise reap when empty; persisted destinations remain until explicitly stopped. The existing-name destination also accepts forcejoinrefusal:<ordinal> as a verification-only modifier; every transfer id is minted by its source and never reused. Transfer handshakes are checkpointed host state, not boot-only replay input.",
             handler: (context, args) => {
                 if (args.Count < 3) {
-                    return CommandResult.Usage(form: "<source-instance> <body:index|seat|party> <target-instance> | ephemeral <site> <path> | persisted <name> <path>", verb: "world.transfer");
+                    return CommandResult.Usage(form: TransferForm, verb: "world.transfer");
                 }
 
                 var sourceName = args[0].ToString();
@@ -380,7 +382,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     index: 1
                 )
                 ) {
-                    return CommandResult.Error(output: $"[world.transfer: expected body:<0..{(WorldBodiesLimits.CapacityCeiling - 1)}>, a local seat 1..{WorldBodiesLimits.LocalSeatCount}, or 'party']");
+                    return CommandResult.Usage(form: TransferForm, got: args[1].ToString(), verb: "world.transfer");
                 }
 
                 WorldInstanceHost.TransferDestination destination;
@@ -403,7 +405,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                         start: 2,
                         verb: "world.transfer"
                     )) {
-                        return CommandResult.Error(output: destinationError!);
+                        return destinationError!.Value;
                     }
                 } else {
                     // The bare '<target-instance>' form — the only one that also accepts the trailing VERIFICATION-ONLY
@@ -427,7 +429,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     }
 
                     if (end != 3) {
-                        return CommandResult.Error(output: "[world.transfer: expected exactly one target-instance name, or 'ephemeral <site> <path>' / 'persisted <name> <path>' (the bare target-instance form may also be followed by forcejoinrefusal:<n>)]");
+                        return CommandResult.Usage(form: TransferForm, got: args[3].ToString(), verb: "world.transfer");
                     }
 
                     destination = WorldInstanceHost.TransferDestination.Existing(name: args[2].ToString());

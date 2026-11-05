@@ -315,10 +315,10 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
         Assert.True(condition: registry.Submit(line: "world.wait 1").IsError);
     }
     [Theory]
-    [InlineData("ready", "[world.wait: ready takes a deadline in seconds: world.wait ready <seconds>]")]
-    [InlineData("READY", "[world.wait: ready takes a deadline in seconds: world.wait ready <seconds>]")]
-    [InlineData("until", "[world.wait: until takes an absolute tick: world.wait until <tick>]")]
-    [InlineData("captures 1 2", "[world.wait: captures takes a deadline in seconds: world.wait captures <seconds>]")]
+    [InlineData("ready", "[world.wait: expected ready <seconds>]")]
+    [InlineData("READY", "[world.wait: expected ready <seconds>]")]
+    [InlineData("until", "[world.wait: expected until <tick>]")]
+    [InlineData("captures 1 2", "[world.wait: expected captures <seconds>]")]
     public void WorldWait_KeywordWithoutItsArgument_IsRefusedNamingItsForm(string line, string expected) {
         using var row = HostRow.Build(
             name: "boot",

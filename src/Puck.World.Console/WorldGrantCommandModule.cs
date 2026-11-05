@@ -947,7 +947,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
                     : "no trailing tokens"
             ));
 
-            error = CommandResult.Error(output: $"[{verb}: unexpected trailing token '{token.ToString()}' — expected {expected}]");
+            error = CommandResult.Usage(form: expected, got: token.ToString(), verb: verb);
 
             return false;
         }

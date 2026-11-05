@@ -223,7 +223,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.EffectiveCount > 2) {
-            return CommandResult.Error(output: "[player.join: expected at most 2 tokens — an optional profile name and/or a slot 2..4]");
+            return CommandResult.Usage(form: JoinForm, got: args[2].ToString(), verb: "player.join");
         }
 
         // Split the (up to two) tokens into an optional slot (an int in 2..4) and an optional profile name (either
@@ -241,14 +241,14 @@ internal sealed partial class PlayerCommandModule {
                 (n <= PlayerRoster.MaxSlots)
             ) {
                 if (slotIndex >= 0) {
-                    return CommandResult.Error(output: "[player.join: gave two slot numbers — expected <profile> and/or <slot 2..4>]");
+                    return CommandResult.Usage(form: JoinForm, got: args[tokenIndex].ToString(), verb: "player.join");
                 }
 
                 slotIndex = PlayerRoster.SlotFromDisplay(number: n);
             } else if (profileName is null) {
                 profileName = args[tokenIndex].ToString();
             } else {
-                return CommandResult.Error(output: "[player.join: gave two profile names — expected <profile> and/or <slot 2..4>]");
+                return CommandResult.Usage(form: JoinForm, got: args[tokenIndex].ToString(), verb: "player.join");
             }
         }
 
@@ -364,7 +364,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.EffectiveCount != 1) {
-            return CommandResult.Error(output: "[player.leave: expected a player index — player.leave <n>, n in 2..4]");
+            return CommandResult.Usage(form: LeaveForm, verb: "player.leave");
         }
 
         if (!WorldArgs.TryParseIndex(
@@ -388,7 +388,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private CommandResult ProfileHandler(CommandContext context, WireArgs args) {
         if (args.Count is not (1 or 2)) {
-            return CommandResult.Error(output: "[player.identity: expected an identity name plus an optional player index — player.identity <name> [n]]");
+            return CommandResult.Usage(form: IdentityForm, verb: "player.identity");
         }
 
         if (!WorldArgs.TryParseIndex(

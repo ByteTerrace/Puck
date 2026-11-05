@@ -15,6 +15,8 @@ public enum WorldModelAccess : byte {
     ExtensionData = 4,
     /// <summary>The member carries <c>[JsonIgnore]</c>.</summary>
     Ignored = 8,
+    /// <summary>The member is required: the serializer refuses an object that leaves it out.</summary>
+    Required = 16,
 }
 /// <summary>One member of a world document model type.</summary>
 /// <param name="Name">The member's JSON name.</param>

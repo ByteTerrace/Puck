@@ -18,7 +18,7 @@ public sealed partial class WorldStateCommandModule {
             _ => (WorldStateHashScope?)null,
         };
         if (scope is null) {
-            return CommandResult.Error(output: $"[world.state.hash: unknown scope '{token}' — expected capture|pose|world|authoritative]");
+            return CommandResult.Usage(form: "[capture|pose|world|authoritative]", got: token, verb: "world.state.hash");
         }
         ulong tick;
         ulong hash;

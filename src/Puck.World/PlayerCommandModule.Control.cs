@@ -112,7 +112,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private CommandResult ChannelsHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[body.channels: expected at most 1 value — an optional body index]");
+            return CommandResult.Usage(form: ChannelsForm, verb: "body.channels");
         }
 
         if (TryRoutedSeatQuery(
@@ -296,10 +296,10 @@ internal sealed partial class PlayerCommandModule {
                 z: z
             );
         } else {
-            return CommandResult.Error(output: $"[{verb}: expected three finite values — <x> <y> <z>]");
+            return CommandResult.Usage(form: "<x> <y> <z> (finite numbers)", verb: verb);
         }
         if (!VectorFunctions.IsFinite(vector: value)) {
-            return CommandResult.Error(output: $"[{verb}: expected three finite values — <x> <y> <z>]");
+            return CommandResult.Usage(form: "<x> <y> <z> (finite numbers)", verb: verb);
         }
         var quantized = CommandValueQuantization.QuantizeAxis3D(value: value);
 
@@ -362,7 +362,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private CommandResult PressHandler(CommandContext context, WireArgs args) {
         if (args.Count is (< 1 or > 4)) {
-            return CommandResult.Error(output: "[body.press: expected a channel name — plus an optional value, hold time, and body index]");
+            return CommandResult.Usage(form: PressForm, verb: "body.press");
         }
 
         // Layout: <channel> [value] [holdSeconds] [body].
@@ -838,7 +838,7 @@ internal sealed partial class PlayerCommandModule {
             !float.IsFinite(f: y)
         ) {
             value = default;
-            error = CommandResult.Error(output: $"[{verb}: expected two finite values — <x> <y>]");
+            error = CommandResult.Usage(form: "<x> <y> (finite numbers)", verb: verb);
             return false;
         }
 

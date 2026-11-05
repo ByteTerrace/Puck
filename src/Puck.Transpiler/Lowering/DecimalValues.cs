@@ -12,9 +12,9 @@ namespace Puck.Transpiler.Lowering;
 /// a decimal is therefore never cast. It is read from the literal's own text where there is one, and from the
 /// double's fifteen significant digits where there is only a computed value.</para>
 /// <para>An authored decimal stays a decimal for as long as the arithmetic applied to it is closed over finite
-/// decimals: a sign, a sum, a difference, a product, and a unit whose scale is a power of ten. A quotient, a
-/// remainder, a function and an angle conversion are computed in <see cref="double"/>, and what they yield is
-/// read back through <see cref="FromDouble"/>.</para>
+/// decimals: a sign, a sum, a difference, a product, a quotient whose exact value is a finite decimal, and a unit
+/// whose scale is a power of ten. Any other quotient, a remainder, a function and an angle conversion are computed in
+/// <see cref="double"/>, and what they yield is read back through <see cref="FromDouble"/>.</para>
 /// </remarks>
 public static class DecimalValues {
     /// <summary>Returns the decimal a computed double stands for: its value to fifteen significant digits, which
