@@ -32,7 +32,7 @@ let streamLegs = [
   { bearing: 188, length: 24 }
   { bearing: 171, length: 24 }
   { bearing: 154, length: 24 }
-  { bearing: 154, length: 24 }
+  { bearing: 154, length: 18 }
 ]
 // A leg's start point, and its middle.
 function legStart(i) = [
@@ -48,7 +48,7 @@ function legMiddle(i) = [
 let bridgeLeg = 5
 
 prototypes {
-  fallsRibbon(id: "falls", profile: fallsProfile, width: 8, standoff: 5)
+  fallsRibbon(id: "falls", profile: fallsProfile, width: 8, standoff: 8, foldRadians: 0.045)
   glacierMass(id: "glacier", lumps: glacierLumps)
   lakeSurface(id: "lake", radius: lakeSite.radius)
   for (leg, i) in streamLegs {

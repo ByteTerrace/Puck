@@ -121,5 +121,5 @@ state {
 }
 
 spawnPoints [
-  { id: "pool", position [poolHole[2] + 3, 0.05, poolCentre[1]], yawDegrees: 270 }
+  { id: "pool", position [poolHole[2] + 3, 0.05, poolCentre[1]], yawDegrees: 90 }
 ]

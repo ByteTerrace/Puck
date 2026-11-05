@@ -24,11 +24,13 @@
 // cell's water over `fullHead`).
 
 // The default chain, upstream to downstream: kind, cell count, bed elevation at its first and last cell, starting water.
+// It starts running: the lake a little over its sill and the falls carrying what a full glacier's melt sends them, so the
+// falls are on at the first tick and no melt has yet to reach them.
 let hydrologyStages = [
   { kind: "source", count: 2, bed: 3, bedEnd: 3, water: 0 }
-  { kind: "lake", count: 3, bed: 2, bedEnd: 2, water: 0.4 }
+  { kind: "lake", count: 3, bed: 2, bedEnd: 2, water: 0.5 }
   { kind: "sill", count: 1, bed: 2.4, bedEnd: 2.4, water: 0 }
-  { kind: "falls", count: 4, bed: 2, bedEnd: 1.1, water: 0 }
+  { kind: "falls", count: 4, bed: 2, bedEnd: 1.1, water: 0.2 }
   { kind: "river", count: 4, bed: 1, bedEnd: 1, water: 0.15 }
   { kind: "aquifer", count: 10, bed: 0, bedEnd: 0, water: 0 }
 ]

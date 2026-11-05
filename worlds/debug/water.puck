@@ -8,9 +8,10 @@
 // (`lakeLevel`, `fallsFlow`, `riverDepth`, `aquiferFill`, `glacier`). The pool is the one place the river is a medium a
 // body swims in.
 //
-// Levers: `water.speed <k>` runs the whole cycle k times faster (the melt clock and the flow together), `world.state
-// glacier` reads the clock and `world.state.cell.set glacier $value 0.5` sets it, `world.fields` prints each row's total
-// (the conserved water), and `world.reset` returns the cycle to its start.
+// Levers: `water.speed <k>` runs the whole cycle k times faster (the melt clock and the flow together; 60 is the three hours
+// in three minutes), `world.state glacier` reads the glacier (1 full, 0 gone) and `world.state.cell.set hydroClock $value
+// 162000` puts it at half (324000 ticks of melt is three hours at 30 Hz), `world.fields` prints each lattice row's
+// `total`, the conserved water, and a fresh boot returns the cycle to its start.
 import "../standard/hydrology"
 // The gauges the pool reads and the scenery binds.
 exports {
