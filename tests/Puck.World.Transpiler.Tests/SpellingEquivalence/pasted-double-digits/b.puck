@@ -1,0 +1,23 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let hour = 0.2617993877991494
+let first = 0.3 * hour
+let second = 1.1 * hour
+let sum = 0.3
+
+inputModes {
+  global []
+  families [
+    {
+      name: "fuel"
+      selector { kind: BodyState, name: "fuel" }
+      default: "empty"
+      states [
+        { name: "empty", ranges [{ minimum: 0, maximum: 0 }], channels [] }
+        { name: $"from-{first}", ranges [{ minimum: first, maximum: second }], channels [] }
+        { name: $"to-{sum}", ranges [{ minimum: sum, maximum: (second * 2) }], channels [] }
+      ]
+    }
+  ]
+}
