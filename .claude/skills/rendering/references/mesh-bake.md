@@ -145,6 +145,11 @@ prefix; the device point region starts with one bound float4 and grows on demand
 Neither side reserves `MeshBakeMaxSamples` rows merely because that is the sampled
 output budget. Interior holes before explicit points or poses remain part of the
 current kernel layout. Preserve their addresses when changing storage.
+The holes are never read, so the region uploads only the runs the batch wrote
+(`SdfMeshBakeBatch.WritePoints` fills `SdfMeshBakeInput.Runs`, which
+`GpuRegion.WriteRuns` copies and owes without comparing): a batch's points are
+new every frame, and comparing a 2 M-row table against the last frame's costs
+about a fifth of the frame thread during a cold bake.
 Charging poses against the sample limit can strand the first pending lattice
 forever: a nearly cubic lattice plus a sparse pose span no longer fits, so the
 scheduler takes no work and every group behind it waits. Cold bakes expose this;
@@ -537,7 +542,10 @@ laws exercise that boundary.
   (`SdfMeshRegion.WriteDraws`) and only the meshes the arena newly placed. A
   layout that moves placed meshes when one lands (sections by attribute) made
   every landing rewrite the whole region. Newly placed meshes land within
-  `SdfWorldTables.MeshLandingWords` a frame, their draws waiting out of the
+  `SdfWorldTables.MeshLandingWords` for each whole 60 Hz frame a frame spans
+  (`SdfMeshPathBake.FrameShares`, as the bake's evaluations do; at a flat 2 MB a
+  frame, a cold bake's 1.7 GB region at 5 to 7 frames a second lands a minute
+  after the bake finishes), their draws waiting out of the
   staged records until they do, and a grown region takes the words it held. A
   list past the draw reserve doubles it and moves only the meshes the grown
   reserve takes (`SdfMeshRegionArena.Moved`), written that frame: relocating

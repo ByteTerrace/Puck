@@ -50,6 +50,15 @@ public sealed class WorkCounterSet : IWorkCounterSource {
 
         m_kinds = kinds.ToArray();
         m_counts = new WorkCount[m_kinds.Length];
+
+        for (var index = 0; (index < m_kinds.Length); index++) {
+            var kind = m_kinds[index];
+
+            if (Volatile.Read(location: ref kind.HomeSet) is null) {
+                kind.HomeIndex = index;
+                Volatile.Write(location: ref kind.HomeSet, value: this);
+            }
+        }
     }
 
     /// <inheritdoc/>
@@ -97,6 +106,10 @@ public sealed class WorkCounterSet : IWorkCounterSource {
     }
 
     private int Find(WorkKind kind) {
+        if ((kind is not null) && ReferenceEquals(objA: Volatile.Read(location: ref kind.HomeSet), objB: this)) {
+            return kind.HomeIndex;
+        }
+
         for (var index = 0; (index < m_kinds.Length); index++) {
             if (ReferenceEquals(objA: m_kinds[index], objB: kind)) {
                 return index;

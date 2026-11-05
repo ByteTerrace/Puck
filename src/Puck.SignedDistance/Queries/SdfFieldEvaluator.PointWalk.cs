@@ -42,56 +42,77 @@ public sealed partial class SdfFieldEvaluator {
         material = 0;
         instructionsWalked = 0;
 
-        // Outside the frame some step of the evaluation can leave the carrier, so the position is refused, never wrapped.
-        if (
-            !m_hasShape ||
-            !position.TryDelta(
-            delta: out var worldPosition,
-            origin: FixedPosition.Zero
-        ) ||
-            !IsInFrame(point: worldPosition)
-        ) {
+        if (!TryWorldPoint(position: position, worldPosition: out var worldPosition)) {
             return false;
         }
 
+        var candidate = FillPointReaches(margin: 0L, reaches: out var reaches, worldPosition: worldPosition);
+
+        (distance, material, instructionsWalked) = WalkPoint(candidate: candidate, reaches: reaches, worldPosition: worldPosition);
+
+        return true;
+    }
+
+    // The world point a position reads at, refused when the program declares no shape or the point leaves the frame:
+    // outside the frame some step of the evaluation can leave the carrier, so the position is refused, never wrapped.
+    private bool TryWorldPoint(FixedPosition position, out FixedVector3 worldPosition) {
+        if (!m_hasShape) {
+            worldPosition = FixedVector3.Zero;
+
+            return false;
+        }
+
+        return (position.TryDelta(delta: out worldPosition, origin: FixedPosition.Zero) && IsInFrame(point: worldPosition));
+    }
+    // Fills the thread's reach scratch with each cullable instance's cheap reach from a point, lowered by a margin in raws,
+    // and answers the primer's candidate, the instance of least reach (minus one when the program is not primeable).
+    // A reach lowered by m raws is still a lower bound at every point whose cheap reach is at most m raws less, which
+    // lets one prepass serve every point of a neighbourhood: the cull only ever skips on a reach at or above its
+    // threshold, and a smaller reach only skips less, which leaves the walk's answer as it is.
+    private int FillPointReaches(FixedVector3 worldPosition, long margin, out ReadOnlySpan<FixedQ4816> reaches) {
         var cullBounds = m_cullBounds;
-        var reaches = (((PointReachScratch is { } scratch) && (scratch.Length >= cullBounds.Length))
-            ? scratch
+        var scratch = (((PointReachScratch is { } held) && (held.Length >= cullBounds.Length))
+            ? held
             : (PointReachScratch = CreateReachScratch(length: cullBounds.Length, work: PointWork, arrays: PointScratchArraysCreated, bytes: PointScratchPayloadCreated)));
-        var primer = PointPrimer.None;
-        var walked = 0L;
-        var powerWork = new PowerWork();
+        var candidate = -1;
 
         for (var bound = 0; (bound < cullBounds.Length); bound++) {
-            reaches[bound] = FixedQ4816.FromRawBits(value: cullBounds[bound].Reach.CheapPointReach(point: worldPosition));
+            scratch[bound] = FixedQ4816.FromRawBits(value: (cullBounds[bound].Reach.CheapPointReach(point: worldPosition) - margin));
 
-            if (m_primeable && ((primer.Candidate < 0) || (reaches[bound] < reaches[primer.Candidate]))) {
-                primer.Candidate = bound;
+            if (m_primeable && ((candidate < 0) || (scratch[bound] < scratch[candidate]))) {
+                candidate = bound;
             }
         }
 
         PointWork.Add(kind: PointPrepassBounds, amount: cullBounds.Length);
+        reaches = scratch.AsSpan(start: 0, length: cullBounds.Length);
+
+        return candidate;
+    }
+    // Walks the whole program at one point over reaches FillPointReaches filled, and counts the evaluation.
+    private (FixedQ4816 Distance, int Material, int InstructionsWalked) WalkPoint(FixedVector3 worldPosition, ReadOnlySpan<FixedQ4816> reaches, int candidate) {
+        var primer = PointPrimer.None;
+        var walked = 0L;
+        var powerWork = new PowerWork();
+
+        primer.Candidate = candidate;
 
         var (resultDistance, resultMaterial) = WalkPoints(
             end: m_instructions.Length,
             first: 0,
             primer: ref primer,
             powerWork: ref powerWork,
-            reaches: reaches.AsSpan(start: 0, length: cullBounds.Length),
+            reaches: reaches,
             walked: ref walked,
             worldPosition: worldPosition
         );
 
-        distance = resultDistance;
-        material = resultMaterial;
-        instructionsWalked = ((int)walked);
         PointWork.Count(kind: PointEvaluations);
         PointWork.Add(amount: walked, kind: PointInstructions);
         powerWork.Publish();
 
-        return true;
+        return (resultDistance, resultMaterial, ((int)walked));
     }
-
     // Walks [first, end) at one point from the far seed and answers the distance and material. With reaches, it tests
     // each cullable instance as it meets it: an instance whose reach clears the running answer, or exceeds the primer's
     // answer, is skipped. The first instance the running answer cannot skip first walks the nearest instance on its own,
@@ -297,8 +318,8 @@ public sealed partial class SdfFieldEvaluator {
 
                         var candidateDistance = ((EvaluateShape(
                             instruction: instruction,
-                            powerWork: ref powerWork,
-                            p: localPosition
+                            p: localPosition,
+                            powerWork: ref powerWork
                         ) * distanceScale) + erosion);
                         // A fold's stride recolours the shape below the screen sentinels, as mapCore applies it.
                         var candidateMaterial = (((materialDelta != 0) && (instruction.Material < SdfProgramBuilder.ScreenMaterialId))
@@ -402,7 +423,7 @@ public sealed partial class SdfFieldEvaluator {
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static FixedVector3 WarpPoint(in CompiledInstruction instruction, FixedVector3 localPosition, ref FixedQ4816 distanceScale) {
         if (instruction.Op == SdfOp.AxialProfile) {
-            var axis = (int)instruction.Shape;
+            var axis = ((int)instruction.Shape);
             var t = FixedQ4816.Clamp(maximum: FixedQ4816.One, minimum: FixedQ4816.Zero, value: ((instruction.Data0Z - Component(axis: axis, point: localPosition)) * instruction.Data0W));
             // sin(πt) is the sine of t half turns: t's raw Q48.16 bits shifted to a 2^64 fraction of a turn.
             var (sine, _) = FixedQ4816.SinCosTurns(fractionalTurns: (((ulong)t.Value) << 47));
@@ -418,14 +439,16 @@ public sealed partial class SdfFieldEvaluator {
         }
 
         var (u, v) = PlaneAxes(plane: instruction.Shape);
-        var (sin, cos) = FixedQ4816.SinCos(angle: (instruction.Data0X * (Component(axis: (int)instruction.Blend, point: localPosition) - instruction.Data0Y)));
+        var (sin, cos) = FixedQ4816.SinCos(angle: (instruction.Data0X * (Component(axis: ((int)instruction.Blend), point: localPosition) - instruction.Data0Y)));
         var pu = Component(axis: u, point: localPosition);
         var pv = Component(axis: v, point: localPosition);
 
         return WithComponents(point: localPosition, u: u, uValue: ((cos * pu) + (sin * pv)), v: v, vValue: ((cos * pv) - (sin * pu)));
     }
+
     // SDF_FLARE_MIN_SCALE in fixed point.
     private static readonly FixedQ4816 FlareMinScale = FixedQ4816.FromDouble(value: SdfProgramBuilder.FlareMinScale);
+
     // The axes a RotatePlane turns, as mapCore picks them: u is Y in the YZ plane and X otherwise, v is Y in the XY plane
     // and Z otherwise.
     private static (int U, int V) PlaneAxes(uint plane) => (((plane == ((uint)Puck.SignedDistance.SdfPlane.YZ)) ? 1 : 0), ((plane == ((uint)Puck.SignedDistance.SdfPlane.XY)) ? 1 : 2));
@@ -578,9 +601,9 @@ public sealed partial class SdfFieldEvaluator {
     // Whether an instance's candidates clear the threshold: its certificate at the largest axis distance first, then at
     // the exact distance, then each lowering member's.
     private bool InstanceClears(in CullBound bound, FixedQ4816 cheapReach, FixedQ4816 threshold, FixedVector3 worldPosition) =>
-        ((cheapReach >= threshold) ||
+        ((threshold.Value <= bound.SeedFloor) && ((cheapReach >= threshold) ||
             bound.Reach.PointClears(point: worldPosition, threshold: threshold.Value) ||
-            ((bound.MemberCount > 1) && MembersClear(bound: in bound, threshold: threshold.Value, worldPosition: worldPosition)));
+            ((bound.MemberCount > 1) && MembersClear(bound: in bound, threshold: threshold.Value, worldPosition: worldPosition))));
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsIdentityRotation(in CompiledInstruction instruction) =>
         ((instruction.Data0X == FixedQ4816.Zero) && (instruction.Data0Y == FixedQ4816.Zero) && (instruction.Data0Z == FixedQ4816.Zero) &&

@@ -79,14 +79,12 @@ public sealed partial class WorldCreationInstances {
                 rotation: rootRotation,
                 value: (posedTip * placementScale)
             ));
-            var resolved = TryResolveTarget(
+            var goal = new EffectorGoal(
                 client: client,
                 effector: effector,
-                normal: out var normalWorld,
                 reads: live.Reads,
                 rootRotation: rootRotation,
                 scale: placementScale,
-                target: out var targetWorld,
                 tipWorld: tipWorld
             );
 
@@ -97,6 +95,9 @@ public sealed partial class WorldCreationInstances {
                 reads: live.Reads
             );
             var contactWeight = 1f;
+            bool resolved;
+            Vector3 targetWorld;
+            Vector3 normalWorld;
 
             if (gateHolds) {
                 resolved = ApplyPlant(
@@ -104,15 +105,16 @@ public sealed partial class WorldCreationInstances {
                     deltaSeconds: deltaSeconds,
                     document: document,
                     effector: effector,
+                    goal: ref goal,
                     index: index,
                     live: live,
-                    normal: ref normalWorld,
-                    resolved: resolved,
+                    normal: out normalWorld,
                     rootRotation: rootRotation,
                     scale: placementScale,
-                    target: ref targetWorld
+                    target: out targetWorld
                 );
             } else {
+                resolved = goal.Resolve(normal: out normalWorld, target: out targetWorld);
                 // A contact released in flight cannot be reused on a later landing at another world point.
                 live.EffectorPlanted[index] = false;
                 live.EffectorStepping[index] = false;
@@ -343,16 +345,44 @@ public sealed partial class WorldCreationInstances {
 
         return true;
     }
+    // The effector's goal for one frame: resolved (TryResolveTarget) at most once, and only when a branch reads it.
+    private ref struct EffectorGoal(CreationEffectorDocument effector, IWorldStampSource client, WorldStateLease reads, Vector3 tipWorld, Quaternion rootRotation, float scale) {
+        private bool m_asked;
+        private bool m_resolved;
+        private Vector3 m_target;
+        private Vector3 m_normal;
+
+        public bool Resolve(out Vector3 target, out Vector3 normal) {
+            if (!m_asked) {
+                m_asked = true;
+                m_resolved = TryResolveTarget(
+                    client: client,
+                    effector: effector,
+                    normal: out m_normal,
+                    reads: reads,
+                    rootRotation: rootRotation,
+                    scale: scale,
+                    target: out m_target,
+                    tipWorld: tipWorld
+                );
+            }
+
+            target = m_target;
+            normal = m_normal;
+
+            return m_resolved;
+        }
+    }
     // Holds the effector's target, and the contact normal there, where it was when the plant window opened, and
     // reports whether a usable target exists: a latched contact survives a probe that misses this frame, which is the
     // whole point of latching.
-    private static bool ApplyPlant(Registration live, CreationDocument document, CreationEffectorDocument effector, int index, bool resolved, float deltaSeconds, Quaternion rootRotation, float scale, ref Vector3 target, ref Vector3 normal, out float contactWeight) {
+    private static bool ApplyPlant(Registration live, CreationDocument document, CreationEffectorDocument effector, int index, ref EffectorGoal goal, float deltaSeconds, Quaternion rootRotation, float scale, out Vector3 target, out Vector3 normal, out float contactWeight) {
         contactWeight = 1f;
         if (effector.Plant is not { } plant) {
             live.EffectorPlanted[index] = false;
             live.EffectorStepping[index] = false;
 
-            return resolved;
+            return goal.Resolve(normal: out normal, target: out target);
         }
         if (!WorldGaitDrivers.TryDriver(
             driver: plant.Driver,
@@ -365,13 +395,15 @@ public sealed partial class WorldCreationInstances {
             live.EffectorPlanted[index] = false;
             live.EffectorStepping[index] = false;
 
-            return resolved;
+            return goal.Resolve(normal: out normal, target: out target);
         }
         if (plant.Replant is { } authored) {
             // A replant's lengths are the body's own, at its scale.
             var replant = (authored with { Distance = (authored.Distance * scale), Height = (authored.Height * scale) });
 
             if (driverWeight <= WorldGaitDrivers.RestWeight) {
+                var resting = goal.Resolve(normal: out normal, target: out target);
+
                 return ApplyRestingPlant(
                     deltaSeconds: deltaSeconds,
                     document: document,
@@ -380,7 +412,7 @@ public sealed partial class WorldCreationInstances {
                     live: live,
                     normal: ref normal,
                     replant: replant,
-                    resolved: resolved,
+                    resolved: resting,
                     target: ref target,
                     up: StepUp(
                         effector: effector,
@@ -403,7 +435,7 @@ public sealed partial class WorldCreationInstances {
             (driverWeight <= WorldGaitDrivers.RestWeight)
         ) {
             live.EffectorPlanted[index] = false;
-            return resolved;
+            return goal.Resolve(normal: out normal, target: out target);
         }
 
         if (!WorldEffectorSolver.InWindow(
@@ -414,15 +446,16 @@ public sealed partial class WorldCreationInstances {
             live.EffectorPlanted[index] = false;
             contactWeight = (1f - (driverWeight * (1f - (plant.SwingWeight ?? 1f))));
 
-            return resolved;
+            return goal.Resolve(normal: out normal, target: out target);
         }
+        // A contact latched in its window holds its point whatever a probe would answer, so it asks none.
         if (live.EffectorPlanted[index]) {
             target = live.EffectorPlantTarget[index];
             normal = live.EffectorPlantNormal[index];
 
             return true;
         }
-        if (!resolved) {
+        if (!goal.Resolve(normal: out normal, target: out target)) {
             return false;
         }
 

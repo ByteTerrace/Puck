@@ -21,7 +21,9 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
     private long m_copyLayoutRevision = -1;
     private int m_drawnMeshes = -1;
     private readonly List<DrawBinding> m_drawBindings = [];
-    private readonly Dictionary<SdfMeshBakeGroup, SdfMesh> m_dressedGroups = [];
+    // Each finished group the topology was built from, with its mesh, in the bake's group order: a frame whose finished
+    // groups and meshes match it in order keeps the topology, read without hashing a group a frame.
+    private readonly List<(SdfMeshBakeGroup Group, SdfMesh Mesh)> m_dressedGroups = [];
     private int m_hostDrawCount;
 
     // Reverse membership belongs to retained draw topology, not a second instance index. A changed source slot/copy
@@ -30,6 +32,8 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
     private int[] m_copyHeads = [];
     private int[] m_nextBindings = [];
     private readonly GpuUploadRuns m_bindingCandidates = new(capacity: GpuRegion.MaxCopyRuns);
+    // The binding indices a frame's changed slots and copies name, gathered before AddBindingKeys sorts them in.
+    private readonly List<int> m_bindingKeys = [];
     private readonly GpuUploadRuns m_hostCandidates = new(capacity: GpuRegion.MaxCopyRuns);
     private readonly GpuUploadRuns m_changedDraws = new(capacity: GpuRegion.MaxCopyRuns);
     private readonly GpuUploadRuns m_changedSlots = new(capacity: GpuRegion.MaxCopyRuns);
@@ -47,7 +51,7 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
     /// <summary>Gets logical retained array payload bytes of reverse binding indexes, copy snapshots and changed-run
     /// scratch. Excludes the output journal, draw/pick-map storage and object/array headers; this is not a physical allocation total.</summary>
     public long ScratchBytes => (((long)m_slotHeads.Length + m_copyHeads.Length + m_nextBindings.Length + m_drawnCopyFrames.Length) * sizeof(int)) +
-        ((long)m_drawnCopies.Length * IntPtr.Size) + m_bindingCandidates.StorageBytes + m_hostCandidates.StorageBytes +
+        ((long)m_drawnCopies.Length * IntPtr.Size) + m_bindingCandidates.StorageBytes + ((long)m_bindingKeys.Capacity * sizeof(int)) + m_hostCandidates.StorageBytes +
         m_changedDraws.StorageBytes + m_changedSlots.StorageBytes;
 
     /// <summary>Returns a frame that draws the bake's meshes beside its own mesh draws, restarting the bake when the frame
@@ -69,8 +73,9 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
             for (var groupIndex = 0; groupIndex < groups.Count; groupIndex++) {
                 var group = groups[groupIndex];
                 if (access.MeshOf(group) is not { } mesh) { continue; }
+                topologyChanged |= ((finished >= m_dressedGroups.Count) || !ReferenceEquals(m_dressedGroups[finished].Group, group) ||
+                    !ReferenceEquals(m_dressedGroups[finished].Mesh, mesh));
                 finished++;
-                topologyChanged |= (!m_dressedGroups.TryGetValue(group, out var heldMesh) || !ReferenceEquals(mesh, heldMesh));
             }
             topologyChanged |= (finished != m_drawnMeshes);
             m_changedDraws.Clear();
@@ -100,6 +105,7 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
                             }
                         }
                     }
+                    AddBindingKeys();
                 }
                 CollectHostDraws(frame, everything: portalPath);
                 // Restore unclipped base records before deriving carried copies. Active/removed clips deliberately
@@ -251,8 +257,19 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
     private void AddBindings(int[] heads, int key) {
         if ((uint)key >= (uint)heads.Length) { return; }
         for (var index = heads[key]; index >= 0; index = m_nextBindings[index]) {
-            m_bindingCandidates.Add(start: index, length: 1);
+            m_bindingKeys.Add(item: index);
         }
+    }
+    // Hands the collected binding indices to the candidate runs in ascending order. Slots and copies name their bindings
+    // out of binding order, and a run set takes an out-of-order index by shifting its runs.
+    private void AddBindingKeys() {
+        var keys = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_bindingKeys);
+
+        keys.Sort();
+        foreach (var key in keys) {
+            m_bindingCandidates.Add(start: key, length: 1);
+        }
+        m_bindingKeys.Clear();
     }
 
     private void IndexBindings(SdfFrame frame) {
@@ -286,7 +303,7 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
         m_draws.AddRange(frame.MeshDraws);
         foreach (var group in access.Groups) {
             if (access.MeshOf(group) is not { } mesh) { continue; }
-            m_dressedGroups.Add(group, mesh);
+            m_dressedGroups.Add((group, mesh));
             if (access.CopiesOf(group) is { } copies) {
                 foreach (var copy in copies) {
                     for (var piece = 0; piece < Math.Max(1, mesh.Chunks.Count); piece++) {

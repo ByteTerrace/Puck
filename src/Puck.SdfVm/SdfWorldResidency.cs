@@ -562,7 +562,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 );
             }
 
-            tables.Pack(frame: frame);
+            tables.Pack(frame: frame, frameSeconds: context.FrameDeltaSeconds);
             m_packedFrame = frame;
             m_frame = frame;
             m_pendingFrame = null;
