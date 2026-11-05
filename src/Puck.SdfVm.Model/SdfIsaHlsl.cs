@@ -302,6 +302,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_SELECT_HEADER_ROWS", value: SdfMeshProbeRelight.SelectionHeaderRows);
         declarations.Count(name: "SDF_PROBE_CACHE_WORDS", value: SdfMeshProbeRelight.CacheWords);
         declarations.Count(name: "SDF_PROBE_RELIGHT_RESULT_WORDS", value: SdfMeshProbeRelight.ResultWords);
+        declarations.Count(name: "SDF_PROBE_METER_OUTPUT_WORDS", value: SdfMeshProbeRelight.MeterOutputWords);
         declarations.Count(name: "SDF_PROBE_RECORD_INPUT_WORD", value: SdfMeshProbeRelight.RecordInputWord);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_CLEARANCE", value: SdfMeshIrradianceProbe.Clearance);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_SHEET_THICKNESS", value: SdfMeshIrradianceProbe.DepthSheetThickness);

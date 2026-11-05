@@ -3,17 +3,20 @@
 #define SDF_PROBE_TRACE_HLSLI
 #include "../isa/sdf-render.hlsli"
 #include "../field/sdf-octahedral.hlsli"
+#ifndef SDF_PROBE_RESULT_STRIDE
+#error Probe traversal requires its entry point's generated result stride.
+#endif
 
 // Separate stacks for the top hierarchy and the geometry it enters. Depth-major addressing keeps a wave's
 // pushes adjacent, and avoids dynamically indexed thread-local arrays on Vulkan.
 groupshared uint sdfProbeTopStack[SDF_PROBE_STACK_DEPTH * SDF_PROBE_GROUP_SIZE];
 groupshared uint sdfProbeGeometryStack[SDF_PROBE_STACK_DEPTH * SDF_PROBE_GROUP_SIZE];
 
-// The service resets and reads the output buffer's final assertion word under this job's fence.
+// The service resets and reads the assertion word after this job's payload, independently of retained slot capacity.
 void sdfProbeStackOverflow() {
-    uint words, stride;
-    sdfProbeHitsRW.GetDimensions(words, stride);
-    InterlockedAdd(sdfProbeHitsRW[words - 1], 1u);
+    uint probes, stride;
+    sdfProbeOrigins.GetDimensions(probes, stride);
+    InterlockedAdd(sdfProbeHitsRW[probes * SDF_PROBE_RESULT_STRIDE], 1u);
 }
 
 float3 sdfProbeVector(uint word) {

@@ -54,6 +54,31 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
         Compare(gpu, extension, [], origins.ToArray());
         Assert.ThrowsAny<XunitException>(() => Compare(gpu, extension, draws, origins.ToArray(), skipNode: true));
         output.WriteLine($"{extension}: skipped top-level subtree rejected by the parity law.");
+        Assert.ThrowsAny<XunitException>(() => Run(gpu, extension, OverdeepScene(), [0], [new(0, 0, -2, 10)], extraCapacityWords: 64));
+        output.WriteLine($"{extension}: malformed overdeep hierarchy counted by the stack assertion.");
+    }
+
+    // Bypass the builder only in this negative control. Equal child boxes keep both children pending; near-first
+    // ties descend the left spine until a push would overflow. No leaf or mesh entry is reached.
+    private static uint[] OverdeepScene() {
+        const int Levels = SdfMeshProbeTrace.StackDepth + 1;
+        var nodes = 2 * Levels + 1;
+        var words = new uint[1 + nodes * SdfMeshProbeTrace.NodeWords];
+        words[0] = 1;
+        for (var node = 0; node < nodes; node++) {
+            var at = 1 + node * SdfMeshProbeTrace.NodeWords;
+            for (var axis = 0; axis < 3; axis++) {
+                words[at + axis] = BitConverter.SingleToUInt32Bits(-1);
+                words[at + 3 + axis] = BitConverter.SingleToUInt32Bits(1);
+            }
+            words[at + 6] = 1;
+        }
+        for (var level = 0; level < Levels; level++) {
+            var node = level == 0 ? 0 : 2 * level - 1;
+            var child = 1 + (2 * level + 1) * SdfMeshProbeTrace.NodeWords;
+            words[1 + node * SdfMeshProbeTrace.NodeWords + 6] = (uint)child << SdfMeshProbeTrace.NodeCountBits;
+        }
+        return words;
     }
 
     private void Compare(GpuDeviceServices gpu, string extension, SdfMeshDraw[] draws, Vector4[] origins, bool skipNode = false) {
@@ -195,11 +220,11 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
         recorder.BeginCommandBuffer(command);
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: resultBuffer.BufferHandle,
             sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
-            destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+            destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
         recorder.CopyBuffer(command, resultReset.BufferHandle, resultBuffer.BufferHandle, resultReset.SizeBytes);
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: resultBuffer.BufferHandle,
-            sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
-            destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+            sourceAccessMask: GpuAccess.CopyWrite, sourceStageMask: GpuStage.Transfer,
+            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
         recorder.BindPipeline(commandBufferHandle: command, bindPoint: GpuBindPoint.Compute, pipelineHandle: pipeline.Handle);
         recorder.BindDescriptorSet(commandBufferHandle: command, bindPoint: GpuBindPoint.Compute, descriptorSetHandle: set,
             group: (uint)ShaderInterfaceGroup.Pass, pipelineLayoutHandle: pipeline.LayoutHandle);
@@ -209,7 +234,7 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
             destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
         recorder.CopyBuffer(command, resultBuffer.BufferHandle, readback.BufferHandle, resultBuffer.SizeBytes);
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: readback.BufferHandle,
-            sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
+            sourceAccessMask: GpuAccess.CopyWrite, sourceStageMask: GpuStage.Transfer,
             destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host);
         recorder.EndCommandBuffer(command);
         gpu.QueueSubmitter.SubmitAndWait([command]);
@@ -233,7 +258,7 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
         }
     }
 
-    private static (uint[] Hits, uint[] Identities) Run(GpuDeviceServices gpu, string extension, uint[] scene, uint[] meshes, Vector4[] origins) {
+    private static (uint[] Hits, uint[] Identities) Run(GpuDeviceServices gpu, string extension, uint[] scene, uint[] meshes, Vector4[] origins, int extraCapacityWords = 0) {
         var layout = SdfWorldInterfaces.ProbeTraceLayout;
         var description = new GpuComputePipelineDescription(Bindings: [], Name: "sdf-probe-trace", PushConstantBinding: null,
             Layout: layout.PipelineLayout(GpuShaderStage.Compute));
@@ -245,7 +270,7 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
         using var originBuffer = gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: (ulong)origins.Length * 16, usage: GpuBufferUsage.Storage);
         using var directionBuffer = gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: (ulong)SdfMeshProbeDepth.HitCount * 16, usage: GpuBufferUsage.Storage);
         var bytes = (ulong)(origins.Length * SdfMeshProbeDepth.HitWords * 4);
-        using var output = gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: bytes + 4, usage: GpuBufferUsage.Storage);
+        using var output = gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: bytes + 4 + (ulong)extraCapacityWords * 4, usage: GpuBufferUsage.Storage);
         using var zero = gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: 4, usage: GpuBufferUsage.Storage);
         zero.Write<uint>([0]);
         using var identities = gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: bytes, usage: GpuBufferUsage.Storage);
@@ -270,11 +295,11 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
             recorder.BeginCommandBuffer(command);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: output.BufferHandle,
                 sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
-                destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+                destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
             recorder.CopyBuffer(command, zero.BufferHandle, output.BufferHandle, 4, destinationOffsetBytes: bytes);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: output.BufferHandle,
-                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
-                destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+                sourceAccessMask: GpuAccess.CopyWrite, sourceStageMask: GpuStage.Transfer,
+                destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: identities.BufferHandle,
                 sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
                 destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
@@ -290,7 +315,7 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
                 destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
             recorder.CopyBuffer(commandBufferHandle: command, sourceBufferHandle: identities.BufferHandle, destinationBufferHandle: readback.BufferHandle, sizeBytes: bytes, destinationOffsetBytes: bytes + 4);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: readback.BufferHandle,
-                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
+                sourceAccessMask: GpuAccess.CopyWrite, sourceStageMask: GpuStage.Transfer,
                 destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host);
             recorder.EndCommandBuffer(command);
             gpu.QueueSubmitter.SubmitAndWait([command]);

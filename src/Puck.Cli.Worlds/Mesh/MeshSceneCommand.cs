@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Numerics;
 
 using Puck.SdfVm;
+using Puck.SignedDistance;
 using Puck.World;
 using Puck.World.Client;
 using Puck.World.Transpiler.Composition;
@@ -19,12 +20,11 @@ namespace Puck.Cli.Mesh;
 /// </summary>
 public static class MeshSceneCommand {
     private const string Verb = "mesh scene";
-    // The probes the trace takes about the changed draw: a High-tier window (48 x 16 x 48 cells of 1 m), each tracing as
-    // many rays as a High-tier probe as far as the debug world's far distance.
-    private const int Rays = 128;
+    // The same finest High window and angular quadrature as the volume, over a fixed comparison reach.
+    private const int Rays = SdfMeshProbeDepth.HitCount;
     private const float Reach = 200f;
 
-    private static readonly (int X, int Y, int Z) Window = (48, 16, 48);
+    private static readonly SdfMeshIrradianceLevel Window = SdfMeshIrradiance.LevelsOf(SdfIndirectTier.High)[0];
 
     /// <summary>Creates the <c>scene</c> subverb.</summary>
     /// <returns>The subverb.</returns>
@@ -154,14 +154,16 @@ public static class MeshSceneCommand {
     // sphere, and from each front-facing hit a shadow ray toward a sun. It reports the rays, the hits, the mean hit
     // distance and the lit hits, which two scenes of the same geometry answer alike.
     private static void Trace(SdfMeshIrradianceScene scene, Vector3 center, string label, TextWriter output) {
-        var low = new Vector3(x: (MathF.Floor(x: center.X) - (Window.X / 2)), y: (MathF.Floor(x: center.Y) - (Window.Y / 2)), z: (MathF.Floor(x: center.Z) - (Window.Z / 2)));
+        var dims = Window.Dims;
+        var cell = center / Window.Spacing;
+        var low = new Vector3(x: (MathF.Floor(x: cell.X) - (dims.X / 2)), y: (MathF.Floor(x: cell.Y) - (dims.Y / 2)), z: (MathF.Floor(x: cell.Z) - (dims.Z / 2)));
         var probes = new List<Vector3>();
         var sun = Vector3.Normalize(value: new Vector3(x: 0.4f, y: 0.8f, z: 0.3f));
 
-        for (var z = 0; (z < Window.Z); z++) {
-            for (var y = 0; (y < Window.Y); y++) {
-                for (var x = 0; (x < Window.X); x++) {
-                    probes.Add(item: (low + new Vector3(x: (x + 0.5f), y: (y + 0.5f), z: (z + 0.5f))));
+        for (var z = 0; (z < dims.Z); z++) {
+            for (var y = 0; (y < dims.Y); y++) {
+                for (var x = 0; (x < dims.X); x++) {
+                    probes.Add(item: ((low + new Vector3(x: (x + 0.5f), y: (y + 0.5f), z: (z + 0.5f))) * Window.Spacing));
                 }
             }
         }
@@ -174,7 +176,7 @@ public static class MeshSceneCommand {
 
         _ = Parallel.For(fromInclusive: 0, toExclusive: probes.Count, body: probe => {
             for (var ray = 0; (ray < Rays); ray++) {
-                var direction = Fibonacci(count: Rays, index: ray);
+                var direction = SdfMeshProbeDepth.RayDirections[ray];
 
                 if (!scene.Intersect(origin: probes[probe], direction: direction, maximum: Reach, distance: out var distance, material: out _, normal: out var normal)) { continue; }
                 hits[probe]++;
@@ -196,14 +198,5 @@ public static class MeshSceneCommand {
         using var process = Process.GetCurrentProcess();
 
         return process.TotalProcessorTime.TotalSeconds;
-    }
-    // The index-th of count directions spread evenly over the sphere (a spherical Fibonacci lattice).
-    private static Vector3 Fibonacci(int index, int count) {
-        const float GoldenAngle = 2.39996323f;
-        var z = (1f - (((2f * index) + 1f) / count));
-        var radius = MathF.Sqrt(x: MathF.Max(x: 0f, y: (1f - (z * z))));
-        var angle = (index * GoldenAngle);
-
-        return new Vector3(x: (radius * MathF.Cos(x: angle)), y: z, z: (radius * MathF.Sin(x: angle)));
     }
 }

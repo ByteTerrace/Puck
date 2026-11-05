@@ -1,4 +1,5 @@
 #include "../isa/sdf-probe-trace.interface.hlsli"
+#define SDF_PROBE_RESULT_STRIDE SDF_PROBE_HIT_WORDS
 #include "../shade/sdf-probe-trace.hlsli"
 
 [numthreads(SDF_PROBE_GROUP_SIZE, 1, 1)]

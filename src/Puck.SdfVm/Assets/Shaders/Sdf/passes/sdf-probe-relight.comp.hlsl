@@ -1,4 +1,5 @@
 #include "../isa/sdf-probe-relight.interface.hlsli"
+#define SDF_PROBE_RESULT_STRIDE SDF_PROBE_RELIGHT_RESULT_WORDS
 #include "../shade/sdf-probe-lighting.hlsli"
 
 groupshared float3 probeVarying[6 * SDF_PROBE_GROUP_SIZE];

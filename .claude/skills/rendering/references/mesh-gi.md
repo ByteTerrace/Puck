@@ -29,10 +29,17 @@ The CPU twin is `Unblocked` through `Walk` and `ILeaves` any-hit leaves.
 the root, switching to median splits when only a balanced subtree fits and
 refusing a named hierarchy that cannot fit. Walks check before pushing and
 count `sdf.mesh-gi.stack-overflow`; CPU overflow also throws. GPU jobs reset
-and read their output buffer's final assertion word under the job's fence.
+and read the assertion word after the job's logical output under its fence.
+The entry point supplies its generated result stride; retained slot capacity
+can grow without moving that word or causing a readback of unused capacity.
+The device law injects an overdeep hierarchy into a larger output allocation
+and requires the assertion to count it on both backends. Reset copies use
+`CopyWrite`, followed by shader read/write access for the atomic increment.
 `puck mesh scene` reports top/geometry depth and forced median splits. The
 degenerate-bounds scene law reaches depth 62 and compares nearest and any hits
 with brute force, with zero overflow.
+The scene command reuses `LevelsOf(High)` and `SdfMeshProbeDepth.RayDirections`,
+so its comparison traces use the volume's actual finest window and quadrature.
 `world.budget` samples per-level median and maximum lighting ages when read,
 in addition to the work-list cycle's combined ages.
 Both work lists use the existing `Puck.Maths` three-way Morton interleave on

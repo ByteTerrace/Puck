@@ -23,6 +23,7 @@
 #define SDF_PROBE_SELECT_HEADER_ROWS              8u
 #define SDF_PROBE_CACHE_WORDS                     290u
 #define SDF_PROBE_RELIGHT_RESULT_WORDS            275u
+#define SDF_PROBE_METER_OUTPUT_WORDS              8u
 #define SDF_PROBE_RECORD_INPUT_WORD               45u
 #define SDF_MESH_IRRADIANCE_CLEARANCE             0.1
 #define SDF_MESH_IRRADIANCE_DEPTH_SHEET_THICKNESS 2.0

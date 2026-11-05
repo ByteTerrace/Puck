@@ -72,7 +72,7 @@ public sealed partial class SdfMeshIrradiance {
         if (!ReferenceEquals(m_gpuMeterClient, GpuTrace) || !ReferenceEquals(m_gpuMeterScene, m_scene) || m_gpuMeterKey.Geometry != m_geometry || m_gpuMeterKey.Window != m_windowVersion) { return false; }
         var index = Array.IndexOf(m_gpuMeterPositions, position);
         if (index < 0) { return false; }
-        var row = m_gpuMeterWords.AsSpan(index * 8, 8);
+        var row = m_gpuMeterWords.AsSpan(index * SdfMeshProbeRelight.MeterOutputWords, SdfMeshProbeRelight.MeterOutputWords);
         source = (row[7] & 3) switch { 1 => SdfExposureMeterSource.Probes, 2 => SdfExposureMeterSource.CameraTrace, _ => SdfExposureMeterSource.None };
         if (source == SdfExposureMeterSource.None) { return false; }
         var total = 0f;

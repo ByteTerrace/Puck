@@ -161,12 +161,12 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         var pipeline = m_tables.Pipeline(query.Meter ? SdfKernel.ProbeMeter : query.Selection ? SdfKernel.ProbeSelect : relight ? SdfKernel.ProbeRelight : SdfKernel.ProbeTrace);
         var layout = compute ? SdfWorldInterfaces.ProbeRelightLayout : SdfWorldInterfaces.ProbeTraceLayout;
         var set = compute ? slot.RelightSet : slot.Set;
-        var bytes = (ulong)query.Origins.Length * (ulong)(query.Meter ? 8 : query.Selection ? 1 : relight ? SdfMeshProbeRelight.ResultWords : SdfMeshProbeDepth.HitWords) * 4;
+        var bytes = (ulong)query.Origins.Length * (ulong)(query.Meter ? SdfMeshProbeRelight.MeterOutputWords : query.Selection ? 1 : relight ? SdfMeshProbeRelight.ResultWords : SdfMeshProbeDepth.HitWords) * 4;
         if (slot.Origins is null || slot.Origins.SizeBytes != (ulong)query.Origins.Length * 16) {
             slot.Origins?.Dispose();
             slot.Origins = m_gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: (ulong)query.Origins.Length * 16, usage: GpuBufferUsage.Storage);
         }
-        if (slot.Hits is null || slot.Hits.SizeBytes != bytes + 4) {
+        if (slot.Hits is null || slot.Hits.SizeBytes < bytes + 4) {
             slot.Hits?.Dispose();
             slot.Hits = m_gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: bytes + 4, usage: GpuBufferUsage.Storage);
         }
@@ -213,12 +213,12 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         var recorder = recording.Recorder;
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: slot.Hits.BufferHandle,
             sourceAccessMask: GpuAccess.TransferRead, sourceStageMask: GpuStage.Transfer,
-            destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+            destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
         recorder.CopyBuffer(commandBufferHandle: command, sourceBufferHandle: m_zero.BufferHandle,
             destinationBufferHandle: slot.Hits.BufferHandle, sizeBytes: 4, destinationOffsetBytes: bytes);
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: slot.Hits.BufferHandle,
-            sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
-            destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+            sourceAccessMask: GpuAccess.CopyWrite, sourceStageMask: GpuStage.Transfer,
+            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: slot.Identities.BufferHandle,
             sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
             destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
@@ -311,7 +311,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         if (query.Lighting is null && query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.GpuRays, query.Origins.Length * SdfMeshProbeDepth.HitCount); }
         if (readback.GpuSeconds is { } seconds) { m_volume.Counters.Add(query.Meter ? SdfMeshIrradiance.GpuMeterNanoseconds : query.Selection ? SdfMeshIrradiance.GpuSelectNanoseconds : query.Lighting is null && query.CommitSource is null ? SdfMeshIrradiance.GpuTraceNanoseconds : SdfMeshIrradiance.GpuRelightNanoseconds, (long)(seconds * 1e9)); }
         if (query.Meter) {
-            for (var i = 7; i < result.Length; i += 8) {
+            for (var i = SdfMeshProbeRelight.MeterOutputWords - 1; i < result.Length; i += SdfMeshProbeRelight.MeterOutputWords) {
                 if ((result[i] & 4) != 0) { m_volume.Counters.Add(SdfMeshIrradiance.CameraTraces, 1); }
                 if ((result[i] & 2) != 0) { m_volume.Counters.Add(SdfMeshIrradiance.CameraRelights, 1); }
             }
@@ -330,7 +330,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         get {
             var bytes = m_sceneRegion?.OwnedBytes ?? default;
             var device = bytes.DeviceLocal;
-            var host = bytes.HostVisible + m_directions.SizeBytes;
+            var host = bytes.HostVisible + m_directions.SizeBytes + m_zero.SizeBytes;
             device += m_feedback?.OwnedBytes.DeviceLocal ?? 0;
             device += (m_hitCache?.SizeBytes ?? 0) + (m_meterCache?.SizeBytes ?? 0);
             host += m_feedback?.OwnedBytes.HostVisible ?? 0;

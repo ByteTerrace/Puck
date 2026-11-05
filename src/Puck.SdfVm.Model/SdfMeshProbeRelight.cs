@@ -23,6 +23,8 @@ public static class SdfMeshProbeRelight {
     public const int RecordInputWord = 5 + OutputWords;
     /// <summary>The diagnostic lighting output followed by the GPU-packed publication record.</summary>
     public const int ResultWords = OutputWords + SdfMeshIrradianceProbe.ProbeWords;
+    /// <summary>Six axis luminances, sky visibility and source/trace flags in one camera-meter answer.</summary>
+    public const int MeterOutputWords = 8;
     /// <summary>Float4 rows preceding materials: counts, sources, gains, three window pairs, axis totals and sky.</summary>
     public const int HeaderRows = 20;
     /// <summary>Reflected RGB and wrap, then emitted RGB.</summary>

@@ -1,4 +1,5 @@
 #include "../isa/sdf-probe-relight.interface.hlsli"
+#define SDF_PROBE_RESULT_STRIDE SDF_PROBE_METER_OUTPUT_WORDS
 #include "../shade/sdf-probe-lighting.hlsli"
 
 groupshared float meterAxis[6 * SDF_PROBE_GROUP_SIZE];
@@ -102,10 +103,10 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
             sky /= divisor;
             value /= divisor;
             if (total <= 0) { value += meterSkyLuminance(axis, sky); }
-            sdfProbeHitsRW[group.x * 8 + axis] = asuint(value);
+            sdfProbeHitsRW[group.x * SDF_PROBE_METER_OUTPUT_WORDS + axis] = asuint(value);
             open += sky / 6;
         }
-        sdfProbeHitsRW[group.x * 8 + 6] = asuint(saturate(2 * open));
-        sdfProbeHitsRW[group.x * 8 + 7] = (total > 0 ? 1 : back <= SDF_PROBE_HIT_COUNT / 4 ? 2 : 0) | (meterTrace != 0 ? 4 : 0);
+        sdfProbeHitsRW[group.x * SDF_PROBE_METER_OUTPUT_WORDS + 6] = asuint(saturate(2 * open));
+        sdfProbeHitsRW[group.x * SDF_PROBE_METER_OUTPUT_WORDS + 7] = (total > 0 ? 1 : back <= SDF_PROBE_HIT_COUNT / 4 ? 2 : 0) | (meterTrace != 0 ? 4 : 0);
     }
 }
