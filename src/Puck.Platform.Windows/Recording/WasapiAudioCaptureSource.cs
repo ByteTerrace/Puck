@@ -6,8 +6,9 @@ namespace Puck.Platform.Windows.Recording;
 
 // A WASAPI IAudioCaptureSource. One dedicated thread owns all COM (like the camera grabber): it initializes the audio
 // client in shared mode at the device's native mix format (float), then captures into a lock-free drop-oldest ring the
-// session drains through Read. The microphone endpoint runs event-driven (SetEventHandle + wait); the render endpoint's
-// loopback mode cannot use the event callback, so it polls on a short cadence. Timestamps are QPC-derived on the shared
+// session drains through Read, and sets DataAvailable after each write so the session waits on it instead of sleeping.
+// The endpoint runs event-driven (SetEventHandle + wait); a render endpoint's loopback runs so where the system allows
+// the event callback with the loopback flag, and otherwise polls on a short cadence. Timestamps are QPC-derived on the shared
 // session clock, anchored to the first packet's QPC position and advanced by the device sample rate so drops never
 // distort the timeline. Overflow drops OLDEST and is counted; the device thread never blocks on the consumer.
 [SupportedOSPlatform("windows")]
@@ -16,6 +17,8 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
 
     private readonly RecordingSessionClock m_clock;
     private readonly string? m_deviceId;
+
+    private readonly AutoResetEvent m_dataAvailable = new(initialState: false);
 
     private readonly ManualResetEventSlim m_initDone = new(initialState: false);
 
@@ -29,6 +32,7 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
     private volatile bool m_baseStamped;
     private int m_channels;
     private bool m_disposed;
+    private bool m_eventDriven;
     private nint m_eventHandle;
     private string? m_initError;
     private int m_initHResult;
@@ -70,6 +74,8 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
     public int Channels => m_channels;
     /// <inheritdoc/>
     public long DroppedSampleCount => (m_ring?.DroppedSampleCount ?? 0);
+    /// <inheritdoc/>
+    public WaitHandle DataAvailable => m_dataAvailable;
 
     /// <inheritdoc/>
     public void Start() {
@@ -123,6 +129,7 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
         m_thread.Join(millisecondsTimeout: 2000);
         m_initDone.Dispose();
         m_startSignal.Dispose();
+        m_dataAvailable.Dispose();
 
         if (m_eventHandle != 0) {
             _ = Wasapi.CloseHandle(hObject: m_eventHandle);
@@ -139,7 +146,7 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
         IAudioCaptureClient? captureClient = null;
 
         try {
-            (audioClient, captureClient) = Initialize();
+            (audioClient, captureClient) = Open();
             m_initOk = true;
         } catch (COMException exception) {
             m_initError = exception.Message;
@@ -176,7 +183,21 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
         _ = Marshal.ReleaseComObject(o: audioClient);
         Wasapi.CoUninitialize();
     }
-    private (IAudioClient AudioClient, IAudioCaptureClient CaptureClient) Initialize() {
+    // The microphone is always event-driven. A loopback is too where the system supports the event callback on a render
+    // endpoint's loopback (Windows 10 build 20348 and later, per IAudioClient::Initialize's remarks); elsewhere Initialize
+    // refuses the combination and a fresh client polls instead.
+    private (IAudioClient AudioClient, IAudioCaptureClient CaptureClient) Open() {
+        if (!m_loopback) {
+            return Initialize(eventDriven: true);
+        }
+
+        try {
+            return Initialize(eventDriven: true);
+        } catch (COMException) {
+            return Initialize(eventDriven: false);
+        }
+    }
+    private (IAudioClient AudioClient, IAudioCaptureClient CaptureClient) Initialize(bool eventDriven) {
         // Loopback captures the render endpoint; the microphone captures a capture endpoint (named or default).
         var audioClient = Wasapi.ActivateAudioClient(
             dataFlow: (m_loopback
@@ -209,13 +230,16 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
 
             var streamFlags = (m_loopback
                 ? Wasapi.StreamFlagsLoopback
-                : Wasapi.StreamFlagsEventCallback
+                : 0u
             );
-            // Loopback polls; the microphone is event-driven with a device-picked buffer (period 0).
-            var bufferDuration = (m_loopback
-                ? 2_000_000L
-                : 0L
-            );
+            // Event-driven capture takes a device-picked buffer (period 0); polling a loopback takes its own.
+            var bufferDuration = 0L;
+
+            if (eventDriven) {
+                streamFlags |= Wasapi.StreamFlagsEventCallback;
+            } else {
+                bufferDuration = 2_000_000L;
+            }
 
             Wasapi.Check(hr: audioClient.Initialize(
                 audioSessionGuid: 0,
@@ -226,7 +250,7 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
                 streamFlags: streamFlags
             ));
 
-            if (!m_loopback) {
+            if (eventDriven) {
                 m_eventHandle = Wasapi.CreateEventW(
                     bInitialState: false,
                     bManualReset: false,
@@ -259,7 +283,18 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
                 riid: ref captureClientIid
             ));
 
+            m_eventDriven = eventDriven;
             return (audioClient, ((IAudioCaptureClient)captureClientObject));
+        } catch {
+            // A refused initialization leaves a client no later call can reuse; the caller's retry activates its own.
+            _ = Marshal.ReleaseComObject(o: audioClient);
+
+            if (m_eventHandle != 0) {
+                _ = Wasapi.CloseHandle(hObject: m_eventHandle);
+                m_eventHandle = 0;
+            }
+
+            throw;
         } finally {
             Wasapi.CoTaskMemFree(pv: formatPointer);
         }
@@ -285,13 +320,14 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
 
         try {
             while (!m_stop) {
-                if (m_loopback) {
-                    Thread.Sleep(millisecondsTimeout: PollIntervalMilliseconds);
-                } else {
+                if (m_eventDriven) {
+                    // The device sets the event per packet; the timeout bounds a stop request and a silent stream.
                     _ = Wasapi.WaitForSingleObject(
                         dwMilliseconds: 100,
                         hHandle: m_eventHandle
                     );
+                } else {
+                    Thread.Sleep(millisecondsTimeout: PollIntervalMilliseconds);
                 }
 
                 DrainPackets(
@@ -349,6 +385,7 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
 
                 StampBaseIfNeeded(qpcPosition: qpcPosition);
                 m_ring!.Write(samples: span);
+                _ = m_dataAvailable.Set();
             } finally {
                 _ = captureClient.ReleaseBuffer(numFramesRead: frames);
             }

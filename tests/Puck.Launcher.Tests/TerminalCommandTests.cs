@@ -22,7 +22,7 @@ public sealed class TerminalCommandTests {
 
         Assert.True(condition: implicitTarget.IsError);
         Assert.Contains(
-            expectedSubstring: "explicit player",
+            expectedSubstring: "expected [on|off] <player>",
             actualString: implicitTarget.Output
         );
         Assert.False(condition: explicitTarget.IsError);

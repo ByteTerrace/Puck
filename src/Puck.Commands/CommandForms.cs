@@ -104,6 +104,27 @@ public sealed class CommandForms {
         );
     }
 
+    /// <summary>Refuses a line whose grammar no form fits, naming the one form its caller knows applies: a verb whose
+    /// shape depends on who invokes it, where the form nearest the words typed (<see cref="Refuse(in WireArgs, string?)"/>)
+    /// may be another invoker's.</summary>
+    /// <param name="index">The form's position in <see cref="Forms"/>.</param>
+    /// <param name="got">The offending token, or <see langword="null"/> when the grammar as a whole is wrong.</param>
+    /// <returns>The grammar refusal.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> names no form.</exception>
+    public CommandResult RefuseForm(int index, string? got = null) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: index);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            other: m_forms.Length,
+            value: index
+        );
+
+        return CommandResult.Usage(
+            form: m_forms[index],
+            got: got,
+            verb: Verb
+        );
+    }
+
     // 0 when the form leads with a literal the first word spells, 1 when it leads with a placeholder, 2 when it leads
     // with a literal the first word is not.
     private static int Lead(in WireArgs args, CommandUsage usage) {
