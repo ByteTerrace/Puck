@@ -7,17 +7,33 @@ public sealed partial class WorldRuleHost {
     // The host sources a rule schedule can name (FactRead.Source). Each one's versions are derived from the value the
     // rule read answers, never recorded by a writer: RefreshFacts compares what each body answers now with what it
     // answered at the last refresh, so no door that moves a body can forget to move its version.
-    private const int BodyPositionSource = 0;
+    private const int BodyPoseSource = 0;
     private const int BodyFactsSource = 1;
     private const int LiveBodiesSource = 2;
+    private const int PlacementPoseSource = 3;
 
-    private FixedVector3[] m_seenPosition = [];
+    // What a pose read answers of one population slot: its position, orientation and up, every input of
+    // Read(BodyPositionOperand), Read(BoardCellOfOperand) and Read(UprightOperand); zero, identity and +Y with no body
+    // stand for "no live body", which those reads answer by themselves.
+    private readonly record struct BodyPose(FixedVector3 Position, FixedQuaternion Orientation, FixedVector3 Up) {
+        public static BodyPose Of(WorldBody? body) => ((body is not null)
+            ? new BodyPose(Orientation: body.FixedOrientation, Position: body.FixedPosition, Up: body.FixedUp)
+            : default);
+    }
+
+    // Which bodies inhabit a placement, as of the placement table version it was built for: a move of one of them
+    // moves the placement source.
+    private bool[] m_inhabitant = [];
+    private ulong m_inhabitantsFor = ulong.MaxValue;
+    private bool m_watchPlacements;
+
+    private BodyPose[] m_seenPose = [];
     private BodyFacts[] m_seenFacts = [];
     private bool[] m_seenLive = [];
-    private ulong[] m_positionVersions = [];
+    private ulong[] m_poseVersions = [];
     private ulong[] m_factsVersions = [];
     private ulong m_liveVersion;
-    private bool m_watchPositions;
+    private bool m_watchPoses;
     private bool m_watchFacts;
     private bool m_factMovesAll = true;
     private readonly List<FactRead> m_factMoves = [];
@@ -31,10 +47,10 @@ public sealed partial class WorldRuleHost {
     public int FactScheduleEpoch => Host.Population.ActionStateLane.Binding;
 
     /// <inheritdoc/>
-    /// <remarks>A body's action state is an arena row (its slot's row in the participant or identity lane); its
-    /// position and its facts are versioned per body by <see cref="RefreshFacts"/>. Each is named only for a body
-    /// reference that is a literal index or the body bound to <c>$each</c>; any other reference resolves through
-    /// state or the host and stays volatile, as does every other world fact.</remarks>
+    /// <remarks>A body's action state is an arena row (its slot's row in the participant or identity lane); its pose
+    /// (position, orientation, up) and its facts are versioned per body by <see cref="RefreshFacts"/>. Each is named
+    /// for a body reference that is a literal index or the body bound to <c>$each</c>, and a pose also for a placement
+    /// reference; any other reference resolves through state and stays volatile, as does every other world fact.</remarks>
     public bool TryScheduleFact(ICompiledFact fact, List<int> rows, List<FactRead> facts) {
         ArgumentNullException.ThrowIfNull(argument: fact);
         ArgumentNullException.ThrowIfNull(argument: rows);
@@ -54,11 +70,14 @@ public sealed partial class WorldRuleHost {
                 }
 
                 return true;
-            case BodyPositionOperand position when TryBodyScope(body: position.Body, scope: out var positionScope):
-                WatchPositions();
-                facts.Add(item: new FactRead(Body: positionScope, Source: BodyPositionSource));
-
-                return true;
+            // A position, the cell under a body (its position over a fixed topology) and its uprightness (its
+            // orientation against its up) are each a function of its pose.
+            case BodyPositionOperand position:
+                return TrySchedulePose(body: position.Body, facts: facts);
+            case BoardCellOfOperand cellOf:
+                return TrySchedulePose(body: cellOf.BodyA, facts: facts);
+            case UprightOperand upright:
+                return TrySchedulePose(body: upright.BodyA, facts: facts);
             case BodyFactOperand bodyFact when TryBodyScope(body: bodyFact.Body, scope: out var factScope):
                 WatchFacts();
                 facts.Add(item: new FactRead(Body: factScope, Source: BodyFactsSource));
@@ -67,6 +86,25 @@ public sealed partial class WorldRuleHost {
             default:
                 return false;
         }
+    }
+    // A pose read names its body's pose, or, for a placement reference, the pose of whichever body inhabits the
+    // placement: a literal placement's ordinal, or the placement $each names.
+    private bool TrySchedulePose(in CompiledBodyRef body, List<FactRead> facts) {
+        if (TryBodyScope(body: body, scope: out var scope)) {
+            WatchPoses();
+            facts.Add(item: new FactRead(Body: scope, Source: BodyPoseSource));
+
+            return true;
+        }
+        if (body.Kind != CompiledBodyRefKind.Placement) {
+            return false;
+        }
+
+        WatchPoses();
+        WatchPlacements();
+        facts.Add(item: new FactRead(Body: ((body.PlacementOrdinals is not null) ? FactRead.EachBody : body.Index), Source: PlacementPoseSource));
+
+        return true;
     }
     /// <inheritdoc/>
     public bool TryScheduleLiveBodies(List<FactRead> facts) {
@@ -77,11 +115,30 @@ public sealed partial class WorldRuleHost {
         return true;
     }
     /// <inheritdoc/>
+    /// <remarks>A body source's <c>$each</c> is the body index the bound key spells; the placement source's is the
+    /// placement the bound key names, and its version pairs the placement table's version (which body inhabits the
+    /// placement) with that body's pose version.</remarks>
     public bool TryFactVersion(int source, int body, out ulong version) {
         version = 0UL;
+        if (source == PlacementPoseSource) {
+            var ordinal = ((body == FactRead.EachBody) ? EachPlacementOrdinal() : body);
+
+            if (ordinal < 0) {
+                return false;
+            }
+
+            var inhabitant = Host.Population.BodyForPlacementOrdinal(ordinal: ordinal);
+
+            version = ((Host.Population.PlacementTableVersion << 32) + ((((uint)inhabitant) < ((uint)m_poseVersions.Length)) ? m_poseVersions[inhabitant] : 0UL));
+
+            return true;
+        }
+        if (body == FactRead.EachBody) {
+            body = BoundEachIndex();
+        }
         switch (source) {
-            case BodyPositionSource when (((uint)body) < ((uint)m_positionVersions.Length)):
-                version = m_positionVersions[body];
+            case BodyPoseSource when (((uint)body) < ((uint)m_poseVersions.Length)):
+                version = m_poseVersions[body];
 
                 return true;
             case BodyFactsSource when (((uint)body) < ((uint)m_factsVersions.Length)):
@@ -98,13 +155,19 @@ public sealed partial class WorldRuleHost {
     }
     /// <inheritdoc/>
     public string DescribeFactSource(int source) => (source switch {
-        BodyPositionSource => "bodyPosition",
+        BodyPoseSource => "bodyPose",
         BodyFactsSource => "fact",
         LiveBodiesSource => "bodies",
+        PlacementPoseSource => "placementPose",
         _ => $"source {source}",
     });
+
+    // The placement the bound key names, as ResolveBodyRef resolves a placement:$each reference, or -1.
+    private int EachPlacementOrdinal() => (Host.Arena.Keys.TryGetName(key: BoundEachKey, name: out var name)
+        ? Host.PlacementOrdinalOf(id: name.Value)
+        : -1);
     /// <inheritdoc/>
-    /// <remarks>Compares every population slot's liveness, and its position and facts when a schedule names them,
+    /// <remarks>Compares every population slot's liveness, and its pose and facts when a schedule names them,
     /// with what the slot answered at the last refresh, exactly as <see cref="Read(BodyPositionOperand)"/> and
     /// <see cref="Read(BodyFactOperand)"/> answer them.</remarks>
     public void RefreshFacts() {
@@ -113,15 +176,17 @@ public sealed partial class WorldRuleHost {
 
         if (m_seenLive.Length != capacity) {
             Array.Resize(array: ref m_seenLive, newSize: capacity);
-            Array.Resize(array: ref m_seenPosition, newSize: capacity);
+            Array.Resize(array: ref m_seenPose, newSize: capacity);
             Array.Resize(array: ref m_seenFacts, newSize: capacity);
-            Array.Resize(array: ref m_positionVersions, newSize: capacity);
+            Array.Resize(array: ref m_poseVersions, newSize: capacity);
             Array.Resize(array: ref m_factsVersions, newSize: capacity);
             SeeEverything();
             m_factMovesAll = true;
 
             return;
         }
+
+        var placementMoved = (m_watchPlacements && SeeInhabitants());
 
         for (var index = 0; (index < capacity); index++) {
             var live = population.IsActive(index: index);
@@ -131,19 +196,20 @@ public sealed partial class WorldRuleHost {
                 m_liveVersion++;
                 m_factMoves.Add(item: new FactRead(Body: index, Source: LiveBodiesSource));
             }
-            if (!m_watchPositions && !m_watchFacts) {
+            if (!m_watchPoses && !m_watchFacts) {
                 continue;
             }
 
             var body = Host.Body(index: index);
 
-            if (m_watchPositions) {
-                var position = ((body is not null) ? body.FixedPosition : FixedVector3.Zero);
+            if (m_watchPoses) {
+                var pose = BodyPose.Of(body: body);
 
-                if (position != m_seenPosition[index]) {
-                    m_seenPosition[index] = position;
-                    m_positionVersions[index]++;
-                    m_factMoves.Add(item: new FactRead(Body: index, Source: BodyPositionSource));
+                if (pose != m_seenPose[index]) {
+                    m_seenPose[index] = pose;
+                    m_poseVersions[index]++;
+                    m_factMoves.Add(item: new FactRead(Body: index, Source: BodyPoseSource));
+                    placementMoved |= (m_watchPlacements && (index < m_inhabitant.Length) && m_inhabitant[index]);
                 }
             }
             if (m_watchFacts) {
@@ -156,6 +222,41 @@ public sealed partial class WorldRuleHost {
                 }
             }
         }
+        if (placementMoved) {
+            m_factMoves.Add(item: new FactRead(Body: FactRead.Whole, Source: PlacementPoseSource));
+        }
+    }
+    // Rebuilds which bodies inhabit a placement when the population's table moved, reporting whether it did.
+    private bool SeeInhabitants() {
+        var population = Host.Population;
+
+        if (population.PlacementTableVersion == m_inhabitantsFor) {
+            return false;
+        }
+
+        m_inhabitantsFor = population.PlacementTableVersion;
+        if (m_inhabitant.Length != population.Capacity) {
+            m_inhabitant = new bool[population.Capacity];
+        } else {
+            Array.Clear(array: m_inhabitant);
+        }
+        for (var ordinal = 0; (ordinal < Host.Document.Definition.Placements.Count); ordinal++) {
+            var body = population.BodyForPlacementOrdinal(ordinal: ordinal);
+
+            if (((uint)body) < ((uint)m_inhabitant.Length)) {
+                m_inhabitant[body] = true;
+            }
+        }
+
+        return true;
+    }
+    private void WatchPlacements() {
+        if (m_watchPlacements) {
+            return;
+        }
+        m_watchPlacements = true;
+        _ = SeeInhabitants();
+        m_factMovesAll = true;
     }
     /// <inheritdoc/>
     public bool DrainFactMoves(List<FactRead> into) {
@@ -172,11 +273,11 @@ public sealed partial class WorldRuleHost {
 
     // A source starts being watched the moment a schedule first names it: what every slot answers now becomes the
     // version-0 baseline, so a change after this point is a refresh's to see, and no capture can predate the baseline.
-    private void WatchPositions() {
-        if (m_watchPositions) {
+    private void WatchPoses() {
+        if (m_watchPoses) {
             return;
         }
-        m_watchPositions = true;
+        m_watchPoses = true;
         SeeEverything();
     }
     private void WatchFacts() {
@@ -194,9 +295,9 @@ public sealed partial class WorldRuleHost {
             var body = Host.Body(index: index);
 
             m_seenLive[index] = population.IsActive(index: index);
-            m_seenPosition[index] = ((body is not null) ? body.FixedPosition : FixedVector3.Zero);
+            m_seenPose[index] = BodyPose.Of(body: body);
             m_seenFacts[index] = ((body is not null) ? body.Facts : BodyFacts.None);
-            m_positionVersions[index]++;
+            m_poseVersions[index]++;
             m_factsVersions[index]++;
         }
         m_liveVersion++;

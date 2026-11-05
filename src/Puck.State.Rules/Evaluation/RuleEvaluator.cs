@@ -281,18 +281,13 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             cache[(schedule.Rows.Length + index)] = (TryFactVersion(fact: schedule.Facts[index], version: out var version) ? version : 0UL);
         }
     }
-    // One fact's version for the evaluation in flight: a $each read resolves to the body the binding names now.
-    private bool TryFactVersion(FactRead fact, out ulong version) {
-        var body = ((fact.Body == FactRead.EachBody) ? m_host.BoundIndex(key: BoundKey.Each) : fact.Body);
-
-        if ((body < 0) && (body != FactRead.Whole)) {
-            version = 0UL;
-
-            return false;
-        }
-
-        return m_host.TryFactVersion(body: body, source: fact.Source, version: out version);
-    }
+    // One fact's version for the evaluation in flight; the host resolves a $each read against the binding in flight,
+    // since only its source knows what $each names (a body index, a placement id).
+    private bool TryFactVersion(FactRead fact, out ulong version) => m_host.TryFactVersion(
+        body: fact.Body,
+        source: fact.Source,
+        version: out version
+    );
     private bool RowsSelected(CompiledRule rule, List<string>? trace) {
         if (rule.Zones is not { References.Count: > 0 } zones) {
             return true;

@@ -69,7 +69,8 @@ public interface IStateReader {
     /// <summary>Returns one host source's version for one body (or for the source as a whole): a counter that moves
     /// whenever what the source answers for that body changes, read after <see cref="RefreshFacts"/>.</summary>
     /// <param name="source">The host's source number.</param>
-    /// <param name="body">The body index, or <see cref="FactRead.Whole"/>.</param>
+    /// <param name="body">The body index, <see cref="FactRead.Whole"/>, or <see cref="FactRead.EachBody"/>, which the
+    /// host resolves against the evaluation in flight as its source reads <c>$each</c>.</param>
     /// <param name="version">The version, when the host answers.</param>
     /// <returns><see langword="true"/> when the host versions the source for that body.</returns>
     bool TryFactVersion(int source, int body, out ulong version) {
