@@ -30,6 +30,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     uint probe = sdfProbeWork[3 + group.x];
     uint input = probe * SDF_PROBE_RELIGHT_INPUT_WORDS;
     uint output = probe * SDF_PROBE_RELIGHT_OUTPUT_WORDS;
+    uint hits = sdfProbeInput[input + 3] * SDF_PROBE_CACHE_WORDS + 2;
     uint flags = sdfProbeInput[input];
     bool valid = (flags & 1u) != 0;
     bool reuse = (flags & 2u) != 0;
@@ -51,13 +52,13 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         probeLocal[axis * SDF_PROBE_GROUP_SIZE + lane] = 0;
     }
     for (uint w = lane; w < SDF_MESH_IRRADIANCE_LIGHT_WORDS; w += SDF_PROBE_GROUP_SIZE) {
-        probeVisible[w] = reuse ? sdfProbeInput[input + 1 + SDF_PROBE_HIT_WORDS + 36 + w] : 0;
+        probeVisible[w] = reuse ? sdfProbeInput[input + 5 + 36 + w] : 0;
     }
     GroupMemoryBarrierWithGroupSync();
     for (uint texel = lane; valid && texel < SDF_PROBE_HIT_COUNT; texel += SDF_PROBE_GROUP_SIZE) {
-        float distance = asfloat(sdfProbeInput[input + 1 + 2 * texel]);
+        float distance = asfloat(sdfProbeCache[hits + 2 * texel]);
         if (!isfinite(distance) || distance < 0) { continue; }
-        uint packed = sdfProbeInput[input + 2 + 2 * texel];
+        uint packed = sdfProbeCache[hits + 1 + 2 * texel];
         uint material = min(packed & 65535u, (uint)counts.x - 1);
         float3 normal = sdfOctDecode(float2((int)(packed << 8) >> 24, (int)packed >> 24) / SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE);
         float4 surface = sdfProbeLighting[SDF_PROBE_RELIGHT_HEADER_ROWS + material * SDF_PROBE_RELIGHT_MATERIAL_ROWS];
@@ -135,8 +136,8 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
             local += probeLocal[lane * SDF_PROBE_GROUP_SIZE + i];
         }
         float total = sdfProbeLighting[9 + lane / 4][lane % 4];
-        local = reuse ? asfloat(uint3(sdfProbeInput[input + 1 + SDF_PROBE_HIT_WORDS + 18 + 3 * lane],
-            sdfProbeInput[input + 1 + SDF_PROBE_HIT_WORDS + 19 + 3 * lane], sdfProbeInput[input + 1 + SDF_PROBE_HIT_WORDS + 20 + 3 * lane])) : local / total;
+        local = reuse ? asfloat(uint3(sdfProbeInput[input + 5 + 18 + 3 * lane],
+            sdfProbeInput[input + 5 + 19 + 3 * lane], sdfProbeInput[input + 5 + 20 + 3 * lane])) : local / total;
         varying = varying / total + local;
         [unroll] for (uint c = 0; c < 3; c++) {
             sdfProbeHitsRW[output + 3 * lane + c] = asuint(varying[c]);

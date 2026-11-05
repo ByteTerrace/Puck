@@ -12,6 +12,8 @@ public enum SdfKernel {
     ProbeSelect,
     /// <summary>Compacts a relight batch into indirect dispatch arguments and a stable work list.</summary>
     ProbeCompact,
+    /// <summary>Stores newly traced hit blocks in the resident cache before relighting.</summary>
+    ProbeCache,
     /// <summary>The mesh bake's instance mask, selecting one bake group's instances.</summary>
     MeshBakeMask,
     /// <summary>The mesh bake's field sampler over one group's lattice: the frame's one walk of the SDF program, run

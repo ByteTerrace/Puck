@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-probe-relight' (sha256/43634c7384a0b0fd2a79cf778b34315efac2469e0d3ca3a4da1892c5bcb524eb). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-probe-relight' (sha256/4fec0ce5f3c832eab990e7f1f888677cc23ef023e6960c4d3e07d37c012278dc). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_PROBE_RELIGHT
 #define PUCK_SHADER_INTERFACE_SDF_PROBE_RELIGHT
 
@@ -13,6 +13,8 @@
 [[vk::binding(7, 3)]] RWStructuredBuffer<uint> sdfProbeHitsRW : register(u7, space3);
 [[vk::binding(8, 3)]] RWStructuredBuffer<uint> sdfProbeWorkRW : register(u8, space3);
 [[vk::binding(9, 3)]] StructuredBuffer<uint> sdfProbeWork : register(t9, space3);
+[[vk::binding(10, 3)]] RWStructuredBuffer<uint> sdfProbeCacheRW : register(u10, space3);
+[[vk::binding(11, 3)]] StructuredBuffer<uint> sdfProbeCache : register(t11, space3);
 
 // This interface declares no work counters, so its passes count nothing: the counting functions a kernel calls
 // are declared empty, and a kernel written for a counting package compiles here unchanged.

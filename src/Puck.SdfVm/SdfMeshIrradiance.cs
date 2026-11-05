@@ -1706,6 +1706,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         });
 
         if (GpuTrace is not null) { RelightGpu(candidates, first, count, results, lights, lighting, in snapshot, feedback); }
+        if (GpuTrace is not null) { hits?.ReleaseHits(); }
 
         m_landed.Clear();
         lock (m_gate) {
@@ -2426,7 +2427,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // allocates one block of each rather than arrays a probe; a landed block is never written again, so
     // readers outside the gate read it whole.
     private readonly record struct ProbeData(int Geometry, ProbeBlock? Hits, int HitIndex, bool Invalid, Vector3 Offset, float Inside,
-        LightBlock? Shading = null, int LightIndex = 0, int Lighting = 0, long LitAt = 0L, int Passes = 0, int Sweep = 0, bool Moved = false, int LocalVersion = 0) {
+        LightBlock? Shading = null, int LightIndex = 0, int Lighting = 0, long LitAt = 0L, int Passes = 0, int Sweep = 0, bool Moved = false, int LocalVersion = 0, uint GpuSlot = 0, ulong GpuToken = 0) {
         public ReadOnlySpan<float> Sky => Hits!.Sky(index: HitIndex);
         public ReadOnlySpan<uint> HitWords => Hits!.Hits(index: HitIndex);
         public ReadOnlySpan<uint> Depth => Hits!.Depth(index: HitIndex);
@@ -2437,15 +2438,17 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // The geometry words of one trace batch's probes, each probe's at its index: six sky shares, the packed octahedral
     // surface map and curvature, then the hit buffer, held as the floats' bits so a batch is one allocation.
     private sealed class ProbeBlock(int count) {
-        public const int FloatsPerProbe = ((6 + SdfMeshIrradianceProbe.DepthWords) + SdfMeshProbeDepth.HitWords);
+        public const int FloatsPerProbe = 6 + SdfMeshIrradianceProbe.DepthWords;
 
         private readonly float[] m_floats = new float[(count * FloatsPerProbe)];
+        private uint[]? m_hits = new uint[count * SdfMeshProbeDepth.HitWords];
 
-        public long Bytes => (((long)m_floats.Length) * sizeof(float));
+        public long Bytes => (((long)m_floats.Length) * sizeof(float)) + (m_hits?.LongLength ?? 0) * sizeof(uint);
+        public void ReleaseHits() => m_hits = null;
 
         public Span<float> Sky(int index) => m_floats.AsSpan(length: 6, start: (index * FloatsPerProbe));
         public Span<uint> Depth(int index) => MemoryMarshal.Cast<float, uint>(span: m_floats.AsSpan(length: SdfMeshIrradianceProbe.DepthWords, start: ((index * FloatsPerProbe) + 6)));
-        public Span<uint> Hits(int index) => MemoryMarshal.Cast<float, uint>(span: m_floats.AsSpan(length: SdfMeshProbeDepth.HitWords, start: (((index * FloatsPerProbe) + 6) + SdfMeshIrradianceProbe.DepthWords)));
+        public Span<uint> Hits(int index) => (m_hits ?? throw new InvalidOperationException("Runtime hit words are resident on the GPU.")).AsSpan(index * SdfMeshProbeDepth.HitWords, SdfMeshProbeDepth.HitWords);
     }
     // The light words of one relight batch's probes, each probe's at its index: the radiance cube (18 floats), the part of
     // it the point and spot lights and emission send (18 floats), then its traced-light visibility words.

@@ -19,6 +19,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private GpuRegion? m_sceneRegion;
     private IDisposable? m_sceneCarry;
     private GpuRegion? m_feedback;
+    private IGpuBuffer? m_hitCache;
     private int m_feedbackWords;
     private SdfMeshIrradianceScene? m_scene;
     private long m_placementVersion = -1;
@@ -146,6 +147,8 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         Bind(SdfKernelInterfaces.ProbeDirections, m_directions, 16);
         Bind(SdfKernelInterfaces.ProbeHitsWritten, slot.Hits, 4, written: true);
         if (compute) {
+            m_hitCache ??= m_gpu.BufferFactory.CreateDeviceLocal(name: default,
+                sizeBytes: (ulong)SdfMeshIrradiance.GpuHitCapacity * SdfMeshProbeRelight.CacheWords * 4, usage: GpuBufferUsage.Storage);
             Write(ref slot.Input, MemoryMarshal.AsBytes(query.Input.AsSpan()));
             Write(ref slot.Lighting, MemoryMarshal.AsBytes(query.Lighting.AsSpan()));
             Bind(SdfKernelInterfaces.ProbeInput, slot.Input!, 4);
@@ -158,6 +161,8 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             }
             Bind(SdfKernelInterfaces.ProbeWorkWritten, slot.Work, 4, written: true);
             Bind(SdfKernelInterfaces.ProbeWork, slot.Work, 4);
+            Bind(SdfKernelInterfaces.ProbeCacheWritten, m_hitCache, 4, written: true);
+            Bind(SdfKernelInterfaces.ProbeCache, m_hitCache, 4);
         } else { Bind(SdfKernelInterfaces.ProbeIdentitiesWritten, slot.Identities, 8, written: true); }
         var recorder = recording.Recorder;
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: slot.Hits.BufferHandle,
@@ -167,6 +172,16 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
             destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
         if (relight) {
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_hitCache!.BufferHandle,
+                sourceAccessMask: GpuAccess.ShaderRead, sourceStageMask: GpuStage.ComputeShader,
+                destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+            var cache = m_tables.Pipeline(SdfKernel.ProbeCache);
+            recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, pipelineHandle: cache.Handle);
+            recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: set, group: (uint)ShaderInterfaceGroup.Pass, pipelineLayoutHandle: cache.LayoutHandle);
+            recorder.Dispatch(command, (uint)query.Origins.Length, 1, 1);
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_hitCache.BufferHandle,
+                sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
+                destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: slot.Work!.BufferHandle,
                 sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.IndirectCommandRead, sourceStageMask: GpuStage.ComputeShader | GpuStage.DrawIndirect,
                 destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
@@ -225,6 +240,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             var device = bytes.DeviceLocal;
             var host = bytes.HostVisible + m_directions.SizeBytes;
             device += m_feedback?.OwnedBytes.DeviceLocal ?? 0;
+            device += m_hitCache?.SizeBytes ?? 0;
             host += m_feedback?.OwnedBytes.HostVisible ?? 0;
             foreach (var slot in m_slots) { device += (slot.Hits?.SizeBytes ?? 0) + (slot.Identities?.SizeBytes ?? 0) + (slot.Work?.SizeBytes ?? 0); host += (slot.Origins?.SizeBytes ?? 0) + (slot.Input?.SizeBytes ?? 0) + (slot.Lighting?.SizeBytes ?? 0); }
             return new GpuMemoryBytes(DeviceLocal: device, HostVisible: host);
@@ -238,6 +254,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         }
         foreach (var slot in m_slots) { slot.Hits?.Dispose(); slot.Origins?.Dispose(); slot.Identities?.Dispose(); slot.Input?.Dispose(); slot.Lighting?.Dispose(); slot.Work?.Dispose(); }
         m_feedback?.Dispose();
+        m_hitCache?.Dispose();
         m_sceneRegion?.Dispose();
         m_sceneCarry?.Dispose();
         m_scene?.Dispose();

@@ -58,6 +58,10 @@ public sealed class SdfKernelInterfaces {
     public const string ProbeWorkWritten = "sdfProbeWorkRW";
     /// <summary>The completed work list, read together with its indirect arguments.</summary>
     public const string ProbeWork = "sdfProbeWork";
+    /// <summary>Resident hit cache, written only by the ordered upload pass.</summary>
+    public const string ProbeCacheWritten = "sdfProbeCacheRW";
+    /// <summary>Resident hit cache read by selection and relight.</summary>
+    public const string ProbeCache = "sdfProbeCache";
     /// <summary>The <see cref="BrickBake"/> request buffer: a three-row header, then the carves.</summary>
     public const string BakeRequest = "bakeRequest";
     /// <summary>The <see cref="BrickBake"/> brick pool the baker writes.</summary>
@@ -151,6 +155,8 @@ public sealed class SdfKernelInterfaces {
             Written(element: ShaderValueType.Uint, name: ProbeHitsWritten),
             Written(element: ShaderValueType.Uint, name: ProbeWorkWritten),
             Read(element: ShaderValueType.Uint, name: ProbeWork),
+            Written(element: ShaderValueType.Uint, name: ProbeCacheWritten),
+            Read(element: ShaderValueType.Uint, name: ProbeCache),
         ], pushesIndex: false);
         WorldParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,

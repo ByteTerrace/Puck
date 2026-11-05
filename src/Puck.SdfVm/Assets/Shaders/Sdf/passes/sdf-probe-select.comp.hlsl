@@ -15,6 +15,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     if (id.x >= count) { return; }
     uint at = id.x * SDF_PROBE_SELECT_INPUT_WORDS;
     bool present = sdfProbeInput[at] != 0;
+    uint cache = sdfProbeInput[at + 8] * SDF_PROBE_CACHE_WORDS;
+    uint2 token = uint2(sdfProbeInput[at + 9], sdfProbeInput[at + 10]);
+    present = present && any(token != 0) && all(token == uint2(sdfProbeCache[cache], sdfProbeCache[cache + 1]));
     uint geometry = sdfProbeInput[at + 1];
     uint lighting = sdfProbeInput[at + 2];
     uint sweep = sdfProbeInput[at + 3];
@@ -28,7 +31,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float3 center = sdfProbeOrigins[id.x].xyz;
         float3 origin = center + asfloat(uint3(sdfProbeInput[at + 5], sdfProbeInput[at + 6], sdfProbeInput[at + 7]));
         float3 placement = 1.5 * spacing + SDF_MESH_IRRADIANCE_CLEARANCE;
-        uint hits = sdfProbeInput[at + 8];
+        uint hits = cache + 2;
         for (uint box = 0; !trace && box < (uint)limits.y; box++) {
             float4 low = sdfProbeLighting[5 + 2 * box];
             float4 high = sdfProbeLighting[6 + 2 * box];
@@ -43,7 +46,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             for (uint ray = 0; !trace && ray < SDF_PROBE_HIT_COUNT; ray++) {
                 float3 direction = sdfProbeDirections[ray].xyz;
                 if (dot(direction, axis) < cone) { continue; }
-                float reach = min(abs(asfloat(sdfProbeInput[hits + 2 * ray])), limits.w);
+                float reach = min(abs(asfloat(sdfProbeCache[hits + 2 * ray])), limits.w);
                 trace = probeMeets(origin, direction, low.xyz, high.xyz, reach + max(0.001, reach * 0.0001) + SDF_MESH_IRRADIANCE_DEPTH_SHEET_THICKNESS);
             }
         }
