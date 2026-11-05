@@ -370,8 +370,10 @@ sweep over a set no version names (a pool, a zone table) are due every tick.
 Moves are pushed, not polled. Every row version moves through one door in the
 arena (`BumpRowVersion`), which records the row in the moved-row feed
 (`StateArena.DrainMovedRows`); the host records each fact that moved
-(`IStateReader.DrainFactMoves`) whenever it refreshes, which the evaluator asks
-for before a walk and after any firing that delivered an arm. After every
+(`IStateReader.DrainFactMoves`) when it derives its versions again: the
+evaluator tells it host state may have moved before a walk and after any firing
+that delivered an arm (`IStateReader.RefreshFacts`), and the host derives once,
+before the next version read or drain. After every
 visit, the walk drains both feeds and marks each mover's readers due. A mark on
 a rule later in document order is seen this tick; one on a rule the walk has
 passed is seen next tick, exactly where an in-place version check would first

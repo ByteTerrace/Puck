@@ -120,6 +120,7 @@ public sealed partial class WorldRuleHost {
     /// placement) with that body's pose version.</remarks>
     public bool TryFactVersion(int source, int body, out ulong version) {
         version = 0UL;
+        DeriveFacts();
         if (source == PlacementPoseSource) {
             var ordinal = ((body == FactRead.EachBody) ? EachPlacementOrdinal() : body);
 
@@ -167,10 +168,23 @@ public sealed partial class WorldRuleHost {
         ? Host.PlacementOrdinalOf(id: name.Value)
         : -1);
     /// <inheritdoc/>
-    /// <remarks>Compares every population slot's liveness, and its pose and facts when a schedule names them,
-    /// with what the slot answered at the last refresh, exactly as <see cref="Read(BodyPositionOperand)"/> and
-    /// <see cref="Read(BodyFactOperand)"/> answer them.</remarks>
-    public void RefreshFacts() {
+    /// <remarks>Marks the derived versions stale; they are derived again before the next version read or drain
+    /// (<see cref="DeriveFacts"/>), so several firings with arms in a row cost one comparison, not one each.</remarks>
+    public void RefreshFacts() => m_factsStale = true;
+
+    // Whether host state may have moved since the versions were last derived.
+    private bool m_factsStale = true;
+
+    // Compares every population slot's liveness, and its pose and facts when a schedule names them, with what the slot
+    // answered when the versions were last derived, exactly as Read(BodyPositionOperand), Read(BoardCellOfOperand),
+    // Read(UprightOperand) and Read(BodyFactOperand) answer them. Every reader of a version or of the moved feed
+    // passes through here first, so a version is current wherever it is read.
+    private void DeriveFacts() {
+        if (!m_factsStale) {
+            return;
+        }
+        m_factsStale = false;
+
         var population = Host.Population;
         var capacity = population.Capacity;
 
@@ -261,6 +275,7 @@ public sealed partial class WorldRuleHost {
     /// <inheritdoc/>
     public bool DrainFactMoves(List<FactRead> into) {
         ArgumentNullException.ThrowIfNull(argument: into);
+        DeriveFacts();
 
         var all = m_factMovesAll;
 

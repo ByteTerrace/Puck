@@ -82,9 +82,10 @@ public interface IStateReader {
     /// <param name="source">The host's source number.</param>
     /// <returns>The name.</returns>
     string DescribeFactSource(int source) => $"source {source}";
-    /// <summary>Brings every host source's version up to what the host's state answers now, recording each source and
-    /// body that moved for <see cref="DrainFactMoves"/>. The evaluator calls it before a family's walk and after a
-    /// firing that delivered an arm, the only work during rule evaluation that changes host state.</summary>
+    /// <summary>Tells the host its state may have moved, so every source's version, and each source and body that moved
+    /// for <see cref="DrainFactMoves"/>, reflects what the host answers by the next <see cref="TryFactVersion"/> or
+    /// <see cref="DrainFactMoves"/>. The evaluator calls it before a family's walk and after a firing that delivered
+    /// an arm, the only work during rule evaluation that changes host state.</summary>
     void RefreshFacts() { }
     /// <summary>Hands every host source and body whose version moved since the last drain to the caller and forgets
     /// them.</summary>
