@@ -22,6 +22,10 @@ namespace Puck.SignedDistance.Queries;
 //   the answer and its material bitwise: a union at or above it is not taken, a smooth union at least k + k·2⁻¹⁵ + 16
 //   raws past it rounds its blend weight to exactly one in either walk, a subtraction's negated candidate at or below it
 //   is not taken.
+// - Consecutive chains outside every cullable instance are grouped (m_segmentGroups, BuildSegmentGroups) so a point
+//   walk skips a whole run of them with one test of the certificate around them all.
+// - A relief inside a scope (NoiseDisplace) is charged to the scope's slack at its certified reach (ReliefLoweringRaws),
+//   so a relieved instance is cullable by the point walk; it carries no box certificate.
 // - When every compose outside a scope is a hard union (m_primeable), the answer is the least of the instances' own
 //   answers. A walk then evaluates its nearest cullable instance first, and skips every instance whose candidates
 //   exceed that instance's answer (a point walk) or reach its upper end (a box walk), wherever it falls in the stream.
@@ -200,6 +204,18 @@ public sealed partial class SdfFieldEvaluator {
                         steps.Add(item: new ScopeStep(Blend: ((SdfBlendOp)instruction.Blend), Op: SdfOp.ShapeBlend, Scale: 0.0, Shape: shape, Smooth: ((double)FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin))));
                         continue;
                     }
+                case SdfOp.NoiseDisplace: {
+                        // A relief inside the scope lowers the scope's field by at most its certified reach, wherever it
+                        // stands among the scope's shapes, so it joins the slack every lowering member is charged at the
+                        // pop. Its box reach is not carried, so the box walk never skips the instance.
+                        if ((depth != 1) || (ReliefLoweringRaws(instruction: in instruction) is not { } reliefRaws)) {
+                            return false;
+                        }
+
+                        roundingRaws = checked((roundingRaws + reliefRaws));
+                        boxed = false;
+                        continue;
+                    }
                 default: {
                         return false;
                     }
@@ -207,6 +223,17 @@ public sealed partial class SdfFieldEvaluator {
         }
 
         return ((depth == 0) && (lowering.Count > 0));
+    }
+    // The most a relief (EditField's NoiseDisplace) can lower the field it edits, in raws: its scale, rounded as the point
+    // rule rounds it, times the octave sum enclosed over every lattice point (Pcg3dLatticeNoise.Fbm3Bounds over an
+    // unbounded box), in outward-rounded interval arithmetic; the point rule's addition is exact. None when the
+    // enclosure leaves the carrier.
+    private static long? ReliefLoweringRaws(in CompiledInstruction instruction) {
+        var relief = (FixedInterval.FromPoint(value: (instruction.Data0Y * instruction.Data1X)) * Pcg3dLatticeNoise.Fbm3Bounds(
+            gain: instruction.Data0Z, lacunarity: instruction.Data0W, octaves: ((int)instruction.Blend), seed: instruction.Shape,
+            x: FixedInterval.Entire, y: FixedInterval.Entire, z: FixedInterval.Entire));
+
+        return (relief.IsUnbounded ? null : Math.Max(val1: 0L, val2: -relief.Lower.Value));
     }
     // The mean of an instance's shapes' centres.
     private static (double X, double Y, double Z) MeanCentre(List<ScopeStep> steps) {
@@ -342,11 +369,12 @@ public sealed partial class SdfFieldEvaluator {
     // subtraction. Its margin is the most any smooth union in it needs, k + k·2⁻¹⁵ + 16 raws, at which both walks round
     // the blend weight to exactly one, and a chain that carves also needs its candidates past the answer's negation. A
     // chain never crosses an instance boundary, so a walk still meets every instance it tests in First order.
-    private static (int[] Slots, SegmentBound[] Bounds) BuildSegments(SdfProgram program, CompiledInstruction[] compiled, ShapeReach?[] reaches) {
+    private static (int[] Slots, SegmentBound[] Bounds, List<ShapeReach> Enclosures) BuildSegments(SdfProgram program, CompiledInstruction[] compiled, ShapeReach?[] reaches) {
         var count = compiled.Length;
         var slots = new int[count];
         CountArrayPayload(rows: slots, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
         var bounds = new List<SegmentBound>();
+        var enclosures = new List<ShapeReach>();
         var boundary = new bool[(count + 1)];
         var shapes = new List<ShapeReach>();
 
@@ -424,19 +452,105 @@ public sealed partial class SdfFieldEvaluator {
                 end++;
             }
 
-            if (!qualifies || (shapes.Count == 0) || !Reach.TryOf(reach: out var reach, shape: Enclose(members: shapes))) {
+            if (!qualifies || (shapes.Count == 0)) {
+                continue;
+            }
+
+            var enclosure = Enclose(members: shapes);
+
+            if (!Reach.TryOf(reach: out var reach, shape: enclosure)) {
                 continue;
             }
 
             slots[start] = bounds.Count;
             bounds.Add(item: new SegmentBound(Carves: carves, End: end, Margin: margin, Reach: reach));
+            enclosures.Add(item: enclosure);
         }
 
         var segmentRows = bounds.ToArray();
         CountArrayPayload(rows: segmentRows, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
         PointWork.Count(kind: CullTableBuilds);
-        return (slots, segmentRows);
+        return (slots, segmentRows, enclosures);
     }
+    // The segment hierarchy over every run of chains that follow one another with nothing between (each chain's end the
+    // next one's ResetPoint) outside every cullable instance: nodes of up to SegmentGroupFanout consecutive chains, then
+    // of nodes, each with the certificate around its members' (Enclose's triangle inequality holds for certificates as
+    // for shapes), their widest margin and whether any carves. A node clearing the running answer by that margin proves
+    // every chain under it clears by its own: the node's bound is at most each member's, its threshold at least each
+    // member's, and a skipped chain leaves the answer bitwise, so each later member meets the same threshold. A walk at a
+    // chain's ResetPoint tests the largest node starting there first (Heads), then the next smaller (Next), then the chain.
+    // No node spans a cullable instance or a scope edge, so a skip passes no cull bound's First and no point read.
+    private static (int[] Heads, SegmentBound[] Groups, int[] Next) BuildSegmentGroups(CompiledInstruction[] compiled, int[] slots, SegmentBound[] bounds, List<ShapeReach> enclosures, CullBound[] cullBounds) {
+        var heads = new int[bounds.Length];
+        var groups = new List<SegmentBound>();
+        var next = new List<int>();
+        var culled = new bool[compiled.Length];
+        var starts = new int[bounds.Length];
+
+        Array.Fill(array: heads, value: -1);
+        foreach (var bound in cullBounds) {
+            Array.Fill(array: culled, value: true, startIndex: bound.First, count: (bound.End - bound.First));
+        }
+        for (var index = 0; (index < slots.Length); index++) {
+            if (slots[index] >= 0) { starts[slots[index]] = index; }
+        }
+
+        var level = new List<(int Slot, SegmentBound Bound, ShapeReach Enclosure)>();
+        var above = new List<(int Slot, SegmentBound Bound, ShapeReach Enclosure)>();
+        var members = new List<ShapeReach>();
+        var slot = 0;
+
+        while (slot < bounds.Length) {
+            level.Clear();
+            while ((slot < bounds.Length) && !culled[starts[slot]] && ((level.Count == 0) || (level[^1].Bound.End == starts[slot]))) {
+                level.Add(item: (slot, bounds[slot], enclosures[slot]));
+                slot++;
+            }
+            if (level.Count == 0) {
+                slot++;
+                continue;
+            }
+            while (level.Count > 1) {
+                above.Clear();
+                for (var first = 0; (first < level.Count); first += SegmentGroupFanout) {
+                    var last = Math.Min(val1: level.Count, val2: (first + SegmentGroupFanout));
+
+                    if ((last - first) < 2) {
+                        above.Add(item: level[first]);
+                        continue;
+                    }
+
+                    members.Clear();
+                    var margin = FixedQ4816.Zero;
+                    var carves = false;
+
+                    for (var member = first; (member < last); member++) {
+                        members.Add(item: level[member].Enclosure);
+                        margin = FixedQ4816.Max(x: margin, y: level[member].Bound.Margin);
+                        carves |= level[member].Bound.Carves;
+                    }
+
+                    var enclosure = Enclose(members: members);
+                    var certified = Reach.TryOf(reach: out var reach, shape: enclosure);
+                    var group = new SegmentBound(Carves: carves, End: level[(last - 1)].Bound.End, Margin: margin, Reach: reach);
+
+                    if (certified) {
+                        next.Add(item: heads[level[first].Slot]);
+                        heads[level[first].Slot] = groups.Count;
+                        groups.Add(item: group);
+                    }
+                    above.Add(item: (level[first].Slot, group, enclosure));
+                }
+                (level, above) = (above, level);
+            }
+        }
+
+        var groupRows = groups.ToArray();
+        CountArrayPayload(rows: groupRows, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
+        return (heads, groupRows, next.ToArray());
+    }
+    // How many consecutive chains, or nodes, one node of the segment hierarchy holds.
+    private const int SegmentGroupFanout = 8;
     // Whether only scope edges stand between a chain's end and the next ResetPoint, instance boundary or the stream's
     // end: a skipped chain leaves the point where its ResetPoint put it, which no instruction after it may read.
     private static bool ClosesAtScopeEdge(CompiledInstruction[] compiled, bool[] boundary, int edge) {
