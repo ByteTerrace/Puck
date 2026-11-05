@@ -251,8 +251,13 @@ public sealed partial class SdfWorldTables {
         var packedWords = SdfMeshRecord.DrawWords;
         var changedWords = 0UL;
         if (incremental) {
+            // Incremental staging admits only standing arena addresses. An unchanged mesh already names its
+            // placement in this retained record; only a mesh replacement needs the arena's reference lookup.
+            var placement = ReferenceEquals(draw.Mesh, m_stagedDraws[index].Mesh)
+                ? SdfMeshRegion.ReadPlacement(record)
+                : m_meshArena.Placements[draw.Mesh];
             var work = SdfMeshRegion.WriteDrawIncremental(draw: in draw, previous: in m_stagedDraws[index],
-                placement: m_meshArena.Placements[draw.Mesh], generation: observation.Generation, record: record);
+                placement: placement, generation: observation.Generation, record: record);
             packedWords = work.PackedWords;
             changedWords = work.ChangedWords;
             if (work.NormalComputed) { tally.Normals++; }
