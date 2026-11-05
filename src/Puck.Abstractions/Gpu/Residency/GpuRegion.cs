@@ -138,6 +138,10 @@ public sealed unsafe class GpuRegion : IDisposable {
     private readonly List<IGpuBuffer> m_ownedBuffers = [];
     // The ranges each host-visible buffer still owes: one list under InPlace and Staged, one per slot under Ring.
     private readonly GpuUploadRuns[] m_owed;
+    // Under Ring, the ranges written since the slots last took them (OwedOf): a write owes into this one list, in the
+    // order it writes, rather than into every slot's, where it would land among the older frames' runs. Every read of a
+    // slot's list folds it first.
+    private readonly GpuUploadRuns? m_fresh;
     private readonly IGpuRecorder m_recorder;
     // The header and run table a staged flush writes at the front of the slot's staging buffer.
     private readonly uint[] m_header;
@@ -347,6 +351,10 @@ public sealed unsafe class GpuRegion : IDisposable {
             ? slotCount
             : 1
         )];
+        m_fresh = ((policy == GpuResidencyPolicy.Ring)
+            ? new GpuUploadRuns(capacity: HostRunCapacity)
+            : null
+        );
 
         for (var index = 0; (index < m_owed.Length); index++) {
             m_owed[index] = ((policy == GpuResidencyPolicy.Staged)
@@ -746,6 +754,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         }
 
         ByteCount = byteCount;
+        m_fresh?.Clear();
 
         foreach (var owed in m_owed) {
             owed.Clear();
@@ -1050,9 +1059,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     public void OweAll(int slot) {
         RequireSlot(slot: slot);
 
-        var owed = m_owed[((Policy == GpuResidencyPolicy.Ring)
-            ? slot
-            : 0)];
+        var owed = ((Policy == GpuResidencyPolicy.Ring) ? OwedOf(slot: slot) : m_owed[0]);
 
         owed.Clear();
         owed.Add(
@@ -1076,7 +1083,7 @@ public sealed unsafe class GpuRegion : IDisposable {
             case GpuResidencyPolicy.Ring:
                 WriteOwed(
                     buffer: m_hostBuffers[slot],
-                    owed: m_owed[slot]
+                    owed: OwedOf(slot: slot)
                 );
                 m_owed[slot].Clear();
 
@@ -1398,12 +1405,38 @@ public sealed unsafe class GpuRegion : IDisposable {
     }
     // Owes words [startWord, endWord) in every buffer.
     private void Owe(int startWord, int endWord) {
+        if (m_fresh is { } fresh) {
+            fresh.Add(
+                length: (endWord - startWord),
+                start: startWord
+            );
+
+            return;
+        }
+
         foreach (var owed in m_owed) {
             owed.Add(
                 length: (endWord - startWord),
                 start: startWord
             );
         }
+    }
+    // Hands the ranges written since the last fold to every slot's list, the one door to a Ring slot's owed list.
+    private GpuUploadRuns OwedOf(int slot) {
+        if ((m_fresh is { } fresh) && (fresh.Count > 0)) {
+            foreach (var owed in m_owed) {
+                for (var run = 0; (run < fresh.Count); run++) {
+                    owed.Add(
+                        length: fresh.Length(index: run),
+                        start: fresh.Start(index: run)
+                    );
+                }
+            }
+
+            fresh.Clear();
+        }
+
+        return m_owed[slot];
     }
     // Owes each run of words in which bytes differ from the contents at offset, a word at a time past the first
     // differing byte, and returns whether any did.
