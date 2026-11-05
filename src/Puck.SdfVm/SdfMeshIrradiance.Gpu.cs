@@ -100,7 +100,8 @@ public sealed partial class SdfMeshIrradiance {
                         var token = m_hitOwners.TryGetValue((level, (x, y, z)), out var owner) && owner.Token == probe.GpuToken ? probe.GpuToken : 0;
                         row[9] = (uint)token;
                         row[10] = (uint)(token >> 32);
-                        candidates.Add(new Candidate(Cell: (x, y, z), Distance: Vector3.DistanceSquared(center, snapshot.Camera), Level: level, LitAt: present ? probe.LitAt : 0, Trace: false));
+                        var priority = ProbePriority((x, y, z), low, center, snapshot.Camera, spacing);
+                        candidates.Add(new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: present ? probe.LitAt : 0, Trace: false));
                         if (present) { ages?.Add(probe.Lighting == snapshot.Lighting.Version ? 0 : (float)Stopwatch.GetElapsedTime(StaleSince(probe.Lighting, in snapshot), now).TotalSeconds); }
                     }
                 }

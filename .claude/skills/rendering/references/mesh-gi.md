@@ -29,6 +29,10 @@ degenerate-bounds scene law reaches depth 62 and compares nearest and any hits
 with brute force, with zero overflow.
 `world.budget` samples per-level median and maximum lighting ages when read,
 in addition to the work-list cycle's combined ages.
+Both work lists use the existing `Puck.Maths` three-way Morton interleave on
+window-relative cells. Trace/relight class, lighting age and level retain their
+priority; within each eight-cell radial band the order is spatial. A drain
+still lists every cell and uses the same spatial order within each level.
 
 The runtime streams the existing scene's nodes and leaf indices through a
 `GpuRegion` source, without a second packed hierarchy on the CPU. One admitted

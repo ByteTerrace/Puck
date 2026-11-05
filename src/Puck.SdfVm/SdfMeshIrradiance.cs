@@ -1685,7 +1685,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                         var rebase = (present && !trace && (probe.Geometry != snapshot.Geometry));
                         var current = (present && (probe.Lighting == lighting.Version));
                         var center = (new Vector3(x: (x + 0.5f), y: (y + 0.5f), z: (z + 0.5f)) * spacing);
-                        var distance = Vector3.DistanceSquared(value1: center, value2: snapshot.Camera);
+                        var priority = ProbePriority((x, y, z), low, center, snapshot.Camera, spacing);
 
                         if (present) {
                             ages?.Add(item: (current ? 0f : ((float)Stopwatch.GetElapsedTime(startingTimestamp: StaleSince(lighting: probe.Lighting, snapshot: in snapshot), endingTimestamp: now).TotalSeconds)));
@@ -1694,7 +1694,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                             stale |= !current;
                             continue;
                         }
-                        candidates.Add(item: new Candidate(Cell: (x, y, z), Distance: distance, Level: level, LitAt: (present ? probe.LitAt : 0L), Trace: trace));
+                        candidates.Add(item: new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: (present ? probe.LitAt : 0L), Trace: trace));
                     }
                 }
             }
@@ -1704,15 +1704,20 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
     private static void OrderCandidates(List<Candidate> candidates, bool all) {
         if (all) {
-            candidates.Sort(comparison: static (a, b) => ((a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) : a.Distance.CompareTo(value: b.Distance)));
+            candidates.Sort(comparison: static (a, b) => ((a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) : CompareSpatial(a, b)));
             return;
         }
         candidates.Sort(comparison: static (a, b) =>
             (a.Trace != b.Trace) ? (a.Trace ? -1 : 1) :
-            a.Trace ? ((a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) : a.Distance.CompareTo(value: b.Distance)) :
+            a.Trace ? ((a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) : CompareSpatial(a, b)) :
             (a.LitAt != b.LitAt) ? a.LitAt.CompareTo(value: b.LitAt) :
-            (a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) : a.Distance.CompareTo(value: b.Distance));
+            (a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) : CompareSpatial(a, b));
     }
+    private static int CompareSpatial(Candidate a, Candidate b) => a.Band != b.Band ? a.Band.CompareTo(b.Band) : a.Morton.CompareTo(b.Morton);
+    // Eight-cell radial bands retain near-first demand while adjacent probes share hierarchy cache lines.
+    // Relative window coordinates avoid signed-cell wrap at zero; the existing Maths interleave supplies Morton order.
+    private static (int Band, uint Morton) ProbePriority((int X, int Y, int Z) cell, (int X, int Y, int Z) low, Vector3 center, Vector3 camera, Vector3 spacing) =>
+        ((int)(((center - camera) / spacing).Length() / 8), BinaryIntegerFunctions.BitwiseTriple<uint, uint>((uint)(cell.X - low.X), (uint)(cell.Y - low.Y), (uint)(cell.Z - low.Z)));
     // When a probe's lighting went stale: the capture of the version after its own, or the oldest capture remembered.
     private static long StaleSince(int lighting, in Snapshot snapshot) {
         var index = ((lighting + 1) - snapshot.VersionBase);
@@ -2505,8 +2510,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private readonly record struct Box(Vector3 Low, Vector3 High);
     // A probe the worker lists: its level and cell, whether it lacks a trace against the current geometry, the capture
     // time of the lighting it was last relit under (zero for none), the relights it holds under the current lighting,
-    // and its squared distance from the camera.
-    private readonly record struct Candidate(int Level, (int X, int Y, int Z) Cell, bool Trace, long LitAt, float Distance);
+    // and its radial priority band and Morton cell order within that band.
+    private readonly record struct Candidate(int Level, (int X, int Y, int Z) Cell, bool Trace, long LitAt, int Band, uint Morton);
 
     // One probe: its geometry (where it stands relative to its cell's centre, the share of its rays that met back faces,
     // whether it lies inside geometry, the geometry it was traced against, and its hit buffer, sky shares and surface map

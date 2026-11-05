@@ -1101,6 +1101,8 @@ The shared scene builder certifies each hierarchy at no more than
 `SdfMeshProbeTrace.StackDepth - 2` edges, forcing median splits when necessary.
 A hierarchy that cannot fit is refused by name. CPU and GPU walks count stack
 overflow as an assertion failure rather than silently ending a walk.
+Within each work priority and eight-cell distance band, probes run in Morton
+cell order to keep neighbouring origins together without changing their rays.
 The budget diagnostic samples median and oldest lighting age per level so a
 coarse window cannot hide the finest window's response time.
 

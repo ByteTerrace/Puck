@@ -248,37 +248,6 @@ Each brief names the invariant, the one place that enforces it and where the
 guarantee stops, the mechanisms it reuses, and a mechanical check per step. No
 brief grants a GPU leg; the lead schedules legs under `puck lease gpu`.
 
-### L1. G1 traversal corrections
-
-**Family.** The G1 lane itself, as a course correction before its step 2
-closes; otherwise the first commit after G1 lands on `lead/velocity`.
-
-**Outcome.** A visibility query walks with any-hit leaves on both CPU and GPU;
-no hierarchy deeper than its walk's stack can be built; a trace batch's probes
-run in Morton order within each priority band.
-
-**Invariant and enforcement.** A probe ray's answer is the scene's nearest hit
-within its reach, or a miss only when no triangle lies there. Enforced at one
-door: `SdfMeshIrradianceScene`'s builder records the depth of each geometry
-hierarchy and of the top level (each walk has its own stack, on the CPU and in
-G1's two groupshared stacks), and no hierarchy deeper than `StackDepth - 2`
-leaves the builder: a node range switches to median splits once the levels
-left above that bound are only as many as a balanced split of its primitives
-needs, and a scene that still cannot fit is refused by name. The walks keep their stack check as an assertion that
-counts (`sdf.mesh-gi.stack-overflow`) rather than a silent return. The
-guarantee stops at float traversal itself: a ray grazing an edge may hit on
-one side of it, as the trace device law already tolerates.
-
-**Reuse.** `SdfMeshProbeTrace.StackDepth` (G1's constant, shared by CPU and GPU on its branch), the
-CPU's `ILeaves` any-hit path, the device law
-`SdfMeshIrradianceTraceDeviceLawTests`. No second traversal: the any-hit walk
-is `sdfProbeIntersect`'s loop with an early return, sharing its node and
-triangle tests.
-
-**Steps and checks.** (3) Morton
-order within a band. Check: `GpuTraceNanoseconds` per ray for a full High
-window, hits unchanged by the device law.
-
 ### L2. Shared hit lighting
 
 **Family.** A Claude `specialist` or Codex at high effort; principal-grade
@@ -341,8 +310,8 @@ first view's frustum against the rest.
 ## Sequencing against G1
 
 G1's own order stands (trace on the GPU, relight and publication on the GPU,
-the work list on the GPU, the CPU trace out of the frame's path). L1 goes into
-the G1 lane now, since it edits G1's kernels and its CPU twin. L2's step 0 runs
+the work list on the GPU, the CPU trace out of the frame's path). The traversal
+contracts are owned by the mesh-GI reference. L2's step 0 runs
 now in parallel: it reads the CPU path and touches only the mesh-scene verb or
 a scratch harness. L3 is part of G1's step 3. L2's steps 1 and 2 follow G1's
 step 3, because they change the relight kernel and the trace's output. Lesson
@@ -355,8 +324,7 @@ reflections on glass) read the same volume and are unaffected by any of these.
 
 - **How far the hits fold into entries, and at what error** is L2's step 0,
   run by the lane that takes it; it decides whether steps 1 and 2 run.
-- **What the any-hit walk saves** is L1's step 1 reading on the 4070; the
-  2060 and the Deck readings come with G2's measurement.
+- **The 2060 and Deck traversal readings** come with G2's measurement.
 - **What fills a G1 World's 18 GB** is a `world.residency` reading and a heap
   walk on the G1 build, owned by the lead's next memory pass; no cap is set
   before it.
