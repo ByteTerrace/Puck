@@ -7,6 +7,15 @@
 // terrain library's sectors do. A stream segment's +Z is its flow, and a falls or glacier shares its wall's sector frame,
 // where +Z points out from the ring's centre and a wall faces -Z.
 
+// The standard's surface material, shared with field rows through the ordinary palette vocabulary.
+let waterMaterial = {
+  color: "#3FB8C4"
+  roughness: 0.16
+  specular: 0.5
+  coat: 0.3
+  glass { depth: 2, ior: 1.333 }
+}
+
 // A turn about X by the angle whose cosine is `c` is the quaternion [±halfTurnSine(c), 0, 0, halfTurnCosine(c)], the sign
 // that of the angle's sine: half-angle identities, since the expression vocabulary has no inverse trigonometry.
 function halfTurnSine(c) = squareRoot((1 - c) / 2)

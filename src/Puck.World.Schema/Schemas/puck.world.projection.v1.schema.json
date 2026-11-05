@@ -31265,7 +31265,7 @@
                   "default": 0
                 },
                 "color": {
-                  "description": "The color the field\u0027s surface shades with \u2014 a #RRGGBB literal or a state.\u003Crow\u003E[.\u003Ckey\u003E] Text-cell binding; required when HeightScale is nonzero.",
+                  "description": "The color the field\u0027s surface shades with \u2014 a #RRGGBB literal or a state.\u003Crow\u003E[.\u003Ckey\u003E] Text-cell binding; required when HeightScale is nonzero, or omitted for a neutral white surface.",
                   "type": [
                     "string",
                     "null"
@@ -31276,6 +31276,1233 @@
                   "description": "Whether this field is a fluid medium (see Medium).",
                   "type": "boolean",
                   "default": false
+                },
+                "material": {
+                  "description": "Optional surface material using the creation palette vocabulary.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "color": {
+                      "description": "The base color as #RRGGBB (see HexColor).",
+                      "type": "string"
+                    },
+                    "emissive": {
+                      "description": "The emissive luminance, in nits, the colour tints (null = 0 \u2014 optional members are nullable and normalized at load).",
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "specular": {
+                      "description": "The specular strength (null = the material default).",
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "roughness": {
+                      "description": "The GGX roughness in [0, 1] (null = DefaultRoughness) \u2014 see SdfMaterial for the roughness-floor formula. A document still spelling shininess is an unmapped member and is refused.",
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "sheen": {
+                      "description": "The fresnel edge-lift strength in [0, 1] (null = 0 \u2014 no lift) \u2014 see SdfMaterial.",
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "metal": {
+                      "description": "The metalness in [0, 1] (null = 0 \u2014 dielectric) \u2014 see SdfMaterial.",
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "coat": {
+                      "description": "The clearcoat strength in [0, 1] (null = 0 \u2014 no coat) \u2014 see SdfMaterial.",
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "weathering": {
+                      "description": "Optional generic coverage and reveal surfaces.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "edge": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "lines": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "settle": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "reach": {
+                          "type": "number",
+                          "default": 1
+                        },
+                        "seed": {
+                          "type": "integer",
+                          "default": 0
+                        },
+                        "scale": {
+                          "type": "number",
+                          "default": 1
+                        },
+                        "floor": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "lane": {
+                          "type": "integer",
+                          "default": 0
+                        },
+                        "under": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "description": "One ascending coverage threshold and the surface it reveals.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "threshold": {
+                                "type": "number"
+                              },
+                              "surface": {
+                                "type": "object",
+                                "properties": {
+                                  "color": {
+                                    "type": "string"
+                                  },
+                                  "roughness": {
+                                    "type": "number"
+                                  },
+                                  "metal": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "color",
+                                  "roughness",
+                                  "metal"
+                                ],
+                                "additionalProperties": false,
+                                "title": "PaletteSurfaceDocument"
+                              }
+                            },
+                            "required": [
+                              "threshold",
+                              "surface"
+                            ],
+                            "additionalProperties": false,
+                            "title": "PaletteRevealDocument"
+                          },
+                          "default": null
+                        },
+                        "deposit": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "color": {
+                              "type": "string"
+                            },
+                            "roughness": {
+                              "type": "number"
+                            },
+                            "metal": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "color",
+                            "roughness",
+                            "metal"
+                          ],
+                          "additionalProperties": false,
+                          "default": null,
+                          "title": "PaletteSurfaceDocument"
+                        },
+                        "noise": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "patternScale": {
+                          "default": null,
+                          "title": "DocumentVector3",
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
+                        },
+                        "softness": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "octaves": {
+                          "type": "integer",
+                          "default": 1
+                        },
+                        "octaveRatio": {
+                          "type": "number",
+                          "default": 2
+                        },
+                        "octaveGain": {
+                          "type": "number",
+                          "default": 0.5
+                        },
+                        "turn": {
+                          "default": null,
+                          "title": "DocumentQuaternion",
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 4,
+                              "maxItems": 4
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "PaletteWeatheringDocument"
+                    },
+                    "wrap": {
+                      "description": "The wrap-lighting share in [0, 1] (null = 0 \u2014 the plain Lambert term) \u2014 see Wrap.",
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "soften": {
+                      "description": "The shading-normal broadening in [0, 1] (null = 0 \u2014 no broadening) \u2014 see Soften.",
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "fill": {
+                      "description": "The fill tint as #RRGGBB or a state binding (null = black \u2014 no fill) \u2014 see Fill.",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "inset": {
+                      "description": "Optional refractive paint layer.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "origin": {
+                          "title": "DocumentVector3",
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
+                        },
+                        "rotation": {
+                          "title": "DocumentQuaternion",
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 4,
+                              "maxItems": 4
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
+                        },
+                        "depth": {
+                          "type": "number"
+                        },
+                        "ior": {
+                          "type": "number"
+                        },
+                        "paint": {
+                          "type": "object",
+                          "properties": {
+                            "stops": {
+                              "type": "array",
+                              "items": {
+                                "description": "One ascending radial ramp stop.",
+                                "type": [
+                                  "object",
+                                  "null"
+                                ],
+                                "properties": {
+                                  "radius": {
+                                    "type": "number"
+                                  },
+                                  "color": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "radius",
+                                  "color"
+                                ],
+                                "additionalProperties": false,
+                                "title": "PaletteRadialStopDocument"
+                              }
+                            },
+                            "softness": {
+                              "type": "number",
+                              "default": 0
+                            },
+                            "modulationAmplitude": {
+                              "type": "number",
+                              "default": 0
+                            },
+                            "modulationFrequency": {
+                              "type": "number",
+                              "default": 0
+                            },
+                            "seed": {
+                              "type": "integer",
+                              "default": 0
+                            }
+                          },
+                          "required": [
+                            "stops"
+                          ],
+                          "additionalProperties": false,
+                          "title": "PaletteRadialPaintDocument"
+                        }
+                      },
+                      "required": [
+                        "origin",
+                        "rotation",
+                        "depth",
+                        "ior",
+                        "paint"
+                      ],
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "PaletteInsetDocument"
+                    },
+                    "bleed": {
+                      "description": "The color multiplying outgoing indirect reflectance and emission, as #RRGGBB or a state binding; null means white.",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "receive": {
+                      "description": "The finite nonnegative gain on received indirect light; null means one.",
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "paints": {
+                      "description": "Up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none.",
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "description": "A paint over the palette slot\u0027s surface: a primitive of the shape vocabulary, placed like a shape, whose inside (or, with a Stroke, the band within that distance of its surface) takes Color. It never changes the field or the bake; the views pass draws it crisp at the pixel. A plane stroked at a half-width paints a stripe, an extruded ellipse prism stroked paints a ring projected along its axis, and a thin sweep paints a curved line where it crosses the surface.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "type": {
+                            "description": "The primitive, read as a shape\u0027s type: every primitive but a path profile.",
+                            "enum": [
+                              "Sphere",
+                              "Box",
+                              "Torus",
+                              "Cylinder",
+                              "Capsule",
+                              "Ellipsoid",
+                              "RoundCone",
+                              "Plane",
+                              "Cone",
+                              "Prism",
+                              "Superellipsoid",
+                              "Sweep"
+                            ],
+                            "title": "SdfSolidPrimitive"
+                          },
+                          "color": {
+                            "description": "The paint\u0027s color, #RRGGBB or a state binding.",
+                            "type": "string"
+                          },
+                          "position": {
+                            "description": "The primitive\u0027s position (null = the frame\u0027s origin).",
+                            "default": null,
+                            "title": "DocumentVector3",
+                            "anyOf": [
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                },
+                                "minItems": 3,
+                                "maxItems": 3
+                              },
+                              {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                              }
+                            ]
+                          },
+                          "rotation": {
+                            "description": "The primitive\u0027s rotation (null = identity).",
+                            "default": null,
+                            "title": "DocumentQuaternion",
+                            "anyOf": [
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                },
+                                "minItems": 4,
+                                "maxItems": 4
+                              },
+                              {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                              }
+                            ]
+                          },
+                          "scale": {
+                            "description": "The primitive\u0027s size, as a shape\u0027s scale (null = one).",
+                            "default": null,
+                            "title": "DocumentVector3",
+                            "anyOf": [
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                },
+                                "minItems": 3,
+                                "maxItems": 3
+                              },
+                              {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                              }
+                            ]
+                          },
+                          "stroke": {
+                            "description": "The half-width of the band painted about the primitive\u0027s surface, in the frame\u0027s units; null or zero fills the primitive.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          },
+                          "parent": {
+                            "description": "The shape whose frame carries the paint, in that shape\u0027s local frame as a shape-riding volume is; null paints in the frame of the slot that owns the hit, or world space on a static placement. A static placement draws no parented paint.",
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "default": null
+                          },
+                          "taper": {
+                            "description": "Prism only: the top-to-bottom width ratio.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          },
+                          "profile": {
+                            "description": "Prism only: the cross-section; a path profile is refused.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "kind": {
+                                "description": "The profile family.",
+                                "enum": [
+                                  "Trapezoid",
+                                  "RoundedRectangle",
+                                  "Polygon",
+                                  "Ellipse",
+                                  "ChamferedRectangle",
+                                  "Convex",
+                                  "Path"
+                                ],
+                                "title": "SdfPrismProfileKind"
+                              },
+                              "cornerRadius": {
+                                "description": "A fraction in [0, 1]: the profile\u0027s smaller half-extent for RoundedRectangle\u0027s corner radius or ChamferedRectangle\u0027s chamfer radius; the scaled polygon\u0027s conservative inradius (ConvexPolygonInradius) for Convex\u0027s uniform corner rounding, also clamped to the extrusion half-depth when extruded.",
+                                "type": "number",
+                                "default": 0.15
+                              },
+                              "sides": {
+                                "description": "Polygon side count, from 3 through 32.",
+                                "type": "integer",
+                                "default": 6
+                              },
+                              "vertices": {
+                                "description": "Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.",
+                                "type": [
+                                  "array",
+                                  "null"
+                                ],
+                                "default": null,
+                                "items": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                }
+                              },
+                              "path": {
+                                "description": "Required only for Path; its points are normalized profile coordinates.",
+                                "type": [
+                                  "object",
+                                  "null"
+                                ],
+                                "properties": {
+                                  "contours": {
+                                    "type": "array",
+                                    "items": {
+                                      "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.",
+                                      "type": [
+                                        "object",
+                                        "null"
+                                      ],
+                                      "properties": {
+                                        "start": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "number"
+                                          },
+                                          "minItems": 2,
+                                          "maxItems": 2
+                                        },
+                                        "segments": {
+                                          "type": "array",
+                                          "items": {
+                                            "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame.",
+                                            "type": [
+                                              "object",
+                                              "null"
+                                            ],
+                                            "properties": {
+                                              "end": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "number"
+                                                },
+                                                "minItems": 2,
+                                                "maxItems": 2
+                                              },
+                                              "control": {
+                                                "default": null,
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "number"
+                                                },
+                                                "minItems": 2,
+                                                "maxItems": 2
+                                              },
+                                              "control2": {
+                                                "default": null,
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "number"
+                                                },
+                                                "minItems": 2,
+                                                "maxItems": 2
+                                              },
+                                              "arcCenter": {
+                                                "default": null,
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "number"
+                                                },
+                                                "minItems": 2,
+                                                "maxItems": 2
+                                              },
+                                              "clockwise": {
+                                                "type": "boolean",
+                                                "default": false
+                                              }
+                                            },
+                                            "required": [
+                                              "end"
+                                            ],
+                                            "additionalProperties": false,
+                                            "title": "SdfPathSegment"
+                                          }
+                                        },
+                                        "closed": {
+                                          "type": "boolean",
+                                          "default": false
+                                        }
+                                      },
+                                      "required": [
+                                        "start",
+                                        "segments"
+                                      ],
+                                      "additionalProperties": false,
+                                      "title": "SdfPathContour"
+                                    }
+                                  },
+                                  "tolerance": {
+                                    "type": "number",
+                                    "default": 0.001
+                                  },
+                                  "stroke": {
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ],
+                                    "properties": {
+                                      "radiusStart": {
+                                        "type": "number"
+                                      },
+                                      "radiusEnd": {
+                                        "type": "number"
+                                      },
+                                      "smooth": {
+                                        "type": "boolean",
+                                        "default": false
+                                      },
+                                      "from": {
+                                        "type": "number",
+                                        "default": 0
+                                      },
+                                      "to": {
+                                        "type": "number",
+                                        "default": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "radiusStart",
+                                      "radiusEnd"
+                                    ],
+                                    "additionalProperties": false,
+                                    "default": null,
+                                    "title": "SdfPathStroke"
+                                  },
+                                  "shear": {
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ],
+                                    "properties": {
+                                      "linear": {
+                                        "type": "number"
+                                      },
+                                      "quadratic": {
+                                        "type": "number",
+                                        "default": 0
+                                      },
+                                      "cubic": {
+                                        "type": "number",
+                                        "default": 0
+                                      },
+                                      "offset": {
+                                        "type": "number",
+                                        "default": 0
+                                      },
+                                      "from": {
+                                        "type": "number",
+                                        "default": -1
+                                      },
+                                      "to": {
+                                        "type": "number",
+                                        "default": 1
+                                      },
+                                      "target": {
+                                        "type": "integer",
+                                        "default": 0
+                                      }
+                                    },
+                                    "required": [
+                                      "linear"
+                                    ],
+                                    "additionalProperties": false,
+                                    "default": null,
+                                    "title": "SdfPathShear"
+                                  }
+                                },
+                                "required": [
+                                  "contours"
+                                ],
+                                "additionalProperties": false,
+                                "default": null,
+                                "title": "SdfPathProfile"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "additionalProperties": false,
+                            "default": null,
+                            "title": "SdfPrismProfile"
+                          },
+                          "lift": {
+                            "description": "Prism only: extrude or revolve.",
+                            "enum": [
+                              "Revolve",
+                              "Extrude",
+                              null
+                            ],
+                            "default": null,
+                            "title": "SdfLift"
+                          },
+                          "rounding": {
+                            "description": "The edge-rounding radius, as a shape\u0027s.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          },
+                          "chamfer": {
+                            "description": "The cap chamfer radius, as a shape\u0027s.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          },
+                          "exponent": {
+                            "description": "Superellipsoid only: the exponent.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          },
+                          "curve": {
+                            "description": "Sweep only: the curve, in the frame\u0027s units.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "a": {
+                                "description": "The curve\u0027s first control point, in the shape\u0027s local (workbench) frame \u2014 creation units, or a state.\u003Crow\u003E[.\u003Ckey\u003E] reference.",
+                                "title": "DocumentVector3",
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "minItems": 3,
+                                    "maxItems": 3
+                                  },
+                                  {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                                  }
+                                ]
+                              },
+                              "b": {
+                                "description": "The curve\u0027s middle control point.",
+                                "title": "DocumentVector3",
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "minItems": 3,
+                                    "maxItems": 3
+                                  },
+                                  {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                                  }
+                                ]
+                              },
+                              "c": {
+                                "description": "The curve\u0027s last control point.",
+                                "title": "DocumentVector3",
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "minItems": 3,
+                                    "maxItems": 3
+                                  },
+                                  {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                                  }
+                                ]
+                              },
+                              "radiusStart": {
+                                "description": "The sweep radius at t = 0; finite and strictly positive.",
+                                "type": "number"
+                              },
+                              "radiusEnd": {
+                                "description": "The sweep radius at t = 1; finite and strictly positive.",
+                                "type": "number"
+                              },
+                              "bulge": {
+                                "description": "The mid-span radius bulge amplitude (null = 0), added by bulge\u00B7sin(\u03C0\u00B7t)^0.65; refused past MaxSweepBulgeRatio times max(RadiusStart, RadiusEnd).",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "strands": {
+                                "description": "The helical strand count (null = 1), in [MinSweepStrands, MaxSweepStrands]. A count above 1 is render-only \u2014 refused for deterministic field contact by name, matching Sweep\u0027s own status.",
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "twist": {
+                                "description": "The strand orbit rate, in turns along the curve (null = 0); finite.",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "strandOffset": {
+                                "description": "The strand orbit radius, in creation units (null = 0); non-negative, finite, refused past MaxSweepStrandOffsetRatio times max(RadiusStart, RadiusEnd).",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "required": [
+                              "a",
+                              "b",
+                              "c",
+                              "radiusStart",
+                              "radiusEnd"
+                            ],
+                            "additionalProperties": false,
+                            "default": null,
+                            "title": "ShapeCurveDocument"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "color"
+                        ],
+                        "additionalProperties": false,
+                        "title": "PalettePaintDocument"
+                      },
+                      "default": null
+                    },
+                    "emissiveLane": {
+                      "description": "The render lane in [0, 3] whose saturated value scales Emissive at shading time, read from each inhabited body\u0027s own look lanes; a placement without lanes reads zero, and null keeps the emissive static.",
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "glass": {
+                      "description": "The slot\u0027s glass (PaletteGlassDocument), whose tint is Color and whose frost is Roughness; null keeps the slot opaque.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "depth": {
+                          "description": "The thickness, in creation units, over which light takes on the tint; finite and positive. A part twice this thick reads twice as deep.",
+                          "type": "number"
+                        },
+                        "ior": {
+                          "description": "The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49 acrylic (null = 1.5).",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "depth"
+                      ],
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "PaletteGlassDocument"
+                    },
+                    "toon": {
+                      "description": "The slot\u0027s own cel style (ToonStyleDocument, on unless it says enabled: false, which keeps the slot continuous); null shades the slot with the world\u0027s default style (render.toon).",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "enabled": {
+                          "description": "Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world\u0027s default is; false on render.toon boots the world\u0027s default off until the lever turns it on, which a style with every value then bands with.",
+                          "type": [
+                            "boolean",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "threshold": {
+                          "description": "Diffuse band threshold in [0, 1].",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "softness": {
+                          "description": "Full terminator width in [0.001, 0.5].",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "shadowTint": {
+                          "description": "Shadow-band reflectance, three linear RGB values in [0, 1].",
+                          "default": null,
+                          "title": "DocumentVector3",
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
+                        },
+                        "outlineWidth": {
+                          "description": "Close outline radius in output pixels, in [0, 4]; zero disables outlines.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "outlineDistance": {
+                          "description": "Distance in metres at which the outline radius halves, in [0.1, 1000].",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "outlineNormal": {
+                          "description": "Crease normal cosine in [0, 0.95].",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "outlineTint": {
+                          "description": "Outline multiplier, three linear RGB values in [0, 1].",
+                          "default": null,
+                          "title": "DocumentVector3",
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
+                        },
+                        "specularSize": {
+                          "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25].",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "exposure": {
+                          "description": "Reflected-light exposure compensation in stops, in [-4, 4].",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "shoulder": {
+                          "description": "Hue-preserving highlight compression in [0, 2]; zero disables it.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "band": {
+                          "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band\u0027s edge.",
+                          "enum": [
+                            "Visibility",
+                            "Combined"
+                          ],
+                          "default": "Visibility",
+                          "title": "SdfToonBand"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "ToonStyleDocument"
+                    },
+                    "toonSelect": {
+                      "description": "The slot\u0027s styles chosen live by a state cell (PaletteToonSelectDocument), whose case replaces Toon while the cell names one; null keeps Toon.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "state": {
+                          "description": "The state.\u003Crow\u003E[.\u003Ckey\u003E] binding naming the cell.",
+                          "type": "string"
+                        },
+                        "cases": {
+                          "description": "The styles, the first for the value zero; each is a whole style (ToonStyleDocument), enabled: false keeping the slot continuous.",
+                          "type": "array",
+                          "items": {
+                            "description": "A cel style on the wire (SdfToon): the world\u0027s default style (render.toon, which the live world.toon lever overrides) and a palette row\u0027s own (Toon) are this one shape, so a style authored once (the standard\u0027s styles.puck) serves both. The engine holds no look of its own: a style that bands authors every value, and one that says enabled: false needs none. Presentation only; no field enters simulation state or the bake.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "enabled": {
+                                "description": "Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world\u0027s default is; false on render.toon boots the world\u0027s default off until the lever turns it on, which a style with every value then bands with.",
+                                "type": [
+                                  "boolean",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "threshold": {
+                                "description": "Diffuse band threshold in [0, 1].",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "softness": {
+                                "description": "Full terminator width in [0.001, 0.5].",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "shadowTint": {
+                                "description": "Shadow-band reflectance, three linear RGB values in [0, 1].",
+                                "default": null,
+                                "title": "DocumentVector3",
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "minItems": 3,
+                                    "maxItems": 3
+                                  },
+                                  {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                                  }
+                                ]
+                              },
+                              "outlineWidth": {
+                                "description": "Close outline radius in output pixels, in [0, 4]; zero disables outlines.",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "outlineDistance": {
+                                "description": "Distance in metres at which the outline radius halves, in [0.1, 1000].",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "outlineNormal": {
+                                "description": "Crease normal cosine in [0, 0.95].",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "outlineTint": {
+                                "description": "Outline multiplier, three linear RGB values in [0, 1].",
+                                "default": null,
+                                "title": "DocumentVector3",
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "minItems": 3,
+                                    "maxItems": 3
+                                  },
+                                  {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                                  }
+                                ]
+                              },
+                              "specularSize": {
+                                "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25].",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "exposure": {
+                                "description": "Reflected-light exposure compensation in stops, in [-4, 4].",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "shoulder": {
+                                "description": "Hue-preserving highlight compression in [0, 2]; zero disables it.",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "band": {
+                                "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band\u0027s edge.",
+                                "enum": [
+                                  "Visibility",
+                                  "Combined"
+                                ],
+                                "default": "Visibility",
+                                "title": "SdfToonBand"
+                              }
+                            },
+                            "additionalProperties": false,
+                            "title": "ToonStyleDocument"
+                          }
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "cases"
+                      ],
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "PaletteToonSelectDocument"
+                    }
+                  },
+                  "required": [
+                    "color",
+                    "emissive",
+                    "specular",
+                    "roughness"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "title": "PaletteEntryDocument"
                 }
               },
               "required": [
@@ -31421,6 +32648,14 @@
                           "value": {
                             "description": "The constant written or added; the result clamps to the field\u0027s range.",
                             "title": "WorldLatticeScalar"
+                          },
+                          "takeFrom": {
+                            "description": "For Add, a distinct donor field at the same cell. Transfers at most Value, donor availability above its minimum, and destination capacity; debits exactly what is deposited.",
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "default": null
                           }
                         },
                         "required": [

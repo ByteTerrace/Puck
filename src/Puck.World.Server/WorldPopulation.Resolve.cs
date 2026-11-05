@@ -267,6 +267,7 @@ public sealed partial class WorldPopulation {
                         Scalar(input: condition.Value)
                     ))],
                 Then: [.. transform.Then.Select(selector: write => new FieldWriteInput(
+                        TakeFrom: write.TakeFrom?.Ordinal,
                         Field: write.Field.Ordinal,
                         Op: MapWriteOp(op: write.Op),
                         Value: Scalar(input: write.Value)

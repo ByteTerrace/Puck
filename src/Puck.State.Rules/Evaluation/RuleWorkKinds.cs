@@ -20,6 +20,12 @@ public static class RuleWorkKinds {
     /// <summary>Gets the kind counting the firings that committed and moved the arena.</summary>
     public static WorkKind Firings { get; } = new(name: "state.rules.firings", unit: "count", workClass: WorkClass.Deterministic);
 
+    /// <summary>Gets the kind counting the rules a due list visited: each rule once per tick it was due.</summary>
+    public static WorkKind Due { get; } = new(name: "state.rules.due", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the rules a due list left unvisited: each rule once per tick nothing it reads
+    /// had moved and its last verdict asked for nothing.</summary>
+    public static WorkKind Elided { get; } = new(name: "state.rules.elided", unit: "count", workClass: WorkClass.Deterministic);
+
     /// <summary>Gets the evaluator's kinds, in the order a report lists them.</summary>
     public static ReadOnlySpan<WorkKind> Kinds =>
         Order.Kinds;
@@ -30,6 +36,8 @@ public static class RuleWorkKinds {
             Evaluations,
             Skips,
             Firings,
+            Due,
+            Elided,
         ];
     }
 }

@@ -369,7 +369,13 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   counts only the memory already charged when a run starts, not the gigabytes it
   is about to take: a windowed World and such a run peaking together took the
   machine to 95% of its commit limit.
-  The lead cannot stop another lane's process; it asks the lane. CPU saturation does not
+  The lead cannot stop another lane's process; it asks the lane. Admission
+  reads memory when a run starts, so two long runs that each pass can still
+  grow into each other: on the lead machine, more than about three lanes that
+  boot Worlds or heavy suites at once kept commit charge between 80% and 94%
+  for hours without speeding anything up. Memory, not CPU, bounds how many
+  World-heavy lanes run together; lanes that only read, write documents or
+  build fit beside them freely. CPU saturation does not
   endanger lanes but voids timings: a lane whose evidence is a time (a tick, a
   frame, a bake) attributes cost by samples and counts while the machine is
   busy and takes its before/after times in a quiet window the lead clears; a

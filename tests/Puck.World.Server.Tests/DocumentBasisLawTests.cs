@@ -12,6 +12,36 @@ namespace Puck.World.Server.Tests;
 /// when stale; a basis surviving to validation refuses; and
 /// <see cref="WorldDefinitionSerialization.SavePreservingBasis"/> writes a proved delta that round-trips.</summary>
 public sealed class DocumentBasisLawTests {
+    [Fact]
+    public void KeyedPositionsResolveForwardReferencesAndRefuseMissingTargetsAndCycles() {
+        var basis = JsonNode.Parse("""{"holds":[{"name":"ground"},{"name":"fall"}]}""")!.AsObject();
+        var overlay = JsonNode.Parse("""{"holds":[{"name":"swim","$before":"ground"},{"name":"dive","$before":"swim"}]}""")!.AsObject();
+        Assert.True(WorldDocumentBasis.TryMerge(basis, overlay, out var merged, out var reason), reason);
+        Assert.Equal(new[] { "dive", "swim", "ground", "fall" }, merged!["holds"]!.AsArray().Select(row => row!["name"]!.GetValue<string>()));
+        Assert.DoesNotContain("$before", merged.ToJsonString());
+        foreach (var invalid in new[] {
+            """{"holds":[{"name":"swim","$before":"missing"}]}""",
+            """{"holds":[{"name":"ground","$before":"fall"},{"name":"fall","$before":"ground"}]}"""
+        }) {
+            Assert.False(WorldDocumentBasis.TryMerge(basis, JsonNode.Parse(invalid)!.AsObject(), out _, out reason));
+            Assert.Contains("$before", reason);
+        }
+    }
+    [Fact]
+    public void AnImportedFragmentCanLeadABasisList() {
+        using var files = new TemporaryDirectory();
+        var basis = JsonNode.Parse(Fixtures.DefaultWorldBytes())!.AsObject();
+        var first = basis["spawnPoints"]![0]!["id"]!.GetValue<string>();
+        files.WriteText("basis.world.json", basis.ToJsonString());
+        files.WriteText("fragment.world.json", new JsonObject {
+            ["spawnPoints"] = new JsonArray(new JsonObject {
+                ["id"] = "extra", ["$before"] = first, ["position"] = new JsonArray(5, 0, 5)
+            })
+        }.ToJsonString());
+        var path = files.WriteText("child.world.json", """{"basis":"basis","imports":[{"document":"fragment"}]}""");
+        Assert.True(Fixtures.TryLoadDrawn(path, out var loaded, out _, out var reason), reason);
+        Assert.Equal("extra", loaded!.SpawnPoints[0].Id);
+    }
     // Loads the document at a path, asserting it refuses, and returns the one-line reason.
     private static string RefusalOf(string path) {
         Assert.False(condition: Fixtures.TryLoadDrawn(

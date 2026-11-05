@@ -116,6 +116,19 @@ public sealed class FieldLatticeFlowLawTests {
     }
 
     [Fact]
+    public void FlowConservesRawRemaindersAndRetainsTransfersIntoFullCells() {
+        var input = FlowFields(width: 3, depth: 1, waterHeightScale: FixedQ4816.Zero);
+        var tiny = new FieldLattice(input);
+        tiny.Restore(new FieldLattice.Checkpoint(Raw: [[0, 3, 0], [0, 65536, 0]]));
+        StepLattice(tiny);
+        Assert.Equal(3, SumRaw(tiny, 0, 3));
+
+        var full = new FieldLattice(input);
+        full.Restore(IntCheckpoint([100, 100, 100], [0, 1, 0]));
+        StepLattice(full);
+        Assert.Equal(300L * 65536, SumRaw(full, 0, 3));
+    }
+    [Fact]
     public void ARampTerrainMovesMassStrictlyTowardTheLowEnd() {
         const int Width = 4;
 

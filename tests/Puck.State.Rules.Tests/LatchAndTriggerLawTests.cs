@@ -319,6 +319,79 @@ public sealed class LatchAndTriggerLawTests {
             expected: 1
         );
     }
+    // The due list is the pull skip pushed: per tick, every cell and the latch hash must match the evaluation that
+    // judges every rule in place, through Level and Edge rules, a sweep, a rule that never fires, and a key the host
+    // removes between ticks.
+    [Fact]
+    public void TheDueListChangesNoObservableResult() {
+        static List<string> Run(bool scheduling, bool due) {
+            var (host, evaluator, rules, latch, _) = EvaluatorFixture.Arrange(rules: [
+                new Rule(
+                    Name: RulesFixture.Name(value: "arm"),
+                    Effects: [EvaluatorFixture.Set(row: "flag", value: 1m)],
+                    Gate: EvaluatorFixture.Compare(comparison: ExpressionOp.GreaterOrEqual, row: "other", value: 2m)
+                ),
+                new Rule(
+                    Name: RulesFixture.Name(value: "count"),
+                    Effects: [EvaluatorFixture.Add(row: "other", value: 1m)],
+                    Gate: EvaluatorFixture.Compare(comparison: ExpressionOp.Less, row: "other", value: 6m)
+                ),
+                Counting(mode: ActionTriggerMode.Level, name: "score"),
+                new Rule(
+                    Name: RulesFixture.Name(value: "edge"),
+                    Effects: [EvaluatorFixture.Add(row: "third", value: 1m)],
+                    Gate: EvaluatorFixture.Compare(comparison: ExpressionOp.GreaterOrEqual, row: "other", value: 3m),
+                    Mode: ActionTriggerMode.Edge
+                ),
+                new Rule(
+                    Name: RulesFixture.Name(value: "sweep"),
+                    Effects: [EvaluatorFixture.Add(row: "score", value: 10m)],
+                    ForEach: "hand",
+                    Gate: EvaluatorFixture.Compare(comparison: ExpressionOp.Equal, row: "third", value: 1m)
+                ),
+                new Rule(
+                    Name: RulesFixture.Name(value: "never"),
+                    Effects: [EvaluatorFixture.Add(row: "score", value: 100m)],
+                    Gate: EvaluatorFixture.Compare(comparison: ExpressionOp.Equal, row: "third", value: 99m)
+                ),
+                new Rule(
+                    Name: RulesFixture.Name(value: "deadline"),
+                    Effects: [EvaluatorFixture.Add(row: "score", value: 1000m)],
+                    Gate: new ActionPredicate.All(Predicates: [
+                        EvaluatorFixture.Compare(comparison: ExpressionOp.GreaterOrEqual, row: RuleFacts.Tick, value: 4m),
+                        EvaluatorFixture.Compare(comparison: ExpressionOp.Equal, row: "flag", value: 1m),
+                    ])
+                ),
+            ]);
+            var trace = new List<string>();
+            var deadline = evaluator.ScheduleOf(latch: latch, rule: rules[^1]);
+
+            Assert.NotNull(@object: deadline.Deadline);
+            Assert.False(condition: deadline.Volatile);
+            evaluator.SchedulingEnabled = scheduling;
+            for (var tick = 0UL; (tick < 10UL); tick++) {
+                if (tick == 7UL) {
+                    _ = host.Arena.TryRemove(
+                        key: host.Arena.Catalog.Keys.Intern(name: RulesFixture.Name(value: "b")),
+                        reason: out _,
+                        rowOrdinal: EvaluatorFixture.Ordinal(host: host, row: "hand")
+                    );
+                }
+                host.Advance(engineTick: tick, tick: tick);
+                _ = (due
+                    ? evaluator.EvaluateDue(latch: latch, rules: rules, stepTicks: 1UL)
+                    : evaluator.Evaluate(latch: latch, rules: rules, stepTicks: 1UL));
+                trace.Add(item: $"{tick}: score={EvaluatorFixture.Cell(host: host, row: "score")} other={EvaluatorFixture.Cell(host: host, row: "other")} flag={EvaluatorFixture.Cell(host: host, row: "flag")} third={EvaluatorFixture.Cell(host: host, row: "third")} latch={Hash(latch: latch, rules: rules):x16} held={latch.Count}");
+            }
+
+            return trace;
+        }
+
+        var inPlace = Run(due: false, scheduling: false);
+
+        Assert.Equal(actual: Run(due: false, scheduling: true), expected: inPlace);
+        Assert.Equal(actual: Run(due: true, scheduling: true), expected: inPlace);
+    }
     [Fact]
     public void SchedulingChangesNoObservableResult() {
         static long Run(bool scheduling) {

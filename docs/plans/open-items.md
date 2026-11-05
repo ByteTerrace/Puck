@@ -273,18 +273,13 @@ both backends; and background work proportional to change (the bake rebaking
 only what an edit touched, GI re-measuring only the probes that can see newly
 landed geometry).
 
-- [high] Rule evaluation is the largest phase of the headless debug tick (37 %
-  of `StepCore`'s samples; body advance 27 %, the machine worker wait 13 %,
-  the instance host 11 %), and 58 % of the rule phase is the machinery that
-  visits rules rather than the authored gates, locals and effects. The
-  [rule-evaluation memo](rule-evaluation-cost.md) holds the per-rule
-  measurement, the research round and the design: schedules that name facets
-  as well as rows, a push-based due list, speculated gates on the pool
-  validated by versions and committed in document order, and
-  `world.budget.rules --spent`. Its [implementation brief](rule-evaluation-cost.md#implementation-brief)
-  is the next lane here; its steps 1 to 4 need no thread and land before
-  step 5, the parallel phase the memo's "Rule evaluation stays serial" section
-  filed.
+- [medium] The rule phase's remaining volatile and visit costs, as
+  `world.budget.rules --spent` names them: `physics(quiescent, ...)` has no
+  version (the chess sweeps), a placement-pose move marks its readers in full
+  (`go-read-stones` is visited every tick), and a moved row re-judges every
+  binding of a sweep. The [rule-evaluation memo](rule-evaluation-cost.md#what-it-leaves-open)
+  lists each, and why speculated gates on the pool wait for a sheet that
+  shows hundreds of non-firing versioned evaluations a tick.
 - [medium] Snapshot emission's entity rows, which T1 partitioned, are a small
   share of its cost, so most of it lies in the serial tail or the subscribers'
   `DeliverSnapshot`; profile it before T3 or any R step assumes otherwise. The
@@ -491,16 +486,16 @@ The custom no-GC runtime port stays later work, on the
   portal face each tick, with an occupancy dictionary `Observe` or `Forget` per
   pair (`WorldInstanceHost.Adjacency.cs:294-434`), a sixth of a standing tick.
   A body-major loop with a bounds test before the occupancy write cuts it.
-- [low] The rule VM's latch scheduling hashes each rule's name every tick
-  (`RuleLatch.Rule`, `RuleLatch.cs:181-189`, from `RuleEvaluator.cs:385`) and
-  keeps a binding in two dictionaries: `Held` (`TryGetValue` at
-  `RuleEvaluator.cs:523`, `GetValueRefOrAddDefault` at `:579`) and `Scheduling`
-  (`RuleLatch.cs:66`), both walked by `EndSweep` after each swept rule
-  (`RuleLatch.cs:244-257`). Resolve each compiled rule's `RuleState` once, when
-  its family compiles, and keep a binding's edge bit and schedule in one entry
-  of one table. The state hash sorts the bindings and folds only the edge bit
-  (`RuleLatch.cs:109-165`), so the merge leaves it unchanged, provided the
-  hashed, checkpointed bit stays apart from the unhashed schedule cache.
+- [low] The rule VM's latch keeps a binding in two dictionaries: `Held`
+  (`TryGetValue` and `GetValueRefOrAddDefault` in
+  `RuleEvaluator.EvaluateOnceCore`) and `Scheduling` (`RuleState.Binding`),
+  both walked by `RuleLatch.EndSweep` after each swept rule. Keep a binding's
+  edge bit and schedule in one entry of one table. The state hash sorts the
+  bindings and folds only the edge bit (`RuleLatch.AppendStateHash`), so the
+  merge leaves it unchanged, provided the hashed, checkpointed bit stays apart
+  from the unhashed schedule cache. The host's interaction path still resolves
+  its `RuleState` by name per tick (`IRuleOwner.TryEvaluateOwn` carries no
+  state); the evaluator's own family walk reads them from `RuleLatch.States`.
 - [low] `PaintLatticeDraw` rents its draw buffer from `ArrayPool<long>.Shared`
   (`WorldTick.LatticeDraws.cs:51`). That is safe because
   `GeneratorEngine.TryRunBatch` writes every index below `values.Length` on
@@ -1053,13 +1048,21 @@ Next: what the water as a forcing workload showed
 ([C3 as built](debug-world-composition.md#c3-as-built)); each item is a system
 the water strained, measured, and not yet fixed.
 
-- [medium] A lattice row's look is one albedo (`WorldFieldEmitter.cs:363`,
-  `SdfMaterial(Albedo: …)`): the pool reads as a flat cyan fill, with none of the
-  roughness, reflection, depth colour or transparent shallows
-  [the art pack](../game/art/caldera-water-pack/README.md) asks for. The fix is an
-  authored material on the row's `field` trait (the palette vocabulary: roughness,
-  specular, coat, glass), through `WorldStateFieldTrait`, `WorldFieldRow`, the
-  validator and `puck schema`; the water then owns no look in C#.
+- [medium] Route to the mesh lane: `WorldFieldEmitter.AdvanceBricks` increments its
+  program revision only for a field's first ready brick, not later uploads
+  (`src/Puck.World.Client/WorldFieldEmitter.cs:231`). `SdfMeshGeometryBuilder.Append`
+  hashes instruction words and selected side tables, not sampled brick contents
+  (`src/Puck.SdfVm/SdfMeshGeometry.cs:293`). A changing opaque field therefore
+  appears able to retain stale baked geometry; reproduce that visible effect and
+  make sampled content part of derived identity. The glass pool samples its live
+  brick through the glass path. This is a source finding, not a measured visual failure.
+- [low] `FieldLattice.StepFlow` sends boundary spill through
+  `IFieldLatticeHost.AddScalar`, whose contract clamps at the scalar row's envelope
+  and cannot return unaccepted supply (`src/Puck.Physics/Fields/FieldLattice.cs:32`).
+  A full spill accumulator can discard quantity. The closed hydrology chain has
+  no spill row; extend the exact-transfer seam to bounded scalar stores before
+  using spill as conserved storage.
+
 - [medium] The water's creations add 172 bake groups, 6.4 million level-0
   triangles and 1.0 GB of the mesh region in use to the debug world (a World
   without the water documents: 7,478 groups, 47.6 M triangles, 1.67 GB used; with
@@ -1075,28 +1078,11 @@ the water strained, measured, and not yet fixed.
   glacier, lake and bridge creations, not in the eight stream segments, the
   hydrology rules or the lattices, so it grows with a creation's extent or kind
   rather than its shape count; the validate stage that holds it is not yet found.
-- [medium] A lattice height column is solid under the field contact provider
-  (`FieldLattice.cs:1161` `ColumnHeight` unions every height row, a medium
-  included, through `WorldSolidField.cs:118`), so a medium world on that
-  provider would stand on its water; the analytic provider the debug world uses
-  ignores lattice columns. A medium row should be excluded from the solid.
-- [low] A lattice transform's row-referenced term is read, not consumed
-  (`FieldLattice.cs:1000`): the hydrology's melt hands water through a slot
-  (`hydroMeltStep`), so a rule firing that is refused (a gauge outside its
-  envelope did it) leaves the last value to be added every step, and the water
-  is no longer conserved. A transform that moves a store into a cell (`take`)
-  would make the hand-off exact; the hydrology's gauges are clamped meanwhile.
-- [low] A keyed list an imported fragment extends appends after the basis's rows
-  (`documents-composition.md` merge rules), so a hold that must lead the Moth's
-  list (the swim) is authored in her own document, where a fragment cannot
-  reach it. A `before` position on a keyed row would let a fragment order itself.
-- [low] `world.counters` has no lattice source: the chain's work shows only in
-  `world.budget`'s per-region cell visits, and the conserved quantity only in
-  `world.fields`' `total`.
-- [low] `world.reload` keeps a lattice's cell values while it resets state rows
-  (the melt clock restarts over a half-filled aquifer), and a `world.reset`
-  call dropped the operator attachment in one run; a reset that restores the
-  lattice from its paint is the lever a fast-forward needs.
+- [low] Investigate the reported operator attachment loss on `world.reset`.
+  `WorldGrants.EndSessionsForRebuild` ends observation sessions, while
+  `WorldControlCommandModule` owns a separate local console endpoint; do not
+  conflate those lifetimes when reproducing the report. Reset and reload now
+  reseed lattice stores alongside scalar state.
 - [low] The glacier's lumps hinge into the wall but leave their crowns above the
   crest at zero (`worlds/debug/water-scenery.puck`, `glacierLumps`), the falls
   are one slab ribbon with no spray, and the lake outlet is not a modelled notch:
@@ -3355,10 +3341,7 @@ Monitor hook check remain supporting work alongside the landscape priority.
     the repository records.
 
 - [low] The hazard detectors' follow-ups ([hazards](../development/hazards.md)):
-  turn STALE001 into an error once `RuleEvaluator.EvaluateOnce` and
-  `RunFixpoint` stop reading a captured scratch and arena (the rule-faults
-  plan's step 4 removes the first); mark the next replaceable family when one
-  appears (a GPU device lost and recreated is the likely one); and triage the
+  mark the next replaceable family when one appears (a GPU device lost and recreated is the likely one); and triage the
   rest of `puck scan --only clones` below the heaviest thirty clusters of `src`
   and `tests`, which this pass did not read. A C# and HLSL formula pair has no
   detector: the two languages share no tree, so an agreement law per pair
@@ -3582,9 +3565,9 @@ read one. The plans that keep open items:
 - [Owned memory for Puck's own host](memory-pooling.md): memory ownership is the
   [engine job system](#engine-job-system)'s; the page holds M1 and R1 to R3,
   the later custom no-GC runtime port.
-- [Rule evaluation proportional to change](rule-evaluation-cost.md#implementation-brief):
-  the measured sheet, the pull's constants, facet versions and the due list,
-  deadline wake, speculated gates on the pool, and the documents; the
+- [Rule evaluation proportional to change](rule-evaluation-cost.md#what-it-leaves-open):
+  the volatile rest the spent sheet names, per-cell due sets, more host fact
+  doors, and speculated gates once a sheet justifies a fork; the
   [engine job system](#engine-job-system) packet ranks it.
 - [Machines and cartridges](machines-and-cartridges.md#open-items): the
   programme's packages, the Humble corpus failures and the emulator batteries'

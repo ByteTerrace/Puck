@@ -428,15 +428,18 @@ history changes what the simulation means:
 | Remembered information | Why it exists | Persistence |
 |---|---|---|
 | Whether each binding's gate held | Decide whether an open gate is a new crossing | Simulation state: hash it and checkpoint it. |
-| Row versions a closed gate last read | Prove the gate's inputs haven't changed | Rebuildable cache, never hashed. |
+| Row and fact versions a verdict that fired nothing last read, and its deadline | Prove the gate's inputs haven't changed | Rebuildable cache, never hashed. |
 | Memoized local values | Avoid recomputing an unchanged local | Rebuildable cache, never hashed. |
 
-With `SchedulingEnabled` (on by default), the evaluator keeps a closed verdict,
-or reuses a local, when none of the rows it reads has changed since the last
-evaluation. A rule that reads the clock or a host fact always runs, and so does
-a traced evaluation. [Rule analysis, scheduling, and work
-budgets](analysis.md#skip-rules-whose-inputs-havent-changed) explains row
-versions, the proof behind the skip, and what defeats it.
+With `SchedulingEnabled` (on by default), the evaluator keeps a closed verdict
+(or an Edge gate's held one), or reuses a local, when nothing it reads has
+changed since the last evaluation, and doesn't visit a rule at all until
+something it reads moves. A rule that reads something no version names (the
+clock outside a deadline, most host facts) always runs, and so does a traced
+evaluation. Order is unchanged: a firing's move is seen by later rules this
+tick and earlier ones next tick, as it always was. [Rule analysis, scheduling,
+and work budgets](analysis.md#skip-rules-whose-inputs-havent-changed) explains
+versions, the due list, the proof behind both, and what defeats them.
 
 ## Make a firing atomic
 

@@ -134,6 +134,22 @@ public sealed class GpuUploadRuns {
         );
         return (changed + (current.Length - shared));
     }
+    /// <summary>Records the units marked by a writer's exact change mask, in increasing order.</summary>
+    /// <param name="mask">One bit per changed unit.</param>
+    /// <param name="start">The destination unit corresponding to bit zero.</param>
+    /// <returns>The changed units before merging or coarsening.</returns>
+    public int AddMask(ulong mask, int start = 0) {
+        ArgumentOutOfRangeException.ThrowIfNegative(start);
+        var changed = System.Numerics.BitOperations.PopCount(mask);
+        while (mask != 0) {
+            var first = System.Numerics.BitOperations.TrailingZeroCount(mask);
+            var length = System.Numerics.BitOperations.TrailingZeroCount(~(mask >> first));
+            Add(start: checked(start + first), length: length);
+            var end = first + length;
+            mask = end == 64 ? 0UL : mask & (ulong.MaxValue << end);
+        }
+        return changed;
+    }
     /// <summary>Forgets every run, as a table's owed ranges reach the GPU.</summary>
     public void Clear() => m_count = 0;
     /// <summary>Gets run <paramref name="index"/>'s length in units.</summary>

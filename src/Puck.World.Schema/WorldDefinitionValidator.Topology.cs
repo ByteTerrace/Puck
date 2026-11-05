@@ -1,6 +1,7 @@
 using Puck.Abstractions.Presentation;
 using Puck.Maths;
 using Puck.Physics.Fields;
+using Puck.World.Authoring;
 
 namespace Puck.World;
 
@@ -725,7 +726,7 @@ public static partial class WorldDefinitionValidator {
                 hasHeightField = true;
 
                 if (
-                    (row.Color is null) ||
+                    (row.Material is null) && (row.Color is not null) &&
                     !WorldColor.IsAuthorable(
                     definition: definition,
                     value: row.Color
@@ -749,6 +750,13 @@ public static partial class WorldDefinitionValidator {
                 !IsHexColor(value: row.Color)
             ) {
                 errors.Add(item: $"{path}.color '{row.Color}' is not #RRGGBB.");
+            }
+            if (row.Material is { } material) {
+                var materialErrors = new List<Puck.Assets.Documents.DocumentValidationError>();
+                CreationCanonicalizer.ValidatePalette(palette: [material], shapes: [], errors: materialErrors);
+                foreach (var error in materialErrors) {
+                    errors.Add(item: $"{path}.material: {error.Path}: {error.Message}");
+                }
             }
         }
 
@@ -917,6 +925,12 @@ public static partial class WorldDefinitionValidator {
                             );
 
                             if (writes[t] is { } write) {
+                                if (write.TakeFrom is { } source) {
+                                    RequireField(name: source, path: $"{path}.then[{t}].takeFrom");
+                                    if ((write.Op != WorldFieldWriteOp.Add) || (source == write.Field)) {
+                                        errors.Add(item: $"{path}.then[{t}].takeFrom requires Add and a distinct donor field.");
+                                    }
+                                }
                                 RequireScalarValue(
                                     path: $"{path}.then[{t}].value",
                                     value: write.Value

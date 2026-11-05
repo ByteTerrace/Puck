@@ -1596,7 +1596,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // extent it held by the render graph's one footprint rule (RenderGraphExtent.Quantize), so a window renders at the
     // extent it is seen at and reallocates only when its need leaves the held step's shrink band.
     private void ResetFootprints() {
-        MeasureDisplayShares();
+        MeasureDisplayShares(rates: FrameRates);
         m_footprints.Clear();
         m_heldViews.Clear();
         m_roots.Clear();
@@ -1611,7 +1611,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // rate holds, then measure its display shares before deciding which glass is small. Measuring last frame's pruned
     // graph would delay wake-up when a consumer grows or a portal becomes visible again.
     private void CompleteFootprints() {
-        RootFilmedViews();
+        var frame = new FootprintFrame(this);
+        RootFilmedViews(frame: in frame);
         var firstScreen = m_footprints.Count;
 
         foreach (var footprint in m_screenFootprints) {
@@ -1620,7 +1621,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 continue;
             }
 
-            switch (PortalCoverage(
+            switch (frame.PortalCoverage(
+                glass: out _,
                 consumer: footprint.Consumer,
                 coverage: out var coverage,
                 producer: footprint.Producer
@@ -1660,11 +1662,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             }
         }
 
-        MeasureDisplayShares();
-        DecideScreenFootprints(firstScreen: firstScreen);
+        MeasureDisplayShares(rates: frame.Rates);
+        DecideScreenFootprints(firstScreen: firstScreen, frame: in frame);
         RateEnvironmentReads();
         PublishRateReadings();
-        MeasureDisplayShares();
+        MeasureDisplayShares(rates: frame.Rates);
         m_visiblePortals.Clear();
         foreach (var footprint in m_footprints) {
             if (m_portals.Contains(item: footprint.Producer) && m_displayShares.ContainsKey(key: footprint.Consumer)) {
@@ -1683,7 +1685,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // world.rates. The display shares were measured before this pruning: a consumer they reach that no kept footprint
     // reaches keeps its footprints as they stood (never decided), and a consumer they never reach decides at once, as
     // it does with no lever on, without demanding its producer.
-    private void DecideScreenFootprints(int firstScreen) {
+    private void DecideScreenFootprints(int firstScreen, in FootprintFrame frame) {
         m_pending.Clear();
         m_pendingState.Clear();
         for (var index = firstScreen; (index < m_footprints.Count); index++) {
@@ -1715,7 +1717,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 }
 
                 var reached = m_demanded.Contains(item: footprint.Consumer);
-                var kept = DecideFootprint(footprint: ref footprint);
+                var kept = DecideFootprint(footprint: ref footprint, frame: in frame);
 
                 m_pending[index] = footprint;
                 m_pendingState[index] = (kept ? FootprintState.Kept : FootprintState.Dropped);
@@ -1734,9 +1736,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     }
     // One footprint's demand: a source's screens rated, a session's glass dropped (false) when too small to render, at
     // its least share while it bakes, or rated by the views lever.
-    private bool DecideFootprint(ref RenderGraphFootprint footprint) {
+    private bool DecideFootprint(ref RenderGraphFootprint footprint, in FootprintFrame frame) {
         if (!m_portals.Contains(item: footprint.Producer)) {
-            footprint = footprint with { Refresh = ScreenRefresh(footprint: in footprint) };
+            footprint = footprint with { Refresh = ScreenRefresh(footprint: in footprint, rates: frame.Rates) };
 
             return true;
         }
@@ -1745,7 +1747,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             ? (Width: share.Width * m_displayWidth, Height: share.Height * m_displayHeight)
             : (Width: double.PositiveInfinity, Height: double.PositiveInfinity));
 
-        switch (PortalSightOf(consumer: footprint.Consumer, producer: footprint.Producer, pixels: pixels, coverage: out var coverage)) {
+        switch (PortalSightOf(consumer: footprint.Consumer, producer: footprint.Producer, pixels: pixels, coverage: out var coverage, glass: out var glass, frame: in frame)) {
             case PortalSight.Small when ViewScenes!.Bakes(view: footprint.Producer):
                 footprint = footprint with { Width = WorldPortalVisibility.BakingShare, Height = WorldPortalVisibility.BakingShare };
 
@@ -1753,7 +1755,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             case PortalSight.Small:
                 return false;
             case PortalSight.Seen:
-                footprint = footprint with { Refresh = ViewRefresh(consumer: footprint.Consumer, coverage: coverage.Height, producer: footprint.Producer, glass: m_portalGlass) };
+                footprint = footprint with { Refresh = ViewRefresh(consumer: footprint.Consumer, coverage: coverage.Height, producer: footprint.Producer, glass: glass, rates: frame.Rates) };
 
                 return true;
             default:
@@ -1765,7 +1767,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // camera's own pixels), at the share of that image the glass spans, so a probe camera facing away from a portal roots
     // nothing beneath it; any other filmed view, or a session whose glass the camera's world cannot place, at the
     // camera's extent times the view's declared one.
-    private void RootFilmedViews() {
+    private void RootFilmedViews(in FootprintFrame frame) {
         m_roots.Clear();
         m_roots.AddRange(collection: m_viewRoots);
 
@@ -1774,6 +1776,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
             if (m_portals.Contains(item: filmed.Name)) {
                 switch (PortalSightOf(
+                    frame: in frame,
+                    glass: out _,
                     consumer: camera.Name,
                     coverage: out var coverage,
                     pixels: (camera.Width * m_displayWidth, camera.Height * m_displayHeight),
@@ -1804,23 +1808,24 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // glass is large enough to render: a glass seen at no more than SdfUpdateRateTiers.ViewHeldPixels of the consumer's
     // image is Small and holds its latest image (HoldsGlass). Every footprint and every filming camera's root of a session
     // takes its demand from here.
-    private PortalSight PortalSightOf(string consumer, string producer, (double Width, double Height) pixels, out (double Width, double Height) coverage) {
-        var sight = PortalCoverage(
+    private PortalSight PortalSightOf(string consumer, string producer, (double Width, double Height) pixels, out (double Width, double Height) coverage, out int glass, in FootprintFrame frame) {
+        var sight = frame.PortalCoverage(
+            glass: out glass,
             consumer: consumer,
             coverage: out coverage,
             producer: producer
         );
 
-        return (((sight == PortalSight.Seen) && HoldsGlass(pixels: Math.Max(pixels.Width * coverage.Width, pixels.Height * coverage.Height), producer: producer))
+        return (((sight == PortalSight.Seen) && HoldsGlass(rates: frame.Rates, pixels: Math.Max(pixels.Width * coverage.Width, pixels.Height * coverage.Height), producer: producer))
             ? PortalSight.Small
             : sight);
     }
     // Whether a consumer sees the glass a session it reads shows on, from its current composed camera, and how much
     // of its image the glass spans: a consumer in another world than the glass's sees none of it, and one whose camera or
     // glass is not known yet is taken to see it at the session's declared extent.
-    private PortalSight PortalCoverage(string consumer, string producer, out (double Width, double Height) coverage) {
+    private PortalSight ReadPortalCoverage(string consumer, string producer, out (double Width, double Height) coverage, out int glassIndex) {
         coverage = default;
-        m_portalGlass = -1;
+        glassIndex = -1;
 
         if (ViewScenes is not { } scenes) {
             return PortalSight.Unknown;
@@ -1855,7 +1860,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     glass: glass!
                 );
                 // The glass a tier view tints: one of the boot world's screens, which its residency's tables hold.
-                m_portalGlass = (scenes.TryPlacements(placements: out _, view: consumer) ? -1 : glass!.Index);
+                glassIndex = (scenes.TryPlacements(placements: out _, view: consumer) ? -1 : glass!.Index);
 
                 return PortalSight.Seen;
             default:

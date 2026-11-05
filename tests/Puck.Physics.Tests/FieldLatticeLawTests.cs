@@ -276,6 +276,18 @@ public sealed class FieldLatticeLawTests {
         );
     }
     [Fact]
+    public void AMediumSurfaceDoesNotBecomeSolidContact() {
+        var input = MediumFields(initial: FixedQ4816.One, heightScale: FixedQ4816.FromInteger(value: 5));
+        var lattice = new FieldLattice(input: input);
+        Assert.Null(@object: lattice.ColumnHeight(x: 0, z: 0));
+
+        var ground = input.Fields[0] with { Name = "ground", IsMedium = false, HeightScale = FixedQ4816.One };
+        var mixed = new FieldLattice(input: input with { Fields = [input.Fields[0], ground] });
+        Assert.Equal(expected: FixedQ4816.One, actual: mixed.ColumnHeight(x: 0, z: 0));
+        var position = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero);
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 5), actual: mixed.MediumSurface(position: in position)!.Value.Point.Y);
+    }
+    [Fact]
     public void ANoiseFillIsBitIdenticalAcrossConstructionsAndMovesWithTheWorldSeed() {
         var fill = new FieldFillInput.Noise(
             Field: 0,
@@ -922,6 +934,29 @@ public sealed class FieldLatticeLawTests {
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "dependencies=[0>1]"
         );
+    }
+    [Theory]
+    [InlineData(3)]
+    [InlineData(100)]
+    public void ATransferRetainsExcessInTheDonorAndCannotRepeatAnExhaustedDeposit(int capacity) {
+        var seed = Fields();
+        var source = seed.Fields[0] with { Name = "source", Initial = FixedQ4816.FromInteger(10) };
+        var destination = source with { Name = "destination", Initial = FixedQ4816.Zero, Maximum = FixedQ4816.FromInteger(capacity) };
+        var input = seed with {
+            Fields = [source, destination],
+            Reactions = [new FieldReactionInput.Transform([], [new FieldWriteInput(1, FieldWriteOp.Add,
+                new FieldScalarInput(FixedQ4816.FromInteger(100), default), TakeFrom: 0)])],
+        };
+        var lattice = new FieldLattice(input);
+        for (ulong tick = 1; tick <= 20; tick++) {
+            lattice.Step(tick, 0, new LambdaHost());
+            Assert.Equal(FixedQ4816.FromInteger(10), lattice.Value(0, 0) + lattice.Value(1, 0));
+        }
+        Assert.Equal(FixedQ4816.FromInteger(10 - Math.Min(capacity, 10)), lattice.Value(0, 0));
+        Assert.Equal(FixedQ4816.FromInteger(Math.Min(capacity, 10)), lattice.Value(1, 0));
+        lattice.Reseed(0);
+        Assert.Equal(FixedQ4816.FromInteger(10), lattice.Value(0, 0));
+        Assert.Equal(FixedQ4816.Zero, lattice.Value(1, 0));
     }
     [Fact]
     public void RestoreRefusesCellValuesOutsideTheAuthoredRangeBeforeWritingAnything() {

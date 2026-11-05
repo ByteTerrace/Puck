@@ -135,6 +135,13 @@ public sealed partial class WorldServer {
     public long ReadClockPhaseError() => m_tick.ReadClockPhaseError();
     /// <inheritdoc cref="WorldTick.ReleaseFederatedIntents"/>
     public void ReleaseFederatedIntents(long leaseId) => m_tick.ReleaseFederatedIntents(leaseId: leaseId);
+    /// <summary>Restarts lattice stores alongside a whole-document state rebuild.</summary>
+    public void ReseedLatticeFields(WorldDefinition definition) {
+        foreach (var region in Population.FieldRegions) {
+            region.Lattice.Reseed(definition.Generation?.WorldSeed ?? 0UL);
+        }
+        m_tick.PaintLatticeDraws(definition);
+    }
     /// <inheritdoc cref="WorldTick.RepaintChangedLatticeDraws"/>
     public void RepaintChangedLatticeDraws(WorldDefinition previous, WorldDefinition current) =>
         m_tick.RepaintChangedLatticeDraws(
