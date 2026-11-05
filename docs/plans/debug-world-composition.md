@@ -291,8 +291,8 @@ pool, and the river drains into an aquifer that fills, gives water back and sett
 against it. The cycle is a 24-cell chain on a flow lattice hidden under the floor
 (source, lake, sill, falls, river and aquifer stages, each a run of cells at a bed
 elevation), transferring a finite ice store into water in fixed-point quantities, so a reproduce run
-repeats it. The scenery binds the chain's gauges (the glacier's lumps hinge into the
-rock with the clock, the lake follows its level, the falls fold into the wall as
+repeats it. The scenery binds the chain's gauges (the glacier contracts uniformly
+about its cradle, the lake follows its level, the falls fold into the wall as
 their flow ebbs) and a float gauge on the pool's bank reads the aquifer.
 [The pool](../../worlds/debug/pool.puck) is a 20 m square basin the floor opens for
 (`paintedGround` takes `holes`), 2.4 m deep, holding a medium lattice whose surface
@@ -316,7 +316,14 @@ gauge float):
   pool's level rose from 1.60 to 2.14 over the melt and the gauge float rose with the
   aquifer, in a Vulkan capture. From the spawn the falls show on the north-west wall.
   `water.speed 60` runs the cycle sixty times faster. The subsequent area fix pass
-  made ice a finite lattice store: `hydroClock` now reports actual melt, and
+  made ice a finite lattice store. The follow-up authors elapsed simulated ticks in
+  `hydroClock` and a remaining-volume target in `hydroTarget`; duration and integer
+  exponent belong to the standard hydrology template (constant-rate exponent 1 by
+  default, the debug world chooses 3). The exact-transfer kernel's generic `retain`
+  input leaves that target in each donor and moves only what the recipient accepts.
+  The final raw unit remains until the duration ends. `glacierLength` drives uniform
+  presentation scale through `CreationDocument.SizeBy`, and zero parks the creation.
+  `world.fields` includes `totalRaw` for exact conserved-total comparisons;
   `hydroIce` plus `hydroWater` is conserved by exact transfers.
 
 Cost, on a machine other lanes were loading (counts are the evidence): the chain is 72
@@ -339,7 +346,7 @@ lowering and glass path as creations. Roughness, coat and glass are authored val
 the engine supplies no water-specific shading.
 
 Departures from [the art pack](../game/art/caldera-water-pack/README.md): the falls are a slab
-ribbon with no spray or plunge pocket, the glacier is six hinged lumps, the lake has no
+ribbon with no spray or plunge pocket, the glacier is six uniformly shrinking lumps, the lake has no
 modelled outlet notch, and the gauge is a post on the bank, not the pavilion over a
 cutaway. The swim has no animation: she floats in her walking pose.
 

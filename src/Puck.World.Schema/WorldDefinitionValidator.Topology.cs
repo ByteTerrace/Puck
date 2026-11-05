@@ -925,6 +925,12 @@ public static partial class WorldDefinitionValidator {
                             );
 
                             if (writes[t] is { } write) {
+                                if (write.Retain is { } retain) {
+                                    if (write.TakeFrom is null) {
+                                        errors.Add(item: $"{path}.then[{t}].retain requires takeFrom.");
+                                    }
+                                    RequireScalarValue(path: $"{path}.then[{t}].retain", value: retain);
+                                }
                                 if (write.TakeFrom is { } source) {
                                     RequireField(name: source, path: $"{path}.then[{t}].takeFrom");
                                     if ((write.Op != WorldFieldWriteOp.Add) || (source == write.Field)) {

@@ -146,34 +146,25 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, gauge = "fallsFlow", 
   }
 }
 
-// A glacier: lumps of ice on a wall, each hinged on a pivot in the rock behind it and swung into the wall as the clock
-// `state.<gauge>` falls from one to zero, so the mass shrinks as it melts. A lump is { position [x, y, r], radii [rx, ry,
-// rr], hinge [x, y, r], turn }, where `turn` is the radians it swings through by the time the glacier is gone.
-template glacierMass(id, lumps, gauge = "glacier", palette = icePalette) {
+// Ice shrinks uniformly about the authored origin; its driver reads the same linear fraction that sets melt volume.
+// Zero parks the creation through the ordinary presentation path, leaving no crowns above the cradle.
+template glacierMass(id, lumps, gauge = "glacierLength", origin = [0, 0, 0], palette = icePalette) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
       palette: palette
+      sizeBy: "melt"
       drivers [
-        { name: "melt", signal: $"state.{gauge}", cadence: -1, blendInSeconds: 0 }
+        { name: "melt", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0, blendOutSeconds: 0 }
       ]
       for (lump, i) in lumps {
         shape Superellipsoid $"ice-{i}" {
           material: i % 2
           exponent: 2.4
-          position: lump.position
+          position [lump.position[0] - origin[0], lump.position[1] - origin[1], lump.position[2] - origin[2]]
           scale: lump.radii
-          swings [
-            {
-              driver: "melt"
-              pivot: lump.hinge
-              axis [1, 0, 0]
-              amplitude: lump.turn
-              phase: 1
-              wave: "linear"
-            }
-          ]
+          group: 1
         }
       }
     }

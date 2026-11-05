@@ -94,11 +94,13 @@ public readonly record struct WorldFieldProgramCondition(
 /// <param name="Op">Whether the value replaces or adds to the current field value.</param>
 /// <param name="Value">The fixed literal or typed state input written.</param>
 /// <param name="TakeFrom">Optional donor field whose cell funds the addition.</param>
+/// <param name="Retain">Optional donor floor read by the transfer.</param>
 public readonly record struct WorldFieldProgramWrite(
     WorldFieldHandle Field,
     WorldFieldWriteOp Op,
     WorldFieldScalarInput Value,
-    WorldFieldHandle? TakeFrom = null
+    WorldFieldHandle? TakeFrom = null,
+    WorldFieldScalarInput? Retain = null
 );
 /// <summary>One required ordering edge between two field-program nodes.</summary>
 /// <param name="Before">The earlier node whose reads or writes conflict with <paramref name="After"/>.</param>
@@ -493,6 +495,7 @@ public sealed class WorldFieldProgram {
         )).ToImmutableArray();
         var writes = (reaction.Then ?? []).Select(selector: write => new WorldFieldProgramWrite(
             TakeFrom: (write.TakeFrom is { } source ? field(source, index) : null),
+            Retain: (write.Retain is { } retain ? scalar(retain, index) : null),
             Field: field(
                 write.Field,
                 index
@@ -517,7 +520,9 @@ public sealed class WorldFieldProgram {
             writes,
             CanonicalFields(handles: fieldReads),
             CanonicalFields(handles: writes.Select(selector: static write => write.Field).Concat(donors)),
-            CanonicalStates(inputs: conditions.Select(selector: static condition => condition.Value).Concat(second: writes.Select(selector: static write => write.Value)))
+            CanonicalStates(inputs: conditions.Select(selector: static condition => condition.Value)
+                .Concat(second: writes.Select(selector: static write => write.Value))
+                .Concat(writes.Where(static write => write.Retain.HasValue).Select(static write => write.Retain!.Value)))
         );
     }
     private static bool Conflicts(WorldFieldNode earlier, WorldFieldNode later) => ReadWriteHazard.Conflicts(

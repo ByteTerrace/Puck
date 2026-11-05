@@ -48,7 +48,8 @@ public sealed record FieldConditionInput(int Field, ExpressionOp Comparison, Fie
 /// <param name="Op">Set or add.</param>
 /// <param name="Value">The constant written or added; the result clamps to the field's range.</param>
 /// <param name="TakeFrom">Optional donor field for an Add: debit exactly what the destination accepts.</param>
-public sealed record FieldWriteInput(int Field, FieldWriteOp Op, FieldScalarInput Value, int? TakeFrom = null);
+/// <param name="Retain">Optional donor floor, above its declared minimum, for a transfer.</param>
+public sealed record FieldWriteInput(int Field, FieldWriteOp Op, FieldScalarInput Value, int? TakeFrom = null, FieldScalarInput? Retain = null);
 /// <summary>One reaction node in a compiled field program, in execution order.</summary>
 public abstract record FieldReactionInput {
     /// <summary>Moves each cell a fraction of the way toward the mean of its face neighbours.</summary>

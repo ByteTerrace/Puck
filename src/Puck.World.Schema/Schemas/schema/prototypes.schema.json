@@ -3410,6 +3410,14 @@
             },
             "default": null,
             "description": "The bounded participating volumes (null = none), at most MaxVolumes \u2014 see VolumeDocument. Each rides the creation root\u0027s or a named shape\u0027s dynamic slot; a static placement bakes its frame in. Presentation-only: no distance field, no collider."
+          },
+          "sizeBy": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null,
+            "description": "Optional driver whose phase, clamped to [0, 1], uniformly scales the rendered creation about its origin. Its weight blends from the neutral size 1; zero hides it. Presentation only, never collider scale."
           }
         },
         "additionalProperties": false,

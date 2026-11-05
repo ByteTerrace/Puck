@@ -570,6 +570,8 @@ public sealed record CreationBehaviorDocument(
 /// <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxVolumes"/> — see <see cref="VolumeDocument"/>. Each rides the
 /// creation root's or a named shape's dynamic slot; a static placement bakes its frame in. Presentation-only: no
 /// distance field, no collider.</param>
+/// <param name="SizeBy">Optional driver whose phase, clamped to [0, 1], uniformly scales the rendered creation about
+/// its origin. Its weight blends from the neutral size 1; zero hides it. Presentation only, never collider scale.</param>
 public sealed record CreationDocument(
     string? Schema,
     DocumentIdentifier? Name,
@@ -590,7 +592,8 @@ public sealed record CreationDocument(
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CreationEffectorDocument>? Effectors = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<VolumeDocument>? Volumes = null
+    IReadOnlyList<VolumeDocument>? Volumes = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SizeBy = null
 ) {
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.creation.v1";

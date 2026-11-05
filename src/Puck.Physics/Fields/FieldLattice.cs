@@ -93,6 +93,7 @@ public sealed class FieldLattice {
     private int m_revision;
     private FixedQ4816[] m_transformWhen = [];
     private FixedQ4816[] m_transformThen = [];
+    private FixedQ4816[] m_transformRetain = [];
 
     /// <summary>One captured lattice: raw Q48.16 cell values per field, field-major.</summary>
     /// <param name="Raw">The raw values, one array per declared field.</param>
@@ -534,6 +535,9 @@ public sealed class FieldLattice {
     }
     private static ReactionSets CompileTransformSets(FieldReactionInput.Transform transform) {
         foreach (var write in transform.Then) {
+            if (write.Retain.HasValue && !write.TakeFrom.HasValue) {
+                throw new ArgumentException(message: "A retained donor floor requires a transfer.", paramName: nameof(transform));
+            }
             if (write.TakeFrom is { } source && ((write.Op != FieldWriteOp.Add) || (source == write.Field))) {
                 throw new ArgumentException(message: "A transfer requires Add and a distinct donor field.", paramName: nameof(transform));
             }
@@ -545,7 +549,8 @@ public sealed class FieldLattice {
                 .Where(predicate: static write => (write.Op == FieldWriteOp.Add))
                 .Select(selector: static write => write.Field)).Concat(donors);
         var stateReads = transform.When.Select(selector: static condition => condition.Value)
-            .Concat(second: transform.Then.Select(selector: static write => write.Value));
+            .Concat(second: transform.Then.Select(selector: static write => write.Value))
+            .Concat(transform.Then.Where(static write => write.Retain.HasValue).Select(static write => write.Retain!.Value));
 
         return new ReactionSets(
             true,
@@ -682,6 +687,7 @@ public sealed class FieldLattice {
             if (m_input.Reactions[index] is FieldReactionInput.Transform transform) {
                 if (m_transformWhen.Length < transform.When.Count) { m_transformWhen = new FixedQ4816[transform.When.Count]; }
                 if (m_transformThen.Length < transform.Then.Count) { m_transformThen = new FixedQ4816[transform.Then.Count]; }
+                if (m_transformRetain.Length < transform.Then.Count) { m_transformRetain = new FixedQ4816[transform.Then.Count]; }
             }
             m_cellPassCount += m_input.Reactions[index] switch {
                 FieldReactionInput.Diffuse => 2,
@@ -1041,6 +1047,7 @@ public sealed class FieldLattice {
         // Transform nodes execute serially; install-sized scratch serves every node without per-step arrays.
         var whenValues = m_transformWhen;
         var thenValues = m_transformThen;
+        var retainedValues = m_transformRetain;
 
         for (var index = 0; (index < reaction.When.Count); index++) {
             whenValues[index] = Resolve(
@@ -1050,6 +1057,9 @@ public sealed class FieldLattice {
             );
         }
         for (var index = 0; (index < reaction.Then.Count); index++) {
+            retainedValues[index] = reaction.Then[index].Retain is { } retain
+                ? Resolve(host: host, input: retain, tick: tick)
+                : FixedQ4816.MinValue;
             thenValues[index] = Resolve(
                 host: host,
                 input: reaction.Then[index].Value,
@@ -1083,7 +1093,8 @@ public sealed class FieldLattice {
                     // One transfer door: both values remain inside their envelopes, and exactly the same raw
                     // quantity leaves the donor and enters the destination. No rounded product or clamped write
                     // can create or discard mass; a stale requested amount can only exhaust this finite store.
-                    var available = (Int128)m_values[source][cell].Value - m_min[source].Value;
+                    var floor = Math.Max(m_min[source].Value, retainedValues[index].Value);
+                    var available = (Int128)m_values[source][cell].Value - floor;
                     var capacity = (Int128)m_max[write.Field].Value - m_values[write.Field][cell].Value;
                     var amount = Int128.Max(0, Int128.Min(thenValues[index].Value, Int128.Min(available, capacity)));
                     if (amount == 0) { continue; }
@@ -1256,10 +1267,12 @@ public sealed class FieldLattice {
 
         for (var field = 0; (field < FieldCount); field++) {
             var sum = 0.0;
+            Int128 totalRaw = 0;
             var nonzero = 0;
 
             foreach (var value in m_values[field]) {
                 sum += ((double)value);
+                totalRaw += value.Value;
 
                 if (value != FixedQ4816.Zero) {
                     nonzero++;
@@ -1273,7 +1286,7 @@ public sealed class FieldLattice {
 
             parts.Add(item: string.Create(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"{m_names[field]} nonzero={nonzero} mean={(sum / CellCount):0.###} total={sum:0.#####}{color}"
+                handler: $"{m_names[field]} nonzero={nonzero} mean={(sum / CellCount):0.###} total={sum:0.#####} totalRaw={totalRaw}{color}"
             ));
         }
 

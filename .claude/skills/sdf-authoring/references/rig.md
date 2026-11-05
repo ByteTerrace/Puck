@@ -65,6 +65,13 @@ outside the delta chain. A `parts` entry may name it: `TryBodyPartPose` and
 
 ## Drivers
 
+`sizeBy` on a creation names a driver whose phase uniformly scales its rendered
+geometry about the creation origin, clamped to [0, 1]. Driver weight blends from
+size 1. At zero the ordinary hidden-slot position hides the whole creation;
+colliders are unchanged. Author the origin where the contraction should end.
+This uses the existing dynamic transform scale and keeps the mesh; anchors read
+the packed pose and scale. The debug glacier is the standard family's example.
+
 `drivers` is up to 32 named `{ name, signal, cadence, when, blendInSeconds,
 blendOutSeconds, dynamics, cadenceBy, weightBy }`. Everything animated names one.
 They advance in declaration order, and a driver reads only drivers declared

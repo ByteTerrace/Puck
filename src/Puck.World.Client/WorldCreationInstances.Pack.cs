@@ -241,6 +241,7 @@ public sealed partial class WorldCreationInstances {
                 // owed (WorldCreationInstances.Rates, whose one decision gives a placed creation only the held tier).
                 var mayHold = (
                     packedBefore &&
+                    (document.SizeBy is null) &&
                     !moved.Everything &&
                     !m_owners.Reseats(owner: index) &&
                     // A held pose carries its slots rigidly, so a registration whose scale changed packs in full.
@@ -335,6 +336,8 @@ public sealed partial class WorldCreationInstances {
             }
 
             NoteRate(center: rootPosition, live: live, packedSlots: packedSlots, posed: posed, radius: RateReach(live: live, placementScale: placementScale), rootSlot: rootSlot);
+            live.PackedRoot = transforms[rootSlot];
+            placementScale = transforms[rootSlot].Scale;
             AppendVolumes(
                 document: document,
                 hidden: live.Hidden,
@@ -609,12 +612,6 @@ public sealed partial class WorldCreationInstances {
 
         // Every slot carries the registration's scale: the creation's geometry is emitted in its slots' own units
         // (EmitOne), and the bake and the draws read the scale off the slot.
-        transforms[rootSlot] = new DynamicTransform(
-            Lanes: lanes,
-            Orientation: rootRotation,
-            Position: rootPosition
-        ) { Scale = placementScale };
-
         var document = live.Creation.EngineDocument;
         var drivers = document.Drivers;
 
@@ -651,6 +648,18 @@ public sealed partial class WorldCreationInstances {
             WorldCreationWork.ProcessWork.Add(kind: WorldCreationWork.DriverPhaseChanges, amount: activity.PhaseChanges);
             if (activity.Continues) { WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.DriverContinuations); }
         }
+
+        if (document.SizeBy is { } sizeBy && WorldGaitDrivers.TryDriver(
+            rows: drivers ?? [], driver: sizeBy, phases: live.DriverPhase, weights: live.DriverWeight,
+            phase: out var sizePhase, weight: out var sizeWeight)) {
+            var size = float.Lerp(1f, Math.Clamp(sizePhase, 0f, 1f), sizeWeight);
+            if (size == 0f) {
+                rootPosition = parkPosition;
+            } else {
+                placementScale *= size;
+            }
+        }
+        transforms[rootSlot] = new DynamicTransform(Lanes: lanes, Orientation: rootRotation, Position: rootPosition) { Scale = placementScale };
 
         var shapes = (document.Shapes ?? []);
         var poses = FramePoses(
