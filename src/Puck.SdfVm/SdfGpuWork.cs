@@ -375,6 +375,8 @@ public sealed class SdfGpuWork : IDisposable {
             if (!TryTake(tables: tables, client: out var client, estimate: out var estimate, job: out var job)) { return; }
             uploaded += client.UploadBytes(job);
             Submit(client: client, estimate: estimate, index: index, job: job, slot: slot);
+            // A full four-slot pump can exhaust the byte budget on its last iteration too.
+            if (uploaded >= UploadBudgetBytes || Stopwatch.GetElapsedTime(began) >= HostBudget) { m_budgetHolds++; return; }
         }
     }
     private bool TryTake(SdfWorldTables tables, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out ISdfGpuWorkClient? client, out double estimate, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job) {
