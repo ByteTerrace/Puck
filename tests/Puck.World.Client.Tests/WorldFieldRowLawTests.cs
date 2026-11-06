@@ -230,7 +230,8 @@ public sealed class WorldFieldRowLawTests {
         var emitter = new WorldFieldEmitter(client: client);
 
         for (var step = 0; (step < 4); step++) { emitter.PrepareFrame(); }
-        Assert.Equal(expected: new[] { (4, 4, 3), (5, 5, 4) }, actual: Emitted(emitter: emitter).SampledFields.Select(selector: static field => (field.DimX, field.DimY, field.DimZ)).ToArray());
+        // Each region's reference (its columns plus a border, three rows tall whatever the heights), then each one's heights.
+        Assert.Equal(expected: new[] { (4, 3, 3), (5, 3, 4), (2, 1, 1), (3, 1, 2) }, actual: Emitted(emitter: emitter).SampledFields.Select(selector: static field => (field.DimX, field.DimY, field.DimZ)).ToArray());
 
         first = first with { Lattice = first.Lattice with { Width = 4 } };
         definition = definition with { StateRaw = WorldFieldsSection.ToStateSection(composite: [first, second]) };
@@ -343,15 +344,17 @@ public sealed class WorldFieldRowLawTests {
         client.DeliverDefinition(definition: definition, version: default);
         emitter.PrepareFrame();
 
-        // The first frame bakes the zero lattice: a flat field, every voxel the empty-space bound.
-        var field = Assert.Single(collection: Emitted(emitter: emitter).SampledFields);
-        var flat = field.Current;
+        // The first frame publishes the zero lattice: no column raised, so every reference voxel is the empty-space bound.
+        var field = Assert.Single(collection: Emitted(emitter: emitter).HeightFields).Field;
+        var flat = field.Reference.Current;
+        var level = field.Heights.Current;
 
         Assert.All(collection: flat.Values.ToArray(), action: static voxel => Assert.True(condition: (voxel > 0f)));
 
         emitter.PrepareFrame();
         emitter.PrepareFrame();
-        Assert.Same(expected: flat, actual: field.Current);
+        Assert.Same(expected: flat, actual: field.Reference.Current);
+        Assert.Same(expected: level, actual: field.Heights.Current);
 
         client.DeliverSnapshot(snapshot: new WorldSnapshot(
             Tick: 1UL,
@@ -362,12 +365,16 @@ public sealed class WorldFieldRowLawTests {
         ));
         emitter.PrepareFrame();
 
-        var raised = field.Current;
+        var raised = field.Reference.Current;
+        var risen = field.Heights.Current;
 
+        // A column raised from nothing keys a new reference; its height moves the heights.
         Assert.NotSame(expected: flat, actual: raised);
-        Assert.Same(expected: field, actual: Assert.Single(collection: Emitted(emitter: emitter).SampledFields));
-        // Cell 5 is column (x 1, z 1), raised two units; the voxel at its centre on the origin layer is inside it.
+        Assert.NotSame(expected: level, actual: risen);
+        Assert.Same(expected: field, actual: Assert.Single(collection: Emitted(emitter: emitter).HeightFields).Field);
+        // Cell 5 is column (x 1, z 1), raised; the voxel at its centre on the origin layer is inside it.
         Assert.Contains(collection: raised.Values.ToArray(), filter: static voxel => (voxel < 0f));
+        Assert.Contains(collection: risen.Values.ToArray(), filter: static height => (height > 0f));
 
         client.DeliverSnapshot(snapshot: new WorldSnapshot(
             Tick: 2UL,
@@ -379,7 +386,21 @@ public sealed class WorldFieldRowLawTests {
         emitter.PrepareFrame();
         emitter.PrepareFrame();
 
-        Assert.Same(expected: raised, actual: field.Current);
+        Assert.Same(expected: raised, actual: field.Reference.Current);
+        Assert.Same(expected: risen, actual: field.Heights.Current);
+
+        // A raised column's height moving publishes the heights alone: the reference, and so the mesh, stands.
+        client.DeliverSnapshot(snapshot: new WorldSnapshot(
+            Tick: 3UL,
+            Revision: 0,
+            StepTicks: 1UL,
+            Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
+            FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: (One / 2)) }
+        ));
+        emitter.PrepareFrame();
+
+        Assert.Same(expected: raised, actual: field.Reference.Current);
+        Assert.NotSame(expected: risen, actual: field.Heights.Current);
     }
     /// <summary>The field emitter's program revision moves exactly when its live program changes: a world that holds no
     /// field never moves it, so the first frame's program is never rebuilt unchanged; a field's first bake, which makes the

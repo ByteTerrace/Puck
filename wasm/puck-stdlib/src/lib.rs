@@ -19,6 +19,8 @@
 //! `#[no_mangle] pub extern "C" fn puck_*` exports live in the *consuming* crate
 //! (`puck-addon-default`, or your own addon crate) instead of here.
 
+#![cfg_attr(not(test), no_std)]
+
 pub mod abi;
 // Not part of the crate's public surface — a GENERATED mirror of the host's closed wire sets (the
 // cell/channel/subject/verdict enums, the capability mask bits, and `AddonAbi`'s layout constants);

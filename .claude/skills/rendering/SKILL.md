@@ -775,8 +775,15 @@ wrong. The contracts that bite most often:
   the geometry hashes them, and a moved snapshot restarts only the groups that read it
   (`SdfMeshBakeGroup.Refresh`). Each bake job writes the snapshots its groups sealed into
   its own `sdfSampledValues` table, so a lattice never samples a newer publication; never
-  put sampled values back into program words or a shared GPU buffer
+  put sampled values back into program words or a shared GPU buffer the bake reads
   ([sampled fields](../../../docs/rendering/sdf/handbook/sampled-fields.md)).
+- **A height field moves as it is drawn.** `SdfHeightField` bakes a reference (every raised
+  column at `ReferenceCells` above the origin) and names its heights as the instance's
+  displacement; the frame's sampled table (`sdfFrameSampled`) carries the heights, and every
+  vertex read (`sdfMeshWorldPosition`, `sdfMeshWorldNormal`, `sdfMeshPreviousPosition`)
+  displaces through `sdfMeshDisplaced`. A new reader of mesh vertices goes through that
+  resolver, or it draws the reference; a draw's box spans `SdfMeshDisplacement.Low`/`High`,
+  and a displaced draw is `IsDynamic`, out of the irradiance volume's static scene.
 - **A mesh is a function of its geometry.** Groups are keyed by
   `SdfMeshGeometryBuilder`; anything the bake samples that the instructions do
   not hold leaves a stale mesh drawing after an edit until the builder hashes
@@ -812,7 +819,14 @@ world.debug-view rates # tint each rated item by its tier; world.rates lists eac
 world.counters gpu     # per-pass counted work: dispatches, shape evaluations, texels, uploads
 world.gpu-timing on    # per-pass timestamps; `world.gpu-timing timeline` orders each node's latest span on the queue's clock with the idle gap before it
 world.budget           # program words, instances, scopes, segments
+world.counters gpu.queue      # native executes, lists, signals and presents by category and split cause
+world.counters render.record  # record jobs' host time per phase, serial sum and per-frame critical path
 ```
+
+Divide `gpu.queue` and `render.record` deltas by their `frames` deltas; [gpu
+cost](references/gpu-cost.md#count-queue-work-and-record-jobs) reads them, and
+[runtime contracts](references/runtime-contracts.md#1-image-lifetime-is-leased-per-image-and-per-reader)
+owns the record job (`gpu.faults record <n>` fails one to exercise abandonment).
 
 `world.counters gpu` runs to hundreds of kilobytes in a world with many graph
 instances, past the 1 MiB an MCP result carries, so ask for what you need:

@@ -116,3 +116,5 @@ worlds/debug/slices/
 /worlds/**/*.cartridge.json
 /worlds/debug/cartridges/deck/*.nes
 /src/Puck.HumbleGamingBrick/Firmware/*.bin
+/src/Puck.AdvancedGamingBrick/Firmware/*.bin
+/wasm/*/dist/*.wasm

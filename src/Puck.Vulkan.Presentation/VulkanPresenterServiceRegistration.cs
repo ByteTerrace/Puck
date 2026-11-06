@@ -140,10 +140,12 @@ public static class VulkanPresenterServiceRegistration {
     }
     /// <summary>Registers the factories, command-buffer recorder, asset source, and shader loader the
     /// renderer and compositor compose over the native APIs, and the backend's <c>pipeline-cache.vulkan</c> and
-    /// <c>procedures.vulkan</c> and <c>memory.vulkan</c> <see cref="IWorkCounterSource"/>s.</summary>
+    /// <c>procedures.vulkan</c> and <c>memory.vulkan</c> <see cref="IWorkCounterSource"/>s, and the process's
+    /// <c>gpu.queue</c> source.</summary>
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddVulkanFactories(this IServiceCollection services) {
         services.AddGpuPipelineCacheWork(backend: PipelineCacheBackend);
+        services.AddGpuQueueWork();
         services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend);
         AddProcedures(services: services);
         services.TryAddSingleton<IVulkanInstanceFactory>(implementationFactory: static sp => new VulkanInstanceFactory(instanceApi: sp.GetRequiredService<IVulkanInstanceApi>()));
@@ -202,6 +204,7 @@ public static class VulkanPresenterServiceRegistration {
     [OpensGpuDevice]
     public static IServiceCollection AddVulkanNativeApis(this IServiceCollection services) {
         AddProcedures(services: services);
+        services.AddGpuQueueWork();
         services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend);
         services.TryAddSingleton<IVulkanBufferApi>(implementationFactory: static _ => new VulkanNativeBufferApi());
         services.TryAddSingleton<IVulkanCommandBufferRecordingApi>(implementationFactory: static sp => new VulkanNativeCommandBufferRecordingApi(allocator: sp.GetRequiredService<IAllocator>()));

@@ -10,6 +10,8 @@
 [[vk::binding(2, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> meshResults : register(u2, space3);
 // The frame's dynamic transforms a mesh with members reads; no case's mesh has members, so one zero row stands in.
 [[vk::binding(3, 3)]] StructuredBuffer<float4> sdfDynamicTransforms : register(t3, space3);
+// The frame's sampled table a displaced draw reads; no case's draw is displaced, so one empty word stands in.
+[[vk::binding(4, 3)]] StructuredBuffer<uint> sdfFrameSampled : register(t4, space3);
 
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-mesh.hlsli"
 

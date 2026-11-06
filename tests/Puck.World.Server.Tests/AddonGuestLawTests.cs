@@ -189,36 +189,6 @@ public sealed partial class AddonGuestLawTests {
         Assert.Equal(AddonFaultKind.OutOfFuel, guest.Fault.Kind);
         Assert.Equal(AddonTickStatus.Faulted, guest.Tick(input: []).Status);
     }
-    // Every committed guest binary: each guest crate's dist builds.
-    public static TheoryData<string> CommittedGuests() => new(values: Directory.EnumerateDirectories(path: RepositoryPaths.Resolve(relativePath: "wasm"))
-            .Select(selector: static crate => Path.Combine(path1: crate, path2: "dist"))
-            .Where(predicate: Directory.Exists)
-            .SelectMany(selector: static dist => Directory.EnumerateFiles(path: dist, searchPattern: "*.wasm"))
-        .Select(selector: static path => Path.GetRelativePath(path: path, relativeTo: RepositoryPaths.RequireRoot()).Replace(newChar: '/', oldChar: '\\'))
-        .Order(comparer: StringComparer.Ordinal));
-    // The committed guest binaries are built against this host's ABI: a stale one reports another version from
-    // puck_abi_version and is refused here, so rebuilding them (`puck wasm build`) is owed whenever the ABI changes. A
-    // guest may be refused for its own reason (channelwalk-bound65 declares one channel name too many), never for its
-    // ABI.
-    [MemberData(memberName: nameof(CommittedGuests))]
-    [Theory]
-    public void ACommittedGuestBinaryReportsTheHostsAbiVersion(string path) {
-        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
-        var instance = new AddonInstance(
-            channelResolver: new NoChannels(),
-            descriptor: new AddonDescriptor(
-                Enabled: true,
-                FuelPerTick: AddonAbi.DefaultFuelPerTick,
-                ModuleHash: null,
-                ModulePath: "guest.wasm",
-                Name: "guest"
-            ),
-            engine: engine,
-            moduleInfo: Load(bytes: File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: path)), engine: engine)
-        );
-
-        Assert.NotEqual(expected: AddonFaultKind.AbiMismatch, actual: instance.Fault.Kind);
-    }
     [Fact]
     public void AGuestGrowsToTheCeilingAndIsRefusedOnePagePastIt() {
         using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);

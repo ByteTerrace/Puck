@@ -98,9 +98,6 @@ milestone. The owner requested its baseline and implementation plan, which
 19. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
     levels or the sky term the moment a view arrives; the rest after the image
     meter.
-20. [Derived products are caches](#derived-products-are-caches): build the
-    generated cartridges and firmware images on demand and remove the bytes
-    from git; narrow the compiled-world key; measure the wasm modules.
 21. [Test runner and replay](#test-runner-and-replay): profile what recording
     still folds whole every tick before choosing the next segment.
 22. [Bake detail](#bake-detail): measure the static round-section term.
@@ -567,13 +564,6 @@ The custom no-GC runtime port stays later work, on the
   Refresh Rate: confirm the 60 FPS bar and VRR pacing hold in front of and
   behind another window, and that `world.target display` reaches the display's
   top rate.
-- [medium · unconfirmed] Owner: rendering integration. Attribute the shared-batch
-  review's higher execute/signal counts against A2 with matched camera, validation
-  and device workloads. `DirectXSubmissionWork.Process`
-  (`src/Puck.DirectX/DirectXSubmissionWork.cs:6`) counts all devices, including
-  background work; a process total does not isolate a frame batch regression.
-  The review's paired headless counter deltas are unchanged; GPU readings and
-  capture paths are recorded in its evidence commit.
 - [medium · unconfirmed] Owner: rendering integration. In the painting wing,
   `world.wait residency` can time out after `world.wait bakes` succeeds and
   presented captures complete, on both backends. Trace `ArmBakes`' resident
@@ -1090,10 +1080,9 @@ source are the next lanes here; the items below are the system work beside them.
   static and animated placements), and profile bake admission, landing and
   illumination together. The stream is eight placements of one still segment
   and the falls still sheets, their motion the flow layer's shading.
-  Drawn heights move by an authored `surfaceStep` with hysteresis, and each
-  step publishes a new snapshot of the field's `SdfSampledField` without
-  rebuilding the program, so only that field's group rebakes. Run costs and
-  before/after evidence live in the water follow-up commits.
+  Drawn heights move at draw time over a reference mesh keyed by the raised
+  columns alone ([field surfaces](water-rendering.md#field-surfaces-move-at-draw-time)),
+  so a moving level rebakes nothing.
   The prototype audits also flag normal/topology defects in the glacier, lake and falls
   despite finding no uncovered surface. Inspect those witnesses through the
   existing mesh-audit image output before attributing them to authored style.
@@ -1242,6 +1231,20 @@ certified-contact packet and step 8 closes. The measured state is in the
   large radius.
 
 ### Refactoring campaign
+
+- [medium · addons] `WasmModuleDeclarations.WithCheckpointExports`
+  (`src/Puck.Assets/WasmModuleDeclarations.Checkpoint.cs:17`) refuses every
+  table and every element/data-count section, and the World mount gate
+  (`src/Puck.World.Addons/WorldAddonRuntime.Lifecycle.cs:621`) requires a
+  checkpointable guest. Rust guests that link the standard library consequently
+  compile and load through `WasmModuleLoader` but cannot mount in a World.
+  The default guest and its shared library are freestanding; the remaining
+  Rust verification fixtures still exercise this limit. Owner: addon runtime.
+  Next: model table and segment continuation state in generic checkpoints, or
+  mechanically prove which module resources are immutable, then mount and
+  restore a standard-library guest in the headless debug world, then author
+  channelwalk's capability-boundary scenarios there. Keep the
+  current named refusal until that state can be reproduced.
 
 Owner: the next session's lead · Next: take the GPU region
 growth merge (with the uniform view limit enforced in `Grow`) as one lane, then
@@ -1583,7 +1586,7 @@ file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
    `MotionWorldProcess.Start` (`Puck.Cli.Runs/Motion/MotionWorldProcess.Device.cs:54`),
    `SweepCommand.ScenarioFile` (`Puck.Cli.Runs/Sweep/SweepCommand.cs:361`) and
    `OperatorWorlds.Launch` (`Puck.Mcp/OperatorWorlds.cs:463`) build
-   `ProcessStartInfo` by hand beside `ChildProcess` (`Puck.Hosting/ChildProcess.cs`)
+   `ProcessStartInfo` by hand beside `ChildProcess` (`Puck.Abstractions/ChildProcess.cs`)
    and `CliProcess` (`Puck.Cli.Core/CliProcess.cs:135`). `[low]` The sweep
    reads both streams to end with no exit drain grace, the hang
    `ChildProcess.ExitDrainGrace` exists for (a build server holding the pipe).
@@ -2013,31 +2016,6 @@ colliders report's only red findings left are the valley's relief
   bake items: a long thin member of a static union baking at the union's capped
   lattice, the sharp-edge rounding of about a tenth of a cell, and the Moth's
   interpenetrating meshes.
-
-### Derived products are caches
-
-Owner: delivery lane with the machines lane · ordinary · Next: choose how hosts
-without Rust obtain addon caches before removing the committed `wasm/*/dist` modules.
-
-A derived product is a cache, never the truth
-([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)):
-its identity is computed from its inputs, a miss is derived again and counted, and
-it is never committed or compared by a gate. The owner's ruling on generated
-bytes: hand-authored bytes are source and stay committed; generated outputs are
-derived products, removed from git and built on demand.
-
-- Stop committing the built addon guests: the eleven `wasm/*/dist/*.wasm`
-  modules are compiled from the Rust crates beside them, and a derived product
-  is a cache ([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
-  A measured Windows run with Rust 1.96.0 and the `wasm32-unknown-unknown` target
-  already installed built all eleven declared variants offline into an empty
-  scratch target in 6.942 seconds; repeating the same variants took 3.613 seconds.
-  Both fit the 30-second edit-to-running bar, before the engine build and boot;
-  neither includes installing Rust or its target. The committed modules were
-  untouched. A miss still requires that toolchain on each host, so the remaining
-  decision is toolchain availability and prewarming/provisioning caches.
-  A hand-written fixture module (the transpiler sample's 8-byte
-  `Samples/addons/rules.wasm`) is source.
 
 ### Test runner and replay
 

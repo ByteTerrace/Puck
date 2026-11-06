@@ -32,7 +32,7 @@ public static class DirectXPresenterServiceRegistration {
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddDirectXPresenter(this IServiceCollection services) {
         services.AddGpuPipelineCacheWork(backend: PipelineCacheBackend);
-        services.AddSingleton<IWorkCounterSource>(implementationInstance: DirectXSubmissionWork.Process);
+        services.AddGpuQueueWork();
         services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend);
         // The presenter's presentation counters live in the composition, keyed by backend, and are the counter source
         // world.counters reads, as the Vulkan backend's are, so a readout never resolves the device or the compositor.

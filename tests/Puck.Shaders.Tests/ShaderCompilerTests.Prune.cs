@@ -1,4 +1,4 @@
-using Puck.Hosting;
+using Puck.Abstractions;
 
 namespace Puck.Shaders.Tests;
 

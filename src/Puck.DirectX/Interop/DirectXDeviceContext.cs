@@ -553,6 +553,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             return;
         }
 
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Drain);
         DirectXCommandCalls.SignalAndWait(
             calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device.Handle)),
             fence: ((ID3D12Fence*)m_idleFence),

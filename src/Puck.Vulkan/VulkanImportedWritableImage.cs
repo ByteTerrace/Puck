@@ -269,6 +269,7 @@ public sealed class VulkanImportedWritableImage : IGpuExportableImage {
             condition: m_disposed,
             instance: this
         );
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Transfer);
 
         if (!m_released) {
             return;
@@ -291,6 +292,7 @@ public sealed class VulkanImportedWritableImage : IGpuExportableImage {
             condition: m_disposed,
             instance: this
         );
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Transfer);
 
         var value = m_nextValue;
         Span<nint> commandBuffers = [m_commandResources.CommandBufferHandles[ReleaseBuffer]];

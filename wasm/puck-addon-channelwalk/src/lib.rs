@@ -76,7 +76,7 @@ mod main_behavior {
     //! have to align separately.
     //!
     //! **`walkonly`** is declared and never resolves against any world this crate is battery-tested with — the
-    //! channel-walk test world (`worlds/channel-walk-world.json`) keeps the shipped default's channel set and
+    //! authored test world should keep the shipped default's channel set and
     //! adds `trigger`, deliberately never adding `walkonly` — so it stays the unresolved-name case
     //! (`puck_stdlib::channels`'s own module doc: "report-and-inert... never faults the mount"). This guest
     //! drives it EVERY tick a Drive handle is held, forever, so `world.addons` staying `ENABLED` with no fault
@@ -105,12 +105,12 @@ mod main_behavior {
     //! pinned threshold: such an act is not constructible for a Binary channel from anywhere in the system.
     //! Case H is walked on the CEILING axis instead — this guest presses `trigger` to its own full `ONE` for a
     //! window, and the seat's authored pool ceiling is moved across the threshold between runs
-    //! (`h-below-threshold.txt` / `h-at-threshold.txt`).
+    //! at the two sides of that boundary.
     //!
-    //! Those two scripts read IDENTICALLY, and that identity is the result rather than a failure: the ceiling
+    //! Those two cases should read identically: the ceiling
     //! does not bite a Binary COMPOSITION channel at all, because this act arrives as a held-channel image and
-    //! never as an intent delta, so the pool arithmetic is handed nothing to clamp. See the README's Finding 2
-    //! for the call sites. Do not "fix" the scripts to expect a clamped value.
+    //! never as an intent delta, so the pool arithmetic is handed nothing to clamp.
+    //! The host's declared shape and held-channel composition decide this behavior.
     //!
     //! All four channels key off the SAME `ticks_since_drive` counter (0-based, incrementing once per tick a
     //! Drive handle is held, reset to `None` whenever a disclosure drops the drive) — see
@@ -140,8 +140,8 @@ mod main_behavior {
 
     /// The channel-walk test world's pinned `trigger` threshold, raw `FixedQ4816` bits — `0.75 * 65536 = 49152`
     /// exactly (0.75 = 3/4, and 65536 is a power of two, so this quantizes with no rounding ambiguity; see
-    /// `worlds/channel-walk-world.json`'s `trigger` row, which pins the same `0.75`). This guest never writes
-    /// this value itself — it exists here only as the derivation this crate's README shows for the pool-ceiling
+    /// an authored `trigger` row choosing the same `0.75`). This guest never writes
+    /// this value itself — it documents the derivation for the pool-ceiling
     /// boundary case H actually walks (see the module doc's `trigger` section).
     #[allow(dead_code)]
     const TRIGGER_THRESHOLD_RAW: i64 = 49_152;

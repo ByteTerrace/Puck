@@ -8,14 +8,25 @@ public sealed class FileSystemAssetSource : IAssetSource {
     public bool Exists(string path) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
 
-        return File.Exists(path: path);
+        return WasmGuestBuild.TryFind(Path.GetFullPath(path), out _, out _) || File.Exists(path: path);
     }
     /// <inheritdoc/>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty, or whitespace.</exception>
     /// <exception cref="FileNotFoundException">No file exists at <paramref name="path"/>.</exception>
-    public ReadOnlyMemory<byte> Read(string path, int maximumBytes = int.MaxValue) {
+    public ReadOnlyMemory<byte> Read(string path, int maximumBytes = int.MaxValue) => ReadBytes(path, maximumBytes);
+
+    /// <summary>Reads an owned array through the same source-backed asset path, without copying its contents.</summary>
+    /// <param name="path">Requested asset path.</param>
+    /// <param name="maximumBytes">Maximum admitted byte length.</param>
+    /// <returns>The asset bytes.</returns>
+    public byte[] ReadBytes(string path, int maximumBytes = int.MaxValue) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
         ArgumentOutOfRangeException.ThrowIfNegative(maximumBytes);
+
+        if (WasmGuestBuild.TryRead(Path.GetFullPath(path), out var derived)) {
+            if (derived.Length > maximumBytes) { throw new InvalidDataException($"The asset '{path}' exceeds the {maximumBytes}-byte source limit."); }
+            return derived;
+        }
 
         using var stream = File.OpenRead(path: path);
         var length = stream.Length;

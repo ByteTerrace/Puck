@@ -36,7 +36,8 @@ public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
 
     /// <inheritdoc/>
     /// <remarks>Takes a <see cref="DirectXSharedFence"/> or a <see cref="DirectXExportableFence"/> of this
-    /// device.</remarks>
+    /// device. A wait still outstanding splits an open batch, since <c>ID3D12CommandQueue::Wait</c> holds everything after
+    /// it on the queue.</remarks>
     public void AddExternalWait(GpuExternalWait wait) {
         ArgumentOutOfRangeException.ThrowIfZero(wait.Value);
 
@@ -47,31 +48,32 @@ public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
             );
         }
 
+        if (GpuQueueWork.Process.Waits(reached: wait.IsReached)) { return; }
         // A wait belongs after earlier submissions, never before a producer that may signal it.
-        m_batch.Split();
+        m_batch.Split(cause: GpuQueueCause.ExternalWait);
 
         m_externalWaits.Add(item: wait);
     }
     /// <inheritdoc/>
     public void Submit(ReadOnlySpan<nint> commandBufferHandles) {
-        if (m_batch.TryDefer(entries: commandBufferHandles, fence: null)) { return; }
-        Execute(commandBufferHandles: commandBufferHandles);
+        if (m_batch.TryDefer(entries: commandBufferHandles, fence: null, lists: commandBufferHandles.Length)) { return; }
+        Execute(cause: GpuQueueCause.Unbatched, commandBufferHandles: commandBufferHandles);
     }
     /// <inheritdoc/>
     public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
         var native = ((DirectXGpuSubmissionFence)fence);
 
-        if (m_batch.TryDefer(entries: commandBufferHandles, fence: native)) { return; }
+        if (m_batch.TryDefer(entries: commandBufferHandles, fence: native, lists: commandBufferHandles.Length)) { return; }
         // An empty fenced submission still completes all work submitted before it.
-        if (commandBufferHandles.IsEmpty) { m_batch.Split(); }
+        if (commandBufferHandles.IsEmpty) { m_batch.Split(cause: GpuQueueCause.EmptyFence); }
         native.RequireDrained();
-        Execute(commandBufferHandles: commandBufferHandles);
+        Execute(cause: GpuQueueCause.Unbatched, commandBufferHandles: commandBufferHandles);
         native.Arm(commandQueue: ((ID3D12CommandQueue*)m_deviceContext.SubmissionQueueHandle));
     }
     /// <inheritdoc/>
     public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
-        m_batch.Split();
-        Execute(commandBufferHandles: commandBufferHandles);
+        m_batch.Split(cause: GpuQueueCause.Drain);
+        Execute(cause: GpuQueueCause.Drain, commandBufferHandles: commandBufferHandles);
         m_deviceContext.WaitIdle();
     }
     /// <inheritdoc/>
@@ -81,17 +83,19 @@ public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
     /// <summary>Hands the deferred submissions to the queue and keeps the batch open
     /// (<see cref="GpuSubmissionBatch.Split"/>). Every read of the context's queue handle
     /// (<see cref="DirectXDeviceContext.CommandQueueHandle"/>) calls it.</summary>
-    internal void Split() => m_batch.Split();
+    internal void Split() => m_batch.Split(cause: GpuQueueCause.QueueDoor);
     /// <inheritdoc/>
     public IGpuSubmissionFence CreateSubmissionFence() =>
         new DirectXGpuSubmissionFence(device: ((ID3D12Device*)m_deviceContext.Device.Handle));
 
-    private void Execute(ReadOnlySpan<nint> commandBufferHandles) {
+    // Counts the execute it makes; a batch's hand-off is counted by the batch and passes no cause.
+    private void Execute(ReadOnlySpan<nint> commandBufferHandles, GpuQueueCause? cause) {
         var queue = ((ID3D12CommandQueue*)m_deviceContext.SubmissionQueueHandle);
 
         if (commandBufferHandles.IsEmpty) {
             return;
         }
+        if (cause is { } counted) { GpuQueueWork.Process.Execute(cause: counted, lists: commandBufferHandles.Length); }
 
         if (m_externalWaits.Count != 0) {
             var calls = DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext);
@@ -125,14 +129,13 @@ public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
             NumCommandLists: ((uint)commandBufferHandles.Length),
             ppCommandLists: lists
         );
-        DirectXSubmissionWork.Process.Execute(commandBufferHandles.Length);
     }
 
     // The deferred command lists reach the queue in one ExecuteCommandLists, behind any external waits, with the owner's
     // signal queued right after them.
     private sealed class Batch(DirectXGpuQueueSubmitter submitter) : GpuSubmissionBatch<nint> {
         protected override void Submit(ReadOnlySpan<nint> entries, GpuBatchedSubmissionFence? owner) {
-            submitter.Execute(commandBufferHandles: entries);
+            submitter.Execute(cause: null, commandBufferHandles: entries);
             ((DirectXGpuSubmissionFence?)owner)?.Arm(commandQueue: ((ID3D12CommandQueue*)submitter.m_deviceContext.SubmissionQueueHandle));
         }
     }
@@ -193,7 +196,6 @@ public sealed unsafe class DirectXGpuSubmissionFence : GpuBatchedSubmissionFence
             queue: commandQueue,
             value: m_pendingValue
         );
-        DirectXSubmissionWork.Process.Signal();
     }
 
     /// <inheritdoc/>

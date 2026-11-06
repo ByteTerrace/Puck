@@ -84,12 +84,13 @@ public sealed partial class ShaderPipelineRenderNode {
         ));
 
         var recorder = m_gpu.Recorder;
+        PrepareFrameCommands();
         var commands = m_commands;
         var command = BeginFrameCommands(slot: slot);
 
         commands.Clear();
         RecordImageCopy(command, source.ImageHandle, source.Layout, copy.ImageHandle, source.Width, source.Height, m_outputLayout);
-        recorder.EndCommandBuffer(commandBufferHandle: command);
+        EndRecordedList(command: command);
         commands.Add(item: command);
         SubmitCounted(
             commands: commands,

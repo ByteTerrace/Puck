@@ -627,7 +627,7 @@ intermediate publications is correct.
 | Sampled images | `GpuImageLease`, `LeaseRetireList` | An image a submission samples, released once that submission retires |
 | View scheduling | `RenderGraphInstance`, `RenderGraphInstanceSet`, `RenderGraphScheduler`, `RenderGraphExtent`, `RenderGraphSourceState` | Which views and sources render in a frame, at what extent, rate or cadence, and price |
 | Nested hits | `RenderGraphHitWalk`, `IRenderGraphHitScene`, `RenderGraphHitPath` | Where a pick through views that show other views lands |
-| Child processes | `ChildProcess`, `ChildProcessResult` | Tool runs and driven companions started from an argument vector |
+| Child processes (`Puck.Abstractions`) | `ChildProcess`, `ChildProcessResult` | Tool runs and driven companions started from an argument vector |
 
 `ChildProcess` starts the tools that the CLI, the shader compiler and the
 emulator diagnostics run. `RunAsync` takes an argument

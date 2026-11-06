@@ -1090,7 +1090,9 @@ hands its bodies to the population's one rigid solve instead of the grounded/fre
 motion program. `WorldBody.Advance` only prepares the step (`PrepareRigidStep`):
 it records the start a refused sweep restores, damps both velocities by their
 authored per-second rates, takes the solved gravity as the step's acceleration,
-and runs one implicit gyroscopic step (`Puck.Physics.FixedGyroscopicStep`). Once
+and runs one implicit gyroscopic step (`Puck.Physics.FixedGyroscopicStep`), which then
+rescales the spin its Newton solve dissipated as far as neither the momentum magnitude nor the energy before the
+step is exceeded (`physics.bodies.gyroscopic-rescale-skips` counts the steps that could not). Once
 every body has advanced, `ResolveDynamicContacts` runs one broadphase and one
 narrowphase query per pair and `WorldPopulation.SolveRigidContacts` solves every
 awake rigid body together through `Puck.Physics.FixedRigidWorld`

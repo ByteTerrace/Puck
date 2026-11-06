@@ -249,6 +249,7 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
             condition: m_disposed,
             instance: this
         );
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Transfer);
 
         if (m_fenceSharedHandle.IsNull) {
             WaitForGpu();
@@ -285,6 +286,7 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
         }
 
         m_disposed = true;
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Drain);
         ReleaseResources(drainQueue: (0 != m_deviceContext.CommandQueueHandle));
     }
 }

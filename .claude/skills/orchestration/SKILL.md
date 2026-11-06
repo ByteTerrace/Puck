@@ -415,7 +415,11 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   warns that it is stale: a stale global tool refuses the current sweep plan's keys, and a report taken
   against an old baseline blames the landing for the tip's own drift. A single-project `Puck.World`
   build carries no SPIR-V, so a Vulkan boot follows a solution build or
-  `-p:PuckShaderSpirvEnabled=true`, and the Direct3D 12 backend is named `directx`. An output-identity gate (a whole mesh store by hash)
+  `-p:PuckShaderSpirvEnabled=true`, and the Direct3D 12 backend is named `directx`. The lead
+  boots the merged head headless from its own shell before pushing: a lane's
+  environment can hide a dependency (a toolchain on the lane's PATH but not the
+  machine's), and lanes merge the local integration branch, so a bad merge is
+  undone before it spreads, and the lane fixes it at the cause. An output-identity gate (a whole mesh store by hash)
   compares every stored payload: the mesh bake is byte-reproducible from its
   inputs (three cold bakes per backend match), so any difference is a finding.
   The hard limits are one heavy integration job and one GPU

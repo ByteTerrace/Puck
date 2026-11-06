@@ -34,11 +34,13 @@ float3 sdfMeshPreviousRow(uint record, uint row) {
 
     return asfloat(uint3(sdfPreviousMeshTransforms[word], sdfPreviousMeshTransforms[(word + 1u)], sdfPreviousMeshTransforms[(word + 2u)]));
 }
-// Where a draw's index `k` stood in the preceding consumed frame: under the draw's previous matrix, or, for a vertex
+// Where a draw's index `k` stood in the preceding consumed frame: displaced by a height field's previous heights, then
+// under the draw's previous matrix, or, for a vertex
 // riding a member, under that member's slot's previous transform; then under the draw's carry, as its current position
 // is (sdfMeshWorldPosition).
 float3 sdfMeshPreviousPosition(uint record, uint k) {
-    float3 object = sdfMeshObjectPosition(record, k);
+    float3 unused = float3(0.0, 1.0, 0.0);
+    float3 object = sdfMeshDisplaced(record, sdfMeshObjectPosition(record, k), true, unused);
     uint entry = sdfMeshMemberEntry(record, sdfMeshIndexAt(record, k));
 
     if (entry != 0u) {

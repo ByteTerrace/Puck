@@ -584,7 +584,7 @@ public static partial class WorldDefinitionValidator {
                 if (field.HeightScale > 0) {
                     var (x, y, z) = WorldFieldCapacity.SurfaceVoxels(region: region);
 
-                    surfaceBytes += (((((long)x) * y) * z) * sizeof(float));
+                    surfaceBytes += ((((((long)x) * y) * z) + (((long)region.Lattice.Width) * region.Lattice.Depth)) * sizeof(float));
                 }
             }
         }
@@ -715,12 +715,6 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.heightScale must be finite and non-negative (was {row.HeightScale}).");
             }
 
-            if (!float.IsFinite(f: row.SurfaceStep) || (row.SurfaceStep < 0f)) {
-                errors.Add(item: $"{path}.surfaceStep must be finite and non-negative (was {row.SurfaceStep}).");
-            } else if ((row.SurfaceStep > 0f) && (row.HeightScale <= 0f)) {
-                errors.Add(item: $"{path}.surfaceStep steps a drawn surface, so it requires a heightScale greater than 0.");
-            }
-
             if (
                 row.Medium &&
                 (row.HeightScale <= 0f)
@@ -744,10 +738,9 @@ public static partial class WorldDefinitionValidator {
                 var maximumRaise = ((((double)row.Max) * row.HeightScale) * lattice.Layers);
                 var minimumRaise = ((((double)row.Min) * row.HeightScale) * lattice.Layers);
 
-                if (maximumRaise > (WorldFieldCapacity.MaxSurfaceCells * ((double)lattice.CellSize))) {
-                    errors.Add(item: $"{path} can raise {maximumRaise} units of surface across {lattice.Layers} layers, above the {(WorldFieldCapacity.MaxSurfaceCells * lattice.CellSize)}-unit ceiling ({WorldFieldCapacity.MaxSurfaceCells} cells of cellSize).");
+                if (maximumRaise > (((double)long.MaxValue) / 65536.0)) {
+                    errors.Add(item: $"{path}'s maximum layered height {maximumRaise} does not fit Q48.16.");
                 }
-
                 if (minimumRaise < (((double)long.MinValue) / 65536.0)) {
                     errors.Add(item: $"{path}'s minimum layered height {minimumRaise} does not fit Q48.16.");
                 }

@@ -689,7 +689,11 @@ authored content. An admitted path is mounted in its folder's own spelling, so
 `machine.content` marks it mounted however the operation spelled it. A
 machine whose authored content file is absent boots with no cartridge (named
 once on stderr, `screen.state … no cartridge`), never refusing the world; an
-operation naming absent content is refused. A folder that empties or vanishes
+operation naming absent content is refused. Other machine preparation failures
+stay on the named instance as `Refused` (`WorldMachineHost.TryPrepareInstances`),
+with one narration at commit and the reason in its screen's text decal,
+`screen.state`, `machine.state` and `world.status`; the other machines still boot.
+A folder that empties or vanishes
 while the World runs shows in the next listing, and the cartridge mounted from
 it keeps running from memory. No verb lists a hard-coded set or scans outside
 the authored folders. The shipped cartridges sit one folder per forge target

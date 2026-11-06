@@ -35,7 +35,7 @@ public sealed partial class WorldMachineHost {
             lease.Runtime.Status,
             (queued?.CompletedSteps ?? lease.CompletedSteps),
             (queued?.PendingSteps ?? 0),
-            queued?.QueueFault,
+            lease.Fault,
             MountedContent(lease: lease)
         );
     }
@@ -647,20 +647,13 @@ public sealed partial class WorldMachineHost {
                     element2: declaration.Configuration
                 )
                 ) {
-                    ValidateInputRoute(
-                        declaration.Name,
-                        live.Lease.Runtime,
-                        candidate.Screens
-                    );
+                    if (live.Lease.Runtime is not RefusedMachine) { ValidateInputRoute(declaration.Name, live.Lease.Runtime, candidate.Screens); }
                     plan.Candidate.Add(
                         key: declaration.Name,
                         value: new(
                             declaration,
                             live.Lease,
-                            ResolveBindings(
-                                declaration: declaration,
-                                lease: live.Lease
-                            )
+                            live.Lease.Runtime is RefusedMachine ? live.Bindings : ResolveBindings(declaration, live.Lease)
                         ) {
                             FolderBoot = folderBoot,
                         }
@@ -671,49 +664,59 @@ public sealed partial class WorldMachineHost {
                     m_narrationHub.Narrate(channel: "machine", text: folderNarration);
                 }
 
-                var engine = Catalog.Engines[declaration.Engine];
-                var request = PrepareCreation(
-                    engine,
-                    declaration.Configuration,
-                    candidate.DocumentDirectory,
-                    absentContent: out var absentContent,
-                    declaredBy: declaration.Name
-                );
-                var runtime = engine.CreateMachine(request: request);
-                var lease = new MachineLease(
-                    runtime,
-                    plan.NextGeneration++,
-                    request.Assets
-                ) {
-                    AbsentContent = absentContent,
-                };
-
-                plan.Created.Add(item: lease);
-                ValidateRuntimeOutputs(
-                    descriptor: engine.Descriptor,
-                    runtime: runtime
-                );
-                ValidateInputRoute(
-                    declaration.Name,
-                    runtime,
-                    candidate.Screens
-                );
-                if (runtime.Status == MachineRuntimeStatus.Faulted) {
-                    throw new InvalidOperationException(message: "The provider returned a faulted runtime.");
-                }
-                plan.Candidate.Add(
-                    key: declaration.Name,
-                    value: new(
-                        declaration,
-                        lease,
-                        ResolveBindings(
-                            declaration: declaration,
-                            lease: lease
-                        )
+                MachineLease? created = null;
+                try {
+                    var engine = Catalog.Engines[declaration.Engine];
+                    var request = PrepareCreation(
+                        engine,
+                        declaration.Configuration,
+                        candidate.DocumentDirectory,
+                        absentContent: out var absentContent,
+                        declaredBy: declaration.Name
+                    );
+                    var runtime = engine.CreateMachine(request: request);
+                    var lease = new MachineLease(
+                        runtime,
+                        plan.NextGeneration++,
+                        request.Assets
                     ) {
-                        FolderBoot = folderBoot,
+                        AbsentContent = absentContent,
+                    };
+
+                    created = lease;
+                    ValidateRuntimeOutputs(
+                        descriptor: engine.Descriptor,
+                        runtime: runtime
+                    );
+                    ValidateInputRoute(
+                        declaration.Name,
+                        runtime,
+                        candidate.Screens
+                    );
+                    if (runtime.Status == MachineRuntimeStatus.Faulted) {
+                        throw new InvalidOperationException(message: "The provider returned a faulted runtime.");
                     }
-                );
+                    plan.Candidate.Add(
+                        key: declaration.Name,
+                        value: new(
+                            declaration,
+                            lease,
+                            ResolveBindings(
+                                declaration: declaration,
+                                lease: lease
+                            )
+                        ) {
+                            FolderBoot = folderBoot,
+                        }
+                    );
+                    plan.Created.Add(item: lease);
+                } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or MachineContentException) {
+                    created?.Runtime.Dispose();
+                    var refused = new RefusedMachine($"Machine '{declaration.Name}' preparation refused: {exception.Message}");
+                    var lease = new MachineLease(refused, plan.NextGeneration++, FrozenDictionary<string, PreparedMachineAsset>.Empty);
+                    plan.Created.Add(lease);
+                    plan.Candidate.Add(declaration.Name, new MachineInstance(declaration, lease, FrozenDictionary<string, MachineMemoryAddress>.Empty) { FolderBoot = folderBoot });
+                }
             }
             foreach (var live in m_instances.Values) {
                 if (
@@ -1017,12 +1020,27 @@ public sealed partial class WorldMachineHost {
             m_documentDirectoryChanged = true;
         }
         plan.Committed = true;
+        foreach (var lease in plan.Created) {
+            if (lease.Runtime is RefusedMachine refused) { m_narrationHub?.Narrate(channel: "machine", text: $"[machine: {refused.Reason}]"); }
+        }
     }
     private void DisposeInstances() {
         foreach (var instance in m_instances.Values) {
             instance.Lease.Runtime.Dispose();
         }
         m_instances.Clear();
+    }
+
+    // A prepared refusal occupies the same named slot as a running machine; it never schedules work.
+    private sealed class RefusedMachine(string reason) : IMachineRuntime, IMachineCheckpointRuntime {
+        public string Reason { get; } = reason;
+        public MachineRuntimeStatus Status => MachineRuntimeStatus.Refused;
+        public bool Advance(ulong deltaTicks) => false;
+        public void Dispose() { }
+        public byte[] CaptureCheckpoint() => System.Text.Encoding.UTF8.GetBytes(Reason);
+        public void RestoreCheckpoint(ReadOnlyMemory<byte> checkpoint) {
+            if (!checkpoint.Span.SequenceEqual(CaptureCheckpoint())) { throw new InvalidDataException("Machine preparation refusal differs from its checkpoint."); }
+        }
     }
 
     internal sealed record MachineInstance(WorldMachine Declaration, MachineLease Lease,
@@ -1035,6 +1053,7 @@ public sealed partial class WorldMachineHost {
     internal sealed class MachineLease(IMachineRuntime runtime, ulong generation,
         IReadOnlyDictionary<string, PreparedMachineAsset> assets) {
         public IMachineRuntime Runtime { get; } = runtime;
+        public string? Fault => Runtime is RefusedMachine refused ? refused.Reason : (Runtime as IQueuedMachineRuntime)?.QueueFault;
         public ulong Generation { get; set; } = generation;
         public IReadOnlyDictionary<string, PreparedMachineAsset> Assets { get; } = assets;
         // The configuration's content fields whose files were absent when the runtime was created, so it runs without
