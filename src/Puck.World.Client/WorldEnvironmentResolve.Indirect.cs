@@ -4,7 +4,7 @@ using Puck.SignedDistance;
 namespace Puck.World.Client;
 
 public sealed partial class WorldEnvironmentResolve {
-    private WorldResolvedIndirect m_indirect = new(SdfIndirectGains.One, null, SdfIndirectApplication.Default, SdfIndirectBudget.Unbounded);
+    private WorldResolvedIndirect m_indirect = new(SdfIndirectGains.One, null, SdfIndirectApplication.Default, SdfIndirectBudget.Unbounded, default);
 
     private void WriteIndirect(WorldStateMirror mirror, WorldRenderIndirect? indirect) {
         var sources = indirect?.Sources;
@@ -22,7 +22,8 @@ public sealed partial class WorldEnvironmentResolve {
                 Intensity: Scalar(mirror, indirect?.Apply?.Intensity, 1f, WorldValueFields.IndirectIntensity, applySite),
                 Tint: Rgb(mirror, indirect?.Apply?.Tint, Vector3.One),
                 Contact: Scalar(mirror, indirect?.Apply?.Contact, 1f, WorldValueFields.IndirectContact, applySite)),
-            new SdfIndirectBudget(Relight: (indirect?.Budget?.Relight ?? 0), Trace: (indirect?.Budget?.Trace ?? 0), Age: (indirect?.Budget?.Age ?? 0f)));
+            new SdfIndirectBudget(Relight: (indirect?.Budget?.Relight ?? 0), Trace: (indirect?.Budget?.Trace ?? 0), Age: (indirect?.Budget?.Age ?? 0f)),
+            new SdfIndirectLightingGrid(indirect?.LightingGrid?.DirectionDegrees ?? 0, indirect?.LightingGrid?.Radiance ?? 0));
     }
 }
 /// <summary>The immutable indirect controls resolved through the environment's existing bindings and clocks.</summary>
@@ -30,4 +31,5 @@ public sealed partial class WorldEnvironmentResolve {
 /// <param name="Bounces">Requested finite feedback depth, or the selected tier's default.</param>
 /// <param name="Apply">Receiver-only controls.</param>
 /// <param name="Budget">The irradiance work each frame grants the volume; zero members are unbounded.</param>
-public readonly record struct WorldResolvedIndirect(SdfIndirectGains Gains, int? Bounces, SdfIndirectApplication Apply, SdfIndirectBudget Budget);
+/// <param name="LightingGrid">The fixed grid for indirect captures; zero members leave values continuous.</param>
+public readonly record struct WorldResolvedIndirect(SdfIndirectGains Gains, int? Bounces, SdfIndirectApplication Apply, SdfIndirectBudget Budget, SdfIndirectLightingGrid LightingGrid);

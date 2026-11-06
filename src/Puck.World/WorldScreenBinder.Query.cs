@@ -112,16 +112,31 @@ public sealed partial class WorldScreenBinder {
         );
     }
     /// <summary>Gets the live decal-text source at a screen index, or <see langword="null"/> when the slot's current
-    /// source is not text — what the frame source's per-frame decal providers consult, so a live source change
+    /// source has neither text nor a machine fault — what the frame source's per-frame decal providers consult, so a live source change
     /// clears the decal the same frame it re-binds the image path.</summary>
     /// <param name="index">The engine screen-surface index.</param>
-    public WorldScreenSource.Text? TextSourceAt(int index) => (m_slots.TryGetValue(
-        key: index,
-        value: out var slot
-    )
-        ? slot.Text
-        : null
-    );
+    public WorldScreenSource.Text? TextSourceAt(int index) {
+        if (!m_slots.TryGetValue(index, out var slot)) { return null; }
+        if (slot.Text is { } text) { return text; }
+        if (slot.DeclaredSource is not WorldScreenSource.Machine || m_machines.State(index)?.Fault is not { } fault) {
+            slot.FaultText = null;
+            return null;
+        }
+        if (slot.FaultText?.Fault != fault) {
+            // Use the text screen's ordinary font/grid path, escaping diagnostics as literal text.
+            const int Columns = 64;
+            var lines = new List<string>();
+            foreach (var row in fault.Replace('\r', ' ').Split('\n')) {
+                for (var offset = 0; offset < row.Length; offset += Columns) {
+                    lines.Add(row.Substring(offset, Math.Min(Columns, row.Length - offset)).Replace("{", "{{").Replace("}", "}}"));
+                }
+            }
+            // A verbose provider error must fit the same bounded decal as authored text; status verbs retain it whole.
+            slot.FaultText = (fault, new WorldScreenSource.Text(lines, Columns: Columns,
+                Rows: Math.Min(lines.Count, SdfWorldTables.MaxScreenDecalCells / Columns)));
+        }
+        return slot.FaultText.Value.Text;
+    }
     /// <summary>Returns the screen's live magazine and 0-based selector, or <see langword="false"/> — a facade over
     /// <see cref="Server.WorldMachineHost.TryMagazine"/> (the authoritative selector).</summary>
     /// <param name="index">The engine screen-surface index.</param>

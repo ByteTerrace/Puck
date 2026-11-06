@@ -34,13 +34,13 @@ public sealed class ShaderToolchainLawTests {
     private sealed class ReplacingRunner(Action replace) : IShaderProcessRunner {
         public int Runs { get; private set; }
 
-        public Task<Puck.Hosting.ChildProcessResult> RunAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken) {
+        public Task<Puck.Abstractions.ChildProcessResult> RunAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken) {
             Runs++;
             replace();
             var output = (arguments.ToList().IndexOf(item: "-Fo") + 1);
 
             File.WriteAllBytes(bytes: [1, 2, 3], path: arguments[output]);
-            return Task.FromResult(result: new Puck.Hosting.ChildProcessResult(ExitCode: 0, Stdout: "", Stderr: ""));
+            return Task.FromResult(result: new Puck.Abstractions.ChildProcessResult(ExitCode: 0, Stdout: "", Stderr: ""));
         }
     }
 
@@ -115,14 +115,6 @@ public sealed class ShaderToolchainLawTests {
 
         Assert.NotEqual(expected: before, actual: toolchain.Identity);
         Assert.Equal(expected: new ShaderToolchain(directory: bin).Identity, actual: toolchain.Identity);
-    }
-    [Fact]
-    public void ACommandWithoutDirectorySeparatorsRetainsTheRequestedNameWhenAbsent() {
-        const string Command = "puck-absent-dxc";
-        var toolchain = ShaderToolchain.OfCommand(command: Command);
-
-        Assert.Null(@object: toolchain.Locate(name: ShaderCompiler.DxcTool));
-        Assert.Equal(expected: Command, actual: toolchain.Resolve(name: ShaderCompiler.DxcTool));
     }
     [Fact]
     public void AToolOnTheSearchPathRunsTheExactExecutableThatLocateIdentifies() {

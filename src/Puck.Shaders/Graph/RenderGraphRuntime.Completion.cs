@@ -122,6 +122,13 @@ public sealed partial class RenderGraphRuntime {
 
         if (Stands(index: index)) {
             MarkCurrent(index: index);
+        } else if (node.LastRecordError is { } failure) {
+            // A failed recording may fail the same way on every frame, so no wait is known to end it.
+            MarkStale(
+                index: index,
+                reason: $"the instance '{name}' cannot render: {failure}",
+                refused: true
+            );
         } else if ((PackageReasonOf(index: index, refusal: true) ?? m_sources[index]?.Upload.Fault) is { } refusal) {
             MarkStale(
                 index: index,

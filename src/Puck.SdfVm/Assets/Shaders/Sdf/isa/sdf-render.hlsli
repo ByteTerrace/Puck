@@ -13,6 +13,7 @@
 #define SDF_PROBE_IDENTITY_WORD                   29u
 #define SDF_PROBE_INSTANCE_INDEX_WORD             30u
 #define SDF_PROBE_STACK_DEPTH                     64u
+#define SDF_PROBE_MAX_WALK_STEPS                  65536u
 #define SDF_PROBE_GROUP_SIZE                      32u
 #define SDF_PROBE_RELIGHT_OUTPUT_WORDS            40u
 #define SDF_PROBE_RELIGHT_INPUT_WORDS             279u
@@ -103,29 +104,35 @@
 #define SDF_VISIBILITY_ZERO_NORMAL  0x80008000u
 
 // The mesh region's draw record (SdfMeshRecord) and the level shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshLevelShift).
-#define SDF_MESH_DRAW_WORDS               63u
-#define SDF_MESH_MATRIX_WORDS             16u
-#define SDF_MESH_MATERIAL_WORD            16u
-#define SDF_MESH_INDEX_WORD               17u
-#define SDF_MESH_INDEX_COUNT_WORD         18u
-#define SDF_MESH_VERTEX_WORD              19u
-#define SDF_MESH_FLAGS_WORD               20u
-#define SDF_MESH_TRIANGLE_MATERIAL_WORD   21u
-#define SDF_MESH_NORMAL_MATRIX_WORD       22u
-#define SDF_MESH_FRAME_SLOT_WORD          31u
-#define SDF_MESH_SKIN_WORD                32u
-#define SDF_MESH_CARRY_ROTATION_WORD      33u
-#define SDF_MESH_CARRY_TRANSLATION_WORD   37u
-#define SDF_MESH_CARRY_SCALE_WORD         40u
-#define SDF_MESH_CLIP_PLANE_WORD          41u
-#define SDF_MESH_LEVEL_TABLE_WORD         45u
-#define SDF_MESH_SELECTION_WORD           47u
-#define SDF_MESH_VERTEX_WORDS             6u
-#define SDF_MESH_MEMBER_WORDS             8u
-#define SDF_MESH_NORMALS_FLAG             0x00000001u
-#define SDF_MESH_MATERIALS_FLAG           0x00000002u
-#define SDF_MESH_SKIN_FLAG                0x00000004u
-#define SDF_MESH_WORLD_MATERIAL_FLAG      0x00000008u
+#define SDF_MESH_DRAW_WORDS             64u
+#define SDF_MESH_MATRIX_WORDS           16u
+#define SDF_MESH_MATERIAL_WORD          16u
+#define SDF_MESH_INDEX_WORD             17u
+#define SDF_MESH_INDEX_COUNT_WORD       18u
+#define SDF_MESH_VERTEX_WORD            19u
+#define SDF_MESH_FLAGS_WORD             20u
+#define SDF_MESH_TRIANGLE_MATERIAL_WORD 21u
+#define SDF_MESH_NORMAL_MATRIX_WORD     22u
+#define SDF_MESH_FRAME_SLOT_WORD        31u
+#define SDF_MESH_SKIN_WORD              32u
+#define SDF_MESH_CARRY_ROTATION_WORD    33u
+#define SDF_MESH_CARRY_TRANSLATION_WORD 37u
+#define SDF_MESH_CARRY_SCALE_WORD       40u
+#define SDF_MESH_CLIP_PLANE_WORD        41u
+#define SDF_MESH_LEVEL_TABLE_WORD       45u
+#define SDF_MESH_SELECTION_WORD         47u
+#define SDF_MESH_VERTEX_WORDS           6u
+#define SDF_MESH_MEMBER_WORDS           8u
+#define SDF_MESH_NORMALS_FLAG           0x00000001u
+#define SDF_MESH_MATERIALS_FLAG         0x00000002u
+#define SDF_MESH_SKIN_FLAG              0x00000004u
+#define SDF_MESH_WORLD_MATERIAL_FLAG    0x00000008u
+#define SDF_MESH_DISPLACEMENT_WORD      63u
+
+// The frame's sampled table (SdfFrameSampled): a handle with no entry, a height field entry's header, and the reference height its baked reference stands at.
+#define SDF_FRAME_SAMPLED_NONE            0xFFFFFFFFu
+#define SDF_FRAME_SAMPLED_HEADER_WORDS    6u
+#define SDF_HEIGHT_FIELD_REFERENCE_CELLS  1u
 #define SDF_MESH_LEVEL_SHIFT              24u
 #define SDF_MESH_SELECTION_GROUP_SIZE     64u
 #define SDF_MESH_SELECTION_GROUPS_PER_ROW 65535u

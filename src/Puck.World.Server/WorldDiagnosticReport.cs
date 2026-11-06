@@ -77,10 +77,15 @@ public sealed record WorldDiagnosticFinding(string Id, string View, string Sever
 /// <param name="Tested">Number of evaluated witnesses.</param>
 /// <param name="Eligible">Number of eligible witnesses in this audit.</param>
 /// <param name="Skipped">Reasons and counts of unevaluated inputs.</param>
-/// <param name="Complete">Whether all required representations and witnesses were evaluated.</param>
+/// <param name="Complete">Whether all required representations and witnesses were evaluated: every input the host could
+/// evaluate was, so <see cref="Skipped"/> is empty; <see cref="Excluded"/> never makes a report incomplete.</param>
 public sealed record WorldDiagnosticCoverage(int Tested, int Eligible, IReadOnlyDictionary<string, int> Skipped, bool Complete) {
     /// <summary>Per-comparison witness counts, distinct from clustered finding counts. Unknown samples are never clean.</summary>
     public IReadOnlyDictionary<string, WorldDiagnosticSampleCounts> Comparisons { get; init; } = new Dictionary<string, WorldDiagnosticSampleCounts>();
+    /// <summary>Gets the comparisons this host cannot make by construction, each with why and how many witnesses or
+    /// bodies it would have covered: a headless host composes no renderer, so it holds no drawn mesh to compare. They
+    /// are neither clean nor unknown, and a host that composes what they need makes them.</summary>
+    public IReadOnlyDictionary<string, int> Excluded { get; init; } = new Dictionary<string, int>();
     /// <summary>Gets how many colliders a report that ran out of time left unread, which a later report resumes; zero for
     /// a whole report.</summary>
     public int Pending { get; init; }
@@ -116,7 +121,7 @@ public sealed record WorldDiagnosticReport(long Snapshot, string View, ulong Tic
     });
     /// <summary>A concise severity and coverage summary.</summary>
     /// <returns>The console/banner summary.</returns>
-    public string Summary() => $"{View}: red={Findings.Count(predicate: f => (!f.Resolved && (f.Severity == "red")))} amber={Findings.Count(predicate: f => (!f.Resolved && (f.Severity == "amber")))} unknown={Findings.Count(predicate: f => (!f.Resolved && (f.Severity == "unknown")))} tested={Coverage.Tested}/{Coverage.Eligible} coverage={(Coverage.Complete ? "complete" : "incomplete")}";
+    public string Summary() => $"{View}: red={Findings.Count(predicate: f => (!f.Resolved && (f.Severity == "red")))} amber={Findings.Count(predicate: f => (!f.Resolved && (f.Severity == "amber")))} unknown={Findings.Count(predicate: f => (!f.Resolved && (f.Severity == "unknown")))} tested={Coverage.Tested}/{Coverage.Eligible} coverage={(Coverage.Complete ? "complete" : "incomplete")}{((Coverage.Excluded.Count > 0) ? $" excluded={string.Join(separator: "; ", values: Coverage.Excluded.Keys)}" : string.Empty)}";
 }
 /// <summary>Stable cause clustering and witness hysteresis, independent of rendering and analysis scheduling.</summary>
 public sealed class WorldDiagnosticTracker {

@@ -1,0 +1,91 @@
+[
+  {
+    "crate": "puck-addon-default",
+    "features": null,
+    "outputs": [
+      "wasm/puck-addon-default/dist/puck-addon-default.wasm"
+    ]
+  },
+  {
+    "crate": "puck-addon-channelwalk",
+    "features": null,
+    "outputs": [
+      "wasm/puck-addon-channelwalk/dist/channelwalk.wasm"
+    ]
+  },
+  {
+    "crate": "puck-addon-channelwalk",
+    "features": [
+      "bound64"
+    ],
+    "outputs": [
+      "wasm/puck-addon-channelwalk/dist/channelwalk-bound64.wasm"
+    ]
+  },
+  {
+    "crate": "puck-addon-channelwalk",
+    "features": [
+      "bound65"
+    ],
+    "outputs": [
+      "wasm/puck-addon-channelwalk/dist/channelwalk-bound65.wasm"
+    ]
+  },
+  {
+    "crate": "puck-addon-stalekind",
+    "features": null,
+    "outputs": [
+      "wasm/puck-addon-stalekind/dist/stalekind.wasm"
+    ]
+  },
+  {
+    "crate": "puck-addon-hudbuilder",
+    "features": null,
+    "outputs": [
+      "wasm/puck-addon-hudbuilder/dist/hudbuilder-main.wasm"
+    ]
+  },
+  {
+    "crate": "puck-addon-hudbuilder",
+    "features": [
+      "spam"
+    ],
+    "outputs": [
+      "wasm/puck-addon-hudbuilder/dist/hudbuilder-spam.wasm"
+    ]
+  },
+  {
+    "crate": "puck-addon-hudbuilder",
+    "features": [
+      "badkind"
+    ],
+    "outputs": [
+      "wasm/puck-addon-hudbuilder/dist/hudbuilder-badkind.wasm"
+    ]
+  },
+  {
+    "crate": "puck-addon-hudbuilder",
+    "features": [
+      "badjson"
+    ],
+    "outputs": [
+      "wasm/puck-addon-hudbuilder/dist/hudbuilder-badjson.wasm"
+    ]
+  },
+  {
+    "crate": "puck-addon-hudbuilder",
+    "features": [
+      "hugepayload"
+    ],
+    "outputs": [
+      "wasm/puck-addon-hudbuilder/dist/hudbuilder-hugepayload.wasm"
+    ]
+  },
+  {
+    "crate": "puck-addon-eventwatch",
+    "features": null,
+    "outputs": [
+      "wasm/puck-addon-eventwatch/dist/eventwatch.wasm"
+    ]
+  }
+]

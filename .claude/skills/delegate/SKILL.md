@@ -84,7 +84,18 @@ orders, verifying a change by building and running it, and fixing a defect at it
   loop (`until grep …; do sleep …; done`) that outlives the tool's timeout is not killed with it: its
   shell is orphaned and keeps polling, and rerunning the wait adds another copy every ten minutes.
   Wait in the background with one notification, or bound a foreground loop below the tool's timeout
-  (`timeout 590 bash -c 'until …'`).
+  (`timeout 590 bash -c 'until …'`). One waiter per condition: never start a wait on a file or job
+  while an earlier wait on it is still running (three bounded copies on one log is still three
+  copies); a background wait notifies once, so take the next step on its notification instead of
+  arming another.
+- Evidence is load-independent ([the phases](../orchestration/SKILL.md#spend-verification-not-writing)):
+  counters, hashes, bytes, executes, laws, captures. Report no timing as a result. A timing
+  question goes in your hand-back as a measurement request (frozen before and after builds, the
+  command, what decides it) for the lead's quiet window. Check each step with filtered laws and a
+  reproduce of only the scenarios it reaches; the lead runs the full suites once per batch.
+- A build takes no lease beyond the build lease a `puck` verb takes itself: `puck lease heavy` is
+  for the memory-heavy test assemblies and reproduce replicas, and a build queued behind them waits
+  for nothing.
 - Once your finish line holds on the merged head, hand back. Start no review or hardening round of
   your own (a self-review, extra guards, fuzzing beyond the brief): the lead's area fix passes and any
   invariant review run beside your next work, and what else you noticed goes under **Found**.

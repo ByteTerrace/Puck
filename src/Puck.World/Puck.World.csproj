@@ -85,6 +85,15 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
+    <Target Name="PuckPrewarmPlayerProducts" AfterTargets="Publish">
+        <PropertyGroup>
+            <_PuckPlayerProductDirectory>$(PublishDir.Replace('\', '/'))</_PuckPlayerProductDirectory>
+        </PropertyGroup>
+        <MSBuild Projects="../Puck.Cli.Worlds/Puck.Cli.Worlds.csproj" Targets="Build"
+                 Properties="Configuration=$(Configuration);RuntimeIdentifier=;SelfContained=false"
+                 RemoveProperties="NoBuild;PublishDir;PublishReadyToRun;AppendRuntimeIdentifierToOutputPath" />
+        <Exec Command="dotnet &quot;$(MSBuildProjectDirectory)/../Puck.Cli.Worlds/bin/$(Configuration)/$(TargetFramework)/Puck.Cli.Worlds.dll&quot; prewarm --output &quot;$(_PuckPlayerProductDirectory)&quot;" />
+    </Target>
     <ItemGroup>
         <!-- The engine's own content: the default recording. Worlds are asset packages the engine is handed at boot,
              never shipped beside it. -->

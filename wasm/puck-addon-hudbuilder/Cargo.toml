@@ -20,13 +20,3 @@ badkind = []
 badjson = []
 hugepayload = []
 
-# The committed builds `puck wasm build` makes of this crate, one per variant: each build's outputs
-# (repository-relative), and its features when it does not build the crate's defaults.
-[package.metadata.puck]
-builds = [
-    { outputs = ["wasm/puck-addon-hudbuilder/dist/hudbuilder-main.wasm"] },
-    { features = ["spam"], outputs = ["wasm/puck-addon-hudbuilder/dist/hudbuilder-spam.wasm"] },
-    { features = ["badkind"], outputs = ["wasm/puck-addon-hudbuilder/dist/hudbuilder-badkind.wasm"] },
-    { features = ["badjson"], outputs = ["wasm/puck-addon-hudbuilder/dist/hudbuilder-badjson.wasm"] },
-    { features = ["hugepayload"], outputs = ["wasm/puck-addon-hudbuilder/dist/hudbuilder-hugepayload.wasm"] },
-]

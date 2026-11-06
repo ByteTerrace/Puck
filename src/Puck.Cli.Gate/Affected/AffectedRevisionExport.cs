@@ -37,7 +37,7 @@ public sealed class AffectedRevisionExport : IDisposable {
     public string Root { get; }
 
     private static string Git(string repository, string revision, TimeSpan bound, params string[] arguments) {
-        Puck.Hosting.ChildProcessResult run;
+        Puck.Abstractions.ChildProcessResult run;
 
         try {
             run = CliGit.RunAsync(

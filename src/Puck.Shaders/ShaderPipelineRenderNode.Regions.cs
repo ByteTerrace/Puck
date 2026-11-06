@@ -411,7 +411,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
         EndTiming(command: command, pass: m_regionCopyPass, slot: slot);
         m_gpu.Recorder.EndDebugGroup(commandBufferHandle: command);
-        m_gpu.Recorder.EndCommandBuffer(commandBufferHandle: command);
+        EndRecordedList(command: command);
         commands.Insert(
             index: 0,
             item: command
@@ -423,6 +423,7 @@ public sealed partial class ShaderPipelineRenderNode {
         var recorder = m_gpu.Recorder;
 
         recorder.BeginCommandBuffer(commandBufferHandle: command);
+        m_recording.Copies = command;
         BeginTiming(command: command, pass: m_regionCopyPass, slot: m_copySlot);
         recorder.BeginDebugGroup(
             commandBufferHandle: command,

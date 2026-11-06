@@ -1,10 +1,11 @@
+using Puck.Abstractions;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace Puck.Shaders;
 
 /// <summary>Resolves shader tools from a caller-selected directory, a caller-selected <c>dxc</c> executable, or the
-/// process search path.</summary>
+/// shared executable discovery (PATH, tool-location overrides and installed toolchains).</summary>
 public sealed class ShaderToolchain {
     private readonly Lock m_identityGate = new();
     private readonly string? m_dxc;
@@ -12,7 +13,7 @@ public sealed class ShaderToolchain {
     private IdentityReading? m_identity;
 
     /// <summary>Initializes a toolchain that finds its tools in <paramref name="directory"/>, or on the process search
-    /// path when it is <see langword="null"/> or empty.</summary>
+    /// path and installed toolchain locations when it is <see langword="null"/> or empty.</summary>
     /// <param name="directory">The directory holding the tools, or <see langword="null"/>.</param>
     public ShaderToolchain(string? directory = null)
         : this(
@@ -149,66 +150,36 @@ public sealed class ShaderToolchain {
             throw new IOException(message: $"The shader toolchain file '{path}' cannot be read: {exception.Message}", innerException: exception);
         }
     }
-    private string? Find(string name) {
-        if (Directory is null) { return null; }
-        var path = Path.Combine(
-            path1: Directory,
-            path2: name
-        );
-
-        if (File.Exists(path: path)) { return path; }
-        path += ".exe";
-        return (File.Exists(path: path)
-            ? path
-            : null
-        );
-    }
-    private static string? ResolvePath(string name) {
-        var pathVariable = Environment.GetEnvironmentVariable(variable: "PATH");
-
-        if (string.IsNullOrWhiteSpace(value: pathVariable)) { return null; }
-        foreach (var directory in pathVariable.Split(
-            options: StringSplitOptions.RemoveEmptyEntries,
-            separator: Path.PathSeparator
-        )) {
-            var candidate = Path.Combine(
-                path1: directory,
-                path2: name
-            );
-
-            if (File.Exists(path: candidate)) { return Path.GetFullPath(path: candidate); }
-            if (File.Exists(path: (candidate + ".exe"))) { return Path.GetFullPath(path: (candidate + ".exe")); }
-        }
-        return null;
+    private static string? LocateExecutable(string name, string? directory = null) {
+        try { return ChildProcess.FindExecutable(name, directory); }
+        catch (FileNotFoundException) { return null; }
     }
     private bool IsDxc(string name) =>
         ((m_dxc is not null) && (string.Equals(a: name, b: ShaderCompiler.DxcTool, comparisonType: StringComparison.OrdinalIgnoreCase) || string.Equals(a: name, b: (ShaderCompiler.DxcTool + ".exe"), comparisonType: StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>Finds a tool's full path: the named <c>dxc</c> executable when the toolchain names one, in
-    /// <see cref="Directory"/> when one is set, otherwise on the process search path.</summary>
+    /// <see cref="Directory"/> when one is set, otherwise through <see cref="ChildProcess.FindExecutable"/>.</summary>
     /// <param name="name">The tool's file name, with or without the <c>.exe</c> extension.</param>
     /// <returns>The tool's full path, or <see langword="null"/> when it is not found.</returns>
     public string? Locate(string name) {
         if (IsDxc(name: name)) {
-            return ((Directory is null) ? ResolvePath(name: m_dxc!) : (File.Exists(path: m_dxc) ? m_dxc : null));
+            return ((Directory is null) ? LocateExecutable(name: m_dxc!) : (File.Exists(path: m_dxc) ? m_dxc : null));
         }
 
         return ((Directory is null)
-            ? ResolvePath(name: name)
-            : Find(name: name)
+            ? LocateExecutable(name: name)
+            : LocateExecutable(name: name, directory: Directory)
         );
     }
     /// <summary>Returns the executable to run for a tool: the named <c>dxc</c> executable when the toolchain names one,
-    /// its full path on the search path, otherwise its full path inside the directory. An absent tool with no
-    /// <see cref="Directory"/> retains its requested name so the process runner reports the missing tool.</summary>
+    /// its full path from shared discovery, otherwise its full path inside the directory.</summary>
     /// <param name="name">The tool's file name, with or without the <c>.exe</c> extension.</param>
-    /// <returns>The name or full path to run.</returns>
-    /// <exception cref="ShaderToolMissingException">The tool is not in <see cref="Directory"/>.</exception>
+    /// <returns>The full path to run.</returns>
+    /// <exception cref="ShaderToolMissingException">The tool cannot be found in the selected locations.</exception>
     public string Resolve(string name) {
         var found = Locate(name: name);
 
         if (found is not null) { return found; }
-        if (Directory is null) { return (IsDxc(name: name) ? m_dxc! : name); }
         throw new ShaderToolMissingException(
             name,
             Directory

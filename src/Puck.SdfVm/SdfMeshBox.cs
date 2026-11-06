@@ -34,7 +34,9 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
     /// <param name="draw">The draw.</param>
     /// <param name="box">The box, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="false"/> for a draw whose mesh has members (<see cref="SdfMesh.Members"/>): those vertices
-    /// ride dynamic-transform slots the GPU reads, so no host box bounds them and every pass draws them.</returns>
+    /// ride dynamic-transform slots the GPU reads, so no host box bounds them and every pass draws them. A displaced
+    /// draw's box spans its displacement's band of heights (<see cref="SdfMeshDraw.Displacement"/>) as well as its
+    /// mesh's.</returns>
     public static bool TryOf(in SdfMeshDraw draw, out SdfMeshBox box) {
         var mesh = draw.Mesh;
 
@@ -45,6 +47,11 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
         }
 
         var (low, high) = (mesh.PositionLow, mesh.PositionHigh);
+
+        if (draw.Displacement is { } displacement) {
+            low.Y = MathF.Min(x: low.Y, y: displacement.Low);
+            high.Y = MathF.Max(x: high.Y, y: displacement.High);
+        }
         var matrix = draw.ObjectToWorld;
         var center = ((low + high) * 0.5f);
         var half = ((high - low) * 0.5f);

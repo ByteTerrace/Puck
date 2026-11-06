@@ -148,6 +148,7 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
                 presentInfo.PNext = presentIdPointer;
             }
 
+            GpuQueueWork.Process.Present();
             return queuePresent(
                 request.PresentQueueHandle,
                 in presentInfo
@@ -226,6 +227,8 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
                 WaitSemaphoreCount = 1,
             };
 
+            GpuQueueWork.Process.Execute(cause: GpuQueueCause.Unbatched, lists: 1);
+            GpuQueueWork.Process.Signal();
             return queueSubmit(
                 request.GraphicsQueueHandle,
                 1,
@@ -281,6 +284,8 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
                 WaitSemaphoreCount = 0,
             };
 
+            GpuQueueWork.Process.Execute(cause: GpuQueueCause.Unbatched, lists: 1);
+            GpuQueueWork.Process.Signal();
             return queueSubmit(
                 graphicsQueueHandle,
                 1,

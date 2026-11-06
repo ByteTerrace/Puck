@@ -22,6 +22,10 @@ public interface ISdfGpuWorkClient : IDisposable {
     /// its budget until the job's timestamps measure it.</param>
     /// <returns><see langword="true"/> when the client hands over a job.</returns>
     bool TryTake(SdfWorldTables tables, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds);
+    /// <summary>The host payload bytes staged by a taken job; zero for jobs without uploads.</summary>
+    /// <param name="job">The taken job.</param>
+    /// <returns>Bytes charged to the service's per-pump upload budget.</returns>
+    int UploadBytes(object job) => 0;
     /// <summary>Records a taken job's commands into its slot's open command buffer, and the copy of what it answers with
     /// through <see cref="SdfGpuWorkRecording.CopyToReadback"/>.</summary>
     /// <param name="job">The job <see cref="TryTake"/> handed over.</param>
@@ -41,6 +45,8 @@ public interface ISdfGpuWorkClient : IDisposable {
     void Abandon(object job);
     /// <summary>Gets the bytes of the client's own buffers for its jobs, by the memory they live in.</summary>
     GpuMemoryBytes OwnedBytes { get; }
+    /// <summary>Gets the category the client's jobs count under in <see cref="GpuQueueWork"/>.</summary>
+    GpuQueueCategory Category { get; }
 }
 /// <summary>What a completed job of the background GPU work copied back (<see cref="ISdfGpuWorkClient.Complete"/>): the
 /// slot's readback, which its client reads and then releases, on any thread, giving the slot back to the service. The
@@ -145,6 +151,11 @@ public sealed class SdfGpuWork : IDisposable {
     public const int SlotCount = 4;
     /// <summary>The share of the GPU's time background work takes at most, measured over each job's GPU time.</summary>
     public const double GpuShare = 0.25;
+    /// <summary>The largest host payload one background upload job stages: one MiB.</summary>
+    public const int UploadChunkBytes = 1 << 20;
+    /// <summary>The most host payload bytes one pump stages.</summary>
+    public const int UploadBudgetBytes = SlotCount * UploadChunkBytes;
+    private static readonly TimeSpan HostBudget = TimeSpan.FromMilliseconds(2);
     // The GPU time, in seconds, an idle service may bank: an idle spell admits no more than this at once.
     private const double MostCreditSeconds = 0.02;
 
@@ -353,13 +364,19 @@ public sealed class SdfGpuWork : IDisposable {
     // Takes each free slot's next job, the clients in turn, while the budget holds credit; a job may overdraw it once.
     private void Refill(SdfWorldTables tables) {
         Accrue();
+        var began = Stopwatch.GetTimestamp();
+        var uploaded = 0;
         for (var index = 0; (index < SlotCount); index++) {
+            if (uploaded >= UploadBudgetBytes || Stopwatch.GetElapsedTime(began) >= HostBudget) { m_budgetHolds++; return; }
             var slot = m_slots[index];
 
             if ((slot.Job is not null) || (slot.Lease is { Released: false })) { continue; }
             if (m_credit <= 0.0) { m_budgetHolds++; return; }
             if (!TryTake(tables: tables, client: out var client, estimate: out var estimate, job: out var job)) { return; }
+            uploaded += client.UploadBytes(job);
             Submit(client: client, estimate: estimate, index: index, job: job, slot: slot);
+            // A full four-slot pump can exhaust the byte budget on its last iteration too.
+            if (uploaded >= UploadBudgetBytes || Stopwatch.GetElapsedTime(began) >= HostBudget) { m_budgetHolds++; return; }
         }
     }
     private bool TryTake(SdfWorldTables tables, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out ISdfGpuWorkClient? client, out double estimate, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job) {
@@ -407,8 +424,10 @@ public sealed class SdfGpuWork : IDisposable {
         // Retain the taken job even if submission throws after executing commands but before arming its fence.
         slot.Job = job;
         slot.Client = client;
-        try { m_gpu.QueueSubmitter.Submit(commandBufferHandles: [commandBuffer], fence: slot.Fence); }
-        catch { m_submissionFailed = true; throw; }
+        try {
+            using var attribution = GpuQueueWork.Attribute(category: client.Category);
+            m_gpu.QueueSubmitter.Submit(commandBufferHandles: [commandBuffer], fence: slot.Fence);
+        } catch { m_submissionFailed = true; throw; }
         slot.Estimate = estimate;
         m_credit -= estimate;
         m_submitted++;

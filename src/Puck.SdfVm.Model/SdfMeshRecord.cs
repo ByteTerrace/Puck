@@ -9,13 +9,18 @@ namespace Puck.SdfVm;
 /// frame slot or -1, the word the mesh's members sit at, the carry every world position and normal the draw resolves
 /// goes through last (a unit rotation quaternion, a translation, then the uniform scale a position takes before the
 /// translation), the world-space clip plane (<c>dot(n, x) + d</c>, a point with a negative value not drawn; all zeros
-/// draws everything), the shared level table's address and count, and the draw's bounds and selection metadata.
+/// draws everything), the shared level table's address and count, the draw's bounds and selection metadata, and the
+/// handle of the heights the draw is displaced by (<see cref="DisplacementWord"/>).
 /// </summary>
 public static class SdfMeshRecord {
     /// <summary>The leading object-to-world matrix words, also the compact previous-pose stride.</summary>
     public const int MatrixWords = 16;
     /// <summary>The words of one draw's record.</summary>
-    public const int DrawWords = 63;
+    public const int DrawWords = 64;
+    /// <summary>The handle, in the frame's sampled table (<see cref="SdfFrameSampled"/>), of the heights a height field's
+    /// draw displaces its baked reference by, or <see cref="SdfFrameSampled.None"/> for a draw drawn as it was
+    /// baked.</summary>
+    public const int DisplacementWord = 63;
     /// <summary>The first of four four-word rows used by GPU draw selection: center and flags; half X and stretch;
     /// half Y and staged instance generation; half Z and level count.</summary>
     public const int SelectionWord = 47;

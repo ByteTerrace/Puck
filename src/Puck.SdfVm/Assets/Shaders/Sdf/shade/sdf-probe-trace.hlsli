@@ -13,7 +13,7 @@ groupshared uint sdfProbeTopStack[SDF_PROBE_STACK_DEPTH * SDF_PROBE_GROUP_SIZE];
 groupshared uint sdfProbeGeometryStack[SDF_PROBE_STACK_DEPTH * SDF_PROBE_GROUP_SIZE];
 
 // The service resets and reads the assertion word after this job's payload, independently of retained slot capacity.
-void sdfProbeStackOverflow() {
+void sdfProbeTraversalFault() {
     uint probes, stride;
     sdfProbeOrigins.GetDimensions(probes, stride);
     InterlockedAdd(sdfProbeHitsRW[probes * SDF_PROBE_RESULT_STRIDE], 1u);
@@ -82,8 +82,10 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
     float entryDistance;
     if (root == 0 || !sdfProbeSlab(root, origin, inverse, maximum, entryDistance)) { return false; }
     uint top = 1, hitInstance = 0, hitTriangle = 0;
+    uint steps = 0;
     sdfProbeTopStack[lane] = root;
     [loop] while (top > 0) {
+        if (++steps > SDF_PROBE_MAX_WALK_STEPS) { sdfProbeTraversalFault(); return anyHit; }
         uint node = sdfProbeTopStack[(--top) * SDF_PROBE_GROUP_SIZE + lane];
         uint link = sdfProbeScene[node + 6];
         uint count = link & ((1u << SDF_PROBE_NODE_COUNT_BITS) - 1u);
@@ -91,7 +93,7 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
             uint first, second;
             sdfProbeChildren(node, origin, inverse, distance, first, second);
             if (top + (first != 0 ? 1u : 0u) + (second != 0 ? 1u : 0u) > SDF_PROBE_STACK_DEPTH) {
-                sdfProbeStackOverflow();
+                sdfProbeTraversalFault();
                 return anyHit;
             }
             if (second != 0) { sdfProbeTopStack[(top++) * SDF_PROBE_GROUP_SIZE + lane] = second; }
@@ -108,6 +110,7 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
             uint depth = 1;
             sdfProbeGeometryStack[lane] = sdfProbeScene[entry + i * SDF_PROBE_ENTRY_WORDS + 1];
             [loop] while (depth > 0) {
+                if (++steps > SDF_PROBE_MAX_WALK_STEPS) { sdfProbeTraversalFault(); return anyHit; }
                 uint inner = sdfProbeGeometryStack[(--depth) * SDF_PROBE_GROUP_SIZE + lane];
                 uint innerLink = sdfProbeScene[inner + 6];
                 uint innerCount = innerLink & ((1u << SDF_PROBE_NODE_COUNT_BITS) - 1u);
@@ -116,7 +119,7 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
                     uint first, second;
                     sdfProbeChildren(inner, localOrigin, localInverse, distance, first, second);
                     if (depth + (first != 0 ? 1u : 0u) + (second != 0 ? 1u : 0u) > SDF_PROBE_STACK_DEPTH) {
-                        sdfProbeStackOverflow();
+                        sdfProbeTraversalFault();
                         return anyHit;
                     }
                     if (second != 0) { sdfProbeGeometryStack[(depth++) * SDF_PROBE_GROUP_SIZE + lane] = second; }

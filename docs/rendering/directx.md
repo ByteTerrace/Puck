@@ -39,11 +39,12 @@ defines this interoperation and the lack of buffer layouts.
 
 The submitter collects a render-graph batch into one ExecuteCommandLists and one
 completion signal. Each deferred fence refers to that completion until its own
-wait drains it. External waits split a pending batch before the waiting work;
-idle waits, exports, uploads, readbacks and presentation flush pending work first.
-The submission.directx source in world.counters counts lists, native executes and
-completion signals through the neutral submitter; presentation and host-copy
-submissions are outside that source.
+wait drains it. An external wait whose fence has already reached its value is
+dropped; one still outstanding splits a pending batch before the waiting work.
+Idle waits, exports, uploads, readbacks and presentation flush pending work first.
+The `gpu.queue` source in `world.counters` counts every native execute, list,
+signal and present on both backends, by who caused it and why it happened then
+(`GpuQueueWork`).
 ## Key features
 
 - *Source-generated bindings, not hand-written P/Invoke:* CsWin32 emits the
@@ -426,9 +427,10 @@ mutex. `DirectXGpuSurfaceExportFactory.CreateExportableFence` creates a
 the handle through `ID3D11Device5::OpenSharedFence` and signals the next value after each write.
 The value rides the image's lease (`GpuImageLease.Wait`), and the node that samples the image adds
 it to the queue submitter with `IGpuQueueSubmitter.AddExternalWait` immediately before the
-submission that samples it (`LeaseRetireList.AddWaits`). `DirectXGpuQueueSubmitter` issues each wait as
-`ID3D12CommandQueue::Wait` immediately before its next submission's `ExecuteCommandLists`, so
-that submission and every later one on the queue wait on the GPU. The wait goes through
+submission that samples it (`LeaseRetireList.AddWaits`). A wait the fence has already reached is
+dropped (`GpuExternalWait.IsReached`): the producer's write has completed. `DirectXGpuQueueSubmitter`
+issues each outstanding wait as `ID3D12CommandQueue::Wait` immediately before its next submission's
+`ExecuteCommandLists`, so that submission and every later one on the queue wait on the GPU. The wait goes through
 `DirectXCommandCalls.QueueWait`, so a removal it meets is a `DeviceLostException`. A fence
 another device created opens through `IGpuSurfaceTransferFactory.TryImportFence` as a
 `DirectXSharedFence`. A Vulkan host allocates the targets and the fence on a headless Direct3D 12

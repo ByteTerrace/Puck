@@ -26,6 +26,7 @@ public sealed partial class SdfWorldTables {
             condition: m_disposed,
             instance: this
         );
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Upload);
 
         // Publishes the newest upload whose fence has already signaled.
         m_work.Poll();

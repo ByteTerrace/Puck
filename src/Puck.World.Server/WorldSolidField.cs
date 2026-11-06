@@ -335,8 +335,10 @@ public sealed class WorldSolidField : IContactField {
     /// <param name="reason">The forwarded <see cref="SdfFieldEvaluator"/> reject reason when a solid names an op the
     /// warp-free evaluator cannot interpret; empty on success.</param>
     /// <param name="regions">The field lattice whose height columns union with the solids for contact, or <see langword="null"/>.</param>
+    /// <param name="posed">Attached solid rows to union in at the given poses (an attached row in
+    /// <paramref name="definition"/> is placed by its inert authored transform like any other), or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when the field compiled, <see langword="false"/> with a named reason otherwise.</returns>
-    public static bool TryBuild(WorldDefinition definition, out WorldSolidField? built, out string reason, IReadOnlyList<WorldFieldRegion>? regions = null) {
+    public static bool TryBuild(WorldDefinition definition, out WorldSolidField? built, out string reason, IReadOnlyList<WorldFieldRegion>? regions = null, IReadOnlyList<WorldPosedSolid>? posed = null) {
         built = null;
         reason = string.Empty;
 
@@ -409,6 +411,34 @@ public sealed class WorldSolidField : IContactField {
                 continue;
             }
 
+            var (material, reach) = BeginRow(placement: placement, creation: creation, solid: solid);
+            var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: worldSeed);
+            var fixedRotation = stamp.FixedRotation;
+
+            stamp.ForEachFixed(instance => EmitCopy(creation: creation, material: material, reach: reach, solid: solid,
+                transform: new FixedCreationStampTransform(
+                    Origin: instance.Origin,
+                    Rotation: fixedRotation,
+                    Scale: FixedQ4816.FromDouble(value: placement.Scale),
+                    ReflectionNormal: instance.ReflectionNormal
+                )));
+        }
+        foreach (var pose in (posed ?? [])) {
+            if ((pose.Placement.Solid is not { } solid) || !CreationStampEmitter.EmitsContact(document: pose.Creation.EngineDocument)) {
+                continue;
+            }
+
+            var (material, reach) = BeginRow(placement: pose.Placement, creation: pose.Creation, solid: solid);
+
+            EmitCopy(creation: pose.Creation, material: material, reach: reach, solid: solid, transform: pose.Transform);
+        }
+
+        // A row's material, its grip, and the bound of each of its copies: the creation's render reach at the row's
+        // scale plus the contact margin the shapes are dilated by. Each placed copy is one program instance carrying
+        // that bound; the evaluator's exact cull skips a hard-union instance the bound proves cannot win a query, so
+        // the bound decides only which work runs, never what distance results; a plane is never culled whatever its
+        // bound.
+        (int Material, float Reach) BeginRow(WorldPlacement placement, WorldPrototype creation, WorldSolid solid) {
             var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
             RecordGrip(
@@ -416,40 +446,14 @@ public sealed class WorldSolidField : IContactField {
                 grantedByOverride: (placement.Grip is not null),
                 material: material
             );
-            var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: worldSeed);
-            var fixedRotation = stamp.FixedRotation;
-
-            // Each placed copy is one program instance carrying a conservative world-space bound: the creation's
-            // render reach at the placement's scale, plus the contact margin the shapes are dilated by. The
-            // evaluator's exact cull skips a hard-union instance the bound proves cannot win a query, so the bound
-            // decides only which work runs, never what distance results; a plane is never culled whatever its bound.
-            var reach = ((CreationStampEmitter.RenderReach(
-                document: creation.EngineDocument,
-                scale: placement.Scale,
-                fontFor: null
-            ) + ((solid.Margin > 0f)
-                ? solid.Margin
-                : 0f)) + InstanceBoundMargin);
-
-            stamp.ForEachFixed(instance => {
-                    _ = builder.BeginInstance(
-                        boundCenter: instance.Origin.ToVector3(),
-                        boundRadius: reach
-                    );
-
-                    var transform = new FixedCreationStampTransform(
-                        Origin: instance.Origin,
-                        Rotation: fixedRotation,
-                        Scale: FixedQ4816.FromDouble(value: placement.Scale),
-                        ReflectionNormal: instance.ReflectionNormal
-                    );
-
-                    CreationStampEmitter.EmitContact(builder, creation.EngineDocument, transform, material, solid.Margin);
-
-                    _ = builder.EndInstance();
-                    placementShapeCount += (creation.Document.Shapes?.Count ?? 0);
-                }
-            );
+            return (material, ((CreationStampEmitter.RenderReach(document: creation.EngineDocument, scale: placement.Scale, fontFor: null) +
+                ((solid.Margin > 0f) ? solid.Margin : 0f)) + InstanceBoundMargin));
+        }
+        void EmitCopy(WorldPrototype creation, WorldSolid solid, int material, float reach, FixedCreationStampTransform transform) {
+            _ = builder.BeginInstance(boundCenter: transform.Origin.ToVector3(), boundRadius: reach);
+            CreationStampEmitter.EmitContact(builder, creation.EngineDocument, transform, material, solid.Margin);
+            _ = builder.EndInstance();
+            placementShapeCount += (creation.Document.Shapes?.Count ?? 0);
         }
 
         var program = builder.Build();

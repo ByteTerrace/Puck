@@ -129,6 +129,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         public bool Disposed { get; private set; }
         public List<SdfGpuWorkReadback> Answers { get; } = [];
         public GpuMemoryBytes OwnedBytes => default;
+        public GpuQueueCategory Category => GpuQueueCategory.Bake;
         public bool TryTake(SdfWorldTables tables, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
             estimatedSeconds = 0.001;
             job = null;

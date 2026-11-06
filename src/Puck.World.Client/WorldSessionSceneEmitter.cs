@@ -583,6 +583,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             IndirectGains = environment.Indirect.Gains,
             IndirectBounces = environment.Indirect.Bounces,
             IndirectBudget = environment.Indirect.Budget,
+            IndirectLightingGrid = environment.Indirect.LightingGrid,
             IndirectApply = environment.Indirect.Apply,
             Lights = environment.Lights,
             Exposure = environment.Exposure,

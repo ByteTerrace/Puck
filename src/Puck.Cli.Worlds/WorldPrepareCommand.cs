@@ -133,6 +133,7 @@ public static class WorldPrepareCommand {
                 WorldDefinitionSerialization.Serialize(definition: definition)
             );
         }
+        PlayerDerivedProducts.Prepare(output);
         Console.WriteLine(value: $"Prepared {visited.Count} hosted world definitions, with {primaryName} as the primary world.");
         return 0;
     }

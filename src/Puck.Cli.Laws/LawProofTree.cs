@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using System.Text;
 using Puck.Abstractions;
 using Puck.Confinement;
-using Puck.Hosting;
 
 namespace Puck.Cli.Laws;
 

@@ -349,12 +349,21 @@ public sealed record WorldRenderShadowCoverage(
 /// <param name="Tier">The boot tier, Medium by default. The live session lever and selected quality preset override it.</param>
 /// <param name="Budget">The irradiance work each frame grants the volume and the lighting age it reports past; absent
 /// bounds nothing.</param>
+/// <param name="LightingGrid">Fixed angular and radiometric grids for indirect captures; absent leaves them continuous.</param>
 public sealed record WorldRenderIndirect(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectSources? Sources = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Bounces = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectApply? Apply = null,
     [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectTier>))] SdfIndirectTier Tier = SdfIndirectTier.Medium,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectBudget? Budget = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectBudget? Budget = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectLightingGrid? LightingGrid = null);
+/// <summary>Fixed grids for indirect light; direct lights remain continuous. Each zero or absent step disables
+/// that grid, and capture history never changes its origin or spacing.</summary>
+/// <param name="DirectionDegrees">Directional azimuth and elevation step in degrees, from zero through 180.</param>
+/// <param name="Radiance">Fractional radiance step per power-of-two range, from zero through one.</param>
+public sealed record WorldRenderIndirectLightingGrid(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? DirectionDegrees = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Radiance = null);
 /// <summary>The irradiance volume's budget: a light change costs a relight of the probes' cached hits and a geometry
 /// change costs a trace, each granted per rendered frame, and overload lengthens the lighting's age rather than the
 /// frame. Every member is optional; an absent one leaves that part unbounded.</summary>

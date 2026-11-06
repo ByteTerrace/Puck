@@ -4,6 +4,11 @@ This Cargo workspace contains Puck's WebAssembly (WASM) standard library,
 the default addon, and verification guests. Start here to build a guest module;
 the individual crate READMEs explain their local role.
 
+The default guest and `puck-stdlib` are freestanding in production builds;
+host-side unit tests retain Rust's standard library. Some verification fixtures
+still link `std` and can be loaded by the scripting host but cannot yet mount
+in a durable World: its checkpoint contract refuses tables and segment-drop state.
+
 An addon is a sandboxed guest the engine drives once per sim tick. It holds no ambient authority: it
 cannot enumerate the world, and it acts only through handles the host mints for it. Everything it
 hears and everything it says crosses as fixed-size cells in two rings inside its own linear memory.
@@ -134,59 +139,29 @@ Puck's host embeds.
 
 ## Build the addons
 
-One-time toolchain setup:
+Install Rust and the target from [machine setup](../docs/development/contributing.md#setting-up-a-machine).
+CI pins Rust 1.96.0; local caches identify the installed Rust/Cargo. The variants are in
+[`builds.json`](builds.json): one crate, optional feature selection and logical
+module path per variant. Cargo manifests describe crates and dependencies;
+they do not inventory built bytes.
 
-```sh
-rustup target add wasm32-unknown-unknown
-```
+The addon loader resolves these logical paths through `WasmGuestBuild` and the
+shared `DerivedBytes` cache. A key includes the source snapshot, lockfile,
+build arguments, Rust/Cargo identity and deriving code. An old `dist` file
+cannot override those sources. A miss compiles offline with the locked
+workspace; a missing Cargo, Rust compiler or target is a named refusal with
+the setup link. Hits, misses and derivation milliseconds are counted.
 
-Then, from the repository root:
+To export the variants for inspection, run `puck wasm build` from the root.
+It uses that same runtime derivation path and writes ignored `dist` outputs,
+printing each output's full content pin. No generated module is committed.
+An authored `addons` row may still pin the bytes it admits; update such a pin
+when intentionally changing that module.
 
-```sh
-puck wasm build
-```
-
-The command builds every committed guest. Each crate that has committed modules declares them in its
-`Cargo.toml` under `[package.metadata.puck]`: one `builds` entry per variant, naming the repository
-paths its module is written to and, for a variant other than the crate's default, its `features`.
-`puck wasm build` reads those entries through `cargo metadata`, runs `cargo build --release
---package <crate> [--no-default-features --features <variant>]` from `wasm/` once per entry, writes
-the module to each path the entry names, and prints each module's `sha256/{64 lowercase hex}` content pin.
-`.cargo/config.toml` already pins the default target, so no `--target` flag is needed. The verb
-refuses before building when a tracked `.wasm` under `wasm/` or `src/` is no entry's output, so a new
-committed guest needs its entry first. Plain `cargo build --release` from `wasm/` builds every
-crate's default variant into `target/wasm32-unknown-unknown/release/`, for example:
-
-```text
-target/wasm32-unknown-unknown/release/puck_addon_default.wasm
-```
-
-Point a world document's `addons` entry at that file, or at your own crate's build output, the same
-way—see "Drop it into a world document" below.
-
-### Refreshing the committed modules
-
-Each guest crate's `dist/` builds (the default addon's
-`wasm/puck-addon-default/dist/puck-addon-default.wasm` among them) are **committed
-binaries**, not something a .NET build makes from this workspace. An `addons` row points at a
-committed module and pins its content hash in the row's own `hash` field.
-
-Update every authored document's `addons` row that pins a module whose printed hash moved.
-
-**The committed bytes' provenance is not gate-enforced.** No build step proves a committed `.wasm`
-was built from the Rust beside it here; they can drift silently if someone edits one without the
-other. `Puck.World.Server.Tests` does refuse every committed module that reports an ABI version other
-than the host's (`ACommittedGuestBinaryReportsTheHostsAbiVersion`). Refreshing the modules is therefore
-a **deliberate step**: run `puck wasm build` whenever a guest's (or a `puck-stdlib` dependency's)
-source or the host's ABI changes, then update every pinning row's `hash` to match the printed
-value **in the same change**. An unrefreshed hash after a real source change means the host is
-running stale bytes under a pin that no longer describes them; a refreshed module with a stale hash
-means the host refuses to load it at all. Neither is silent, but only the first is wrong.
-
-Cargo embeds absolute paths, so a rebuild from a different checkout produces different bytes—and
-therefore a different hash—even when the sources are identical. Read a changed hash as "these are
-new bytes", never as "the source changed", and do not refresh the committed copy incidentally.
-
+Player publishing and `world prepare` prewarm the content-addressed store with
+compiler provenance under current source/code keys. Shipped players verify
+those entries without Cargo or Rust installed. To prepare a player directory
+explicitly, run `puck world prewarm --output <player>`.
 ### Running the unit tests
 
 ```sh

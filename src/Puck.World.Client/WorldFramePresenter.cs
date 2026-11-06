@@ -2226,6 +2226,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             IndirectGains = lighting.Indirect.Gains,
             IndirectBounces = lighting.Indirect.Bounces,
             IndirectBudget = lighting.Indirect.Budget,
+            IndirectLightingGrid = lighting.Indirect.LightingGrid,
             IndirectApply = lighting.Indirect.Apply,
             Volumes = m_volumes,
             // Every emitter's mesh draws: the static placements' and the stamp pool's, then the neighbour worlds'.

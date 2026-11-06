@@ -11,6 +11,7 @@ public sealed partial class ShaderPipelineRenderNode {
         var selected = m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput)];
 
         m_latestSlot = slot;
+        PrepareFrameCommands();
         var commands = m_commands;
         var command = BeginFrameCommands(slot: slot);
 
@@ -37,7 +38,7 @@ public sealed partial class ShaderPipelineRenderNode {
             exported: null,
             slot: slot
         );
-        m_gpu.Recorder.EndCommandBuffer(commandBufferHandle: command);
+        EndRecordedList(command: command);
         commands.Add(item: command);
         SubmitCounted(
             commands: commands,

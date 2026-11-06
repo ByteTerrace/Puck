@@ -21,7 +21,7 @@ public sealed class VulkanLogicalDevice : IDisposable {
     /// from <see cref="GraphicsQueueFamilyIndex"/>, which hands nothing over.</summary>
     public VkQueue GraphicsQueue {
         get {
-            Batch.Split();
+            Batch.Split(cause: GpuQueueCause.QueueDoor);
 
             return m_graphicsQueue;
         }
@@ -54,7 +54,7 @@ public sealed class VulkanLogicalDevice : IDisposable {
     /// handing the open batch's deferred submissions to the graphics queue, so a present follows them.</summary>
     public VkQueue PresentQueue {
         get {
-            Batch.Split();
+            Batch.Split(cause: GpuQueueCause.QueueDoor);
 
             return m_presentQueue;
         }
@@ -134,7 +134,7 @@ public sealed class VulkanLogicalDevice : IDisposable {
         );
 
         // Work deferred to an open batch reaches the queue before the wait drains it; the batch stays open.
-        Batch.Split();
+        Batch.Split(cause: GpuQueueCause.Drain);
 
         var result = m_logicalDeviceApi.WaitIdle(device: Commands);
 

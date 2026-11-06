@@ -26,6 +26,8 @@ public static class SdfMeshProbeTrace {
     public const int InstanceIndexWord = 30;
     /// <summary>Traversal stack capacity shared with the CPU walk.</summary>
     public const int StackDepth = 64;
+    /// <summary>The most node visits in one ray, across both hierarchy levels; corrupt links cannot cycle forever.</summary>
+    public const int MaxWalkSteps = 65536;
     /// <summary>Threads per trace group; the two per-thread stacks occupy 16 KiB.</summary>
     public const int GroupSize = 32;
 }

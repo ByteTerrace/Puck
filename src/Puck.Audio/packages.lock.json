@@ -33,6 +33,7 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "System.IO.Hashing": "[10.*, )"
         }
@@ -51,6 +52,9 @@
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "System.CommandLine": "[2.*, )"
         }
+      },
+      "ByteTerrace.Puck.Confinement": {
+        "type": "Project"
       },
       "ByteTerrace.Puck.Hosting": {
         "type": "Project",

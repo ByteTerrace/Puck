@@ -10,8 +10,11 @@ namespace Puck.Abstractions.Gpu;
 /// an armed creation throws <see cref="GpuCreationFaultException"/> instead of reaching the device, and nothing is
 /// created. It also holds one armed device loss: a GPU host counts each frame it produces here
 /// (<see cref="ThrowIfLossDue"/>), and the armed frame throws <see cref="DeviceLostException"/> inside the frame body
-/// its device-loss policy guards. Only the <c>gpu.faults</c> console verb, which answers the operator alone, arms it,
-/// so a world document can never reach it.
+/// its device-loss policy guards. And it holds one armed recording fault: a render node counts each frame recording it
+/// begins here (<see cref="ThrowIfRecordingDue"/>), and the armed recording throws
+/// <see cref="GpuRecordingFaultException"/> partway through its command list, so the node's handling of a failed record
+/// job can be exercised on a healthy device. Only the <c>gpu.faults</c> console verb, which answers the operator alone,
+/// arms it, so a world document can never reach it.
 /// <para>
 /// Each kind holds at most one armed fault, counted from the moment it is armed, and a fault fires exactly once. The
 /// counts are creation calls, the failed one included, in the order the calls arrive: deterministic by count alone,
@@ -29,6 +32,9 @@ public sealed class GpuCreationFaults {
 
     /// <summary>The refusal code every armed device loss's <see cref="DeviceLostException"/> message starts with.</summary>
     public const string LossRefusalCode = "GPU_DEVICE_LOSS_FAULT";
+    /// <summary>The refusal code every armed recording fault's <see cref="GpuRecordingFaultException"/> message starts
+    /// with.</summary>
+    public const string RecordingRefusalCode = "GPU_RECORDING_FAULT";
 
     // Per kind: the one-based creation number the armed fault fails, or zero when none is armed.
     private readonly long[] m_armed = new long[KindCount];
@@ -39,6 +45,9 @@ public sealed class GpuCreationFaults {
     private long m_framesSeen;
     private long m_lossArmed;
     private bool m_lossRemoves;
+    // Recordings counted since the last disarm, and the one-based recording the armed fault fails, or zero.
+    private long m_recordingsSeen;
+    private long m_recordingArmed;
     private long m_revision;
 
     /// <summary>Gets every kind, in declaration order.</summary>
@@ -211,7 +220,58 @@ public sealed class GpuCreationFaults {
             m_framesSeen = 0L;
             m_lossArmed = 0L;
             m_lossRemoves = false;
+            m_recordingsSeen = 0L;
+            m_recordingArmed = 0L;
             m_revision++;
+        }
+    }
+    /// <summary>Arms the <paramref name="nth"/> frame recording a render node begins from now to fail partway through
+    /// its command list, replacing any recording fault already armed.</summary>
+    /// <param name="nth">The one-based number, counted from now, of the recording that fails: 1 fails the next.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nth"/> is less than 1.</exception>
+    public void ArmRecording(int nth = 1) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            other: 1,
+            value: nth
+        );
+
+        lock (m_gate) {
+            m_recordingArmed = (m_recordingsSeen + nth);
+            m_revision++;
+        }
+    }
+    /// <summary>Counts one frame recording a render node is recording, and throws when it is the armed one, clearing the
+    /// fault as it fires. A node calls this once per frame recording, after its first pass has recorded.</summary>
+    /// <exception cref="GpuRecordingFaultException">This is the recording the armed fault fails.</exception>
+    public void ThrowIfRecordingDue() {
+        long fired;
+
+        lock (m_gate) {
+            fired = ++m_recordingsSeen;
+            if (fired != m_recordingArmed) { return; }
+            m_recordingArmed = 0L;
+            m_revision++;
+        }
+
+        throw new GpuRecordingFaultException(recording: fired);
+    }
+    /// <summary>Reads how many recordings remain before the armed recording fault fires.</summary>
+    /// <param name="remaining">The one-based number, counted from now, of the recording that fails: 1 is the next; zero
+    /// when none is armed.</param>
+    /// <returns><see langword="true"/> when a recording fault is armed.</returns>
+    public bool TryGetArmedRecording(out long remaining) {
+        lock (m_gate) {
+            remaining = ((m_recordingArmed == 0L) ? 0L : (m_recordingArmed - m_recordingsSeen));
+
+            return (m_recordingArmed != 0L);
+        }
+    }
+    /// <summary>Gets how many frame recordings render nodes have counted since the faults were last disarmed.</summary>
+    public long RecordingsSeen {
+        get {
+            lock (m_gate) {
+                return m_recordingsSeen;
+            }
         }
     }
     /// <summary>Counts one frame a GPU host is about to produce, and throws when it is the frame the armed loss fires

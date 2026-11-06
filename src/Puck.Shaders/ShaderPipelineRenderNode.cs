@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
@@ -759,13 +760,21 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     }
     // Begins the slot's one command list, which every pass, the preview, the export copy and the presentation record
     // into; only the region copies, which the passes' recordings owe, record in a list of their own, submitted first.
+    // The recording that begins it owns it until SubmitCounted hands it over or AbandonRecording gives it up. The
+    // borrowed buffers it records against are refreshed first (PrepareFrameCommands), by the caller's preparation.
     private nint BeginFrameCommands(int slot) {
-        RefreshBorrowedBuffers();
+        BeginRecording(slot: slot);
         var command = m_slots[slot].Commands!.CommandBufferHandle;
 
         m_gpu.Recorder.BeginCommandBuffer(commandBufferHandle: command);
-        ReacquireBorrowedBuffers();
+        m_recording.Frame = command;
         return command;
+    }
+    // Takes each borrowed buffer's current allocation and its host state, before the cadence checkpoint of a frame, so
+    // an abandoned recording rolls back to the allocation it would have recorded against.
+    private void PrepareFrameCommands() {
+        RefreshBorrowedBuffers();
+        ReacquireBorrowedBuffers();
     }
     // Records the export's copy and the selected output's presentation at the end of the frame's list.
     private void FinalizeOutputs(int slot, nint command, IGpuExportableImage? exported) {
@@ -1607,6 +1616,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         try {
             return Produce(context: in context);
         } catch {
+            AbandonRecording();
             AbortCadenceFrame();
             throw;
         } finally {
@@ -1730,10 +1740,34 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     }
     // Renders a frame of the installed graph: every pass, the region copies, the preview, the export's copy and the
     // published outputs, in one submission, which takes an exported image back from its reader before it writes it and
-    // completes it for the reader after.
+    // completes it for the reader after. The frame is one record job (ShaderPipelineRenderNode.Recording.cs): prepared,
+    // recorded, then committed; a recording that fails is abandoned before anything reaches the queue.
     private Surface RenderFrame(in FrameContext context, IGpuExportableImage? exported, out ulong exportValue, out bool exportWritten) {
         exportValue = 0UL;
         exportWritten = false;
+
+        var job = PrepareFrame(exported: exported);
+
+        try {
+            RecordFrame(context: in context, job: in job);
+        } catch (Exception error) when (ContainsRecordFailure(error: error)) {
+            AbandonRecording();
+            AbortCadenceFrame();
+            NoteRecordFailure(error: error);
+            return m_lastSurface;
+        }
+        return CommitFrame(
+            exportValue: out exportValue,
+            exportWritten: out exportWritten,
+            job: in job
+        );
+    }
+    // What preparation reserved for one frame's recording.
+    private readonly record struct FrameJob(int Slot, RuntimeResource Selected, bool Previewed, IGpuExportableImage? Exported);
+    // Reserves the next slot: its previous submission retired, its leases retired, its regions bound, this frame's leases
+    // held and the cadence checkpointed, so a failed recording can roll back.
+    private FrameJob PrepareFrame(IGpuExportableImage? exported) {
+        m_recording.PreparedAt = Stopwatch.GetTimestamp();
         UpdateRenderExtents();
 
         var selectedResource = m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput)];
@@ -1747,23 +1781,37 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         slot.Leases.RetireAll();
         BindRegionBuffers(slot: slotIndex);
         HoldLeases();
+        PrepareFrameCommands();
+        m_commands.Clear();
+        BeginCadenceFrame(slot: slotIndex);
+        return new FrameJob(
+            Exported: exported,
+            Previewed: NeedsPreview(spec: selectedResource.Spec),
+            Selected: selectedResource,
+            Slot: slotIndex
+        );
+    }
+    // Records the slot's lists: every pass, the region copies, the preview, the export copy and the presentation.
+    private void RecordFrame(in FrameContext context, in FrameJob job) {
+        m_recording.RecordedAt = Stopwatch.GetTimestamp();
+
+        var slotIndex = job.Slot;
         var commands = m_commands;
         var command = BeginFrameCommands(slot: slotIndex);
 
-        commands.Clear();
-        BeginCadenceFrame(slot: slotIndex);
         RecordPasses(
             command: command,
             context: context,
             slot: slotIndex
         );
+        m_device.Services.Faults?.ThrowIfRecordingDue();
         RecordRegionCopies(
             commands: commands,
             slot: slotIndex
         );
-        var previewed = NeedsPreview(spec: selectedResource.Spec);
+        if (job.Previewed) {
+            var selectedResource = job.Selected;
 
-        if (previewed) {
             m_preview!.Record(
                 PreviewSource(
                     selected: selectedResource,
@@ -1780,21 +1828,31 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         }
         FinalizeOutputs(
             command: command,
-            exported: exported,
+            exported: job.Exported,
             slot: slotIndex
         );
         // The region copies' list runs first in the submission, so the frame's list resolves its timestamps too.
         ResolveTimings(command: command, slot: slotIndex);
-        m_gpu.Recorder.EndCommandBuffer(commandBufferHandle: command);
+        EndRecordedList(command: command);
         commands.Add(item: command);
+    }
+    // Submits the recorded lists and publishes what they write. From the submission on the queue owns the write: a
+    // later export or readback failure must not reuse this submission slot or roll the committed history back.
+    private Surface CommitFrame(in FrameJob job, out ulong exportValue, out bool exportWritten) {
+        m_recording.CommittedAt = Stopwatch.GetTimestamp();
+        exportValue = 0UL;
+        exportWritten = false;
+
+        var slotIndex = job.Slot;
+        var slot = m_slots[slotIndex];
+        var exported = job.Exported;
+
         exported?.BeginWrite();
         SubmitCounted(
-            commands: commands,
+            commands: m_commands,
             fence: slot.Fence!
         );
-        // From here the queue owns the write. A later export or readback failure must not reuse this submission slot
-        // or roll the committed history back.
-        if (previewed) { m_preview!.Submitted(slot: slotIndex); }
+        if (job.Previewed) { m_preview!.Submitted(slot: slotIndex); }
         CommitCadenceFrame();
         m_frame++;
         m_frameLeases.MoveTo(destination: slot.Leases);
@@ -1817,6 +1875,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             exportWritten = true;
         }
         CaptureIfPending();
+        NoteCommitted();
         return m_lastSurface;
     }
 

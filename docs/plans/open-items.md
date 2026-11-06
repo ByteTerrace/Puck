@@ -51,8 +51,8 @@ milestone. The owner requested its baseline and implementation plan, which
 2. [Lighting and GI](#lighting-and-gi) [high]: the
    [graphics architecture plan](graphics-architecture.md)'s G1 acceptance work:
    reduce the landed GPU trace/relight's lockstep drain to a frame's work;
-   the sun's fixed grid stays the lockstep drain's correctness
-   fix beside it.
+   the authored capture grid bounds when changing lighting owes a drain,
+   while each boundary still needs the same full convergence.
 3. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
    M1 read, after the draw-identity fix R2's review found
    ([GPU robustness](#vulkan-regressions-and-gpu-robustness)).
@@ -98,9 +98,6 @@ milestone. The owner requested its baseline and implementation plan, which
 19. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
     levels or the sky term the moment a view arrives; the rest after the image
     meter.
-20. [Derived products are caches](#derived-products-are-caches): build the
-    generated cartridges and firmware images on demand and remove the bytes
-    from git; narrow the compiled-world key; measure the wasm modules.
 21. [Test runner and replay](#test-runner-and-replay): profile what recording
     still folds whole every tick before choosing the next segment.
 22. [Bake detail](#bake-detail): measure the static round-section term.
@@ -567,13 +564,6 @@ The custom no-GC runtime port stays later work, on the
   Refresh Rate: confirm the 60 FPS bar and VRR pacing hold in front of and
   behind another window, and that `world.target display` reaches the display's
   top rate.
-- [medium · unconfirmed] Owner: rendering integration. Attribute the shared-batch
-  review's higher execute/signal counts against A2 with matched camera, validation
-  and device workloads. `DirectXSubmissionWork.Process`
-  (`src/Puck.DirectX/DirectXSubmissionWork.cs:6`) counts all devices, including
-  background work; a process total does not isolate a frame batch regression.
-  The review's paired headless counter deltas are unchanged; GPU readings and
-  capture paths are recorded in its evidence commit.
 - [medium · unconfirmed] Owner: rendering integration. In the painting wing,
   `world.wait residency` can time out after `world.wait bakes` succeeds and
   presented captures complete, on both backends. Trace `ArmBakes`' resident
@@ -1094,10 +1084,9 @@ source are the next lanes here; the items below are the system work beside them.
   static and animated placements), and profile bake admission, landing and
   illumination together. The stream is eight placements of one still segment
   and the falls still sheets, their motion the flow layer's shading.
-  Drawn heights move by an authored `surfaceStep` with hysteresis, and each
-  step publishes a new snapshot of the field's `SdfSampledField` without
-  rebuilding the program, so only that field's group rebakes. Run costs and
-  before/after evidence live in the water follow-up commits.
+  Drawn heights move at draw time over a reference mesh keyed by the raised
+  columns alone ([field surfaces](water-rendering.md#field-surfaces-move-at-draw-time)),
+  so a moving level rebakes nothing.
   The prototype audits also flag normal/topology defects in the glacier, lake and falls
   despite finding no uncovered surface. Inspect those witnesses through the
   existing mesh-audit image output before attributing them to authored style.
@@ -1246,6 +1235,20 @@ certified-contact packet and step 8 closes. The measured state is in the
   large radius.
 
 ### Refactoring campaign
+
+- [medium · addons] `WasmModuleDeclarations.WithCheckpointExports`
+  (`src/Puck.Assets/WasmModuleDeclarations.Checkpoint.cs:17`) refuses every
+  table and every element/data-count section, and the World mount gate
+  (`src/Puck.World.Addons/WorldAddonRuntime.Lifecycle.cs:621`) requires a
+  checkpointable guest. Rust guests that link the standard library consequently
+  compile and load through `WasmModuleLoader` but cannot mount in a World.
+  The default guest and its shared library are freestanding; the remaining
+  Rust verification fixtures still exercise this limit. Owner: addon runtime.
+  Next: model table and segment continuation state in generic checkpoints, or
+  mechanically prove which module resources are immutable, then mount and
+  restore a standard-library guest in the headless debug world, then author
+  channelwalk's capability-boundary scenarios there. Keep the
+  current named refusal until that state can be reproduced.
 
 Owner: the next session's lead · Next: take the GPU region
 growth merge (with the uniform view limit enforced in `Grow`) as one lane, then
@@ -1586,7 +1589,7 @@ file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
    `MotionWorldProcess.Start` (`Puck.Cli.Runs/Motion/MotionWorldProcess.Device.cs:54`),
    `SweepCommand.ScenarioFile` (`Puck.Cli.Runs/Sweep/SweepCommand.cs:361`) and
    `OperatorWorlds.Launch` (`Puck.Mcp/OperatorWorlds.cs:463`) build
-   `ProcessStartInfo` by hand beside `ChildProcess` (`Puck.Hosting/ChildProcess.cs`)
+   `ProcessStartInfo` by hand beside `ChildProcess` (`Puck.Abstractions/ChildProcess.cs`)
    and `CliProcess` (`Puck.Cli.Core/CliProcess.cs:135`). `[low]` The sweep
    reads both streams to end with no exit drain grace, the hang
    `ChildProcess.ExitDrainGrace` exists for (a build server holding the pipe).
@@ -1653,8 +1656,8 @@ confirmed the AV1 item in the code; the rest are unconfirmed):
    (`Puck.World.Transpiler/Composition/WorldCompileCache.cs:186`, `494`) repeat
    `AssemblyReach.Of` (`Puck.Assets/AssemblyReach.cs:18`),
    and `CacheRetention.EnforceOnWrite`,
-   skipping `CacheRetention.Due`'s one-minute scan throttle on every cache
-   write (S) `[low]`.
+   skipping its per-process write tally (it lists only once its own writes pass
+   the bound, or a minute on) on every cache write (S) `[low]`.
 3. Camera plane validation and L8/BGRA packing:
    `Win32FaceAuthenticationPixelGraph`
    (`Puck.Platform.Windows/Win32FaceAuthenticationCameraGraph.cs:204`) beside
@@ -1716,6 +1719,17 @@ and owns the coarse levels' connectivity visibility (G3), and the
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) holds
 the fixed poses and the approaches already rejected.
 
+- [medium] Probe scene capacity retains its high-water allocation:
+  `GpuArena.Allocate` (`src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:147`)
+  never lowers `Words`, and `RecordSceneUpload`
+  (`src/Puck.SdfVm/SdfMeshProbeGpuWork.Scene.cs:33`) only grows the region.
+  Reclaim capacity after a large scene leaves, without moving a published
+  root or storage still read by an in-flight submission. Owner: lighting batch.
+- [medium] Unify the keyed placement arenas in `SdfMeshIrradianceScene.GpuArena`
+  (`src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:140`) and `SdfMeshRegionArena`
+  (`src/Puck.SdfVm/SdfMeshRegionArena.cs:20`). Both own keyed placement over
+  shared free ranges; one mechanism should retain their distinct payloads and
+  publication lifetimes. Owner: lighting batch.
 - Attribute `SdfMeshIrradiance.DescribeRelightReference`'s outdoor next-bounce
   discrepancy at `world.probe -3 1 -5 0 1 0`, after the fixed outdoor visit
   with day held. Separate retraced hit differences, shadow rays and the
@@ -1727,6 +1741,11 @@ the fixed poses and the approaches already rejected.
   `SdfMeshProbeRelight.OutputWords` prefix and publication copies the device
   buffer. Preserve the source output's readback-token/fence ownership through
   commit; do not trade that lifetime guarantee for fewer copied bytes.
+  `SdfMeshProbeGpuWork.Complete` (`src/Puck.SdfVm/SdfMeshProbeGpuWork.cs:352-358`)
+  also allocates the full readback and copies its payload again to strip the
+  assertion word. Carry an explicit logical length through the answer instead
+  of copying that payload; count answer bytes and allocations beside relight
+  time when compacting it.
 
 - [medium] GPU probe work still duplicates memory and copies.
   - The probe service's feedback region keeps a CPU copy as large as the
@@ -1737,10 +1756,10 @@ the fixed poses and the approaches already rejected.
     interleaves records; one scatter dispatch replaces them.
   - The bloom kernels (`sdf-bloom-down`, `sdf-bloom-apply`) and the overlay
     keep literal luminance weights instead of the generated `SDF_LUMINANCE`.
-  - `SdfMeshProbeGpuWork.Abandon` leaves the scene carry to the next
-    completion.
-  - Relight, select, meter and cache have no CPU/GPU parity law; only
-    `world.probe`'s relight reference compares them.
+  - Full relight, selection, metering and hit-cache paths need CPU/GPU parity
+    coverage. The trace law covers miss-only directional visibility and the
+    gather law covers receiver lookup; `world.probe` supplies the broader
+    relight reference.
 
 - [high] Night lighting, from the owner's walkthrough at the lawn's trees:
   - **The jump to night is wrong.** Forcing midnight
@@ -1760,32 +1779,6 @@ the fixed poses and the approaches already rejected.
     mean luma. This is probably stepped relighting or exposure updates. Check it
     against the lockstep relight work below.
 
-- [high] Under lockstep a moving sun relights the whole probe window every tick
-  from no bounce: a lockstep frame drains the irradiance relight to the end
-  before it renders (`SdfMeshIrradiance.Stage`, `SdfMeshIrradiance.cs:538-563`),
-  and the day cycle moves the lighting version in `DrainKey()` (`:578`) every
-  tick, the capture limit skipped at `:1084`. A lockstep tick with the day
-  running therefore takes seconds, so the sweep's windowed leg cannot run with
-  the day cycle ([sweep](#sweep-and-visual-checks)). Fix at the cause: quantize
-  the sun on a fixed grid under lockstep (never against the last capture, which
-  would make the image depend on when a run started), so a lockstep frame
-  relights only what its own time moved. One function snaps the directional
-  lights' direction and radiance, read by both `RefreshLighting`'s key
-  (`SdfMeshIrradiance.cs:1076`) and `Lighting.Capture` (`:1092`), so the drained
-  light stays a pure function of the frame; the windowed path can take the same
-  snapped key in place of its wall-clock `LightingInterval`, leaving one policy.
-  The sky-only tolerance (`SkyMatches`, `:1086,1097`) compares against the
-  previous capture too, so lockstep's sky bounce also depends on history; the
-  same quantization removes it. A drain relights the whole window from no
-  bounce until a pass moves nothing, and that from-no-bounce invariant stays.
-  Measured in the debug world at High: with the day running at its authored
-  1/1440 per second, every lockstep tick advanced `sdf.mesh-gi.relit` by
-  1,032,192 (73,728 probes × 14 passes); with the day pinned, 100 stationary
-  lockstep ticks relit nothing, and each window move (a `debug.go`, a tier
-  switch) relit the same 1,032,192 once, which a walk crossing a window's band
-  repeats. Prove it by `sdf.mesh-gi.relit` per tick and drains per 100
-  ticks under lockstep with the day cycle running, and by two lockstep runs
-  started at different ticks capturing an identical still at one tick.
 - From step 1: stretching the far cascade to cover the valley costs too much,
   so the valley waits for the terrain pass's step 7 static cascade; indoors a
   cel style tints bounced light as its shadow band, so banded materials in the
@@ -2016,31 +2009,6 @@ colliders report's only red findings left are the valley's relief
   bake items: a long thin member of a static union baking at the union's capped
   lattice, the sharp-edge rounding of about a tenth of a cell, and the Moth's
   interpenetrating meshes.
-
-### Derived products are caches
-
-Owner: delivery lane with the machines lane · ordinary · Next: choose how hosts
-without Rust obtain addon caches before removing the committed `wasm/*/dist` modules.
-
-A derived product is a cache, never the truth
-([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)):
-its identity is computed from its inputs, a miss is derived again and counted, and
-it is never committed or compared by a gate. The owner's ruling on generated
-bytes: hand-authored bytes are source and stay committed; generated outputs are
-derived products, removed from git and built on demand.
-
-- Stop committing the built addon guests: the eleven `wasm/*/dist/*.wasm`
-  modules are compiled from the Rust crates beside them, and a derived product
-  is a cache ([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
-  A measured Windows run with Rust 1.96.0 and the `wasm32-unknown-unknown` target
-  already installed built all eleven declared variants offline into an empty
-  scratch target in 6.942 seconds; repeating the same variants took 3.613 seconds.
-  Both fit the 30-second edit-to-running bar, before the engine build and boot;
-  neither includes installing Rust or its target. The committed modules were
-  untouched. A miss still requires that toolchain on each host, so the remaining
-  decision is toolchain availability and prewarming/provisioning caches.
-  A hand-written fixture module (the transpiler sample's 8-byte
-  `Samples/addons/rules.wasm`) is source.
 
 ### Test runner and replay
 
@@ -2548,16 +2516,6 @@ both runs.
   valid readings against a baseline whose only red reason was a prior baseline
   difference remain clean, rather than becoming red for `red -> clean`.
 
-- [high] The windowed leg never reaches its tour while the day cycle runs.
-  After settling, the sweep runs `world.rate resume`, `world.wait 300`,
-  `world.rate pause` in one 120 s call (`SweepCommand.cs:267`) with lockstep on,
-  and every lockstep frame relights every probe under the moving sun, so the
-  call times out and every windowed signal and still goes unmeasured. The cause
-  is the [lockstep relight](#lighting-and-gi); holding the sun in the plan's
-  prelude does not help, since the warm-up runs before the prelude. Until it is
-  fixed, a tour runs attached with the sun held before attaching
-  (`world.row.set state day advance
-  {"perSecondNumerator":0,"perSecondDenominator":1}`).
 - [medium] `world.debug-view report colliders --json` throws
   `DivideByZeroException` (`[world.debug-view: handler threw
   DivideByZeroException: Attempted to divide by zero.]`) on the debug world,
@@ -2580,10 +2538,9 @@ both runs.
   the repository like any derived product; each machine compares against its
   own. The tour splits into a main part and a `night-field` part per backend,
   as attached windowed legs with the sun held (`--no-headless --no-scenarios`),
-  and each part compares with its own counterpart. Known red signals are the
-  baseline's drift, the colliders refusal, frames read under lockstep (each tick
-  waiting for its frame, so not the frame bar), and the watchdog's
-  `companion-overlap` records.
+  and each part compares with its own counterpart. Warm-up and timing signals
+  use ordinary presentation (`SweepCommand.Run`); only the still tour converges
+  its clock and lighting.
 - [low] A sweep's `--baseline` names one report, but a split run (a headless
   report and a windowed one, or a tour in parts) marks every signal the other
   part read as `baseline: new signal`, red, and a report does not merge two runs

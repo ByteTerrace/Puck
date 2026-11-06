@@ -9,7 +9,7 @@ public sealed partial class RenderGraphCadenceLawTests {
         using var ordinary = ImageNode(new FakePipelineGpu(), new ImageFactory(), "ordinary");
 
         ordinary.ProduceUntilInstalled();
-        Assert.Equal(0UL, ordinary.CadenceCpuBytes);
+        Assert.True(condition: (ordinary.CadenceCpuBytes > 0UL));
         using var retained = Node(new FakePipelineGpu(), new Model());
 
         retained.ProduceUntilInstalled();

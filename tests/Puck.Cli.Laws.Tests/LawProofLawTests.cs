@@ -648,7 +648,7 @@ public sealed class LawProofCleanupVerdictLawTests : LawProofLaws {
                         cleanupGit: (repository, arguments) => {
                             ++cleanupCalls;
                             if (failureStage == 2) {
-                                return new Puck.Hosting.ChildProcessResult(ExitCode: 1, Stderr: "cannot inspect registration", Stdout: "");
+                                return new Puck.Abstractions.ChildProcessResult(ExitCode: 1, Stderr: "cannot inspect registration", Stdout: "");
                             }
                             if ((failureStage == 0) || (cleanupCalls == 2)) { throw cleanupException; }
                             return CliGit.Run(arguments: arguments, repository: repository);

@@ -100,10 +100,12 @@ public sealed partial class RenderGraphRuntime {
                     recorder: recorder
                 );
                 recorder.EndCommandBuffer(commandBufferHandle: command);
-                gpu.QueueSubmitter.Submit(
-                    commandBufferHandles: [command],
-                    fence: fence
-                );
+                using (GpuQueueWork.Attribute(category: GpuQueueCategory.Upload)) {
+                    gpu.QueueSubmitter.Submit(
+                        commandBufferHandles: [command],
+                        fence: fence
+                    );
+                }
 
                 return new StandIn(
                     fence: fence,
