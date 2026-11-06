@@ -173,7 +173,7 @@ public static class EvalsCommand {
     private static Command CreateGraders() {
         var resultArgument = new Argument<string>(name: "result") { Description = "The result document (aggregate-result.json)." };
         var armOption = new Option<string>(name: "--arm") { DefaultValueFactory = static _ => "with", Description = "The arm whose runs are listed: with or without." };
-        var evidenceOption = new Option<int>(name: "--evidence-chars") { DefaultValueFactory = static _ => 0, Description = "Cut each judge excerpt to this many characters; 0 prints it whole." };
+        var evidenceOption = CliOptions.Count(defaultValue: 0, description: "Cut each judge excerpt to this many characters; 0 prints it whole.", minimum: 0, name: "--evidence-chars");
         var command = new Command(description: "List every grader below ceiling with its votes and evidence, the hand-labelling work list.", name: "graders") { resultArgument, armOption, evidenceOption };
 
         armOption.AcceptOnlyFromAmong("with", "without");

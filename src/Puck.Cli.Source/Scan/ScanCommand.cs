@@ -122,10 +122,10 @@ public static class ScanCommand {
 
     public static Command Create() {
         var groupedOption = new Option<bool>(name: "--grouped") { Description = "Also write <name>.grouped.json, the per-file work list." };
-        var maxPerChunkOption = new Option<int>(name: "--max-per-chunk") { DefaultValueFactory = _ => ScanOptions.DefaultMaxPerChunk, Description = "Entries per grouped chunk." };
-        var minExpressionTokensOption = new Option<int>(name: "--min-expression-tokens") { DefaultValueFactory = _ => ScanOptions.DefaultMinExpressionTokens, Description = "clones: minimum token count of a cloned expression; 0 skips the expression pass." };
-        var minStatementsOption = new Option<int>(name: "--min-statements") { DefaultValueFactory = _ => ScanOptions.DefaultMinStatements, Description = "clones: minimum statement count." };
-        var minTokensOption = new Option<int>(name: "--min-tokens") { DefaultValueFactory = _ => ScanOptions.DefaultMinTokens, Description = "clones: minimum token count." };
+        var maxPerChunkOption = CliOptions.Count(defaultValue: ScanOptions.DefaultMaxPerChunk, description: "Entries per grouped chunk.", minimum: 1, name: "--max-per-chunk");
+        var minExpressionTokensOption = CliOptions.Count(defaultValue: ScanOptions.DefaultMinExpressionTokens, description: "clones: minimum token count of a cloned expression; 0 skips the expression pass.", minimum: 0, name: "--min-expression-tokens");
+        var minStatementsOption = CliOptions.Count(defaultValue: ScanOptions.DefaultMinStatements, description: "clones: minimum statement count.", minimum: 1, name: "--min-statements");
+        var minTokensOption = CliOptions.Count(defaultValue: ScanOptions.DefaultMinTokens, description: "clones: minimum token count.", minimum: 1, name: "--min-tokens");
         var noBlocksOption = new Option<bool>(name: "--no-blocks") { Description = "clones: skip the nested-block pass." };
         var onlyOption = new Option<string?>(name: "--only") { Description = $"Restrict to named analyzers, comma-separated (known: {KnownAnalyzers})." };
         var outputOption = CliOptions.Output(description: "The directory each analyzer's <name>.jsonl is written to (default <repo>/artifacts/scan).");

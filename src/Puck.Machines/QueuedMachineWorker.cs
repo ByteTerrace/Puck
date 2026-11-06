@@ -196,8 +196,10 @@ public sealed class QueuedMachineWorker : IDisposable {
             op: TimeTravelOp.Status
         ).Status;
 
-    internal QueuedMachineCheckpoint CaptureCheckpoint() => RunCheckpoint(restore: null);
-    internal void RestoreCheckpoint(QueuedMachineCheckpoint checkpoint) => _ = RunCheckpoint(restore: checkpoint);
+    internal QueuedMachineCheckpoint CaptureCheckpoint() => RunCheckpoint(restore: null, validateOnly: false);
+    internal void RestoreCheckpoint(QueuedMachineCheckpoint checkpoint) => _ = RunCheckpoint(restore: checkpoint, validateOnly: false);
+    // Makes every check a restore of the checkpoint makes, behind the same accepted steps, and applies nothing.
+    internal void ValidateCheckpoint(QueuedMachineCheckpoint checkpoint) => _ = RunCheckpoint(restore: checkpoint, validateOnly: true);
 
     // Stops the worker and disposes the core (a forced final save flush rides its Dispose). A lent core is severed from
     // its link first, so the link never steps a core that is being torn down.
@@ -265,6 +267,10 @@ public sealed class QueuedMachineWorker : IDisposable {
                 (restore.CycleScale != core.CycleRate.Seconds)
             ) {
                 request.Error = "machine restore requires matching content, configuration, and clock scale";
+                return;
+            }
+            if (request.ValidateOnly) {
+                request.Result = restore;
                 return;
             }
             core.RestoreState(
@@ -494,7 +500,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             m_audioRing.Clear();
         }
     }
-    private QueuedMachineCheckpoint RunCheckpoint(QueuedMachineCheckpoint? restore) {
+    private QueuedMachineCheckpoint RunCheckpoint(QueuedMachineCheckpoint? restore, bool validateOnly) {
         lock (m_lifecycleLock) {
             ObjectDisposedException.ThrowIf(
                 condition: (m_disposed != 0),
@@ -502,7 +508,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             );
             ThrowIfLent(operation: "checkpoint");
             if (m_core is null) { throw new InvalidOperationException(message: "cannot checkpoint an empty machine"); }
-            var request = new CheckpointRequest { Restore = restore };
+            var request = new CheckpointRequest { Restore = restore, ValidateOnly = validateOnly };
             using var completion = new ManualResetEventSlim(initialState: false);
 
             if (!m_lifecycle.EnqueueAndWait(item: new WorkItem(
@@ -1229,6 +1235,7 @@ public sealed class QueuedMachineWorker : IDisposable {
         public string? Error;
         public QueuedMachineCheckpoint? Restore;
         public QueuedMachineCheckpoint? Result;
+        public bool ValidateOnly;
     }
     private readonly record struct WorkItem(
         WorkKind Kind,

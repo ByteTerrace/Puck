@@ -41,7 +41,9 @@ public static class CacheCommand {
     /// <returns>The command.</returns>
     public static Command Create() {
         var cache = new Option<string?>("--cache") { Description = "The cache directory; the per-user shader cache the build and the CLI share when omitted." };
-        var unused = new Option<int>("--unused-minutes") { Description = "Remove every file no compile has used for this many minutes, at least 1.", Required = true };
+        var unused = CliOptions.Count(description: "Remove every file no compile has used for this many minutes, at least 1.", minimum: 1, name: "--unused-minutes");
+
+        unused.Required = true;
         var prune = new Command(
             description: """
             Remove every file of a shader compiler cache that no compile has used for --unused-minutes.

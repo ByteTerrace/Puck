@@ -10,18 +10,10 @@ public static class CanaryGpuJobs {
 
     /// <summary>Creates <c>--gpu-jobs</c>.</summary>
     /// <returns>The option.</returns>
-    public static Option<int> Create() {
-        var option = new Option<int>(name: "--gpu-jobs") {
-            DefaultValueFactory = static _ => Default,
-            Description = $"Maximum canary legs on the GPU at once: a windowed or offscreen World, or a leg requiring gpu (default {Default}). Each still holds its World processes of --jobs.",
-        };
-
-        option.Validators.Add(item: static result => {
-            if (result.GetValueOrDefault<int>() < 1) {
-                result.AddError(errorMessage: "--gpu-jobs must be at least 1.");
-            }
-        });
-
-        return option;
-    }
+    public static Option<int> Create() => CliOptions.Count(
+        defaultValue: Default,
+        description: $"Maximum canary legs on the GPU at once: a windowed or offscreen World, or a leg requiring gpu (default {Default}). Each still holds its World processes of --jobs.",
+        minimum: 1,
+        name: "--gpu-jobs"
+    );
 }

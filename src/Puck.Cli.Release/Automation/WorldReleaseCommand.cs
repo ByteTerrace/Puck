@@ -359,7 +359,7 @@ public static class WorldReleaseCommand {
             description: "The directory that retains the isolated legs and their qualification evidence.",
             required: true
         );
-        var qualificationSteps = new Option<int>("--steps") { DefaultValueFactory = _ => 60, Description = "Exact continuation steps per packaged leg (1–1024)." };
+        var qualificationSteps = CliOptions.Count(defaultValue: 60, description: "Exact continuation steps per packaged leg (1–1024).", maximum: 1024, minimum: 1, name: "--steps");
         var qualify = new Command(
             description: "Exercise exact packaged releases in both directions against an offline fixture.",
             name: "qualify"

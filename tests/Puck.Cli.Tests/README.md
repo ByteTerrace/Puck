@@ -27,7 +27,7 @@ The suites share their fixtures from [`tests/Shared/Cli`](../Shared/Cli/README.m
 ## What this suite holds
 
 `CliConventionLawTests` holds every verb of the composed tree to the CLI
-conventions, with its exemptions in `CliConventionExemptions.json`, and checks
+conventions, with no exemptions, and checks
 that help loads no compiler, build engine, benchmark or GPU assembly.
 `SchemaBootstrapLawTests` holds the schema bootstrap's root, and
 `LedgerDriftTests` holds the architecture, registry and schema ledgers to what

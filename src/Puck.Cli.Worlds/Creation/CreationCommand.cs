@@ -58,7 +58,7 @@ public static partial class CreationCommand {
     }
     private static int RunShape(string worldPath, string prototypeId, string[] shapeNames) {
         if (!CliWorldDocuments.TryLoad(definition: out var definition, fullPath: out var fullPath, path: worldPath, verb: "creation shape")) {
-            return 1;
+            return CliExit.Refused;
         }
 
         var creations = definition.Creations;
@@ -95,7 +95,7 @@ public static partial class CreationCommand {
     }
     private static int RunStats(string worldPath, string? prototypeId) {
         if (!CliWorldDocuments.TryLoad(definition: out var loaded, fullPath: out var fullPath, path: worldPath, verb: "creation stats")) {
-            return 1;
+            return CliExit.Refused;
         }
 
         var definition = loaded;
@@ -128,8 +128,7 @@ public static partial class CreationCommand {
                     prototype: prototype
                 );
             } catch (Exception exception) when ((exception is InvalidOperationException or ArgumentException)) {
-                Console.Error.WriteLine(value: $"creation stats: '{prototype.Id}' step-clamp inspection failed — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
-                return 1;
+                return CliExit.Refuse(verb: "creation stats", what: $"'{prototype.Id}'", why: $"step-clamp inspection failed: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
             }
         }
 
@@ -139,12 +138,10 @@ public static partial class CreationCommand {
                 out _,
                 out var contactReason
             )) {
-                Console.Error.WriteLine(value: $"creation stats: contact inspection failed — {contactReason}");
-                return 1;
+                return CliExit.Refuse(verb: "creation stats", what: "the world", why: $"contact inspection failed: {contactReason}");
             }
         } catch (Exception exception) when ((exception is InvalidOperationException or ArgumentException)) {
-            Console.Error.WriteLine(value: $"creation stats: contact inspection failed — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
-            return 1;
+            return CliExit.Refuse(verb: "creation stats", what: "the world", why: $"contact inspection failed: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
         }
 
         Console.Out.WriteLine(value: "  contact: accepted — the world's deterministic field compiled, including solid placements and screens; render-only facets remain omitted.");

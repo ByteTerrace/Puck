@@ -22,7 +22,7 @@ internal static class CliWorldDocuments {
         // The document a boot would run is drawn before it is read; a cross-document claim needs its neighbours, which an
         // offline inspection has none of.
         if (!WorldDefinitionLoader.TryLoadFileForAdmission(admission: out var admission, contentHash: out _, documents: PuckDocumentComposer.Instance, path: fullPath, proveNeighbours: false, reason: out var reason)) {
-            Console.Error.WriteLine(value: $"{verb}: '{fullPath}' failed to load — {reason}");
+            _ = CliExit.Refuse(verb: verb, what: CliPaths.ToDisplay(fullPath: fullPath), why: $"failed to load: {reason}");
 
             return false;
         }

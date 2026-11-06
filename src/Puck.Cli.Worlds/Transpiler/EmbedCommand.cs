@@ -13,145 +13,104 @@ namespace Puck.Cli.Transpiler;
 
 /// <summary>Implements the <c>puck embed</c> command and its <c>probe</c> subcommand.</summary>
 public static class EmbedCommand {
-    /// <summary>Creates the <c>embed</c> CLI command definition.</summary>
+    private const string LockVerb = "embed lock";
+    private const string ProbeVerb = "embed probe";
+
+    // The provider options lock and probe share: the provider kind, its endpoint and its request shape.
+    private sealed record ProviderOptions(Option<string?> Provider, Option<string?> Endpoint, Option<bool> OmitDimensions, Option<int> TimeoutSeconds) {
+        public static ProviderOptions Create() {
+            var provider = new Option<string?>(name: "--provider") {
+                Description = "Provider kind: fixture or openai-compatible. Defaults to fixture for puck-fixture models.",
+            };
+
+            provider.AcceptOnlyFromAmong("fixture", "openai-compatible");
+
+            return new ProviderOptions(
+                Endpoint: new Option<string?>(name: "--endpoint") { Description = "The OpenAI-compatible HTTP endpoint URI a remote provider is reached at." },
+                OmitDimensions: new Option<bool>(name: "--omit-dimensions") { Description = "Omit the dimensions field from embedding request payloads." },
+                Provider: provider,
+                TimeoutSeconds: CliOptions.Count(defaultValue: 60, description: "Request timeout in seconds (default 60).", minimum: 1, name: "--timeout-seconds")
+            );
+        }
+        public IEnumerable<Option> All => [Provider, Endpoint, OmitDimensions, TimeoutSeconds];
+    }
+
+    /// <summary>Creates <c>puck embed</c> and its <c>lock</c> and <c>probe</c> verbs.</summary>
     /// <returns>The configured command tree.</returns>
     public static Command Create() {
+        var embedCommand = new Command(
+            description: "Resolve authored embed(...) text into committed .embeddings.json lock files, or probe their similarity rankings.",
+            name: "embed"
+        ) { CreateLockSubcommand(), CreateProbeSubcommand() };
+
+        return embedCommand;
+    }
+
+    private static Command CreateLockSubcommand() {
         var pathArgument = new Argument<string>(name: "path") {
             Description = "The .puck root file or directory of roots to embed.",
         };
-
-        var checkOption = new Option<bool>(name: "--check") {
-            Description = "Verify that all authored texts are locked and fresh without contacting a provider.",
-        };
-
-        var providerOption = new Option<string?>(name: "--provider") {
-            Description = "Provider kind: 'fixture' or 'openai-compatible'. Defaults to fixture for puck-fixture models.",
-        };
-
-        var endpointOption = new Option<string?>(name: "--endpoint") {
-            Description = "OpenAI-compatible HTTP endpoint URI.",
-        };
-
-        var omitDimensionsOption = new Option<bool>(name: "--omit-dimensions") {
-            Description = "When true, omits the dimensions field from embedding request payloads.",
-        };
-
-        var batchSizeOption = new Option<int>(name: "--batch-size") {
-            DefaultValueFactory = static _ => 64,
-            Description = "Number of texts per embedding request batch (1..2048, default 64).",
-        };
-
-        var timeoutSecondsOption = new Option<int>(name: "--timeout-seconds") {
-            DefaultValueFactory = static _ => 60,
-            Description = "Request timeout in seconds (default 60).",
-        };
-
-        var embedCommand = new Command(
+        var checkOption = CliOptions.Check(description: "Verify that all authored texts are locked and fresh without contacting a provider.");
+        var providers = ProviderOptions.Create();
+        var batchSizeOption = CliOptions.Count(defaultValue: 64, description: "Number of texts per embedding request batch (1..2048, default 64).", maximum: 2048, minimum: 1, name: "--batch-size");
+        var lockCommand = new Command(
             description: "Resolve authored embed(...) text into committed .embeddings.json lock files.",
-            name: "embed"
-        ) {
-            pathArgument,
-            checkOption,
-            providerOption,
-            endpointOption,
-            omitDimensionsOption,
-            batchSizeOption,
-            timeoutSecondsOption,
-        };
+            name: "lock"
+        ) { pathArgument, checkOption, batchSizeOption };
 
-        var probeCommand = CreateProbeSubcommand();
+        foreach (var option in providers.All) {
+            lockCommand.Options.Add(item: option);
+        }
 
-        embedCommand.Add(command: probeCommand);
+        lockCommand.SetAction(action: async (parseResult, cancellationToken) => await ExecuteEmbedAsync(
+            batchSize: parseResult.GetValue(option: batchSizeOption),
+            cancellationToken: cancellationToken,
+            check: parseResult.GetValue(option: checkOption),
+            endpoint: parseResult.GetValue(option: providers.Endpoint),
+            omitDimensions: parseResult.GetValue(option: providers.OmitDimensions),
+            path: parseResult.GetRequiredValue(argument: pathArgument),
+            provider: parseResult.GetValue(option: providers.Provider),
+            timeoutSeconds: parseResult.GetValue(option: providers.TimeoutSeconds)
+        ).ConfigureAwait(continueOnCapturedContext: false));
 
-        embedCommand.SetAction(action: async (parseResult, cancellationToken) => {
-            var path = parseResult.GetRequiredValue(argument: pathArgument);
-            var check = parseResult.GetValue(option: checkOption);
-            var provider = parseResult.GetValue(option: providerOption);
-            var endpoint = parseResult.GetValue(option: endpointOption);
-            var omitDimensions = parseResult.GetValue(option: omitDimensionsOption);
-            var batchSize = parseResult.GetValue(option: batchSizeOption);
-            var timeoutSeconds = parseResult.GetValue(option: timeoutSecondsOption);
-
-            return await ExecuteEmbedAsync(
-                batchSize: batchSize,
-                cancellationToken: cancellationToken,
-                check: check,
-                endpoint: endpoint,
-                omitDimensions: omitDimensions,
-                path: path,
-                provider: provider,
-                timeoutSeconds: timeoutSeconds
-            ).ConfigureAwait(continueOnCapturedContext: false);
-        });
-
-        return embedCommand;
+        return lockCommand;
     }
 
     private static Command CreateProbeSubcommand() {
         var pathArgument = new Argument<string>(name: "path") {
             Description = "The .puck root file containing the embedding space.",
         };
-
         var textArgument = new Argument<string>(name: "text") {
             Description = "The query text to probe against locked vectors.",
         };
-
         var spaceOption = new Option<string?>(name: "--space") {
             Description = "The target embedding space name (optional if only one space is declared).",
         };
-
-        var topOption = new Option<int>(name: "--top") {
-            DefaultValueFactory = static _ => 5,
-            Description = "Maximum number of similarity matches to display (default 5).",
-        };
-
-        var providerOption = new Option<string?>(name: "--provider");
-        var endpointOption = new Option<string?>(name: "--endpoint");
-        var omitDimensionsOption = new Option<bool>(name: "--omit-dimensions");
-        var timeoutSecondsOption = new Option<int>(name: "--timeout-seconds") {
-            DefaultValueFactory = static _ => 60,
-        };
-
+        var topOption = CliOptions.Count(defaultValue: 5, description: "Maximum number of similarity matches to display (default 5).", minimum: 1, name: "--top");
+        var providers = ProviderOptions.Create();
         var probeCommand = new Command(
             description: "Rank similarity of a query text against locked vectors.",
             name: "probe"
-        ) {
-            pathArgument,
-            textArgument,
-            spaceOption,
-            topOption,
-            providerOption,
-            endpointOption,
-            omitDimensionsOption,
-            timeoutSecondsOption,
-        };
+        ) { pathArgument, textArgument, spaceOption, topOption };
 
-        probeCommand.SetAction(action: async (parseResult, cancellationToken) => {
-            var path = parseResult.GetRequiredValue(argument: pathArgument);
-            var text = parseResult.GetRequiredValue(argument: textArgument);
-            var space = parseResult.GetValue(option: spaceOption);
-            var top = parseResult.GetValue(option: topOption);
-            var provider = parseResult.GetValue(option: providerOption);
-            var endpoint = parseResult.GetValue(option: endpointOption);
-            var omitDimensions = parseResult.GetValue(option: omitDimensionsOption);
-            var timeoutSeconds = parseResult.GetValue(option: timeoutSecondsOption);
+        foreach (var option in providers.All) {
+            probeCommand.Options.Add(item: option);
+        }
 
-            return await ExecuteProbeAsync(
-                cancellationToken: cancellationToken,
-                endpoint: endpoint,
-                omitDimensions: omitDimensions,
-                path: path,
-                provider: provider,
-                space: space,
-                text: text,
-                timeoutSeconds: timeoutSeconds,
-                top: top
-            ).ConfigureAwait(continueOnCapturedContext: false);
-        });
+        probeCommand.SetAction(action: async (parseResult, cancellationToken) => await ExecuteProbeAsync(
+            cancellationToken: cancellationToken,
+            endpoint: parseResult.GetValue(option: providers.Endpoint),
+            omitDimensions: parseResult.GetValue(option: providers.OmitDimensions),
+            path: parseResult.GetRequiredValue(argument: pathArgument),
+            provider: parseResult.GetValue(option: providers.Provider),
+            space: parseResult.GetValue(option: spaceOption),
+            text: parseResult.GetRequiredValue(argument: textArgument),
+            timeoutSeconds: parseResult.GetValue(option: providers.TimeoutSeconds),
+            top: parseResult.GetValue(option: topOption)
+        ).ConfigureAwait(continueOnCapturedContext: false));
 
         return probeCommand;
-    }
-    private static async Task<int> ExecuteEmbedAsync(
+    }    private static async Task<int> ExecuteEmbedAsync(
         string path,
         bool check,
         string? provider,
@@ -169,11 +128,11 @@ public static class EmbedCommand {
         } else if (File.Exists(path: fullPath)) {
             puckFiles.Add(item: fullPath);
         } else {
-            Console.Error.WriteLine(value: $"error: Path '{path}' does not exist.");
-            return 2;
+            return CliExit.Refuse(verb: LockVerb, what: CliPaths.ToDisplay(fullPath: fullPath), why: "does not exist.");
         }
 
         var overallExitCode = 0;
+        var locked = 0;
 
         foreach (var puckFile in puckFiles) {
             if (!TryDiscoverSpacesAndTexts(
@@ -182,14 +141,15 @@ public static class EmbedCommand {
                 spaces: out var spaces,
                 textsBySpace: out var textsBySpace
             )) {
-                Console.Error.WriteLine(value: $"error: Failed to analyze '{puckFile}': {failure}");
-                overallExitCode = 2;
+                overallExitCode = CliExit.Refuse(verb: LockVerb, what: CliPaths.ToDisplay(fullPath: puckFile), why: failure);
                 continue;
             }
 
             if ((spaces.Count == 0) && (textsBySpace.Count == 0)) {
                 continue;
             }
+
+            locked++;
 
             var lockPath = EmbeddingLock.DeriveLockPath(sourcePath: puckFile);
             var lockFile = (EmbeddingLock.TryLoad(rootSourcePath: puckFile) ?? new EmbeddingLock());
@@ -272,14 +232,12 @@ public static class EmbedCommand {
                             provider: provider,
                             timeoutSeconds: timeoutSeconds
                         );
-                    } catch (Exception ex) {
-                        Console.Error.WriteLine(value: $"error: Failed to initialize provider for space '{space.Name}': {ex.Message}");
-                        return 1;
+                    } catch (Exception ex) when (ex is InvalidOperationException or UriFormatException or ArgumentException) {
+                        return CliExit.Refuse(verb: LockVerb, what: $"space '{space.Name}'", why: $"its provider could not start: {ex.Message}");
                     }
 
                     using (generator) {
-                        var boundedBatchSize = Math.Clamp(max: 2048, min: 1, value: batchSize);
-                        var batches = EmbeddingBatcher.Batch(batchSize: boundedBatchSize, items: textsToEmbed);
+                        var batches = EmbeddingBatcher.Batch(batchSize: batchSize, items: textsToEmbed);
 
                         foreach (var batch in batches) {
                             GeneratedEmbeddings<Embedding<float>> embeddings;
@@ -289,16 +247,14 @@ public static class EmbedCommand {
                                     cancellationToken: cancellationToken,
                                     values: batch
                                 ).ConfigureAwait(continueOnCapturedContext: false);
-                            } catch (Exception ex) {
-                                Console.Error.WriteLine(value: $"error: Embedding provider failed: {ex.Message}");
-                                return 1;
+                            } catch (Exception ex) when (ex is not OperationCanceledException) {
+                                return CliExit.Refuse(verb: LockVerb, what: $"space '{space.Name}'", why: $"the embedding provider failed: {ex.Message}");
                             }
 
                             var embeddingList = embeddings.ToList();
 
                             if (embeddingList.Count != batch.Count) {
-                                Console.Error.WriteLine(value: $"error: Provider returned {embeddingList.Count} embeddings, expected {batch.Count}.");
-                                return 1;
+                                return CliExit.Refuse(verb: LockVerb, what: $"space '{space.Name}'", why: $"the provider returned {embeddingList.Count} embeddings for {batch.Count} texts.");
                             }
 
                             for (var i = 0; (i < batch.Count); i++) {
@@ -306,8 +262,7 @@ public static class EmbedCommand {
                                 var emb = embeddingList[i];
 
                                 if (!VectorQuantizer.TryQuantizeToBase64Url(base64UrlVector: out var b64, embedding: emb)) {
-                                    Console.Error.WriteLine(value: $"error: Quantization failed for text \"{srcText}\".");
-                                    return 1;
+                                    return CliExit.Refuse(verb: LockVerb, what: $"text \"{srcText}\"", why: "its embedding could not be quantized.");
                                 }
 
                                 lockFile.SetEntry(identity: identity, spaceName: space.Name, text: srcText, vectorBase64Url: b64);
@@ -338,6 +293,10 @@ public static class EmbedCommand {
             }
         }
 
+        if ((locked == 0) && (overallExitCode == 0)) {
+            return CliExit.Empty(verb: LockVerb, selection: CliPaths.ToDisplay(fullPath: fullPath), why: ((puckFiles.Count == 0) ? "holds no .puck source" : "declares no embedding space and no embed(...) text"));
+        }
+
         return overallExitCode;
     }
     private static async Task<int> ExecuteProbeAsync(
@@ -354,15 +313,13 @@ public static class EmbedCommand {
         var fullPath = Path.GetFullPath(path: path);
 
         if (!File.Exists(path: fullPath)) {
-            Console.Error.WriteLine(value: $"error: File '{path}' does not exist.");
-            return 2;
+            return CliExit.Refuse(verb: ProbeVerb, what: CliPaths.ToDisplay(fullPath: fullPath), why: "does not exist.");
         }
 
         var lockFile = EmbeddingLock.TryLoad(rootSourcePath: fullPath);
 
         if ((lockFile is null) || (lockFile.Spaces.Count == 0)) {
-            Console.Error.WriteLine(value: $"error: No embedding lock file found for '{path}'. Run puck embed first.");
-            return 1;
+            return CliExit.Refuse(verb: ProbeVerb, what: CliPaths.ToDisplay(fullPath: fullPath), why: "has no embedding lock file; run puck embed lock first.");
         }
 
         string resolvedSpaceName;
@@ -372,21 +329,18 @@ public static class EmbedCommand {
         } else if (lockFile.Spaces.Count == 1) {
             resolvedSpaceName = lockFile.Spaces.Keys.First();
         } else {
-            Console.Error.WriteLine(value: "error: Multiple spaces declared in lock file; specify target space with --space.");
-            return 1;
+            return CliExit.Refuse(verb: ProbeVerb, what: "--space", why: "the lock file declares several spaces; name the one to probe.");
         }
 
         if (!lockFile.Spaces.TryGetValue(key: resolvedSpaceName, value: out var lockSpace)) {
-            Console.Error.WriteLine(value: $"error: Space '{resolvedSpaceName}' not found in lock file.");
-            return 1;
+            return CliExit.Refuse(verb: ProbeVerb, what: $"--space {resolvedSpaceName}", why: "names no space in the lock file.");
         }
 
         StateVector queryVector;
 
         if (lockFile.TryGet(spaceName: resolvedSpaceName, text: text, vectorBase64Url: out var existingVector)) {
             if (!StateVector.TryParseBase64Url(dimensions: lockSpace.Identity.Dimensions, error: out var err, text: existingVector, vector: out var vec)) {
-                Console.Error.WriteLine(value: $"error: Corrupted lock vector: {err}");
-                return 1;
+                return CliExit.Refuse(verb: ProbeVerb, what: $"space '{resolvedSpaceName}'", why: $"its locked vector is corrupt: {err}");
             }
             queryVector = vec;
         } else {
@@ -402,9 +356,8 @@ public static class EmbedCommand {
                     provider: provider,
                     timeoutSeconds: timeoutSeconds
                 );
-            } catch (Exception ex) {
-                Console.Error.WriteLine(value: $"error: Provider initialization failed: {ex.Message}");
-                return 1;
+            } catch (Exception ex) when (ex is InvalidOperationException or UriFormatException or ArgumentException) {
+                return CliExit.Refuse(verb: ProbeVerb, what: $"space '{resolvedSpaceName}'", why: $"its provider could not start: {ex.Message}");
             }
 
             using (generator) {
@@ -416,13 +369,11 @@ public static class EmbedCommand {
                 var embList = embs.ToList();
 
                 if ((embList.Count == 0) || !VectorQuantizer.TryQuantizeToBase64Url(base64UrlVector: out var b64, embedding: embList[0])) {
-                    Console.Error.WriteLine(value: "error: Failed to quantize query vector.");
-                    return 1;
+                    return CliExit.Refuse(verb: ProbeVerb, what: "the query text", why: "its embedding could not be quantized.");
                 }
 
                 if (!StateVector.TryParseBase64Url(dimensions: lockSpace.Identity.Dimensions, error: out var err, text: b64, vector: out var vec)) {
-                    Console.Error.WriteLine(value: $"error: Failed to parse query vector: {err}");
-                    return 1;
+                    return CliExit.Refuse(verb: ProbeVerb, what: "the query text", why: $"its vector could not be read: {err}");
                 }
 
                 queryVector = vec;
@@ -480,7 +431,7 @@ public static class EmbedCommand {
             Endpoint = new Uri(uriString: endpoint),
             Model = identity.Model,
             OmitDimensions = omitDimensions,
-            Timeout = TimeSpan.FromSeconds(value: Math.Max(val1: 1, val2: timeoutSeconds)),
+            Timeout = TimeSpan.FromSeconds(value: timeoutSeconds),
         };
 
         return OpenAiEmbeddingGeneratorFactory.Create(options: options);

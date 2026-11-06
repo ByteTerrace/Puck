@@ -41,6 +41,7 @@ public static class GatePlan {
         new("shaders generate", GateStepKind.Puck, ["shaders", "generate", "--check"]),
         new("wasm-stdlib", GateStepKind.Puck, ["wasm-stdlib", "--check"]),
         new("branding", GateStepKind.Puck, ["branding", "--check"]),
+        new("packages", GateStepKind.Puck, ["packages", "--check"]),
         .. BaselinesCommand.Artifacts.OrderBy(keySelector: static artifact => artifact.Name, comparer: StringComparer.Ordinal)
             .Select(selector: static artifact => new GateStep(("baselines " + artifact.Name), GateStepKind.Baseline, artifact.CheckArguments(), Heavy: true)),
         new("affected canaries", GateStepKind.Canaries, ["canary", "--gpu-jobs", "<gpu-jobs>", "<canaries>"], Heavy: true, Gpu: true),
@@ -53,8 +54,7 @@ public static class GatePlan {
     public static readonly IReadOnlyDictionary<string, string> CheckExclusions = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
         ["agents link"] = "Checks one machine's harness links in one checkout, state outside the change.",
         ["compile"] = "Needs a tree and output; affected runs the shipped catalog check when reached.",
-        ["packages"] = "Its valued --check needs the document whose generated package section is checked.",
-        ["embed"] = "Needs an authored embedding root; checked by its owning change.",
+        ["embed lock"] = "Needs an authored embedding root; checked by its owning change.",
         ["migrate"] = "Needs a named migration and source path; no migration is implied by qualification.",
     };
 

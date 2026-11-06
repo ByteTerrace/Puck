@@ -164,9 +164,9 @@ public sealed class MeshCommandTests {
 
         var (absent, guidance) = Invoke("mesh", "audit", "--world", world, "--group", "podCap-left", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
 
-        Assert.Equal(expected: 1, actual: absent);
+        Assert.Equal(expected: 2, actual: absent);
         Assert.Contains(expectedSubstring: "podCap-left: no stored mesh", actualString: guidance);
-        Assert.Contains(expectedSubstring: "the store holds no mesh of the selected groups", actualString: guidance);
+        Assert.Contains(expectedSubstring: "the store holds no mesh of them under bake identity", actualString: guidance);
     }
     // With --cpu the verb bakes the selected groups itself, through the bake's own lattices answered by the field
     // evaluator, and reads no store: a plain box audits clean, and a group whose field the evaluator refuses is named.
@@ -199,9 +199,9 @@ public sealed class MeshCommandTests {
         Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "audit", "--world", world, "--identity", "not-hex"), text: "--identity takes 32 hex digits"));
         Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "audit", "--world", world, "--identity", "5", "--build", directory.RootPath), text: "--identity takes 32 hex digits"));
         Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "audit", "--world", world, "--build", directory.RootPath, "--backend", "vulkan"), text: "cannot read the bake identity"));
-        Assert.Equal(expected: (1, true), actual: Refused(output: Invoke("mesh", "audit", "--world", malformed), text: "failed to load"));
+        Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "audit", "--world", malformed), text: "failed to load"));
         // This build's own identity, read from its assemblies and kernels, keys nothing in an empty store.
-        Assert.Equal(expected: (1, true), actual: Refused(output: Invoke("mesh", "audit", "--world", world, "--group", "podCap-left", "--cache-dir", directory.PathOf(name: "empty")), text: ", build "));
+        Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "audit", "--world", world, "--group", "podCap-left", "--cache-dir", directory.PathOf(name: "empty")), text: ", build "));
     }
     // mesh scene builds the irradiance trace scene over the stored static meshes, traces it, updates it for one draw's new
     // geometry (building that alone), a move and a return (building nothing), and traces each answer alike; a change no
@@ -252,10 +252,10 @@ public sealed class MeshCommandTests {
         var malformed = directory.WriteText(name: "malformed.world.json", text: "[1, 2, 3]");
 
         Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "scene", "--world", world, "--change", "nothing-holds-this", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache")), text: "has a label holding 'nothing-holds-this'"));
-        Assert.Equal(expected: (1, true), actual: Refused(output: Invoke("mesh", "scene", "--world", world, "--identity", identity, "--cache-dir", directory.PathOf(name: "empty")), text: "holds no static mesh"));
+        Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "scene", "--world", world, "--identity", identity, "--cache-dir", directory.PathOf(name: "empty")), text: "holds no static mesh"));
         Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "scene", "--world", world, "--backend", "metal"), text: "unknown --backend 'metal'"));
         Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "scene", "--world", world, "--identity", "not-hex"), text: "mesh scene: --identity takes 32 hex digits"));
-        Assert.Equal(expected: (1, true), actual: Refused(output: Invoke("mesh", "scene", "--world", malformed), text: "failed to load"));
+        Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "scene", "--world", malformed), text: "failed to load"));
     }
     // mesh identity prints this build's bake identity with its parts, names nothing changed against itself, says how the
     // walk reached a member, and refuses a backend it has no kernels for and a directory holding no build.
@@ -279,8 +279,8 @@ public sealed class MeshCommandTests {
 
         Assert.Equal(expected: (0, false), actual: (named, against.Contains(value: "against", comparisonType: StringComparison.Ordinal)));
         Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "identity", "--backend", "metal"), text: "unknown --backend 'metal'"));
-        Assert.Equal(expected: (1, true), actual: Refused(output: Invoke("mesh", "identity", "--build", directory.RootPath), text: "cannot read the bake identity"));
-        Assert.Equal(expected: (1, true), actual: Refused(output: Invoke("mesh", "identity", "--against", directory.RootPath), text: "cannot read the bake identity"));
+        Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "identity", "--build", directory.RootPath), text: "cannot read the bake identity"));
+        Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "identity", "--against", directory.RootPath), text: "cannot read the bake identity"));
     }
     [Fact]
     public void TheRestScenesSurroundSendsAndAnswersNothing() {

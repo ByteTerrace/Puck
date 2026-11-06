@@ -7,18 +7,8 @@ namespace Puck.Cli.Host;
 public static class HostCommand {
     private const string LoadVerb = "host load";
 
-    private static void ValidateThreshold(Option<double?> option, double? maximum = null) {
-        option.Validators.Add(item: result => {
-            if ((result.GetValueOrDefault<double?>() is { } value) && (!double.IsFinite(d: value) || (value < 0) || ((maximum is { } limit) && (value > limit)))) {
-                result.AddError(errorMessage: $"{option.Name} must be finite and {((maximum is { } upper) ? $"between 0 and {upper}" : "nonnegative")}.");
-            }
-        });
-    }
-    private static int Load(bool watch, int interval, int window, HostLoadThresholds thresholds, CancellationToken cancellationToken) {
-        if ((interval < 1) || (window < 1)) {
-            return CliExit.Refuse(verb: LoadVerb, what: "--interval and --window", why: "must each be at least 1.");
-        }
-
+    private static int Load(bool watch, int interval, int window, HostLoadThresholds thresholds, bool json, CancellationToken cancellationToken) {
+        using var records = CliJsonLines.Open(json: json);
         var probe = new HostProbe(checkoutRoot: Environment.CurrentDirectory);
         var spacing = TimeSpan.FromSeconds(seconds: interval);
 
@@ -26,8 +16,25 @@ public static class HostCommand {
         var monitor = new HostLoadMonitor(cpuSamples: (watch ? window : 1), thresholds: thresholds);
 
         do {
-            foreach (var line in monitor.Observe(sample: probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)))) {
-                Console.Out.WriteLine(value: line);
+            var sample = probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1));
+            var lines = monitor.Observe(sample: sample);
+
+            if (records is null) {
+                foreach (var line in lines) {
+                    Console.Out.WriteLine(value: line);
+                }
+            } else if (lines.Count > 0) {
+                records.Write(record: new System.Text.Json.Nodes.JsonObject {
+                    ["at"] = sample.At,
+                    ["cpuPercent"] = Finite(value: monitor.CpuMean),
+                    ["freeRamGb"] = Finite(value: sample.FreeRamGb),
+                    ["freeDiskGb"] = Finite(value: sample.FreeDiskGb),
+                    ["commitPercent"] = Finite(value: sample.CommitPercent),
+                    ["reuseNodes"] = sample.ReuseNodes,
+                    ["gpuHolder"] = sample.GpuHolder,
+                    ["heavyTestHolder"] = sample.HeavyTestHolder,
+                    ["admission"] = monitor.Admission,
+                });
             }
 
             Console.Out.Flush();
@@ -43,25 +50,23 @@ public static class HostCommand {
             ? CliExit.Cancelled
             : CliExit.Success);
     }
+    private static double? Finite(double value) => (double.IsFinite(d: value) ? Math.Round(value: value, digits: 1) : null);
     private static Command CreateLoad() {
+        var jsonOption = CliOptions.Json(description: "Write one JSON object per reading that prints a line: at, cpuPercent (the window's mean), freeRamGb, freeDiskGb, commitPercent, reuseNodes, gpuHolder, heavyTestHolder and admission (PRESSURE with its reasons, CAPACITY, LOADED or null).");
         var watchOption = new Option<bool>(name: "--watch") { Description = "Keep reading every --interval seconds and print a line on each transition, until cancelled." };
-        var intervalOption = new Option<int>(name: "--interval") { DefaultValueFactory = _ => 10, Description = "Seconds between readings with --watch." };
-        var windowOption = new Option<int>(name: "--window") { DefaultValueFactory = _ => 6, Description = "Readings the CPU mean covers with --watch; CAPACITY waits until that many exist." };
-        var capacityCpuOption = new Option<double?>(name: "--capacity-cpu") { DefaultValueFactory = _ => HostLoadThresholds.ThisMachine.CapacityCpuPercent, Description = "CAPACITY needs the CPU mean below this percentage (with --capacity-ram)." };
-        var capacityRamOption = new Option<double?>(name: "--capacity-ram") { DefaultValueFactory = _ => HostLoadThresholds.ThisMachine.CapacityRamGb, Description = "CAPACITY needs free memory above this many gigabytes (with --capacity-cpu)." };
-        var capacityCommitOption = new Option<double?>(name: "--capacity-commit") { DefaultValueFactory = _ => HostLoadThresholds.ThisMachine.CapacityCommitPercent, Description = "CAPACITY needs the commit charge below this percentage of the commit limit, when the platform reports one." };
-        var pressureRamOption = new Option<double?>(name: "--pressure-ram") { DefaultValueFactory = _ => HostLoadThresholds.ThisMachine.PressureRamGb, Description = "PRESSURE when free memory is below this many gigabytes." };
-        var pressureDiskOption = new Option<double?>(name: "--pressure-disk") { DefaultValueFactory = _ => HostLoadThresholds.ThisMachine.PressureDiskGb, Description = "PRESSURE when free disk on the working directory's drive is below this many gigabytes." };
+        var intervalOption = CliOptions.Count(defaultValue: 10, description: "Seconds between readings with --watch.", minimum: 1, name: "--interval");
+        var windowOption = CliOptions.Count(defaultValue: 6, description: "Readings the CPU mean covers with --watch; CAPACITY waits until that many exist.", minimum: 1, name: "--window");
+        var capacityCpuOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.CapacityCpuPercent, description: "CAPACITY needs the CPU mean below this percentage (with --capacity-ram).", maximum: 100, minimum: 0, name: "--capacity-cpu");
+        var capacityRamOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.CapacityRamGb, description: "CAPACITY needs free memory above this many gigabytes (with --capacity-cpu).", minimum: 0, name: "--capacity-ram");
+        var capacityCommitOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.CapacityCommitPercent, description: "CAPACITY needs the commit charge below this percentage of the commit limit, when the platform reports one.", maximum: 100, minimum: 0, name: "--capacity-commit");
+        var pressureRamOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.PressureRamGb, description: "PRESSURE when free memory is below this many gigabytes.", minimum: 0, name: "--pressure-ram");
+        var pressureDiskOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.PressureDiskGb, description: "PRESSURE when free disk on the working directory's drive is below this many gigabytes.", minimum: 0, name: "--pressure-disk");
 
-        ValidateThreshold(maximum: 100, option: capacityCpuOption);
-        ValidateThreshold(option: capacityRamOption);
-        ValidateThreshold(maximum: 100, option: capacityCommitOption);
-        ValidateThreshold(option: pressureRamOption);
-        ValidateThreshold(option: pressureDiskOption);
+
         var command = new Command(
             description: "Report CPU, memory, disk and GPU busyness as admission lines: GPU busy|idle, PRESSURE, CAPACITY, LOADED.",
             name: "load"
-        ) { watchOption, intervalOption, windowOption, capacityCpuOption, capacityRamOption, capacityCommitOption, pressureRamOption, pressureDiskOption };
+        ) { watchOption, intervalOption, windowOption, capacityCpuOption, capacityRamOption, capacityCommitOption, pressureRamOption, pressureDiskOption, jsonOption };
 
         command.Detail(detail: $"""
               Lines (each carries cpu=, freeRAM=, freeDisk=, commit= where the platform reports a commit limit, and reuseNodes=):
@@ -96,6 +101,7 @@ public static class HostCommand {
         command.SetAction(action: (parseResult, cancellationToken) => Task.Run(function: () => Load(
             cancellationToken: cancellationToken,
             interval: parseResult.GetValue(option: intervalOption),
+            json: parseResult.GetValue(option: jsonOption),
             thresholds: new HostLoadThresholds(
                 CapacityCpuPercent: parseResult.GetValue(option: capacityCpuOption),
                 CapacityCommitPercent: parseResult.GetValue(option: capacityCommitOption),

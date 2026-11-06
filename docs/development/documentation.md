@@ -566,8 +566,8 @@ puck evals compare <with-without>/aggregate-result.json <after>/aggregate-result
   | `principal` | `claude-fable-5-1` | `delegate`, and the area skills its design touches |
   | The lead | Opus | `orchestration` |
 
-- **Load and cost:** `run` defaults to `-j 4` and a $20 `--max-cost-usd`
-  ceiling; keep `-j` at 4 or below on a shared machine. A Sonnet case costs
+- **Load and cost:** `run` defaults to `--jobs 4` and a $20 `--max-cost-usd`
+  ceiling; keep `--jobs` at 4 or below on a shared machine. A Sonnet case costs
   about $0.20 per run with both arms.
 
 ### Write cases and graders

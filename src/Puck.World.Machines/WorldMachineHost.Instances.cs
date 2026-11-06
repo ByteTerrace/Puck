@@ -32,7 +32,7 @@ public sealed partial class WorldMachineHost {
             instance.Declaration.Engine,
             instance.Declaration.Running,
             lease.Runtime.Status,
-            (queued?.CompletedSteps ?? lease.CompletedSteps),
+            (queued?.CompletedSteps ?? CompletedSteps(lease: lease)),
             (queued?.PendingSteps ?? 0),
             lease.Fault,
             MountedContent(lease: lease)
@@ -163,7 +163,7 @@ public sealed partial class WorldMachineHost {
             var requestForProvider = new MachineCreationRequest(
                 Configuration: WithoutFields(
                     configuration: current.Configuration,
-                    fieldPaths: live.Lease.AbsentContent
+                    fieldPaths: ((live.Lease as MachineLease.Running)?.AbsentContent ?? [])
                 ),
                 Assets: live.Lease.Assets,
                 AudioSampleRate: AudioSampleRate
@@ -202,7 +202,7 @@ public sealed partial class WorldMachineHost {
                             );
                             ValidateInputRoute(
                                 current.Name,
-                                runtime
+                                engine.Descriptor
                             );
                             if (runtime.Status == MachineRuntimeStatus.Faulted) {
                                 refusal = new(
@@ -212,7 +212,7 @@ public sealed partial class WorldMachineHost {
                                 return false;
                             }
 
-                            var lease = new MachineLease(
+                            var lease = new MachineLease.Running(
                                 runtime,
                                 m_nextInstanceGeneration,
                                 requestForReplacement.Assets
@@ -243,6 +243,12 @@ public sealed partial class WorldMachineHost {
                             }
                         }
                     }
+                case MachineOperationPreparation.Runtime when (live.Lease is MachineLease.Refused refusedLease):
+                    refusal = new(
+                        MachineOperationStatus.Refused,
+                        reason: $"{refusedLease.Reason}; only an operation that replaces the machine applies to it."
+                    );
+                    return false;
                 case MachineOperationPreparation.Runtime runtime:
                     if (runtime.Configuration is { } configuration) {
                         MachineConfigurationValidation.Validate(
@@ -429,11 +435,11 @@ public sealed partial class WorldMachineHost {
         foreach (var instance in m_instances.Values) {
             if (
                 !instance.Declaration.Running ||
+                (instance.Lease is not MachineLease.Running lease) ||
                 linkedInstances.Contains(item: instance.Declaration.Name)
             ) {
                 continue;
             }
-            var lease = instance.Lease;
             var runtime = lease.Runtime;
 
             if (runtime is IMachineInputPorts ports) {
@@ -519,8 +525,10 @@ public sealed partial class WorldMachineHost {
         return input;
     }
     // Every engageable screen showing the machine must resolve to one of its input ports: the port its route names, or
-    // the machine's sole port when the route names none. A passive display routes no input and needs no port.
-    private void ValidateInputRoute(string instance, IMachineRuntime runtime, IReadOnlyList<WorldScreen>? candidateScreens = null) {
+    // the machine's sole port when the route names none. A passive display routes no input and needs no port. The ports
+    // are the provider's declared ones, which every created runtime matches (ValidateRuntimeOutputs), so a route is
+    // checked the same whether the machine prepared or was refused.
+    private void ValidateInputRoute(string instance, MachineEngineDescriptor descriptor, IReadOnlyList<WorldScreen>? candidateScreens = null) {
         var routes = ((candidateScreens is not null)
             ? candidateScreens.Select(selector: static screen => (screen.Index, Source: ((WorldScreenSource?)screen.Source), screen.Route))
             : m_slots.Values.Select(selector: static slot => (slot.Index, Source: slot.DeclaredSource, slot.Route))
@@ -538,22 +546,20 @@ public sealed partial class WorldMachineHost {
                 index: index,
                 machine: $"machine '{instance}'",
                 route: route,
-                runtime: runtime
+                ports: descriptor.InputPorts
             ) is { } refusal)
             ) {
                 throw new ArgumentException(message: refusal);
             }
         }
     }
-    // Why an engageable screen's route resolves to no input port of the runtime it shows, or null when it resolves.
-    private static string? InputRouteRefusal(int index, string machine, WorldScreenRoute route, IMachineRuntime runtime) {
-        var ports = ((runtime as IMachineInputPorts)?.InputPorts ?? FrozenDictionary<string, IMachineInputPort>.Empty);
-
+    // Why an engageable screen's route resolves to no input port of the machine it shows, or null when it resolves.
+    private static string? InputRouteRefusal(int index, string machine, WorldScreenRoute route, IReadOnlyList<MachinePortDescriptor> ports) {
         if (!route.Engageable) {
             return null;
         }
         if (route.Port is { } port) {
-            return (ports.ContainsKey(key: port)
+            return (ports.Any(predicate: declared => string.Equals(a: declared.Name, b: port, comparisonType: StringComparison.Ordinal))
                 ? null
                 : $"Screen {index} routes to input port '{port}', which {machine} does not have ({DescribePorts(ports: ports)})."
             );
@@ -563,11 +569,11 @@ public sealed partial class WorldMachineHost {
             : null
         );
 
-        static string DescribePorts(IReadOnlyDictionary<string, IMachineInputPort> ports) => ((ports.Count == 0)
+        static string DescribePorts(IReadOnlyList<MachinePortDescriptor> ports) => ((ports.Count == 0)
             ? "none"
             : string.Join(
                 separator: ", ",
-                values: ports.Keys.Order(comparer: StringComparer.Ordinal)
+                values: ports.Select(selector: static declared => declared.Name).Order(comparer: StringComparer.Ordinal)
             ));
     }
     private bool TryPrepareInstances(WorldDefinition? current, WorldDefinition candidate,
@@ -633,6 +639,11 @@ public sealed partial class WorldMachineHost {
                 ) {
                     throw new InvalidOperationException(message: $"Machine '{declaration.Name}' participates in live link '{linkName}'; unlink first.");
                 }
+                var engine = Catalog.Engines[declaration.Engine];
+
+                // A running machine whose declaration is unchanged keeps its runtime. A refused one is never kept: every
+                // rebuild prepares it again, so a fixed cause (a toolchain installed, a file unlocked) recovers on the
+                // next world.reload.
                 if (
                     (current is not null) &&
                     !directoryChanged &&
@@ -640,19 +651,20 @@ public sealed partial class WorldMachineHost {
                     key: declaration.Name,
                     value: out var live
                 ) &&
+                    (live.Lease is MachineLease.Running kept) &&
                     (live.Declaration.Engine == declaration.Engine) &&
                     JsonElement.DeepEquals(
                     element1: live.Declaration.Configuration,
                     element2: declaration.Configuration
                 )
                 ) {
-                    if (live.Lease.Runtime is not RefusedMachine) { ValidateInputRoute(declaration.Name, live.Lease.Runtime, candidate.Screens); }
+                    ValidateInputRoute(declaration.Name, engine.Descriptor, candidate.Screens);
                     plan.Candidate.Add(
                         key: declaration.Name,
                         value: new(
                             declaration,
-                            live.Lease,
-                            live.Lease.Runtime is RefusedMachine ? live.Bindings : ResolveBindings(declaration, live.Lease)
+                            kept,
+                            ResolveBindings(declaration, kept)
                         ) {
                             FolderBoot = folderBoot,
                         }
@@ -663,59 +675,38 @@ public sealed partial class WorldMachineHost {
                     m_narrationHub.Narrate(channel: "machine", text: folderNarration);
                 }
 
-                MachineLease? created = null;
-                try {
-                    var engine = Catalog.Engines[declaration.Engine];
-                    var request = PrepareCreation(
-                        engine,
-                        declaration.Configuration,
-                        candidate.DocumentDirectory,
-                        absentContent: out var absentContent,
-                        declaredBy: declaration.Name
-                    );
-                    var runtime = engine.CreateMachine(request: request);
-                    var lease = new MachineLease(
-                        runtime,
-                        plan.NextGeneration++,
-                        request.Assets
-                    ) {
-                        AbsentContent = absentContent,
-                    };
+                var generation = plan.NextGeneration++;
+                MachineLease lease;
 
-                    created = lease;
-                    ValidateRuntimeOutputs(
-                        descriptor: engine.Descriptor,
-                        runtime: runtime
+                // Creating the runtime is the one step a machine's own failure (absent toolchain, unreadable content, a
+                // provider fault) refuses alone; the rest of the inventory still prepares.
+                try {
+                    lease = CreateRunning(
+                        declaration: declaration,
+                        documentDirectory: candidate.DocumentDirectory,
+                        engine: engine,
+                        generation: generation
                     );
-                    ValidateInputRoute(
-                        declaration.Name,
-                        runtime,
-                        candidate.Screens
-                    );
-                    if (runtime.Status == MachineRuntimeStatus.Faulted) {
-                        throw new InvalidOperationException(message: "The provider returned a faulted runtime.");
-                    }
-                    plan.Candidate.Add(
-                        key: declaration.Name,
-                        value: new(
-                            declaration,
-                            lease,
-                            ResolveBindings(
-                                declaration: declaration,
-                                lease: lease
-                            )
-                        ) {
-                            FolderBoot = folderBoot,
-                        }
-                    );
-                    plan.Created.Add(item: lease);
                 } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or MachineContentException) {
-                    created?.Runtime.Dispose();
-                    var refused = new RefusedMachine($"Machine '{declaration.Name}' preparation refused: {exception.Message}");
-                    var lease = new MachineLease(refused, plan.NextGeneration++, FrozenDictionary<string, PreparedMachineAsset>.Empty);
-                    plan.Created.Add(lease);
-                    plan.Candidate.Add(declaration.Name, new MachineInstance(declaration, lease, FrozenDictionary<string, MachineMemoryAddress>.Empty) { FolderBoot = folderBoot });
+                    lease = new MachineLease.Refused(
+                        generation: generation,
+                        reason: $"Machine '{declaration.Name}' preparation refused: {exception.Message}"
+                    );
                 }
+                plan.Created.Add(item: lease);
+                // A screen route or memory binding the document gets wrong is an admission error, and refuses the whole
+                // transaction like any other invalid row. A refused machine has no memory spaces to bind against.
+                ValidateInputRoute(declaration.Name, engine.Descriptor, candidate.Screens);
+                plan.Candidate.Add(
+                    key: declaration.Name,
+                    value: new(
+                        declaration,
+                        lease,
+                        ((lease is MachineLease.Running running) ? ResolveBindings(declaration, running) : FrozenDictionary<string, MachineMemoryAddress>.Empty)
+                    ) {
+                        FolderBoot = folderBoot,
+                    }
+                );
             }
             foreach (var live in m_instances.Values) {
                 if (
@@ -747,6 +738,38 @@ public sealed partial class WorldMachineHost {
             reason = $"Machine '{preparing}' preparation refused: {exception.Message}";
             return false;
         }
+    }
+    // Creates a declared machine's runtime from its configuration, or throws why it cannot; a runtime that fails its
+    // provider's descriptor or arrives faulted is disposed before the throw.
+    private MachineLease.Running CreateRunning(WorldMachine declaration, string? documentDirectory, IMachineEngine engine, ulong generation) {
+        var request = PrepareCreation(
+            engine,
+            declaration.Configuration,
+            documentDirectory,
+            absentContent: out var absentContent,
+            declaredBy: declaration.Name
+        );
+        var runtime = engine.CreateMachine(request: request);
+
+        try {
+            ValidateRuntimeOutputs(
+                descriptor: engine.Descriptor,
+                runtime: runtime
+            );
+            if (runtime.Status == MachineRuntimeStatus.Faulted) {
+                throw new InvalidOperationException(message: "The provider returned a faulted runtime.");
+            }
+        } catch {
+            runtime.Dispose();
+            throw;
+        }
+        return new MachineLease.Running(
+            runtime,
+            generation,
+            request.Assets
+        ) {
+            AbsentContent = absentContent,
+        };
     }
     // The declaration a machine boots: as authored, or, for a machine preferring a folder default whose folders name one
     // it can mount, as authored with the default as its content. The narration names the deciding folder, never the
@@ -1020,7 +1043,7 @@ public sealed partial class WorldMachineHost {
         }
         plan.Committed = true;
         foreach (var lease in plan.Created) {
-            if (lease.Runtime is RefusedMachine refused) { m_narrationHub?.Narrate(channel: "machine", text: $"[machine: {refused.Reason}]"); }
+            if (lease is MachineLease.Refused refused) { m_narrationHub?.Narrate(channel: "machine", text: $"[machine: {refused.Reason}]"); }
         }
     }
     private void DisposeInstances() {
@@ -1030,16 +1053,14 @@ public sealed partial class WorldMachineHost {
         m_instances.Clear();
     }
 
-    // A prepared refusal occupies the same named slot as a running machine; it never schedules work.
-    private sealed class RefusedMachine(string reason) : IMachineRuntime, IMachineCheckpointRuntime {
-        public string Reason { get; } = reason;
+    // The runtime face of a refused lease, shared by every one: it reports Refused, never advances, and has no output,
+    // input, memory or checkpoint capability.
+    private sealed class RefusedRuntime : IMachineRuntime {
+        public static RefusedRuntime Instance { get; } = new();
+
         public MachineRuntimeStatus Status => MachineRuntimeStatus.Refused;
         public bool Advance(ulong deltaTicks) => false;
         public void Dispose() { }
-        public byte[] CaptureCheckpoint() => System.Text.Encoding.UTF8.GetBytes(Reason);
-        public void RestoreCheckpoint(ReadOnlyMemory<byte> checkpoint) {
-            if (!checkpoint.Span.SequenceEqual(CaptureCheckpoint())) { throw new InvalidDataException("Machine preparation refusal differs from its checkpoint."); }
-        }
     }
 
     internal sealed record MachineInstance(WorldMachine Declaration, MachineLease Lease,
@@ -1049,18 +1070,40 @@ public sealed partial class WorldMachineHost {
         public FolderDefaultBoot? FolderBoot { get; init; }
     }
     internal sealed record FolderDefaultBoot(JsonElement Authored, JsonElement Configuration);
-    internal sealed class MachineLease(IMachineRuntime runtime, ulong generation,
-        IReadOnlyDictionary<string, PreparedMachineAsset> assets) {
-        public IMachineRuntime Runtime { get; } = runtime;
-        public string? Fault => Runtime is RefusedMachine refused ? refused.Reason : (Runtime as IQueuedMachineRuntime)?.QueueFault;
-        public ulong Generation { get; set; } = generation;
-        public IReadOnlyDictionary<string, PreparedMachineAsset> Assets { get; } = assets;
-        // The configuration's content fields whose files were absent when the runtime was created, so it runs without
-        // them.
-        public IReadOnlyList<string> AbsentContent { get; init; } = [];
+    // A named machine's lease: the runtime its provider created, or the refusal that took its place. The private
+    // constructor closes the pair, so every decision that differs by kind (advancing, checkpointing, keeping a lease
+    // across a rebuild) is a switch over exactly these two.
+    internal abstract class MachineLease {
+        private MachineLease(ulong generation) => Generation = generation;
 
-        public long CompletedSteps { get; set; }
+        public ulong Generation { get; set; }
+        // What screens, outputs and status reads see: the provider's runtime, or the shared refused face.
+        public abstract IMachineRuntime Runtime { get; }
+        public abstract IReadOnlyDictionary<string, PreparedMachineAsset> Assets { get; }
+        public abstract string? Fault { get; }
+        public abstract WorldMachineCheckpointKind Kind { get; }
+
+        internal sealed class Running(IMachineRuntime runtime, ulong generation, IReadOnlyDictionary<string, PreparedMachineAsset> assets)
+            : MachineLease(generation) {
+            public override IMachineRuntime Runtime { get; } = runtime;
+            public override IReadOnlyDictionary<string, PreparedMachineAsset> Assets { get; } = assets;
+            public override string? Fault => (Runtime as IQueuedMachineRuntime)?.QueueFault;
+            public override WorldMachineCheckpointKind Kind => WorldMachineCheckpointKind.Running;
+            // The configuration's content fields whose files were absent when the runtime was created, so it runs
+            // without them.
+            public IReadOnlyList<string> AbsentContent { get; init; } = [];
+            public long CompletedSteps { get; set; }
+        }
+        internal sealed class Refused(string reason, ulong generation) : MachineLease(generation) {
+            public override IMachineRuntime Runtime => RefusedRuntime.Instance;
+            public override IReadOnlyDictionary<string, PreparedMachineAsset> Assets => FrozenDictionary<string, PreparedMachineAsset>.Empty;
+            public override string? Fault => Reason;
+            public override WorldMachineCheckpointKind Kind => WorldMachineCheckpointKind.Refused;
+            public string Reason { get; } = reason;
+        }
     }
+    // A lease's synchronous step count: a refused machine never steps.
+    private static long CompletedSteps(MachineLease lease) => ((lease as MachineLease.Running)?.CompletedSteps ?? 0L);
     internal sealed class PreparedInstances(WorldMachineHost owner, ulong revision, ulong nextGeneration, string? documentDirectory) : IDisposable {
         public WorldMachineHost Owner { get; } = owner;
         // The directory the candidate document's relative content resolved beside.

@@ -11,4 +11,11 @@ public interface IMachineCheckpointRuntime {
     /// <summary>Restores a captured state after checking its content, configuration, and encoding identity.</summary>
     /// <param name="checkpoint">Owned checkpoint bytes; the runtime does not retain the caller's buffer.</param>
     void RestoreCheckpoint(ReadOnlyMemory<byte> checkpoint);
+    /// <summary>Makes every check <see cref="RestoreCheckpoint"/> makes, behind the same accepted work, and changes
+    /// nothing. A host restoring several runtimes asks each one first, so a restore it commits never stops partway
+    /// on an image a runtime would refuse.</summary>
+    /// <param name="checkpoint">The checkpoint bytes a later restore would apply.</param>
+    /// <param name="reason">Why the restore would refuse, or empty when it would apply.</param>
+    /// <returns>Whether <see cref="RestoreCheckpoint"/> would accept the image now.</returns>
+    bool TryValidateCheckpoint(ReadOnlyMemory<byte> checkpoint, out string reason);
 }

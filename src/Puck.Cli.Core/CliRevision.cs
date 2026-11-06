@@ -14,6 +14,29 @@ public static class CliRevision {
     /// <summary>The section of the CLI reference that says how to reinstall the checkout's CLI.</summary>
     public const string ReinstallReference = "docs/reference/cli.md#installing-the-checkouts-cli-on-path";
 
+    /// <summary>Gets the commit this CLI was built at, from the runtime configuration's <c>Puck.SourceRevision</c>
+    /// (stamped by Directory.Build.targets, the key <c>WorldSchema.SourceRevision</c> reads in a World), or
+    /// <see langword="null"/> when the build recorded none.</summary>
+    public static string? Built { get; } = ((AppContext.GetData(name: "Puck.SourceRevision") is string { Length: > 0 } revision) ? revision : null);
+
+    /// <summary>Indicates whether a refusal's reason is a strict reader refusing a member it does not know: System.Text.Json's
+    /// unmapped member, or a strict CLI reader's unknown member. A CLI built before the document's schema gained that member
+    /// refuses it this way, so the reason alone cannot tell revision skew from a bad document.</summary>
+    /// <param name="reason">The refusal's reason.</param>
+    /// <returns><see langword="true"/> when the reason names an unknown member.</returns>
+    public static bool NamesUnknownMember(string reason) => (
+        reason.Contains(comparisonType: StringComparison.Ordinal, value: "could not be mapped to any .NET member") ||
+        reason.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "unknown member")
+    );
+    /// <summary>Writes the stale-revision warning to standard error after a refusal that names an unknown member, when this
+    /// CLI was built at another revision than the working directory's checkout, so revision skew names itself.</summary>
+    /// <param name="reason">The refusal's reason.</param>
+    public static void ExplainUnknownMember(string reason) {
+        if (NamesUnknownMember(reason: reason) && (StaleWarningAsync(built: Built).GetAwaiter().GetResult() is { } warning)) {
+            Console.Error.WriteLine(value: warning);
+        }
+    }
+
     /// <summary>Spells a version with the revision it was built at as semantic-version build metadata.</summary>
     /// <param name="version">The package version.</param>
     /// <param name="revision">The commit, or <see langword="null"/> when the build recorded none.</param>

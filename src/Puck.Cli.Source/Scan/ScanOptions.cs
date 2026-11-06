@@ -28,8 +28,7 @@ internal sealed class ScanOptions {
     // rather than derived inside the analyzer, so the corpus is not silently widened by a hidden global.
     public string ShaderRoot { get; init; } = "";
 
-    // Builds the options from the parsed command line. A non-positive count falls back to its default rather than
-    // disabling the gate it feeds. `repositoryRoot` is null when neither the artifacts default nor comment-smells
+    // Builds the options from the parsed command line, whose parser has already bounded every count. `repositoryRoot` is null when neither the artifacts default nor comment-smells
     // needed one, which is also the only case where `outDirectory` is guaranteed non-null.
     public static ScanOptions Create(
         bool grouped,
@@ -45,19 +44,10 @@ internal sealed class ScanOptions {
         new() {
             Grouped = grouped,
             IncludeBlocks = !noBlocks,
-            MaxPerChunk = ((maxPerChunk > 0)
-            ? maxPerChunk
-            : DefaultMaxPerChunk),
-            MinExpressionTokens = Math.Max(
-                val1: minExpressionTokens,
-                val2: 0
-            ),
-            MinStatements = ((minStatements > 0)
-            ? minStatements
-            : DefaultMinStatements),
-            MinTokens = ((minTokens > 0)
-            ? minTokens
-            : DefaultMinTokens),
+            MaxPerChunk = maxPerChunk,
+            MinExpressionTokens = minExpressionTokens,
+            MinStatements = minStatements,
+            MinTokens = minTokens,
             OutDirectory = ((outDirectory is { } outDir)
             ? Path.GetFullPath(path: outDir)
             : Path.Combine(

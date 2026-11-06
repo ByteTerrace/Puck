@@ -581,16 +581,17 @@ public sealed class McpInteropTests {
         provider: System.Globalization.CultureInfo.InvariantCulture,
         s: System.Text.RegularExpressions.Regex.Match(input: status, pattern: @" placements (\d+) ").Groups[1].Value
     );
-    // Copies the debug world's package into the directory and returns its entry source's path.
+    // Copies the checkout's worlds tree into the directory, so the debug package's relative imports (../standard) resolve
+    // as they do in the checkout, and returns the debug world's entry source's path.
     private static string StageWorld(TemporaryDirectory directory, string name) {
         var worlds = directory.PathOf(name: name);
 
         CopyTree(
-            source: Path.Combine(path1: RepositoryPaths.RequireRoot(), path2: "worlds/debug"),
+            source: Path.Combine(path1: RepositoryPaths.RequireRoot(), path2: "worlds"),
             target: worlds
         );
 
-        return Path.Combine(path1: worlds, path2: "debug.puck");
+        return Path.Combine(path1: worlds, path2: "debug", path3: "debug.puck");
     }
     // Starts a headless World from its own build output beside this suite's, publishing its control endpoint in the
     // directory. The task completes when the World announces it, and faults if its standard error closes first.

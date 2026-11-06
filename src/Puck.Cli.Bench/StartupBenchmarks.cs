@@ -15,11 +15,11 @@ public static class StartupBenchmarks {
         var artifact = new Option<string?>("--world-artifact") { Description = "Measure this Puck.World entry assembly instead of the build of the checkout's sources, which is built first, outside every sample, when no run has built that source state." };
         var output = new Option<string?>("--output") { Description = "Parent for a unique run directory containing report.json, transcripts, and captures." };
         var cache = new Option<string?>("--cache-dir") { Description = "World cache root shared across samples; an empty directory measures a cold boot followed by warm boots." };
-        var samples = new Option<int>("--samples") { DefaultValueFactory = _ => 3, Description = "Fresh processes measured per world, 1 to 100." };
-        var timeout = new Option<int>("--timeout-seconds") { DefaultValueFactory = _ => 120, Description = "Seconds one sample may take before it is abandoned, 1 to 3600." };
+        var samples = CliOptions.Count(defaultValue: 3, description: "Fresh processes measured per world, 1 to 100.", maximum: 100, minimum: 1, name: "--samples");
+        var timeout = CliOptions.Count(defaultValue: 120, description: "Seconds one sample may take before it is abandoned, 1 to 3600.", maximum: 3600, minimum: 1, name: "--timeout-seconds");
         var headless = new Option<bool>("--headless") { Description = "Measure console readiness only; default launches the windowed renderer and requires a completed PNG capture." };
-        var width = new Option<int>("--width") { DefaultValueFactory = _ => 1280, Description = "Window width in pixels for the rendered capture, 1 to 16384." };
-        var height = new Option<int>("--height") { DefaultValueFactory = _ => 720, Description = "Window height in pixels for the rendered capture, 1 to 16384." };
+        var width = CliOptions.Count(defaultValue: 1280, description: "Window width in pixels for the rendered capture, 1 to 16384.", maximum: 16384, minimum: 1, name: "--width");
+        var height = CliOptions.Count(defaultValue: 720, description: "Window height in pixels for the rendered capture, 1 to 16384.", maximum: 16384, minimum: 1, name: "--height");
         var json = new Option<bool>("--json") { Description = "Print the report (puck.bench.v1) on standard output instead of the summary line." };
         var command = new Command(description: "Measure fresh-process World startup serially, with isolated persistence for every sample.", name: "startup") { worlds, artifact, output, cache, samples, timeout, headless, width, height, json };
 
@@ -32,10 +32,7 @@ public static class StartupBenchmarks {
     }
 
     private static int Run(string[] worlds, string? artifact, string? output, int samples, int timeout, bool headless, int width, int height, string? cache, bool json, BenchHostSample? sampleHost) {
-        if ((samples is < 1 or > 100) || (timeout is < 1 or > 3600) || (width is < 1 or > 16384) || (height is < 1 or > 16384)) {
-            Console.Error.WriteLine(value: "startup: samples must be 1..100, timeout 1..3600 seconds, and dimensions 1..16384.");
-            return 2;
-        }
+
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root)) { return 2; }
         var run = PuckPaths.Normalize(path: Path.Combine(path1: (output ?? Path.Combine(path1: root, path2: "artifacts/startup")), path2: Guid.NewGuid().ToString(format: "N")));
 

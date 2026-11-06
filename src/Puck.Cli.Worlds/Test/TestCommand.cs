@@ -23,7 +23,9 @@ public static partial class TestCommand {
     private const string ScratchPrefix = "puck-test-";
 
 
-    private static int Run(string path, string? worldArtifact, string? keep, int jobs, bool reproduce, string? cacheDirectory, string? workers, string? record, string? compare, string[] filters) {
+    private static int Run(string path, string? worldArtifact, string? keep, int jobs, bool reproduce, string? cacheDirectory, string? workers, string? record, string? compare, string[] filters, bool json = false) {
+        using var records = CliJsonLines.Open(json: json);
+
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             Console.Error.WriteLine(value: "ERROR: puck test must run inside the repository.");
 
@@ -56,6 +58,7 @@ public static partial class TestCommand {
                     legs: legs,
                     path: path,
                     record: record,
+                    records: records,
                     repositoryRoot: repositoryRoot,
                     reproduce: reproduce,
                     runDirectory: kept,
@@ -76,6 +79,7 @@ public static partial class TestCommand {
             legs: legs,
             path: path,
             record: record,
+            records: records,
             repositoryRoot: repositoryRoot,
             reproduce: reproduce,
             runDirectory: run.Path,
@@ -84,7 +88,7 @@ public static partial class TestCommand {
     }
     // One run of the verb inside runDirectory: the --keep directory, or a run directory the caller concludes with the
     // exit code this returns.
-    private static int RunIn(string path, string? worldArtifact, int jobs, bool reproduce, string repositoryRoot, string runDirectory, string? cacheDirectory, IReadOnlyList<TestLeg> legs, string? record, string? compare, string[] filters) {
+    private static int RunIn(string path, string? worldArtifact, int jobs, bool reproduce, string repositoryRoot, string runDirectory, string? cacheDirectory, IReadOnlyList<TestLeg> legs, string? record, string? compare, string[] filters, CliJsonLines? records) {
         var preparation = new WorldBootWork();
         using var attribution = WorldBootWork.Attribute(work: preparation);
 
@@ -120,11 +124,7 @@ public static partial class TestCommand {
 
         using var held = lease;
 
-        var parallelism = Math.Clamp(
-            value: jobs,
-            min: 1,
-            max: Math.Max(val1: 1, val2: worlds.Count)
-        );
+        var parallelism = Math.Min(val1: jobs, val2: worlds.Count);
 
         var batches = Enumerable.Range(0, worlds.Count)
             .GroupBy(keySelector: index => (index % parallelism))
@@ -169,22 +169,44 @@ public static partial class TestCommand {
             ticks += worldTicks;
             refused |= (verdict == 2);
             failed |= (verdict != 0);
+            var comparedVerdict = 0;
+
             if (recorded && (verdict != 2)) {
-                var compared = CompareAndRecord(compare: compare, error: Console.Error, legs: legs, output: Console.Out,
+                comparedVerdict = CompareAndRecord(compare: compare, error: Console.Error, legs: legs, output: Console.Out,
                     record: record, test: worlds[index], worldDirectory: worldDirectory);
 
-                diverged |= (compared != 0);
+                refused |= (comparedVerdict == 2);
+                diverged |= (comparedVerdict == 1);
             }
+
+            records?.Write(record: new JsonObject {
+                ["world"] = worlds[index].Name,
+                ["path"] = CliPaths.ToDisplay(fullPath: worlds[index].Path),
+                ["verdict"] = Verdict(code: verdict),
+                ["comparison"] = (recorded ? Verdict(code: comparedVerdict) : null),
+                ["hostBoots"] = worldBoots,
+                ["exportedTicks"] = worldTicks,
+                ["artifacts"] = CliPaths.ToDisplay(fullPath: worldDirectory),
+            });
         }
-        refused |= diverged;
 
         Console.WriteLine(value: $"test: work processes={batches.Length} host-boots={boots} world-runs={worlds.Count} exported-authority-ticks={ticks}");
+        records?.Write(record: new JsonObject {
+            ["worlds"] = worlds.Count,
+            ["verdict"] = (refused ? "refused" : ((diverged || failed) ? "fail" : "pass")),
+            ["diverged"] = diverged,
+            ["workProcesses"] = batches.Length,
+            ["hostBoots"] = boots,
+            ["exportedTicks"] = ticks,
+        });
         if (refused) {
-            if (diverged) {
-                Console.Error.WriteLine(value: "FAIL: a world's authority hashes, snapshot entries, exports or crossing log differed between worker counts or from its recording, or had no recording to compare.");
-            }
-
             return 2;
+        }
+
+        if (diverged) {
+            Console.Error.WriteLine(value: "FAIL: a world's authority hashes, snapshot entries, exports or crossing log differed between worker counts or from its recording.");
+
+            return 1;
         }
 
         if (failed) {
@@ -206,6 +228,7 @@ public static partial class TestCommand {
 
         return 0;
     }
+    private static string Verdict(int code) => code switch { 0 => "pass", 1 => "fail", _ => "refused" };
     // Holds the shared heavy lease (HeavyLease) and says so: the lease prints its own line while it waits, and this one when it is held.
     private static CliLease AcquireHeavy(string path, string repositoryRoot, int worlds) {
         var started = Stopwatch.GetTimestamp();
@@ -243,10 +266,13 @@ public static partial class TestCommand {
             var proof = Path.Combine(path1: legDirectory, path2: AuthoritiesFile);
 
             if (!File.Exists(path: proof) || (JsonNode.Parse(File.ReadAllText(path: proof)) is not JsonArray { Count: > 0 } rows) ||
-                rows.Any(predicate: row => (row?["divergence"]?.GetValue<int>() != -1)) ||
                 reading.Worlds.Any(predicate: world => !rows.Any(predicate: row => (row?["world"]?.GetValue<string>() == world.World)))) {
-                error.WriteLine(value: "  REFUSED: missing or divergent checkpoint reproduction.");
+                error.WriteLine(value: "  REFUSED: missing checkpoint reproduction.");
                 return 2;
+            }
+            if (rows.Any(predicate: row => (row?["divergence"]?.GetValue<int>() != -1))) {
+                error.WriteLine(value: "  FAIL: recorded input did not reproduce the authority from its checkpoint.");
+                return 1;
             }
         }
         var reported = Report(name, reading, test.Expectations, output, error);
