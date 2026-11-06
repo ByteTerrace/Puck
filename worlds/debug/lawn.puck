@@ -157,11 +157,11 @@ prototypes {
   paintedGround(
     id: "floor",
     radius: 740,
-    turf: "#6C8A33",
+    turf: lawnTurf,
     paving: "#BC7F58",
     paths: lawnPaths,
     pathWidth: lawnPathWidth,
-    holes: [poolHole, plungeHole, reservoirHole]
+    holes: [poolHole, plungeHole, reservoirHole, riverHole]
   )
   broadleafTree(id: "lawn-oak-0")
   broadleafTree(id: "lawn-oak-1", height: 1.12, spread: 0.92, lean: 0.06)

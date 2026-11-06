@@ -77,8 +77,8 @@ milestone. The owner requested its baseline and implementation plan, which
    ordinary work.
 10. [Water feature build](#water) ([plan](water.md#the-lanes)) [ordinary]: the
     chain as the arc has landed (the hidden chain still draws, see the packet);
-    A1 to A5 and R1 in parallel next, then R3, P1 last. The owner accepted the
-    plan's three taste calls; A1 builds the carved channel.
+    A2 to A5 and R1 in parallel next, then R3, P1 last. The owner accepted the
+    plan's three taste calls; the carved channel has landed.
 11. [Certified field contact](#certified-field-contact): box and ellipsoid
     bodies, then clearance on slopes within a third of a metre.
 12. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
@@ -1088,7 +1088,7 @@ worlds in place is rewritten.
 
 Owner: the water feature lane (rendering, puck-world, sdf-authoring) · ordinary ·
 Next: [the water feature plan](water.md) owns the feature end to end: the arc as a
-specification, the audit, the definition of done and the lanes (A1 to A5 the world
+specification, the audit, the definition of done and the lanes (A2 to A5 the world
 authoring, R1 glass shadows, R3 the particle pool, P1 the tour). The items below
 are what the plan defers or the water strained in a system beside it.
 
@@ -1102,6 +1102,13 @@ are what the plan defers or the water strained in a system beside it.
   flag, or a flow height row the emitter and the contact provider skip), then
   confirm with a windowed World that `[sdf.mesh-bake] done` and `world.budget`
   show no `hydro` groups.
+
+- [medium] A flow that follows a course. A palette flow layer carries one
+  velocity over a surface, so the river's single water body flows along the
+  course's mean heading and the course's legs turn only gently about it
+  ([the river's channel](water.md#the-rivers-channel-as-built)); a river that
+  winds freely needs a flow whose velocity is read per place (from the course's
+  tangent or a lattice row), which is a palette-flow and shader change.
 
 - [medium] Cold mesh residency still misses the one-minute target. Attribute the
   remaining large water meshes with `puck mesh audit --prototype` (now selects

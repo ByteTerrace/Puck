@@ -46,34 +46,41 @@ let waterMaterial = {
 
 // A spatial view of a scalar store. The authoritative store remains the caller's row; these cells supply the
 // ordinary surface and medium queries at the place where visitors meet it. The drawn surface follows the full value as
-// it drifts with the cycle, with no rebake, and bodies float on it.
+// it drifts with the cycle, with no rebake, and bodies float on it. A view's `material` is its surface's look
+// (`waterMaterial`, or a stream's `streamMaterial`).
 template waterViews(views) {
   state {
     lattices: map(views, view => field(
-        name: view.name, origin: [view.hole[0], view.floorY, view.hole[1]], cellSize: view.cell,
-        width: floor((view.hole[2] - view.hole[0]) / view.cell), depth: floor((view.hole[3] - view.hole[1]) / view.cell),
-        layers: 1, stepEveryTicks: 8,
-        reactions: [
-          transform(
-            when: [{ field: view.rowName, comparison: GreaterOrEqual, value: 0 }],
-            then: [{ field: view.rowName, op: Set, value { row: view.gauge } }]
-          )
-        ]
-      ))
+      name: view.name,
+      origin: [view.hole[0], view.floorY, view.hole[1]],
+      cellSize: view.cell,
+      width: floor((view.hole[2] - view.hole[0]) / view.cell),
+      depth: floor((view.hole[3] - view.hole[1]) / view.cell),
+      layers: 1,
+      stepEveryTicks: 8,
+      reactions: [
+        transform(
+          when: [{ field: view.rowName, comparison: GreaterOrEqual, value: 0 }],
+          then: [{ field: view.rowName, op: Set, value { row: view.gauge } }]
+        )
+      ]
+    ))
     world {
-      for view in views { row {
-        name: view.rowName
-        kind: "Fixed"
-        domain: cellsOf(topology: view.name)
-        field {
-          initial: view.initial
-          min: 0
-          max: view.maximumDepth
-          heightScale: view.heightScale
-          material: waterMaterial
-          medium {}
+      for view in views {
+        row {
+          name: view.rowName
+          kind: "Fixed"
+          domain: cellsOf(topology: view.name)
+          field {
+            initial: view.initial
+            min: 0
+            max: view.maximumDepth
+            heightScale: view.heightScale
+            material: view.material
+            medium {}
+          }
         }
-      } }
+      }
     }
   }
 }
@@ -88,17 +95,15 @@ function fallsSlope(profile, j) = (profile[j][0] - profile[j + 1][0]) / squareRo
     (profile[j + 1][0] - profile[j][0]) * (profile[j + 1][0] - profile[j][0])
 )
 
-// The standard turquoise and white of a stream, a lake and a falls, as palette rows: the water, its brush edge and its foam.
-// The water is glass, its medium the template's (`glass`).
+// The standard turquoise of a falls and a lake, as a palette row. The water is glass, its medium the template's (`glass`).
 let waterPalette = [
   { color: "#2FB5C0", roughness: 0.18, specular: 0.55, glass: waterGlass }
-  { color: "#F4F8F6", roughness: 0.55, specular: 0.1, wrap: 0.45 }
-  { color: "#FFFFFF", roughness: 0.6, specular: 0.05, wrap: 0.5 }
 ]
-// The standard's flows, as palette `flow` layers: the water's shading moves while its geometry stands still. A velocity is
-// in the creation's engine frame (the author frame's x and z negated), so a stream whose author +Z is its flow runs
-// along -Z. One cycle's travel stays under a third of a pattern feature along the flow (stretch / scale).
+// The standard's flows, as palette `flow` layers: the water's shading moves while its geometry stands still. One cycle's
+// travel stays under a third of a pattern feature along the flow (stretch / scale). A stream's `velocity` is the caller's,
+// in world space for a surface that is not a creation's own.
 let streamFlowLayer = {
+  frame: World
   velocity [0, 0, -1.2]
   scale: 0.6
   stretch: 4
@@ -109,9 +114,12 @@ let streamFlowLayer = {
   surface: waterFoam
   seed: 7
 }
-// A stream sheet stands a hand's depth over its bed, so it scatters more per metre to show colour, and its contact reaches
-// less than its depth: foam gathers along the banks, not over the whole bed.
-let streamGlass = waterGlass with { scattering: 4, contact { reach: 0.06, coverage: 0.7 } }
+// A stream runs under a metre deep over its bed: its water scatters more per metre than a pool's, so a shallow reach stays
+// clear over the stones and the deep turns turquoise, and its contact reaches less than its depth, so foam gathers along the
+// banks and round the stones, not over the whole bed.
+let streamGlass = waterGlass with { scattering: 0.9, contact { reach: 0.25, coverage: 0.7 } }
+// The stream's surface material: the standard's water wearing the stream's glass and flow.
+let streamMaterial = waterMaterial with { glass: streamGlass, flow: streamFlowLayer }
 // A falls runs down every sheet at the sheet's own slope: only the velocity's part along a surface moves it. Its velocity
 // and pattern are in world space, so the flow runs down a sheet however the sheet turns. A world that binds a render lane
 // to its discharge thins the foam with it (`coverageLane`, a world lane from 4 to 7: `fallsFlowLayer with { coverageLane:
@@ -156,21 +164,67 @@ let stonePalette = [
   { color: "#B3A482", roughness: 0.92, specular: 0.02 }
 ]
 
-// A stream segment is one still sheet `length` long whose shading flows along its author +Z (`flow`, a palette flow
-// layer): the geometry never moves, so every segment of a stream is a placement of one prototype sharing one baked
-// mesh. `overlap` extends each end past the segment's length so adjacent segments meet at a bend; a stream raises
-// alternate segments by two centimetres so overlapping ends never share a plane. The sheet is glass (`glass`, its medium):
-// the bed shows through it.
-template streamSegment(id, length, width = 4.5, overlap = 0.5, palette = waterPalette, flow = streamFlowLayer, glass = streamGlass, top = 0.1) {
+// The length of a line from `a` to `b`, points [x, z].
+function channelLength(a, b) = squareRoot((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]))
+// The cosine of the bearing of the line from `a` to `b`, taken eastward (the line is the same either way): the bearing
+// in [0, 180] whose half-turn about +Y orients a shape's +Z along the line.
+function channelCosine(a, b) = ((b[0] < a[0]) ? -1 : 1) * (b[1] - a[1]) / channelLength(a, b)
+
+// The half width of a channel's cutter at its top, `reach` over the ground's top: the profile widens from `bedHalf` at the
+// bed to `bankHalf` at the ground, and the cutter runs on past the ground at the same slope.
+function channelTopHalf(top, bed, reach, bedHalf, bankHalf) = bedHalf +
+  (bankHalf - bedHalf) * (top + reach - bed) / (top - bed)
+
+// A patch of ground with a river's channel cut in it: the ground between `region` ([minX, minZ, maxX, maxZ] in world X/Z,
+// the floor opening that holds it), `depth` thick under its top at `top`, and one authored channel profile cut along the
+// course `points` (world X/Z vertices): a flat bed `bedHalf` out from the course at `bed`, banks rising to `bankHalf` at the
+// ground's top (a trapezoid, so a bank is a slope and the profile never changes along the course). Each leg is one cutter, and
+// its ends run on by `join` so adjacent legs meet at a bend with no notch. `stones` are rows { position [x, y, z], radii,
+// yaw (degrees) } on the bed and banks. The ground wears `ground` (a palette row), the cut surface the bed and bank
+// material, the stones theirs. Every shape is a union or a subtraction of admitted primitives, so the channel collides as it
+// is drawn, and the author frame's half turn makes each world position the negated one. The water is the caller's: a
+// `waterViews` field over the region, its datum the bed.
+template riverChannel(id, region, points, ground, top = 0, bed = -0.9, bedHalf = 1.8, bankHalf = 3, depth = 1.5, reach = 0.4, join = 0.5, stones = [], palette = stonePalette) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
-      palette [palette[0] with { flow: flow, glass: glass }]
-      shape Box "sheet" {
+      palette: concat([ground], palette)
+      shape Box "ground" {
         material: 0
-        position [0, top - 0.3, 0]
-        scale [width / 2, 0.3, length / 2 + overlap]
+        position [0 - (region[0] + region[2]) / 2, top - depth, 0 - (region[1] + region[3]) / 2]
+        scale [(region[2] - region[0]) / 2, depth, (region[3] - region[1]) / 2]
+      }
+      for i in range(0, length(points) - 1) {
+        shape Prism $"cut-{i}" {
+          blend: Subtraction
+          material: 2
+          position [
+            0 - (points[i][0] + points[i + 1][0]) / 2,
+            (bed + top + reach) / 2,
+            0 - (points[i][1] + points[i + 1][1]) / 2
+          ]
+          scale [
+            channelTopHalf(top, bed, reach, bedHalf, bankHalf),
+            (top + reach - bed) / 2,
+            channelLength(points[i], points[i + 1]) / 2 + join
+          ]
+          taper: bedHalf / channelTopHalf(top, bed, reach, bedHalf, bankHalf)
+          rotation [
+            halfTurnSine(channelCosine(points[i], points[i + 1]))
+            0
+            halfTurnCosine(channelCosine(points[i], points[i + 1]))
+            0
+          ]
+        }
+      }
+      for (stone, i) in stones {
+        shape Ellipsoid $"stone-{i}" {
+          material: 1
+          position [0 - stone.position[0], stone.position[1], 0 - stone.position[2]]
+          scale: stone.radii
+          rotation [0, sine(stone.yaw * 0.008726646259971648), 0, cosine(stone.yaw * 0.008726646259971648)]
+        }
       }
     }
   }
@@ -198,8 +252,10 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gaug
           material: 0
           position [0, (profile[j][1] + profile[j + 1][1]) / 2, (profile[j][0] + profile[j + 1][0]) / 2 - standoff]
           scale [width / 2, thickness / 2, squareRoot(
-            (profile[j + 1][1] - profile[j][1]) * (profile[j + 1][1] - profile[j][1]) +
-            (profile[j + 1][0] - profile[j][0]) * (profile[j + 1][0] - profile[j][0])) / 2]
+              (profile[j + 1][1] - profile[j][1]) * (profile[j + 1][1] - profile[j][1]) +
+                (profile[j + 1][0] - profile[j][0]) * (profile[j + 1][0] - profile[j][0])
+            ) / 2
+          ]
           rotation [0 - halfTurnSine(fallsSlope(profile, j)), 0, 0, halfTurnCosine(fallsSlope(profile, j))]
           swings [
             {

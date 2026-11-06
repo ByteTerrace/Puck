@@ -188,12 +188,10 @@ the code or capture shows, and the lane that closes it.
 
 | Id | Gap | What the code shows | Lane |
 |---|---|---|---|
-| G1 | The river has no channel | `streamSegment` is a 0.6 m slab whose top stands 0.1 m over the turf (`position [0, top - 0.3, 0]`), 0.2 m of it buried, placed eight times along the legs; the lawn's `paintedGround` cuts holes for the pool, the plunge basin and the reservoir and nothing along the river (`lawn.puck`'s `holes`), so there is no bed, no bank, no riffle, and the current reads as a film over grass. Alternate legs ride 2 cm higher, a visible step at each bend. The last leg ends at (−57.7, 1.2) plus its 0.5 m overlap, about 2.5 m short of the pool's north bank at z = −2. The art's panel 4 has the current in banks with stones under an arch. | A1 |
 | G2 | The lake is a film in the air | `lakeSurface` is a cylinder 0.24 m thick (`scale [radius, 0.12, radius]`) at y 324.5 over a bowl the valley cuts to y 319 (`valleyBasins[lake-basin]`: radii 17 at y 336), and its slide lifts it 4 m per unit of `lakeLevel` over 0.4, so during the melt it floats up to 3.6 m higher with air beneath. The art's panel 2 has clear stones at the near bank, turquoise middle depth and teal deep water. | A2 |
 | G3 | The falls stand 8 m off the wall | `fallsRibbon` places fourteen flat 8 m sheets at `standoff: 8` in front of the face profile, so the ribbon hangs in the air before the rock; the art has one sheet hugging and interrupted by rock, and a residual dark wet streak when dry. | A3 |
 | G4 | The pool and plunge floors are flat boxes | `waterBasin` is a flat bed with square walls and up to four steps; the art's panel 4 wants shallow stones at the margin, a dark deep end, submerged stones under caustic light and the drain throat at the bank (the pool's west opening at (−66, −1.3, −6) leads nowhere); panel 3 wants a dark rounded plunge pocket. | A4 |
 | G5 | The reservoir is invisible and has no inlet | The pavilion's observation window (`glass { depth: 8, ior: 1.5 }`) lies over the reservoir's glass field surface, and the glass pass shades the nearest layer alone, so the pane reads as tint with no water line, float or medium (W1's capture). The art's panel 5 has a descending inlet, air over the water, and the float on the surface beside pale ticks; the chamber has no inlet geometry and the gauge's post tops out at y −0.1 under the window. | A5, after the two-glass-layers lane |
-| G6 | Unused palette rows | `waterPalette` rows 1 and 2 (the brush edge and foam of the stream's old paints) are referenced by no template since the flow layer replaced the paints. | A1 |
 
 #### Look, light and motion
 
@@ -341,23 +339,14 @@ The owner's rulings on the three taste calls: the lake rests at its outlet
 sill and the falls run dry within 15 simulated minutes after T; the aquifer is
 confined, fills by 3T/4 and then backs the river up to a held level; and the
 river runs in a carved channel, not a slab over the turf. The chain builds the
-first two ([the arc](#the-arc-run)); A1 builds the third.
-
-### A1. The river in its channel
-
-**Outcome.** A carved channel from the plunge basin to the pool's north bank: the lawn and terrain cut along the legs (the `paintedGround` holes and the valley's cuts, one authored channel profile), banks and a bed with riffle stones, and the water as one body filling the channel to a level the chain sets (a height field over the channel, the mechanism the pool uses, or the segment prototype deepened to the bed), its surface wearing `streamFlowLayer`. The bridge's arch clears the settled level. `waterPalette`'s unused rows go.
-
-**Invariant.** The river's drawn level is the chain's `riverDepth` at the presented tick, nowhere a constant. Enforced by the surface reading the gauge through the field surface or a slide, as the lake's does.
-
-**Reuse.** `waterViews`, `SdfHeightField`, `streamSegment`, `paintedGround`, `terrainBasin`, the flow layer. No per-leg geometry: the eight placements of one segment stay, or one lattice replaces them.
-
-**Check.** The river views at stages 1, 4 and 5 (the definition of done); the Moth standing in the channel reads `InMedium` in `body.where`; the mesh-pass vertex count of the river's groups within the budget.
+first two ([the arc](#the-arc-run)); [the river's channel](#the-rivers-channel-as-built)
+is the third.
 
 ### A2. The lake and the glacier
 
 **Outcome.** The lake as a body filling its bowl from the floor to `lakeLevel` (a field surface over the bowl or a solid whose top slides), through which the bowl's floor and bank stones read; the outlet sill the one moving edge. The glacier as a tongue in its cradle with crevasses and melt channels authored as shapes, shrinking about the cradle to bare moraine at T.
 
-**Invariant.** As A1's: the level is the gauge's; the ice's size is `glacier`'s.
+**Invariant.** The level is the gauge's, as [the river's](#the-rivers-channel-as-built) is; the ice's size is `glacier`'s.
 
 **Reuse.** `lakeSurface`, `glacierMass`, `valleyBasins`, `waterViews`, `lakeFlowLayer`, `icePalette`.
 
@@ -423,7 +412,7 @@ Deferred to [open items](open-items.md#water) with its mechanism named: a verb t
 
 ### Order
 
-The simulation is the feature's truth and every look binds to it. A1 to A5 and R1 run in parallel (A5's pane acceptance waits on the two-glass-layers lane). R3 next, since it adds a pass. P1 lands with the last authoring lane. R4 and D1 after the integration acceptance.
+The simulation is the feature's truth and every look binds to it. A2 to A5 and R1 run in parallel (A5's pane acceptance waits on the two-glass-layers lane). R3 next, since it adds a pass. P1 lands with the last authoring lane. R4 and D1 after the integration acceptance.
 
 ## The mechanisms under the water
 
@@ -443,7 +432,7 @@ probe answers), the one light walk (`sdfLightResponse`, uncascaded, probe
 shadowing) gives its highlights and the light its medium and revealed flow
 surface receive, and the flow layer runs through `sdfShadeFlow`, shared with
 the light stage. In the standard every water surface wears a glass row:
-`waterGlass` on the field surfaces, thinner-body variants on the stream
+`waterGlass` on the field surfaces, variants on the stream
 (`streamGlass`), the falls (`fallsGlass`) and the lake (`lakeGlass`), each a
 template parameter.
 
@@ -494,14 +483,53 @@ presented tick (`WorldEnvironmentResolve`) and it enters the kernels through
 one pass value, `worldLanes`, read only by `sdfLane` (`frame/sdf-lanes.hlsli`).
 
 **The water on it.** In the standard (`worlds/standard/water.puck`), the
-stream segment is one still sheet wearing `streamFlowLayer`; the debug world
-places the one `stream` prototype eight times. The falls is fourteen sheets
+river is a `waterViews` field body wearing `streamMaterial`, whose flow is
+`streamFlowLayer` ([the river's channel](#the-rivers-channel-as-built)). The falls is fourteen sheets
 wearing `fallsFlowLayer`, one world-space downward velocity that runs down
 every sheet at its own slope; each sheet folds about its own flow axis by
 `fallsFlow`, the chain's discharge over the sill, and its foam coverage follows
 world lane 4, which the debug world binds to `state.fallsFlow`. The lake keeps its level slide and wears
 `lakeFlowLayer`. The meadow's grass wears `meadowWind`, the same layer with a
 wind vector.
+
+### The river's channel as built
+
+The river runs in a carved channel, not a slab over the turf. `riverChannel`
+(`worlds/standard/water.puck`) is a patch of ground (`region`, the floor's
+opening for it, `lawn.puck`'s `holes`) with one authored trapezoid profile cut
+along the course by a subtraction per leg (bed `bedHalf`, banks widening to
+`bankHalf` at the ground's top, each leg's ends running on by `join` so a bend
+has no notch), the bed and banks in one material and the riffle and bank stones
+as unions. A creation that blends other than by union collides as its composed
+field (`WorldColliderSet.CollidesAsField`), so a body walks the banks and the
+bed as drawn. The debug world authors the course once (`riverLegs`,
+`worlds/debug/water-site.puck`): the channel, the water, the bridge and the
+two basins' wall openings all read it, and the pool's and the plunge basin's
+openings sit where the course crosses their walls (`riverCrossing`).
+
+The water is one `waterViews` lattice over the channel's region, 3 m cells,
+whose datum is the bed (`riverBed`, the pool's floor plus its rest depth, so the
+river's surface and the pool's are the same height at every `riverDepth`). A
+cell's value is the chain's `riverDepth` everywhere, so the surface stands
+under the ground (the turf hides it) outside the cut and shows exactly where the
+cut exposes it; the lattice is a medium, so the Moth stands in the channel and
+reads `inmedium` in `body.where`. The surface wears `streamMaterial`: the
+stream's glass (a hand's depth of clear water over the stones, turquoise
+where deep, foam where the bed or a bank comes within `reach`) and
+`streamFlowLayer`.
+
+**Invariant and its door.** The river's drawn level is `riverDepth` at the
+presented tick, never a constant: the surface is the lattice row's height
+field, which the lattice's transform sets from the gauge, and every bank and
+bed collides as drawn because the channel is one creation whose contact is its
+own composed field. Where it stops: a flow layer carries one velocity over a
+surface, so a winding course cannot be followed leg by leg. The river's
+current runs along the course's mean heading (`riverHeading`) and the legs turn
+only gently about it (within about 35 degrees at the first leg, under 20 over
+the rest); a flow that follows a field of directions needs engine work (a
+palette flow whose velocity is read from a lattice or a course), recorded
+here. The bridge's deck stands over the settled surface with its piers on the
+banks.
 
 ### Field surfaces move at draw time
 
