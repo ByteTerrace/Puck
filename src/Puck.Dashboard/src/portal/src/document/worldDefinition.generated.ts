@@ -1944,6 +1944,10 @@ export type PaletteGlassDocument = {
    * Foam or a wet margin where an opaque surface behind the glass comes within reach of its surface, revealed through the slot's flow coverage (null = none).
    */
   contact?: PaletteGlassContactDocument | null;
+  /**
+   * Shadow extinction per creation unit, finite and non-negative (null = zero).
+   */
+  shadowDensity?: number | null;
 };
 
 export type PaletteInsetDocument = {
@@ -8906,6 +8910,10 @@ export type WorldPrototype = {
            */
           coverage: number;
         } | null;
+        /**
+         * Shadow extinction per creation unit, finite and non-negative (null = zero).
+         */
+        shadowDensity?: number | null;
       } | null;
       /**
        * The slot's own cel style (ToonStyleDocument, on unless it says enabled: false, which keeps the slot continuous); null shades the slot with the world's default style (render.toon).

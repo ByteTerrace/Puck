@@ -914,6 +914,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 device: inputs.Device,
                 shadowRaster: passes.ShadowRaster,
                 shadowExitRaster: passes.ShadowExitRaster,
+                shadowGlassRaster: passes.ShadowGlassRaster,
                 glassRaster: passes.GlassRaster,
                 occlusion: passes.Occlusion,
                 meshRaster: passes.MeshRaster,

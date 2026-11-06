@@ -8,8 +8,9 @@ namespace Puck.SdfVm;
 /// <summary>
 /// One raster pass's GPU selection and counted indirect commands. All passes cull boxes and choose levels from the
 /// residency's retained mesh records. Opaque occlusion draws the previous visible set, builds a conservative depth
-/// pyramid, and draws newly visible records in a second phase. Cascades, glass and a non-occluding mesh pass use one
-/// phase. Level and surface generation persist per draw within one table owner, including across buffer growth;
+/// pyramid, and draws newly visible records in a second phase. Cascades select once for opaque entry/exit and glass
+/// extinction; glass and a non-occluding mesh pass use one phase. Level and surface generation persist per draw within
+/// one table owner, including across buffer growth;
 /// changing owners clears selection history, and a capture ignores prior levels.
 /// Each phase preserves staged draw order with empty commands for rejected records, so depth ties resolve alike.
 /// No host draw walk or readback is involved. KEEP IN SYNC with sdf-mesh-selection.hlsli and the occlusion kernel.
@@ -23,8 +24,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // Controls only; bounds and level metadata live in the shared mesh region. Paired with sdf-mesh-selection.hlsli:
     // one header row, three detail rows, ten cull rows.
     private const int HeaderWords = (14 * 4);
-    // Entry/early, late/solid exit, thin exit; paired with SdfOcclusionPhases in the kernel.
-    private const uint ArgumentPhases = 3u;
+    // Entry/early, late/solid exit, thin exit, glass extinction; paired with SdfOcclusionPhases in the kernel.
+    private const uint ArgumentPhases = 4u;
     private const ulong CountsBytes = ((4 + SdfPortalSight.Capacity) * sizeof(uint));
 
     private readonly IGpuBufferFactory m_buffers;

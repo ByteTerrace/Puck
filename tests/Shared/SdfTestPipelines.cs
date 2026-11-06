@@ -46,6 +46,7 @@ internal static class SdfTestPipelines {
                 occlusion: new byte[] { 1 },
                 pipelines: pipelines,
                 shadowFragment: new byte[] { 1 },
+                shadowGlassFragment: new byte[] { 1 },
                 shadowVertex: new byte[] { 1 },
                 vertex: new byte[] { 1 }
             ),

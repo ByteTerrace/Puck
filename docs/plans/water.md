@@ -199,7 +199,6 @@ the code or capture shows, and the lane that closes it.
 
 | Id | Gap | What the code and the record show | Lane |
 |---|---|---|---|
-| L1 | The falls cast no shadow | A glass draw is skipped by the cascades and the irradiance trace (`SdfMeshDraw.Glass`), so the ribbon lights the wall behind it as if absent; the art's sheet darkens its wall. | R1 |
 | L2 | The falls core reads pale | `fallsGlass` scatters 0.8 per metre of `#1A8A94` under the full sun through a 0.2 m sheet; the record's capture reads the core as pale sage, the art's as transparent turquoise with selective white edges. | A3 |
 | L3 | No wet rock | Nothing darkens the fall line, the splash zone or the banks; the art names wet rock as a coloured darker material region. | A3, A4 |
 | L4 | Spray and splash | The spray is one cloud volume (`impactSpray`), scaled by `fallsFlow`; there are no foam rings in the plunge pocket, no droplets, no splash: the particle pool (W3) is not built. | R3 |
@@ -369,9 +368,9 @@ first two ([the arc](#the-arc-run)); A1 builds the third.
 
 **Invariant.** The sheet's shape, fold and visibility are functions of `fallsFlow` at the presented tick.
 
-**Reuse.** `fallsRibbon`, `fallsProfile`, `fallsFlowLayer`, world lane 4, `impactSpray`; R1 for the shadow.
+**Reuse.** `fallsRibbon`, `fallsProfile`, `fallsFlowLayer`, world lane 4, `impactSpray`; [authored glass shadow density](../rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image) for the shadow.
 
-**Check.** The falls-from-below view at stages 1, 2 and 4; a presented burst over the sheet; `world.debug-view shadow` showing the ribbon's shadow once R1 lands.
+**Check.** The falls-from-below view at stages 1, 2 and 4; a presented burst over the sheet; `world.debug-view shadow` showing the ribbon's shadow.
 
 ### A4. The pool and the plunge basin
 
@@ -393,16 +392,6 @@ first two ([the arc](#the-arc-run)); A1 builds the third.
 
 **Check.** The pavilion-pane view at stages 1, 3 and 5; the passage view at stage 5.
 
-### R1. Glass casts an authored shadow
-
-**Outcome.** A glass material's authored shadow density (a neutral engine default of none, which is today's image): the cascades draw glass draws with that density into a shadow term the surface pass reads, so a falls or a tinted pane darkens what lies behind it. The water chooses its density in the standard.
-
-**Invariant and its door.** The shadow a glass draw casts is a function of its material's density and its thickness along the light, read where the cascades' depth is read today; one door, the cascade pass's draw selection (`SdfMeshDraw.Glass` selects the pipeline instead of excluding the draw). Where it stops: a glass that shadows is still absent from the irradiance trace.
-
-**Reuse.** The cascade passes and their pipelines (`SdfMeshRasterPass`), `GpuPassPipelineKey`, the surface pass's shadow estimate.
-
-**Check.** The falls view shows the ribbon's shadow on the wall; `world.debug-view shadow`; `gpu.vertices` in the cascade passes rises by the glass draws' vertices and no more; a Vulkan boot.
-
 ### R3. The particle pool (W3)
 
 As [W3](#w3-the-presentation-particle-pool): the splash at the plunge pocket and droplets at the falls' foot first. Checks there.
@@ -423,7 +412,7 @@ Deferred to [open items](open-items.md#water) with its mechanism named: a verb t
 
 ### Order
 
-The simulation is the feature's truth and every look binds to it. A1 to A5 and R1 run in parallel (A5's pane acceptance waits on the two-glass-layers lane). R3 next, since it adds a pass. P1 lands with the last authoring lane. R4 and D1 after the integration acceptance.
+The simulation is the feature's truth and every look binds to it. A1 to A5 run in parallel (A5's pane acceptance waits on the two-glass-layers lane). R3 next, since it adds a pass. P1 lands with the last authoring lane. R4 and D1 after the integration acceptance.
 
 ## The mechanisms under the water
 
