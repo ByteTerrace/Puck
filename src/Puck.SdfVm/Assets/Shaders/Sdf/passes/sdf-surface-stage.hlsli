@@ -172,7 +172,7 @@ float sdfMeshShadowDepth(uint cascade, SdfMeshCascade c, int2 texel, bool exit) 
 // receiver point: in front of the point by more than `cone`, the inverse penumbra slope, per texel of lateral distance
 // past SdfMeshShadowNearTexels; a caster outside that cone cannot shadow the point. The blocker search passes zero for
 // `near`, so it finds every caster in front of the receiver's surface.
-float3 sdfMeshShadowGap(uint cascade, SdfMeshCascade c, float2 texel, float2 offset, float receiver, float2 gradient, float texelWorld, float near, float cone, bool exit) {
+float3 sdfMeshShadowGap(bool opticalPresent, uint cascade, SdfMeshCascade c, float2 texel, float2 offset, float receiver, float2 gradient, float texelWorld, float near, float cone, bool exit) {
     float2 at = floor(texel + offset);
     float2 delta = ((at + 0.5) - texel);
     float lateral = length(delta);
@@ -184,9 +184,10 @@ float3 sdfMeshShadowGap(uint cascade, SdfMeshCascade c, float2 texel, float2 off
     );
     // Opaque blockers keep their original estimate. At an unblocked receiver the same cascade contributes the
     // extinction accumulated to its first opaque depth; the nearest glass entry supplies the penumbra's distance.
+    if (!opticalPresent || gap.x > 0.0) { return float3(gap, 1.0); }
     int last = int(passGroup.meshShadowTexels) - 1;
     uint2 cell = uint2(clamp(int2(at), int2(0, 0), int2(last, last)));
-    uint word = 4u * (cell.y * passGroup.meshShadowTexels + cell.x);
+    uint word = 3u * (cell.y * passGroup.meshShadowTexels + cell.x);
     uint low = cascade == 0u ? meshShadowNearOptical[word] : (cascade == 1u ? meshShadowFarOptical[word] : meshShadowSecondOptical[word]);
     uint high = cascade == 0u ? meshShadowNearOptical[word + 1u] : (cascade == 1u ? meshShadowFarOptical[word + 1u] : meshShadowSecondOptical[word + 1u]);
     uint entry = cascade == 0u ? meshShadowNearOptical[word + 2u] : (cascade == 1u ? meshShadowFarOptical[word + 2u] : meshShadowSecondOptical[word + 2u]);
@@ -223,6 +224,11 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, ui
 
     [loop]
     for (uint cascade = first; (cascade < end); cascade++) {
+        uint opticalWords, opticalStride;
+        if (cascade == 0u) { meshShadowNearOptical.GetDimensions(opticalWords, opticalStride); }
+        else if (cascade == 1u) { meshShadowFarOptical.GetDimensions(opticalWords, opticalStride); }
+        else { meshShadowSecondOptical.GetDimensions(opticalWords, opticalStride); }
+        bool opticalPresent = opticalWords >= 3u * passGroup.meshShadowTexels * passGroup.meshShadowTexels;
         SdfMeshCascade c = sdfMeshCascadeAt(cascade);
         float texelWorld = ((2.0 * c.halfHeight) / texels);
         bool exit = (dot(face, c.forward) > 0.0);
@@ -263,7 +269,7 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, ui
         for (uint tap = 0u; (tap < SdfMeshShadowSearchTaps); tap++) {
             float r = sqrt((float(tap) + pattern.y) / float(SdfMeshShadowSearchTaps));
             float angle = ((float(tap) * SdfGoldenAngle) + rotation);
-            float3 gap = sdfMeshShadowGap(cascade, c, texel, (float2(cos(angle), sin(angle)) * (r * searchTexels)), receiver, gradient, texelWorld, 0.0, cone, exit);
+            float3 gap = sdfMeshShadowGap(opticalPresent, cascade, c, texel, (float2(cos(angle), sin(angle)) * (r * searchTexels)), receiver, gradient, texelWorld, 0.0, cone, exit);
             if (gap.x > 0.0) {
                 nearest = min(nearest, gap.x);
                 nearestInCone = ((gap.y > 0.0) ? min(nearestInCone, gap.x) : nearestInCone);
@@ -288,7 +294,7 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, ui
         for (uint tap = 0u; (tap < SdfMeshShadowFilterTaps); tap++) {
             float r = sqrt((float(tap) + pattern.y) / float(SdfMeshShadowFilterTaps));
             float angle = ((float(tap) * SdfGoldenAngle) + rotation);
-            float3 gap = sdfMeshShadowGap(cascade, c, texel, (float2(cos(angle), sin(angle)) * (r * filterTexels)), receiver, gradient, texelWorld, SdfMeshShadowSlopeBias, cone, exit);
+            float3 gap = sdfMeshShadowGap(opticalPresent, cascade, c, texel, (float2(cos(angle), sin(angle)) * (r * filterTexels)), receiver, gradient, texelWorld, SdfMeshShadowSlopeBias, cone, exit);
             float caster = saturate(gap.x / soft) * gap.z;
             float open = (1.0 - caster);
 

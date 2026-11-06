@@ -96,6 +96,12 @@ float sdfMaterialWrap(int material) {
     return (sdfMaterialBase(material, materialBase) ? asfloat(sdfWords[materialBase + 2u]).y : 0.0);
 }
 
+// The shadow raster needs only density, before any fragment side effect or receiver fetch.
+float sdfMaterialShadowDensity(int material) {
+    uint materialBase;
+    return sdfMaterialBase(material, materialBase) ? asfloat(sdfWords[materialBase + 25u]).w : 0.0;
+}
+
 // The ONE material decode point (KEEP IN SYNC with SdfProgram.Materials.cs and SdfProgram.cs).
 SdfMaterialData sdfMaterialLoad(int material) {
     SdfMaterialData data = (SdfMaterialData)0;
@@ -145,7 +151,7 @@ SdfMaterialData sdfMaterialLoad(int material) {
     data.scattering = asfloat(sdfWords[materialBase + 31u]).w;
     data.contactReach = f16tof32(sdfWords[materialBase + 20u].w & 0xFFFFu);
     data.contactCoverage = f16tof32(sdfWords[materialBase + 20u].w >> 16u);
-    data.shadowDensity = asfloat(sdfWords[materialBase + 25u]).w;
+    data.shadowDensity = sdfMaterialShadowDensity(material);
     data.toonBands = asfloat(sdfWords[materialBase + 22u]);
     data.toonShadow = asfloat(sdfWords[materialBase + 23u]);
     data.toonOutline = asfloat(sdfWords[materialBase + 24u]);

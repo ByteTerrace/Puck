@@ -10,7 +10,7 @@ namespace Puck.SdfVm;
 /// that rasterizes the mesh draws into a shadow cascade's depth alone, one entry each a device in the composition's
 /// <see cref="GpuPassPipelineCache"/>. The two share the layout; the shadow pipeline has a vertex stage of its own, the
 /// light's orthographic projection. Opaque stages force the depth test first; glass extinction runs for every face and
-/// fails the late depth test to preserve opaque depths. The engine's holder leases them beside its pipeline set, and the
+/// fails the Greater late depth test against non-negative exit depth to preserve opaque depths. The engine's holder leases them beside its pipeline set, and the
 /// engine takes the built pipelines and their render passes at construction.
 /// <para>
 /// The pipelines draw with the mesh interface's layout (<see cref="SdfWorldInterfaces.Mesh"/>): one set per ring slot
@@ -62,6 +62,7 @@ public sealed class SdfMeshRasterPass {
             stem: OcclusionShaderStem
         ),
         pipelines: pipelines,
+        shadowGlassVertex: Load(bytecodeExtension: bytecodeExtension, directory: SdfKernelSet.DefaultDirectory, stage: "vert", stem: ShadowGlassShaderStem),
         shadowGlassFragment: Load(bytecodeExtension: bytecodeExtension, directory: SdfKernelSet.DefaultDirectory, stage: "frag", stem: ShadowGlassShaderStem),
         shadowFragment: Load(
             bytecodeExtension: bytecodeExtension,
@@ -91,9 +92,10 @@ public sealed class SdfMeshRasterPass {
     /// <param name="shadowFragment">The shadow pipeline's fragment stage's bytecode.</param>
     /// <param name="glassFragment">The glass pipeline's fragment stage's bytecode, drawn with <paramref name="vertex"/>.</param>
     /// <param name="occlusion">The mesh pass occlusion kernel's bytecode (<see cref="OcclusionShaderStem"/>).</param>
+    /// <param name="shadowGlassVertex">The cascade vertex stage with glass attributes.</param>
     /// <param name="shadowGlassFragment">The cascade's glass extinction stage.</param>
     /// <exception cref="ArgumentNullException"><paramref name="pipelines"/> is <see langword="null"/>.</exception>
-    public SdfMeshRasterPass(GpuPassPipelineCache pipelines, ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> fragment, ReadOnlyMemory<byte> shadowVertex, ReadOnlyMemory<byte> shadowFragment, ReadOnlyMemory<byte> glassFragment, ReadOnlyMemory<byte> occlusion, ReadOnlyMemory<byte> shadowGlassFragment) {
+    public SdfMeshRasterPass(GpuPassPipelineCache pipelines, ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> fragment, ReadOnlyMemory<byte> shadowVertex, ReadOnlyMemory<byte> shadowFragment, ReadOnlyMemory<byte> glassFragment, ReadOnlyMemory<byte> occlusion, ReadOnlyMemory<byte> shadowGlassFragment, ReadOnlyMemory<byte> shadowGlassVertex) {
         ArgumentNullException.ThrowIfNull(argument: pipelines);
 
         Pipelines = pipelines;
@@ -112,7 +114,7 @@ public sealed class SdfMeshRasterPass {
             vertex: shadowVertex
         );
         OcclusionKey = OcclusionKeyOf(occlusion: occlusion);
-        ShadowGlassKey = GpuPassPipelineKey.OfGraphics(description: ShadowDescription with { Name = ShadowGlassShaderStem }, fragment: shadowGlassFragment, vertex: shadowVertex, renderPass: ShadowRenderPass);
+        ShadowGlassKey = GpuPassPipelineKey.OfGraphics(description: ShadowDescription with { Name = ShadowGlassShaderStem }, fragment: shadowGlassFragment, vertex: shadowGlassVertex, renderPass: ShadowRenderPass);
         GlassKey = GlassKeyOf(
             fragment: glassFragment,
             vertex: vertex

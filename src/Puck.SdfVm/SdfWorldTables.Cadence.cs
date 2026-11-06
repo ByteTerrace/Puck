@@ -52,6 +52,7 @@ public sealed partial class SdfWorldTables {
     private ulong m_shadowSignature;
     // The live program's material wraps (SdfMaterial.Wrap), which the surface pass reads (WrapSignatureOf).
     private ulong m_wrapSignature;
+    private ulong m_shadowDensitySignature;
     private ulong m_visualSignature;
 
     private static readonly (int Offset, int Length)[] CompositeValues = Members(members: [SdfWorldPackage.GeometryOnly]);
@@ -323,6 +324,7 @@ public sealed partial class SdfWorldTables {
 
         var shadow = Fnv1aHash.Create();
 
+        shadow.Add(value: m_shadowDensitySignature);
         foreach (var light in m_lightRecords) {
             if (!light.CastsShadow) { continue; }
             Span<float> direction = [light.Direction.X, light.Direction.Y, light.Direction.Z, light.Param];

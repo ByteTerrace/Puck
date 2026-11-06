@@ -95,7 +95,7 @@ public sealed partial class SdfProgramBuilder {
         if (!material.IsGlassValid) {
             throw new ArgumentOutOfRangeException(
                 nameof(material),
-                $"A glass material needs a finite, positive depth, an index of refraction in [{SdfGlass.MinIor}, {SdfGlass.MaxIor}], an albedo (its tint) and a scatter colour in [0, 1], a non-negative scattering and contact reach, a contact coverage in [0, 1], and for a contact a flow naming the surface its coverage reveals; got {material.Glass} with albedo {material.Albedo} and flow {material.Flow}."
+                $"A glass material needs a finite, positive depth, an index of refraction in [{SdfGlass.MinIor}, {SdfGlass.MaxIor}], an albedo (its tint) and a scatter colour in [0, 1], a finite non-negative shadowDensity, scattering and contact reach, a contact coverage in [0, 1], and for a contact a flow naming the surface its coverage reveals; got {material.Glass} with albedo {material.Albedo} and flow {material.Flow}."
             );
         }
         if (material.Paints is { Count: > SdfProgram.MaxPaintsPerMaterial } paints) {

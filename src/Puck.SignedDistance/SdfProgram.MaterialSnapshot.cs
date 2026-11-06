@@ -10,6 +10,7 @@ public sealed partial class SdfProgram {
     public IReadOnlyList<SdfMaterial> Materials => m_materialsView;
 
     private bool? m_hasGlass;
+    private bool? m_hasGlassShadows;
     private bool? m_hasFlow;
     private bool? m_readsWorldLanes;
 
@@ -33,6 +34,9 @@ public sealed partial class SdfProgram {
     /// a view of such a program runs the glass passes (<c>SdfWorldPackage.WithGlass</c>), and a view of any other pays
     /// nothing for them. Measured once, on first read.</summary>
     public bool HasGlass => (m_hasGlass ??= MeasureGlass());
+
+    /// <summary>Gets whether a drawn glass shape has positive shadow extinction; only these programs need optical cascades.</summary>
+    public bool HasGlassShadows => (m_hasGlassShadows ??= MeasureGlass(shadows: true));
 
     /// <summary>Returns whether a material id names a glass material of the program's table; a screen sentinel or an
     /// id past the table is opaque.</summary>
@@ -63,9 +67,10 @@ public sealed partial class SdfProgram {
         return (shapes > 0);
     }
 
-    private bool MeasureGlass() {
+    private bool MeasureGlass(bool shadows = false) {
         foreach (var instruction in m_instructions) {
-            if ((instruction.Op == SdfOp.ShapeBlend) && IsGlassMaterial(material: unchecked((int)instruction.Material))) {
+            if ((instruction.Op == SdfOp.ShapeBlend) && IsGlassMaterial(material: unchecked((int)instruction.Material)) &&
+                (!shadows || m_materialsView[(int)instruction.Material].Glass is { ShadowDensity: > 0f })) {
                 return true;
             }
         }

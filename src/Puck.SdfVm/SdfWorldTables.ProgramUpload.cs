@@ -7,7 +7,8 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldTables {
     /// <summary>Re-uploads the scene program (the host's <c>ProgramChanged</c> path — e.g. a rebuilt overworld scene).
     /// Program and instance buffers grow on demand once the device is idle. Persistent images,
-    /// screen bindings and pipelines remain in place. Palette-value edits keep transport and geometry signatures;
+    /// screen bindings and pipelines remain in place. Palette-value edits keep geometry signatures; wrap and shadow
+    /// density separately invalidate their consuming passes.
     /// material reassignment or any other field/layout change invalidates them.</summary>
     /// <param name="program">The scene program to upload.</param>
     /// <param name="delta">The words <paramref name="program"/> differs in from the program it was built after, or
@@ -59,6 +60,7 @@ public sealed partial class SdfWorldTables {
         m_liveInstanceMaskWordCount = program.InstanceMaskWordCount;
         m_liveProgram = program;
         m_wrapSignature = WrapSignatureOf(program: program);
+        m_shadowDensitySignature = ShadowDensitySignatureOf(program: program);
         m_requiredDynamicTransformCapacity = program.RequiredDynamicTransformCapacity;
         // CADENCE GATE: whether ANY declared screen forces every frame to render — see m_programDeclaresScreenSlab.
         m_programDeclaresScreenSlab = ProgramDeclaresShape(
@@ -74,7 +76,7 @@ public sealed partial class SdfWorldTables {
         ReconfigureWork();
     }
 
-    // The hash of every material's wrap in table order: the one material value the surface pass reads, deciding which
+    // The hash of every material's wrap in table order: the surface pass reads it to decide which
     // pixels past a light's terminator query its cascades (sdfMaterialWrap in passes/sdf-surface-stage.hlsli).
     private static ulong WrapSignatureOf(SdfProgram program) {
         var hash = Fnv1aHash.Create();
@@ -85,7 +87,16 @@ public sealed partial class SdfWorldTables {
 
         return hash.Value;
     }
-    // Only paint and material values are lighting-only. The exact prefix and suffix retain every instruction material
+    // Cascades read density; the surface pass reads their optical term. Palette-only uploads must invalidate both.
+    private static ulong ShadowDensitySignatureOf(SdfProgram program) {
+        var hash = Fnv1aHash.Create();
+        foreach (var material in program.Materials) {
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: material.Glass?.ShadowDensity ?? 0f));
+        }
+        return hash.Value;
+    }
+    // Paint and material values do not change geometry. Wrap and density have separate pass signatures.
+    // The exact prefix and suffix retain every instruction material
     // ID, compiled-part binding, shape/instance flag, bound and auxiliary table; a reordered palette is not inferred.
     private static bool SameProgramGeometry(SdfProgram previous, SdfProgram current) {
         var before = previous.Words;

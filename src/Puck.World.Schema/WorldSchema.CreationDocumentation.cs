@@ -9,6 +9,7 @@ public static partial class WorldSchema {
         var index = XmlDocIndex.Value;
         var unconstrained = ((node is JsonValue value) && value.TryGetValue<bool>(value: out var permissive) && permissive);
         var obj = AsObjectNode(node: ref node);
+        if (obj is not null) { ApplyNumericDomains(context.TypeInfo, obj); }
 
         if (
             unconstrained &&

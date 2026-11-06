@@ -1279,6 +1279,7 @@ public static partial class WorldSchema {
         }
 
         run.TypesByNode[obj] = context.TypeInfo.Type;
+        ApplyNumericDomains(context.TypeInfo, obj);
 
         // The document root carries its own hand-written title ("Puck world definition (puck.world.definition.v1)" and
         // its projection/silo counterparts, added after Transform runs) — StampTitle would collide with it.
@@ -1334,6 +1335,20 @@ public static partial class WorldSchema {
 
         return node;
     }
+    // Plain numeric fields use their declared domain in both world and converter-owned creation exports.
+    private static void ApplyNumericDomains(JsonTypeInfo type, JsonObject node) {
+        if (node["properties"] is not JsonObject properties) { return; }
+        foreach (var property in type.Properties) {
+            var scalar = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+            if ((scalar != typeof(float)) && (scalar != typeof(double))) { continue; }
+            var field = WorldValueFields.All.FirstOrDefault(field => field.Owner == type.Type && field.Name == property.Name);
+            if (field is null || properties[property.Name] is not JsonObject value) { continue; }
+            var domain = field.Domain;
+            if (float.IsFinite(domain.Minimum)) { value[domain.MinimumOpen ? "exclusiveMinimum" : "minimum"] = domain.Minimum; }
+            if (float.IsFinite(domain.Maximum)) { value[domain.MaximumOpen ? "exclusiveMaximum" : "maximum"] = domain.Maximum; }
+        }
+    }
+
     // A $ref node the exporter emits can carry sibling keywords alongside "$ref" — draft 2020-12 allows it, and
     // the exporter uses it: a cached concrete TypeInfo's memoized $ref plus an occurrence-specific "default" (an
     // optional property's own default value, e.g. WorldPlacement.FaceSources = null). "$ref" alone is never a
