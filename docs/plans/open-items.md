@@ -75,9 +75,10 @@ milestone. The owner requested its baseline and implementation plan, which
 9. [Engine job system](#engine-job-system) [high]: scheduling, the
    garbage-collection cuts, then J1; the replay burst's tick budget and F17 as
    ordinary work.
-10. [Water feature build](#water) ([plan](water.md#the-lanes)) [ordinary]: H1,
-    the chain as the arc, first, then A1 to A5 and R1 in parallel, R3, P1 last.
-    The owner accepted the plan's three taste calls as H1 and A1 state them.
+10. [Water feature build](#water) ([plan](water.md#the-lanes)) [ordinary]: the
+    chain as the arc has landed (the hidden chain still draws, see the packet);
+    A1 to A5 and R1 in parallel next, then R3, P1 last. The owner accepted the
+    plan's three taste calls; A1 builds the carved channel.
 11. [Certified field contact](#certified-field-contact): box and ellipsoid
     bodies, then clearance on slopes within a third of a metre.
 12. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
@@ -1087,10 +1088,20 @@ worlds in place is rewritten.
 
 Owner: the water feature lane (rendering, puck-world, sdf-authoring) · ordinary ·
 Next: [the water feature plan](water.md) owns the feature end to end: the arc as a
-specification, the audit, the definition of done and the lanes (H1 the chain as the
-arc, A1 to A5 the world authoring, R1 glass shadows, R3 the particle pool, P1 the
-tour). The items below are what the plan defers or the water strained in a system
-beside it.
+specification, the audit, the definition of done and the lanes (A1 to A5 the world
+authoring, R1 glass shadows, R3 the particle pool, P1 the tour). The items below
+are what the plan defers or the water strained in a system beside it.
+
+- [medium] A lattice row that is simulation only. The water chain
+  (`worlds/standard/hydrology.puck`) levels water against a bed with
+  `FieldLattice.StepFlow`, which reads a row's height only when its `heightScale`
+  is above zero (own row, and every `over` row), while `WorldFieldEmitter.Shape`
+  draws and bakes every row with a `heightScale` above zero and the body
+  coupling stands on it. The chain 90 m under the floor therefore bakes two
+  height fields nobody sees. Separate flow height from geometry (a row or lattice
+  flag, or a flow height row the emitter and the contact provider skip), then
+  confirm with a windowed World that `[sdf.mesh-bake] done` and `world.budget`
+  show no `hydro` groups.
 
 - [medium] Cold mesh residency still misses the one-minute target. Attribute the
   remaining large water meshes with `puck mesh audit --prototype` (now selects
