@@ -1096,7 +1096,7 @@ authoring, R3 the particle pool, P1 the tour). The items below
 are what the plan defers or the water strained in a system beside it.
 
 - [low · glass-shadow review F5] Mixed-density faces do not define a thickness
-  integral: `src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-optical-depth.hlsli:143`
+  integral: `src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-optical-depth.hlsli:22`
   accumulates each face's own density. An entry at density 0.8 and an exit at
   zero in overlapping glass slots integrate through air to the receiver;
   swapping their densities clamps the negative sum to no shadow. A water
@@ -1104,7 +1104,7 @@ are what the plan defers or the water strained in a system beside it.
   camera absorption shares this design. Give the integral a medium identity
   or otherwise account for transitions before supporting mixed-density shells.
 - [low · glass-shadow review F6] Open or portal-clipped glass loses its paired
-  face: `src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-mesh-occlusion.comp.hlsl:264`
+  face: `src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-mesh-occlusion.comp.hlsl:263`
   routes glass without requiring the enclosing bit, and the shadow vertex
   stage clips it at the portal plane. A kept front face with its back face
   beyond that plane integrates all the way to the receiver, so its shadow
