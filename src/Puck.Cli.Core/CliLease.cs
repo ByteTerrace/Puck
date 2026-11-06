@@ -111,8 +111,8 @@ public sealed class CliLease : IDisposable {
                 var ahead = place.Ahead;
                 var measurement = false;
 
-                if ((ticket is not null) && ((ahead == 0) || quiet is not null)) {
-                    var lease = TryAcquire(clock: clock, directory: directory, holder: holder, lane: lane, root: root, name: name, quiet: quiet, ancestor: ancestor, measurement: out measurement);
+                if (ticket is not null) {
+                    var lease = TryAcquire(clock: clock, directory: directory, holder: holder, lane: lane, root: root, name: name, quiet: quiet, ancestor: ancestor, eligible: ((ahead == 0) || quiet is not null), measurement: out measurement);
 
                     if (lease is not null) { return lease; }
                 }
@@ -384,7 +384,7 @@ public sealed class CliLease : IDisposable {
         return Task.FromResult(result: Path.Combine(path1: mainCheckout, path2: ".claude/leases"));
     }
 
-    private static CliLease? TryAcquire(string directory, string holder, string lane, TimeProvider clock, string root, string name, CliLease? quiet, Func<int, long, bool>? ancestor, out bool measurement) {
+    private static CliLease? TryAcquire(string directory, string holder, string lane, TimeProvider clock, string root, string name, CliLease? quiet, Func<int, long, bool>? ancestor, bool eligible, out bool measurement) {
         measurement = false;
         using var admission = FileLock.TryAcquire(Path.Combine(root, "admission.guard"));
         if (admission is null) { return null; }
@@ -399,6 +399,7 @@ public sealed class CliLease : IDisposable {
             using var idle = FileLock.TryAcquire(quietDirectory + ".guard");
             if (queued || idle is null) { measurement = true; return null; }
         }
+        if (!eligible) { return null; }
         // Keep the guard inode: unlinking it lets two processes lock different files at the same path.
         if (FileLock.TryAcquire(path: (directory + ".guard")) is not { } gate) {
             return null;
