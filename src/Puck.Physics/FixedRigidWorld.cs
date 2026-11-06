@@ -19,8 +19,9 @@ namespace Puck.Physics;
 /// A speculative contact approaches, and a deeper contact's soft push returns, to the rest offset, so either ends in
 /// that band.</para>
 /// <para><b>Order.</b> Bodies are integrated in the order the caller lists them and manifolds are solved in the order the
-/// caller lists them, each manifold's slots in ascending index order. The caller supplies a canonical order; nothing here
-/// reads a hash container.</para>
+/// caller lists them. Within a manifold, the points' common mode (equal increments at every point, one impulse at their
+/// centroid) is solved exactly first, then each point in turn, in ascending slot order in the biased pass and descending
+/// order in the relax pass. The caller supplies a canonical order; nothing here reads a hash container.</para>
 /// <para><b>Rounding.</b> Every mixed-scale product goes through the refusing face of the fused kernels, so a result that
 /// leaves its carrier is declined and counted (<see cref="RefusalCount"/>) rather than wrapped into an ordinary
 /// answer.</para>
@@ -187,70 +188,70 @@ public sealed class FixedRigidWorld {
         );
         RefusalCount += refusals;
     }
-    // Restitution reflects each closing slot's pre-solve normal speed, the manifold's points together for the same
-    // reason the normal solve takes them together (SolveOnce).
+    // Restitution reflects each closing slot's pre-solve normal speed, solved like the normal rows (SolveOnce): the
+    // common mode of a face whose every point restitutes first, then each point in turn.
     private void ApplyRestitution(ReadOnlySpan<FixedRigidManifold> manifolds) {
-        Span<long> deltas = stackalloc long[FixedPairManifoldSlotTable.Capacity];
-
         for (var iteration = 0; (iteration < m_options.RestitutionIterations); ++iteration) {
             foreach (var manifold in manifolds) {
                 if (manifold.Restitution <= FixedQ4816.Zero) {
                     continue;
                 }
 
-                var active = 0;
+                var targetSum = 0L;
+                var count = 0;
+                var everyPoint = (manifold.CommonModeMassRaw > 0L);
 
                 for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
                     ref var slot = ref manifold.Slots[index];
 
+                    if ((slot.Disposition != FixedPairManifoldSlotDisposition.Constraint) || (slot.NormalMassRaw <= 0L)) {
+                        continue;
+                    }
+
                     if (!Restitutes(slot: in slot)) {
-                        deltas[index] = 0L;
+                        everyPoint = false;
 
                         continue;
                     }
 
-                    var normalVelocity = RelativeVelocity(
-                        direction: slot.Normal,
-                        manifold: manifold,
-                        slot: in slot
-                    );
-                    var target = (normalVelocity + manifold.Restitution * slot.RelativeVelocity);
+                    targetSum += RestitutionTarget(manifold: manifold, slot: in slot).Value;
+                    ++count;
+                }
 
-                    deltas[index] = -ToImpulse(value: target, factorRaw: slot.NormalMassRaw);
+                if (count == 0) {
+                    continue;
+                }
 
-                    if ((slot.NormalImpulseRaw > 0L) || (deltas[index] > 0L)) {
-                        ++active;
+                if (everyPoint) {
+                    var share = (-ToImpulse(value: FixedQ4816.FromRawBits(value: (targetSum / count)), factorRaw: manifold.CommonModeMassRaw) / count);
+
+                    for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
+                        ref var slot = ref manifold.Slots[index];
+
+                        if (Restitutes(slot: in slot)) {
+                            AccumulateNormal(deltaRaw: share, manifold: manifold, slot: ref slot);
+                        }
                     }
                 }
 
-                for (var index = 0; ((active > 0) && (index < FixedPairManifoldSlotTable.Capacity)); ++index) {
+                for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
                     ref var slot = ref manifold.Slots[index];
 
-                    if (!Restitutes(slot: in slot)) {
-                        continue;
-                    }
-
-                    var accumulated = Math.Max(
-                        val1: (slot.NormalImpulseRaw + (deltas[index] / active)),
-                        val2: 0L
-                    );
-                    var applied = (accumulated - slot.NormalImpulseRaw);
-
-                    slot.NormalImpulseRaw = accumulated;
-                    slot.MaxNormalImpulseRaw = Math.Max(val1: slot.MaxNormalImpulseRaw, val2: accumulated);
-
-                    if (applied != 0L) {
-                        ApplyImpulse(
-                            direction: slot.Normal,
-                            impulseRaw: applied,
+                    if (Restitutes(slot: in slot)) {
+                        AccumulateNormal(
+                            deltaRaw: -ToImpulse(value: RestitutionTarget(manifold: manifold, slot: in slot), factorRaw: slot.NormalMassRaw),
                             manifold: manifold,
-                            slot: in slot
+                            slot: ref slot
                         );
                     }
                 }
             }
         }
     }
+    // The normal velocity a restituting slot must still gain: its current normal velocity less the coefficient times its
+    // pre-solve closing speed.
+    private FixedQ4816 RestitutionTarget(FixedRigidManifold manifold, in FixedPairManifoldSlot slot) =>
+        (RelativeVelocity(direction: slot.Normal, manifold: manifold, slot: in slot) + (manifold.Restitution * slot.RelativeVelocity));
     private bool Restitutes(in FixedPairManifoldSlot slot) =>
         (slot.Disposition == FixedPairManifoldSlotDisposition.Constraint) &&
         (slot.NormalMassRaw > 0L) &&
@@ -287,6 +288,43 @@ public sealed class FixedRigidWorld {
         RefusalCount += refusals;
 
         return mass;
+    }
+    // The effective mass at the solved points' centroid along their shared normal, or zero when fewer than two points
+    // are solved or any two normals differ.
+    private long CommonModeMass(FixedRigidManifold manifold) {
+        var anchorA = FixedVector3.Zero;
+        var anchorB = FixedVector3.Zero;
+        var normal = FixedVector3.Zero;
+        var count = 0;
+
+        for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
+            ref readonly var slot = ref manifold.Slots[index];
+
+            if (
+                (slot.Disposition != FixedPairManifoldSlotDisposition.Constraint) ||
+                (slot.NormalMassRaw <= 0L)
+            ) {
+                continue;
+            }
+
+            if ((count > 0) && (slot.Normal != normal)) {
+                return 0L;
+            }
+
+            normal = slot.Normal;
+            anchorA += slot.AnchorA;
+            anchorB += slot.AnchorB;
+            ++count;
+        }
+
+        if (count < 2) {
+            return 0L;
+        }
+
+        var divisor = FixedQ4816.FromInteger(value: count);
+        var centroid = new FixedPairManifoldSlot { AnchorA = (anchorA / divisor), AnchorB = (anchorB / divisor) };
+
+        return EffectiveMass(direction: normal, manifold: manifold, slot: in centroid);
     }
     private void Prepare(ReadOnlySpan<FixedRigidManifold> manifolds) {
         var constraints = 0;
@@ -374,6 +412,8 @@ public sealed class FixedRigidWorld {
                     slot.RollingMass2Raw = 0L;
                 }
             }
+
+            manifold.CommonModeMassRaw = CommonModeMass(manifold: manifold);
         }
 
         LastStepConstraintCount = constraints;
@@ -511,10 +551,11 @@ public sealed class FixedRigidWorld {
         ApplyAngularImpulse(axis: slot.Tangent1, impulseRaw: applied1, manifold: manifold);
         ApplyAngularImpulse(axis: slot.Tangent2, impulseRaw: applied2, manifold: manifold);
     }
-    // The normal impulse a slot asks for this pass, from the bodies' current velocities and displacement: the
-    // speculative bias while the slot lies above the rest band, the soft bias (biased pass only) once it overlaps, each
-    // aiming at the rest offset, and a plain non-penetration constraint inside the band.
-    private long NormalDelta(FixedRigidManifold manifold, in FixedPairManifoldSlot slot, in FixedSoftConstraint softness, bool useBias) {
+    // What a slot asks for this pass, from the bodies' current velocities and displacement: the velocity its impulse
+    // must remove (the speculative bias while the slot lies above the rest band, the soft bias in the biased pass once
+    // it overlaps, each aiming at the rest offset, a plain non-penetration constraint inside the band) and the impulse
+    // raw the softness relaxes from what the slot has accumulated.
+    private (FixedQ4816 Driven, long Relaxed) NormalAsk(FixedRigidManifold manifold, in FixedPairManifoldSlot slot, in FixedSoftConstraint softness, bool useBias) {
         var bodyA = manifold.BodyA!;
         var bodyB = manifold.BodyB!;
         var rotatedA = bodyA.DeltaRotation.Rotate(vector: slot.AnchorA);
@@ -563,7 +604,7 @@ public sealed class FixedRigidWorld {
             outBits: FixedQ4816.FractionBitCount
         )) + velocityBias);
 
-        return (-ToImpulse(value: driven, factorRaw: slot.NormalMassRaw) - Product(
+        return (driven, Product(
             aBits: m_options.Scales.Impulse,
             aRaw: slot.NormalImpulseRaw,
             bBits: impulseScaleBits,
@@ -571,86 +612,109 @@ public sealed class FixedRigidWorld {
             outBits: m_options.Scales.Impulse
         ));
     }
+    // The normal impulse raw a slot asks for this pass on its own.
+    private long NormalDelta(FixedRigidManifold manifold, in FixedPairManifoldSlot slot, in FixedSoftConstraint softness, bool useBias) {
+        var (driven, relaxed) = NormalAsk(manifold: manifold, slot: in slot, softness: in softness, useBias: useBias);
+
+        return (-ToImpulse(value: driven, factorRaw: slot.NormalMassRaw) - relaxed);
+    }
+    // Adds a normal impulse raw to a slot's accumulated impulse, clamped at zero, and applies what the clamp let through.
+    private void AccumulateNormal(FixedRigidManifold manifold, ref FixedPairManifoldSlot slot, long deltaRaw) {
+        var accumulated = Math.Max(val1: (slot.NormalImpulseRaw + deltaRaw), val2: 0L);
+        var applied = (accumulated - slot.NormalImpulseRaw);
+
+        slot.NormalImpulseRaw = accumulated;
+        slot.MaxNormalImpulseRaw = Math.Max(val1: slot.MaxNormalImpulseRaw, val2: accumulated);
+        manifold.LastStepMovementRaw = Math.Max(val1: manifold.LastStepMovementRaw, val2: Math.Abs(value: applied));
+
+        if (applied != 0L) {
+            ApplyImpulse(
+                direction: slot.Normal,
+                impulseRaw: applied,
+                manifold: manifold,
+                slot: in slot
+            );
+        }
+    }
+    // The common mode of a manifold's points: equal increments at every point, which act as one impulse at their
+    // centroid, sized by the centroid's own effective mass from the points' mean ask. It is the exact correction along
+    // that direction, so an impact or a warm start's excess shared by a face is removed in one pass without the torque a
+    // point-by-point sweep would hand the body, and a body at rest (every ask zero) asks for nothing. It runs only while
+    // every point takes part (carries load or asks to push); a point still apart leaves the points to the sweep alone.
+    private void SolveCommonMode(FixedRigidManifold manifold, in FixedSoftConstraint softness, bool useBias) {
+        if (manifold.CommonModeMassRaw <= 0L) {
+            return;
+        }
+
+        var drivenSum = 0L;
+        var relaxedSum = 0L;
+        var count = 0;
+
+        for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
+            ref var slot = ref manifold.Slots[index];
+
+            if (
+                (slot.Disposition != FixedPairManifoldSlotDisposition.Constraint) ||
+                (slot.NormalMassRaw <= 0L)
+            ) {
+                continue;
+            }
+
+            var (driven, relaxed) = NormalAsk(manifold: manifold, slot: in slot, softness: in softness, useBias: useBias);
+
+            if ((slot.NormalImpulseRaw <= 0L) && ((-ToImpulse(value: driven, factorRaw: slot.NormalMassRaw) - relaxed) <= 0L)) {
+                return;
+            }
+
+            drivenSum += driven.Value;
+            relaxedSum += relaxed;
+            ++count;
+        }
+
+        var share = ((-ToImpulse(value: FixedQ4816.FromRawBits(value: (drivenSum / count)), factorRaw: manifold.CommonModeMassRaw) - relaxedSum) / count);
+
+        for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
+            ref var slot = ref manifold.Slots[index];
+
+            if (
+                (slot.Disposition == FixedPairManifoldSlotDisposition.Constraint) &&
+                (slot.NormalMassRaw > 0L)
+            ) {
+                AccumulateNormal(deltaRaw: share, manifold: manifold, slot: ref slot);
+            }
+        }
+    }
     // Every iteration of the budget runs unconditionally: an early break driven by a tolerance would make the
     // measurement change the trajectory it measures.
     private void SolveOnce(ReadOnlySpan<FixedRigidManifold> manifolds, bool useBias) {
-        Span<long> deltas = stackalloc long[FixedPairManifoldSlotTable.Capacity];
-
         foreach (var manifold in manifolds) {
             var softness = ((manifold.BodyA!.IsDynamic && manifold.BodyB!.IsDynamic)
                 ? m_dynamicSoftness
                 : m_staticSoftness
             );
-            var active = 0;
 
-            // A manifold's points are solved together: every point's ask is read from the same velocities, and each
-            // point that takes part takes an equal share of it. A sweep that visited them in turn would hand most of an
-            // impact to whichever point it reached first, and the uneven impulse would spin the body — a tall piece
-            // landing flat would tip on that alone. The pairs are still visited in turn, and successive passes converge
-            // the shares.
-            for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
+            SolveCommonMode(manifold: manifold, softness: in softness, useBias: useBias);
+
+            // Each point then reads the velocities the points before it left and applies its impulse at once. The
+            // biased pass visits a manifold's points in ascending slot order and the relax pass in descending order, so
+            // the first point visited does not keep the larger share of what the common mode left.
+            for (var ordinal = 0; (ordinal < FixedPairManifoldSlotTable.Capacity); ++ordinal) {
+                var index = (useBias ? ordinal : ((FixedPairManifoldSlotTable.Capacity - 1) - ordinal));
                 ref var slot = ref manifold.Slots[index];
 
                 if (
                     (slot.Disposition != FixedPairManifoldSlotDisposition.Constraint) ||
                     (slot.NormalMassRaw <= 0L)
                 ) {
-                    deltas[index] = 0L;
-
                     continue;
                 }
 
-                deltas[index] = NormalDelta(
+                AccumulateNormal(
+                    deltaRaw: NormalDelta(manifold: manifold, slot: in slot, softness: in softness, useBias: useBias),
                     manifold: manifold,
-                    slot: in slot,
-                    softness: in softness,
-                    useBias: useBias
+                    slot: ref slot
                 );
-
-                // Only a point whose impulse this pass can change shares the ask: a speculative point still apart,
-                // asking to pull with nothing accumulated, takes no share.
-                if ((slot.NormalImpulseRaw > 0L) || (deltas[index] > 0L)) {
-                    ++active;
-                }
             }
-
-            if (active == 0) {
-                continue;
-            }
-
-            for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
-                ref var slot = ref manifold.Slots[index];
-
-                if (
-                    (slot.Disposition != FixedPairManifoldSlotDisposition.Constraint) ||
-                    (slot.NormalMassRaw <= 0L)
-                ) {
-                    continue;
-                }
-
-                var accumulated = Math.Max(
-                    val1: (slot.NormalImpulseRaw + (deltas[index] / active)),
-                    val2: 0L
-                );
-                var applied = (accumulated - slot.NormalImpulseRaw);
-
-                slot.NormalImpulseRaw = accumulated;
-                slot.MaxNormalImpulseRaw = Math.Max(val1: slot.MaxNormalImpulseRaw, val2: accumulated);
-                manifold.LastStepMovementRaw = Math.Max(
-                    val1: manifold.LastStepMovementRaw,
-                    val2: Math.Abs(value: applied)
-                );
-
-                if (applied != 0L) {
-                    ApplyImpulse(
-                        direction: slot.Normal,
-                        impulseRaw: applied,
-                        manifold: manifold,
-                        slot: in slot
-                    );
-                }
-            }
-
             // Friction and rolling resistance run in the unbiased pass only: a biased push-out is a position correction,
             // not a contact force, and coupling either to it would brake the body by how deep the correction reached.
             if (useBias) {

@@ -714,7 +714,7 @@ public sealed class WorldRigidDynamicsLawTests {
         Assert.True(condition: (UpAlignment(body: upper) > 0.999f), userMessage: $"the upper box tipped (up {UpAlignment(body: upper):0.####})");
         Assert.True(condition: (MathF.Abs(x: (gap - height)) < 0.01f), userMessage: $"the upper box stands {gap:0.####} above the lower one's base, not its height {height:0.####}");
         Assert.Equal(expected: settled, actual: (lower.FixedPosition.Y, upper.FixedPosition.Y, upper.FixedPosition.X));
-        Assert.True(condition: (MathF.Abs(x: (((float)upper.FixedPosition.X) - 0.05f)) < 0.05f), userMessage: $"the upper box slid to x={((double)upper.FixedPosition.X):0.####}");
+        Assert.True(condition: (MathF.Abs(x: (((float)upper.FixedPosition.X) - 0.05f)) < 0.005f), userMessage: $"the upper box slid to x={((double)upper.FixedPosition.X):0.####}");
         Assert.True(condition: (lower.Resting && upper.Resting), userMessage: $"the stack never came to rest (lower {lower.Resting}, upper {upper.Resting})");
     }
     [Fact]

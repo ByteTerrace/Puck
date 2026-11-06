@@ -1298,10 +1298,11 @@ lowers it to the same JSON as before, except where the look changes on purpose.
   carried bodies. Admit a carried body to the broadphase as a static side that
   pushes with its velocity, and delete the positional door.
 - [low] A curved body resting on one point has no torsional friction: a Go stone
-  spinning about its normal keeps spinning under rolling resistance alone, and
-  five stones stay awake ten seconds after a knock in the debug world. A
-  torsional (spin) friction row on a surface manifold, clamped by its normal
-  impulse times a patch radius, is the Box2D rolling-resistance shape.
+  spinning about its normal keeps spinning, since the rolling-resistance row
+  (`FixedRigidWorld.SolveRolling`) resists only the axes tangent to the surface,
+  and five stones stayed awake ten seconds after a knock in the debug world. A
+  third row about the slot's normal beside it, clamped by the normal impulse
+  times a patch radius, answers it.
 - [medium] The one rigid solver has open regressions against the old path's
   laws (`tests/Puck.World.Server.Tests`): a light flat body rocking on one
   curved point is undamped (a tilted lens in `ATiltedLensTipsBeforeItRests`

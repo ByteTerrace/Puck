@@ -23,6 +23,10 @@ public sealed class FixedRigidManifold {
     /// the bodies' relative rolling (angular velocity about the axes tangent to its surface) with an angular impulse of
     /// at most this lever times the point's normal impulse.</summary>
     public FixedQ4816 RollingResistance { get; set; }
+    /// <summary>Gets the effective mass raw, at <see cref="FixedRigidScales.EffectiveMass"/>, of the step's points' common
+    /// mode: one impulse at their centroid along their shared normal, which equal increments at every point apply. Zero
+    /// when fewer than two points are solved or their normals differ, so the mode is not solved this step.</summary>
+    public long CommonModeMassRaw { get; internal set; }
     /// <summary>Gets the pair's persistent manifold slots.</summary>
     public FixedPairManifoldSlotTable Slots { get; } = new();
     /// <summary>Gets the largest applied-impulse change, in raw units at <see cref="FixedRigidScales.Impulse"/>, the most
