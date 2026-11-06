@@ -1729,7 +1729,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 exported: exported
             );
         } finally {
-            if (exported is not null) {
+            if ((exported is not null) && !OwesExportCompletion) {
                 m_export!.EndWrite(
                     image: exported,
                     written: exportWritten,
@@ -1871,8 +1871,12 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         SubmitPackageReadbacks(fence: slot.Fence!, slot: slotIndex);
         SubmitTiming(fence: slot.Fence!, slot: slotIndex);
         if (exported is not null) {
-            exportValue = exported.CompleteWrite();
-            exportWritten = true;
+            if (DefersExportCompletion) {
+                OweExportCompletion(image: exported);
+            } else {
+                exportValue = exported.CompleteWrite();
+                exportWritten = true;
+            }
         }
         CaptureIfPending();
         NoteCommitted();

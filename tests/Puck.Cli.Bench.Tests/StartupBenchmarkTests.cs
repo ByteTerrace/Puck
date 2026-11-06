@@ -22,7 +22,7 @@ public sealed class StartupBenchmarkTests {
 
         Assert.Null(@object: sample.Error);
         Assert.Null(@object: StartupBenchmarks.Summarize(expected: 2, headless: true, rows: [sample]));
-        Assert.Equal(100, StartupBenchmarks.Summarize(expected: 1, headless: true, rows: [sample])!.MeanMilliseconds);
+        Assert.Equal(100, StartupBenchmarks.Summarize(expected: 1, headless: true, rows: [sample])!.Median);
     }
     [Fact]
     public void PendingCaptureAndUnrelatedCaptureDoNotProveReadiness() {
@@ -38,7 +38,7 @@ public sealed class StartupBenchmarkTests {
         var sample = StartupBenchmarks.Assess("world", 1, Transcript(extra: [pending, completion]), false, path);
 
         Assert.Null(@object: sample.Error);
-        Assert.Equal(250, StartupBenchmarks.Summarize(expected: 1, headless: false, rows: [sample])!.MeanMilliseconds);
+        Assert.Equal(250, StartupBenchmarks.Summarize(expected: 1, headless: false, rows: [sample])!.Median);
         File.Delete(path: path);
         Assert.NotNull(@object: StartupBenchmarks.Assess("world", 1, Transcript(extra: [completion]), false, path).Error);
     }

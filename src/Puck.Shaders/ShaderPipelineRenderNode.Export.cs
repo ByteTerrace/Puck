@@ -137,6 +137,51 @@ public sealed partial class ShaderPipelineRenderNode {
             : null);
     }
 
+    // A written export whose completion waits for the frame's batch to reach the queue.
+    private (IShaderPipelineOutputExport Export, IGpuExportableImage Image)? m_exportOwed;
+
+    /// <summary>Gets or sets whether the node leaves a frame's export completion to its caller
+    /// (<see cref="CompleteOwedExport"/>) rather than completing it as the frame commits. A caller whose submissions
+    /// reach the queue as one batch sets it around <see cref="ProduceFrame"/> and completes after the batch is flushed:
+    /// <see cref="IGpuExportableImage.CompleteWrite"/> reads the queue, which hands the open batch's deferred submissions
+    /// over early, an execute the frame would not otherwise make.</summary>
+    internal bool DefersExportCompletion { get; set; }
+    /// <summary>Gets whether a written export's completion and its reader's publication are still owed.</summary>
+    internal bool OwesExportCompletion => (m_exportOwed is not null);
+
+    // Takes the image whose submission is deferred to the caller's batch, so its completion and the end of its write wait
+    // for CompleteOwedExport.
+    private void OweExportCompletion(IGpuExportableImage image) => m_exportOwed = (m_export!, image);
+
+    /// <summary>Completes the write of the export the latest frame owed, queuing its shared fence behind the batch the
+    /// frame's submission joined, and ends the write for the reader, which sees the image published with the fence value
+    /// it waits for on its own device. The fence follows every submission of the batch, not only this node's, so the
+    /// reader's wait ends when the whole batch has run. Does nothing when no completion is owed.</summary>
+    /// <param name="submitted">Whether the batch reached the queue. A batch that did not (a failed flush) ends the write
+    /// as unwritten, publishing nothing.</param>
+    /// <exception cref="DeviceLostException">The device was lost.</exception>
+    internal void CompleteOwedExport(bool submitted) {
+        if (m_exportOwed is not var (export, image)) { return; }
+
+        m_exportOwed = null;
+
+        var value = 0UL;
+        var written = false;
+
+        try {
+            if (submitted) {
+                value = image.CompleteWrite();
+                written = true;
+            }
+        } finally {
+            export.EndWrite(
+                image: image,
+                written: written,
+                writtenValue: value
+            );
+        }
+    }
+
     /// <summary>Gets the image the installed graph copies its default output into, which the reader on another device
     /// opens by its shared handles, or <see langword="null"/> when the node exports nothing or has installed no graph since
     /// it was given its export. A graph built again copies into another image. The node never publishes or samples

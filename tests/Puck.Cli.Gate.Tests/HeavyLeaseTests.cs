@@ -13,7 +13,7 @@ public sealed class HeavyLeaseTests {
 
         cancellation.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 30));
         var leaseRoot = await CliLease.RootAsync(checkout: root, cancellationToken: cancellation.Token);
-        using var outer = await CliLease.AcquireAsync(root: leaseRoot, name: "heavy", holder: "doctrine-outer", wait: TimeSpan.Zero, clock: TimeProvider.System, cancellationToken: cancellation.Token);
+        using var outer = await CliLease.AcquireAsync(checkout: root, root: leaseRoot, name: "heavy", holder: "doctrine-outer", wait: TimeSpan.Zero, clock: TimeProvider.System, cancellationToken: cancellation.Token);
         var metadataPath = Path.Combine(path1: leaseRoot, path2: "heavy/holder");
         var metadata = File.ReadAllLines(path: metadataPath);
         using var parent = System.Diagnostics.Process.GetProcessById(processId: ProcessInspection.ParentId(processId: Environment.ProcessId));

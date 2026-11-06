@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Diagnosers;
 using Puck.Maths;
 
 namespace Puck.Cli.Bench;
@@ -7,7 +6,6 @@ namespace Puck.Cli.Bench;
 // The quaternion members whose kernels carry the most rounding structure: the scale-free FromTo, the great-circle
 // Slerp, and the fused logarithm — over unit and near-unit operands of gameplay scale.
 [MemoryDiagnoser]
-[DisassemblyDiagnoser(maxDepth: 3)]
 public class QuaternionKernels {
     private const int Count = 512;
 

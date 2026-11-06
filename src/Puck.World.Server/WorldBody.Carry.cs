@@ -114,7 +114,9 @@ public sealed partial class WorldBody {
     /// <summary>Gets whether this body's own collider, at its CURRENT pose, overlaps the static contact field — a
     /// zero-displacement probe sweep (previous position equal to current) that still reports a correction exactly
     /// when the pose is already embedded, or proves neither (an embedded pose the field measures no way out of). Used to
-    /// refuse a carry release whose left-behind pose would penetrate a wall — see <c>WorldPopulation.TryEndCarry</c>.
+    /// refuse a carry release whose left-behind pose would penetrate a wall — see <c>WorldPopulation.TryEndCarry</c>. A
+    /// rigid body at rest reads clear: its contacts settle in the rest band past the skin
+    /// (<see cref="WorldPopulation.RigidRestBand"/>), where the probe pushes nothing.
     /// <see langword="false"/> for a body with no collider or contact field, since there is nothing there to embed
     /// in.</summary>
     public bool IsPenetratingStaticGeometry() {

@@ -141,6 +141,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private RenderGraphSchedule? m_latest;
     private int m_turn;
     private int m_unproduced;
+    // The nodes whose frame wrote an export this frame, which complete it once the batch has reached the queue.
+    private readonly List<ShaderPipelineRenderNode> m_exportsOwed = [];
 
     private RenderGraphRuntime(RenderGraphInstanceSet set, RenderGraphRuntimeGraph?[] graphs, ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, SourceGraph?[] sources, Binding[][] inputs, int root, IGpuDeviceContext device, RenderGraphPackageRecorders packages, PackageGraphs packageGraphs, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint inFlightFrames, GpuImageLeases images) {
         m_images = images;
@@ -1486,9 +1488,14 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 node.ShownAtItsExtent = (index == m_root);
                 node.UnreadFrames = m_unreadFrames[index];
 
+                // An export the node writes is completed behind the whole batch, once it is flushed.
+                node.DefersExportCompletion = true;
+
                 try {
                     surface = node.ProduceFrame(context: in context);
                 } finally {
+                    node.DefersExportCompletion = false;
+                    if (node.OwesExportCompletion) { m_exportsOwed.Add(item: node); }
                     if (node.FrameCounter != rendered) {
                         longestRecord = Math.Max(val1: longestRecord, val2: node.LastRecordTicks);
                         m_historySucceeded[index] = true;
@@ -1549,7 +1556,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             );
             Complete();
         } finally {
-            queue.FlushBatch();
+            CompleteOwedExports(queue: queue);
         }
         if (longestRecord >= 0) { RenderRecordWork.Process.Frame(longestRecordTicks: longestRecord); }
 

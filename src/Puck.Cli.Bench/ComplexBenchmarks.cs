@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Diagnosers;
 using Puck.Maths;
 using QFixElem = Puck.Maths.QuadraticAlgebra<Puck.Maths.FixedQ4816>.Element;
 
@@ -9,7 +8,6 @@ namespace Puck.Cli.Bench;
 // Gate scenario "1. complex mul narrow (latency)": a unit-rotation dependent chain (raw ~2^16, the fast path).
 // FixedComplex.operator* vs QuadraticAlgebra<FixedQ4816>{0,-1}.Multiply, generic held statically and locally.
 [MemoryDiagnoser]
-[DisassemblyDiagnoser(maxDepth: 3)]
 public class ComplexMulNarrow {
     private const int Ops = Bench.LatencyOps;
 
@@ -84,7 +82,6 @@ public class ComplexMulNarrow {
 }
 // Gate scenario "2. complex mul wide (throughput)": raw >= 2^31 forces the Int128 path; throughput over operand pairs.
 [MemoryDiagnoser]
-[DisassemblyDiagnoser(maxDepth: 3)]
 public class ComplexMulWide {
     private FixedComplex[] m_handA = [];
     private FixedComplex[] m_handB = [];

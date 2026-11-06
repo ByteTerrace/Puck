@@ -16,8 +16,8 @@ internal static class WorldGpuHold {
         public readonly Task<CliLease> Lease;
         public int Count;
 
-        public Entry(string root, string holder, string lane) =>
-            Lease = CliLease.AcquireAsync(ancestor: ProcessInspection.IsAncestor, cancellationToken: Abandon.Token, clock: TimeProvider.System, holder: holder, lane: lane, name: "gpu", root: root, wait: CliLease.DefaultWait);
+        public Entry(string root, string holder, string lane, string checkout) =>
+            Lease = CliLease.AcquireAsync(ancestor: ProcessInspection.IsAncestor, cancellationToken: Abandon.Token, checkout: checkout, clock: TimeProvider.System, holder: holder, lane: lane, name: "gpu", root: root, wait: CliLease.DefaultWait);
 
         // The last share ends the hold: a wait no caller still shares stops and leaves the queue, and a granted lease is released.
         public void Dispose() {
@@ -44,7 +44,7 @@ internal static class WorldGpuHold {
 
         lock (Gate) {
             if (!Held.TryGetValue(key: key, value: out entry!)) {
-                entry = new Entry(holder: holder, lane: lane, root: root);
+                entry = new Entry(checkout: checkout, holder: holder, lane: lane, root: root);
                 Held[key] = entry;
             }
             entry.Count++;

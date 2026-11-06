@@ -641,10 +641,6 @@ public sealed partial class WorldBody {
         RigidResting: m_resting,
         RigidRestingHoldTicks: m_restingHoldTicks,
         RigidSleepRootPlusOne: m_rigidSleepRootPlusOne,
-        RigidGroundContacting: m_rigidGroundContacting,
-        RigidObstructionContacting: m_rigidObstructionContacting,
-        RigidGroundMissStreak: m_rigidGroundMissStreak,
-        RigidObstructionMissStreak: m_rigidObstructionMissStreak,
         Carrying: m_carryingIndex,
         CarriedBy: m_carriedByIndex
     );
@@ -748,10 +744,6 @@ public sealed partial class WorldBody {
         m_resting = residue.RigidResting;
         m_restingHoldTicks = residue.RigidRestingHoldTicks;
         m_rigidSleepRootPlusOne = residue.RigidSleepRootPlusOne;
-        m_rigidGroundContacting = residue.RigidGroundContacting;
-        m_rigidObstructionContacting = residue.RigidObstructionContacting;
-        m_rigidGroundMissStreak = residue.RigidGroundMissStreak;
-        m_rigidObstructionMissStreak = residue.RigidObstructionMissStreak;
         m_carryingIndex = residue.Carrying;
         m_carriedByIndex = residue.CarriedBy;
     }

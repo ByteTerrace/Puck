@@ -89,7 +89,7 @@ let walkerMotion = {
 }
 
 // A rigid piece (a stone, a token, a chess piece): it falls under gravity and settles where it is let go, and stays.
-template pieceKit(name, collider, mass, friction = 0.6, restitution = 0.05, rollingFriction = 0.2) {
+template pieceKit(name, collider, mass, friction = 0.6, restitution = 0.05, rollingResistance = 0.002) {
   kits [
     {
       bodyContact: Solid
@@ -103,7 +103,7 @@ template pieceKit(name, collider, mass, friction = 0.6, restitution = 0.05, roll
         linearDamping: 0.05
         mass: mass
         restitution: restitution
-        rollingFriction: rollingFriction
+        rollingResistance: rollingResistance
       }
     }
   ]

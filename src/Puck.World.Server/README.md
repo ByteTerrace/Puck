@@ -846,7 +846,7 @@ framed rather than shrinking to a speck on screen. Body-vs-body contact
 (`WorldPopulation.ResolveDynamicContacts`), overlap events (`WorldEventFeed`),
 the cross-boundary continuum trajectory (`WorldBody.ApplyContinuumTrajectory`),
 the adjacency sweep's local side (`WorldAdjacencyContactField`), and a rigid
-body's own static-contact sweep (`WorldBody.AdvanceRigid`) all read each
+body's own contact generation (`WorldBody.ProbeRigidSurface`) all read each
 body's scaled collider volumes now, so a shrunk body's contact with another
 body agrees with its contact with the world. The one residual gap: the
 adjacency sweep's remote side still reads a neighbour authority's unscaled
@@ -1073,228 +1073,124 @@ world contact. Saturation deliberately omits lower-priority new event pairs.
 `solid` kits. Its per-body box-overlapping candidate budget (default 32, maximum 256) and
 resolved-pair degree (default 8, maximum 16) bound a fully coincident crowd;
 stable population order decides which later pairs are omitted.
-The X sweep also queries a fixed-point YZ grid, rebuilt for each rigid pass.
+The X sweep also queries a fixed-point YZ grid, rebuilt each tick.
 Cells span the largest body diameter, so only the same or adjacent cells can
 overlap. Their lists merge in X/index order, preserving deterministic pair
 priority without scanning an entire X-aligned, Y/Z-disjoint column. Reused
 population-sized storage keeps the broadphase allocation-free after load.
-The counters `DynamicContactPairVisits` (before Y/Z rejection or candidate limits,
-summed over all passes), `DynamicContactCandidates`, `DynamicContactNarrowPairs`,
+The counters `DynamicContactPairVisits` (before Y/Z rejection or candidate limits),
+`DynamicContactCandidates`, `DynamicContactNarrowPairs`,
 `DynamicContactResolvedPairs`, and `DynamicContactLimitedBodies` expose the
 actual work to tests and host diagnostics.
 
 ### Rigid dynamics (`WorldBody.Rigid.cs`, `WorldPopulation.Rigid.cs`)
 
 A kit carrying a `rigid` facet (`FixedWorldRigid`, derived from the kit's own
-sphere/capsule/box collider and authored mass via `Puck.Maths.FixedMassProperties`)
-hands its bodies to the rigid solver instead of the grounded/free motion
-program: `WorldBody.Advance` branches to `AdvanceRigid` before any intent,
-action track, or hold runs. Each substep rotates and translates the body
-about its own centre of mass (`root + orientation·CenterOffset`), not its
-root: the CoM under the pre-substep orientation is displaced by the
-substep's linear motion, and the root is re-derived from THAT against the
-new orientation—updating the root directly at the linear velocity and
-re-deriving it from the new orientation's offset would additionally kick
-the true CoM by the rotation alone every substep. Static-world contact is a
-swept, substepped integration against the SAME `IContactField` every
-locomotion body resolves against. Substep count is derived per body per
-tick from its speed and the collider's own bounding radius against an
-authored travel fraction (`collision.bodyContacts.rigidSubstepTravelFraction`,
-floored by `collision.bodyContacts.rigidSubstepMinimumTravel`), capped by
-`collision.bodyContacts.rigidSubstepCeiling`; the derived count is echoed in
-`world.budget`'s `rigid` segment and `RigidStaticSubstepsThisTick`.
+sphere/capsule/box/ellipsoid collider and authored mass via `Puck.Maths.FixedMassProperties`)
+hands its bodies to the population's one rigid solve instead of the grounded/free
+motion program. `WorldBody.Advance` only prepares the step (`PrepareRigidStep`):
+it records the start a refused sweep restores, damps both velocities by their
+authored per-second rates, takes the solved gravity as the step's acceleration,
+and runs one implicit gyroscopic step (`Puck.Physics.FixedGyroscopicStep`), which then
+rescales the spin its Newton solve dissipated as far as neither the momentum magnitude nor the energy before the
+step is exceeded (`physics.bodies.gyroscopic-rescale-skips` counts the steps that could not). Once
+every body has advanced, `ResolveDynamicContacts` runs one broadphase and one
+narrowphase query per pair and `WorldPopulation.SolveRigidContacts` solves every
+awake rigid body together through `Puck.Physics.FixedRigidWorld`
+(`collision.bodyContacts.rigidSubstepCeiling` substeps a tick):
 
-Rigid integration publishes `Grounded` and the contact count from its own
-measured walkable contacts. `Rising` and `Falling` read rigid vertical velocity;
-they do not reuse the dormant locomotion velocity or spawn-time grounded flag.
+- **Surface contacts.** Each body's contact generation (`ProbeRigidSurface`)
+  asks the contact field for every static surface within the step's travel plus
+  the contact reach, one exact query per collider at the start pose
+  (`IContactField.CollectContacts`, `FixedStaticContactSolver.CollectContacts`);
+  coplanar surfaces merge into the deepest and the deepest three are kept. A
+  body that can travel farther than the contact reach this step, or a field that
+  cannot answer per surface (a signed-distance field, a field collider within
+  reach, a body standing in a portal's opening, an adjacency merge), is probed by
+  one certified sweep of the predicted motion instead, whose
+  walkable and non-walkable normals become the surfaces; that sweep's refusal
+  blocks the body for the tick. `Puck.Physics.FixedRigidContacts` spreads each
+  surface over the body's support features with their own separations.
+- **Body contacts.** A broadphase pair with a rigid side, within what both
+  bodies can travel this step plus the rest band (`WorldBody.ContactTravel`,
+  `WorldPopulation.RigidRestBand`), wakes its sleepers and becomes a manifold of
+  its own, so the step meets the contact speculatively before the pair overlaps:
+  two boxes contribute the upper face's corners clamped onto the lower box, a
+  curved body its support point. A kit body is a
+  static side carrying its live velocity (`WorldBody.TwoBodyHandle`), so it pushes
+  a rigid body and is never pushed by one. Two kit bodies still share their
+  overlap positionally.
+- **Ownership.** Every manifold is owned by one body and carried in its
+  continuation: a body's surface contact, its contacts with kit bodies, and its
+  contacts with rigid bodies of higher index (`WorldBody.RigidContacts`). A body
+  owns at most `maxPairsPerBody` body contacts plus its surface contact, the
+  degree the broadphase admits, so no admitted contact is dropped for room. A
+  manifold the step produced no candidates for is released.
+- **Commit.** Each body rotates and translates about its centre of mass by the
+  solve's displacement. A body whose solved root departs from the predicted root
+  by more than `rigidSubstepTravelFraction` of its bounding radius (floored by
+  `rigidSubstepMinimumTravel`) is re-certified by a guard sweep from its start,
+  whose refusal blocks it. Rigid integration publishes `Grounded` and the contact
+  count from contacts under the walkable slope that carried load.
+- **Rest and rolling.** A contact settles at the solver's rest offset
+  (`FixedRigidSolverOptions.RestOffset`): within the rest band it is a plain
+  non-penetration constraint, so a resting body neither sinks under its load nor
+  reads as penetrating its support's skin. Each contact point resists the pair's
+  relative rolling with an angular impulse of at most `rollingResistance` times
+  its normal impulse, solved beside friction; spin about the normal is not
+  resisted.
 
 `WorldBody.ScaleRigid` derives a scale-consistent copy of the compiled facet
 from the body's own live `Scale` (`WorldBody.Scale.cs`) on every read:
-mass ∝ `Scale`³ against the authored mass at scale 1 (a uniformly bigger body
-of the same material is heavier by its volume ratio), inertia (mass·length²)
+mass ∝ `Scale`³ against the authored mass at scale 1, inertia (mass·length²)
 ∝ `Scale`⁵ so inverse mass/inertia scale by `Scale`⁻³/`Scale`⁻⁵, and the
-centre-of-mass offset and bounding radius ∝ `Scale`—the same linear rule
-`ScaledColliderVolumes` applies to the collider itself. Restitution, friction,
-rolling friction, and both damping rates are dimensionless coefficients,
-unaffected by `Scale`. `Scale == One` (the overwhelming common case) returns
-the facet unchanged, touching no arithmetic. `AdvanceRigid` reassigns its own
-local `rigid` to the scaled copy once at entry, so every downstream read in
-that call—including the reference `ResolveRigidContact` receives—is
-already scale-consistent; `TwoBodyHandle`, `TryApplyRigidImpulse`, and the
-`RigidMass`/`RigidBoundingRadius`/`RigidCenterOfMass` read-backs each derive
-their own scaled copy independently. `RigidCenterOfMass` (`body.where`'s
-`com=`) is `root + orientation·(CenterOffset × Scale)`—the point a rolling
-or tumbling rigid body's substeps actually rotate and translate about, which
-orbits away from the root `body.where`'s `pos=` always echoes.
-
-The ground (walkable) and obstruction (wall) contacts `IContactField.Resolve`
-reports are independent channels—a grounded body still bounces the first
-time it clips a wall—so each carries its OWN rising-edge restitution latch
-(`m_rigidGroundContacting`/`m_rigidObstructionContacting`, `WorldBody.ResolveRigidContact`):
-restitution fires only on a genuine impact on THAT channel, never on
-continued contact, which would read gravity's own per-tick pull (or ongoing
-sliding contact) as a fresh hit and never let the body settle. A body
-depenetrated exactly to its contact skin's minimum distance reads no push
-(`distance >= minimum`) for a run of substeps even while still touching,
-until gravity's own per-substep pull re-closes the gap past fixed-point
-rounding—a smaller collider needs proportionally more such substeps
-(`AdvanceRigid`'s own derived substep count grows as `BoundingRadius`
-shrinks). Dropping the latch on the first such miss read every one of those
-substeps as having left the surface and the next contacting one as a fresh
-landing, re-firing restitution on a body that never actually left the ground.
-`m_rigidGroundMissStreak`/`m_rigidObstructionMissStreak` (`WorldBody.RigidGroundMissStreak`/
-`RigidObstructionMissStreak`) count each channel's run of consecutive misses;
-the latch drops only once a streak reaches that SAME tick's own derived
-substep count—one full engine tick's worth of grace, however finely the
-tick happened to be substepped—so a boundary miss rides it out while a
-departure spanning more than one tick's substeps still clears it and a real
-landing still restitutes. `GroundNormal` reads Zero on a genuinely grounded
-substep only through `WorldAdjacencyContactField`'s own cross-authority
-merge, which omits it from the `ContactResolution` it returns—the
-local-only solver always sets a walkable `GroundNormal` together with
-`Grounded`; that path's friction/rolling-resistance run against the same
-`UnitY` the static sweep's own up axis already assumes instead. Tangential
-(slip) friction at either contact is a real coupled Coulomb impulse, not a
-decay curve: the contact-point velocity (linear plus the rotational
-contribution `ω × r`, `r` the collider's bounding radius along the contact
-normal) is arrested toward zero through `Puck.Physics.FixedTwoBodyKernel`,
-clamped to the authored `friction` coefficient times the normal impulse the
-sweep just applied to stop the substep's own inward motion—the SAME
-meaning `friction` carries against another rigid body (below), never a
-speed-independent rate. `r`, the contact anchor, is the shape's own true
-witness point along the normal (`Puck.Physics.FixedRigidWitness.Anchor`)—
-the real support point of the collider's box/capsule/sphere geometry oriented
-by the body's own quaternion—never a point on the conservative bounding
-sphere, so an off-centre wall clip carries a real lever arm. A GROUNDED box or
-capsule additionally resolves over its own support MANIFOLD instead of one
-witness point (`WorldBody.ResolveRigidGroundManifold`,
-`FixedRigidWitness.SupportManifold`—up to four box corners, or two capsule
-cap points when it lies on its side): `collision.bodyContacts.rigidManifoldIterations`
-sequential-impulse passes distribute the normal impulse across every
-manifold point still closing, then friction clamps per point to THAT point's
-own accumulated normal impulse—never the manifold's total—which is what
-keeps an upright body's centre of mass over its support polygon without an
-artificial extra damping term. An ellipsoid uses the same pre-sweep manifold
-response over its one off-centre witness, so gravity tips it. The two-body kernel
-applies inverse inertia to the geometric lever before multiplying the impulse
-magnitude, preserving small contact torques that Q16 torque rounding would erase.
-The world is
-modeled as an infinite-mass static phantom (`WorldBody.GroundPhantomHandle`),
-so linear and angular motion stay coupled exactly as inertia dictates and a
-spinning ball can genuinely start rolling (or a rolling one stop spinning)
-rather than the two evolving independently. `rollingFriction` remains a
-separate pure angular-velocity
-decay while grounded—rolling resistance, not slip friction. Rolling
-friction and both damping coefficients are authored per-second RATES,
-applied as `(1 - rate·dt)` each tick so the same value decays identically at
-any simulation rate; the rest speed and hold window
-(`collision.bodyContacts.rigidRestSpeed`/`rigidRestHoldSeconds`)
-are authored the same way. The rest speed reads the body's fastest point,
-linear speed plus angular speed times the bounding radius, the same quantity
-the substep count derives from, so a long piece turning slowly about its
-centre does not latch while its ends still move. Before contact, every awake
-non-spherical rigid body takes one implicit gyroscopic step a tick
-(`Puck.Physics.FixedGyroscopicStep`), so its angular momentum is not held
-fixed in world axes while it turns; the step then rescales the spin its
-implicit Newton solve dissipated, as far as neither the momentum magnitude nor
-the energy before the step is exceeded (`physics.bodies.gyroscopic-rescale-skips`
-counts the steps that could not).
-
-Dynamic-vs-dynamic rigid contact rides the SAME broadphase/narrowphase
-`ResolveDynamicContacts` already runs for two `solid` kits
-(`FixedDynamicBodyContacts.TryCorrection`, whose correction direction points
-from the second body toward the first, and whose box-vs-box separating-axis
-test is `Puck.Physics`'s own—see that project's README). When at least one side is rigid,
-`WorldPopulation.ResolveRigidPairContact` replaces the plain positional split
-with an impulse computed through `Puck.Physics.FixedTwoBodyKernel`—the
-kernel's own contract names its "A" side the body the contact normal points
-AWAY FROM, so the pair's roles are assigned to match that direction exactly
-(swap them and an approaching pair reads as a positive, separating, closing
-speed). Each rigid side's contact anchor is its own true witness point facing
-the other body (`Puck.Physics.FixedRigidWitness.Anchor`), never the body
-center and never a point on the conservative bounding sphere—real torque,
-not a torque-free strike, reaches both sides when both are rigid, exactly
-matching the true surface a struck capsule or box actually contacts. `ResolveDynamicContacts` runs a derived-down count of EXTRA full
-broadphase-plus-narrowphase sweeps in the SAME tick (`RigidPairPassesThisTick`,
-capped by `collision.bodyContacts.rigidPairIterationCeiling` and derived down
-from `rigidPairIterationBudget` divided by the first pass's own count of pairs
-routed through the rigid impulse path), each re-scanning every solid body's
-CURRENT (already corrected) position rather than replaying only the pairs the
-first pass happened to find—a rigid pair's own positional split can move a
-body into a third one only a later sweep discovers—so an impulse chain (a
-rack break, a falling domino line) crosses more than one pair-hop within the
-tick instead of propagating one body-hop per tick; an extra sweep that
-resolves nothing stops the run early, and both counts are echoed in
-`world.budget`'s `rigid` segment. A
-resolved
-pair's tangential (friction) impulse is likewise a real Coulomb impulse
-through the kernel—the full-stick impulse that would zero the relative
-tangential velocity, clamped to the pair's average friction coefficient
-times the normal impulse just applied—never an independent rescale of
-either body's whole velocity vector, which would burn or invent momentum
-along the normal too. Below a small authored closing-speed floor
-(`collision.bodyContacts.rigidPairRestitutionSpeed`) restitution is treated
-as zero—a rigid pair carries no per-pair rising-edge latch, so without
-this floor two touching bodies would restitute a hair apart every tick they
-are found overlapping and never fully settle. A kinematic (locomotion) side builds a
-STATIC phantom handle (`WorldBody.TwoBodyHandle`) carrying its own live
-velocity so it contributes to the closing-speed term without ever receiving
-an impulse back (`FixedRigidBody.IsDynamic` gates every write)—"a
-kinematic character contributes its velocity; it is never pushed by them."
-Positional depenetration still runs, restricted to the rigid side(s) alone
-against a kinematic partner, through `WorldBody.ApplyRigidPositionalCorrection`
-(never the locomotion `ApplyDynamicContact`, whose planar/vertical-velocity
-channels a rigid body does not use)—which also wakes the body it moves,
-since a body another one is visibly displacing is not at rest whatever its
-latched velocity said a moment ago.
+centre-of-mass offset, bounding radius and rolling-resistance lever ∝
+`Scale`—the same linear rule `ScaledColliderVolumes` applies to the collider
+itself. Restitution, friction and both damping rates are dimensionless or
+per-second coefficients, unaffected by `Scale`. `RigidCenterOfMass` (`body.where`'s
+`com=`) is `root + orientation·(CenterOffset × Scale)`. Restitution below
+`collision.bodyContacts.rigidPairRestitutionSpeed` is zero, so bodies at rest
+never micro-bounce. A carried body's tangibility push on a rigid body it
+overlaps stays positional (`WorldBody.ApplyRigidPositionalCorrection`), since the
+carried body is posed by its carrier outside the solve.
 
 A body settles to `Puck.Physics.Motion.ActionFact.Resting` (`BodyFacts.Resting`,
-published by `WorldBody.FactHolds`) after its linear and angular speed stay
-below threshold for a short hold window while grounded—the LINEAR threshold
-scales with the body's own live `Scale` (a spatial rate, like a hold's own
-travel speed), the ANGULAR one does not (no length dimension). Once the latch
-closes over a complete contact island, the population parks every member—position,
-orientation, and both contact latches hold bit-identical every tick—until
-something wakes it (`TryApplyRigidImpulse`, `CommitRigidHandle`,
-`ApplyRigidPositionalCorrection`, `Pose`, `Glide`, `Reconcile`, a changed scale or collider/rigid facet, or `SetContactField`
-handing it a different field reference—a live solid edit that moved or
-removed the floor it rested against—each of which clears the latch
-itself): this
-is what makes `$physics:quiescent`/the `resting` fact mean a body is not
-moving, rather than merely reporting zero velocity at the instant the latch
-last closed. `body.impulse`
+published by `WorldBody.FactHolds`) after its fastest point (linear speed plus
+angular speed times its bounding radius) stays below the scaled rest speed for
+the authored hold window while supported; the latch zeroes both velocities.
+Once every member of a contact island rests, the population parks the island:
+its members leave the step until something wakes it (`TryApplyRigidImpulse`, a
+broadphase overlap with an awake body, `Pose`, `Glide`, `Reconcile`, a changed
+scale or collider/rigid facet, `SetContactField` handing it a different field,
+or a moved kit-body support). The island graph is the bodies' own persistent
+contacts, nothing rebuilt per tick: an occupied rigid contact joins two islands,
+and a contact with a kit body is a support whose change wakes the island it
+holds (`WorldPopulation.Sleep.cs`). This is what makes
+`$physics:quiescent`/the `resting` fact mean a body is not moving. `body.impulse`
 (`WorldCommand.RigidImpulse`, checked for `IsRigid` server-side and refused
 by name otherwise, then `WorldBody.TryApplyRigidImpulse`—refused by name a
 second way when the impulse's scaled velocity delta overflows the fixed-point
-representation, leaving velocity entirely unchanged rather than applying a
-wrapped or partial result) wakes it. `$physics:quiescent`
-(`WorldPopulation.RigidBodiesQuiescent`) reads 1 when every active rigid body
-rests uncarried, vacuously 1 for a world authoring none. The scoped expression
-`physics(quiescent, roster)` checks only the count-1 inhabitants named by a keyed
-row's authored keys (`WorldPopulation.RigidPlacementsQuiescent`); its compiled
-placement ordinals make a read one lookup per member. A carried member keeps
-the read false. A body's final resting hold includes dynamic-pair support and the post-pair velocity.
-Bodies supported by other bodies sleep together once the whole contact component rests. Moving, carrying,
-rescaling, recompiling or striking a member wakes its entire island in stable slot order, so removing a support
-releases its stack. Sleeping bodies leave the integration work set and retain a spatial index of frozen bounds;
-only an awake body's nearby sleepers enter a dynamic sweep. Extra passes can discover further sleepers as an
-impulse propagates. Region occupancy and overlap events retain unchanged sleeping results and reconsider them
-when a body wakes, a region moves or the collision policy changes. Body register synchronization skips unchanged
-register generations and occupancy/configuration revisions.
-Non-rigid solid supports remain awake and retain explicit wake dependencies on their sleeping loads; moving or
-removing one releases the load. A changed solved gravity vector (including participation in an attached area)
-wakes affected islands before integration, independently of the contact-field revision. Checkpoint version 19
-retains these support dependencies and gravity observations, pending event-body work, the collision discovery
-policy and begin-budget work left over. Those decisions affect bounded admission and must continue identically
-after restore; reconstructed frozen bodies do not count as new discoveries.
-`world.rigid` echoes the live
-per-body census (mass, velocity, angular velocity, resting) plus the
-quiescent verdict; the compiled rest/substep/pair-restitution policy and the
-last tick's solver work (pair resolutions, worst substep count) are
-`world.budget`'s own `rigid` segment. Checkpoint (`WorldBodyIntegrationResidue`)
-and the diagnostic population hash (`WorldReplaySnapshot.HashState`) both cover
-linear/angular velocity, the resting latch and hold-tick counter, canonical sleeping-island membership, BOTH
-restitution edge latches, and both channels' miss streaks. A kit swap that
+representation, leaving velocity entirely unchanged) wakes it.
+`$physics:quiescent` (`WorldPopulation.RigidBodiesQuiescent`) reads 1 when every
+active rigid body rests uncarried, vacuously 1 for a world authoring none. The
+scoped expression `physics(quiescent, roster)` checks only the count-1
+inhabitants named by a keyed row's authored keys
+(`WorldPopulation.RigidPlacementsQuiescent`). Sleeping bodies retain a spatial
+index of frozen bounds (`SleepingIndex`): only an awake body's nearby sleepers
+enter the broadphase, and a bounded contact-field change takes its candidates
+from the same index over the change box, so a change that reaches no sleeper
+visits none; the parked bodies observe the field together through the
+population's own observation. A changed solved gravity vector wakes affected
+islands before integration. `world.rigid` echoes the live per-body census plus
+the quiescent verdict; `world.budget`'s `rigid` segment echoes the last step's
+solved bodies, manifolds, contact points, guard sweeps and solver refusals and
+the compiled policy. The checkpoint entry carries each body's owned contact
+slots (`WorldPopulationEntryCheckpoint.RigidContacts`: partner, slot, identity,
+anchors, normal, normal and friction impulses, idle count), so the continuation
+hash, the checkpoint and a scoped replay all carry the warm start; the
+diagnostic population hash (`WorldReplaySnapshot.HashState`) covers linear and
+angular velocity, the resting latch and hold-tick counter and canonical
+sleeping-island membership. A kit swap that
 adds or drops the `rigid` facet resets every rigid-solver field
 (`WorldBody.RecompileKit`) rather than leaking the other kind of body's stale
 state forward; a live retune that keeps the facet carries its velocity

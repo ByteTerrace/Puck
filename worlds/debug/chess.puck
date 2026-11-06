@@ -155,7 +155,7 @@ pieceKit(
   mass: 0.12,
   friction: 0.5,
   restitution: 0.1,
-  rollingFriction: 0.15
+  rollingResistance: 0.0015
 )
 heldKit(name: "boardCursor")
 

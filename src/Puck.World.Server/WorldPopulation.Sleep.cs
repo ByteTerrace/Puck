@@ -4,19 +4,18 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
     // Derived work sets. Slot order is the authority order, independent of insertion or wake order. They are
-    // rebuilt during restore. Canonical frozen-component membership, external support/gravity observations and
-    // pending event eligibility are continuation state; spatial bounds and internal rigid adjacency are derived.
+    // rebuilt during restore. Canonical frozen-component membership, gravity observations and pending event
+    // eligibility are continuation state; spatial bounds are derived. The island graph is the bodies' own persistent
+    // contacts (WorldPopulation.Rigid.cs): a rigid contact joins two rigid bodies' islands, and a contact with a kit
+    // body is a support whose change wakes the island it holds. Nothing rebuilds it per tick.
     private readonly BodyWorkSet m_awakeBodies;
     private readonly BodyWorkSet m_sleepingBodies;
     private readonly BodyWorkSet m_eventBodies;
 
-    private readonly Dictionary<int, SortedSet<int>> m_rigidNeighbours = [];
-    // Non-rigid supports keep integrating. Their changes wake dependent rigid components without parking the
-    // support itself. These edges, unlike adjacency within one rigid island, cannot be reconstructed from roots.
-    private readonly Dictionary<int, SortedSet<int>> m_nonRigidSupports = [];
     private readonly Dictionary<int, FixedVector3?> m_sleepGravity = [];
     private readonly List<int> m_island = [];
     private readonly HashSet<int> m_islandVisited = [];
+    private readonly HashSet<int> m_parkVisited = [];
 
     private readonly int[] m_stepBodies;
     private readonly int[] m_eventBodyImage;
@@ -41,6 +40,7 @@ public sealed partial class WorldPopulation {
 
     private void BodyEntryChanged(int index) {
         WakeBodyIsland(index: index);
+        if (m_entries[index] is not { Active: true, Body: not null }) { ForgetRigidContacts(index: index, keepReferred: false); }
         m_eventBodies.Add(item: index);
         if (m_entries[index] is { Active: true, Body: not null }) { m_awakeBodies.Add(item: index); } else { m_awakeBodies.Remove(item: index); }
     }
@@ -52,26 +52,19 @@ public sealed partial class WorldPopulation {
     private void WakeBodyIsland(int index) {
         if (m_wakingIsland) { return; }
         if (!m_sleepingBodies.Contains(item: index)) {
-            if (m_nonRigidSupports.Remove(key: index, value: out var loads)) {
-                foreach (var load in loads) { WakeBodyIsland(index: load); }
+            // An awake kit body's change wakes the sleeping islands it supports.
+            if ((m_entries[index].Body is { IsRigid: false }) && (index < m_rigidContactReferrers.Length) &&
+                (m_rigidContactReferrers[index] is { Count: > 0 } supported)) {
+                m_rigidNeighbourScratch.Clear();
+                m_rigidNeighbourScratch.AddRange(collection: supported);
+                foreach (var owner in m_rigidNeighbourScratch) {
+                    if (m_sleepingBodies.Contains(item: owner)) { WakeBodyIsland(index: owner); }
+                }
             }
             return;
         }
         m_wakingIsland = true;
-        m_island.Clear();
-        m_islandVisited.Clear();
-        m_island.Add(item: index);
-        m_islandVisited.Add(item: index);
-        for (var cursor = 0; (cursor < m_island.Count); cursor++) {
-            var member = m_island[cursor];
-
-            if (m_rigidNeighbours.TryGetValue(key: member, value: out var neighbours)) {
-                foreach (var neighbour in neighbours) {
-                    if (m_islandVisited.Add(item: neighbour)) { m_island.Add(item: neighbour); }
-                }
-            }
-        }
-        m_island.Sort();
+        CollectRigidIsland(root: index);
         foreach (var member in m_island) {
             if (m_sleepingBodies.Remove(item: member)) {
                 m_sleepGravity.Remove(key: member);
@@ -83,32 +76,41 @@ public sealed partial class WorldPopulation {
                 }
             }
         }
-        // Every edge of the woken component will be derived again from actual contacts this tick.
-        foreach (var member in m_island) { m_rigidNeighbours.Remove(key: member); }
         m_wakingIsland = false;
     }
-    private void LinkRigidBodies(int left, int right) {
-        if (!m_entries[left].Body!.IsRigid || !m_entries[right].Body!.IsRigid) {
-            var support = (m_entries[left].Body!.IsRigid ? right : left);
-            var load = ((support == left) ? right : left);
+    // Collects into m_island, in slot order, the rigid bodies the root's occupied rigid contacts join it to.
+    private void CollectRigidIsland(int root) {
+        m_island.Clear();
+        m_islandVisited.Clear();
+        m_island.Add(item: root);
+        m_islandVisited.Add(item: root);
+        for (var cursor = 0; (cursor < m_island.Count); cursor++) {
+            var member = m_island[cursor];
 
-            if (!m_nonRigidSupports.TryGetValue(key: support, value: out var loads)) { m_nonRigidSupports[support] = loads = []; }
-            loads.Add(item: load);
-            return;
+            if (m_entries[member].Body is { } body) {
+                foreach (var contact in body.RigidContacts) {
+                    if ((contact.Partner >= 0) && contact.Manifold.Slots.AnyOccupied &&
+                        (m_entries[contact.Partner] is { Active: true, Body: { IsRigid: true } }) && m_islandVisited.Add(item: contact.Partner)) {
+                        m_island.Add(item: contact.Partner);
+                    }
+                }
+            }
+            if ((member < m_rigidContactReferrers.Length) && (m_rigidContactReferrers[member] is { } referrers)) {
+                foreach (var owner in referrers) {
+                    if ((m_entries[owner] is { Active: true, Body: { IsRigid: true } ownerBody }) && !m_islandVisited.Contains(item: owner) &&
+                        (FindRigidContact(body: ownerBody, partner: member) is { } contact) && contact.Manifold.Slots.AnyOccupied) {
+                        m_islandVisited.Add(item: owner);
+                        m_island.Add(item: owner);
+                    }
+                }
+            }
         }
-        if (!m_rigidNeighbours.TryGetValue(key: left, value: out var a)) { m_rigidNeighbours[left] = a = []; }
-        if (!m_rigidNeighbours.TryGetValue(key: right, value: out var b)) { m_rigidNeighbours[right] = b = []; }
-        a.Add(item: right);
-        b.Add(item: left);
+        m_island.Sort();
     }
     private ReadOnlySpan<int> PrepareBodyStep() {
         ObserveContactFieldChange();
         m_awakeBodies.CopyTo(array: m_stepBodies);
         foreach (var index in m_awakeBodies) { m_eventBodies.Add(item: index); }
-        foreach (var index in m_awakeBodies) { m_rigidNeighbours.Remove(key: index); }
-        foreach (var loads in m_nonRigidSupports.Values) {
-            foreach (var index in m_awakeBodies) { loads.Remove(item: index); }
-        }
         return m_stepBodies.AsSpan(start: 0, length: m_awakeBodies.Count);
     }
     /// <summary>Settles the parked rigid bodies on the field lattices' step, right after
@@ -143,7 +145,7 @@ public sealed partial class WorldPopulation {
 
             if (local && (terms.Fields != m_sleepFieldTerms.Fields)) { FoldFieldRegionChanges(box: ref box); }
             if (local && box is { Any: true, Unbounded: false }) {
-                WakeSleepersNear(box: in box, contactFieldVersion: version, margin: FieldWakeMargin());
+                WakeSleepersNear(box: in box, margin: FieldWakeMargin());
             } else {
                 WorldBodyWork.Process.Add(amount: m_sleepingBodies.Count, kind: WorldBodyWork.FieldWakes);
                 while (m_sleepingBodies.Count > 0) { WakeBodyIsland(index: m_sleepingBodies.Min); }
@@ -160,17 +162,28 @@ public sealed partial class WorldPopulation {
         m_sleepFieldTermsKnown = known;
         RecordFieldRegionRevisions();
     }
-    // Wakes, island by island in slot order, every sleeper whose bounds grown by the margin meet the box; every other
-    // sleeper observes the change, since nothing it could reach changed.
-    private void WakeSleepersNear(in WorldColliderBox box, ulong contactFieldVersion, FixedQ4816 margin) {
-        var before = m_sleepingBodies.Count;
+    // Wakes, island by island in slot order, every sleeper whose bounds grown by the margin meet the box. The candidates
+    // come from the retained sleeping index over the grown box, so a change that reaches nobody visits no sleeper; the
+    // rest observe the change through the population's own observation (m_sleepFieldVersion), never a per-sleeper write.
+    private void WakeSleepersNear(in WorldColliderBox box, FixedQ4816 margin) {
+        if (m_sleepIndexDirty) {
+            m_sleepIndex.Rebuild(population: this, sleeping: m_sleepingBodies);
+            m_sleepIndexDirty = false;
+        }
+        var found = m_sleepIndex.QueryBox(box: in box, destination: m_sleepQueries, margin: margin);
 
         m_fieldWakes.Clear();
-        foreach (var index in m_sleepingBodies) {
+        for (var ordinal = 0; (ordinal < found); ordinal++) {
+            var index = m_sleepQueries[ordinal];
+
             if (FieldChangeReaches(box: in box, body: m_entries[index].Body!, margin: margin)) { m_fieldWakes.Add(item: index); }
         }
+        m_fieldWakes.Sort();
+        var before = m_sleepingBodies.Count;
+
         foreach (var index in m_fieldWakes) { WakeBodyIsland(index: index); }
-        ObserveFieldChange(contactFieldVersion: contactFieldVersion, sleepersBefore: before);
+        WorldBodyWork.Process.Add(amount: (before - m_sleepingBodies.Count), kind: WorldBodyWork.FieldWakes);
+        WorldBodyWork.Process.Add(amount: (found - m_fieldWakes.Count), kind: WorldBodyWork.FieldObserved);
     }
     // How far past a sleeper's broadphase radius a change still reaches it: the farthest a contact acts (the tuning's
     // ContactReach) plus the travel of a rigid body's downward support probe (RefreshRigidStaticSupport), so a body a
@@ -178,40 +191,26 @@ public sealed partial class WorldPopulation {
     private FixedQ4816 FieldWakeMargin() => (m_contactReach + m_rigidContactPolicy.SubstepMinimumTravel);
     private static bool FieldChangeReaches(in WorldColliderBox box, WorldBody body, FixedQ4816 margin) =>
         box.Meets(position: body.FixedPosition, reach: (body.BroadphaseRadius + margin));
-    // Every sleeper still parked observes the change, and the counts record what it woke and what it left asleep.
-    private void ObserveFieldChange(ulong contactFieldVersion, int sleepersBefore) {
-        foreach (var index in m_sleepingBodies) { m_entries[index].Body!.ObserveContactField(contactFieldVersion: contactFieldVersion); }
-        WorldBodyWork.Process.Add(amount: (sleepersBefore - m_sleepingBodies.Count), kind: WorldBodyWork.FieldWakes);
-        WorldBodyWork.Process.Add(amount: m_sleepingBodies.Count, kind: WorldBodyWork.FieldObserved);
-    }
     // Freeze a complete resting contact component together. A supported stack cannot freeze above a body that
     // is still moving, and changing any member wakes the component before its support graph is discarded.
     private void ParkRigidIslands() {
-        m_islandVisited.Clear();
         m_awakeBodies.CopyTo(array: m_stepBodies);
         var count = m_awakeBodies.Count;
 
+        m_parkVisited.Clear();
         for (var ordinal = 0; (ordinal < count); ordinal++) {
             var root = m_stepBodies[ordinal];
 
             if (m_entries[root].Body is not { IsRigid: true }) { continue; }
-            if (!m_islandVisited.Add(item: root)) { continue; }
-            m_island.Clear();
-            m_island.Add(item: root);
+            if (!m_parkVisited.Add(item: root)) { continue; }
+            CollectRigidIsland(root: root);
             var resting = true;
 
-            for (var cursor = 0; (cursor < m_island.Count); cursor++) {
-                var member = m_island[cursor];
-
-                resting &= (m_entries[member] is { Active: true, Body: { IsRigid: true, Resting: true, CarriedBy: null } });
-                if (m_rigidNeighbours.TryGetValue(key: member, value: out var neighbours)) {
-                    foreach (var neighbour in neighbours) {
-                        if (m_islandVisited.Add(item: neighbour)) { m_island.Add(item: neighbour); }
-                    }
-                }
+            foreach (var member in m_island) {
+                m_parkVisited.Add(item: member);
+                resting &= (m_entries[member] is { Active: true, Body: { IsRigid: true, Resting: true, CarriedBy: null, PopulationSleeping: false } });
             }
             if (!resting) { continue; }
-            m_island.Sort();
             var rootPlusOne = (m_island[0] + 1);
 
             foreach (var member in m_island) {
@@ -232,9 +231,8 @@ public sealed partial class WorldPopulation {
         for (var index = 0; (index < Capacity); index++) {
             if (m_entries[index] is { Active: true, Body: not null }) { m_awakeBodies.Add(item: index); }
         }
-        m_rigidNeighbours.Clear();
-        m_nonRigidSupports.Clear();
         m_sleepGravity.Clear();
+        RebuildRigidContactReferrers();
         m_sleepFieldVersion = ContactFieldVersion;
         var pendingFieldWake = false;
         // Restore can retire remote humans whose connection cannot survive. A surviving part of their rigid
@@ -258,7 +256,6 @@ public sealed partial class WorldPopulation {
 
             if (root < 0) { continue; }
             if (retiredRoots.Contains(item: (root + 1))) { body.WakeRigidIsland(); continue; }
-            if (root != index) { LinkRigidBodies(left: root, right: index); }
             body.ParkRigidIsland(rootPlusOne: (root + 1), contactFieldVersion: residue.LastContactFieldVersion);
             pendingFieldWake |= (residue.LastContactFieldVersion != ContactFieldVersion);
             m_awakeBodies.Remove(item: index);
@@ -269,16 +266,24 @@ public sealed partial class WorldPopulation {
         foreach (var row in checkpoint.SleepingGravity) {
             if (m_sleepingBodies.Contains(item: row.Body)) { m_sleepGravity.Add(key: row.Body, value: row.Acceleration); }
         }
-        foreach (var edge in checkpoint.SleepingSupports) {
-            if (!m_sleepingBodies.Contains(item: edge.Body)) { continue; }
-            if (m_entries[edge.Support] is { Active: true, Body: not null }) { LinkRigidBodies(left: edge.Support, right: edge.Body); } else { WakeBodyIsland(index: edge.Body); }
+        // A body whose contact partner did not survive the restore (a retired remote human) has lost that contact: the
+        // contact is released, and a sleeper holding it wakes.
+        for (var index = 0; (index < Capacity); index++) {
+            if (m_entries[index] is not { Active: true, Body: { } owner }) { continue; }
+            var lost = false;
+
+            for (var position = (owner.RigidContacts.Count - 1); (position >= 0); position--) {
+                var partner = owner.RigidContacts[position].Partner;
+
+                if ((partner >= 0) && (m_entries[partner] is not { Active: true, Body: not null })) {
+                    owner.ReleaseRigidContactAt(position: position);
+                    lost = true;
+                }
+            }
+            if (lost && m_sleepingBodies.Contains(item: index)) { WakeBodyIsland(index: index); }
         }
         m_sleepIndexDirty = true;
     }
-    private (int Support, int Body)[] CaptureSleepingSupports() => [.. m_nonRigidSupports
-        .OrderBy(keySelector: static pair => pair.Key)
-        .SelectMany(selector: pair => pair.Value.Where(predicate: body => m_sleepingBodies.Contains(item: body))
-            .Select(selector: body => (pair.Key, body)))];
 
     // This is folded separately from body-entry bytes, which deliberately remain the entry codec's exact image.
     internal void AppendSleepStateHash(ref Fnv1aHash hash) {
@@ -291,18 +296,6 @@ public sealed partial class WorldPopulation {
 
             hash.Add(value: ((byte)(acceleration.HasValue ? 1 : 0)));
             if (acceleration is { } vector) { hash.Add(value: vector.X.Value); hash.Add(value: vector.Y.Value); hash.Add(value: vector.Z.Value); }
-        }
-        var supportCount = 0;
-
-        foreach (var loads in m_nonRigidSupports.Values) {
-            foreach (var load in loads) { if (m_sleepingBodies.Contains(item: load)) { supportCount++; } }
-        }
-        hash.Add(value: supportCount);
-        foreach (var index in m_awakeBodies) {
-            if (!m_nonRigidSupports.TryGetValue(key: index, value: out var loads)) { continue; }
-            foreach (var load in loads) {
-                if (m_sleepingBodies.Contains(item: load)) { hash.Add(value: index); hash.Add(value: load); }
-            }
         }
     }
     internal ReadOnlySpan<int> EventBodies() {
@@ -347,6 +340,57 @@ public sealed partial class WorldPopulation {
                 cell.Add(item: (new WorldSweepBody(Index: index, MinimumX: (position.X - radius), MaximumX: (position.X + radius), Radius: radius), position));
             }
             foreach (var cell in m_cells.Values) { cell.Sort(comparison: static (a, b) => a.Bounds.CompareTo(other: b.Bounds)); }
+        }
+        // The sleepers whose bounds, grown by the margin, may meet the box: every one that does, and perhaps a few that do
+        // not, which the caller's exact test rejects. Cells are visited in key order and lists by X, so the candidates
+        // are not in slot order.
+        internal int QueryBox(in WorldColliderBox box, FixedQ4816 margin, int[] destination) {
+            if (m_cells.Count == 0) { return 0; }
+            var count = 0;
+
+            if (box.Unbounded) {
+                foreach (var pair in m_cells) {
+                    foreach (var candidate in pair.Value) { destination[count++] = candidate.Bounds.Index; }
+                }
+                return count;
+            }
+            var reach = margin.Value.AddSaturating(right: m_maximumRadius);
+            var firstY = box.Minimum.Y.Value.SubtractSaturating(right: reach).FloorDivide(divisor: m_width);
+            var lastY = box.Maximum.Y.Value.AddSaturating(right: reach).FloorDivide(divisor: m_width);
+            var firstZ = box.Minimum.Z.Value.SubtractSaturating(right: reach).FloorDivide(divisor: m_width);
+            var lastZ = box.Maximum.Z.Value.AddSaturating(right: reach).FloorDivide(divisor: m_width);
+            var minimum = box.Minimum.X.Value.SubtractSaturating(right: reach);
+            var maximum = box.Maximum.X.Value.AddSaturating(right: reach);
+            var range = (((((Int128)lastY) - firstY) + 1) * ((((Int128)lastZ) - firstZ) + 1));
+
+            if (range > m_cells.Count) {
+                foreach (var pair in m_cells) {
+                    if ((pair.Key.Y >= firstY) && (pair.Key.Y <= lastY) && (pair.Key.Z >= firstZ) && (pair.Key.Z <= lastZ)) { Visit(cell: pair.Value); }
+                }
+            } else {
+                for (var y = firstY; (y <= lastY); y++) {
+                    for (var z = firstZ; (z <= lastZ); z++) {
+                        if (m_cells.TryGetValue(key: (y, z), value: out var cell)) { Visit(cell: cell); }
+                    }
+                }
+            }
+            return count;
+
+            void Visit(List<(WorldSweepBody Bounds, FixedVector3 Position)> cell) {
+                var low = 0;
+                var high = cell.Count;
+                // A list is sorted by its bounds' least X; one whose least X lies past the box's grown reach misses it.
+                var lowest = minimum.SubtractSaturating(right: m_width);
+
+                while (low < high) {
+                    var middle = (low + ((high - low) / 2));
+
+                    if (cell[middle].Bounds.MinimumX.Value < lowest) { low = (middle + 1); } else { high = middle; }
+                }
+                for (var ordinal = low; ((ordinal < cell.Count) && (cell[ordinal].Bounds.MinimumX.Value <= maximum)); ordinal++) {
+                    if (cell[ordinal].Bounds.MaximumX.Value >= minimum) { destination[count++] = cell[ordinal].Bounds.Index; }
+                }
+            }
         }
         internal int Query(WorldBody body, int[] destination) {
             if (m_cells.Count == 0) { return 0; }

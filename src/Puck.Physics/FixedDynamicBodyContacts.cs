@@ -14,6 +14,7 @@ public static class FixedDynamicBodyContacts {
         FixedQuaternion rightOrientation,
         in FixedBodyColliderVolume right,
         int tieBreaker,
+        FixedQ4816 margin,
         out FixedVector3 correction
     ) {
         if (
@@ -36,7 +37,7 @@ public static class FixedDynamicBodyContacts {
             var movingPosition = (ellipsoidIsLeft ? rightPosition : leftPosition);
             var movingOrientation = (ellipsoidIsLeft ? rightOrientation : leftOrientation);
             var found = FixedConvexContact.TryPush(in ellipsoidCollider, movingPosition, in movingOrientation,
-                in moving, FixedQ4816.Zero, out var ellipsoidPush);
+                in moving, margin, out var ellipsoidPush);
 
             correction = (found ? (ellipsoidPush.Normal * (ellipsoidIsLeft ? -ellipsoidPush.Penetration : ellipsoidPush.Penetration)) : FixedVector3.Zero);
             return found;
@@ -63,7 +64,7 @@ public static class FixedDynamicBodyContacts {
                 q2: rightEnd
             );
             var distanceSquared = delta.LengthSquared;
-            var radius = (left.Radius + right.Radius);
+            var radius = ((left.Radius + right.Radius) + margin);
 
             if (distanceSquared >= (radius * radius)) {
                 correction = default;
@@ -106,6 +107,7 @@ public static class FixedDynamicBodyContacts {
                     position: rightPosition,
                     volume: in right
                 ),
+                padding: margin,
                 tieBreaker: tieBreaker
             );
         }
@@ -124,7 +126,7 @@ public static class FixedDynamicBodyContacts {
             rotation: (boxOrientation * box.Rotation).Normalize(),
             innerHalfExtents: box.HalfExtents, radius: FixedQ4816.Zero);
 
-        if (FixedRoundedBoxContact.TryPush(collider, roundPosition, roundOrientation, round, FixedQ4816.Zero, out var push)) {
+        if (FixedRoundedBoxContact.TryPush(collider, roundPosition, roundOrientation, round, margin, out var push)) {
             correction = (push.Normal * (roundIsLeft ? push.Penetration : -push.Penetration));
             return true;
         }
@@ -263,7 +265,9 @@ public static class FixedDynamicBodyContacts {
         return ((p1 + (d1 * s)) - (p2 + (d2 * t)));
     }
     /// <summary>Finds the deepest overlap correction from <paramref name="rightVolumes"/> to
-    /// <paramref name="leftVolumes"/>.</summary>
+    /// <paramref name="leftVolumes"/>, every volume grown by half of <paramref name="margin"/>: a pair whose gap is under
+    /// the margin reports a correction whose length is the margin less the gap, so the signed overlap depth is the
+    /// correction's length less the margin.</summary>
     /// <param name="leftPosition">The left body's world position.</param>
     /// <param name="leftOrientation">The left body's world orientation.</param>
     /// <param name="leftVolumes">The left body's local volumes.</param>
@@ -272,7 +276,9 @@ public static class FixedDynamicBodyContacts {
     /// <param name="rightVolumes">The right body's local volumes.</param>
     /// <param name="tieBreaker">A stable value selecting an axis sign when centers coincide.</param>
     /// <param name="correction">The deepest correction, directed from right to left.</param>
-    /// <returns><see langword="true"/> when any volume pair overlaps.</returns>
+    /// <param name="margin">The non-negative gap, in metres, within which a separated pair still reports a correction;
+    /// zero reports only overlapping pairs.</param>
+    /// <returns><see langword="true"/> when any volume pair overlaps or lies within the margin.</returns>
     public static bool TryCorrection(
         FixedVector3 leftPosition,
         FixedQuaternion leftOrientation,
@@ -281,7 +287,8 @@ public static class FixedDynamicBodyContacts {
         FixedQuaternion rightOrientation,
         ReadOnlySpan<FixedBodyColliderVolume> rightVolumes,
         int tieBreaker,
-        out FixedVector3 correction
+        out FixedVector3 correction,
+        FixedQ4816 margin = default
     ) {
         correction = FixedVector3.Zero;
         var deepestSquared = UInt128.Zero;
@@ -293,6 +300,7 @@ public static class FixedDynamicBodyContacts {
                     left: in left,
                     leftOrientation: leftOrientation,
                     leftPosition: leftPosition,
+                    margin: margin,
                     right: in right,
                     rightOrientation: rightOrientation,
                     rightPosition: rightPosition,

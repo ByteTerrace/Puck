@@ -1,6 +1,7 @@
 using Puck.Cli.Determinism;
 using System.Diagnostics;
 
+using Puck.Abstractions;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Machines;
 using Puck.Maths;
@@ -24,7 +25,7 @@ internal static class WorldBenchmarks {
     // the median is the steady-state claim and the widest tick is a visible outlier, not the headline.
     private const int WarmupTicks = 60;
 
-    private static void MeasureWorld(string path, List<(string Name, string Value)> rows) {
+    private static void MeasureWorld(string path, BenchRows rows) {
         // The validator asks which screen-machine engines ship and which compile a cartridge, and the answers come
         // from a registry the shipped brick extensions must be fed into first. CliWorldVocabulary is the CLI's one
         // installer and does both.
@@ -55,6 +56,7 @@ internal static class WorldBenchmarks {
         using var addons = Puck.World.Addons.WorldAddonRuntime.Create(definition: bench.Server.Definition, server: bench.Server);
 
         rows.Add(item: ("world: server construction", $"{constructionTimer.Elapsed.TotalSeconds:F1} s"));
+        rows.Metric(name: "server-construction", unit: "ms", value: constructionTimer.Elapsed.TotalMilliseconds);
 
         MeasureGallery(catalog: catalog, definition: definition!, rows: rows);
 
@@ -96,7 +98,9 @@ internal static class WorldBenchmarks {
         var medianElapsedMs = ((elapsedTicksSamples[(elapsedTicksSamples.Length / 2)] * 1000.0) / Stopwatch.Frequency);
 
         rows.Add(item: ("world: idle tick (median)", $"{medianElapsedMs:F3} ms"));
+        rows.Metric(name: "idle-tick", unit: "ms", value: medianElapsedMs);
         rows.Add(item: ("world: quiet-tick allocation (median)", $"{medianAllocation:N0} bytes"));
+        rows.Metric(name: "quiet-tick-allocation", unit: "bytes", value: medianAllocation);
         rows.Add(item: ("world: sleeping rigid bodies", $"{server.Population.SleepingRigidBodies}"));
         rows.Add(item: ("world: simulated body visits / tick", $"{(simulatedBodyVisits / ((double)SampleTicks)):F1}"));
         rows.Add(item: ("world: dynamic broadphase pair visits / tick", $"{(dynamicPairVisits / ((double)SampleTicks)):F1}"));
@@ -105,6 +109,7 @@ internal static class WorldBenchmarks {
         // The body and contact work behind the tick, as deterministic counts: what a timing row is read beside.
         for (var kind = 0; (kind < TickWork.Length); kind++) {
             rows.Add(item: ($"world: {TickWork[kind].Kind.Name} per tick", $"{((countsAfter[kind] - countsBefore[kind]) / ((double)SampleTicks)):F1}"));
+            rows.Metric(name: $"work.{TickWork[kind].Kind.Name}", unit: "per tick", value: ((countsAfter[kind] - countsBefore[kind]) / ((double)SampleTicks)));
         }
 
         MeasureValueWrite(
@@ -124,7 +129,7 @@ internal static class WorldBenchmarks {
     }
     // The live simulation workload, including the guests and the console's edit echoes. The other rows isolate
     // server operations; every benchmark host mounts the document's declared guests.
-    private static void MeasureGallery(WorldDefinition definition, Puck.World.Machines.WorldMachineCatalog catalog, List<(string Name, string Value)> rows) {
+    private static void MeasureGallery(WorldDefinition definition, Puck.World.Machines.WorldMachineCatalog catalog, BenchRows rows) {
         using var bench = WorldBenchServer.Boot(catalog: catalog, definition: definition);
         var server = bench.Server;
 
@@ -178,7 +183,7 @@ internal static class WorldBenchmarks {
         }
         rows.Add(item: ("world: measured addons", string.Join(separator: ", ", values: addons.Receipts.Select(selector: receipt => receipt.Name))));
     }
-    private static void MeasureCellBurst(Puck.World.Server.WorldServer server, ulong stepTicks, List<(string Name, string Value)> rows) {
+    private static void MeasureCellBurst(Puck.World.Server.WorldServer server, ulong stepTicks, BenchRows rows) {
         // The same typed write door the scope uses, including live edit authority and budgets.
         // Resolve addresses before the measured window; each tick writes seven summary cells and six histories.
         var scope = WorldDefinitionRows.FindStateRow(server.Definition.State, "scope");
@@ -227,13 +232,14 @@ internal static class WorldBenchmarks {
         }
         Array.Sort(array: allocations);
         rows.Add(item: ("world: 13-cell guest burst tick (median)", $"{MedianMilliseconds(samples: samples):F3} ms"));
+        rows.Metric(name: "cell-burst-tick", unit: "ms", value: MedianMilliseconds(samples: samples));
         rows.Add(item: ("world: 13-cell guest burst tick allocation (median)", $"{allocations[(SampleTicks / 2)]:N0} bytes"));
     }
     // gallery.lights.all: every hall light cell written in one tick, which moves the hall's responding rows (floors,
     // roof, switches) to their lit or dark creations in that tick. The tick is timed and metered beside the population
     // revisions it moved: a response change moves no body and leaves the revision, so a client composes its program
     // once, on the values the change delivers.
-    private static void MeasureResponseChange(Puck.World.Server.WorldServer server, ulong stepTicks, List<(string Name, string Value)> rows) {
+    private static void MeasureResponseChange(Puck.World.Server.WorldServer server, ulong stepTicks, BenchRows rows) {
         if (WorldDefinitionRows.FindStateRow(server.Definition.State, "hallLights") is not { Cells: { Count: > 0 } cells }) {
             rows.Add(item: ("world: response change", "no hallLights row"));
 
@@ -289,13 +295,14 @@ internal static class WorldBenchmarks {
         Array.Sort(array: allocations);
         Array.Sort(array: revisions);
         rows.Add(item: ("world: response change tick (median, gallery.lights.all)", $"{MedianMilliseconds(samples: samples):F3} ms"));
+        rows.Metric(name: "response-change-tick", unit: "ms", value: MedianMilliseconds(samples: samples));
         rows.Add(item: ("world: response change tick allocation (median)", $"{allocations[(Changes / 2)]:N0} bytes"));
         rows.Add(item: ("world: response change population revisions moved (median)", $"{revisions[(Changes / 2)]}"));
     }
     // The program a client composes on the frame thread (WorldSceneEmitter.Emit, the work SdfCompositionFrameSource
     // hands its background build): composed again with nothing changed, and after each hall light change delivers the
     // rows holding their new masks.
-    private static void MeasureSceneEmission(string path, Puck.World.Server.WorldServer server, ulong stepTicks, List<(string Name, string Value)> rows) {
+    private static void MeasureSceneEmission(string path, Puck.World.Server.WorldServer server, ulong stepTicks, BenchRows rows) {
         if (WorldDefinitionRows.FindStateRow(server.Definition.State, "hallLights") is not { Cells: { Count: > 0 } cells }) {
             rows.Add(item: ("world: scene emission", "no hallLights row"));
 
@@ -357,10 +364,12 @@ internal static class WorldBenchmarks {
         Array.Sort(array: changedBytes);
         rows.Add(item: ("world: scene emission, nothing changed (median)", $"{MedianMilliseconds(samples: steady):F3} ms, {steadyBytes[(Samples / 2)]:N0} bytes"));
         rows.Add(item: ("world: scene emission after a hall light change (median)", $"{MedianMilliseconds(samples: changed):F3} ms, {changedBytes[(Samples / 2)]:N0} bytes"));
+        rows.Metric(name: "scene-emission-steady", unit: "ms", value: MedianMilliseconds(samples: steady));
+        rows.Metric(name: "scene-emission-changed", unit: "ms", value: MedianMilliseconds(samples: changed));
     }
     // An authored whole-row edit that moves one cell's value: the tick that drains it, timed and metered beside
     // the arena versions and installed rows it replaces. Bound addon writes use the separate typed burst above.
-    private static void MeasureValueWrite(Puck.World.Server.WorldServer server, ulong stepTicks, List<(string Name, string Value)> rows) {
+    private static void MeasureValueWrite(Puck.World.Server.WorldServer server, ulong stepTicks, BenchRows rows) {
         var row = server.Definition.State.FirstOrDefault(predicate: candidate => (
             (candidate.Shape == Puck.State.RowShape.Slot) &&
             (candidate.Kind == Puck.State.CellKind.Int) &&
@@ -433,6 +442,7 @@ internal static class WorldBenchmarks {
         Array.Sort(array: versionsMoved);
         Array.Sort(array: rowsReplaced);
         rows.Add(item: ($"world: state value write tick (median, row '{row.Name.Value}')", $"{MedianMilliseconds(samples: elapsedTicksSamples):F3} ms"));
+        rows.Metric(name: "value-write-tick", unit: "ms", value: MedianMilliseconds(samples: elapsedTicksSamples));
         rows.Add(item: ("world: state value write tick allocation (median)", $"{allocationSamples[(allocationSamples.Length / 2)]:N0} bytes"));
         rows.Add(item: ("world: state value write tick rows moved (median)", $"{versionsMoved[(versionsMoved.Length / 2)]} arena versions, {rowsReplaced[(rowsReplaced.Length / 2)]} installed rows of {server.Definition.State.Count}"));
     }
@@ -440,7 +450,7 @@ internal static class WorldBenchmarks {
     // machine's pending window is full. The back-to-back window above is bounded by the slowest machine once the
     // windows fill, so the tick is also timed paced at the simulation rate, as the game runs it, beside the count of
     // submissions that waited. Each machine's own tick of emulation is then timed alone, synchronously.
-    private static void MeasureMachines(WorldBenchServer bench, WorldDefinition definition, ulong stepTicks, List<(string Name, string Value)> rows) {
+    private static void MeasureMachines(WorldBenchServer bench, WorldDefinition definition, ulong stepTicks, BenchRows rows) {
         var machines = new List<(int Screen, IMachineRuntime Runtime)>();
 
         foreach (var screen in definition.Screens) {
@@ -478,6 +488,7 @@ internal static class WorldBenchmarks {
         }
 
         rows.Add(item: ("world: paced tick (median)", $"{MedianMilliseconds(samples: pacedSamples):F3} ms ({PacedSampleTicks} ticks at {definition.SimulationRateHz} Hz; {(Backpressure() - waitsBefore)} waits on {machines.Count} machines)"));
+        rows.Metric(name: "paced-tick", unit: "ms", value: MedianMilliseconds(samples: pacedSamples));
 
         foreach (var (screen, runtime) in machines) {
             var samples = new long[MachineSampleTicks];
@@ -490,6 +501,7 @@ internal static class WorldBenchmarks {
             }
 
             rows.Add(item: ($"world: screen {screen} machine ({bench.Machines.State(index: screen)?.Engine}), one tick alone (median)", $"{MedianMilliseconds(samples: samples):F3} ms ({MachineSampleTicks} synchronous ticks)"));
+            rows.Metric(name: $"machine-{screen}-tick", unit: "ms", value: MedianMilliseconds(samples: samples));
         }
     }
     private static double MedianMilliseconds(long[] samples) {
@@ -521,20 +533,80 @@ internal static class WorldBenchmarks {
 
     private static long[] ReadTickWork() => Array.ConvertAll(array: TickWork, converter: static entry =>
         (entry.Source.TryRead(kind: entry.Kind, value: out var value) ? value : throw new InvalidOperationException(message: $"{entry.Source.Name} does not count {entry.Kind.Name}.")));
-    private static void PrintTable(List<(string Name, string Value)> rows) {
-        var nameWidth = rows.Max(selector: row => row.Name.Length);
+    private static void PrintTable(IReadOnlyList<KeyValuePair<string, string>> rows, TextWriter writer) {
+        if (rows.Count == 0) { return; }
+        var nameWidth = rows.Max(selector: row => row.Key.Length);
 
         foreach (var (name, value) in rows) {
-            Console.WriteLine(value: $"{name.PadRight(totalWidth: nameWidth)}  {value}");
+            writer.WriteLine(value: $"{name.PadRight(totalWidth: nameWidth)}  {value}");
         }
     }
 
-    /// <summary>Measures one world's server tick path and prints one row per number.</summary>
+    /// <summary>Measures one world <paramref name="repeats"/> times with the engine assemblies of this assembly's load
+    /// context, and returns the last finished repeat's rows and every metric's samples as JSON text, which crosses a load
+    /// context unchanged: <c>{"rows":[[name,text]...],"metrics":{name:{"unit":u,"samples":[...]}},"repeats":n,"error":e}</c>.
+    /// A repeat that fails stops the run; its partial readings are discarded and its message is the error.</summary>
+    /// <param name="path">The world document's full path.</param>
+    /// <param name="repeats">How many times to measure it, at least one.</param>
+    /// <returns>The JSON payload.</returns>
+    public static string MeasureRepeats(string path, int repeats) {
+        var samples = new SortedDictionary<string, (string Unit, List<double> Values)>(comparer: StringComparer.Ordinal);
+        BenchRows? last = null;
+        string? error = null;
+        var finished = 0;
+
+        for (; (finished < repeats) && (error is null); finished++) {
+            var rows = new BenchRows();
+
+            try {
+                MeasureWorld(path: path, rows: rows);
+            } catch (Exception exception) {
+                error = exception.Message;
+                break;
+            }
+            last = rows;
+            foreach (var (name, (unit, value)) in rows.Metrics) {
+                if (!samples.TryGetValue(key: name, value: out var series)) { samples[name] = series = (unit, []); }
+                series.Values.Add(item: value);
+            }
+        }
+
+        var metrics = new System.Text.Json.Nodes.JsonObject();
+
+        foreach (var (name, (unit, values)) in samples) {
+            metrics[name] = new System.Text.Json.Nodes.JsonObject { ["unit"] = unit, ["samples"] = new System.Text.Json.Nodes.JsonArray(items: [.. values.Select(selector: static value => (System.Text.Json.Nodes.JsonNode?)value)]) };
+        }
+        return new System.Text.Json.Nodes.JsonObject {
+            // Where the measured server actually loaded from, read inside the context that ran it.
+            ["engine"] = PuckPaths.Normalize(path: typeof(Puck.World.Server.WorldServer).Assembly.Location),
+            ["error"] = error,
+            ["metrics"] = metrics,
+            ["repeats"] = finished,
+            ["rows"] = new System.Text.Json.Nodes.JsonArray(items: [.. (last?.Table ?? []).Select(selector: static row => (System.Text.Json.Nodes.JsonNode?)new System.Text.Json.Nodes.JsonArray(row.Name, row.Value))]),
+        }.ToJsonString();
+    }
+
+    /// <summary>Measures one world's server tick path, prints one row per number, and records the run as a
+    /// <see cref="BenchReport"/>.</summary>
     /// <param name="world">The world's asset package folder, <c>.puck</c> source or <c>.world.json</c> document, or
     /// <see langword="null"/> for <see cref="DefaultWorldRelativePath"/> under the repository root.</param>
-    /// <returns>0 when every row was measured, 1 when the world could not load or run, 2 when no repository root was
-    /// found for the default world or a package names no entry.</returns>
-    public static int Run(string? world) {
+    /// <param name="repeats">How many times the whole lane runs; every metric is summarized over them.</param>
+    /// <param name="artifact">A World build's <c>Puck.World.dll</c> whose engine assemblies are measured in place of
+    /// this CLI's own, or <see langword="null"/> to measure the CLI's.</param>
+    /// <param name="output">The parent of a unique run directory that receives <c>report.json</c>, or
+    /// <see langword="null"/> to write none.</param>
+    /// <param name="json">Whether the report goes to standard output, with the table on standard error.</param>
+    /// <param name="sampleHost">The host sampler, or <see langword="null"/> to record no host load.</param>
+    /// <returns>0 when every repeat measured, 1 when the world could not load or run, 2 for invalid arguments, no
+    /// repository root for the default world, or a package that names no entry.</returns>
+    public static int Run(string? world, int repeats, string? artifact, string? output, bool json, BenchHostSample? sampleHost) {
+        if (repeats is < 1 or > 100) {
+            return CliExit.Refuse(verb: "bench world", what: "--repeats", why: "must be 1 to 100.");
+        }
+        if ((artifact is not null) && !File.Exists(path: artifact)) {
+            return CliExit.Refuse(verb: "bench world", what: artifact, why: "names no World build (a Puck.World.dll).");
+        }
+
         string path;
 
         if (world is not null) {
@@ -563,21 +635,75 @@ internal static class WorldBenchmarks {
             path = entryPath;
         }
 
-        var rows = new List<(string Name, string Value)>();
+        var build = BenchBuild.Of(entryAssembly: (artifact ?? CliPaths.Tool));
+        var start = BenchReport.Start(build: build, repeats: repeats, settings: new Dictionary<string, string> {
+            ["world"] = CliPaths.ToDisplay(fullPath: path),
+        }, verb: "bench world");
+        string payload;
+        BenchHostLoad? load;
 
-        try {
-            MeasureWorld(
-                path: path,
-                rows: rows
-            );
-        } catch (Exception exception) {
-            Console.Error.WriteLine(value: $"ERROR: {exception.Message}");
+        using (var host = new BenchHostRecorder(sample: sampleHost)) {
+            // A build's engine runs in its own load context, where no admission is installed: admit the run once here.
+            if (artifact is not null) {
+                WorldAdmission.WaitInProcess(step: "bench world");
+            }
+            payload = ((artifact is null) ? MeasureRepeats(path: path, repeats: repeats) : BenchArtifactContext.MeasureRepeats(artifact: artifact, path: path, repeats: repeats));
+            load = host.Finish();
+        }
+
+        var answer = System.Text.Json.Nodes.JsonNode.Parse(json: payload)!;
+        var error = answer["error"]?.GetValue<string>();
+        var rows = answer["rows"]!.AsArray().Select(selector: static row => new KeyValuePair<string, string>(row![0]!.GetValue<string>(), row[1]!.GetValue<string>())).ToArray();
+        var metrics = new SortedDictionary<string, BenchMetric>(comparer: StringComparer.Ordinal);
+
+        foreach (var (name, metric) in answer["metrics"]!.AsObject()) {
+            metrics[name] = BenchMetric.Of(samples: [.. metric!["samples"]!.AsArray().Select(selector: static sample => sample!.GetValue<double>())], unit: metric["unit"]!.GetValue<string>());
+        }
+
+        var report = start with {
+            Complete = ((error is null) && (answer["repeats"]!.GetValue<int>() == repeats)),
+            HostLoad = load,
+            Metrics = metrics,
+            Rows = rows,
+            Settings = new Dictionary<string, string>(collection: start.Settings) { ["engine"] = answer["engine"]!.GetValue<string>() },
+        };
+
+        if (output is not null) {
+            var run = Path.Combine(path1: Path.GetFullPath(path: output), path2: Guid.NewGuid().ToString(format: "N"));
+
+            Directory.CreateDirectory(path: run);
+            Console.Error.WriteLine(value: $"bench world: report {PuckPaths.Normalize(path: report.Write(directory: run))}");
+        }
+
+        var table = (json ? Console.Error : Console.Out);
+
+        PrintTable(rows: rows, writer: table);
+        if (repeats > 1) {
+            foreach (var line in report.MetricLines()) { table.WriteLine(value: line); }
+        }
+        if (json) { Console.Out.WriteLine(value: report.ToJson()); }
+        if (error is not null) {
+            Console.Error.WriteLine(value: $"ERROR: {error}");
 
             return 1;
         }
 
-        PrintTable(rows: rows);
-
         return 0;
     }
+}
+/// <summary>The rows <c>bench world</c> prints, and beside them the numeric metrics its report summarizes.</summary>
+internal sealed class BenchRows {
+    /// <summary>Gets the printed rows in order.</summary>
+    public List<(string Name, string Value)> Table { get; } = [];
+    /// <summary>Gets each metric's unit and value for this repeat.</summary>
+    public Dictionary<string, (string Unit, double Value)> Metrics { get; } = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>Adds a printed row.</summary>
+    /// <param name="item">The row's name and text.</param>
+    public void Add((string Name, string Value) item) => Table.Add(item: item);
+    /// <summary>Records a metric for this repeat.</summary>
+    /// <param name="name">The metric's name in the report.</param>
+    /// <param name="unit">Its unit.</param>
+    /// <param name="value">Its value.</param>
+    public void Metric(string name, string unit, double value) => Metrics[name] = (unit, value);
 }

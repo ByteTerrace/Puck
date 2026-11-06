@@ -142,7 +142,7 @@ public static partial class SweepCommand {
 
         // The baseline's answers and stills are read while this run writes its own beside them: one folder for both
         // would replace the baseline before it is compared.
-        if ((baseline is not null) && SamePath(left: Path.GetDirectoryName(path: baseline.Path)!, right: directory)) {
+        if ((baseline is not null) && CliPaths.Same(left: Path.GetDirectoryName(path: baseline.Path)!, right: directory)) {
             return CliExit.Refuse(verb: Verb, what: "--output", why: $"{CliPaths.ToDisplay(fullPath: directory)} holds the --baseline report, and this run would overwrite its answers and stills before comparing them; name another directory");
         }
 

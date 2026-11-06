@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Machines;
 using Puck.State;
@@ -1416,11 +1417,13 @@ public sealed partial class PuckLanguageServer {
                 break;
 
             default:
+                // A request for a method the server does not offer is refused by name; an unknown notification is
+                // ignored, as JSON-RPC requires.
                 if (id is not null) {
-                    // Method not found
-                    SendResponse(
+                    SendError(
+                        code: MethodNotFound,
                         id: id,
-                        result: null
+                        message: $"Method not found: {method}"
                     );
                 }
                 break;
@@ -1470,6 +1473,20 @@ public sealed partial class PuckLanguageServer {
 
         send(obj: message);
     }
+    // The JSON-RPC 2.0 error codes the server answers with.
+    private const int ParseError = -32700;
+    private const int InvalidRequest = -32600;
+    private const int MethodNotFound = -32601;
+    private const int InternalError = -32603;
+
+    private void SendError(JsonNode? id, int code, string message) => Send(message: new JsonObject {
+        ["jsonrpc"] = "2.0",
+        ["id"] = id?.DeepClone(),
+        ["error"] = new JsonObject {
+            ["code"] = code,
+            ["message"] = message,
+        },
+    });
     private void SendResponse(JsonNode? id, JsonNode? result) {
         var response = new JsonObject {
             ["jsonrpc"] = "2.0",
@@ -1515,8 +1532,10 @@ public sealed partial class PuckLanguageServer {
 
     /// <summary>Handles one JSON-RPC message, handing every message it writes in reply — responses, and notifications
     /// such as <c>textDocument/publishDiagnostics</c> — to <paramref name="send"/> in the order it writes them, before
-    /// returning. A message that is not JSON, or whose handling throws, is answered with a <c>window/logMessage</c>
-    /// notification naming the failure, and the session stays open.</summary>
+    /// returning. A message that is not JSON is answered with a JSON-RPC parse error (-32700) and one that is not an
+    /// object with an invalid-request error (-32600), both with a null id; a request for an unknown method is answered
+    /// with method-not-found (-32601), and a request whose handling throws with an internal error (-32603) naming the
+    /// failure, beside a <c>window/logMessage</c> notification. The session stays open.</summary>
     /// <param name="message">One JSON-RPC 2.0 message, as text.</param>
     /// <param name="send">Receives each outgoing message.</param>
     /// <remarks>This is the whole protocol; a transport only carries messages in and out of it. <see cref="RunAsync"/>
@@ -1534,12 +1553,34 @@ public sealed partial class PuckLanguageServer {
         m_send = send;
 
         try {
+            JsonNode? parsed;
+
             try {
-                if (JsonNode.Parse(json: message) is JsonObject request) {
-                    HandleMessage(msg: request);
-                }
-            } catch (Exception ex) {
+                parsed = JsonNode.Parse(json: message);
+            } catch (JsonException ex) {
                 LogMessage(message: $"LSP parse error: {ex.Message}");
+                // The id of a message that is not JSON cannot be read, so JSON-RPC answers it with a null id.
+                SendError(code: ParseError, id: null, message: $"Parse error: {ex.Message}");
+
+                return;
+            }
+
+            if (parsed is not JsonObject request) {
+                SendError(code: InvalidRequest, id: null, message: "Invalid request: a JSON-RPC message is a JSON object.");
+
+                return;
+            }
+
+            try {
+                HandleMessage(msg: request);
+            } catch (Exception ex) {
+                var method = request["method"]?.ToString();
+
+                LogMessage(message: $"LSP {method} failed: {ex.Message}");
+                // A request is owed a response; a notification has no id to answer.
+                if ((request["id"] is { } id) && (method is not null)) {
+                    SendError(code: InternalError, id: id, message: $"{method} failed: {ex.Message}");
+                }
             }
         } finally {
             m_send = null;

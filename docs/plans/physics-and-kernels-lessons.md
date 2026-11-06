@@ -5,8 +5,9 @@ the successor to Box2D v3) and from OpenBLAS, for accuracy and for
 performance. This memo is the research round's answer. It reads Puck's live
 physics paths, names what the debug world measured, sets each lesson against
 the opened sources (several independent ones per topic, with their
-disagreements), ranks the lessons, and gives a brief for the top
-lesson still open (the kit-body contact work, the gyroscopic term and the rest latch have landed). Every page cited under [Sources](#sources) was opened for this memo;
+disagreements), ranks the lessons, and keeps the brief for lesson 2, the one
+rigid solver (it has landed, as have the kit-body contact work, the gyroscopic
+term and the rest latch). Every page cited under [Sources](#sources) was opened for this memo;
 a claim that rests on a page that could not be opened is marked so.
 
 Nothing here ran a World or changed engine code. The counts quoted are the
@@ -39,39 +40,24 @@ from a float engine and what Puck's integers make better.
   collider's own push query (`FixedSupportDistance`) and one landing sweep, a
   full `ResolveSweep`.
 - **Rigid bodies** (chess pieces, Go stones, reversi discs, alchemy tokens)
-  advance in `WorldBody.AdvanceRigid` (`WorldBody.Rigid.cs:635`). It damps,
-  adds gravity, derives a substep count from travel against an authored
-  fraction of the bounding radius (`:697-719`), and per substep integrates the
-  orientation with the world-frame angular velocity held constant
-  (`:751`) and runs a full `ResolveSweep` against the static field (`:763`).
-  Body-against-body contact is a separate pass after every body has moved:
-  `WorldPopulation.ResolveDynamicContacts`
-  (`WorldPopulation.Resolve.cs:805`) runs a sweep-and-prune over awake bodies
-  and nearby sleepers, takes the deepest overlap per pair
-  (`FixedDynamicBodyContacts.TryCorrection`, `:990`), applies one impulse with
-  friction and splits the positional correction
-  (`WorldPopulation.ResolveRigidPairContact`, `WorldPopulation.Rigid.cs:65-209`),
-  and repeats the whole broadphase and narrowphase up to an authored ceiling
-  of passes (`Resolve.cs:1045`).
+  are solved together by one `FixedRigidWorld` soft-step solve a tick
+  (`WorldPopulation.SolveRigidContacts`, `WorldPopulation.Rigid.cs`), from
+  manifolds each body owns and carries in its checkpoint entry. Each body's
+  step is prepared in `WorldBody.PrepareRigidStep` (damping, gravity as the
+  step's acceleration, the gyroscopic step); its surface contacts come from one
+  exact query per collider within reach (`IContactField.CollectContacts`), or
+  one certified sweep where the field cannot answer per surface; its body
+  contacts from one overlap query per broadphase pair in
+  `ResolveDynamicContacts`. `FixedRigidContacts` spreads each contact over the
+  shapes' support features, and a guard sweep re-certifies a body whose solved
+  motion left its predicted motion.
 - **Sleep** parks a whole resting contact component
-  (`WorldPopulation.ParkRigidIslands`, `WorldPopulation.Sleep.cs:189`). The
-  island graph is rebuilt every tick from that tick's contacts: awake bodies'
-  edges are dropped in `PrepareBodyStep` (`:104-113`) and relinked as pairs
-  resolve (`LinkRigidBodies`, `:90-103`, which allocates a `SortedSet` per
-  newly linked body). Parked bodies keep a retained index
-  (`SleepingIndex`, `:329`) that the pair sweep queries
-  (`NearbySleepingBodies`, `:319`). A bounded contact-field change still
-  box-tests every sleeper (`WakeSleepersNear`, `:165-174`), an item already in
-  the [refactoring packet](open-items.md#refactoring-campaign).
-- **A second rigid solver exists, unwired.** `FixedRigidSolver`
-  (`src/Puck.Physics/FixedRigidSolver.cs:5-20`) is a substepped sequential
-  impulse solver with soft constraints, warm starting, persistent manifold
-  slots, speculative activation and a relax pass, which "re-derives every
-  separation from the displacement the solver has itself accumulated within
-  the step" (its summary). `FixedRigidWorld` (`FixedRigidWorld.cs:5-30`)
-  generalises it to pairs and is marked "SHAPE ONLY — not wired into any
-  world tick". That is the Box2D v3 Soft Step design, built in fixed point,
-  beside a different live implementation of the same mechanism.
+  (`WorldPopulation.ParkRigidIslands`, `WorldPopulation.Sleep.cs`). The island
+  graph is the bodies' persistent contacts: an occupied rigid contact joins two
+  islands and a contact with a kit body is a wake dependency, so nothing is
+  rebuilt per tick. Parked bodies keep a retained index (`SleepingIndex`) that
+  both the pair sweep and a bounded contact-field change query, and they observe
+  the field through the population's own observation.
 
 ### The measurements
 
@@ -257,17 +243,15 @@ prepare, integrate velocities, warm start, solve, integrate positions, relax,
 restitution, store impulses. Catto: "Relaxation is expensive, but it improves
 the simulation quality dramatically." Box3D keeps the same solver.
 
-**What Puck does.** The live path iterates on geometry three times over: every
-rigid substep re-runs a full static `ResolveSweep` with its relaxation passes
-(`WorldBody.Rigid.cs:763`); every pair pass re-runs the broadphase and the
-narrowphase over all awake bodies (`WorldPopulation.Resolve.cs:853-1072`); and
-a pair resolves one impulse at one witness point with a positional split, no
-warm starting and no persistent manifold. `FixedRigidSolver` and
-`FixedRigidWorld` implement the Soft Step sequence in fixed point (the
-substep sequence and the "softness coefficients formed at the substep width",
-`FixedRigidSolver.cs:17-19`; `FixedSoftConstraint`) and are wired nowhere.
-That is two implementations of rigid contact, which AGENTS.md counts as a
-defect.
+**What Puck does.** Landed (brief B): `FixedRigidWorld` is the one rigid
+contact solver, the static field and body pairs alike, wired into the tick
+(`WorldPopulation.SolveRigidContacts`); `FixedRigidSolver` and the World's
+per-substep sweep and pair passes are deleted. The manifold slots and
+accumulated impulses ride each body's checkpoint entry, so the continuation
+hash, the checkpoint and a scoped replay carry the warm start. A manifold's
+points are solved together rather than in visiting order, which a single-pass
+Gauss-Seidel sweep needs to keep a tall piece that lands flat from spinning on
+its first corner.
 
 **Expected gain.** Nothing at idle: every rigid piece sleeps. In an active
 scene (a Go board knocked, a chess capture, a reversi flip, the regression's
@@ -311,8 +295,8 @@ exists.
 
 **What Puck does.** Landed: `FixedGyroscopicStep.Advance` (Puck.Physics) is
 this Newton step, solved by `FixedLinearSolve.TrySolve3`, called once per
-rigid step from `WorldBody.AdvanceRigid` before contact; brief B's integrate
-stage calls the same member. Its law
+rigid step from `WorldBody.PrepareRigidStep` before contact, the one
+solve's integrate stage. Its law
 (`tests/Puck.Physics.Tests/GyroscopicStepLawTests.cs`) measured what the
 memo had expected to be conservation "within the fixed-point budget": at
 60 Hz implicit Euler's own truncation is first order and dissipative, and the
@@ -341,11 +325,12 @@ islands move to their own solver set and leave the constraint graph
 correctness. They are an optimization." "Sleeping must be done per island, not
 per body." Jolt documents the same per-island rest rule.
 
-**What Puck does.** Puck sleeps per island (correctly) but rebuilds the island
-graph from that tick's contacts every tick (`WorldPopulation.Sleep.cs:104-113`,
-`:90-103`), allocating `SortedSet`s as it relinks, and box-tests every sleeper
-on a bounded field change (`:165-174`) while `SleepingIndex` already answers a
-spatial query over parked bounds (`:329`).
+**What Puck does.** Landed (brief B): the island graph is the bodies'
+persistent contact manifolds, with no per-tick rebuild or allocation, and a
+bounded field change takes its candidates from `SleepingIndex` over the change
+box; the parked bodies observe the field through the population's
+`m_sleepFieldVersion`, so a change that reaches no sleeper visits none (the
+debug world's `physics.bodies.field-observed` fell from 61 a tick to 0).
 
 **Expected gain.** The wake: 488 box tests and 488 per-sleeper writes each
 lattice step (61 `physics.bodies.field-observed` a tick) fall to the sleepers
@@ -500,57 +485,30 @@ constraints whose separations are updated from anchor displacement. One
 implementation of rigid contact for the World and `Puck.Physics`.
 
 **Invariant.** Every rigid contact, static or between bodies, is solved by
-`FixedRigidWorld`'s substep sequence, and a step runs the exact geometry
-queries once per candidate pair. **Enforcement:** the old path is deleted
-(`WorldPopulation.ResolveRigidPairContact`, the rigid branch of
-`ResolveDynamicContacts`' pass loop, and `AdvanceRigid`'s per-substep
-`ResolveSweep`), so no second route exists for a new caller. **Where it
-stops:** kit bodies keep `FixedStaticContactSolver` and the certified sweep;
-a kit-against-rigid pair keeps today's rule that a kinematic body is never
-pushed by a rigid one, expressed as a static body in the pair.
+`FixedRigidWorld`'s substep sequence, and a step runs the contact geometry once
+per candidate pair. **Enforcement:** the old path is deleted
+(`ResolveRigidPairContact`, the pair-pass loop, `AdvanceRigid`'s per-substep
+sweep, `FixedRigidSolver`), and the only caller of `FixedRigidWorld.Step` in the
+World is `WorldPopulation.SolveRigidContacts`, which every awake rigid body's
+prepared step reaches. **Where it stops:** kit bodies keep
+`FixedStaticContactSolver` and the certified sweep; a carried body's tangibility
+push is still positional (open items); a field collider within reach makes a
+body's surface contacts come from one sweep rather than one query per surface
+(open items).
 
-**Steps.**
-
-0. Measure an active scene: a fixture that wakes the Go board (an impulse on
-   one stone) on a headless World, reading `physics.contact.*` and the
-   `world.budget` rigid segment a tick. **Check:** the counts in the commit
-   body, the baseline for step 4.
-1. Candidate generation: turn a static collider's contact into
-   `FixedContactCandidate`s with stable source and feature ids, with up to four
-   points for a face contact (the ground manifold `WorldBody.Rigid.cs` already
-   builds is the starting point), and a body pair's into `FixedTwoBodyContact`.
-   **Check:** a Physics law that a box resting flat yields four slots with
-   stable ids across steps.
-2. Size the pair registry from the population (rigid bodies times a
-   per-body contact budget, refused by name in the validator), replacing the
-   least-recently-active eviction and the dropping of overflow candidates,
-   since a contact solver must not discard contacts for a budget (the physics
-   reference says so of perception). **Check:** a validation refusal names the
-   budget; no `LastStepDroppedPairCount` above zero on the debug world.
-3. Wire `FixedRigidWorld` into the tick in place of the rigid advance and the
-   rigid pair passes, with the manifold slots and accumulated impulses in the
-   body continuation (checkpoint, hash and scoped replay), and the World's
-   existing contracts carried over: sweep refusal, the continuous bound (as
-   speculative contacts plus the existing substep ceiling), support blocking,
-   carriers, rolling resistance and island parking. **Check:**
-   `puck test --reproduce` on chess (17 authorities), water and hall; the chess
-   idle demo plays (`physics(quiescent)` holds); a stack fixture stands for
-   600 ticks.
-4. Delete the old path. **Check:** the build; `puck references` finds no
-   caller of the deleted members; the step 0 scene's exact queries per awake
-   rigid body a tick fall to roughly one per candidate pair.
-
-This is a specialist lane (physics, with `maths-usage` loaded), several
-commits, re-recording the rigid scenarios once.
+**Where it stands.** Steps 0 to 4 closed; their evidence is in the commits. The
+one remaining measure: on the Go knock scene, exact queries per awake stone a
+tick fell only where surfaces are analytic, because the game tables carry
+relief and take the sweep (open items, "A rigid body near a field collider").
 
 ## Open questions and who settles them
 
 - **Whether lesson 6 pays.** With lesson 1 landed the contact work of the idle tick is
   about 0.2 ms; lesson 6 is not scheduled until a quiet-window profile shows a
   bounds pass worth vectorising.
-- **Whether contact recycling pays in fixed point.** Settled inside brief B's
-  solver by measurement on the step 0 scene, after brief B lands; until then
-  lesson 8 is not scheduled.
+- **Whether contact recycling pays in fixed point.** Settled inside the one
+  solver by measurement on brief B's Go knock scene; lesson 8 is not scheduled
+  until that measurement runs.
 - **Whether a parallel rigid solve pays.** The job-system memo's T2 measures
   the rigid share of an active tick; lesson 7 waits on that reading.
 

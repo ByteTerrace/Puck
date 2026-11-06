@@ -136,12 +136,12 @@ public sealed class ContactKernelTests {
         );
     }
     [Fact]
-    public void RigidSolverRefusesAnInvalidIterationBudgetByName() {
+    public void RigidSolverRefusesAnInvalidSubstepCountByName() {
         var exception = Assert.Throws<ArgumentOutOfRangeException>(testCode: () =>
-            new FixedRigidSolver(options: new FixedRigidSolverOptions { SolveIterations = 0 }));
+            new FixedRigidWorld(options: new FixedRigidSolverOptions { SubstepCount = 0 }));
 
         Assert.Equal(
-            expected: nameof(FixedRigidSolverOptions.SolveIterations),
+            expected: nameof(FixedRigidSolverOptions.SubstepCount),
             actual: exception.ParamName
         );
     }

@@ -790,17 +790,12 @@ public sealed partial class WorldPopulation {
         m_revision++;
     }
     /// <summary>
-    /// Resolves active local body pairs after every body has integrated. Pair order is deterministic sweep order with
-    /// population index as the complete tie-breaker; each body's own authority remains its sole pose writer and an
-    /// overlap is shared equally unless static support blocks one rigid body's share. The FIRST pass's own resolved rigid-pair count derives how many
-    /// EXTRA full sweeps run (<see cref="RigidPairPassesThisTick"/>, <see cref="WorldBodyContactPolicy.RigidPairIterationCeiling"/>):
-    /// every pass re-runs broadphase and narrowphase from scratch, over the SAME bodies' now-current positions and
-    /// velocities, so a pair a strike's own positional correction newly brings into contact (the next ball down a
-    /// rack, the next domino down a falling line) is discovered and resolved in a LATER pass of the same tick,
-    /// rather than only ever replaying the pairs the first pass happened to find — a fixed replay set can never grow
-    /// past what one broadphase saw before any impulse moved anything. An extra pass with zero rigid pairs to
-    /// resolve stops the run early rather than spending the rest of the authored ceiling re-confirming a settled
-    /// population.
+    /// Resolves active local body pairs after every body has advanced, then solves the tick's rigid step. One broadphase
+    /// and one narrowphase query per pair run over the awake solid bodies and the sleepers near them, in deterministic
+    /// sweep order with population index as the complete tie-breaker. Two kit bodies share their overlap equally
+    /// unless a side's sweep was refused; a pair with a rigid side wakes its sleepers and becomes that step's body
+    /// contact, solved with every rigid body's surface contacts by one <see cref="FixedRigidWorld"/> step
+    /// (WorldPopulation.Rigid.cs). The complete resting islands then park.
     /// </summary>
     public void ResolveDynamicContacts() {
         var contacts = m_dynamicContactBodies;
@@ -819,7 +814,10 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            var radius = body.BroadphaseRadius;
+            // A body reaches as far as it can move this step, plus half the rest band a pair keeps its contact within,
+            // so a rigid pair is found before it overlaps.
+            var travel = body.ContactTravel(stepTicks: m_rigidTickStepTicks);
+            var radius = ((body.BroadphaseRadius + travel) + RigidRestOffset);
 
             maximumRadius = FixedQ4816.Max(x: maximumRadius, y: radius);
 
@@ -827,7 +825,8 @@ public sealed partial class WorldPopulation {
                 Index: index,
                 MinimumX: (body.FixedPosition.X - radius),
                 MaximumX: (body.FixedPosition.X + radius),
-                Radius: radius
+                Radius: radius,
+                Travel: travel
             );
             included[index] = true;
         }
@@ -838,23 +837,15 @@ public sealed partial class WorldPopulation {
         DynamicContactLimitedBodies = 0;
         DynamicContactNarrowPairs = 0;
         DynamicContactResolvedPairs = 0;
-        RigidPairResolvedCount = 0;
-        RigidPairPassesThisTick = 0;
+        m_rigidPairHits.Clear();
 
         // A pair's summed radii never exceed this cell width, so intersecting Y/Z intervals have centres in the
         // same or adjacent cells. Keep raw units for exact floor division (including negative coordinates).
         var cellWidth = Math.Max(val1: 2L, val2: maximumRadius.Value.AddSaturating(right: maximumRadius.Value));
 
-        // One full broadphase-plus-narrowphase sweep over the current work set, extended by nearby sleepers on
-        // each pass, since a rigid pair's own positional correction can
-        // move a body into a THIRD one a later pass needs to see. Returns candidate pairs routed to the rigid impulse path
-        // (used only to derive the extra-pass count below) — RigidPairResolvedCount is ResolveRigidPairContact's own
-        // to increment, one call at a time, never assigned here directly.
-        int RunSweep() {
-            var rigidResolvedThisPass = 0;
-
-            // Frozen bodies retain their spatial index. Only bodies near an awake contact enter this sweep;
-            // a woken neighbour can extend the work set on the next pass, preserving contact-chain propagation.
+        // The one broadphase-plus-narrowphase sweep over the work set, extended by the sleepers near it.
+        {
+            // Frozen bodies retain their spatial index. Only bodies near an awake contact enter this sweep.
             for (var ordinal = 0; (ordinal < count); ordinal++) {
                 var body = m_entries[contacts[ordinal].Index].Body!;
 
@@ -866,7 +857,7 @@ public sealed partial class WorldPopulation {
 
                     if (included[index] || (BodyContact(index: index) != WorldBodyContactMode.Solid)) { continue; }
                     var sleeper = m_entries[index].Body!;
-                    var radius = sleeper.BroadphaseRadius;
+                    var radius = (sleeper.BroadphaseRadius + RigidRestOffset);
 
                     included[index] = true;
                     maximumRadius = FixedQ4816.Max(x: maximumRadius, y: radius);
@@ -876,10 +867,7 @@ public sealed partial class WorldPopulation {
             }
             cellWidth = Math.Max(val1: 2L, val2: maximumRadius.Value.AddSaturating(right: maximumRadius.Value));
 
-            // Refreshed from each body's CURRENT FixedPosition every pass (radius is collider-derived and does not
-            // change mid-tick): an earlier pass's own positional correction can move a body's X interval enough that
-            // the stale one either misses a pair it should now prune in, or keeps pruning in a pair that has since
-            // moved apart. The Y/Z grid is rebuilt from those same current positions below.
+            // Refreshed from each body's current position (radius is collider-derived and does not change mid-tick).
             for (var refreshOrdinal = 0; (refreshOrdinal < count); refreshOrdinal++) {
                 var refreshedRadius = contacts[refreshOrdinal].Radius;
                 var refreshedX = m_entries[contacts[refreshOrdinal].Index].Body!.FixedPosition.X;
@@ -987,6 +975,11 @@ public sealed partial class WorldPopulation {
                     }
                     DynamicContactNarrowPairs++;
 
+                    var pairIsRigid = (left.IsRigid || right.IsRigid);
+                    // A rigid pair is solved speculatively: within what both can travel this step plus the rest band,
+                    // its contact exists before it overlaps. Two kit bodies resolve by position, overlap only.
+                    var margin = (pairIsRigid ? ((leftContact.Travel + rightContact.Travel) + RigidRestBand) : FixedQ4816.Zero);
+
                     if (FixedDynamicBodyContacts.TryCorrection(
                         leftPosition: left.FixedPosition,
                         leftOrientation: left.FixedOrientation,
@@ -995,22 +988,21 @@ public sealed partial class WorldPopulation {
                         rightOrientation: right.FixedOrientation,
                         rightVolumes: right.ScaledColliderVolumes(),
                         tieBreaker: leftIndex ^ rightIndex,
-                        correction: out var correction
+                        correction: out var correction,
+                        margin: margin
                     )) {
-                        var pairIsRigid = (left.IsRigid || right.IsRigid);
+                        var depth = (correction.Length - margin);
 
+                        if (pairIsRigid && (left.PopulationSleeping || right.PopulationSleeping) &&
+                            RestingContactHolds(depth: depth, left: leftIndex, right: rightIndex)) {
+                            // The sleeper rests in this very contact, and a contact no deeper than its rest wakes nothing.
+                            continue;
+                        }
                         if (pairIsRigid) {
-                            // Wake before writing this pair's support scratch. Wake discards the pre-sleep
-                            // contact image, including when the body skipped this tick's integration snapshot.
+                            // The pair is a body contact of this tick's rigid step; its sleepers join the step.
                             if (left.PopulationSleeping) { WakeBodyIsland(index: leftIndex); }
                             if (right.PopulationSleeping) { WakeBodyIsland(index: rightIndex); }
-                            ResolveRigidPairContact(
-                                correction: correction,
-                                left: left,
-                                right: right
-                            );
-                            LinkRigidBodies(left: leftIndex, right: rightIndex);
-                            rigidResolvedThisPass++;
+                            m_rigidPairHits.Add(item: new RigidPairHit(Correction: correction, Depth: depth, Left: leftIndex, Right: rightIndex));
                         } else {
                             var (leftShare, rightShare) = SplitPairCorrection(
                                 correction: correction,
@@ -1031,44 +1023,10 @@ public sealed partial class WorldPopulation {
                 }
             }
 
-            return rigidResolvedThisPass;
         }
 
-        var firstPassRigidResolved = RunSweep();
-
-        RigidPairPassesThisTick = 1;
-
-        // The first pass's own resolved rigid-pair count derives how many EXTRA sweeps run: a lightly loaded tick
-        // (few clustered pairs — a rack break, a falling domino line) gets every authored pass, so the impulse chain
-        // crosses more than one pair-hop within THIS tick instead of propagating one body per tick; a heavily loaded
-        // one is bounded by RigidPairIterationBudget so a crowded tick's total extra-sweep work stays capped.
-        var extraIterations = (Math.Clamp(
-            value: (m_bodyContactPolicy.RigidPairIterationBudget / Math.Max(
-                val1: 1,
-                val2: firstPassRigidResolved
-            )),
-            min: 1,
-            max: Math.Max(
-                val1: 1,
-                val2: m_bodyContactPolicy.RigidPairIterationCeiling
-            )
-        ) - 1);
-
-        for (var extra = 0; ((extra < extraIterations) && (firstPassRigidResolved > 0)); extra++) {
-            RigidPairPassesThisTick++;
-
-            var thisPassRigidResolved = RunSweep();
-
-            if (thisPassRigidResolved <= 0) {
-                break;
-            }
-        }
-        for (var ordinal = 0; (ordinal < count); ordinal++) {
-            var body = m_entries[contacts[ordinal].Index].Body!;
-
-            if (!body.PopulationSleeping) { body.FinishRigidContacts(policy: m_rigidContactPolicy); }
-        }
         DynamicContactPotentialPairs = ((count * (count - 1)) / 2);
+        SolveRigidContacts();
         ParkRigidIslands();
     }
 

@@ -12,6 +12,7 @@ namespace Puck.Physics.Tests;
 public sealed class TwoBodyKernelLawTests {
     private static readonly FixedRigidScales Scales = new(
         EffectiveMass: 32,
+        Impulse: 16,
         InverseInertia: 40,
         InverseMass: 40
     );
@@ -65,12 +66,26 @@ public sealed class TwoBodyKernelLawTests {
         ),
         };
     }
-    private static (FixedVector3 DeltaVA, FixedVector3 DeltaVB, long InvA, long InvB) RunAsymmetricPair(FixedRigidSolverOptions options) {
+    private static readonly FixedVector3 Gravity = new(X: FixedQ4816.Zero, Y: FixedQ4816.FromDouble(value: -9.81d), Z: FixedQ4816.Zero);
+
+    // One step of a single two-body manifold.
+    private static void StepPair(FixedRigidWorld world, FixedRigidManifold manifold, FixedRigidBody bodyA, FixedRigidBody bodyB, FixedTwoBodyContact candidate) {
+        manifold.BodyA = bodyA;
+        manifold.BodyB = bodyB;
+        manifold.Associate(candidates: [candidate]);
+        world.Step(bodies: [bodyA, bodyB], manifolds: [manifold]);
+    }
+    private static (FixedVector3 DeltaVA, FixedVector3 DeltaVB, long InvA, long InvB) RunAsymmetricPair(FixedRigidSolverOptions options, bool gravity) {
         var world = new FixedRigidWorld(options: options);
         var bodyA = MakeBox(density: 40d);
         var bodyB = MakeBox(density: 4000d);
-        var idA = world.AddBody(body: bodyA);
-        var idB = world.AddBody(body: bodyB);
+        var idA = 0;
+        var idB = 1;
+
+        if (gravity) {
+            bodyA.Acceleration = Gravity;
+            bodyB.Acceleration = Gravity;
+        }
 
         bodyA.LinearVelocity = new(
             X: FixedQ4816.Zero,
@@ -108,10 +123,7 @@ public sealed class TwoBodyKernelLawTests {
             FeatureId: 0
         );
 
-        world.Step(
-            candidates: [candidate,],
-            step: 1
-        );
+        StepPair(bodyA: bodyA, bodyB: bodyB, candidate: candidate, manifold: new FixedRigidManifold(), world: world);
 
         Assert.Equal(
             expected: 0,
@@ -128,9 +140,9 @@ public sealed class TwoBodyKernelLawTests {
 
     [Fact]
     public void AsymmetricPairsMomentumStaysWithinACountedRoundingBudget() {
-        var options = new FixedRigidSolverOptions { AppliedAcceleration = FixedVector3.Zero, Gravity = FixedVector3.Zero, RateHz = 60, RelaxIterations = 1, SolveIterations = 2, SubstepCount = 4, };
+        var options = new FixedRigidSolverOptions { RateHz = 60, RelaxIterations = 1, SolveIterations = 2, SubstepCount = 4, };
 
-        var (deltaVA, deltaVB, invA, invB) = RunAsymmetricPair(options: options);
+        var (deltaVA, deltaVB, invA, invB) = RunAsymmetricPair(gravity: false, options: options);
 
         // Cross-multiplying by the other body's raw inverse mass turns "mA*dvA + mB*dvB ~= 0" (division, not exact)
         // into one exact-integer quantity: dvA*invMassB + dvB*invMassA. K counts every ApplyImpulse invocation the
@@ -235,12 +247,13 @@ public sealed class TwoBodyKernelLawTests {
     }
     [Fact]
     public void MassSymmetricPairsVelocityDeltasAreExactBitwiseOpposites() {
-        var options = new FixedRigidSolverOptions { AppliedAcceleration = FixedVector3.Zero, Gravity = FixedVector3.Zero, RateHz = 60, SubstepCount = 4, };
+        var options = new FixedRigidSolverOptions { RateHz = 60, SubstepCount = 4, };
         var world = new FixedRigidWorld(options: options);
         var bodyA = MakeBox(density: 100d);
         var bodyB = MakeBox(density: 100d);
-        var idA = world.AddBody(body: bodyA);
-        var idB = world.AddBody(body: bodyB);
+        var idA = 0;
+        var idB = 1;
+        var manifold = new FixedRigidManifold();
 
         bodyA.LinearVelocity = new(
             X: FixedQ4816.Zero,
@@ -279,10 +292,7 @@ public sealed class TwoBodyKernelLawTests {
         };
 
         for (var step = 1; (step <= 60); ++step) {
-            world.Step(
-                candidates: [.. candidates,],
-                step: step
-            );
+            StepPair(bodyA: bodyA, bodyB: bodyB, candidate: candidates[0], manifold: manifold, world: world);
         }
 
         Assert.Equal(
@@ -298,7 +308,7 @@ public sealed class TwoBodyKernelLawTests {
     public void RestoringGravityBreaksTheAsymmetricMomentumBound() {
         var options = new FixedRigidSolverOptions { RateHz = 60, RelaxIterations = 1, SolveIterations = 2, SubstepCount = 4, };
 
-        var (deltaVA, deltaVB, invA, invB) = RunAsymmetricPair(options: options);
+        var (deltaVA, deltaVB, invA, invB) = RunAsymmetricPair(gravity: true, options: options);
         var k = (((long)options.SubstepCount) * ((1 + options.SolveIterations) + options.RelaxIterations));
         var crossRaw = ((((BigInteger)deltaVA.Y.Value) * invB) + (((BigInteger)deltaVB.Y.Value) * invA));
         var bound = ((k * 64L) * Math.Max(

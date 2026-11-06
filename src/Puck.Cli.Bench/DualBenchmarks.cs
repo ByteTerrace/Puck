@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Diagnosers;
 using Puck.Maths;
 using QFixElem = Puck.Maths.QuadraticAlgebra<Puck.Maths.FixedQ4816>.Element;
 using QQuatElem = Puck.Maths.QuadraticAlgebra<Puck.Maths.FixedQuaternion>.Element;
@@ -14,7 +13,6 @@ namespace Puck.Cli.Bench;
 // a kernel specialized on the relation against one carrying the relation as data, and the Static/Local pair separates
 // the static readonly descriptor, whose coefficients the JIT may fold, from the parameter form, where it cannot.
 [MemoryDiagnoser]
-[DisassemblyDiagnoser(maxDepth: 3)]
 public class DualFixMul {
     private const int Ops = Bench.LatencyOps;
 
@@ -101,7 +99,6 @@ public class DualFixMul {
 // every component rounded once per product, against a raw-level accumulation that rounds each dual component once for
 // the whole sum. Step's dual part is zero, so the chain stays in-regime while every Hamilton product still executes.
 [MemoryDiagnoser]
-[DisassemblyDiagnoser(maxDepth: 3)]
 public class DualQuaternionMul {
     private const int Ops = Bench.LatencyOps;
 

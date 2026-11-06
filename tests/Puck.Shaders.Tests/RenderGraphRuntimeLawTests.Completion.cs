@@ -252,6 +252,74 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
         }
     }
+    /// <summary>A refusal is narrated on standard error once, when it starts, and a reconfiguration that keeps the refused
+    /// instance does not narrate it again. The red leg: a record of narrations kept per slot and rebuilt with each
+    /// reconfiguration tells the same refusal on the first frame after it.</summary>
+    [Fact]
+    public void ARefusalThatOutlastsAReconfigurationIsNarratedOnce() {
+        var gpu = new FakePipelineGpu();
+        var package = new RefusingPackage();
+        const string Reason = "the law refused it and narrates this once";
+        var narration = new StringWriter();
+        var standardError = Console.Error;
+
+        Console.SetError(newError: narration);
+
+        try {
+            Assert.True(condition: RenderGraphRuntime.TryCreate(
+                deviceContext: gpu,
+                graphs: [Graph(pipeline: CameraGraph()), Graph(ScreensGraph(false, "screen"), ("screen", "camera"))],
+                hostsOnDirectX: false,
+                packages: package.Registry,
+                pipelines: new GpuPassPipelineCache(),
+                refusal: out var created,
+                root: "main",
+                runtime: out var refusing,
+                set: Set(
+                    Instance(name: "camera"),
+                    Instance(
+                        name: "main",
+                        reads: new RenderGraphRead(Producer: "camera")
+                    )
+                )
+            ), userMessage: created?.Message);
+
+            using (refusing) {
+                var frames = new Frames(
+                    footprints: [new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "camera", Width: 1.0)],
+                    roots: [new RenderGraphRoot(Height: 1.0, Instance: "main", Width: 1.0)],
+                    runtime: refusing
+                );
+
+                frames.Next(count: 3);
+                package.Refusal = Reason;
+                frames.Next(count: 3);
+                Assert.True(
+                    condition: refusing.TryReconfigure(
+                        graphs: [null, null],
+                        refusal: out var refused,
+                        root: "main",
+                        set: Set(
+                            Instance(name: "camera"),
+                            Instance(
+                                name: "main",
+                                reads: new RenderGraphRead(Producer: "camera")
+                            )
+                        )
+                    ),
+                    userMessage: refused?.Message
+                );
+                frames.Next(count: 3);
+            }
+        } finally {
+            Console.SetError(newError: standardError);
+        }
+
+        Assert.Equal(
+            actual: narration.ToString().Split(separator: '\n').Count(predicate: line => line.Contains(value: $"[render-graph] refused: the instance 'camera' cannot render: {Reason}")),
+            expected: 1
+        );
+    }
     /// <summary>A producer answers three ways, and the frame follows it: one still making its image (holding) leaves the
     /// frame not yet renderable, which an offscreen host waits out, and one that ended (an imported feed whose window is
     /// gone) refuses it by its own reason, so the host steps on. The red leg: the same ended producer read as a wait

@@ -42,7 +42,7 @@ internal static class CarryFixtures {
                 LinearDamping: 0f,
                 Mass: 1f,
                 Restitution: 0f,
-                RollingFriction: 0f
+                RollingResistance: 0f
             )
             : source.Kits[0].Rigid),
         };
@@ -56,7 +56,7 @@ internal static class CarryFixtures {
             LinearDamping: 0f,
             Mass: 0.3f,
             Restitution: 0.2f,
-            RollingFriction: 0.1f
+            RollingResistance: 0.001f
         ),
             Carry = null,
         };

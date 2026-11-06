@@ -1,7 +1,6 @@
 using System.CommandLine;
 using System.ComponentModel;
 using System.Globalization;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Abstractions;
@@ -11,7 +10,7 @@ namespace Puck.Cli.Bench;
 // Measures the real host in fresh processes. Builds and shutdown are outside the readiness interval; PNG readback
 // and pipe delivery are inside the capture interval, making it a conservative bound on visible-frame readiness.
 public static class StartupBenchmarks {
-    public static Command Create() {
+    public static Command Create(BenchHostSample? sampleHost) {
         var worlds = new Argument<string[]>(name: "worlds") { Arity = ArgumentArity.ZeroOrMore, Description = "Worlds to boot: asset package folders, sources or documents. Default: the debug world's package, worlds/debug." };
         var artifact = new Option<string?>("--world-artifact") { Description = "Measure this Puck.World entry assembly instead of the build of the checkout's sources, which is built first, outside every sample, when no run has built that source state." };
         var output = new Option<string?>("--output") { Description = "Parent for a unique run directory containing report.json, transcripts, and captures." };
@@ -21,15 +20,18 @@ public static class StartupBenchmarks {
         var headless = new Option<bool>("--headless") { Description = "Measure console readiness only; default launches the windowed renderer and requires a completed PNG capture." };
         var width = new Option<int>("--width") { DefaultValueFactory = _ => 1280, Description = "Window width in pixels for the rendered capture, 1 to 16384." };
         var height = new Option<int>("--height") { DefaultValueFactory = _ => 720, Description = "Window height in pixels for the rendered capture, 1 to 16384." };
-        var command = new Command(description: "Measure fresh-process World startup serially, with isolated persistence for every sample.", name: "startup") { worlds, artifact, output, cache, samples, timeout, headless, width, height };
+        var json = new Option<bool>("--json") { Description = "Print the report (puck.bench.v1) on standard output instead of the summary line." };
+        var command = new Command(description: "Measure fresh-process World startup serially, with isolated persistence for every sample.", name: "startup") { worlds, artifact, output, cache, samples, timeout, headless, width, height, json };
 
         command.SetAction(action: parse => Run(
             (parse.GetValue(argument: worlds) ?? []), parse.GetValue(option: artifact), parse.GetValue(option: output),
-            parse.GetValue(option: samples), parse.GetValue(option: timeout), parse.GetValue(option: headless), parse.GetValue(option: width), parse.GetValue(option: height), parse.GetValue(option: cache)));
+            parse.GetValue(option: samples), parse.GetValue(option: timeout), parse.GetValue(option: headless), parse.GetValue(option: width), parse.GetValue(option: height), parse.GetValue(option: cache),
+            parse.GetValue(option: json), sampleHost));
+        command.Detail(detail: "Writes report.json (puck.bench.v1) in a unique run directory under --output after every sample: the World build's identity (version with its commit, SHA-256 of its engine assemblies), the host load sampled during the run, and the metric `startup` (console readiness headless, the completed capture windowed, in ms) as median, p10 and p90 over every sample of every world. `puck measure` reads it as /metrics/startup/median. Exit 0 when every sample passed, 1 when one failed, 2 for invalid arguments.");
         return command;
     }
 
-    private static int Run(string[] worlds, string? artifact, string? output, int samples, int timeout, bool headless, int width, int height, string? cache) {
+    private static int Run(string[] worlds, string? artifact, string? output, int samples, int timeout, bool headless, int width, int height, string? cache, bool json, BenchHostSample? sampleHost) {
         if ((samples is < 1 or > 100) || (timeout is < 1 or > 3600) || (width is < 1 or > 16384) || (height is < 1 or > 16384)) {
             Console.Error.WriteLine(value: "startup: samples must be 1..100, timeout 1..3600 seconds, and dimensions 1..16384.");
             return 2;
@@ -55,8 +57,22 @@ public static class StartupBenchmarks {
             return 2;
         }
         var rows = new List<StartupSample>();
+        var start = BenchReport.Start(build: BenchBuild.Of(entryAssembly: artifact), repeats: samples, settings: new Dictionary<string, string> {
+            ["worlds"] = string.Join(separator: ", ", values: worlds.Select(selector: static world => CliPaths.ToDisplay(fullPath: world))),
+            ["headless"] = (headless ? "true" : "false"),
+            ["size"] = $"{width}x{height}",
+            ["cacheDir"] = ((cache is null) ? "(per sample)" : PuckPaths.Normalize(path: Path.GetFullPath(path: cache))),
+        }, verb: "bench startup");
+        var progress = (json ? Console.Error : Console.Out);
+        using var host = new BenchHostRecorder(sample: sampleHost);
+        BenchReport Report(bool finished) => start with {
+            Complete = (finished && (Summarize(rows, (worlds.Length * samples), headless) is not null)),
+            HostLoad = (finished ? host.Finish() : null),
+            Metrics = ((Summarize(rows, (worlds.Length * samples), headless) is { } metric) ? new Dictionary<string, BenchMetric> { ["startup"] = metric } : new Dictionary<string, BenchMetric>()),
+            Startup = rows.ToArray(),
+        };
 
-        Console.WriteLine(value: $"startup: {worlds.Length} worlds x {samples} fresh processes; {(headless ? "headless" : "windowed")} {width}x{height}; {run}");
+        progress.WriteLine(value: $"startup: {worlds.Length} worlds x {samples} fresh processes; {(headless ? "headless" : "windowed")} {width}x{height}; {run}");
         // Interleave repetitions so all samples of one world do not uniquely benefit from adjacent disk-cache use.
         for (var sample = 1; (sample <= samples); sample++) {
             for (var index = 0; (index < worlds.Length); index++) {
@@ -90,19 +106,19 @@ public static class StartupBenchmarks {
                     row = new(worlds[index], sample, null, null, null, exception.Message);
                 }
                 rows.Add(item: row);
-                Console.WriteLine(value: ((row.Error is null)
+                progress.WriteLine(value: ((row.Error is null)
                     ? $"{CliPaths.ToDisplay(fullPath: worlds[index])} #{sample}: console {row.ConsoleMilliseconds:F1} ms, capture {row.CaptureMilliseconds:F1} ms"
                     : $"FAIL {CliPaths.ToDisplay(fullPath: worlds[index])} #{sample}: {row.Error}"));
                 // Persist partial evidence after every child; interruption never turns the completed prefix into a full run.
-                var report = new StartupReport(RuntimeInformation.FrameworkDescription, RuntimeInformation.OSDescription, artifact, headless, width, height, (worlds.Length * samples), rows.ToArray(), Summarize(rows, (worlds.Length * samples), headless));
-
-                File.WriteAllText($"{run}/report.json", JsonSerializer.Serialize(report, StartupJsonContext.Default.StartupReport));
+                _ = Report(finished: false).Write(directory: run);
             }
         }
-        var summary = Summarize(rows, (worlds.Length * samples), headless);
+        var report = Report(finished: true);
 
-        Console.WriteLine(value: ((summary is null) ? "startup: incomplete or failed samples; no corpus timing claimed." : $"startup: mean {summary.MeanMilliseconds:F1} ms; median {summary.MedianMilliseconds:F1} ms; p95 {summary.P95Milliseconds:F1} ms; max {summary.MaximumMilliseconds:F1} ms."));
-        return ((summary is null) ? 1 : 0);
+        _ = report.Write(directory: run);
+        if (json) { Console.Out.WriteLine(value: report.ToJson()); }
+        else { Console.WriteLine(value: (report.Complete ? $"startup: {report.MetricLines().Single()}" : "startup: incomplete or failed samples; no corpus timing claimed.")); }
+        return (report.Complete ? 0 : 1);
     }
 
     public static StartupSample Assess(string world, int sample, CliProcessResult result, bool headless, string capture) {
@@ -125,22 +141,16 @@ public static class StartupBenchmarks {
         line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[capture] ") &&
         line.Line.Replace(newChar: '/', oldChar: '\\').EndsWith($" -> {capture.Replace(newChar: '/', oldChar: '\\')}", StringComparison.Ordinal));
 
-    public static StartupSummary? Summarize(IReadOnlyList<StartupSample> rows, int expected, bool headless) {
+    // The `startup` metric: every sample of every world, or null until all of them passed.
+    public static BenchMetric? Summarize(IReadOnlyList<StartupSample> rows, int expected, bool headless) {
         if ((rows.Count != expected) || (rows.Count == 0) || rows.Any(predicate: row => (row.Error is not null))) { return null; }
         var values = rows.Select(selector: row => (headless ? row.ConsoleMilliseconds : row.CaptureMilliseconds)).ToArray();
 
         if (values.Any(predicate: value => ((value is null) || !double.IsFinite(d: value.Value) || (value.Value < 0)))) { return null; }
-        var ordered = values.Select(selector: value => value!.Value).Order().ToArray();
-        var middle = (ordered.Length / 2);
-
-        return new(ordered.Average(), (((ordered.Length % 2) == 0) ? ((ordered[(middle - 1)] + ordered[middle]) / 2) : ordered[middle]), ordered[(((int)Math.Ceiling(a: (ordered.Length * .95))) - 1)], ordered[^1]);
+        return BenchMetric.Of(samples: [.. values.Select(selector: static value => value!.Value)], unit: "ms");
     }
 }
 public sealed record StartupSample(string World, int Sample, double? ConsoleMilliseconds, double? CaptureMilliseconds, int? ExitCode, string? Error);
-public sealed record StartupSummary(double MeanMilliseconds, double MedianMilliseconds, double P95Milliseconds, double MaximumMilliseconds);
 
-internal sealed record StartupReport(string Runtime, string OperatingSystem, string Artifact, bool Headless, int Width, int Height, int ExpectedSamples, StartupSample[] Samples, StartupSummary? Summary);
-[JsonSerializable(typeof(StartupReport))]
 [JsonSerializable(typeof(string))]
-[JsonSourceGenerationOptions(NewLine = "\n", WriteIndented = true)]
 internal sealed partial class StartupJsonContext : JsonSerializerContext;

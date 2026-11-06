@@ -48,6 +48,29 @@ public interface IContactField {
             velocity: ref velocity,
             volumes: volumes
         );
+    /// <summary>Collects every static surface a body volume lies within a margin of, at a fixed pose, one exact query
+    /// per surface (<see cref="FixedStaticContactSolver.CollectContacts"/>). A provider that cannot answer per surface (a
+    /// signed-distance field, a cross-authority merge) declines with a negative count, and the caller probes by sweep.</summary>
+    /// <param name="position">The body's world position.</param>
+    /// <param name="orientation">The body's world orientation.</param>
+    /// <param name="volume">The body-local convex volume.</param>
+    /// <param name="margin">The non-negative distance a surface may lie from the volume and still count.</param>
+    /// <param name="destination">The destination for the surfaces.</param>
+    /// <returns>The number of surfaces written, or -1 when the provider declines.</returns>
+    int CollectContacts(in FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 margin,
+        Span<FixedSurfaceContact> destination) => -1;
+    /// <summary>Builds the diagnostic support witness of the deepest walkable surface among those
+    /// <see cref="CollectContacts"/> reported at the same pose: the read-back a sweep's
+    /// <see cref="ContactResolution.Support"/> carries, for a body whose surfaces came from the per-surface query. It
+    /// queries nothing and never feeds a simulation decision.</summary>
+    /// <param name="contacts">The surfaces <see cref="CollectContacts"/> wrote.</param>
+    /// <param name="position">The body's world position the surfaces were collected at.</param>
+    /// <param name="orientation">The body's world orientation.</param>
+    /// <param name="volume">The body-local convex volume.</param>
+    /// <param name="up">The body's unit up axis, which walkability is measured against.</param>
+    /// <returns>The witness, or <see langword="null"/> when no surface is walkable or the provider publishes none.</returns>
+    ContactSupportWitness? SupportWitness(ReadOnlySpan<FixedSurfaceContact> contacts, in FixedVector3 position, in FixedQuaternion orientation,
+        in FixedBodyColliderVolume volume, in FixedVector3 up) => null;
     /// <summary>Finds the support distance below a body: the least descent along the opposite of
     /// <paramref name="up"/>, within <paramref name="reach"/>, at which anything this field resolves against first comes
     /// within its contact skin of the body. A ground snap lowers by it and lands with one sweep

@@ -63,7 +63,7 @@ public sealed class WorldUprightFactLawTests {
             LinearDamping: 1f,
             Mass: 1f,
             Restitution: 0.05f,
-            RollingFriction: 2f
+            RollingResistance: 0.005f
         );
         var uprightBody = (bodyRefUnderTest ?? $"{WorldRuleFacts.UprightPrefix}body:0");
 

@@ -12,7 +12,8 @@ namespace Puck.Shaders;
 /// instance that renders a graph the bytes of the host-written regions its installed graph reads
 /// (<see cref="RenderGraphRuntime.RegionBytes"/>), and the work its newest completed submission counted
 /// (<see cref="RenderGraphRuntime.Work"/>): the passes that executed of those recorded, and their dispatches and draws.
-/// Every figure is a count; nothing is timed. A reader reuses one
+/// Every figure is a count except an instance's record jobs' host time
+/// (<see cref="ShaderPipelineRenderNode.AppendRecordTimes"/>), a wall-clock pacing reading. A reader reuses one
 /// instance, which reuses one <see cref="GpuWorkSample"/>, so a steady read into a builder with room allocates nothing.
 /// </summary>
 public sealed class RenderGraphLiveBudget {
@@ -135,6 +136,7 @@ public sealed class RenderGraphLiveBudget {
             }
             if (runtime.NodeOf(instance: row.Instance) is { } node) {
                 _ = into.Append(value: " cadence-cpu-bytes=").Append(value: node.CadenceCpuBytes);
+                node.AppendRecordTimes(into: into);
             }
             AppendLedger(
                 into: into,

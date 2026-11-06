@@ -31,6 +31,16 @@ public static class CliPaths {
             newChar: '/',
             oldChar: '\\'
         );
+    /// <summary>Returns whether two paths name the same file or directory: compared in full, without a trailing separator,
+    /// and without case on Windows.</summary>
+    /// <param name="left">One path, absolute or relative to the working directory.</param>
+    /// <param name="right">The other path.</param>
+    /// <returns><see langword="true"/> when both resolve to the same full path.</returns>
+    public static bool Same(string left, string right) => string.Equals(
+        a: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: left)),
+        b: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: right)),
+        comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+    );
     // The default display base is the working directory.
     public static string ToDisplay(string fullPath) =>
         ToDisplay(
