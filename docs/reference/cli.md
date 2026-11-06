@@ -2476,7 +2476,7 @@ changed under the plan's compare mode for each metric (`exact`,
 pixel counts as changed when a colour channel differs by more than the tour's
 `levelTolerance` (16 levels), and a still whose fraction exceeds
 `amberFraction` (2%) is amber; a `compare-<group>.png` sheet then sets each
-baseline still above its current one. A signal difference outside its compare tolerance is red; a baseline signal missing from a selected leg is unmeasured. The report is a derived product: keep it in an ignored lane scratch directory and never commit it.
+baseline still above its current one. A signal difference outside its compare tolerance is red; a baseline signal missing from a selected leg is unmeasured. Each signal stores its rules' colour as `status` and the comparison's as `comparison` (red when anything changed, clean otherwise, absent without `--baseline`); the run's colour is the worse of the two, and a later sweep that takes this report as its baseline compares only `status`, so a comparison's red never carries forward. The report is a derived product: keep it in an ignored lane scratch directory and never commit it.
 
 Exit codes: 0 nothing red or unmeasured, 1 something red or unmeasured, 2 a
 refusal (a plan, a baseline, a `--output` that is the `--baseline` report's

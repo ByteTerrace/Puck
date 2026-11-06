@@ -56,12 +56,19 @@ public sealed record SweepToolResult(string Name, string Status, int Ticks, IRea
 /// <param name="Name">The signal.</param>
 /// <param name="Leg">The leg it was read on.</param>
 /// <param name="Line">The line it read.</param>
-/// <param name="Status">Its colour.</param>
+/// <param name="Status">Its colour by its own rules and refusals alone, never the baseline comparison's: a baseline
+/// reads this colour, so a report recorded against one carries no comparison red into the next.</param>
 /// <param name="Reasons">The rules that hold and the refusals.</param>
 /// <param name="Metrics">The metrics, by name.</param>
 /// <param name="File">The answer's file, relative to the report.</param>
 /// <param name="Changes">What changed against the baseline.</param>
-public sealed record SweepSignalResult(string Name, string Leg, string Line, string Status, IReadOnlyList<string> Reasons, IReadOnlyDictionary<string, string> Metrics, string File, IReadOnlyList<string> Changes);
+/// <param name="Comparison">The baseline comparison's colour: red when <paramref name="Changes"/> names anything,
+/// clean when it names nothing, and <see langword="null"/> when the sweep had no baseline.</param>
+public sealed record SweepSignalResult(string Name, string Leg, string Line, string Status, IReadOnlyList<string> Reasons, IReadOnlyDictionary<string, string> Metrics, string File, IReadOnlyList<string> Changes, string? Comparison = null) {
+    /// <summary>Gets the signal's colour in this run: the worse of its rules' colour and the comparison's.</summary>
+    [JsonIgnore]
+    public string Colour => SweepStatus.Worse(left: Status, right: (Comparison ?? SweepStatus.Clean));
+}
 /// <summary>One tour still.</summary>
 /// <param name="Name">The stop.</param>
 /// <param name="Group">Its contact sheet.</param>
@@ -147,7 +154,7 @@ public sealed record SweepReport(
             _ = text.AppendLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"  {tool.Status,-10} tool {tool.Name} ({tool.Ticks} ticks){Join(items: tool.Reasons)}"));
         }
         foreach (var signal in Signals) {
-            _ = text.AppendLine(value: $"  {signal.Status,-10} {signal.Leg} {signal.Name}{Join(items: signal.Reasons)}{((signal.Changes.Count == 0) ? string.Empty : $" | changed: {string.Join(separator: "; ", values: signal.Changes)}")}");
+            _ = text.AppendLine(value: $"  {signal.Colour,-10} {signal.Leg} {signal.Name}{Join(items: signal.Reasons)}{((signal.Changes.Count == 0) ? string.Empty : $" | changed: {string.Join(separator: "; ", values: signal.Changes)}")}");
         }
 
         _ = text.AppendLine(value: $"  {Scenarios.Status,-10} scenarios{Join(items: Scenarios.Reasons)}");
@@ -166,7 +173,7 @@ public sealed record SweepReport(
 
     private IEnumerable<string> Everything() => (((Tools.Count == 0) && (Signals.Count == 0) && ((Tour?.Stills.Count ?? 0) == 0) && (Scenarios.Status == SweepStatus.Skipped)) ? new[] { SweepStatus.Unknown } : [])
         .Concat(second: Tools.Select(selector: static tool => tool.Status))
-        .Concat(second: Signals.Select(selector: static signal => signal.Status))
+        .Concat(second: Signals.Select(selector: static signal => signal.Colour))
         .Concat(second: [Scenarios.Status])
         .Concat(second: (Tour?.Stills.Select(selector: static still => still.Status) ?? []));
     private static string Join(IReadOnlyList<string> items) => ((items.Count == 0) ? string.Empty : $": {string.Join(separator: "; ", values: items)}");
@@ -255,7 +262,7 @@ public sealed class SweepBaseline {
         foreach (var leg in legs.Select(selector: static leg => leg.Leg).Distinct()) {
             foreach (var key in m_metrics.Keys.Where(predicate: key => (key.StartsWith(comparisonType: StringComparison.Ordinal, value: (leg + "/")) && !present.Contains(item: key)))) {
                 yield return new SweepSignalResult(key[(leg.Length + 1)..], leg, string.Empty, SweepStatus.Unknown,
-                    ["baseline signal missing from this run"], new Dictionary<string, string>(), string.Empty, ["signal gone"]);
+                    ["baseline signal missing from this run"], new Dictionary<string, string>(), string.Empty, ["signal gone"], SweepStatus.Red);
             }
         }
     }
