@@ -160,7 +160,7 @@ public static class MeasureCommand {
             using var export = AffectedRevisionExport.Create(checkout, revision, ["."]);
             CliFiles.CopyDirectory(export.Root, target);
         } else {
-            var source = Path.GetFullPath(inputTree!);
+            var source = PuckPaths.Normalize(inputTree!);
             if (!Directory.Exists(source)) { throw new ArgumentException($"Input tree {source} does not exist."); }
             if (File.Exists(Path.Combine(source, ".git")) || Directory.Exists(Path.Combine(source, ".git"))) {
                 var listing = CliGit.Run(source, "ls-files", "-z", "--cached", "--others", "--exclude-standard");
@@ -184,7 +184,7 @@ public static class MeasureCommand {
         var equals = argument.StartsWith("--", StringComparison.Ordinal) ? argument.IndexOf('=') : -1;
         var value = equals >= 0 ? argument[(equals + 1)..] : argument;
         if (Path.IsPathRooted(value)) {
-            if (!Inside(checkout, value)) { throw new ArgumentException($"Input {value} is outside the requesting checkout; place inputs in the declared tree and use relative paths."); }
+            if (!Inside(checkout, value)) { throw new ArgumentException($"Input {PuckPaths.Normalize(value)} is outside the requesting checkout; place inputs in the declared tree and use relative paths."); }
             value = Path.GetRelativePath(checkout, value).Replace(Path.DirectorySeparatorChar, '/');
         } else if (!value.StartsWith("--", StringComparison.Ordinal) && !Inside(checkout, Path.GetFullPath(value, checkout))) {
             throw new ArgumentException($"Input {value} escapes the frozen input tree.");
@@ -219,7 +219,7 @@ public static class MeasureCommand {
         File.WriteAllText(Path.Combine(output, "command.stderr.log"), run.Stderr);
         if (run.ExitCode != 0 || run.TimedOut) { throw new InvalidOperationException($"measure {item.Name} {side} #{round + 1}: command failed ({run.ExitCode}, timedOut={run.TimedOut}); {PuckPaths.Normalize(output)}"); }
         var reports = Directory.GetFiles(output, "report.json", SearchOption.AllDirectories);
-        if (reports.Length != 1) { throw new InvalidDataException($"Expected one command report under {output}; found {reports.Length}."); }
+        if (reports.Length != 1) { throw new InvalidDataException($"Expected one command report under {PuckPaths.Normalize(output)}; found {reports.Length}."); }
         using var json = JsonDocument.Parse(File.ReadAllText(reports[0]));
         var readings = item.Metrics.ToDictionary(metric => metric, metric => ReadMetric(json.RootElement, metric), StringComparer.Ordinal);
         Console.WriteLine($"measure: {item.Name} {side} #{round + 1} read {readings.Count} metric(s).");
