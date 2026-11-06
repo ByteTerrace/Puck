@@ -4,7 +4,7 @@ using Puck.Abstractions.Machines;
 namespace Puck.World.Server;
 
 public sealed partial class WorldMachineHost {
-    private static FrozenDictionary<string, MachineMemoryAddress> ResolveBindings(WorldMachine declaration, MachineLease lease) {
+    private static FrozenDictionary<string, MachineMemoryAddress> ResolveBindings(WorldMachine declaration, MachineLease.Running lease) {
         var resolved = new Dictionary<string, MachineMemoryAddress>(comparer: StringComparer.Ordinal);
         var writes = new List<(string Name, MachineMemoryAddress Address)>();
 

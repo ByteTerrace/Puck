@@ -167,13 +167,30 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
         m_worker.ReadAudioSamples(destination: destination);
     /// <inheritdoc/>
     public void RestoreCheckpoint(ReadOnlyMemory<byte> checkpoint) {
+        var restored = DecodeForThisHost(checkpoint: checkpoint);
+
+        m_worker.RestoreCheckpoint(checkpoint: restored.Checkpoint);
+        m_inputs = restored.Inputs;
+    }
+    /// <inheritdoc/>
+    public bool TryValidateCheckpoint(ReadOnlyMemory<byte> checkpoint, out string reason) {
+        try {
+            m_worker.ValidateCheckpoint(checkpoint: DecodeForThisHost(checkpoint: checkpoint).Checkpoint);
+        } catch (Exception exception) when (exception is InvalidDataException or InvalidOperationException or ObjectDisposedException) {
+            reason = exception.Message;
+            return false;
+        }
+        reason = string.Empty;
+        return true;
+    }
+    // The checks a restore makes before it reaches the worker: the image's encoding and its seat count.
+    private (QueuedMachineCheckpoint Checkpoint, MachinePads Inputs, int Seats) DecodeForThisHost(ReadOnlyMemory<byte> checkpoint) {
         var restored = QueuedMachineCheckpoint.Decode(bytes: checkpoint);
 
         if (restored.Seats != m_seats.Length) {
             throw new InvalidOperationException(message: $"machine restore requires the checkpoint's {restored.Seats} input seats to match this host's {m_seats.Length}");
         }
-        m_worker.RestoreCheckpoint(checkpoint: restored.Checkpoint);
-        m_inputs = restored.Inputs;
+        return restored;
     }
     /// <inheritdoc/>
     public int RewindBy(int frames) =>
