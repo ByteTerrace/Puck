@@ -1,0 +1,14 @@
+{
+  "note": "Windowed measurement views from the water plan's capture table, shared by frame and GPU-pass requests.",
+  "tour": {
+    "prelude": ["world.row.set hud.defaults enabled false", "console off 1"],
+    "reset": ["body.stop 0", "world.debug-view off", "view.override layout play"],
+    "frame": ["view.reseed 0"],
+    "settle": 60,
+    "stops": [
+      { "name": "pool", "lines": ["view.override camera pose -43 1.7 -12 90 -8"] },
+      { "name": "falls", "lines": ["view.override camera look -95 6 95 -160 90 160 50"] },
+      { "name": "lake", "lines": ["view.override camera look -230 345 230 -311 324.5 311"] }
+    ]
+  }
+}

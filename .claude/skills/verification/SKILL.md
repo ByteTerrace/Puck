@@ -52,10 +52,16 @@ names both match, and the verb reports the skipped count. The same selection
 governs `--record` and `--compare`. The lead runs full suites once per batch.
 Timing questions go to `puck measure request` with frozen before/after World
 artifacts with explicit `--before-input-tree` and `--after-input-tree` roots
-(or commits, which freeze their whole trees), the bench world, startup or sweep command, numeric JSON-pointer
+(or commits, which freeze their whole trees), the bench world, startup, frames or sweep command, numeric JSON-pointer
 metrics and `--decides`. `puck measure list` shows the queue; the lead's
 `puck measure run` takes quiet once and drains it with ABAB pairs, reporting
 median, IQR and paired differences from those existing measurement harnesses.
+`bench frames` reads windowed boot history or selected sweep-tour stops through
+the existing World launch and control session; select GPU passes explicitly with
+`--gpu-pass` and use the exact `world.gpu-timing` node/pass names. Its full-window
+check reads the required sample count from that console answer, and every stop
+rearms timing so the previous view cannot supply its samples. Filing uses the same
+stop/pass selection as execution and refuses unsupported pointers before freezing.
 See the [measurement reference](../../../docs/reference/cli.md#puck-measurequeued-measurement-windows).
 
 A queued World build can outlive a cancelled start. Do not change a checkout's

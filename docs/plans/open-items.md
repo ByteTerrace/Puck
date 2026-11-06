@@ -1159,8 +1159,7 @@ beside it.
 
 ### Measurement window
 
-Owner: the measure-harness lane, then the lead (one quiet window) · ordinary ·
-Next: the harness the unread questions need, then a window that answers them.
+Owner: the lead (one quiet window) · ordinary · Next: drain the queued windowed controls.
 
 Evidence here is timing, so it waits for a window with no other lane building or
 running a World ([orchestration](../../.claude/skills/orchestration/SKILL.md)).
@@ -1169,25 +1168,32 @@ machine-local. The same-build `bench world` and `bench startup` controls are
 answered and sit well inside their 10 % criteria; a `bench world` or
 `bench startup` answer is read against them.
 
-Questions no harness reads yet (lanes asked for each; none has a number):
+[`puck bench frames`](../reference/cli.md#puck-bench-frames) now writes windowed
+`host.frames` and selected `world.gpu-timing` readings in `puck.bench.v1`, through
+the shared World launch and sweep control session. Boot history uses
+`bench frames worlds/debug`, with `/metrics/boot.frames.p50/median` and
+`/metrics/boot.frames.p99/median`. A tour uses `--plan <sweep-plan>` and optional
+`--stop <names>`; each stop contributes the same frame statistics under its name.
+GPU passes use repeated `--gpu-pass <node/pass>` and pointers such as
+`/metrics/pool.gpu.world~1sdf.world$glass-shade/median`. Missing passes fail;
+filing refuses unsupported pointers before it copies builds.
 
-- Windowed boot frames: the frame times of a windowed debug-world boot, for the
-  boot-spike lane.
-- The glass passes' GPU time at the pool, the falls and the lake, for the two
-  glass interfaces a pixel ([water](#water)).
-- The sweep tour's frame time at the 50th and 99th percentiles, for the sky
-  staging change ([sweep](#sweep-and-visual-checks)).
-- `host.frames` at the water views, for [the water plan's P1](water.md#p1-the-tour-and-the-budget).
+The remaining questions are machine-local `puck measure` requests, each with the
+integration-tip build frozen on both sides as a control. Drain by name/ID from
+`puck measure list`, with `puck measure run <id> --repeats 5 --timeout-seconds 7200`:
 
-The gap: `puck measure` runs `bench world`, `bench startup` or `sweep` (its
-headless frame-signal plans) and reads a JSON pointer from the report
-(`MeasureCommand.ValidateCommand` and `SampleAsync`), so none of those reports
-carries a windowed frame time or a per-pass GPU time. Both are read today from a
-live World by hand (`host.frames`, `world.gpu-timing`) under the GPU lease, and
-no verb emits them as report metrics. Build the harness: a windowed World leg, launched through
-`WorldLaunch` inside `puck lease quiet`, that arms the boot or the tour and
-writes a `puck.bench.v1` report of frame-time percentiles and per-pass GPU
-times, so `puck measure request` can pair two builds on them.
+- **Glass passes at the water views** ([water](#water)):
+  `bench frames --plan worlds/debug/measure-water.json --gpu-pass 'world/sdf.world$glass' --gpu-pass 'world/sdf.world$glass-shade'`;
+  the three stops' `.gpu.` medians compare each pass in ms, with paired IQR
+  establishing the noise before judging two glass interfaces per pixel.
+- **Sweep tour frame percentiles** ([sweep](#sweep-and-visual-checks)):
+  `bench frames --plan worlds/debug/sweep.json`; select every stop's
+  `.frames.p50/median` and `.frames.p99/median`, in ms, to judge the sky staging
+  change against the control's paired differences and IQR.
+- **Water-view host frames**, for [P1](water.md#p1-the-tour-and-the-budget):
+  `bench frames --plan worlds/debug/measure-water.json`; select the pool,
+  falls and lake's `.frames.p50/median` and `.frames.p99/median` and read them
+  against the frame bar and the control's IQR.
 
 ### Author shaders
 
