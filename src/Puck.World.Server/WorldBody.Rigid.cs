@@ -608,6 +608,7 @@ public sealed partial class WorldBody {
         var velocity = (m_rigidVelocity + (m_rigidAcceleration * (seconds / FixedQ4816.FromInteger(value: 2L))));
         var root = m_position;
         var resolved = (root + (velocity * seconds));
+        var predicted = resolved;
 
         DiagnosticSupport = null;
         m_diagnosticManifoldPoint = null;
@@ -701,6 +702,19 @@ public sealed partial class WorldBody {
         if (resolution.ObstructionNormal != FixedVector3.Zero) {
             surfaces[written++] = new RigidSurface(Normal: resolution.ObstructionNormal,
                 Separation: FixedVector3.Dot(left: (root - resolved), right: resolution.ObstructionNormal), SourceId: WorldRigidContacts.ObstructionSource);
+        }
+
+        // A sweep that held the predicted motion back without naming a surface (it proved neither contact nor clearance
+        // there) still stopped the body: the push it applied is the surface the step meets.
+        if (
+            (written == 0) &&
+            FixedVector3.TrySubtract(difference: out var held, left: resolved, right: predicted) &&
+            (held != FixedVector3.Zero)
+        ) {
+            var normal = held.Normalize();
+
+            surfaces[written++] = new RigidSurface(Normal: normal, Separation: FixedVector3.Dot(left: (root - resolved), right: normal),
+                SourceId: WorldRigidContacts.GroundSource);
         }
 
         DiagnosticSupport = resolution.Support;

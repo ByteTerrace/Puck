@@ -206,7 +206,10 @@ public sealed class FixedRigidWorld {
                         factorRaw: slot.NormalMassRaw,
                         factorBits: m_options.Scales.EffectiveMass
                     )).Value;
-                    ++active;
+
+                    if ((slot.NormalImpulseRaw > 0L) || (deltas[index] > 0L)) {
+                        ++active;
+                    }
                 }
 
                 for (var index = 0; ((active > 0) && (index < FixedPairManifoldSlotTable.Capacity)); ++index) {
@@ -512,9 +515,10 @@ public sealed class FixedRigidWorld {
             var active = 0;
 
             // A manifold's points are solved together: every point's ask is read from the same velocities, and each
-            // takes an equal share of it. A sweep that visited them in turn would hand most of an impact to whichever
-            // point it reached first, and the uneven impulse would spin the body — a tall piece landing flat would tip
-            // on that alone. The pairs are still visited in turn, and successive passes converge the shares.
+            // point that takes part takes an equal share of it. A sweep that visited them in turn would hand most of an
+            // impact to whichever point it reached first, and the uneven impulse would spin the body — a tall piece
+            // landing flat would tip on that alone. The pairs are still visited in turn, and successive passes converge
+            // the shares.
             for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
                 ref var slot = ref manifold.Slots[index];
 
@@ -533,7 +537,12 @@ public sealed class FixedRigidWorld {
                     softness: in softness,
                     useBias: useBias
                 );
-                ++active;
+
+                // Only a point whose impulse this pass can change shares the ask: a speculative point still apart,
+                // asking to pull with nothing accumulated, takes no share.
+                if ((slot.NormalImpulseRaw > 0L) || (deltas[index] > 0L)) {
+                    ++active;
+                }
             }
 
             if (active == 0) {

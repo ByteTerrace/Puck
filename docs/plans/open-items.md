@@ -1298,6 +1298,27 @@ lowers it to the same JSON as before, except where the look changes on purpose.
   five stones stay awake ten seconds after a knock in the debug world. A
   torsional (spin) friction row on a surface manifold, clamped by its normal
   impulse times a patch radius, is the Box2D rolling-resistance shape.
+- [medium] The one rigid solver has open regressions against the old path's
+  laws (`tests/Puck.World.Server.Tests`): a light flat body rocking on one
+  curved point is undamped (a tilted lens in `ATiltedLensTipsBeforeItRests`
+  rocks at several radians a second, since a rolling contact does no work and
+  `rollingFriction` is only a per-second decay), a scale-0.05 ball never meets
+  its scaled rest speed (`WorldRigidCommandLawTests`), and a body at rest sits a
+  soft contact's steady-state depth inside the contact skin, which
+  `WorldBody.IsPenetratingStaticGeometry` reads as penetration
+  (`ArrivingBodyCannotPushALateWokenSleeperThroughItsFloor`). A rolling
+  resistance row on a surface manifold (clamped by its normal impulse times an
+  authored length, the Box2D shape) answers the first, and a rest offset on the
+  soft target the last.
+- [medium] The debug world's sweep reads red on the one rigid solver
+  (`puck sweep --no-scenarios` against the tip baseline): the chess watchdog
+  sees four piece-overlap begins during the idle demo (pieces the demo moves
+  touch neighbours for a few ticks while the soft solve separates them, where
+  the old positional correction separated them at once), and
+  `world.debug-view report contacts` covers fewer bodies (tested 497 to 401,
+  unknown 7 to 103), because a rigid body whose surfaces come from the per-surface
+  query publishes no `ContactSupportWitness`. Build the witness from the
+  deepest walkable surface the query found.
 - [low] The rigid solver's contact softness (`ContactHertz`,
   `ContactDampingRatio`, `ContactSpeed` in `FixedRigidSolverOptions`) is an
   engine default the World never authors; give `collision.bodyContacts` the

@@ -532,7 +532,10 @@ body's surface contacts come from one sweep rather than one query per surface
 **Where it stands.** Steps 0 to 4 closed; their evidence is in the commits. The
 one remaining measure: on the Go knock scene, exact queries per awake stone a
 tick fell only where surfaces are analytic, because the game tables carry
-relief and take the sweep (open items, "A rigid body near a field collider").
+relief and take the sweep (open items, "A rigid body near a field collider"), and
+the solver has open regressions against the old path's laws and the debug world's
+sweep (open items, "The one rigid solver has open regressions", "The debug
+world's sweep reads red").
 
 ## Open questions and who settles them
 

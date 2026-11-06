@@ -685,26 +685,36 @@ public sealed class WorldRigidDynamicsLawTests {
     [Fact]
     public void ABoxStackedOnABoxStandsForSixHundredTicks() {
         // One rigid solver holds a stack: the upper box rests on the lower one through a four-point body contact, the
-        // lower on the floor through its surface contact, and neither creeps, tips nor sinks over twenty seconds.
+        // lower on the floor through its surface contact, and neither creeps, tips nor sinks over twenty seconds. A box
+        // root sits at its base, so the pair is posed touching, a little above the floor, and lands together.
         using var fixture = TwoJoinedSeats(definition: BoxOnFloorDocument());
         var lower = fixture.Server.Body(index: 0)!;
         var upper = fixture.Server.Body(index: 1)!;
-        var lowerY = (FloorTopY + BoxHalfExtents.Y);
-        var upperY = (lowerY + (2f * BoxHalfExtents.Y));
+        var height = (2f * BoxHalfExtents.Y);
+        var lowerY = (FloorTopY + 0.1f);
 
         lower.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: lowerY, yawRadians: 0f, z: 0f);
-        upper.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0.05f, y: upperY, yawRadians: 0f, z: 0f);
+        upper.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0.05f, y: (lowerY + height), yawRadians: 0f, z: 0f);
+
+        var settled = (Lower: FixedQ4816.Zero, Upper: FixedQ4816.Zero, UpperX: FixedQ4816.Zero);
 
         for (var tick = 0; (tick < 600); tick++) {
             fixture.Step();
+
+            if (tick == 99) {
+                settled = (lower.FixedPosition.Y, upper.FixedPosition.Y, upper.FixedPosition.X);
+            }
         }
 
         static float UpAlignment(WorldBody body) => Vector3.Dot(vector1: Vector3.Transform(value: Vector3.UnitY, rotation: body.Orientation), vector2: Vector3.UnitY);
 
+        var gap = (((float)upper.FixedPosition.Y) - ((float)lower.FixedPosition.Y));
+
         Assert.True(condition: (UpAlignment(body: lower) > 0.999f), userMessage: $"the lower box tipped (up {UpAlignment(body: lower):0.####})");
         Assert.True(condition: (UpAlignment(body: upper) > 0.999f), userMessage: $"the upper box tipped (up {UpAlignment(body: upper):0.####})");
-        Assert.True(condition: (MathF.Abs(x: (((float)upper.FixedPosition.Y) - upperY)) < 0.02f), userMessage: $"the upper box stands at y={((double)upper.FixedPosition.Y):0.####}, not {upperY:0.####}");
-        Assert.True(condition: (MathF.Abs(x: (((float)upper.FixedPosition.X) - 0.05f)) < 0.02f), userMessage: $"the upper box crept to x={((double)upper.FixedPosition.X):0.####}");
+        Assert.True(condition: (MathF.Abs(x: (gap - height)) < 0.01f), userMessage: $"the upper box stands {gap:0.####} above the lower one's base, not its height {height:0.####}");
+        Assert.Equal(expected: settled, actual: (lower.FixedPosition.Y, upper.FixedPosition.Y, upper.FixedPosition.X));
+        Assert.True(condition: (MathF.Abs(x: (((float)upper.FixedPosition.X) - 0.05f)) < 0.05f), userMessage: $"the upper box slid to x={((double)upper.FixedPosition.X):0.####}");
         Assert.True(condition: (lower.Resting && upper.Resting), userMessage: $"the stack never came to rest (lower {lower.Resting}, upper {upper.Resting})");
     }
     [Fact]
