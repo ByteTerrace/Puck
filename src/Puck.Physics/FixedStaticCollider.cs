@@ -335,12 +335,54 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         out bool uncertain
     ) {
         if (Kind == FixedStaticColliderKind.Field) {
-            return FixedFieldColliderContact.TryPush(collider: in this, orientation: in orientation, position: position, push: out push, skin: skin,
-                uncertain: out uncertain, volume: in volume);
+            var bounds = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume);
+
+            switch (Narrow(center: bounds.Center, extent: bounds.Extent, reach: skin, collider: out var narrowed)) {
+                case FixedFieldRegion.Empty: {
+                        push = default;
+                        uncertain = false;
+                        return false;
+                    }
+                case FixedFieldRegion.Base: {
+                        uncertain = false;
+                        return narrowed.TryGetAnalyticPush(orientation: in orientation, position: position, push: out push, skin: skin, volume: in volume);
+                    }
+                default: {
+                        return FixedFieldColliderContact.TryPush(collider: in this, orientation: in orientation, position: position, push: out push, skin: skin,
+                            uncertain: out uncertain, volume: in volume);
+                    }
+            }
         }
 
         uncertain = false;
         return TryGetAnalyticPush(orientation: in orientation, position: position, push: out push, skin: skin, volume: in volume);
+    }
+    /// <summary>Narrows a field collider for a query confined to a world box grown by a reach: the one exact analytic
+    /// collider its <see cref="FixedColliderField.Partition"/> proves the solid there is, or none of the solid. Every
+    /// query a field collider answers from a bounded region asks here first, so a body its carves cannot reach reads
+    /// the analytic surface the field equals there; each narrowing counts as
+    /// <see cref="FixedStaticContactWork.FieldNarrowed"/>.</summary>
+    /// <param name="center">The region's world centre.</param>
+    /// <param name="extent">The region's world half-extent before the reach.</param>
+    /// <param name="reach">The distance, in metres, the query looks past the region; a negative reach counts as zero.</param>
+    /// <param name="collider">The exact analytic collider when the answer is <see cref="FixedFieldRegion.Base"/>.</param>
+    /// <returns><see cref="FixedFieldRegion.Field"/> for a collider that is not a field, a field without a partition, or a
+    /// region the partition does not narrow.</returns>
+    internal FixedFieldRegion Narrow(FixedVector3 center, FixedVector3 extent, FixedQ4816 reach, out FixedStaticCollider collider) {
+        collider = default;
+
+        if ((Kind != FixedStaticColliderKind.Field) || (Field?.Partition is not { } partition)) {
+            return FixedFieldRegion.Field;
+        }
+
+        var grow = (FixedQ4816.Max(x: reach, y: FixedQ4816.Zero) + BoundsPadding);
+        var region = partition.Narrow(center: in center, collider: out collider, extent: (extent + new FixedVector3(X: grow, Y: grow, Z: grow)));
+
+        if (region != FixedFieldRegion.Field) {
+            FixedStaticContactWork.Process.CountNarrowed();
+        }
+
+        return region;
     }
     private bool TryGetAnalyticPush(
         FixedVector3 position,

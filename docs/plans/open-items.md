@@ -750,6 +750,17 @@ Remaining:
   by its gauge and every blend's growth is charged, but a primitive whose field
   reads under its distance (the cone family) grows only by the reach. Take each
   shape's gain from the evaluator's reach certificates.
+- [medium] A carved creation's contact narrows to its analytic pieces only for
+  hard unions and hard subtractions (`FixedFieldPartition`, built in
+  `WorldColliderSet.PrimitiveColliders`): any other blend (smooth, chamfer,
+  pipe, stairs, an intersection) leaves every query against the creation on the
+  field solve. An operand blended over radius k reaches only where its own field
+  reads under k (plus its blend's rounding), which needs a certified lower bound
+  on that field: the evaluator's reach certificates hold one per shape
+  (v ≥ G·|p − C| − R, `SdfFieldEvaluator.Certificates.cs`), whose ball of radius
+  (k + R)/G bounds the operand's reach. A piece whose analytic collider only
+  bounds it (an ellipsoid stone, a margined superellipsoid) also keeps the field
+  wherever a body meets it.
 - Contact cost at the valley rim: each relief collider's `SdfBoundsCache`
   answers most proofs from an identical earlier box (a body at rest asks the
   same box every tick), and a relief bound walks each octave's cells. Further
@@ -2084,11 +2095,11 @@ boxes left (the item below), then the valley sectors' buried colliders. The rend
 colliders report's only red findings left are the valley's relief
 ([the valley's terrain](#the-valleys-terrain)).
 
-- [low] Carving blends (Subtraction and the rest) now collide as their composed
-  field instead of their whole bounding box (`WorldColliderSet.CollidesAsField`).
-  Check the places that relied on the box: the camera course's comment says it
-  does, and the paintings' walls were tiled from boxes for the same reason
-  (`paintings.puck:249-251`), which can now become one wall with openings.
+- [low] Carving blends (Subtraction and the rest) collide as their composed
+  field (`WorldColliderSet.CollidesAsField`), and a hard subtraction costs a
+  field solve only where it reaches a body (`FixedFieldPartition`). Check the
+  places that relied on the old whole-box contact: the camera course's comment
+  says it does.
 - [low] A headless World grants one peer slot, so contact cost under many
   bodies (the relief lane's 500 standing bodies) cannot be measured through
   `puck_world_start`; give the headless host a way to admit a crowd for

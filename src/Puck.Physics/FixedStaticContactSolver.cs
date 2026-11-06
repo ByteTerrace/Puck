@@ -113,8 +113,9 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     /// volume grown by the margin, or the default value to visit every collider.</param>
     /// <param name="destination">The destination for the surfaces, in collider order, static before attached.</param>
     /// <returns>The number of surfaces written, surfaces past the destination's length unreported; or -1 when a field
-    /// collider lies within the margin, since a field certifies contact only inside its own band and the margin can
-    /// reach past it.</returns>
+    /// collider lies within the margin and its partition does not narrow the region to one exact analytic collider or
+    /// to none of its solid (<see cref="FixedFieldPartition"/>), since a field certifies contact only inside its own
+    /// band and the margin can reach past it.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="colliders"/> or <paramref name="dynamicColliders"/> is
     /// <see langword="null"/>.</exception>
     public int CollectContacts(FixedStaticColliderSet colliders, FixedStaticColliderSet dynamicColliders, FixedVector3 position,
@@ -202,11 +203,24 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             if (frames[index].Separates(bodyExtent: in grown, offset: (center - boxes[index].Center), skin: FixedQ4816.Zero)) {
                 continue;
             }
-            if (colliders[index].Kind == FixedStaticColliderKind.Field) {
-                return -1;
+            var collider = colliders[index];
+
+            if (collider.Kind == FixedStaticColliderKind.Field) {
+                switch (collider.Narrow(center: center, collider: out var narrowed, extent: grown, reach: FixedQ4816.Zero)) {
+                    case FixedFieldRegion.Empty: {
+                            continue;
+                        }
+                    case FixedFieldRegion.Base: {
+                            collider = narrowed;
+                            break;
+                        }
+                    default: {
+                            return -1;
+                        }
+                }
             }
 
-            var pushes = colliders[index].TryGetPush(
+            var pushes = collider.TryGetPush(
                 orientation: in orientation,
                 position: position,
                 push: out var push,

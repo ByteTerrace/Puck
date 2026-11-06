@@ -47,12 +47,35 @@ public static class FixedSupportDistance {
     /// and never past the touching descent for a convex collider.</param>
     /// <returns><see langword="true"/> when the collider is met within the reach.</returns>
     public static bool TryDescend(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation,
-        in FixedBodyColliderVolume volume, FixedQ4816 skin, in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) =>
-        ((collider.Kind == FixedStaticColliderKind.Field)
-            ? TryBracket(collider: in collider, descent: out descent, orientation: in orientation, position: position,
-                reach: reach, skin: skin, up: in up, volume: in volume)
-            : TryAdvance(collider: in collider, descent: out descent, orientation: in orientation, position: position,
-                reach: reach, skin: skin, up: in up, volume: in volume));
+        in FixedBodyColliderVolume volume, FixedQ4816 skin, in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) {
+        if (collider.Kind != FixedStaticColliderKind.Field) {
+            return TryAdvance(collider: in collider, descent: out descent, orientation: in orientation, position: position,
+                reach: reach, skin: skin, up: in up, volume: in volume);
+        }
+
+        // The whole descent's swept box, narrowed once: a descent its field's carves cannot reach is the convex descent
+        // onto the one exact collider the solid there is.
+        var start = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume);
+        var end = FixedColliderBounds.WorldBounds(orientation: in orientation, position: (position - (up * reach)), volume: in volume);
+        var low = -FixedVector3.Max(left: (start.Extent - start.Center), right: (end.Extent - end.Center));
+        var high = FixedVector3.Max(left: (start.Center + start.Extent), right: (end.Center + end.Extent));
+
+        switch (collider.Narrow(center: ((low + high) / Two), collider: out var narrowed, extent: (((high - low) / Two) + new FixedVector3(X: PaddingSlack, Y: PaddingSlack, Z: PaddingSlack)),
+            reach: skin)) {
+            case FixedFieldRegion.Empty: {
+                    descent = FixedQ4816.Zero;
+                    return false;
+                }
+            case FixedFieldRegion.Base: {
+                    return TryAdvance(collider: in narrowed, descent: out descent, orientation: in orientation, position: position,
+                        reach: reach, skin: skin, up: in up, volume: in volume);
+                }
+            default: {
+                    return TryBracket(collider: in collider, descent: out descent, orientation: in orientation, position: position,
+                        reach: reach, skin: skin, up: in up, volume: in volume);
+                }
+        }
+    }
 
     // Newton from below on the convex separation: see the type's remarks.
     private static bool TryAdvance(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation,

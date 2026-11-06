@@ -261,7 +261,9 @@ are the authored ones. Strands closer than twice their radius fuse.
   and otherwise a converged solve measures the Euclidean distance to a
   bracketed surface point, never the field's value. `world.counters
   physics.contact` prices it as `field-queries`, `field-bounds`, `field-reads`,
-  `field-samples` and `field-unproved`. Every boolean inside the creation
+  `field-samples` and `field-unproved`; an unrelieved carved creation's queries
+  that no carve reaches read its exact union pieces instead, counted as
+  `field-narrowed` (`FixedFieldPartition`). Every boolean inside the creation
   still collides as its contact shapes do (detail shapes drop), and a creation
   whose shapes contact drops entirely compiles no collider. An embedded body
   the field measures no way out of (a symmetric point) is stuck, never pushed

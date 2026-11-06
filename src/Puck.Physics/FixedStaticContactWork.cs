@@ -18,7 +18,7 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
     public const string SourceName = "physics.contact";
 
     private readonly WorkCounterSet m_counts = new(
-        kinds: [Resolves, SupportDistances, Queries, ConvexQueries, Supports, Pushes, FieldQueries, FieldBounds, FieldSamples, FieldReads, FieldUnproved],
+        kinds: [Resolves, SupportDistances, Queries, ConvexQueries, Supports, Pushes, FieldQueries, FieldBounds, FieldSamples, FieldReads, FieldUnproved, FieldNarrowed],
         name: SourceName
     );
 
@@ -49,6 +49,10 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
     /// <summary>Gets the kind counting the field queries that ended unproved: neither proved clear nor in contact, nor
     /// projected onto the surface (<see cref="FixedFieldContactOutcome.Unproved"/>).</summary>
     public static WorkKind FieldUnproved { get; } = new(name: "physics.contact.field-unproved", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the queries against a field collider that its partition narrowed to one exact
+    /// analytic collider or to none of its solid (<see cref="FixedFieldPartition"/>), so no field solve ran: a body its
+    /// carves cannot reach.</summary>
+    public static WorkKind FieldNarrowed { get; } = new(name: "physics.contact.field-narrowed", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the ledger every analytic solve counts into. Declared after the kinds, which its counter set reads as
     /// it is created.</summary>
     public static FixedStaticContactWork Process { get; } = new();
@@ -94,6 +98,8 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
             m_counts.Count(kind: FieldUnproved);
         }
     }
+    /// <summary>Counts one field-collider query its partition narrowed (<see cref="FieldNarrowed"/>).</summary>
+    public void CountNarrowed() => m_counts.Count(kind: FieldNarrowed);
     /// <summary>Reads the current total of one of this ledger's kinds.</summary>
     /// <param name="kind">One of this ledger's kinds.</param>
     /// <returns>The total counted so far.</returns>
