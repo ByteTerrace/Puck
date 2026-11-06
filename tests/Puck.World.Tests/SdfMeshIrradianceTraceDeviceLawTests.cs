@@ -54,8 +54,37 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
         Compare(gpu, extension, [], origins.ToArray());
         Assert.ThrowsAny<XunitException>(() => Compare(gpu, extension, draws, origins.ToArray(), skipNode: true));
         output.WriteLine($"{extension}: skipped top-level subtree rejected by the parity law.");
-        Assert.ThrowsAny<XunitException>(() => Run(gpu, extension, OverdeepScene(), [0], [new(0, 0, -2, 10)], extraCapacityWords: 64));
+        Run(gpu, extension, OverdeepScene(), [0], [new(0, 0, -2, 10)], extraCapacityWords: 64, expectFault: true);
         output.WriteLine($"{extension}: malformed overdeep hierarchy counted by the stack assertion.");
+        foreach (var geometry in new[] { false, true }) {
+            Run(gpu, extension, CyclicScene(geometry), [0], [new(0, 0, -2, 10)], expectFault: true);
+            output.WriteLine($"{extension}: single-child {(geometry ? "geometry" : "top")} cycle terminated and counted.");
+        }
+    }
+
+    private static uint[] CyclicScene(bool geometry) {
+        var words = new uint[64];
+        words[0] = 1;
+        Box(1, -1, 1);
+        if (geometry) {
+            words[7] = (8u << SdfMeshProbeTrace.NodeCountBits) | 1u;
+            words[8] = 32; words[9] = 16;
+            words[32 + SdfMeshProbeTrace.IdentityWord] = 1;
+            Box(16, -1, 1);
+            Box(23, 1000, 1001);
+            words[22] = 16u << SdfMeshProbeTrace.NodeCountBits;
+        } else {
+            words[7] = 1u << SdfMeshProbeTrace.NodeCountBits;
+            Box(8, 1000, 1001);
+        }
+        return words;
+
+        void Box(int node, float low, float high) {
+            for (var axis = 0; axis < 3; axis++) {
+                words[node + axis] = BitConverter.SingleToUInt32Bits(low);
+                words[node + 3 + axis] = BitConverter.SingleToUInt32Bits(high);
+            }
+        }
     }
 
     // Bypass the builder only in this negative control. Equal child boxes keep both children pending; near-first
@@ -258,7 +287,7 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
         }
     }
 
-    private static (uint[] Hits, uint[] Identities) Run(GpuDeviceServices gpu, string extension, uint[] scene, uint[] meshes, Vector4[] origins, int extraCapacityWords = 0) {
+    private static (uint[] Hits, uint[] Identities) Run(GpuDeviceServices gpu, string extension, uint[] scene, uint[] meshes, Vector4[] origins, int extraCapacityWords = 0, bool expectFault = false) {
         var layout = SdfWorldInterfaces.ProbeTraceLayout;
         var description = new GpuComputePipelineDescription(Bindings: [], Name: "sdf-probe-trace", PushConstantBinding: null,
             Layout: layout.PipelineLayout(GpuShaderStage.Compute));
@@ -322,7 +351,8 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
             var words = origins.Length * SdfMeshProbeDepth.HitWords;
             var result = new uint[words * 2 + 1];
             readback.Read(MemoryMarshal.AsBytes(result.AsSpan()));
-            Assert.Equal(0u, result[words]);
+            if (expectFault) { Assert.InRange(result[words], 1u, (uint)(origins.Length * SdfMeshProbeDepth.HitCount)); }
+            else { Assert.Equal(0u, result[words]); }
             return (result[..words], result[(words + 1)..]);
 
             void Bind(string name, IGpuBuffer buffer) {

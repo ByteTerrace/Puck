@@ -302,7 +302,16 @@ in the frame.
   lighting's age, never the frame. `world.budget` prints the age's median and
   oldest. The part of each probe's light the point and spot lights and emission
   send is kept while they hold still, so a moving sun relights only the
-  directional light and the bounce. A body's palette coming or going, which no
+  directional light and the bounce. `render.indirect.lightingGrid` optionally
+  snaps indirect captures: `directionDegrees` steps directional azimuth and
+  elevation; `radiance` is a fractional step per colour channel's power-of-two
+  range for directional radiometry and projected sky. Each zero or absent step
+  leaves that component continuous. The standard chooses its precision in
+  `worlds/standard/quality.puck`. Within a grid cell, a moving sun reuses the
+  capture; crossing a boundary relights under the new values. Converged frames
+  still drain from no bounce, and compare sky values exactly, so their light
+  depends on their own frame rather than earlier captures. Direct lights stay
+  continuous. A body's palette coming or going, which no
   probe ray meets, relights nothing (`SdfMeshIrradianceScene.Materials` names
   the ids the key reads). Old probes keep drawing, and remain available to the
   exposure meter and viewers, until their replacement lands. A layout change clears the

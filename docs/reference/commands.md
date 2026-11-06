@@ -852,6 +852,10 @@ creation, node and operation. The report carries tested/eligible counts and
 explicit skipped reasons. `coverage.comparisons` gives red, clean and unknown
 sample counts for each attempted comparison; these count witnesses, while the
 banner counts clustered causes. Missing evaluation is **unknown**, never a zero.
+`coverage.excluded` names, with its count, what the host cannot compare by
+construction and why: a headless host composes no renderer, so its rendered-mesh
+comparisons are excluded rather than unknown, and an excluded comparison leaves
+coverage complete. A windowed or offscreen World makes them.
 
 The colliders report reads each collider's boundary witnesses against the
 authored field. A witness's separation is the field's own reading there, scaled
@@ -934,8 +938,12 @@ a seam or crevice its solids enclose, such as the fillet groove along an edge
 where three boxes meet; the contour closes over it, so it is counted `enclosed`,
 neither red nor clean. The authored-field comparison is independent.
 Opaque solids participate in that contract; transmissive geometry does not
-become a missing opaque surface. Attached poses and providers without a
-retained witness are reported as unknown. Contacts use the actual analytic
+become a missing opaque surface. An attached solid is audited at the carrier
+pose the solver last sampled: its colliders against the authored field with the
+row placed at that same pose. Its draws are dynamic, outside the static trace
+scene, so its mesh comparison is unknown in a rendered host. Providers without a
+retained witness are reported as unknown. A body without a collider runs no
+contact solve and is not a contacts subject. Contacts use the actual analytic
 support push and loaded rigid-manifold anchor. A hover requires settled normal
 velocity and a gap beyond contact skin and precision; ground-snap reach is
 reported separately. A drawn contact check requires an exact presented solver

@@ -12,9 +12,7 @@ public delegate Task<string?> LeaseSettle(TimeSpan settle, TimeSpan timeout, Tex
 
 /// <summary>Runs one command while holding a shared machine-work lease.</summary>
 public static class LeaseCommand {
-    /// <summary>The leases <c>puck lease quiet</c> holds, in the one order it takes them. A run that holds one lease and then takes
-    /// another (a heavy suite that builds the World, a build that boots it) already goes heavy, then build, then gpu, so the quiet
-    /// order is the same and the verb cannot deadlock against them; it releases in the reverse order.</summary>
+    /// <summary>The resources a priority quiet reservation drains and holds, releasing in reverse order.</summary>
     public static readonly IReadOnlyList<string> QuietOrder = ["heavy", "build", "gpu"];
 
     private static async Task<int> RunAsync(ParseResult parse, string verb, IReadOnlyList<string> names, Option<string> holder, Option<string?> lane, Option<int> wait, Option<HostStartKind?>? kind, Argument<string[]> arguments, TimeProvider clock, string? leaseRoot, Option<int>? settle, LeaseSettle? settleWait, HostAdmit? admit, CancellationToken cancellationToken) {
@@ -44,8 +42,11 @@ public static class LeaseCommand {
         var held = new List<CliLease>();
 
         try {
+            if (settleWait is not null) {
+                held.Add(await CliLease.AcquireQuietAsync(root: directory, holder: parse.GetValue(holder)!, wait: bound, clock: clock, cancellationToken: cancellationToken, ancestor: ProcessInspection.IsAncestor, lane: named).ConfigureAwait(false));
+            }
             // One wait bounds the whole acquisition: each lease gets what the earlier ones left.
-            foreach (var name in names) {
+            foreach (var name in (settleWait is null ? names : [])) {
                 var remaining = (bound - clock.GetElapsedTime(startingTimestamp: started));
 
                 held.Add(item: await CliLease.AcquireAsync(ancestor: ProcessInspection.IsAncestor, lane: named, root: directory, name: name, holder: parse.GetValue(option: holder)!, wait: ((remaining > TimeSpan.Zero) ? remaining : TimeSpan.Zero), clock: clock, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false));
@@ -87,7 +88,7 @@ public static class LeaseCommand {
         var now = clock.GetUtcNow();
         var text = new System.Text.StringBuilder();
 
-        foreach (var name in new[] { "build", "gpu", "heavy" }) {
+        foreach (var name in new[] { "quiet", "build", "gpu", "heavy" }) {
             var state = CliLease.Inspect(name: name, now: now, root: root);
 
             if (state.Holder is null) {
@@ -125,7 +126,7 @@ public static class LeaseCommand {
             var holder = new Option<string>(name: "--holder") { Description = "Holder name recorded with the holder process and acquisition time; its first word is the lane unless --lane names one.", Required = true };
             var lane = new Option<string?>(name: "--lane") { Description = "The lane admission rotates between; defaults to the first word of --holder." };
             var wait = new Option<int>(name: "--wait") { Description = "Seconds to wait for the lease; zero refuses immediately (default)." };
-            var kind = ((name == "gpu") ? new Option<HostStartKind?>(name: "--kind") { Description = "Expected peak class of the child command (default WindowedWorld); Step for a bounded small device check that boots no World. Changes the memory estimate, not lease ownership or admission thresholds." } : null);
+            var kind = ((name is "gpu" or "heavy") ? new Option<HostStartKind?>(name: "--kind") { Description = "Expected peak class of the child command (default WindowedWorld for gpu, HeavySuite for heavy); Step for a bounded focused check. Changes the memory estimate, not lease ownership or admission thresholds." } : null);
             var arguments = CliOptions.Forwarded(description: "Executable and arguments after --; no shell expansion is performed.", name: "command");
 
             arguments.Arity = ArgumentArity.OneOrMore;
@@ -159,7 +160,7 @@ public static class LeaseCommand {
             var command = new Command(description: "Hold the heavy, build and gpu leases together, wait for an idle machine, then run the command: a settle window for timing measurements.", name: "quiet") { holder, lane, wait, settle, arguments };
 
             command.SetAction(action: (parse, cancellationToken) => RunAsync(arguments: arguments, cancellationToken: cancellationToken, clock: clock, holder: holder, kind: null, lane: lane, leaseRoot: leaseRoot, names: QuietOrder, parse: parse, settle: settle, settleWait: settleWait, admit: null, verb: "lease quiet", wait: wait));
-            command.Detail(detail: "Use: puck lease quiet --holder <lane> [--lane <lane>] [--wait <seconds>] [--settle <seconds>] -- <executable> <arguments...>\nTakes the heavy, build and gpu leases in that one order (the order a heavy suite, a World build and a World boot already nest in, so it cannot deadlock against them), then samples the machine with the `puck host load` sampler until it has been idle for --settle seconds: no GPU work, no heavy test run, and CAPACITY by the host-load thresholds (CPU mean and free memory). What the wait is on is printed to standard error whenever it changes. Then it runs the command and releases all three leases in reverse on every exit path. A run under the command that takes any of the three leases nests (the quiet holder is its ancestor) instead of waiting on it, so `puck sweep`, a World start and a World build run inside. --wait bounds the lease acquisition in total and, added to --settle, the wait for idle; a machine that never settles in time is refused (exit 2) and the leases are released. Child failure preserves its exit code; cancellation kills the child tree and releases the leases.");
+            command.Detail(detail: "Use: puck lease quiet --holder <lane> [--lane <lane>] [--wait <seconds>] [--settle <seconds>] -- <executable> <arguments...>\nQueues a priority measurement reservation before draining heavy, build and gpu. Once queued, no new grant is issued except to the quiet owner or a validated descendant: current holders finish without being stopped, and other waiters say they are waiting for the measurement window. CliLease.TryAcquire enforces this under admission.guard, the same lock used to register tickets; ordinary work retains lane rotation. --wait bounds acquisition in total, including current holders that do not finish; a timeout releases the reservation and every partial hold. Once all three are held, the `puck host load` sampler waits for --settle idle seconds (no GPU work, no heavy test run and host capacity), bounded by --wait plus --settle. Then the command runs. Nested sweep, World and build grants run inside the window. Every exit releases resources in reverse before the reservation; failure preserves the child's exit code and cancellation kills its tree.");
             root.Subcommands.Add(item: command);
         }
 

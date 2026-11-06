@@ -44,7 +44,7 @@ public sealed partial class ShaderCompiler {
         );
     }
 
-    // Holds the cache within Retention after a publication, at most once a minute per directory in a process, keeping the
+    // Holds the cache within Retention after a publication, listing the directory only once this process's writes may pass it (or a minute on), keeping the
     // entry just published. Only published outputs count; a staged publication of another compile is never touched.
     private void Retain(string published) => _ = CacheRetention.EnforceOnWrite(
         bound: Retention,
