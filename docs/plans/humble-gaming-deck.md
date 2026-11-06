@@ -385,6 +385,16 @@ machine are in.
   cartridges built on demand are in; ordered operations while recording and the
   replay receipt (the cabinet module's) remain.
 - The Famicom Disk System; peripherals.
+- Emulation rate. A Deck takes several times longer per world tick than the
+  World's own tick CPU (`puck bench world` prints each machine's tick alone), and
+  a headless unpaced run (`puck test`, replay catch-up, `--unpaced`) waits on the
+  slowest machine's pending window, which is a Deck in the debug world. With
+  quiet master ticks skipped, the per-dot PPU (`HgdPpu.StepDot`: the range tests
+  in `StepRenderingDot` and `StepSprites`, `EmitPixel`) and the CPU's per-cycle
+  `Transfer` are most of what is left. Cutting them, for example by deciding
+  each dot's work from a per-dot table rather than a cascade of range tests,
+  must leave every state `QuietTickEquivalenceLawTests` and the battery compare
+  unchanged.
 
 ---
 
