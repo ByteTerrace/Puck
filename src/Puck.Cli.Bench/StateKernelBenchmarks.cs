@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Diagnosers;
 
 using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
 using RuleExpressions = Puck.State.Rules.RuleExpressions;
@@ -47,7 +46,6 @@ public enum KernelShape {
 // carries the entry point's own dispatch, stack traffic, checks and refusal path and nothing else. Operand arrays
 // are filled from a seeded generator so no operand folds at compile time.
 [MemoryDiagnoser]
-[DisassemblyDiagnoser(maxDepth: 4)]
 public class StateArithmeticKernels {
     private const int Count = 1024;
 
@@ -220,7 +218,6 @@ public class StateArithmeticKernels {
 // below the declared maximum with its neighbours, and the maximum itself. Data preparation stays outside the timed
 // body; only the evaluation is measured.
 [MemoryDiagnoser]
-[DisassemblyDiagnoser(maxDepth: 3)]
 public class StateExpressionKernels {
     private CompiledExpressionToken[] m_program = [];
     private StateKernelReader? m_reader;

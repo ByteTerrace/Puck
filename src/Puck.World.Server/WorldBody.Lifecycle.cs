@@ -325,19 +325,14 @@ public sealed partial class WorldBody {
         m_upNeedsReseat = true;
 
         if (m_rigid is not null) {
-            // A rigid kit's own contact state is the resting latch, not m_grounded above (AdvanceRigid never reads
-            // it): a body a moment ago resting on the floor it just left is not resting on wherever it landed,
-            // whatever this tick's stale hold-tick count and latched contacts still say — carrying them forward
-            // would leave AdvanceRigid's own rest-latch fast path (see WorldBody.Rigid.cs) skipping this body
-            // forever, never re-deriving a genuine grounded transition at the new pose.
+            // A rigid kit's contact state is its rest latch and its contact manifolds: a body a moment ago resting on
+            // the floor it just left is not resting on wherever it landed, and its warm-start impulses describe
+            // contacts it no longer has.
             m_rigidVelocity = FixedVector3.Zero;
             m_angularVelocity = FixedVector3.Zero;
             m_resting = false;
             m_restingHoldTicks = 0UL;
-            m_rigidGroundContacting = false;
-            m_rigidObstructionContacting = false;
-            m_rigidGroundMissStreak = 0;
-            m_rigidObstructionMissStreak = 0;
+            ClearRigidContactSlots();
         }
 
         CommitTeleport();
@@ -518,7 +513,10 @@ public sealed partial class WorldBody {
 
         var hadRigidFacet = (m_rigid is not null);
 
-        if (colliderChanged || (m_rigid != rigid)) { InvalidateRigidRest(); }
+        if (colliderChanged || (m_rigid != rigid)) {
+            InvalidateRigidRest();
+            ClearRigidContactSlots();
+        }
 
         m_rigid = rigid;
 
@@ -537,10 +535,6 @@ public sealed partial class WorldBody {
             m_angularVelocity = FixedVector3.Zero;
             m_resting = false;
             m_restingHoldTicks = 0UL;
-            m_rigidGroundContacting = false;
-            m_rigidObstructionContacting = false;
-            m_rigidGroundMissStreak = 0;
-            m_rigidObstructionMissStreak = 0;
         }
 
         // A facet loss (rigid above, carry here) leaves both carry relationship indices in place: only
@@ -711,8 +705,8 @@ public sealed partial class WorldBody {
     }
     /// <summary>Sets (or clears) the world contact field this body's grounded integrator solves its swept position
     /// against — the population hands it the live field on activation and every rebuild. A rigid kit whose field
-    /// REFERENCE changes is woken: its rest latch was derived against the old static world (see
-    /// <see cref="AdvanceRigid"/>'s rest-latch fast path), and a live solid edit that moved or removed the floor
+    /// REFERENCE changes is woken: its rest latch was derived against the old static world,
+    /// and a live solid edit that moved or removed the floor
     /// beneath it must let it fall rather than leave it frozen in the air — a checkpoint restore hands the field to a
     /// fresh body BEFORE <see cref="ApplyIntegrationResidue"/> re-applies the captured latch, so a restore is never
     /// perturbed by this wake.</summary>

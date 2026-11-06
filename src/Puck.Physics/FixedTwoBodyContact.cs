@@ -27,8 +27,7 @@ public readonly record struct FixedTwoBodyContact(
 ) : IManifoldCandidate {
     /// <summary>Sorts a candidate list into canonical order in place.</summary>
     /// <param name="candidates">The candidates to order.</param>
-    /// <remarks>An explicit insertion sort rather than a library sort, matching <see cref="FixedContactCandidate.Canonicalize"/>:
-    /// the ordering is part of the contract a permutation law proves, so it is written where it can be read, and its
+    /// <remarks>An explicit insertion sort rather than a library sort: the ordering is part of the contract a permutation law proves, so it is written where it can be read, and its
     /// cost is irrelevant at manifold sizes.</remarks>
     public static void Canonicalize(List<FixedTwoBodyContact> candidates) =>
         FixedContactCanonicalization.InsertionSort(

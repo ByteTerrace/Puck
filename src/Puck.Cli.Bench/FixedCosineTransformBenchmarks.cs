@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Diagnosers;
 using Puck.Maths;
 
 namespace Puck.Cli.Bench;
@@ -9,7 +8,6 @@ namespace Puck.Cli.Bench;
 // reference), at a length small enough for the direct sum to finish in reasonable time. A fixed-point kernel, so the
 // disassembler rides along.
 [MemoryDiagnoser]
-[DisassemblyDiagnoser(maxDepth: 3)]
 public class DctForwardVsDirectSum {
     private const int Length = 128;
 
@@ -63,7 +61,6 @@ public class DctForwardVsDirectSum {
 // Forward and Inverse latency alone, at a length representative of a small audio block and one representative of a
 // large one.
 [MemoryDiagnoser]
-[DisassemblyDiagnoser(maxDepth: 3)]
 public class DctForwardInverse {
     private FixedQ4816[] m_smallForwardInput = [];
     private FixedQ4816[] m_largeForwardInput = [];

@@ -141,7 +141,7 @@ public static partial class SweepCommand {
 
         // The baseline's answers and stills are read while this run writes its own beside them: one folder for both
         // would replace the baseline before it is compared.
-        if ((baseline is not null) && SamePath(left: Path.GetDirectoryName(path: baseline.Path)!, right: directory)) {
+        if ((baseline is not null) && CliPaths.Same(left: Path.GetDirectoryName(path: baseline.Path)!, right: directory)) {
             return CliExit.Refuse(verb: Verb, what: "--output", why: $"{CliPaths.ToDisplay(fullPath: directory)} holds the --baseline report, and this run would overwrite its answers and stills before comparing them; name another directory");
         }
 
@@ -224,6 +224,7 @@ public static partial class SweepCommand {
                         using (budget.Pause()) {
                             gpu = CliLease.AcquireAsync(
                                 ancestor: ProcessInspection.IsAncestor,
+                                checkout: repositoryRoot,
                                 cancellationToken: cancellation,
                                 clock: TimeProvider.System,
                                 holder: Verb,
@@ -317,7 +318,6 @@ public static partial class SweepCommand {
         return (report.Failed ? CliExit.Failed : CliExit.Success);
     }
     private static SweepSignalResult WindowedNotRun(string reason) => new(Changes: [], File: string.Empty, Leg: SweepLegs.Windowed, Line: string.Empty, Metrics: new Dictionary<string, string>(), Name: "windowed-leg", Reasons: [$"not run: {reason}"], Status: SweepStatus.Unknown);
-    private static bool SamePath(string left, string right) => string.Equals(a: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: left)), b: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: right)), comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
     private static List<string> Arguments(string world, string state, string? cacheDirectory, TimeSpan deadline, IReadOnlyList<string> extra) => [
         "--world", world,
         .. WorldDevices.NoneArguments,

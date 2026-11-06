@@ -270,10 +270,11 @@ ms of it; at the forest pose the sum was 1.4 to 5 ms with a 0.6 to 4 ms critical
 path. One node's recording dominates, with periodic produce spikes of 300 to 450
 ms inside it. So the next lever is that node's own host work, moved into the
 coordinator's preparation and measured, not workers. Which node it is has not
-been read: `render.record` is process-wide, and each node's
-`ShaderPipelineRenderNode.LastRecordTicks` is not yet reported per instance. The
-candidate is a world node's SDF pass, whose first recording runs the residency's
-frame staging, upload and background pump.
+been read from `render.record`, which is process-wide; each instance's prepare,
+record and commit time is on its `world.budget` live-frame row and in
+`pipeline.inspect` (`ShaderPipelineRenderNode.AppendRecordTimes`). The candidate
+is a world node's SDF pass, whose first recording runs the residency's frame
+staging, upload and background pump.
 Concurrency also needs, before it is safe: package recorders that keep no host
 state shared across nodes (the residency's once-a-frame `Submit`), a
 thread-safe pipeline cache lookup and counting recorder, and per-worker command

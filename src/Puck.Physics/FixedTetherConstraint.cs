@@ -42,7 +42,7 @@ namespace Puck.Physics;
 /// <para>
 /// <b>No iteration.</b> This is a single constraint against a single anchor, solved in closed form each call — there
 /// is no manifold to relax and therefore no iteration count to accept as a parameter, unlike
-/// <see cref="FixedRigidSolver"/>'s multi-contact relaxation.
+/// <see cref="FixedRigidWorld"/>'s multi-contact relaxation.
 /// </para>
 /// <para>
 /// <b>Where to call it.</b> Solve a tether as a LATE correction on an already-integrated body — after its ordinary

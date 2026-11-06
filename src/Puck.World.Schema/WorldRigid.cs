@@ -6,7 +6,7 @@ namespace Puck.World;
 /// <summary>A kit's rigid-dynamics facet: authoring a body as a passive rigid entity — a billiard ball, a bowling
 /// pin, a chess piece — rather than a locomotion-driven avatar. Presence is the whole switch: a kit authoring this
 /// hands its body's integration to the rigid solver instead of the grounded/free motion program, so <see cref="Mass"/>,
-/// <see cref="Restitution"/>, <see cref="Friction"/>, <see cref="RollingFriction"/>, <see cref="LinearDamping"/> and
+/// <see cref="Restitution"/>, <see cref="Friction"/>, <see cref="RollingResistance"/>, <see cref="LinearDamping"/> and
 /// <see cref="AngularDamping"/> are the WHOLE authored physics — nothing here is a C# constant. Mass and inertia derive
 /// from <see cref="WorldKit.Collider"/> (one sphere, capsule, box or ellipsoid volume, including a creation's single
 /// primitive) and <see cref="Mass"/> through <see cref="FixedMassProperties"/>, so
@@ -23,15 +23,18 @@ namespace Puck.World;
 /// than decaying linear and angular velocity independently. Applied only while in contact, so it never slows a
 /// free-flying body. Non-negative (a coefficient over 1 is physically ordinary); zero (the default) is
 /// frictionless.</param>
-/// <param name="RollingFriction">The angular-velocity decay rate, per second, applied while a rigid body is in
-/// contact with a surface — the resistance that lets a rolling ball settle instead of spinning forever. Non-negative;
-/// the applied decay is clamped so a wide step never reverses spin.</param>
+/// <param name="RollingResistance">The rolling-resistance lever, in metres at scale one: each contact point resists the
+/// body's rolling (its angular velocity about the axes tangent to the surface, relative to what it touches) with a
+/// torque of at most this lever times the point's normal force, so a rolling ball or a rocking disc settles instead of
+/// rolling forever, and a heavier load resists more. It scales with the body like its collider, against another rigid
+/// body the pair's average applies, and it never resists spin about the contact normal. Non-negative; zero (the default)
+/// applies none.</param>
 /// <param name="LinearDamping">The linear-velocity decay rate, per second — applied as <c>(1 - rate·dt)</c> each
 /// tick, so the same authored value decays velocity the same way whatever the world's simulation rate. Non-negative;
 /// zero (the default) applies none.</param>
 /// <param name="AngularDamping">The angular-velocity decay rate, per second, on the same terms as
 /// <see cref="LinearDamping"/>. Non-negative; zero (the default) applies none.</param>
-public sealed record WorldRigid(float Mass, float Restitution = 0f, float Friction = 0f, float RollingFriction = 0f, float LinearDamping = 0f, float AngularDamping = 0f);
+public sealed record WorldRigid(float Mass, float Restitution = 0f, float Friction = 0f, float RollingResistance = 0f, float LinearDamping = 0f, float AngularDamping = 0f);
 /// <summary>The one-time fixed-point compilation of a kit's <see cref="WorldRigid"/> facet: derived mass/inertia
 /// (via <see cref="FixedMassProperties"/>, from the kit's own compiled collider) already inverted at
 /// <see cref="Scales"/>, the collider's own centre-of-mass offset from the body's root (the same offset every
@@ -45,7 +48,7 @@ public readonly record struct FixedWorldRigid(
     long InverseInertiaZZ,
     FixedQ4816 Restitution,
     FixedQ4816 Friction,
-    FixedQ4816 RollingFriction,
+    FixedQ4816 RollingResistance,
     FixedQ4816 LinearDamping,
     FixedQ4816 AngularDamping,
     FixedVector3 CenterOffset,
@@ -98,13 +101,13 @@ public readonly record struct FixedWorldRigid(
             !float.IsFinite(f: rigid.Mass) ||
             !float.IsFinite(f: rigid.Restitution) ||
             !float.IsFinite(f: rigid.Friction) ||
-            !float.IsFinite(f: rigid.RollingFriction) ||
+            !float.IsFinite(f: rigid.RollingResistance) ||
             !float.IsFinite(f: rigid.LinearDamping) ||
             !float.IsFinite(f: rigid.AngularDamping) ||
             (Math.Abs(value: rigid.Mass) > fixedMaximum) ||
             (Math.Abs(value: rigid.Restitution) > fixedMaximum) ||
             (Math.Abs(value: rigid.Friction) > fixedMaximum) ||
-            (Math.Abs(value: rigid.RollingFriction) > fixedMaximum) ||
+            (Math.Abs(value: rigid.RollingResistance) > fixedMaximum) ||
             (Math.Abs(value: rigid.LinearDamping) > fixedMaximum) ||
             (Math.Abs(value: rigid.AngularDamping) > fixedMaximum)
         ) {
@@ -322,7 +325,7 @@ public readonly record struct FixedWorldRigid(
             InverseInertiaZZ: invZZ,
             Restitution: FixedQ4816.FromDouble(value: rigid.Restitution),
             Friction: FixedQ4816.FromDouble(value: rigid.Friction),
-            RollingFriction: FixedQ4816.FromDouble(value: rigid.RollingFriction),
+            RollingResistance: FixedQ4816.FromDouble(value: rigid.RollingResistance),
             LinearDamping: FixedQ4816.FromDouble(value: rigid.LinearDamping),
             AngularDamping: FixedQ4816.FromDouble(value: rigid.AngularDamping),
             CenterOffset: centerOffset,

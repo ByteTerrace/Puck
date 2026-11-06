@@ -34,12 +34,12 @@ public sealed class WorldRigidSleepContinuationLawTests {
             var target = population.EntryBody(index: 0)!;
 
             Assert.True(condition: target.Grounded);
-            Assert.False(condition: target.IsPenetratingStaticGeometry());
+            Assert.False(condition: target.IsPenetratingStaticGeometry(), userMessage: $"the settled sleeper reads as penetrating its floor at y={((double)target.FixedPosition.Y):0.######}");
             Pose(index: 1, population: population, x: 0, y: (target.Position.Y + .7f), z: 0);
             Step(population: population, tick: 1200);
             Assert.True(condition: (population.DynamicContactResolvedPairs > 0));
             Assert.Equal(1, population.SimulatedBodyVisits);
-            Assert.False(condition: target.IsPenetratingStaticGeometry());
+            Assert.False(condition: target.IsPenetratingStaticGeometry(), userMessage: $"the arrival left the sleeper penetrating its floor at y={((double)target.FixedPosition.Y):0.######}");
             Assert.Equal(floorPosition, target.FixedPosition);
             Assert.True(condition: target.Grounded);
             return WorldAuthorityCheckpointCodec.Encode(checkpoint: captured with { Population = population.Capture() });
@@ -110,13 +110,13 @@ public sealed class WorldRigidSleepContinuationLawTests {
         var captured = RoundTrip(definition, population).Population;
 
         Assert.Equal(expected: (rigidSupport ? 2 : 1), actual: captured.SleepingGravity.Count);
-        if (remoteSupport && !rigidSupport) { Assert.Equal(expected: (0, 1), actual: Assert.Single(collection: captured.SleepingSupports)); }
+        // A sleeping load carries its support as its own contact with the remote body.
+        if (remoteSupport && !rigidSupport) { Assert.Contains(collection: captured.Entries.Single(predicate: static entry => (entry.Index == 1)).RigidContacts, filter: static slot => (slot.Partner == 0)); }
         population.Restore(checkpoint: captured, defaults: definition.PlayerDefaults, tick: 1200);
         Assert.Null(@object: population.EntryBody(index: 0));
         Assert.Equal(0, population.SleepingRigidBodies);
         var restored = RoundTrip(definition, population).Population;
 
-        Assert.Empty(collection: restored.SleepingSupports);
         Assert.Empty(collection: restored.SleepingGravity);
         population.Restore(checkpoint: restored, defaults: definition.PlayerDefaults, tick: 1200);
         if (remoteSupport) {
@@ -337,7 +337,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
             BodyMotionProgram = "idle",
             Collider = new WorldCollider.Sphere(Radius: .4f),
             BodyContact = WorldBodyContactMode.Solid,
-            Rigid = new WorldRigid(AngularDamping: .02f, Friction: .3f, LinearDamping: .01f, Mass: 1, Restitution: .4f, RollingFriction: .05f),
+            Rigid = new WorldRigid(AngularDamping: .02f, Friction: .3f, LinearDamping: .01f, Mass: 1, Restitution: .4f, RollingResistance: 0.0005f),
         };
 
         return source with {

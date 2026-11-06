@@ -38,7 +38,7 @@ public sealed class CueLawTests {
             LinearDamping: 0f,
             Mass: 1f,
             Restitution: 0f,
-            RollingFriction: 0f
+            RollingResistance: 0f
         ),
         };
         var placement = new WorldPlacement(

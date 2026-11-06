@@ -280,7 +280,9 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                     continue;
                 }
                 tested++;
-                var budget = new WorldDiagnosticBudget(0, server.Definition.Collision.ContactSkin, WorldDiagnosticGeometry.Numerical(collider: support.Collider));
+                var budget = new WorldDiagnosticBudget(0, server.Definition.Collision.ContactSkin, WorldDiagnosticGeometry.Numerical(collider: support.Collider)) {
+                    RestBand = (body.IsRigid ? ((double)WorldPopulation.RigidRestBand) : 0),
+                };
                 var gap = ((double)FixedVector3.Dot(left: (foot - surface.Point), right: support.Push.Normal));
                 var row = (((support.Source == FixedSurfaceColliderSource.Static) && (support.ColliderIndex < server.Population.DiagnosticColliders.Count))
                     ? server.Population.DiagnosticColliders[support.ColliderIndex] : null);

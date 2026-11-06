@@ -68,16 +68,6 @@ namespace Puck.World.Server;
 /// carried across a checkpoint so a restore does not re-arm the hold window from zero mid-settle.</param>
 /// <param name="RigidSleepRootPlusOne">Zero while awake; otherwise one plus the smallest slot in the frozen
 /// contact island. The wake relationship survives a checkpoint even when depenetration left a tiny contact gap.</param>
-/// <param name="RigidGroundContacting">A rigid kit's ground-channel restitution edge latch — whether the
-/// previous substep already had a walkable contact, so a restore does not read a genuine mid-rest tick as a
-/// fresh impact.</param>
-/// <param name="RigidObstructionContacting">A rigid kit's obstruction-channel restitution edge latch, on the
-/// same terms as <paramref name="RigidGroundContacting"/> but for the last non-walkable (wall) contact.</param>
-/// <param name="RigidGroundMissStreak">The ground-channel contact's consecutive-miss run —
-/// <see cref="WorldBody.RigidGroundMissStreak"/> — carried so a restore does not grant a fresh grace window a
-/// checkpoint interrupted mid-run.</param>
-/// <param name="RigidObstructionMissStreak">The obstruction-channel contact's consecutive-miss run, on the same
-/// terms as <paramref name="RigidGroundMissStreak"/>.</param>
 /// <param name="Input">Exact pending publications, applied read-back and input-bank identity.</param>
 /// <param name="Carrying">The population index of the body this one is carrying, or <c>-1</c>.</param>
 /// <param name="CarriedBy">The population index of the body carrying this one, or <c>-1</c>.</param>
@@ -122,10 +112,6 @@ public readonly record struct WorldBodyIntegrationResidue(
     bool RigidResting,
     ulong RigidRestingHoldTicks,
     int RigidSleepRootPlusOne,
-    bool RigidGroundContacting,
-    bool RigidObstructionContacting,
-    int RigidGroundMissStreak,
-    int RigidObstructionMissStreak,
     int Carrying,
     int CarriedBy
 );

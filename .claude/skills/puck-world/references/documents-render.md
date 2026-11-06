@@ -418,27 +418,16 @@ cadence phase, cached steering, and overlap latches through checkpoint/hash.
 (defaults 32/8). Dense saturation omits later stable-index pairs. Do not couple
 these budgets to `collision.events`; sensing and physical correction are
 independent authored costs. `rigidSubstepCeiling` (default 8, maximum 32)
-bounds a rigid body's own per-tick continuous-collision substep count against
-an authored `rigidSubstepTravelFraction` (default 0.5) — the count itself is
-derived per body per tick from speed and collider size, never authored
-directly. `rigidRestSpeed`/`rigidRestHoldSeconds` (defaults 0.05/0.25) are the
-threshold on the fastest point's speed (linear plus angular times bounding
-radius) and the hold window a grounded rigid body's `Resting` fact latches
-against. `rigidManifoldIterations` (default 4,
-maximum 16) bounds the sequential-impulse passes a box or capsule's own ground
-support manifold (up to four box corners, or two capsule cap points, fewer
-once tilted enough — `FixedRigidWitness.SupportManifold`) resolves over each
-substep, so a normal impulse off-centre carries torque instead of only
-friction. `rigidPairRestitutionSpeed` (default 0.05) floors a rigid-vs-rigid
-pair's restitution at zero below that closing speed, so two resting bodies do
-not micro-bounce apart every tick they are found touching.
-`rigidPairIterationCeiling`/`rigidPairIterationBudget` (defaults 4/64) bound
-how many EXTRA full broadphase-plus-narrowphase sweeps `ResolveDynamicContacts`
-runs after its first pass in one tick — the count actually run is derived DOWN
-from the ceiling by the budget divided by how many pairs the first pass routed
-through the rigid impulse path, so an impulse chain (a rack break, a falling
-domino line) can cross more than one pair-hop within the same tick instead of
-propagating one body-hop per tick.
+is the rigid solver's substeps a tick. `rigidSubstepTravelFraction`/`rigidSubstepMinimumTravel`
+(defaults 0.5/0.001) bound how far a body's solved motion may depart from its
+predicted motion before a guard sweep re-certifies it. `rigidRestSpeed`/`rigidRestHoldSeconds`
+(defaults 0.05/0.25) are the threshold on the fastest point's speed (linear plus
+angular times bounding radius) and the hold window a supported rigid body's
+`Resting` fact latches against. `rigidPairRestitutionSpeed` (default 0.05) floors
+a rigid contact's restitution at zero below that closing speed, so two resting
+bodies do not micro-bounce. `maxPairsPerBody` also sizes the rigid contact
+registry: a rigid body owns at most that many body contacts plus its surface
+contact.
 
 ### Text-screen bindings
 
@@ -489,12 +478,14 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
 
 ### A kit's `rigid` facet
 
-`mass`, `restitution`, `friction`, `rollingFriction`,
+`mass`, `restitution`, `friction`, `rollingResistance`,
 `linearDamping`, `angularDamping` hand its bodies to the rigid solver
 instead of a locomotion program — see
 [the server reference](../../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
-`mass` is required and positive; the other four are non-negative per-second
-decay rates, never per-tick fractions. Requires `collider` with exactly one
+`mass` is required and positive; `restitution` is in `[0, 1]`, `friction` a
+non-negative coefficient, `rollingResistance` a non-negative lever in metres,
+and the two dampings non-negative per-second decay rates, never per-tick
+fractions. Requires `collider` with exactly one
 sphere, capsule, box or ellipsoid volume and `bodyContact: solid`. A
 `fromCreation` collider admits a creation's single primitive too; a nonuniform
 Sphere or Ellipsoid retains its actual radii and curved support, rather than
@@ -509,29 +500,23 @@ unrotated until that path has the same principal-axis admission check.
 A kit's `rigid` facet (`Puck.World.Schema.WorldRigid`) is a passive
 physical entity — mass/restitution/friction/damping derived to
 mass/inertia from the kit's own primitive collider, never a free
-density or tensor. `WorldBody.AdvanceRigid` (`WorldBody.Rigid.cs`) hands the
-whole step to the rigid solver instead of the grounded/free motion
-program. Every contact anchor — static (ground/obstruction) and pair alike —
-is the shape's own true witness point (`Puck.Physics.FixedRigidWitness.Anchor`),
-never a point on the conservative bounding sphere, so an off-centre strike
-carries a real lever arm into `Puck.Physics.FixedTwoBodyKernel`. A box or
-capsule resting on a near-horizontal surface additionally resolves over its
-own support MANIFOLD (`FixedRigidWitness.SupportManifold` — up to four box
-corners, or two capsule cap points lying on a side) with a few sequential-
-impulse passes (`collision.bodyContacts.rigidManifoldIterations`), which is
-what keeps an upright body's centre of mass over its support polygon without
-artificial damping. Dynamic-vs-dynamic contact rides the existing
-`ResolveDynamicContacts` broadphase (`WorldPopulation.Rigid.cs`); the first
-pass's own resolved rigid-pair count derives a count of extra FULL sweeps —
-fresh broadphase and narrowphase, over the same bodies' now-current
-positions — over the SAME tick (`collision.bodyContacts.rigidPairIterationCeiling`/
-`rigidPairIterationBudget`), so an impulse chain (a rack break, a falling
-domino line) crosses more than one pair-hop within one tick instead of one
-body per tick; a box-vs-box pair depenetrates by the complete fifteen-axis
-separating-axis test (`Puck.Physics.FixedOrientedBox.TrySeparation`), not the
+density or tensor. Every rigid contact, against the static field or another
+body, is solved by one `Puck.Physics.FixedRigidWorld` step over every awake rigid
+body (`WorldPopulation.SolveRigidContacts`, `WorldPopulation.Rigid.cs`), from
+manifolds each body owns and carries in its continuation. The geometry runs once
+a step: each body's contact generation asks the contact field for every static
+surface within its reach (one exact query per collider, or one certified sweep
+where the field cannot answer per surface), and `ResolveDynamicContacts` runs one
+overlap query per broadphase pair; `Puck.Physics.FixedRigidContacts` spreads each
+contact over the shapes' support features (`FixedRigidWitness.SupportManifold`:
+four box corners, two capsule caps, an ellipsoid's support point and a tilted
+ring), each with its own separation, which is what keeps an upright body's centre
+of mass over its support polygon and lets a tilted one tip. A box-vs-box pair's
+overlap is the complete fifteen-axis separating-axis test
+(`Puck.Physics.FixedOrientedBox.TrySeparation`), not the
 coarser world-bounds approximation a capsule-vs-box pair still uses. Once the resting latch
 closes over a complete rigid contact island, the population parks every member until something
-wakes it (an impulse, a dynamic-pair impulse or depenetration, a hard
+wakes it (an impulse, a broadphase overlap with an awake body, a hard
 teleport, glide, reconciliation, changed scale/collider/rigid facet, or a live solid edit replacing the contact field it rested
 against) — this is what makes `Resting`/`$physics:quiescent` mean the body
 is not moving. `body.impulse`, `world.rigid`, `world.budget`, and the
@@ -544,9 +529,9 @@ values do not filter membership, and uninhabited or inactive bodies contribute
 no motion. Dynamic-pair support counts toward the hold after the pair solve. A stack sleeps as one island;
 touching or changing any member wakes the component, so moving a lower body releases the stack.
 Sleeping bodies retain a spatial index and leave the integration, broadphase construction and event work sets.
-An awake neighbour queries that index before its sweep. Canonical island roots are checkpointed; the spatial
-index and rigid wake adjacency are rebuilt from those roots. Non-rigid supports keep explicit wake dependencies
-on sleeping loads. Solved gravity changes wake affected components before integration, even without a contact-field
+An awake neighbour queries that index before its sweep, and a bounded contact-field change takes its candidates from
+the same index over the change box. The island graph is the bodies' own persistent contacts, carried in each body's
+checkpoint entry; a contact with a non-rigid support is a wake dependency of the sleeping load. Solved gravity changes wake affected components before integration, even without a contact-field
 revision. Checkpoints also retain pending event discovery and its last policy: clearing that history would change
 which edges consume a bounded candidate budget. Reconstruct captured scale and effective kit before restoring
 rest latches, so register catch-up does not spuriously wake an unchanged body. `puck bench world` reports sleeping bodies and integration,

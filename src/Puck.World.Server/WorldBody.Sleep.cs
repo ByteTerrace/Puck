@@ -23,23 +23,14 @@ public sealed partial class WorldBody {
     internal void ParkRigidIsland(int rootPlusOne, ulong contactFieldVersion) {
         m_rigidSleepRootPlusOne = rootPlusOne;
         m_lastContactFieldVersion = contactFieldVersion;
-        RigidStaticSubstepsThisTick = 0;
         m_previousPosition = m_position;
     }
-    // A parked rigid body that a contact-field change provably cannot reach observes it without waking.
-    internal void ObserveContactField(ulong contactFieldVersion) => m_lastContactFieldVersion = contactFieldVersion;
     internal void WakeRigidIsland() {
         m_rigidSleepRootPlusOne = 0;
         InvalidateRigidRest();
-        // PrepareBodyStep fixes this tick's integration roster. A later wake joins the contact solve immediately,
-        // but integrates only next tick. Start its contact phase empty, exactly as a reconstructed body does;
-        // neither support nor a hold tick may come from the advance that preceded sleep. Zero step ticks also
-        // tell RefreshRigidStaticSupport to query a fresh static witness during this tick's contacts.
-        m_rigidHoldBeforeStep = 0;
-        m_rigidStepTicks = 0;
-        m_rigidPairSupported = false;
-        m_rigidStaticSupported = false;
-        m_rigidSupportNormal = default;
+        // A body woken during this tick's contacts joins the rigid step it was not prepared for: the population
+        // prepares it there (WorldPopulation.SolveRigidContacts). Its contacts keep their warm start.
+        m_rigidStepTicks = 0UL;
     }
 
     private void NotifyPopulationWake() => m_populationWake?.Invoke(obj: m_populationIndex);

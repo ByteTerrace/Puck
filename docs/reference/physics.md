@@ -425,65 +425,43 @@ a caller-supplied max distance and half-angle around an aim direction, then
 ranked by angular deviation before distance. Every reach, max distance, and
 half-angle is caller-supplied; nothing here derives one from a document.
 
-`FixedRigidSolver` owns canonical contact ordering, persistent manifold slots,
-warm starting, speculative activation, bounded deep-overlap recovery, soft
-constraints formed at the substep width, and a fixed iteration budget. Geometry
-stays caller-supplied through `FixedContactCandidate`, so the solver acquires no
-absolute position, world schema, or SDF dependency. It solves exactly ONE body
-against a candidate set every call—it has no member through which a second
-dynamic body could reach it. `FixedRigidSolver` is not wired into
-`Puck.World.Server` anywhere.
+### The rigid solver
 
-### Multi-body coupling
+`FixedRigidWorld` is the one rigid contact solver, for the World and for any
+caller: a soft-step sequential-impulse solve over temporal substeps (integrate
+velocities, warm start, biased solve, integrate positions, unbiased relax; then
+restitution and the friction store), with the softness formed at the substep
+width and a stiffer, less-damped softness for a contact with a static side. It
+owns no body or pair registry. A caller hands each `Step` the bodies to
+integrate (`FixedRigidBody`, whose `Acceleration` is its own gravity) and the
+`FixedRigidManifold`s to solve, both in canonical order; a manifold names its
+two bodies (a static surface is a zero-mass `BodyA` with zero anchors), its
+friction and restitution, and a `FixedPairManifoldSlotTable` whose slots carry
+the warm-start impulses from step to step. The caller owns each manifold for as
+long as its pair touches, so the slots are continuation state it checkpoints.
 
-`FixedTwoBodyKernel` generalizes `FixedRigidSolver`'s single-body effective-mass
-and impulse-application kernels to two named bodies, either of which may be
-static—a static side's zero inverse mass and inverse inertia contribute
-exactly zero to every sum, so a dynamic-vs-static pair degenerates to the
-single-body formula without a special case. `FixedTwoBodyContact` and
-`FixedPairManifoldSlotTable` extend `FixedContactCandidate` and
-`FixedManifoldSlotTable`'s pattern from one body to a body PAIR: one manifold
-slot table per active pair—the existing 16-slot cap read as a per-pair budget,
-never a global one—with the same ordered-array, no-hash-container, total-key
-eviction discipline, and a canonical-order key covering every declared field,
-including the second anchor.
+Contact geometry enters once a step. `FixedRigidContacts` turns one contact a
+geometry query found into manifold candidates (`FixedTwoBodyContact`): a body
+against a surface takes every support point of its face toward the surface
+(`FixedRigidWitness.SupportManifold`: a box's four face corners named by corner,
+a capsule's two caps, an ellipsoid's support point and a ring of four tilted
+points), each with its own separation, so a lifted corner is a speculative
+contact rather than a missing one; two boxes take the B face's corners clamped
+onto the A box; a curved body or a kinematic side takes one witness point. The
+substeps and passes re-derive every separation from the displacement the solve
+accumulated, so no geometry query runs inside the solve. A manifold's points
+are solved together (each takes an equal share of what it asks for from the
+same velocities), and restitution likewise, so a flat impact never spins a body
+on visiting order; friction runs in the relax pass only, along two tangents
+clamped as one vector to the Coulomb cone. Every mixed-scale product goes
+through the refusing face of the fused kernels and is counted
+(`RefusalCount`). The manifold slot table associates by source, feature, normal
+and nearest anchors, ages a missed slot by an idle count rather than an
+absolute step, and evicts by a total key.
 
-`FixedRigidWorld` is a SHAPE-ONLY multi-body orchestrator over any number of
-bodies and the pairs among them: a dense, id-indexed, never-swap-removed body
-store (a body's id IS its storage index, tombstoned on removal, never reused),
-a dense pair registry with a declared `MaxActivePairs` budget, and the same
-integrate/warm-start/biased-solve/integrate-positions/relax substep sequence
-`FixedRigidSolver` already runs for one body, generalized to every live body
-and every active pair in ascending id/index order. It carries a static/dynamic
-softness asymmetry—a stiffer, less-damped constraint for any pair touching a
-non-dynamic body—and exposes `LastStepQuiescentPairCount` as a READING toward
-a future sleeping/islands decision; every pair still runs its full iteration
-budget regardless of that count. **`FixedRigidWorld` is not wired into any
-World tick**—nothing here is verified by running `Puck.World`.
-
-`FixedRigidSolverOptions.Restitution` and `.RestitutionThreshold` drive one
-post-substep restitution pass per `Step`: a slot whose pre-solve closing speed
-clears the threshold is driven toward `-Restitution` times that closing speed,
-clamped so the accumulated normal impulse never goes negative. The default
-coefficient is zero, so a caller that never sets it sees no bounce.
-
-`FixedRigidSolverOptions.Friction` drives a coupled 2×2 tangential solve during
-the unbiased relax pass only—never while a biased position correction is
-applying, so a push-out never reads as a physical force. The two tangent
-directions are built once per slot each `Prepare()` by
-`FixedVector3.OrthonormalBasis`, and the coupled effective-mass tensor between
-them (nonzero whenever the tangents are not aligned with the body's principal
-inertia axes) is inverted once and applied every iteration, mirroring how the
-normal direction's own scalar effective mass is formed. The accumulated
-tangential impulse is clamped to the friction cone `Friction · NormalImpulseRaw`
-—the SAME raw the normal block that iteration just updated, not a step-wide
-total—via an exact squared-magnitude compare, with `FixedQ4816.Sqrt` used
-only on the branch that must rescale. Friction is per **slot**, which today
-means per contact point: `FixedManifoldSlot` carries exactly one anchor, so a
-multi-point manifold (a box lying flat, say) applies one friction cone per
-point rather than one per manifold at a shared centroid. The default
-coefficient is zero, so a caller that never sets it sees no tangential
-resistance.
+`FixedTwoBodyKernel` holds the scalar kernels a contact between two named
+bodies needs: the combined effective mass, the relative normal velocity and
+the impulse application, either body possibly static.
 
 ## The tether constraint
 
@@ -726,7 +704,8 @@ thread-safe**.
   `IFixedContactStep`, `FixedStepUpResult`.
 - **Surface-attach query**—`FixedSurfaceQuery`, `FixedSurfaceAttachCandidate`,
   `FixedSurfaceColliderSource`.
-- **Rigid solver**—`FixedRigidSolver`, `FixedContactCandidate`.
+- **Rigid solver**—`FixedRigidWorld`, `FixedRigidManifold`, `FixedRigidContacts`,
+  `FixedPairManifoldSlotTable`, `FixedTwoBodyKernel`.
 - **Navigation kernel**—`NavigationRuntime`, `NavigationRuntime.Domain`,
   `NavigationDomainInput`, `NavigationCapacity`, `NavigationSharing`,
   `INavigationMediumField`, `NavigationStatus`, `NavigationSharedCheckpoint`,

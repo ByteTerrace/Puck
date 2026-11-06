@@ -43,13 +43,13 @@ public static class LeaseCommand {
 
         try {
             if (settleWait is not null) {
-                held.Add(await CliLease.AcquireQuietAsync(root: directory, holder: parse.GetValue(holder)!, wait: bound, clock: clock, cancellationToken: cancellationToken, ancestor: ProcessInspection.IsAncestor, lane: named).ConfigureAwait(false));
+                held.Add(await CliLease.AcquireQuietAsync(root: directory, holder: parse.GetValue(holder)!, wait: bound, clock: clock, checkout: (RepositoryPaths.FindRoot() ?? Environment.CurrentDirectory), cancellationToken: cancellationToken, ancestor: ProcessInspection.IsAncestor, lane: named).ConfigureAwait(false));
             }
             // One wait bounds the whole acquisition: each lease gets what the earlier ones left.
             foreach (var name in (settleWait is null ? names : [])) {
                 var remaining = (bound - clock.GetElapsedTime(startingTimestamp: started));
 
-                held.Add(item: await CliLease.AcquireAsync(ancestor: ProcessInspection.IsAncestor, lane: named, root: directory, name: name, holder: parse.GetValue(option: holder)!, wait: ((remaining > TimeSpan.Zero) ? remaining : TimeSpan.Zero), clock: clock, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false));
+                held.Add(item: await CliLease.AcquireAsync(ancestor: ProcessInspection.IsAncestor, checkout: (RepositoryPaths.FindRoot() ?? Environment.CurrentDirectory), lane: named, root: directory, name: name, holder: parse.GetValue(option: holder)!, wait: ((remaining > TimeSpan.Zero) ? remaining : TimeSpan.Zero), clock: clock, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false));
 
                 // Admission follows the lease, in the queue's order: the one holder of a heavy or GPU lease is the only run
                 // judging the machine, so two starts never read the same headroom and both take it.
@@ -95,11 +95,12 @@ public static class LeaseCommand {
                 _ = text.Append(value: name).Append(value: ": idle");
             } else {
                 _ = text.Append(value: name).Append(value: ": held by ").Append(value: state.Holder).Append(value: " (lane ").Append(value: state.Lane).Append(value: ") for ").Append(value: Age(since: state.Since, now: now));
-                if (!state.HolderAlive) { _ = text.Append(value: ", stale: its process has exited"); }
+                if (state.Checkout is { } checkout) { _ = text.Append(value: " from ").Append(value: checkout); }
+                if (!state.HolderAlive) { _ = text.Append(value: ", stale: no process holds its lock"); }
             }
             _ = text.Append(value: ((state.Queue.Count == 0) ? "\n" : $"; {state.Queue.Count} queued\n"));
             foreach (var (ticket, index) in state.Queue.OrderBy(keySelector: static ticket => ticket.Ahead).ThenBy(keySelector: static ticket => ticket.Id, comparer: StringComparer.Ordinal).Select(selector: static (ticket, index) => (ticket, index))) {
-                _ = text.Append(value: $"  {(index + 1)}. {ticket.Holder} (lane {ticket.Lane}) waiting {Age(since: ticket.Since, now: now)}; lane {ticket.Position} of {ticket.Lanes} in the round, {ticket.Ahead} ahead\n");
+                _ = text.Append(value: $"  {(index + 1)}. {ticket.Holder} (lane {ticket.Lane}){((ticket.Checkout is null) ? string.Empty : $" from {ticket.Checkout}")} waiting {Age(since: ticket.Since, now: now)}; lane {ticket.Position} of {ticket.Lanes} in the round, {ticket.Ahead} ahead\n");
             }
         }
         return text.ToString();
@@ -146,7 +147,7 @@ public static class LeaseCommand {
             Console.Out.Write(value: Render(clock: clock, root: directory));
             return 0;
         });
-        list.Detail(detail: "Use: puck lease list\nReads .claude/leases/ without taking a ticket, dropping a dead ticket or writing a rotation serial. Each of build, gpu and heavy prints idle, or its holder (lane, how long it has held the lease) and then its live waiters in admission order: the rotation puts the oldest ticket of the lane served least recently first, so the order is the order the lease will be granted in. Each waiter shows its holder, lane, how long it has waited, and its lane's turn among the queued lanes. A holder file whose process has exited prints as stale; the next acquisition replaces it. A lease a holder's descendants hold as a child of it is not shown.");
+        list.Detail(detail: "Use: puck lease list\nReads .claude/leases/ without taking a ticket, dropping a dead ticket or writing a rotation serial. Each of build, gpu and heavy prints idle, or its holder (lane, how long it has held the lease) and then its live waiters in admission order: the rotation puts the oldest ticket of the lane served least recently first, so the order is the order the lease will be granted in. Each holder and waiter shows its holder, lane and the checkout it works in (when its CLI recorded one), and each waiter how long it has waited and its lane's turn among the queued lanes. Whether the holder is alive is read from the lease's guard lock, the lock that decides ownership: a holder file no process holds the lock for prints as stale, and the next acquisition replaces it. A lease a holder's descendants hold as a child of it is not shown.");
         root.Subcommands.Add(item: list);
 
         if (settleWait is not null) {

@@ -12,11 +12,14 @@ public sealed partial class RenderGraphRuntime {
     private string?[] m_stale = [];
     // Whether that reason is a refusal, which only a change to what the instance was built from lifts.
     private bool[] m_staleRefused = [];
-    // The watchdog: how many render attempts in a row each instance has not shown its frame, and the reason it last
-    // narrated. A refusal narrates at once and a wait once it outlasts StallFrames attempts, each reason once, on standard
-    // error, so a host that never renders names why whatever its script waits on.
+    // The watchdog: how many render attempts in a row each instance has not shown its frame. A refusal narrates at once and
+    // a wait once it outlasts StallFrames attempts, on standard error, so a host that never renders names why whatever its
+    // script waits on.
     private int[] m_staleFrames = [];
-    private string?[] m_staleNarrated = [];
+    // The reason each instance's standing was last narrated, by instance name: a narration lasts from its start until the
+    // instance is current again, so a reconfiguration that renumbers the instances or resets their standing neither
+    // repeats a refusal that still holds nor hides its clearing. Reconfiguration forgets the instances it removes.
+    private readonly Dictionary<string, string> m_narrated = new(comparer: StringComparer.Ordinal);
 
     /// <summary>The render attempts in a row an instance may wait without showing its frame before the runtime narrates
     /// why: about thirty seconds at the simulation's default rate, far past a cold boot's pipeline builds.</summary>
@@ -60,7 +63,6 @@ public sealed partial class RenderGraphRuntime {
         m_stale = new string?[count];
         m_staleRefused = new bool[count];
         m_staleFrames = new int[count];
-        m_staleNarrated = new string?[count];
         m_productionReasons = new string?[count];
         m_productionMessages = new string?[count];
         m_historySucceeded = new bool[count];
@@ -99,13 +101,36 @@ public sealed partial class RenderGraphRuntime {
         m_stale[index] = null;
         m_staleRefused[index] = false;
         m_staleFrames[index] = 0;
-        m_staleNarrated[index] = null;
+
+        if (
+            (m_narrated.Count != 0) &&
+            m_narrated.Remove(
+                key: m_set.Instances[index].Name,
+                value: out var cleared
+            )
+        ) {
+            Console.Error.WriteLine(value: $"[render-graph] cleared: {cleared}");
+        }
+    }
+    // Drops the narrations of instances the set no longer holds; nothing renders them, so nothing would clear them.
+    private void ForgetRemovedNarrations() {
+        if (m_narrated.Count == 0) { return; }
+
+        foreach (var name in m_narrated.Keys.ToArray()) {
+            if (m_set.IndexOf(name: name) < 0) { _ = m_narrated.Remove(key: name); }
+        }
     }
     private void MarkStale(int index, string reason, bool refused = false) {
         m_stale[index] = reason;
         m_staleRefused[index] = refused;
-        if ((refused || (++m_staleFrames[index] > StallFrames)) && !string.Equals(a: reason, b: m_staleNarrated[index], comparisonType: StringComparison.Ordinal)) {
-            m_staleNarrated[index] = reason;
+
+        var name = m_set.Instances[index].Name;
+
+        if (
+            (refused || (++m_staleFrames[index] > StallFrames)) &&
+            !(m_narrated.TryGetValue(key: name, value: out var narrated) && string.Equals(a: reason, b: narrated, comparisonType: StringComparison.Ordinal))
+        ) {
+            m_narrated[name] = reason;
             Console.Error.WriteLine(value: $"[render-graph] {(refused ? "refused" : $"not rendered for {m_staleFrames[index]} attempts")}: {reason}");
         }
     }

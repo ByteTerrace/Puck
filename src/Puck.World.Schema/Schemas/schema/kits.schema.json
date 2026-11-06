@@ -864,8 +864,8 @@
                 "type": "number",
                 "default": 0
               },
-              "rollingFriction": {
-                "description": "The angular-velocity decay rate, per second, applied while a rigid body is in contact with a surface \u2014 the resistance that lets a rolling ball settle instead of spinning forever. Non-negative; the applied decay is clamped so a wide step never reverses spin.",
+              "rollingResistance": {
+                "description": "The rolling-resistance lever, in metres at scale one: each contact point resists the body\u0027s rolling (its angular velocity about the axes tangent to the surface, relative to what it touches) with a torque of at most this lever times the point\u0027s normal force, so a rolling ball or a rocking disc settles instead of rolling forever, and a heavier load resists more. It scales with the body like its collider, against another rigid body the pair\u0027s average applies, and it never resists spin about the contact normal. Non-negative; zero (the default) applies none.",
                 "type": "number",
                 "default": 0
               },

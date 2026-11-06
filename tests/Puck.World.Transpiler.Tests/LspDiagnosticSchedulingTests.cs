@@ -307,18 +307,49 @@ public class LspDiagnosticSchedulingTests {
         Assert.InRange(actual: server.SourceDiagnoses, high: 5, low: 1);
     }
     [Fact]
-    public void AMessageThatIsNotJsonIsAnsweredWithALogMessageAndTheSessionStaysOpen() {
+    public void AMessageThatIsNotJsonIsAnsweredWithAParseErrorAndTheSessionStaysOpen() {
         var server = new PuckLanguageServer();
         var written = new List<JsonObject>();
 
         server.Handle(message: "{ not json", send: written.Add);
 
-        var log = Assert.Single(collection: written);
+        var error = Assert.Single(collection: written, predicate: static message => (message["error"] is not null));
 
-        Assert.Equal(actual: log["method"]?.ToString(), expected: "window/logMessage");
+        Assert.Equal(actual: (int?)error["error"]?["code"], expected: -32700);
+        Assert.Null(@object: error["id"]);
+        Assert.Contains(collection: written, filter: static message => (message["method"]?.ToString() == "window/logMessage"));
         Assert.True(condition: server.IsRunning);
 
         Send(message: LanguageServerClient.Request(id: 1, method: "shutdown"), server: server, written: written);
         Assert.False(condition: server.IsRunning);
+    }
+    [Fact]
+    public void AnUnknownRequestIsRefusedByNameAndAnUnknownNotificationIsIgnored() {
+        var server = new PuckLanguageServer();
+        var written = new List<JsonObject>();
+
+        server.Handle(message: """{"jsonrpc":"2.0","id":7,"method":"puck/noSuchMethod"}""", send: written.Add);
+        var refused = Assert.Single(collection: written);
+
+        Assert.Equal(actual: (int?)refused["error"]?["code"], expected: -32601);
+        Assert.Equal(actual: (int?)refused["id"], expected: 7);
+        Assert.Null(@object: refused["result"]);
+        written.Clear();
+        server.Handle(message: """{"jsonrpc":"2.0","method":"puck/noSuchNotification"}""", send: written.Add);
+        Assert.Empty(collection: written);
+    }
+    [Fact]
+    public void ARequestWhoseHandlerFaultsIsAnsweredWithAnInternalError() {
+        var server = new PuckLanguageServer();
+        var written = new List<JsonObject>();
+
+        // A position whose line is not a number makes the hover handler throw while reading it.
+        server.Handle(message: """{"jsonrpc":"2.0","id":3,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///a.puck"},"position":{"line":"x","character":0}}}""", send: written.Add);
+
+        var error = Assert.Single(collection: written, predicate: static message => (message["error"] is not null));
+
+        Assert.Equal(actual: (int?)error["error"]?["code"], expected: -32603);
+        Assert.Equal(actual: (int?)error["id"], expected: 3);
+        Assert.True(condition: server.IsRunning);
     }
 }

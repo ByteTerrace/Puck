@@ -195,12 +195,24 @@ public sealed class WorldPortalHoleContactField : IContactField {
         );
     }
     /// <inheritdoc/>
+    /// <remarks>A body standing in an opening declines, so the caller's sweep takes back what the wall behind the glass
+    /// pushed; anywhere else the inner field answers.</remarks>
+    public int CollectContacts(in FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 margin,
+        Span<FixedSurfaceContact> destination) =>
+        (TryOpening(opening: out _, orientation: in orientation, position: in position, volumes: [volume])
+            ? -1
+            : m_inner.CollectContacts(destination: destination, margin: margin, orientation: in orientation, position: in position, volume: in volume));
+    /// <inheritdoc/>
     /// <remarks>The wrapped field's own: an opening takes back a push only at a landing, so the landing sweep, which runs
     /// through this field, is what lets a body standing in a door drop through it instead of standing on the ground
     /// behind its glass.</remarks>
     public bool TrySupportDistance(in FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes,
         in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) =>
         m_inner.TrySupportDistance(descent: out descent, orientation: in orientation, position: in position, reach: reach, up: in up, volumes: volumes);
+    /// <inheritdoc/>
+    public ContactSupportWitness? SupportWitness(ReadOnlySpan<FixedSurfaceContact> contacts, in FixedVector3 position, in FixedQuaternion orientation,
+        in FixedBodyColliderVolume volume, in FixedVector3 up) =>
+        m_inner.SupportWitness(contacts: contacts, orientation: in orientation, position: in position, up: in up, volume: in volume);
     /// <inheritdoc/>
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) => m_inner.TryUp(
         position: in position,

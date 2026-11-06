@@ -349,6 +349,7 @@ public sealed partial class RenderGraphRuntime {
         m_standInReads = new string?[count];
         m_taintedReads = new string?[count];
         ResetStale(count: count);
+        ForgetRemovedNarrations();
         m_unproduced = 0;
         m_unreadFrames = unreadFrames;
         refusal = null;

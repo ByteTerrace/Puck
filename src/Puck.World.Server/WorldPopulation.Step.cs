@@ -717,8 +717,7 @@ public sealed partial class WorldPopulation {
                     engageProbeOrdinal: probe,
                     entityIndex: slot,
                     generatorInvocations: m_generatorInvocations,
-                    rigidPolicy: m_rigidContactPolicy,
-                    scratch: m_stepScratch,
+                        scratch: m_stepScratch,
                     stepTicks: stepTicks,
                     tick: tick
                 );
@@ -820,6 +819,7 @@ public sealed partial class WorldPopulation {
     public void AdvanceSimulated(ulong tick, ulong stepTicks, ulong stepStartEngineTick) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
         SimulatedBodyVisits = 0;
+        m_rigidTickStepTicks = stepTicks;
 
         AutonomyStatistics = default;
 
@@ -978,7 +978,6 @@ public sealed partial class WorldPopulation {
                 effectOutputs: m_effectOutputs,
                 designationOutputs: m_designationOutputs,
                 generatorInvocations: m_generatorInvocations,
-                rigidPolicy: m_rigidContactPolicy,
                 scratch: m_stepScratch,
                 sleepAfterTicks: m_sleepAfterTicks,
                 contactFieldVersion: contactFieldVersion

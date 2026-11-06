@@ -237,12 +237,11 @@ path then position, with a `cref` relation under `--doc`. Exit codes are the sam
   declares nothing" (exit 1). A named file that is not `.cs` is called out on
   stderr and skipped.
 - **It sees files no project compiles** (the `references` blind spot above), and
-  it prunes `.git`, `.tmp`, `artifacts`, `bin`, `obj`, `node_modules`, `publish`,
-  `BenchmarkDotNet.Artifacts` and agent worktrees under `.claude/worktrees`.
-  `puck search` prunes exactly the same set (verified), so the two verbs paired
-  on one question cover one tree — neither reaches a stale duplicate checkout
-  that would answer as a live consumer. Naming a pruned directory as a root
-  still walks it, for either verb.
+  it reads git's view of the tree through the shared `FileWalk`, as `puck
+  search` does, so the two verbs paired on one question cover one tree and
+  neither reaches an ignored scratch snapshot or a duplicate checkout that would
+  answer as a live consumer. Naming an ignored directory as a root still walks
+  it, for either verb.
 - **Both record forms report the kind `record`.**
 - Two runs are byte-identical, and running from a different directory changes
   only the path prefix (verified).

@@ -394,15 +394,14 @@ step. The parallel tick keeps that order and forks three phases:
 
 | Phase | Epoch (reads) | Writes during the phase | Join |
 |---|---|---|---|
-| **E1 rigid advance** (the bodies whose kit is rigid, `WorldBody.Step.cs:60-70`, by entity partition, inside `AdvanceSimulated`'s order) | The contact fields and collider set as `RefreshAttached` left them (`WorldPopulation.Step.cs:826`); the body's own fields. `AdvanceRigid` reads no other body and no arena (`WorldBody.Rigid.cs:635-692`): it writes its own velocity, pose and support flags and captures into the partition's scratch. | The body's own fields; the partition's work counters. | Counters summed in partition order; then the kit bodies and seats advance serially as today, reading the rigid bodies' new poses as a lower-index body's would today (below). |
+| **E1 rigid advance** (the bodies whose kit is rigid, `WorldBody.Step.cs:60-70`, by entity partition, inside `AdvanceSimulated`'s order) | The body's own fields and its solved gravity. `WorldBody.PrepareRigidStep` reads no other body and no arena: it writes its own velocity, its step's acceleration and its start image. The contact generation and the solve that follow (`WorldPopulation.SolveRigidContacts`) read other bodies and stay serial; lesson 7 of the physics lessons plan is the partition for them. | The body's own fields; the partition's work counters. | Counters summed in partition order; then the kit bodies and seats advance serially as today, reading the rigid bodies' new poses as a lower-index body's would today (below). |
 | **E3 crossing scan** (seats by partition, per instance) | Every body's final pose for the tick (`FixedPreviousPosition`, `FixedPosition`), the face catalog, the occupancy as the phase started. | The seat's winner (`winners[seat]`, `WorldInstanceHost.Adjacency.cs:423-432`) and an occupancy delta per partition: the `(placement, face, seat, inside)` rows `Observe` would write and the rows `Forget` would remove. | Deltas applied to the one occupancy dictionary in seat order, then `ResolveAndEnqueueCoalescedTransfers` over the winners, serial (`:355-369`). |
 | **E4 snapshot** (entity rows by partition; built) | The final state: population entries, each body's own fields, and participant lane slots, which build no arena cache (contract rule 2). | Positional writes into `SnapshotEntries` at offsets a prefix sum assigns (below); each row's register-file range of the snapshot's state scratch; the body's own continuity hint. | The field and input tail of `BuildSnapshotCore` (`WorldDocument.Apply.cs:940-997`) and `DeliverSnapshot`, serial and unchanged. |
 
 **E1's scope.** Only rigid bodies partition. A rigid kit "hands the whole step to
-the rigid solver instead of the grounded/free motion program: no intent, action
-track, or hold list applies" (`WorldBody.Step.cs:60-62`), and `AdvanceRigid`
-touches the body's own fields, the contact field and its scratch
-(`WorldBody.Rigid.cs:635-692`). A kit body's advance cannot partition without a
+the population's rigid solve instead of the grounded/free motion program: no
+intent, action track, or hold list applies" (`WorldBody.Step.cs`), and
+`PrepareRigidStep` touches the body's own fields alone. A kit body's advance cannot partition without a
 larger change, because it is an arena transaction: `BeginKitStep` opens a scope
 on the one journal (`WorldInputRuntime.Effects.cs:18-24`, `WorldBody.Step.cs:82`),
 validation writes and rewinds the arena (`:101-132`), a foreign state effect
@@ -891,10 +890,10 @@ it. Three items from that memo are ordinary work, independent of threading:
 What the code read for this memo could not settle; each is the first task of the
 step that meets it.
 
-1. Whether `ResolveRigidContact` and the rigid solver's pair path reached from
-   `AdvanceRigid` read any other body or any shared scratch beyond the step
-   scratch (`WorldBody.Rigid.cs:635-692` shows none, the solver was not read);
-   T2's first task.
+1. Whether the rigid contact generation (`WorldBody.ProbeRigidSurface`, one
+   contact-field query per body) can partition ahead of the serial
+   `FixedRigidWorld` step: it reads the collider set's shared `m_candidates`
+   scratch (`WorldColliderSet.Candidates`); T2's first task.
 2. Whether `FixedStaticContactSolver` (`WorldColliderSet.cs:112`) and
    `FixedFieldContactSolver` (`FixedFieldContactSolver.cs:32`) keep working
    scratch beyond `m_candidates` (`WorldColliderSet.cs:73`); T2.

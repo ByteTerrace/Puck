@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders;
@@ -30,6 +31,39 @@ public sealed partial class ShaderPipelineRenderNode {
     public string? LastRecordError { get; private set; }
     /// <summary>Gets the duration of the node's latest committed recording, in <see cref="Stopwatch"/> ticks.</summary>
     public long LastRecordTicks { get; private set; }
+    /// <summary>Gets the number of record jobs the node has committed.</summary>
+    public long RecordJobs { get; private set; }
+
+    // The node's committed jobs' phases in Stopwatch ticks: the latest job's, the sum over every job and the longest
+    // recording. The process-wide RenderRecordWork counts the same jobs; this is the per-instance account of them.
+    private long m_lastPrepareTicks;
+    private long m_lastCommitTicks;
+    private long m_totalPrepareTicks;
+    private long m_totalRecordTicks;
+    private long m_totalCommitTicks;
+    private long m_longestRecordTicks;
+
+    /// <summary>Appends the node's record jobs' host time, in microseconds, as one run of <c>key=value</c> pairs: the
+    /// jobs committed, the latest job's prepare, record and commit time, the mean of each over every job, and the
+    /// longest single recording. The one reading the live budget's instance rows and the graph inspection share, so the
+    /// instance behind <c>render.record</c>'s critical path is named wherever the engine already reports a node.
+    /// Wall-clock readings: pacing counts, never compared between runs.</summary>
+    /// <param name="into">The builder the pairs are appended to, each after a separating space.</param>
+    public void AppendRecordTimes(StringBuilder into) {
+        ArgumentNullException.ThrowIfNull(into);
+
+        var jobs = Math.Max(val1: RecordJobs, val2: 1L);
+
+        _ = into.Append(value: " record-jobs=").Append(value: RecordJobs)
+            .Append(value: " last-prepare-us=").Append(value: Microseconds(ticks: m_lastPrepareTicks))
+            .Append(value: " last-record-us=").Append(value: Microseconds(ticks: LastRecordTicks))
+            .Append(value: " last-commit-us=").Append(value: Microseconds(ticks: m_lastCommitTicks))
+            .Append(value: " mean-prepare-us=").Append(value: Microseconds(ticks: (m_totalPrepareTicks / jobs)))
+            .Append(value: " mean-record-us=").Append(value: Microseconds(ticks: (m_totalRecordTicks / jobs)))
+            .Append(value: " mean-commit-us=").Append(value: Microseconds(ticks: (m_totalCommitTicks / jobs)))
+            .Append(value: " longest-record-us=").Append(value: Microseconds(ticks: m_longestRecordTicks));
+    }
+    private static long Microseconds(long ticks) => ((ticks * 1_000_000L) / Stopwatch.Frequency);
 
     // Takes the slot's lists for a new recording. A node records one frame at a time, so a recording still active is a
     // defect in its caller, refused before any list is touched.
@@ -106,9 +140,16 @@ public sealed partial class ShaderPipelineRenderNode {
 
         LastRecordError = null;
         LastRecordTicks = (m_recording.CommittedAt - m_recording.RecordedAt);
+        m_lastCommitTicks = (now - m_recording.CommittedAt);
+        m_lastPrepareTicks = (m_recording.RecordedAt - m_recording.PreparedAt);
+        RecordJobs++;
+        m_totalCommitTicks += m_lastCommitTicks;
+        m_totalPrepareTicks += m_lastPrepareTicks;
+        m_totalRecordTicks += LastRecordTicks;
+        m_longestRecordTicks = Math.Max(val1: m_longestRecordTicks, val2: LastRecordTicks);
         RenderRecordWork.Process.Job(
-            commitTicks: (now - m_recording.CommittedAt),
-            prepareTicks: (m_recording.RecordedAt - m_recording.PreparedAt),
+            commitTicks: m_lastCommitTicks,
+            prepareTicks: m_lastPrepareTicks,
             recordTicks: LastRecordTicks
         );
     }

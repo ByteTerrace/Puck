@@ -1,5 +1,6 @@
 using System.CommandLine;
 using Puck.Cli.Format;
+using Puck.GamingBricks.Forge;
 using Puck.World.Transpiler.Decompiler;
 using Puck.World.Transpiler.Embeddings;
 using Puck.World;
@@ -65,11 +66,26 @@ public static class DecompileCommand {
             return 2;
         }
 
+        System.Text.Json.Nodes.JsonObject? document;
+
+        try {
+            document = (System.Text.Json.Nodes.JsonNode.Parse(json: json) as System.Text.Json.Nodes.JsonObject);
+        } catch (System.Text.Json.JsonException ex) {
+            return CliExit.Refuse(verb: "decompile", what: CliPaths.ToDisplay(fullPath: fullPath), why: $"is not JSON: {ex.Message}");
+        }
+
+        // The document's own schema picks the vocabulary, the same way compiling does, and a document that names neither
+        // vocabulary is refused rather than printed as a world.
+        var schema = ((document?["schema"] is System.Text.Json.Nodes.JsonValue tag) && tag.TryGetValue<string>(value: out var named) ? named : null);
+
+        if ((document is null) || !(DecompileCartridge.Handles(document: document) || (schema == WorldDefinition.SchemaVersion))) {
+            return CliExit.Refuse(verb: "decompile", what: CliPaths.ToDisplay(fullPath: fullPath), why: $"is not a world definition or a cartridge: its schema is '{(schema ?? "(absent)")}', not {WorldDefinition.SchemaVersion} or {CartridgeDocument.SchemaId}.");
+        }
+
         string puckSource;
 
         try {
-            // The document's own schema picks the vocabulary, the same way compiling does.
-            puckSource = (((System.Text.Json.Nodes.JsonNode.Parse(json: json) is System.Text.Json.Nodes.JsonObject document) && DecompileCartridge.Handles(document: document))
+            puckSource = (DecompileCartridge.Handles(document: document)
                 ? DecompileCartridge.Run(document: document)
                 : WorldDecompiler.Decompile(embeddings: lockFile, jsonText: json)
             );

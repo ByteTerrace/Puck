@@ -8,6 +8,7 @@ namespace Puck.Physics.Tests;
 public sealed class FixedRigidWitnessLawTests {
     private static readonly FixedRigidScales Scales = new(
         EffectiveMass: 32,
+        Impulse: 16,
         InverseInertia: 40,
         InverseMass: 40
     );
@@ -40,10 +41,12 @@ public sealed class FixedRigidWitnessLawTests {
             Y: FixedQ4816.One,
             Z: FixedQ4816.Zero
         );
-        Span<FixedVector3> anchors = stackalloc FixedVector3[4];
+        Span<FixedVector3> anchors = stackalloc FixedVector3[FixedRigidWitness.MaximumSupportPoints];
+        Span<int> features = stackalloc int[FixedRigidWitness.MaximumSupportPoints];
         var count = FixedRigidWitness.SupportManifold(
             anchors: anchors,
             centerOffset: centerOffset,
+            features: features,
             normal: normal,
             orientation: FixedQuaternion.Identity,
             volume: boxVolume
@@ -228,10 +231,12 @@ public sealed class FixedRigidWitnessLawTests {
             Y: FixedQ4816.One,
             Z: FixedQ4816.Zero
         );
-        Span<FixedVector3> sphereAnchors = stackalloc FixedVector3[4];
+        Span<FixedVector3> sphereAnchors = stackalloc FixedVector3[FixedRigidWitness.MaximumSupportPoints];
+        Span<int> sphereFeatures = stackalloc int[FixedRigidWitness.MaximumSupportPoints];
         var sphereCount = FixedRigidWitness.SupportManifold(
             anchors: sphereAnchors,
             centerOffset: sphereVolume.Center,
+            features: sphereFeatures,
             normal: normal,
             orientation: FixedQuaternion.Identity,
             volume: sphereVolume
