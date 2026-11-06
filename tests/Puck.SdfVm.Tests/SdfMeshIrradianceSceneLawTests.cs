@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Reflection;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -78,6 +79,32 @@ public sealed class SdfMeshIrradianceSceneLawTests {
         Assert.True(scene.TryNearestSurface(new Vector3(0, 3, 0), 3, out var point, out _, out var nearestError));
         Assert.Equal(new Vector3(0, 1, 0), point);
         Assert.Equal(error, nearestError);
+    }
+    // A scene trimmed of the geometry it retained for a later build exports the very words the untrimmed scene exports and
+    // keeps its GPU identity, so the probe client adopts it in the untrimmed scene's place without another upload
+    // (SdfMeshProbeGpuWork.Adopt), and the retained geometry the client's claim held is freed.
+    [Fact]
+    public void ASceneTrimmedOfRetainedGeometryExportsTheSameGpuWordsAndKeepsItsGpuIdentity() {
+        const BindingFlags Hidden = (BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic);
+        var sheet = Sheet(quads: 8, materials: 3);
+        var draws = Draws(sheet: sheet, cube: Cube());
+        var sheets = draws.Where(predicate: draw => ReferenceEquals(objA: draw.Mesh, objB: sheet)).ToArray();
+        using var first = SdfMeshIrradianceScene.Build(draws: draws);
+        using var kept = SdfMeshIrradianceScene.Build(draws: sheets, previous: first);
+        var same = typeof(SdfMeshIrradianceScene).GetMethod(name: "SameGpuContent", bindingAttr: Hidden)!;
+
+        Assert.True(condition: (kept.TrianglesRetained > 0));
+        using var trimmed = (SdfMeshIrradianceScene)typeof(SdfMeshIrradianceScene).GetMethod(name: "WithoutRetained", bindingAttr: Hidden)!.Invoke(obj: kept, parameters: null)!;
+
+        Assert.NotSame(expected: kept, actual: trimmed);
+        Assert.Equal(expected: 0L, actual: trimmed.TrianglesRetained);
+        Assert.True(condition: (bool)same.Invoke(obj: null, parameters: [kept, trimmed])!);
+        Assert.False(condition: (bool)same.Invoke(obj: null, parameters: [first, kept])!);
+
+        var placements = new Dictionary<SdfMesh, SdfMeshRegionMesh>();
+
+        _ = SdfMeshRegion.Plan(sheets, placements);
+        Assert.Equal(expected: kept.ExportGpu(placements: placements), actual: trimmed.ExportGpu(placements: placements));
     }
     // A rippled sheet of quads, wide enough that its hierarchy and preparation run in parallel.
     private static SdfMesh Sheet(int quads, uint materials) {

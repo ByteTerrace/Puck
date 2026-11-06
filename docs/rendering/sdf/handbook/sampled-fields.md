@@ -40,12 +40,21 @@ its upload and the meshes of every group that reads no moved field stand.
 The mesh identity covers the values: `SdfMeshGeometryBuilder` hashes a sampled
 instruction's snapshot in place of its handle, as it hashes a side table's
 values in place of its packed offset, and keeps the snapshot beside the poses it
-keeps (`SdfMeshGeometryBuilder.Sampled`). A frame whose set differs from the one
-the bake planned at restarts only the groups whose geometry hashed a snapshot the
-set no longer holds (`SdfMeshBakeGroup.Refresh`); every other group, its mesh and
-any lattice in flight stand. A changed height therefore keys a new mesh for that
-field's group alone, and a revisited height keys a mesh the library or store
-already holds.
+keeps (`SdfMeshGeometryBuilder.Sampled`). The bake reads only the handles some
+instruction samples (`SdfProgram.BakedSampledFields`), and compares their own
+identity, `SdfSampledSet.Baked`, which stands while those snapshots stand: a
+height field's heights handle, which only a draw reads, can move every frame and
+cost the bake nothing. A frame whose baked set moved resamples
+(`SdfMeshPathBake.Resample`): it walks only the groups that read a sampled field
+and plans again those whose geometry hashed a snapshot the set no longer holds
+(`SdfMeshBakeGroup.Refresh`, from each group's planned box); every other group,
+its mesh and any lattice in flight stand. A group still baking an older snapshot
+keeps baking it while the newest plan waits as its successor, started once it
+lands, so a field republished faster than one bake (a wetting front crossing
+columns) still lands meshes and settles on its latest snapshot. A changed
+reference therefore keys a new mesh for that field's group alone, and a revisited
+one keys a mesh the library or store already holds. `world.residency` counts
+restarts, resamples, the readers they walked and the coalesced successors.
 
 The bake kernel is the only kernel that samples a distance field (it defines
 `SDF_SAMPLED_REGIONS`; every other kernel answers `SDF_FAR_DISTANCE`). It reads
