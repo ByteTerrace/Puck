@@ -57,9 +57,9 @@ public sealed class SdfReactivityDeviceLawTests {
         SdfInstruction Sphere(float radius, uint material, bool detail) => new(
             Op: SdfOp.ShapeBlend, Shape: ((uint)SdfShapeType.Sphere), Blend: ((uint)SdfBlendOp.Union), Material: material,
             Data0: new Vector4(w: 0f, x: radius, y: 0f, z: 0f), Data1: Vector4.Zero, Detail: detail);
-        var program = new SdfProgram(instances: null, screenSurfaces: null,
+        var program = SdfProgram.Of(
             instructions: [Sphere(detail: false, material: 0u, radius: 1f), Sphere(detail: true, material: 1u, radius: 1.1f)],
-            materials: [new SdfMaterial(Albedo: Vector3.One), new SdfMaterial(Albedo: Vector3.One, Emissive: (emissive ? 4f : 0f))]);
+            appearance: new SdfAppearance(materials: [new SdfMaterial(Albedo: Vector3.One), new SdfMaterial(Albedo: Vector3.One, Emissive: (emissive ? 4f : 0f))]));
         var frame = new SdfFrame(Program: program, ProgramChanged: false, Time: 0f,
             Views: [new SdfViewSnapshot(
                 Camera: new CameraSnapshot(Position: new Vector3(x: 0f, y: 0f, z: -3f), Right: Vector3.UnitX,

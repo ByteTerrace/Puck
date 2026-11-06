@@ -127,7 +127,7 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>Creates a builder, optionally pre-sizing its instruction/instance/material/screen-surface lists so a
     /// repeat-construction caller (a live composition rebuild) that already knows roughly how big the next program
     /// will be — from a previous build's own counts, e.g. <see cref="SdfProgram.InstructionCount"/>/
-    /// <see cref="SdfProgram.Instances"/>.Count/<see cref="SdfProgram.MaterialCount"/>/<see cref="SdfProgram.ScreenSurfaces"/>.Count,
+    /// <see cref="SdfProgram.Instances"/>.Count/<see cref="SdfProgram.MaterialCount"/>/<see cref="SdfAppearance.ScreenSurfaces"/>.Count,
     /// or the previous builder's <see cref="ConvexPolygonCount"/> — avoids re-paying <see cref="List{T}"/>'s geometric-growth reallocation from empty on every rebuild. Every hint
     /// defaults to 0, matching <see cref="List{T}"/>'s own parameterless-constructor capacity, so a caller that
     /// supplies none starts every list empty.</summary>
@@ -1210,15 +1210,14 @@ public sealed partial class SdfProgramBuilder {
             }
         }
 
-        return new SdfProgram(
+        return SdfProgram.Of(
+            appearance: new SdfAppearance(materials: m_materials, screenSurfaces: m_screenSurfaces),
             convexPolygonProfiles: m_convexPolygonProfiles,
             instances: m_instances,
             instructions: m_instructions,
-            materials: m_materials,
             paths: m_paths,
             sampledBindings: m_sampledBindings,
             reservedPathWords: m_reservedPathWords,
-            screenSurfaces: m_screenSurfaces,
             sweepCurves: m_sweepCurves
         );
     }

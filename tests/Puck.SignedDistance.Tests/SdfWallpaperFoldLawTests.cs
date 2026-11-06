@@ -169,7 +169,7 @@ public sealed class SdfWallpaperFoldLawTests {
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
         var program = builder.WallpaperFold(cell: cell, group: group, limit: Limit(group: group) with { X = ((group >= SdfWallpaperGroup.P3) ? SdfWallpaperFold.UnboundedLimit : 2f), Y = ((group >= SdfWallpaperGroup.P3) ? SdfWallpaperFold.UnboundedLimit : 2f) }).Sphere(material: material, radius: 0.1f).Build();
 
-        return new SdfProgram(program.Instructions.Select(selector: instruction => ((instruction.Op == SdfOp.WallpaperFold) ? tamper(instruction) : instruction)).ToArray(), [new SdfMaterial(Albedo: Vector3.One)]);
+        return TestPrograms.Of(program.Instructions.Select(selector: instruction => ((instruction.Op == SdfOp.WallpaperFold) ? tamper(instruction) : instruction)).ToArray(), [new SdfMaterial(Albedo: Vector3.One)]);
     }
 
     // A unit sphere in a P6M lattice of 0.001 cells with no limit, inside an instance bounded at 23.51: the unbounded

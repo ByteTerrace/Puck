@@ -10,7 +10,7 @@ namespace Puck.SignedDistance.Tests;
 public sealed class SdfPackedContractLawTests {
     private static readonly SdfMaterial[] OneMaterial = [new SdfMaterial(Albedo: Vector3.One)];
 
-    private static SdfProgram Build(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, IReadOnlyList<SdfMaterial>? materials = null) => new(
+    private static SdfProgram Build(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, IReadOnlyList<SdfMaterial>? materials = null) => TestPrograms.Of(
         instances: instances,
         instructions: instructions,
         materials: (materials ?? OneMaterial),
@@ -133,7 +133,7 @@ public sealed class SdfPackedContractLawTests {
 
         Assert.Equal(
             expected: 3,
-            actual: Assert.Single(collection: program.ScreenSurfaces).ScreenIndex
+            actual: Assert.Single(collection: program.Appearance.ScreenSurfaces).ScreenIndex
         );
 
         var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().ScreenSurface(
@@ -250,7 +250,7 @@ public sealed class SdfPackedContractLawTests {
             .Build();
 
         Assert.Equal(
-            actual: program.ScreenSurfaces[0].Up,
+            actual: program.Appearance.ScreenSurfaces[0].Up,
             expected: Vector3.UnitY
         );
     }
@@ -732,7 +732,7 @@ public sealed class SdfPackedContractLawTests {
         _ = Assert.Single(collection: program.Instructions);
         _ = Assert.Throws<NotSupportedException>(testCode: () => ((IList<SdfInstruction>)program.Instructions)[0] = Shape(shape: ((uint)SdfShapeType.Box)));
         _ = Assert.Throws<NotSupportedException>(testCode: () => ((IList<SdfInstanceRange>)program.Instances).Clear());
-        _ = Assert.Throws<NotSupportedException>(testCode: () => ((IList<SdfScreenSurface>)program.ScreenSurfaces).Clear());
+        _ = Assert.Throws<NotSupportedException>(testCode: () => ((IList<SdfScreenSurface>)program.Appearance.ScreenSurfaces).Clear());
 
         // Control: reading the same seam still works, and still describes the packed stream.
         Assert.Equal(

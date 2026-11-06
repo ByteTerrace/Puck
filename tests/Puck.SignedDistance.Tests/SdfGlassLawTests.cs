@@ -26,7 +26,7 @@ public sealed class SdfGlassLawTests {
         Shape: ((uint)SdfShapeType.Sphere)
     );
     private static Vector4 Row(SdfProgram program, int material, int row) {
-        var word = ((((int)program.Words[SdfProgram.ProgramMaterialOffsetLane]) + (SdfProgram.MaterialVectorsPerEntry * material) + row) * 4);
+        var word = ((((int)program.Words[SdfProgram.ProgramMaterialOffsetLane]) + (SdfAppearance.MaterialVectorsPerEntry * material) + row) * 4);
 
         return new Vector4(
             x: BitConverter.UInt32BitsToSingle(value: program.Words[word]),
@@ -52,7 +52,7 @@ public sealed class SdfGlassLawTests {
     [Fact]
     public void AGlassMaterialPacksItsAbsorptionAndIndexAndAnOpaqueOnePacksZeros() {
         var tint = new Vector3(x: 0.9f, y: 0.6f, z: 0.2f);
-        var program = new SdfProgram(
+        var program = TestPrograms.Of(
             instructions: [Shape(material: 0), Shape(material: 1)],
             materials: [new SdfMaterial(Albedo: tint, Glass: Acrylic), new SdfMaterial(Albedo: Vector3.One)]
         );
@@ -62,8 +62,8 @@ public sealed class SdfGlassLawTests {
 
         Assert.Equal(expected: new Vector4(value: absorption, w: Acrylic.Ior), actual: glass);
         Assert.Equal(expected: Vector4.Zero, actual: opaque);
-        Assert.True(condition: program.Materials[0].IsGlass);
-        Assert.False(condition: program.Materials[1].IsGlass);
+        Assert.True(condition: program.Appearance.Materials[0].IsGlass);
+        Assert.False(condition: program.Appearance.Materials[1].IsGlass);
     }
     [Fact]
     public void BothAdmissionDoorsRefuseAnInadmissibleGlass() {
@@ -76,7 +76,7 @@ public sealed class SdfGlassLawTests {
         }) {
             Assert.False(condition: material.IsGlassValid);
             Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgramBuilder().AddMaterial(material: material));
-            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram(instructions: [Shape(material: 0)], materials: [material]));
+            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => TestPrograms.Of(instructions: [Shape(material: 0)], materials: [material]));
         }
         // An opaque material's albedo may exceed one; only a tint is bounded.
         Assert.True(condition: new SdfMaterial(Albedo: new Vector3(value: 2f)).IsGlassValid);
@@ -86,8 +86,8 @@ public sealed class SdfGlassLawTests {
     public void AProgramKnowsItsGlassShapesAndRanges() {
         var glass = new SdfMaterial(Albedo: Vector3.One, Glass: Acrylic);
         var opaque = new SdfMaterial(Albedo: Vector3.One);
-        var mixed = new SdfProgram(instructions: [Shape(material: 0), Shape(material: 1), Shape(material: 1)], materials: [opaque, glass]);
-        var plain = new SdfProgram(instructions: [Shape(material: 0)], materials: [opaque]);
+        var mixed = TestPrograms.Of(instructions: [Shape(material: 0), Shape(material: 1), Shape(material: 1)], materials: [opaque, glass]);
+        var plain = TestPrograms.Of(instructions: [Shape(material: 0)], materials: [opaque]);
 
         Assert.True(condition: mixed.HasGlass);
         Assert.False(condition: plain.HasGlass);

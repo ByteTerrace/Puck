@@ -56,9 +56,7 @@ float3 sdfDynamicBoundCenter(float3 offset, uint slot) {
 //   words[0]              = (instructionCount, materialCount, dataOffset, materialOffset)
 //   words[1 .. 1+N)       = instruction headers (op, shapeType, blendOp, materialId)
 //   words[dataOffset ..]  = instruction data, 2 uint4 per instruction (data0, data1 as float bits)
-//   words[dataOffset + 2*instructionCount ..] = paints, SDF_PAINT_VECTORS_PER_ENTRY uint4 each (sdfApplyPaints).
-//   words[matOffset ..] = materials, SDF_MATERIAL_VECTORS_PER_ENTRY uint4 each; see SdfProgram.Materials.cs and sdfMaterialLoad.
-//   words[matOffset + SDF_MATERIAL_VECTORS_PER_ENTRY*materialCount ..] = HOST-BAKED bounding-sphere table (SdfProgram.PackBounds), 2 uint4 per
+//   words[dataOffset + 2*instructionCount ..] = HOST-BAKED bounding-sphere table (SdfProgram.PackBounds), 2 uint4 per
 //                           instruction: b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot,
 //                           skipTo, 0) — map()'s exact Union early-out reads it; mode SDF_BOUND_NONE evaluates fully.
 //   [.. segment directory ..] then the INSTANCE directory (SdfProgram.PackInstances): one
@@ -78,6 +76,8 @@ float3 sdfDynamicBoundCenter(float3 offset, uint slot) {
 //                           collapses Reset/Translate/Rotate/TransformDynamic/Shape chains into direct local poses; mapCore bypasses the
 //                           generic per-op switch for those segments, while the authored instruction range stays intact for every non-rigid
 //                           segment and the CPU SdfFieldEvaluator.
+//   [.. side tables, part programs ..] then, at materialOffset, the APPEARANCE section the field never reads
+//                           (SdfAppearance.Pack): materials, then their paints (sdfMaterialLoad, sdfApplyPaints).
 
 // A bake lattice's instance mask is a DERIVED ceil(instanceCount/32) uints (sdfInstanceMaskWordCount), so the instance
 // ceiling SDF_MAX_INSTANCES caps it at SDF_MAX_INSTANCES/32 = 2048 words. The sentinel instance-mask BASE means "every
@@ -130,12 +130,13 @@ bool sdfInstanceMaskHasSummary(uint instanceMaskBase) {
     return hasSummary;
 }
 
-// The SEGMENT directory's element offset in sdfWords: header -> materials -> shape-bound table -> segment directory.
-// KEEP IN SYNC with SdfProgram's offset math.
+// The SEGMENT directory's element offset in sdfWords: instruction data -> shape-bound table -> segment directory.
+// KEEP IN SYNC with SdfProgram's offset math (SdfProgram.Layout).
 uint sdfSegmentDirectoryOffset() {
     uint4 header = sdfProgramWord(0);
+    uint instructions = SDF_PROGRAM_INSTRUCTION_COUNT(header);
 
-    return ((SDF_PROGRAM_MATERIAL_OFFSET(header) + (SDF_MATERIAL_VECTORS_PER_ENTRY * SDF_PROGRAM_MATERIAL_COUNT(header))) + (SDF_BOUND_RECORD_VECTORS * SDF_PROGRAM_INSTRUCTION_COUNT(header)));
+    return ((SDF_PROGRAM_DATA_OFFSET(header) + (SDF_INSTRUCTION_DATA_VECTORS * instructions)) + (SDF_BOUND_RECORD_VECTORS * instructions));
 }
 // The INSTANCE directory's element offset, given a caller that ALREADY resolved the segment directory
 // (sdfLoadProgramLayout has both in hand). DXC's SPIR-V backend runs no GVN over StructuredBuffer loads, so

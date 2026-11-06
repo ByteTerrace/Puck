@@ -232,10 +232,7 @@ Thousands of independent authored grass poses still warrant generic pose-program
 work; caching repeated slots alone does not remove them. Cold bake, physical
 memory, density sweeps and target-device bars remain open.
 
-- [medium] A surface-pattern code edit forces a full native rebake with no
-  stored groups loaded, though no authored shape changed. That exceeds the
-  one-minute bake bar and reinforces the appearance/field identity separation
-  below. The bounded clearing relief also adds real mesh and query work: scale
+- [medium] The bounded clearing relief adds real mesh and query work: scale
   it only with measured detail/visibility handling. Pattern filtering uses a
   conservative footprint approximation; an area fix pass over the
   reserved-component packing and filtering is owed. Owner: material/bake owner.
@@ -252,14 +249,6 @@ memory, density sweeps and target-device bars remain open.
   then retain against the exact emitted inputs. Preserve the root/routed scopes'
   different placement, screen and adjacency policies. Their frequency in the
   forest workload is unmeasured. Owner: presentation-query owner.
-- [medium] `SdfProgram` still packs appearance before field bounds, segments and
-  instances (`src/Puck.SignedDistance/SdfProgram.cs:140`). Material
-  stride/extent therefore affect field offsets, and its constructor's bake
-  closure conservatively reaches appearance code. Separate canonical field
-  packing from appearance, preserving the exact field interpreter inputs and
-  material-boundary semantics; prove appearance-only edits keep bake identity
-  and field/skin/material-cut changes invalidate it. Do not replace the
-  remaining real dependency with a blacklist. Owner: graphics/bake owner.
 
 An area fix pass over this packet's code is owed.
 

@@ -85,7 +85,7 @@ float4 sdfGlassLitAt(float2 at, uint2 extent) {
 }
 // The coverage a glass's contact adds to its flow's at a distance `behind` from the surface to the opaque hit along the
 // ray: the material's contact coverage where the opaque surface touches the glass, falling smoothly to zero at its reach;
-// zero for a material with no contact (row 20.w's halves, KEEP IN SYNC with SdfProgram.PackMaterials).
+// zero for a material with no contact (row 20.w's halves, KEEP IN SYNC with SdfAppearance.Pack).
 float sdfGlassContact(SdfMaterialData material, float behind) {
     if ((material.contactReach <= 0.0) || (material.contactCoverage <= 0.0)) {
         return 0.0;

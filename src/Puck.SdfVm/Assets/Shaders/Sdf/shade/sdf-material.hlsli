@@ -5,7 +5,7 @@
 float sdfWrapDiffuse(float ndotl, float wrap) {
     return max(((ndotl + wrap) / (1.0 + wrap)), 0.0);
 }
-// Generic material rows, paired with SdfProgram.Materials.cs.
+// Generic material rows, paired with SdfAppearance.Pack.
 struct SdfMaterialData {
     float3 albedo;
     float emissive;
@@ -32,7 +32,7 @@ struct SdfMaterialData {
     float4 depositResponse; // roughness, metal, pattern Z, noise coverage
     float2 weatheringOctave; // second octave's frequency ratio and gain; a zero gain reads a single octave
     float4 weatheringTurn; // the pattern lattice's turn, a unit quaternion (x, y, z, w)
-    uint paintFirst; // the vector of the material's first paint (SdfProgram.PackPaint)
+    uint paintFirst; // the vector of the material's first paint (SdfAppearance.PackPaint)
     uint paintCount; // its paints, drawn in order
     uint emissiveLane; // the render lane scaling emissive, plus one; 0 keeps the static emissive
     float3 absorption; // a glass's absorption per world unit (SdfGlass.Absorption); exp(-absorption * distance) transmits
@@ -95,7 +95,7 @@ float sdfMaterialWrap(int material) {
     return (sdfMaterialBase(material, materialBase) ? asfloat(sdfWords[materialBase + 2u]).y : 0.0);
 }
 
-// The ONE material decode point (KEEP IN SYNC with SdfProgram.Materials.cs and SdfProgram.cs).
+// The ONE material decode point (KEEP IN SYNC with SdfAppearance.Pack and the stream layout in SdfProgram.cs).
 SdfMaterialData sdfMaterialLoad(int material) {
     SdfMaterialData data = (SdfMaterialData)0;
     uint materialBase;

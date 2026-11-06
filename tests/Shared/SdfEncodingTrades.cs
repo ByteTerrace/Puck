@@ -74,5 +74,5 @@ internal static class SdfEncodingTrades {
     }
 
     private static int SegmentDirectoryOf(uint[] words, SdfProgram program) =>
-        ((((int)words[SdfProgram.ProgramMaterialOffsetLane]) + (SdfProgram.MaterialVectorsPerEntry * ((int)words[SdfProgram.ProgramMaterialCountLane]))) + (SdfProgram.BoundRecordVectors * program.InstructionCount));
+        ((((int)words[SdfProgram.ProgramDataOffsetLane]) + (SdfProgram.InstructionDataVectors * ((int)words[SdfProgram.ProgramInstructionCountLane]))) + (SdfProgram.BoundRecordVectors * program.InstructionCount));
 }
