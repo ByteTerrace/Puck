@@ -2890,9 +2890,17 @@ matching forward inputs during global setup.
 by-parameter argument into a `[MethodImpl(NoInlining)]` method so it cannot—the
 same two placements the gate measures.
 
-`MemoryDiagnoser` rides on every class. `DisassemblyDiagnoser` is attached only
-to the **fixed-point kernels** (scenarios 1–5); the extension scenarios are
-modular-`ulong` arithmetic, not a fixed-point kernel.
+`MemoryDiagnoser` rides on every class. Every scenario runs in the CLI's own
+process against the assemblies it was built with (BenchmarkDotNet's in-process
+emit toolchain, applied to whichever job the command line picks), so nothing is
+rebuilt from the working tree and the numbers describe that build. For machine
+code, set the JIT's own `DOTNET_JitDisasm=<method>` (with `DOTNET_JitStdOutFile`)
+for the run: BenchmarkDotNet's `DisassemblyDiagnoser` cannot read the .NET 11
+runtime and fails every case it rides on, so no class carries it.
+
+Exit **0** when every selected scenario measured, or the run only listed or
+printed help; **1** when a scenario failed validation or did not run to a
+measurement; **2** when the arguments did not parse or matched no scenario.
 
 ### Running it
 
@@ -2900,7 +2908,7 @@ modular-`ulong` arithmetic, not a fixed-point kernel.
 # Everything (balanced default job):
 puck bench kernels --filter '*'
 
-# One scenario family — the norm quirk, with the disassembler:
+# One scenario family — the norm quirk:
 puck bench kernels --filter '*Norm*'
 
 # Just the hand-vs-generic-static comparison of one class:
@@ -2918,9 +2926,10 @@ is its `hide` option) is reached past a separator: `puck bench kernels -- --help
 
 #### Job rigor
 
-No explicit job is baked into the config, so a command-line `--job` is the only
-job that runs (the harness would otherwise run its own job *alongside* one added
-here and double the output). Pick rigor on the command line:
+The config adds only the in-process toolchain, as a mutator applied to every
+job, so a command-line `--job` is the only job that runs (a plain job added in
+the config would run *alongside* it and double the output). Pick rigor on the
+command line:
 
 | Flag | Use |
 |---|---|

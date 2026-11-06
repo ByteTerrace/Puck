@@ -1,8 +1,13 @@
 using System.CommandLine;
 
 using BenchmarkDotNet.Configs;
+using BenchmarkDotNet.ConsoleArguments;
+using BenchmarkDotNet.ConsoleArguments.ListBenchmarks;
 using BenchmarkDotNet.Diagnosers;
+using BenchmarkDotNet.Jobs;
+using BenchmarkDotNet.Loggers;
 using BenchmarkDotNet.Running;
+using BenchmarkDotNet.Toolchains.InProcess.Emit;
 
 namespace Puck.Cli.Bench;
 
@@ -10,26 +15,87 @@ namespace Puck.Cli.Bench;
 // `world`, `startup` and `state-evidence` lanes, which run outside BenchmarkDotNet entirely.
 //
 // BenchmarkDotNet owns the whole option grammar of `kernels`, so it arrives as one unparsed string[] the switcher reads
-// itself: puck neither validates nor rewrites a token of it.
+// itself: puck rewrites no token of it, and reads BenchmarkDotNet's own parse only to judge the run's outcome.
 public static class BenchRunner {
-    // MemoryDiagnoser rides on every scenario: these kernels are meant to be zero-alloc, and its byte columns are
-    // the only thing that reports whether they are. DisassemblyDiagnoser is attached per-class, only on the
-    // fixed-point kernels, via attribute — the extension scenario is modular-ulong arithmetic, not a fixed-point
-    // kernel. No explicit job is added here so a command-line --job is the single job that runs (adding one here
-    // would run alongside it and double the output).
-    private static int Run(string[] benchmarkArguments) {
-        var config = ManualConfig
-            .Create(config: DefaultConfig.Instance)
-            .AddDiagnoser(newDiagnosers: MemoryDiagnoser.Default);
+    private const string KernelsVerb = "bench kernels";
 
-        BenchmarkSwitcher
+    // MemoryDiagnoser rides on every scenario: these kernels are meant to be zero-alloc, and its byte columns are
+    // the only thing that reports whether they are. No class carries DisassemblyDiagnoser: its ClrMD cannot read the
+    // DAC of the runtime this CLI targets and fails the whole case; the JIT's own DOTNET_JitDisasm reaches the same
+    // code because the scenarios run in this process. The in-process toolchain rides as a mutator, so it applies to whichever job the command line picks
+    // (a plain job here would run beside a command-line --job and double the output): every scenario runs in this
+    // process against the CLI's own loaded assemblies, never a rebuild of whatever source the working tree holds.
+    private static IConfig KernelsConfig() =>
+        ManualConfig
+            .Create(config: DefaultConfig.Instance)
+            .AddDiagnoser(newDiagnosers: MemoryDiagnoser.Default)
+            .AddJob(newJobs: new Job(id: "InProcess").WithToolchain(toolchain: InProcessEmitToolchain.Instance).AsMutator());
+    // The exit code of a kernels run: 0 when every selected scenario ran, or the run only listed, printed information
+    // or help; 1 when a scenario failed validation, failed to run or measured nothing; 2 when the arguments did not
+    // parse or selected nothing.
+    private static int Run(string[] benchmarkArguments) {
+        var config = KernelsConfig();
+        var (parsed, _, options) = ConfigParser.Parse(
+            args: benchmarkArguments,
+            globalConfig: config,
+            logger: NullLogger.Instance
+        );
+        var summaries = BenchmarkSwitcher
             .FromAssembly(assembly: typeof(BenchRunner).Assembly)
             .Run(
             args: benchmarkArguments,
             config: config
-        );
+        ).ToArray();
 
-        return 0;
+        if (!parsed) {
+            // The switcher has printed its parser's own message. Help and version requests also fail its parse.
+            return (benchmarkArguments.Any(predicate: static token => (token is "--help" or "--version"))
+                ? CliExit.Success
+                : CliExit.Refuse(
+                verb: KernelsVerb,
+                what: string.Join(separator: ' ', values: benchmarkArguments),
+                why: "BenchmarkDotNet could not parse these arguments (its message is above)"
+            ));
+        }
+
+        if ((options.ListBenchmarkCaseMode != ListBenchmarkCaseMode.Disabled) || options.PrintInformation) {
+            return CliExit.Success;
+        }
+
+        if (summaries.Sum(selector: static summary => summary.BenchmarksCases.Length) == 0) {
+            return CliExit.Refuse(
+                verb: KernelsVerb,
+                what: string.Join(separator: ' ', values: benchmarkArguments),
+                why: "no scenario matched, so nothing was measured"
+            );
+        }
+
+        var failures = 0;
+
+        foreach (var summary in summaries) {
+            foreach (var error in summary.ValidationErrors.Where(predicate: static error => error.IsCritical)) {
+                Console.Error.WriteLine(value: $"puck {KernelsVerb}: validation: {error.Message}");
+
+                failures++;
+            }
+
+            foreach (var report in summary.Reports.Where(predicate: static report => (!report.Success || (report.ResultStatistics is null)))) {
+                Console.Error.WriteLine(value: $"puck {KernelsVerb}: {report.BenchmarkCase.DisplayInfo}: did not run to a measurement");
+
+                failures++;
+            }
+
+            // A case refused before it ran (a critical validation error) leaves no report at all.
+            foreach (var benchmarkCase in summary.BenchmarksCases.Where(predicate: benchmarkCase => !summary.Reports.Any(predicate: report => ReferenceEquals(objA: report.BenchmarkCase, objB: benchmarkCase)))) {
+                Console.Error.WriteLine(value: $"puck {KernelsVerb}: {benchmarkCase.DisplayInfo}: never ran");
+
+                failures++;
+            }
+        }
+
+        return ((failures == 0)
+            ? CliExit.Success
+            : CliExit.Failed);
     }
 
     /// <summary>Creates the <c>bench</c> verb; <paramref name="clock"/> bounds its tool runs.</summary>
@@ -69,6 +135,11 @@ public static class BenchRunner {
 
             puck's own help answers -h and --help here, so BenchmarkDotNet's (-h is its `hide` option) are reached
             past a `--` separator: `puck bench kernels -- --help`.
+
+            Every scenario runs in this process, against the assemblies this CLI was built with; nothing is rebuilt
+            from the working tree, so the numbers describe this build. Exit 0 when every selected scenario measured
+            (or the run only listed or printed help), 1 when one failed validation or did not run to a measurement,
+            and 2 when the arguments did not parse or matched no scenario.
             """);
         worldCommand.Detail(detail: """
             Loads one world, the debug world unless another is named, builds its server without a device, and
