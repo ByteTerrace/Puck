@@ -235,6 +235,7 @@ public sealed partial class GateRunLawTests : GateRunLaws {
                 ["registry", "--check"],
                 ["vocabulary", "--check"],
                 ["shaders", "generate", "--check"],
+                ["wasm-stdlib", "--check"],
                 ["branding", "--check"],
             }
         );
@@ -250,7 +251,7 @@ public sealed partial class GateRunLawTests : GateRunLaws {
         var (exitCode, output, _) = Gate(branches: branches, directory: directory, runner: runner);
 
         Assert.Equal(actual: exitCode, expected: CliExit.Failed);
-        Assert.Equal(actual: runner.Steps.Count, expected: 8);
+        Assert.Equal(actual: runner.Steps.Count, expected: 9);
         Assert.Contains(actualString: output, expectedSubstring: "gate: schema FAILED (exit 1, ");
         Assert.Contains(actualString: output, expectedSubstring: "gate: FAILED: schema; full output in ");
         Assert.Contains(expectedSubstring: "===== schema (exit 1)\noutput of schema", actualString: File.ReadAllText(path: directory.PathOf(name: "gate.log")).ReplaceLineEndings(replacementText: "\n"));

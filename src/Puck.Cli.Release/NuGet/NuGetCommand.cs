@@ -12,7 +12,7 @@ namespace Puck.Cli.NuGet;
 
 /// <summary>
 /// <c>puck nuget</c> — the shared-version NuGet release: pack every opted-in project, select and verify a batch, push
-/// it, and the GitHub-side gate, tag, release record, and CLI pin that surround a publication.
+/// it, and the GitHub-side gate, tag, release record, and published-CLI check that surround a publication.
 /// </summary>
 public static class NuGetCommand {
     private static readonly StringComparer PackageComparer = StringComparer.OrdinalIgnoreCase;
@@ -546,10 +546,10 @@ public static class NuGetCommand {
             description: "Pack, select, verify, and push a shared-version NuGet release.",
             name: "nuget"
         ) {
-            version, pack, prepare, verify, push, NuGetReleaseCommand.Gate(), NuGetReleaseCommand.Tag(), NuGetReleaseCommand.Release(), NuGetReleaseCommand.Pin(), NuGetReleaseCommand.PinPublished(), NuGetReleaseCommand.Smoke(),
+            version, pack, prepare, verify, push, NuGetReleaseCommand.Gate(), NuGetReleaseCommand.Tag(), NuGetReleaseCommand.Release(), NuGetReleaseCommand.VerifyPublished(), NuGetReleaseCommand.Smoke(),
         };
 
-        command.Detail(detail: "prepare, verify, and push use VERSION (or the shared version) and GITHUB_SHA (or git HEAD).");
+        command.Detail(detail: "prepare, verify, and push use the shared version and GITHUB_SHA (or git HEAD).");
 
         version.SetAction(action: _ => PrintVersion());
         pack.SetAction(action: (parseResult, _) => PackAsync(

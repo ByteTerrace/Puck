@@ -38,6 +38,7 @@ public static class GatePlan {
         new("registry", GateStepKind.Puck, ["registry", "--check"]),
         new("vocabulary", GateStepKind.Puck, ["vocabulary", "--check"]),
         new("shaders generate", GateStepKind.Puck, ["shaders", "generate", "--check"]),
+        new("wasm-stdlib", GateStepKind.Puck, ["wasm-stdlib", "--check"]),
         new("branding", GateStepKind.Puck, ["branding", "--check"]),
         .. BaselinesCommand.Artifacts.OrderBy(keySelector: static artifact => artifact.Name, comparer: StringComparer.Ordinal)
             .Select(selector: static artifact => new GateStep(("baselines " + artifact.Name), GateStepKind.Baseline, artifact.CheckArguments(), Heavy: true)),

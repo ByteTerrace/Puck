@@ -2,7 +2,7 @@
 
 This directory owns Puck's maintained visual assets and the map of their
 consumers. Use it when you need the product mark, a browser icon, the palette,
-or the distribution check. The manifest records the byte hash and intended
+or the distribution check. The manifest records the intended
 variant for every maintained asset; the rasters are retained from the existing
 site, dashboard, and editor consumers without pixel edits.
 
@@ -65,9 +65,8 @@ engine.
 
 ## Updating an asset
 
-Replace the canonical bytes deliberately, update the corresponding `sha256` in
-[`manifest.json`](manifest.json), and update or add copy entries for every
-consumer. Keep a distinct manifest asset when a consumer's authored dimensions
+Replace the canonical bytes deliberately, then update or add copy entries in
+[`manifest.json`](manifest.json) for every consumer. Keep a distinct manifest asset when a consumer's authored dimensions
 or treatment are intentional. Run the deterministic check from the repository
 root:
 
@@ -83,9 +82,10 @@ puck branding
 puck branding --check
 ```
 
-The command validates every canonical hash and every destination path before it
-writes. `--check` fails on a missing canonical or active consumer file, a
-changed canonical hash, or drift in an active distributed copy. Deferred
+The command validates every canonical file and every destination path before it
+writes. `--check` fails on a missing canonical or active consumer file, or on an
+active distributed copy whose bytes differ from its canonical file; no hash is
+recorded. Deferred
 consumers are counted and retain path validation, but their files are not
 synchronized or required to exist. The verification workflow runs this check
 with the candidate CLI; see [CI and releases](../docs/development/ci.md).

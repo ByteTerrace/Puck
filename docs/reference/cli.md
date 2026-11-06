@@ -120,7 +120,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck mesh`](#puck-mesh-auditbaked-mesh-audit) | `mesh audit` measures the meshes a World's bake stored against the fields they were baked from and reports each group's defects, worst first, located and named by shape; `mesh scene` times the irradiance volume's trace scene over them, built whole and updated for one draw's change; `mesh identity` prints the bake identity a build keys them by and what differs from another build's. |
 | [`puck migrate`](#the-puck-dsl-verbs) | applies one named syntax-tree rewrite to every `.puck` source under a path, proving each rewritten source still compiles to the document it did apart from the members the migration declares. |
 | [`puck motion`](#puck-motiontick-pinned-motion-stills-and-contact-sheets) | judges how the Moth moves: boots the debug world's real `Puck.World`, runs the tick-pinned scenarios of `worlds/debug/motion.scenarios.json` through the `motion` layout's four cameras, and writes per-camera stills, labelled contact sheets and a manifest; `--reproduce` runs everything twice in fresh Worlds and compares pose hashes and pixels. |
-| [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `pin`, `pin-published`, `smoke`. |
+| [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `verify-published`, `smoke`. |
 | [`puck official`](#puck-officialthe-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.manifest.v1` tree—the shipped engine, the authoring workspace, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
 | [`puck packages`](#puck-packagespublished-nuget-package-report) | the published `ByteTerrace.Puck.*` NuGet package report—id/description/tags—checked and regenerated against `docs/site/index.html`. |
 | [`puck parity`](#puck-paritycross-backend-parity-over-the-authored-parity-world) | boots a parity world it is given offscreen once per graphics backend and judges every capture it schedules: content gate, exact state hash, an exact reference image where a station names one, and per-tile pixels. |
@@ -139,7 +139,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck verbs`](#puck-verbsconsole-verb-catalog) | the console verb catalog `src/Puck.World.Vocabulary/Assets/puck.console.verbs.json`, every verb any boot shape registers, read from a headless and a windowed World's `world.affordances` and checked against them; authored commands are validated against it. |
 | [`puck vocabulary`](#puck-vocabularyworld-authoring-vocabulary) | the world authoring vocabulary `docs/reference/world-vocabulary.md`, generated from the one construct table the parser, the printer and the language server read, and checked against it. |
 | [`puck wasm`](../../wasm/README.md) | derives Rust guest variants through the runtime cache and exports ignored modules. |
-| [`puck wasm-stdlib`](#puck-wasm-stdlibwasm-standard-library-sources) | regenerates every generated Rust source of the WASM standard library: `FixedQ4816`'s Rust port and known-answer vectors, and the addon ABI's Rust mirror. |
+| [`puck wasm-stdlib`](#puck-wasm-stdlibwasm-standard-library-sources) | regenerates every generated Rust source of the WASM standard library: `FixedQ4816`'s Rust port and known-answer vectors, and the addon ABI's Rust mirror; `--check` compares them with the files on disk and their staged copies. |
 | [`puck worktree-base`](#puck-worktree-baseworktree-base-guard) | puts a worktree's HEAD at a named base commit, refusing rather than resetting a dirty tree. |
 | [`puck worktree-report`](#puck-worktree-reportremoval-report) | reports which local branches and worktrees have landed and are safe to remove. |
 | [`puck world`](#automation-commands) | prepare hosted world documents, prepare release manifests, inspect deployment-group state, or probe a QUIC endpoint. |
@@ -343,8 +343,13 @@ QUIC reachability and the endpoint's expected public key; it requires QUIC suppo
 and contacts the supplied host. `wasm build` exports the Rust guest variants
 in `wasm/builds.json` through the addon loader's counted cache; its `dist` outputs
 are ignored exports. `world prepare` also writes a prewarmed `derived` store into
-its output. `world prewarm --output <player>` prepares the same BIOS and addon store
-for a player executable directory. Publishing `Puck.World` runs this automatically.
+its output, holding only what the prepared worlds reference: the AGB BIOS when a
+machine of the `advanced-gaming-brick` engine takes the bundled firmware, and each
+Rust addon guest variant an addon row's module path names. A world that references
+neither needs no `clang`, `ld.lld` or Rust toolchain; one that does needs them at
+prepare time. `prewarm --output <player>` prepares every BIOS and addon variant the
+engine can derive, for a player executable directory. Publishing `Puck.World` runs
+it automatically.
 `world release prepare` loads the validated silo inventory, requires one canonical
 composed `*.world.json` output for every owner/world row, and writes a
 content-addressed manifest (`release.json` in the package directory unless
@@ -949,15 +954,17 @@ could know it. The plan runs serially in this order:
 9. `registry`: `puck registry --check`.
 10. `vocabulary`: `puck vocabulary --check`.
 11. `shaders generate`: `puck shaders generate --check`.
-12. `branding`: `puck branding --check`.
-13. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
-14. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
-15. `parity`: `puck parity` when selected, only with `--gpu`.
-16. `Puck.World.Tests`: device suite, only with `--gpu`.
-17. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
-18. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
-19. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
-20. `docs citations`: `puck docs citations`, only with `--gpu`.
+12. `wasm-stdlib`: `puck wasm-stdlib --check`.
+13. `branding`: `puck branding --check`.
+14. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
+15. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
+16. `parity`: `puck parity` when selected, only with `--gpu`.
+17. `Puck.World.Tests`: device suite, only with `--gpu`.
+18. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
+19. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
+20. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
+21. `docs citations`: `puck docs citations`, only with `--gpu`.
+
 The device suites run `dotnet test --project <suite> -c Release --no-build` over the
 solution build's binaries, as affected's suites do, since Microsoft.Testing.Platform hands
 MSBuild switches to the test application, which refuses them. Each selects its device laws
@@ -2454,8 +2461,10 @@ one host. It boots each scenario of a `puck.determinism.manifest.v1` manifest in
 this process the way the game boots it, headless and with no presentation. It
 joins the scenario's seats, then steps the world for its ticks, writing the
 scenario's state cells and submitting its held intents before the ticks they
-name. The shipped manifest is
-[tests/Puck.Determinism/determinism.json](../../experimental/tests/Puck.Determinism/determinism.json).
+name. The manifest the verb
+was built around is
+[tests/Puck.Determinism/determinism.json](../../experimental/tests/Puck.Determinism/determinism.json),
+quarantined under `experimental/` with the other gates.
 It covers body dynamics and action state, flocks, rule latches and state
 writes, flow conservation, a kart lap, a billiards host, navigation,
 rule groups, decisions, board enforcement and interactions. Two
@@ -2516,7 +2525,7 @@ versions, manifests (by pin), scenario lists or tick counts.
 Exit codes: `record` exits 0 when it has written the stream and 2 when the
 manifest or a scenario cannot be read or run, or a scenario moves a component it
 exercises nowhere. `compare` exits 0 with no
-divergence, 1 on a divergence and 2 on a refusal. Recording the shipped manifest takes
+divergence, 1 on a divergence and 2 on a refusal. Recording that manifest takes
 seconds and writes one hash per component per tick. Every
 per-tick component but the topologies is exercised by some scenario. The
 topologies are declaration that nothing at run time changes, so no scenario can
@@ -2924,18 +2933,19 @@ runtime pack, or the capture's own disassembly walk. After such a change, run
 `--capture`, which exits 1 when the lowering no longer reproduces the pinned
 evidence.
 
-Before producing new kernel artifacts, capture the exact work list and verify that
-the checked-out sources still match the manifest:
+Before producing new kernel artifacts, capture the exact work list and read each
+kernel source's current digest:
 
 ```sh
 puck bench state-evidence --inventory --output artifacts/state-evidence/inventory.json
 ```
 
 The inventory records the manifest digest, pinned SDK and roll-forward policy,
-every Native AOT entry point and symbol, expected and actual source SHA-256 values,
+every Native AOT entry point and symbol, each kernel source's current SHA-256,
 per-target unresolved analyzer findings, the per-vocabulary coverage with each
 unmodeled operation named, and every missing memory coefficient. A nonzero exit
-means at least one kernel source digest is stale or absent. Run it from the
+means at least one kernel source file is absent; no source digest is recorded in
+the manifest. Run it from the
 repository checkout; the command locates the checkout by ascending to `Puck.slnx`.
 
 Each kernel artifact campaign must use the inventory's exact source digest and the
@@ -2970,8 +2980,8 @@ inferred from the machine running the capture.
 
 The kernel *declarations* are not regenerated. Entry point, symbol, reviewed
 formula, declared loop bounds, included overhead and input domain are reviewed
-and pinned in `ReferenceSchedule.json`; the capture regenerates the source
-digests, the per-target prices, the instruction-form service rows and the
+and pinned in `ReferenceSchedule.json`; the capture regenerates the
+per-target prices, the instruction-form service rows and the
 family-balanced representative service, then compares each against what is
 pinned and names every difference. The manifest keeps the first few reasons a
 target left a kernel unresolved; the run prints every one, since each is a loop
@@ -4223,7 +4233,8 @@ and `fixed_vectors.rs` (known-answer vectors, computed by calling the real
 addon ABI's names and values from the live host types.
 
 ```text
-puck wasm-stdlib   regenerate every registered generated Rust source
+puck wasm-stdlib           regenerate every registered generated Rust source
+puck wasm-stdlib --check   compare each with the file on disk and its staged copy; write nothing
   -h / --help   this text
 ```
 
@@ -4233,10 +4244,12 @@ This verb is a thin wrapper: it writes whatever
 `Puck.Maths.FixedQ4816RustPort`, one of the registry's contributors. **Adding a
 future artifact is a one-line addition to that registry**—this verb never
 changes. Every `Emit` delegate is **byte-idempotent**: an unchanged host must
-produce byte-identical output on every run, which is what makes running this
-verb twice a drift check in its own right. **Nothing gates that**: a drifted
-commit is caught only by running this verb and reading the diff. Never hand-edit a generated file; regenerate it
-with this verb and commit the result.
+produce byte-identical output on every run. `--check` regenerates each file in
+memory and compares it with the file on disk, then with the staged copy, through
+the same helper every generator uses (`CliGeneratedFile`), and exits 1 naming
+each file that is missing, stale or unstaged. A stale port is a determinism risk
+for WASM guests, so the `ledgers` job of `verify.yml` runs it on every change.
+Never hand-edit a generated file; regenerate it with this verb and commit the result.
 
 Takes no arguments and no `<root>`: each registered path (e.g. `wasm/puck-stdlib/src`) names a repository convention rather than
 something a caller supplies, so it is anchored at the repository root instead
@@ -4384,8 +4397,8 @@ directory that is no git worktree.
 
 ## `puck branding`—maintained assets
 
-`puck branding` reads `branding/manifest.json`, verifies every canonical SHA-256
-hash and required source reference, then synchronizes every non-deferred copy.
+`puck branding` reads `branding/manifest.json`, hashes every canonical file
+(no hash is recorded) and checks each required source reference, then synchronizes every non-deferred copy.
 The command preflights every source, destination, duplicate output, and wiring
 entry before it writes, and refuses rooted, escaping, or reparse-point paths.
 A copy the manifest marks `deferred` still has its destination path checked
@@ -4393,11 +4406,11 @@ but is never written; no copy in the manifest carries that mark.
 
 ```text
 puck branding             synchronize canonical assets into their consumers
-puck branding --check     check hashes and wiring without writing
+puck branding --check     check each copy against its canonical file, and wiring, without writing
 ```
 
 Exit codes are **0** for a successful synchronization or matching check, **1**
-for a manifest, hash, copy, or wiring problem, and **2** when no repository root
+for a manifest, copy, or wiring problem, and **2** when no repository root
 can be found. The authoritative asset map and variant rationale live in
 [`branding/README.md`](../../branding/README.md).
 
