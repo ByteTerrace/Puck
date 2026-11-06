@@ -201,7 +201,8 @@ puck --version
 ```
 
 A running `puck` holds the installed tool, so close whatever launched one
-first: the editor's language server, an MCP client's server. The uninstall
+first: the editor's language server, an MCP client's server, a lead's
+`puck lanes --watch` monitor. The uninstall
 otherwise fails with `The file exists` and leaves the earlier install in place.
 
 An agent reinstalls the global tool this way whenever it finds it stale (a
