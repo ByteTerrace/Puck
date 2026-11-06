@@ -146,8 +146,8 @@ public static class ScanCommand {
         };
 
         command.Detail(detail: $"""
-            Analyzers: {KnownAnalyzers}. The tree is parsed once for every selected analyzer, and
-            the walk skips {FileWalk.PrunedNames}, and agent worktrees under .claude/worktrees.
+            Analyzers: {KnownAnalyzers}. The tree is parsed once for every selected analyzer.
+            {FileWalk.WalkSummary}
 
             Records go to stdout when exactly one analyzer is selected and neither --output nor
             --grouped is given, and to files otherwise; the digest always goes to stderr. Output

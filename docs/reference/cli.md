@@ -2805,19 +2805,16 @@ puck search <pattern> [path ...]        content search (default path: cwd)
 Exit codes: **0** matched, **1** no match, **2** usage/pattern error (the
 engine's own parse message is printed verbatim). A path argument that names
 nothing on disk is one of those usage errors—every bad path is reported before
-the run gives up, so a typo cannot pass for "no match". The recursive walk skips
-`.git`, `.tmp`, `artifacts`, `bin`, `obj`, `node_modules`, `publish`,
-`BenchmarkDotNet.Artifacts`, agent worktrees under `.claude/worktrees`,
-directory links (junctions and symbolic links, which the walk never follows),
-and binary files—naming one of those paths searches it anyway. That set is
-`FileWalk.SkipDirectories`, the one prune set every tree-walking verb shares;
+the run gives up, so a typo cannot pass for "no match". The walk is `FileWalk`,
+the one walk every tree-walking verb shares: inside a git work tree it reads
+git's view of the tree (`git ls-files --cached --others --exclude-standard`),
+so ignored scratch snapshots, build output and the duplicate checkouts under
+`.claude/worktrees` never answer as live code. Outside a work tree, or under a
+root git ignores, it walks the disk and skips `FileWalk.SkipDirectories`, agent
+worktrees and directory links; the help prints that list. Binary files are
+skipped too, and naming an ignored directory or a file searches it anyway.
 `format` alone also skips the quarantined `experimental/` trees, which every
-reading verb still searches. The build-artifact
-names are on that list because this project writes into them: publishing drops a
-generated `Puck.Maths.xml` next to the executable, whose duplicated doc comments
-would otherwise drain the default `-M` cap ahead of `src/Puck.Maths/` itself.
-`.claude/worktrees` holds live duplicate checkouts, whose copies otherwise answer
-a query as if they were live consumers. The full flag, glob, and engine-semantics
+reading verb still searches. The full flag, glob, and engine-semantics
 reference—including the leftmost-longest and complement gotchas—lives in the
 `content-search` skill (`.claude/skills/content-search/SKILL.md`), which drives
 every content search in this repo through the published `puck search`.
@@ -3262,11 +3259,9 @@ repository root.
 
 ## `puck scan`—source sweep
 
-Parses every `.cs` file under `<root>` **once** (the shared prune set—`.git`,
-`.tmp`, `artifacts`, `bin`, `obj`, `node_modules`, `publish`,
-`BenchmarkDotNet.Artifacts`—plus agent worktrees under `.claude/worktrees`
-pruned below the root; naming a skipped directory as the root itself still scans
-it) and
+Parses every `.cs` file under `<root>` **once** (through the shared `FileWalk`,
+which reads git's view of the tree; naming an ignored directory as the root
+itself still scans it) and
 runs the selected analyzers over that one shared corpus, so a full sweep parses
 the tree a single time rather than once per analyzer.
 
@@ -3804,10 +3799,9 @@ puck format --file-list <json-array-of-paths> [--check] [--configuration <name>]
 ```
 
 `<root>` is a directory or a single source, resolved against the working
-directory. The walk takes every `.cs` and `.puck` file under it and skips
-the shared prune set (`.git`, `.tmp`, `artifacts`, `BenchmarkDotNet.Artifacts`,
-`bin`, `node_modules`, `obj`, `publish`), agent worktrees under
-`.claude/worktrees`, and the quarantined `experimental` trees. Generated C# (`*.g.cs`, `*.generated.cs`) is
+directory. The walk takes every `.cs` and `.puck` file under it that the shared
+`FileWalk` admits (git's view of the tree, so nothing ignored), and skips the
+quarantined `experimental` trees. Generated C# (`*.g.cs`, `*.generated.cs`) is
 never formatted.
 
 `--file-list` takes the path of a JSON file holding an array of paths, and both

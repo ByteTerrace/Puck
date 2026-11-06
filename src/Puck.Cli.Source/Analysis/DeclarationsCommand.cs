@@ -132,9 +132,7 @@ public static class DeclarationsCommand {
 
         command.Detail(detail: $"""
             Output is `path:line:col decl <kind> <qualified name>[ : <base list>]`, sorted by
-            path then position. Both record forms report the kind `record`. The walk skips
-            {FileWalk.PrunedNames}, and agent worktrees under .claude/worktrees; name one as a
-            root to inventory it.
+            path then position. Both record forms report the kind `record`. {FileWalk.WalkSummary}
 
             This tier reads syntax, not symbols: it sees every .cs file on disk, including the
             ones no project compiles, but it matches names rather than resolving them. Use

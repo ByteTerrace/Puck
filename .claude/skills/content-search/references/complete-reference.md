@@ -89,20 +89,17 @@ and exit 2. Write `search --files [path ...] [-g ...] [--not ...]`. `--files -q`
 is the bare existence probe (verified): no listing, exit 0 if any file would be
 searched and 1 if none.
 
-Defaults: the recursive walk skips `.git`, `.tmp`, `artifacts`, `bin`, `obj`,
-`node_modules`, `publish`, `BenchmarkDotNet.Artifacts`, agent worktrees under
-`.claude/worktrees`, directory links (junctions and symbolic links are never
-followed), and binary files (NUL-byte sniff of the first 4 KiB). The
-build-artifact names are pruned because this repo publishes the tool into
-`src/Puck.Cli/publish/`, whose generated `.xml` doc files are duplicates of the
-sources that would otherwise drain the `-M` cap before the walk reaches
-`src/Puck.Maths/`. `.claude/worktrees` is pruned because it holds live duplicate
-checkouts of this same repository: their copies answer a tree-wide query as if
-they were live consumers, which poisons find-usages and safe-to-delete sweeps.
-Explicitly named paths partly override this
-(verified): a named directory IS searched, even `bin`, `publish`, `.git` or
-`.claude/worktrees` — though skip-named subdirectories inside it are still
-pruned, and `-g`/`--not` still apply — and so is a file named inside one. A named
+Defaults: inside a git work tree the walk reads git's view of the tree, the
+files `git ls-files --cached --others --exclude-standard` names, so ignored
+build output, `.claude/scratch` snapshots and the duplicate checkouts under
+`.claude/worktrees` never answer a tree-wide query as live consumers. Outside a
+work tree, or under a root git ignores, it walks the disk and prunes the
+`FileWalk.SkipDirectories` names the help prints, agent worktrees and directory
+links (never followed). Binary files (NUL-byte sniff of the first 4 KiB) are
+skipped either way. Explicitly named paths partly override this: a named
+ignored directory IS searched, even `bin` or `.claude/scratch` — though
+skip-named subdirectories inside it are still pruned, and `-g`/`--not` still
+apply — and so is a file named inside one. A named
 file bypasses `-g` include globs entirely but still honors `--not` and the binary
 sniff, so naming a NUL-containing file (UTF-16, `.spv`, `.dxil`) silently exits 1
 with no warning. UTF-8 with permissive fallback; a leading byte-order mark is
