@@ -2,7 +2,6 @@ using System.Collections.Frozen;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Machines;
-using Puck.Audio.Mixing;
 
 namespace Puck.World.Server;
 
@@ -167,7 +166,7 @@ public sealed partial class WorldMachineHost {
                     fieldPaths: live.Lease.AbsentContent
                 ),
                 Assets: live.Lease.Assets,
-                AudioSampleRate: MachineAudioRate.SampleRate
+                AudioSampleRate: AudioSampleRate
             );
             var prepared = provider.PrepareOperation(
                 current: requestForProvider,
@@ -941,7 +940,7 @@ public sealed partial class WorldMachineHost {
         return new(
             configuration.Clone(),
             assets.ToFrozenDictionary(comparer: StringComparer.Ordinal),
-            MachineAudioRate.SampleRate
+            AudioSampleRate
         );
     }
     // A configuration without the named content fields: each field's whole object leaves it, so the engine creates its

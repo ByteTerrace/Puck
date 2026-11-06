@@ -24,13 +24,13 @@ public sealed class FixedStepUpLawTests {
 
     private readonly ref struct StaticStep(FixedStaticCollider[] colliders) : IFixedContactStep {
         private readonly FixedStaticCollider[] m_colliders = colliders;
+        private static FixedStaticContactSolver Solver => new(ContactSkin: FixedQ4816.Zero, GroundedThreshold: GroundedThreshold, MaxIterations: 4);
 
+        public bool TrySupportDistance(in FixedVector3 start, FixedQ4816 reach, out FixedQ4816 descent) =>
+            Solver.TrySupportDistance(colliders: new(colliders: m_colliders), descent: out descent, dynamicColliders: FixedStaticColliderSet.Empty,
+                orientation: FixedQuaternion.Identity, position: in start, reach: reach, up: FixedVector3.UnitY, volumes: Capsule);
         public ContactResolution Sweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
-            new FixedStaticContactSolver(
-                ContactSkin: FixedQ4816.Zero,
-                GroundedThreshold: GroundedThreshold,
-                MaxIterations: 4
-            ).ResolveSweep(
+            Solver.ResolveSweep(
                 colliders: new(colliders: m_colliders),
                 dynamicColliders: FixedStaticColliderSet.Empty,
                 orientation: FixedQuaternion.Identity,
