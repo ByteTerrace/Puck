@@ -12,7 +12,7 @@ namespace Puck.Cli.Bench;
 public static class StartupBenchmarks {
     public static Command Create(BenchHostSample? sampleHost) {
         var worlds = new Argument<string[]>(name: "worlds") { Arity = ArgumentArity.ZeroOrMore, Description = "Worlds to boot: asset package folders, sources or documents. Default: the debug world's package, worlds/debug." };
-        var artifact = new Option<string?>("--world-artifact") { Description = "Existing World DLL; defaults to src/Puck.World/bin/Release/net11.0/Puck.World.dll. Never builds." };
+        var artifact = new Option<string?>("--world-artifact") { Description = "Measure this Puck.World entry assembly instead of the build of the checkout's sources, which is built first, outside every sample, when no run has built that source state." };
         var output = new Option<string?>("--output") { Description = "Parent for a unique run directory containing report.json, transcripts, and captures." };
         var cache = new Option<string?>("--cache-dir") { Description = "World cache root shared across samples; an empty directory measures a cold boot followed by warm boots." };
         var samples = new Option<int>("--samples") { DefaultValueFactory = _ => 3, Description = "Fresh processes measured per world, 1 to 100." };
@@ -37,11 +37,16 @@ public static class StartupBenchmarks {
             return 2;
         }
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root)) { return 2; }
-        artifact = Path.GetFullPath(path: (artifact ?? Path.Combine(path1: root, path2: "src/Puck.World/bin/Release/net11.0/Puck.World.dll")));
-        if (!File.Exists(path: artifact)) {
-            Console.Error.WriteLine(value: $"startup: missing World artifact {artifact}; build World in Release before measuring.");
+        var run = PuckPaths.Normalize(path: Path.Combine(path1: (output ?? Path.Combine(path1: root, path2: "artifacts/startup")), path2: Guid.NewGuid().ToString(format: "N")));
+
+        Directory.CreateDirectory(path: run);
+        // The build happens before the first sample, so no sample's interval holds it.
+        if (!WorldLaunch.TryResolve(build: out var build, error: out var buildError, logDirectory: run, named: artifact, repositoryRoot: root, spirv: (!headless && WorldLaunch.NeedsSpirv(backend: null, shape: WorldShape.Windowed)), verb: "startup")) {
+            Console.Error.WriteLine(value: $"startup: {buildError}");
             return 2;
         }
+        using var held = build;
+        artifact = build.Path;
         if (worlds.Length == 0) {
             // The debug world is the one live world; every other world is quarantined in experimental/.
             worlds = [Path.Combine(path1: root, path2: WorldBenchmarks.DefaultWorldRelativePath)];
@@ -51,9 +56,6 @@ public static class StartupBenchmarks {
             Console.Error.WriteLine(value: "startup: every world must exist and occur exactly once.");
             return 2;
         }
-        var run = PuckPaths.Normalize(path: Path.Combine(path1: (output ?? Path.Combine(path1: root, path2: "artifacts/startup")), path2: Guid.NewGuid().ToString(format: "N")));
-
-        Directory.CreateDirectory(path: run);
         var rows = new List<StartupSample>();
         var start = BenchReport.Start(build: BenchBuild.Of(entryAssembly: artifact), repeats: samples, settings: new Dictionary<string, string> {
             ["worlds"] = string.Join(separator: ", ", values: worlds.Select(selector: static world => CliPaths.ToDisplay(fullPath: world))),
@@ -78,15 +80,20 @@ public static class StartupBenchmarks {
 
                 Directory.CreateDirectory(path: directory);
                 var capture = $"{directory}/frame.png";
-                var arguments = new[] { artifact, "--world", worlds[index], "--devices", "none", "--headless", (headless ? "true" : "false"), "--exit-after-seconds", "0", "--width", width.ToString(provider: CultureInfo.InvariantCulture), "--height", height.ToString(provider: CultureInfo.InvariantCulture), "--state-dir", $"{directory}/state", "--capture-dir", $"{directory}/captures" };
-                if (cache is not null) { arguments = [.. arguments, "--cache-dir", Path.GetFullPath(cache)]; }
+                var request = new WorldLaunchRequest(Artifact: artifact, Step: "bench startup") {
+                    Arguments = ["--width", width.ToString(provider: CultureInfo.InvariantCulture), "--height", height.ToString(provider: CultureInfo.InvariantCulture), "--capture-dir", $"{directory}/captures", .. ((cache is null) ? Array.Empty<string>() : ["--cache-dir", Path.GetFullPath(cache)])],
+                    ExitAfterSeconds = 0,
+                    Shape = (headless ? WorldShape.Headless : WorldShape.Windowed),
+                    StateDirectory = $"{directory}/state",
+                    World = worlds[index],
+                };
                 var input = (("world.status\n" + (headless ? "" : $"world.wait 1\nworld.screenshot {JsonSerializer.Serialize(capture, StartupJsonContext.Default.String)}\n")) + "wire.errors\n");
                 StartupSample row;
 
                 try {
-                    WorldAdmission.Wait(step: "bench startup", worldArguments: arguments);
+                    using var launch = WorldLaunch.Admit(request: request);
 
-                    var result = CliProcess.RunCaptured("dotnet", arguments, input, TimeSpan.FromSeconds(seconds: timeout),
+                    var result = launch.Run(input: input, timeout: TimeSpan.FromSeconds(seconds: timeout),
                         continueWhen: line => (headless
                             ? ((line.Stream == CliProcessOutputStream.Stdout) && (line.Line == "[wire.errors: 0 rejected]"))
                             : IsCaptureCompletion(capture: capture, line: line)),
@@ -95,7 +102,7 @@ public static class StartupBenchmarks {
                     File.WriteAllText($"{directory}/stdout.log", result.Stdout);
                     File.WriteAllText($"{directory}/stderr.log", result.Stderr);
                     row = Assess(worlds[index], sample, result, headless, capture);
-                } catch (Exception exception) when ((exception is Win32Exception or IOException or InvalidOperationException)) {
+                } catch (Exception exception) when ((exception is Win32Exception or IOException or InvalidOperationException or TimeoutException)) {
                     row = new(worlds[index], sample, null, null, null, exception.Message);
                 }
                 rows.Add(item: row);

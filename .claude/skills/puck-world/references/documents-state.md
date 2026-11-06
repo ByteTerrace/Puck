@@ -612,7 +612,7 @@ is an authored seek: a rebuild advances `skip + cursor` rather than
 persist and RESUME on reload; it fills only while the row carries no cell, so an
 authored `value` is a deliberate override. `bodies.capacityRow` (a scalar `int`
 row) and `host.backendRow` (a scalar `text` row, parsed by name through
-`WorldHostTokens.ParseBackend`, never an unnamed ordinal) are boot-time READS of
+`WorldBackendTokens.Parse`, never an unnamed ordinal) are boot-time READS of
 such a row, resolved after every row's first fill. Each writes the read value into
 the ordinary literal field (`bodies.capacity`/`host.backend`) and NARRATES on stderr
 (`[world.draw: settled <site> instance=<name> -> <value>]`); the row stays the

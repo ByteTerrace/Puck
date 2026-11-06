@@ -196,9 +196,10 @@ that covers cold compilation and contention; a short start can expire during a
 cold build under contention. This does not extend the lane's twenty-minute
 running-World batch. Each wait defaults to 20 seconds; `timeoutMs` allows up to 120000 in one
 call, so a cold build needs few polls. Never repeat the start while pending. A pending
-answer names its `stage` (`building` the World from the checkout's sources, `gpu-lease`,
-`host-admission` then the admission's own `waiting for memory headroom: commit 82% of limit`
-(the commit-charge and memory admission every start passes), or `booting`, with the World's
+answer names its `stage` (`building` the World from the checkout's sources, `host-admission`
+then the admission's own `waiting for memory headroom: commit 82% of limit` (the commit-charge
+and memory admission every start passes; a windowed start waits for it before `gpu-lease` and
+is judged again once the lease is held), or `booting`, with the World's
 last stderr line in `output`) and the seconds `elapsedSeconds`
 since admission. A cold build continues between calls and across adapter updates.
 `cancel: true` on the wait cancels an unfinished start. A cancelled poll only
@@ -551,10 +552,10 @@ owner's Control+Alt+Escape never reaches the World. stdin, the console,
 `player.signal`, `body.*`, schedule rows and MCP still drive the World. The
 boot says `[world.host] physical input devices are off` on stderr; a stderr with
 a `[gamepad]` or `[gameinput]` line means the flag was missed. A headless or
-offscreen boot opens no device either way, and the flag is harmless there. The
-verbs that boot a windowed or offscreen World for you (`puck canary`, `puck
-parity`, `puck counters`, `puck verbs`, `puck docs citations`, `puck bench
-startup`) pass it themselves (`WorldDevices.NoneArguments`). The owner's own World
+offscreen boot opens no device either way, and the flag is harmless there. Every
+World a verb or `puck_world_start` boots for you passes it through the one launch
+(`WorldLaunchRequest.CommandLine`), which also takes the GPU lease for a windowed
+or offscreen World; only an owner-play start opens the devices. The owner's own World
 (`.claude/launch.json`'s `debug-world`) explicitly passes `--devices all`. Never inject real input to
 check the flag: the owner may be holding the pad.
 

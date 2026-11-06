@@ -165,7 +165,7 @@ public sealed class HostLoadLawTests {
     [InlineData("--pressure-disk", "-1")]
     [Theory]
     public void ThresholdsRefuseNonphysicalValuesBeforeReadingTheMachine(string option, string value) =>
-        Assert.NotEmpty(collection: HostCommand.Create(composition: SuiteRoot.Composition).Parse(args: ["load", option, value]).Errors);
+        Assert.NotEmpty(collection: HostCommand.Create().Parse(args: ["load", option, value]).Errors);
     [InlineData(100UL, 1000UL, 99UL, 1010UL)]
     [InlineData(100UL, 1000UL, 120UL, 1010UL)]
     [Theory]

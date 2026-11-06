@@ -79,10 +79,11 @@ public static class WorldArtifactBuild {
     /// exited; also retained for a named managed-store artifact, and <see langword="null"/> for an external package
     /// or on failure.</param>
     /// <param name="error">Why no artifact is available, or empty on success.</param>
+    /// <param name="spirv">Whether the checkout's build carries Vulkan SPIR-V; a named build is used as given.</param>
     /// <param name="wait">How long the run may wait for other runs' builds and the machine's build lease, or
     /// <see langword="null"/> for <see cref="CliLease.DefaultWait"/>.</param>
     /// <returns><see langword="true"/> when an artifact is available.</returns>
-    public static bool TryResolveNamed(string? named, string verb, string repositoryRoot, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out string? path, out WorldArtifact? lease, out string error, TimeSpan? wait = null) {
+    public static bool TryResolveNamed(string? named, string verb, string repositoryRoot, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out string? path, out WorldArtifact? lease, out string error, bool spirv = false, TimeSpan? wait = null) {
         lease = null;
 
         if (named is { }) {
@@ -126,6 +127,7 @@ public static class WorldArtifactBuild {
             error: out error,
             logDirectory: logDirectory,
             repositoryRoot: repositoryRoot,
+            spirv: spirv,
             timeout: timeout,
             verb: verb,
             wait: wait

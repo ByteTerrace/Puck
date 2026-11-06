@@ -92,7 +92,7 @@ public sealed class WorldBootRowSourceLawTests {
             );
 
             foreach (var identity in Identities) {
-                Assert.NotNull(@object: WorldHostTokens.ParseBackend(token: SampledToken(
+                Assert.NotNull(@object: WorldBackendTokens.Parse(token: SampledToken(
                     definition: definition,
                     instanceIdentity: identity
                 )));

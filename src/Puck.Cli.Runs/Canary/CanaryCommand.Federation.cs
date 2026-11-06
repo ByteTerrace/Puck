@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
@@ -446,9 +445,25 @@ public static partial class CanaryCommand {
             );
         }
 
-        // The authorities start together, so the leg is admitted once: a role admitted after another has started would find
-        // that role's own World holding the GPU.
-        WorldAdmission.Wait(cancellationToken: budget.Cancellation, device: (manifest.BootShape != CanaryBootShape.Headless), step: "canary");
+        // The authorities start together, so every one is admitted before any starts: each admission counts the ones
+        // admitted before it, and they share this run's GPU lease.
+        var launches = new Dictionary<string, WorldLaunch>(comparer: StringComparer.Ordinal);
+
+        try {
+            foreach (var role in leg.Authorities) {
+                launches[role.Id] = WorldLaunch.Admit(cancellationToken: budget.Cancellation, request: new WorldLaunchRequest(Artifact: artifact, Step: "canary") {
+                    Arguments = ["--federation-key-file", keyPaths[role.Id]],
+                    ExitAfterSeconds = manifest.TimeoutSeconds,
+                    Shape = ((manifest.BootShape == CanaryBootShape.Headless) ? WorldShape.Headless : WorldShape.Windowed),
+                    StateDirectory = Path.Combine(path1: runDirectory, path2: $"state-{role.Id}"),
+                    World = patchedWorldPaths[role.Id],
+                });
+            }
+        } catch (Exception exception) when ((exception is InvalidOperationException or TimeoutException)) {
+            foreach (var admitted in launches.Values) { admitted.Dispose(); }
+
+            return CanaryLegRun.InfrastructureFailure(leg: leg, reason: exception.Message.ReplaceLineEndings(replacementText: " "), runDirectory: runDirectory);
+        }
 
         var tasks = new Dictionary<string, Task<CliProcessResult>>(comparer: StringComparer.Ordinal);
         // Every authority serves the others while any script is still running, so none is asked to quit until every
@@ -457,21 +472,7 @@ public static partial class CanaryCommand {
         var everyScriptEnded = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
         foreach (var role in leg.Authorities) {
-            var stateDirectory = Path.Combine(
-                path1: runDirectory,
-                path2: $"state-{role.Id}"
-            );
-            var arguments = new List<string> {
-                artifact,
-                "--world", patchedWorldPaths[role.Id],
-                "--federation-key-file", keyPaths[role.Id],
-                "--devices", "none",
-                "--state-dir", stateDirectory,
-                "--exit-after-seconds", manifest.TimeoutSeconds.ToString(provider: CultureInfo.InvariantCulture),
-                "--headless", ((manifest.BootShape == CanaryBootShape.Headless)
-                ? "true"
-                : "false"),
-            };
+            var launch = launches[role.Id];
             var script = scriptTexts[role.Id];
             var terminalOrdinal = CountVerbLines(
                 script: script,
@@ -496,8 +497,7 @@ public static partial class CanaryCommand {
                 try {
                     budget.Tally.WorldStarted();
 
-                    return CliProcess.RunCaptured(
-                        arguments: arguments,
+                    return launch.Run(
                         cancellationToken: budget.Cancellation,
                         continuationGate: everyScriptEnded.Task,
                         continuationInput: RunnerQuit,
@@ -517,11 +517,11 @@ public static partial class CanaryCommand {
 
                             return false;
                         },
-                        fileName: "dotnet",
                         input: script,
                         timeout: timeout
                     );
                 } finally {
+                    launch.Dispose();
                     End();
                 }
             });

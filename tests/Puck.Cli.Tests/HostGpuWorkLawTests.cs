@@ -4,18 +4,14 @@ using Xunit;
 
 namespace Puck.Cli.Tests;
 
-/// <summary>CONTRACT UNDER TEST: <see cref="HostProcesses"/> classifies a running process as GPU work under the grammars
-/// the composed <c>puck</c> root hands the gate (<see cref="PuckRootCommand.Gate"/>): the World, a GPU verb's root action,
-/// or a device-law test host whose arguments can select a device law, and never a comparison of saved results, a build,
-/// a shell or a CPU selection. Every law feeds injected command lines; none reads the machine.</summary>
+/// <summary>CONTRACT UNDER TEST: <see cref="HostProcesses"/> classifies a running process as GPU work: a World that opens a
+/// device, or a device-law test host whose arguments can select a device law, and never a CLI verb (the World it starts
+/// holds the device, under the GPU lease its launch takes), a build, a shell or a CPU selection. Every law feeds injected
+/// command lines; none reads the machine.</summary>
 public sealed class HostGpuWorkLawTests {
-    private static IReadOnlyDictionary<string, Func<System.CommandLine.Command>> Grammars => PuckRootCommand.Gate.GpuVerbGrammars;
 
     [InlineData("Puck.World", @"C:\Puck\src\Puck.World\bin\Release\net11.0\Puck.World.exe --world worlds/a.puck")]
     [InlineData("dotnet", @"dotnet C:\Users\a\AppData\Local\Puck\world-builds\k\Puck.World.dll --world w --headless false --devices none")]
-    [InlineData("dotnet", @"dotnet ""C:\scratch\l1-cli\Puck.Cli.dll"" canary pipeline-ink")]
-    [InlineData("dotnet", "dotnet /tmp/cli/Puck.Cli.dll parity")]
-    [InlineData("puck", "puck counters --world w.json")]
     [InlineData("Puck.World.Tests", @"C:\Puck\tests\Puck.World.Tests\bin\Release\net11.0\Puck.World.Tests.exe --port 1")]
     [InlineData("Puck.DirectX.Tests", "Puck.DirectX.Tests.exe")]
     [InlineData("Puck.Platform.Windows.Tests", "Puck.Platform.Windows.Tests.exe")]
@@ -23,8 +19,8 @@ public sealed class HostGpuWorkLawTests {
     [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.DirectX.Tests\bin\Release\net11.0\Puck.DirectX.Tests.dll")]
     [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.World.Tests\bin\Release\net11.0\Puck.World.Tests.dll")]
     [Theory]
-    public void TheWorldAGpuVerbAndADeviceTestHostAreGpuWork(string name, string commandLine) =>
-        Assert.True(condition: HostProcesses.IsGpuWork(commandLine: commandLine, grammars: Grammars, name: name));
+    public void TheWorldAndADeviceTestHostAreGpuWork(string name, string commandLine) =>
+        Assert.True(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
     // A headless World opens no device, so it never holds a device step back.
     [InlineData("dotnet", @"dotnet C:\Users\a\AppData\Local\Puck\world-builds\k\Puck.World.dll --headless true")]
     [InlineData("dotnet", "dotnet src/Puck.World/bin/Release/net11.0/Puck.World.dll --world worlds/debug --devices none --headless --exit-after-seconds 20")]
@@ -49,14 +45,14 @@ public sealed class HostGpuWorkLawTests {
     [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.Cli.Tests\bin\Release\net11.0\Puck.Cli.Tests.dll")]
     [Theory]
     public void BuildsShellsAndOtherTestsAreNeverGpuWork(string name, string commandLine) =>
-        Assert.False(condition: HostProcesses.IsGpuWork(commandLine: commandLine, grammars: Grammars, name: name));
+        Assert.False(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
     [InlineData("Puck.World.Tests", @"C:\Puck\tests\Puck.World.Tests\bin\Release\net11.0\Puck.World.Tests.exe --filter-not-trait Category=Gpu")]
     [InlineData("dotnet", "dotnet exec tests/Puck.World.Tests/bin/Release/net11.0/Puck.World.Tests.dll --filter-class *CaptureLawTests --filter-not-trait Category=Gpu")]
     [InlineData("Puck.Vulkan.Tests", "Puck.Vulkan.Tests.exe --filter-not-trait=Category=Gpu")]
     [InlineData("dotnet", "dotnet\0/tmp/a path/Puck.DirectX.Tests.dll\0--filter-not-trait\0Category=Gpu\0")]
     [Theory]
     public void ADeviceTestRunCarryingTheCpuSelectionIsNotGpuWork(string name, string commandLine) =>
-        Assert.False(condition: HostProcesses.IsGpuWork(commandLine: commandLine, grammars: Grammars, name: name));
+        Assert.False(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
     [InlineData("Puck.World.Tests", "Puck.World.Tests.exe --filter-trait Category=Gpu")]
     [InlineData("Puck.World.Tests", "Puck.World.Tests.exe --filter-class *WorldCaptureHoldLawTests")]
     [InlineData("dotnet", "dotnet exec Puck.World.Tests.dll --filter-not-trait Category=Slow")]
@@ -64,13 +60,13 @@ public sealed class HostGpuWorkLawTests {
     [InlineData("Puck.World.Tests", "Puck.World.Tests.exe @run.rsp --filter-not-trait Category=Gpu")]
     [Theory]
     public void ADeviceTestRunThatCanSelectADeviceLawIsGpuWork(string name, string commandLine) =>
-        Assert.True(condition: HostProcesses.IsGpuWork(commandLine: commandLine, grammars: Grammars, name: name));
+        Assert.True(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
     [Fact]
     public void EveryDeviceSuiteIsGpuWorkUnderItsGateSelectionAndNotUnderTheCpuSelection() {
         foreach (var (suite, selection) in GatePlan.DeviceSuites) {
             foreach (var (name, prefix) in new[] { (suite, $"{suite}.exe"), ("dotnet", $"dotnet exec {suite}.dll") }) {
-                Assert.True(condition: HostProcesses.IsGpuWork(commandLine: $"{prefix} {string.Join(separator: ' ', value: selection)}", grammars: Grammars, name: name));
-                Assert.False(condition: HostProcesses.IsGpuWork(commandLine: $"{prefix} {string.Join(separator: ' ', value: CliTestRun.CpuSelection)}", grammars: Grammars, name: name));
+                Assert.True(condition: HostProcesses.IsGpuWork(commandLine: $"{prefix} {string.Join(separator: ' ', value: selection)}", name: name));
+                Assert.False(condition: HostProcesses.IsGpuWork(commandLine: $"{prefix} {string.Join(separator: ' ', value: CliTestRun.CpuSelection)}", name: name));
             }
         }
     }
@@ -87,16 +83,23 @@ public sealed class HostGpuWorkLawTests {
     [InlineData("puck", "puck counters --help")]
     [Theory]
     public void OnlyTheRunningEntryPointCanClaimGpuWork(string name, string commandLine) =>
-        Assert.False(condition: HostProcesses.IsGpuWork(commandLine: commandLine, grammars: Grammars, name: name));
-    [InlineData("Puck.Cli", "\"C:/a path/Puck.Cli.exe\" parity")]
+        Assert.False(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
     [InlineData("dotnet", "dotnet exec --runtimeconfig runtime.json \"C:/a path/Puck.World.dll\" --world build")]
     [InlineData("dotnet", "dotnet exec /tmp/Puck.Vulkan.Tests.dll")]
     [InlineData("Puck.World.Test", "/tmp/Puck.World.Tests --port 1")]
     [InlineData("Puck.World", "Puck.World --world build")]
-    [InlineData("puck", "puck canary --list false --plan false --merge")]
-    [InlineData("puck", "puck counters --world compare --script script")]
     [InlineData("dotnet", "dotnet\0/tmp/a path/Puck.World.dll\0--world\0build\0")]
     [Theory]
     public void ApphostsAndManagedEntryPointsAreGpuWorkRegardlessOfArgumentWords(string name, string commandLine) =>
-        Assert.True(condition: HostProcesses.IsGpuWork(commandLine: commandLine, grammars: Grammars, name: name));
+        Assert.True(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
+    // A verb that starts a World is not GPU work while it waits for the GPU lease: two such verbs queue on the lease rather
+    // than each reading the other as the GPU's holder.
+    [InlineData("dotnet", @"dotnet ""C:\scratch\l1-cli\Puck.Cli.dll"" canary pipeline-ink")]
+    [InlineData("dotnet", "dotnet /tmp/cli/Puck.Cli.dll parity")]
+    [InlineData("puck", "puck counters --world w.json")]
+    [InlineData("Puck.Cli", "\"C:/a path/Puck.Cli.exe\" parity")]
+    [InlineData("puck", "puck motion --backend vulkan")]
+    [Theory]
+    public void AVerbThatStartsAWorldIsNotGpuWorkItself(string name, string commandLine) =>
+        Assert.False(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
 }

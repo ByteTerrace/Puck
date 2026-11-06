@@ -19,7 +19,7 @@ namespace Puck.World;
 /// re-rolling a value the player has already seen: a reloaded site already holds a cell, so nothing refills it, and
 /// the next redraw resumes from the stored cursor.</para>
 /// <para><b>Why the backend draws a NAME.</b> The host backend's natural spelling is a weighted TEXT source over the
-/// backend tokens, parsed through <see cref="WorldHostTokens.ParseBackend"/> here. A numeric draw over the enum's
+/// backend tokens, parsed through <see cref="WorldBackendTokens.Parse"/> here. A numeric draw over the enum's
 /// ordinals would read at the authoring site as a number nothing explains, and would silently re-point itself the day
 /// a member is inserted.</para>
 /// <para><b>What the settle-time refusals still own.</b> Admission proves a DRAWN row over every outcome its source
@@ -329,8 +329,8 @@ public static class WorldDrawBootResolver {
                 ? tokenCell.Value.AsText
                 : null) ?? string.Empty);
 
-            if (WorldHostTokens.ParseBackend(token: token) is not { } backend) {
-                reason = $"host.backendRow '{backendRow}' read token '{token}', which names no backend ('{WorldHostTokens.BackendAuto}', '{WorldHostTokens.BackendDirectX}', or '{WorldHostTokens.BackendVulkan}')";
+            if (WorldBackendTokens.Parse(token: token) is not { } backend) {
+                reason = $"host.backendRow '{backendRow}' read token '{token}', which names no backend ('{WorldBackendTokens.Auto}', '{WorldBackendTokens.DirectX}', or '{WorldBackendTokens.Vulkan}')";
 
                 return false;
             }
@@ -338,7 +338,7 @@ public static class WorldDrawBootResolver {
             Narrate(
                 site: WorldDrawSites.HostBackend,
                 instanceIdentity: instanceIdentity,
-                settled: WorldHostTokens.BackendToken(backend: backend)
+                settled: WorldBackendTokens.Token(backend: backend)
             );
 
             host = (host with { Backend = backend, BackendRow = null });

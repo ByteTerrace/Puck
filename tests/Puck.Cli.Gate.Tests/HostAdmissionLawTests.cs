@@ -18,7 +18,7 @@ public sealed class HostAdmissionLawTests {
 
     [Fact]
     public void HostOptionsDefaultToTheAdmissionThresholdsAndStillAllowOverrides() {
-        var load = HostCommand.Create(composition: SuiteRoot.Composition).Subcommands.Single(predicate: command => (command.Name == "load"));
+        var load = HostCommand.Create().Subcommands.Single(predicate: command => (command.Name == "load"));
         var defaults = HostLoadThresholds.ThisMachine;
         (string Name, double? Value)[] thresholds = [("--capacity-cpu", defaults.CapacityCpuPercent), ("--capacity-ram", defaults.CapacityRamGb), ("--capacity-commit", defaults.CapacityCommitPercent),("--pressure-ram", defaults.PressureRamGb), ("--pressure-disk", defaults.PressureDiskGb)];
 
@@ -232,7 +232,7 @@ public sealed class HostAdmissionLawTests {
         Assert.Equal(expected: ["CAPACITY cpu=0% freeRAM=8.0GB freeDisk=100.0GB commit=60% reuseNodes=42"], actual: monitor.Observe(sample: Sample(commit: 60)));
         Assert.True(condition: monitor.HasCapacity);
     }
-    // A verb below the gate passes WorldAdmission before each World start, and the installed admission is HostAdmission: the
+    // A verb below the gate admits each World start through WorldLaunch, and the installed admission is HostAdmission: the
     // start waits at a 90% commit charge and goes ahead at 60%, each replica admitted on its own reading, and a bound that
     // passes first refuses the start by exception.
     [Fact]
@@ -241,39 +241,53 @@ public sealed class HostAdmissionLawTests {
         var readings = 0;
         var asked = new List<(string Step, bool Device, bool Heavy, HostStartKind Kind)>();
         using var error = new StringWriter();
-        HostAdmit admit = (checkout, step, device, heavySuite, kind, bound, progress, stage, cancellationToken) => {
+        WorldAdmit admit = (checkout, step, device, heavySuite, kind, bound, reserve, progress, stage, cancellationToken) => {
             asked.Add(item: (step, device, heavySuite, kind));
 
-            return Task.FromResult(result: HostAdmission.Wait(step, device, heavySuite, () => ((readings++ < 2) ? Sample(commit: 90, limit: 64) : Sample(commit: 60, limit: 64)), clock, clock.Advance, error, cancellationToken, Thresholds, bound, stage, kind));
+            return Task.FromResult(result: HostAdmission.Wait(step, device, heavySuite, () => ((readings++ < 2) ? Sample(commit: 90, limit: 64) : Sample(commit: 60, limit: 64)), clock, clock.Advance, error, cancellationToken, Thresholds, bound, stage, kind, reserve: reserve));
         };
 
         WorldAdmission.Install(admit: admit);
         try {
-            string[] worker = ["Puck.World.dll", "--devices", "none", "--test-batch", "batch.json"];
+            var worker = new WorldLaunchRequest(Artifact: "Puck.World.dll", Step: "test worker") { Arguments = ["--test-batch", "batch.json"], HeavySuite = true, Shape = WorldShape.TestBatch };
 
             // The first replica waits two samples at 90% and starts on the third.
-            WorldAdmission.Wait(step: "test worker", worldArguments: worker, heavySuite: true, cancellationToken: TestContext.Current.CancellationToken);
+            WorldLaunch.Admit(cancellationToken: TestContext.Current.CancellationToken, request: worker).Dispose();
             Assert.Equal(expected: 3, actual: readings);
             Assert.Equal(expected: TimeSpan.FromSeconds(seconds: 20), actual: clock.GetElapsedTime(startingTimestamp: 0));
             Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit 90% of limit (admission needs under 75%); commit headroom 6.4GB (admission needs at least 9.0GB");
             Assert.Contains(actualString: error.ToString(), expectedSubstring: "capacity returned for test worker");
 
-            // The next replica is admitted on its own reading: 60% starts at once, a windowed boot asks for the GPU.
-            WorldAdmission.Wait(step: "test worker", worldArguments: worker, heavySuite: true, cancellationToken: TestContext.Current.CancellationToken);
-            WorldAdmission.Wait(step: "sweep", worldArguments: ["Puck.World.dll", "--world", "worlds/debug", "--headless", "false"], cancellationToken: TestContext.Current.CancellationToken);
+            // The next replica is admitted on its own reading: 60% starts at once, as does a World booted in process.
+            WorldLaunch.Admit(cancellationToken: TestContext.Current.CancellationToken, request: worker).Dispose();
+            WorldAdmission.WaitInProcess(cancellationToken: TestContext.Current.CancellationToken, step: "bench");
             Assert.Equal(expected: 5, actual: readings);
             Assert.Equal(expected: TimeSpan.FromSeconds(seconds: 20), actual: clock.GetElapsedTime(startingTimestamp: 0));
-            Assert.Equal(expected: [("test worker", false, true, HostStartKind.ReproduceReplica), ("test worker", false, true, HostStartKind.ReproduceReplica), ("sweep", true, false, HostStartKind.WindowedWorld)], actual: asked);
+            Assert.Equal(expected: [("test worker", false, true, HostStartKind.ReproduceReplica), ("test worker", false, true, HostStartKind.ReproduceReplica), ("bench", false, false, HostStartKind.HeadlessWorld)], actual: asked);
 
             // A machine that never recovers refuses the start at the admission's bound, and the verb's start never happens.
             readings = int.MinValue;
-            Assert.Throws<HostAdmissionRefusedException>(testCode: () => WorldAdmission.Wait(step: "canary", device: false, cancellationToken: TestContext.Current.CancellationToken));
+            Assert.Throws<HostAdmissionRefusedException>(testCode: () => WorldAdmission.WaitInProcess(cancellationToken: TestContext.Current.CancellationToken, step: "canary"));
         } finally {
             WorldAdmission.Install(admit: null);
         }
 
         // Without an installed admission a start is admitted at once.
-        WorldAdmission.Wait(step: "canary", device: true, cancellationToken: TestContext.Current.CancellationToken);
+        WorldAdmission.WaitInProcess(cancellationToken: TestContext.Current.CancellationToken, step: "canary");
+    }
+    // The launch's own view of a World (whether it opens a device, so takes the GPU lease) and the host's reading of the
+    // command line it builds agree for every shape, so a running World is classified as the launch admitted it.
+    [InlineData(WorldShape.Headless)]
+    [InlineData(WorldShape.Windowed)]
+    [InlineData(WorldShape.Document)]
+    [InlineData(WorldShape.TestBatch)]
+    [Theory]
+    public void TheLaunchAndTheHostReadAWorldsDeviceAlike(WorldShape shape) {
+        var request = new WorldLaunchRequest(Artifact: "Puck.World.dll", Step: "law") { Arguments = ((shape == WorldShape.TestBatch) ? ["--test-batch", "batch.json"] : []), Shape = shape, World = "worlds/debug" };
+
+        Assert.Equal(expected: request.OpensDevice, actual: WorldDevices.OpensDevice(arguments: request.CommandLine(), start: 1));
+        Assert.Equal(expected: request.Kind, actual: WorldDevices.StartKind(arguments: request.CommandLine(), start: 1));
+        Assert.Contains(collection: request.CommandLine(), expected: "none");
     }
     [InlineData(new string[0], true)]
     [InlineData(new[] { "--headless" }, false)]
@@ -317,6 +331,33 @@ public sealed class HostAdmissionLawTests {
         Assert.False(condition: tracker.Judge(reading: Sample(commit: 50, starts: growing), kind: HostStartKind.WindowedWorld, thresholds: Thresholds, clock: new GateClock(), reserve: false).Covered);
         Assert.True(condition: tracker.Judge(reading: Sample(commit: 50), kind: HostStartKind.WindowedWorld, thresholds: Thresholds, clock: new GateClock(), reserve: false).Covered);
     }
+    // Reserved growth covers only the starts that have not reported ready: an idle headless World at 0.6 GB that reported
+    // steady state counts its usage alone (which the charge already holds), so a windowed start that needs 18 GB of the
+    // 22 GB headroom goes ahead beside it; the same World before it reported ready holds its 5.4 GB still to grow and
+    // keeps the start out.
+    [Fact]
+    public void AStartThatReportedReadyReservesNoGrowth() {
+        HostRunningStart[] booting = [new(Id: 9, Kind: HostStartKind.HeadlessWorld, PrivateGb: 0.6)];
+        HostRunningStart[] ready = [new(Id: 9, Kind: HostStartKind.HeadlessWorld, PrivateGb: 0.6, Ready: true)];
+        // Commit 45% of 40 GB leaves 22 GB.
+        var unready = new HostStartTracker().Judge(reading: Sample(commit: 45, starts: booting), kind: HostStartKind.WindowedWorld, thresholds: Thresholds, clock: new GateClock(), reserve: false);
+        var settled = new HostStartTracker().Judge(reading: Sample(commit: 45, starts: ready), kind: HostStartKind.WindowedWorld, thresholds: Thresholds, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (5.4, 1, false), actual: (Math.Round(value: unready.GrowthGb, digits: 6), unready.Growing, unready.Covered));
+        Assert.Equal(expected: (0.0, 0, true, 18.0), actual: (settled.GrowthGb, settled.Growing, settled.Covered, settled.NeedGb));
+    }
+    // A World reports steady state in its own words: a headless World once it answers on its console or publishes its
+    // attachment, a World that opens a device once its renderer is ready or its bakes settle; boot narration is neither.
+    [InlineData("[world.status: tick 3]", true, false, true)]
+    [InlineData("[world.control: operator attachment C:/t/puck-control-1.json]", false, false, true)]
+    [InlineData("[world.host] physical input devices are off (--devices none); this boot shape opens none either way.", false, false, false)]
+    [InlineData("[world.status: tick 3]", true, true, false)]
+    [InlineData("[engine: ready at tick 41]", false, true, true)]
+    [InlineData("[bakes: settled at tick 90]", false, true, true)]
+    [InlineData("[bakes: not settled after 600 seconds, so world.wait released: debug]", false, true, false)]
+    [Theory]
+    public void AWorldReportsReadyInItsOwnWords(string line, bool stdout, bool device, bool ready) =>
+        Assert.Equal(expected: ready, actual: WorldReadiness.Signals(line: line, opensDevice: device, stdout: stdout));
     // Two starts asked in a row cannot take the same headroom: the first admitted start holds its peak until its process
     // shows up, so the second waits, then goes ahead when the process appears (counted at its live size) or the hold passes.
     [Fact]

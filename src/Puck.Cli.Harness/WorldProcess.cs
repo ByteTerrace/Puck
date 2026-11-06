@@ -1,38 +1,43 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace Puck.Cli.Motion;
+namespace Puck.Cli;
 
 /// <summary>One line a World wrote.</summary>
 /// <param name="Index">The line's position in the World's output, counting both streams in arrival order.</param>
 /// <param name="Stream">The stream the line came on.</param>
 /// <param name="Text">The line.</param>
-public sealed record MotionOutputLine(int Index, CliProcessOutputStream Stream, string Text);
+public sealed record WorldOutputLine(int Index, CliProcessOutputStream Stream, string Text);
 /// <summary>
 /// A real <c>Puck.World</c> process driven line by line over its standard input, with every output line recorded in
 /// arrival order, so a run can send a line, read what the World answered, and decide the next line from it. Both
-/// streams are also written to <c>stdout.log</c> and <c>stderr.log</c> in the run's directory.
+/// streams are also written to log files in the run's directory. Only an admitted launch starts one
+/// (<see cref="WorldLaunch.Start"/>); it holds that launch's GPU lease until it is disposed.
 /// </summary>
-public sealed partial class MotionWorldProcess : IDisposable {
+public sealed class WorldProcess : IDisposable {
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
     private readonly object m_gate = new();
-    private readonly List<MotionOutputLine> m_lines = [];
-
-    private readonly Process m_process;
-
+    private readonly List<WorldOutputLine> m_lines = [];
     private readonly List<Thread> m_pumps = [];
 
+    private readonly Process m_process;
     private readonly StreamWriter m_stderr;
     private readonly StreamWriter m_stdout;
 
-    private MotionWorldProcess(Process process, StreamWriter stdout, StreamWriter stderr) {
+    private readonly WorldReadiness m_readiness;
+
+    private IDisposable? m_gpu;
+
+    private WorldProcess(Process process, StreamWriter stdout, StreamWriter stderr, IDisposable? gpu, WorldReadiness readiness) {
+        m_gpu = gpu;
+        m_readiness = readiness;
         m_process = process;
         m_stderr = stderr;
         m_stdout = stdout;
     }
 
-    /// <summary>Gets the World's process id, for the lease record and for stopping exactly this process.</summary>
+    /// <summary>Gets the World's process id, for stopping exactly this process.</summary>
     public int ProcessId => m_process.Id;
     /// <summary>Gets a value indicating whether the World has exited.</summary>
     public bool HasExited => m_process.HasExited;
@@ -45,52 +50,25 @@ public sealed partial class MotionWorldProcess : IDisposable {
         }
     }
 
-    /// <summary>Starts a World.</summary>
-    /// <param name="artifact">The World build's entry assembly.</param>
-    /// <param name="arguments">The World's arguments.</param>
-    /// <param name="workingDirectory">The directory the World runs in; relative paths in <paramref name="arguments"/> resolve against it.</param>
-    /// <param name="logDirectory">The directory that receives <c>stdout.log</c> and <c>stderr.log</c>.</param>
-    /// <returns>The running World.</returns>
-    public static MotionWorldProcess Start(string artifact, IReadOnlyList<string> arguments, string workingDirectory, string logDirectory) {
+    internal static WorldProcess Start(string fileName, IReadOnlyList<string> arguments, IReadOnlyDictionary<string, string?>? environment, string workingDirectory, string logDirectory, string logPrefix, IDisposable? gpu, Func<Process, WorldReadiness> readiness) {
         _ = Directory.CreateDirectory(path: logDirectory);
 
-        var startInfo = new ProcessStartInfo {
-            CreateNoWindow = true,
-            FileName = "dotnet",
-            RedirectStandardError = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            StandardErrorEncoding = Utf8,
-            StandardInputEncoding = Utf8,
-            StandardOutputEncoding = Utf8,
-            UseShellExecute = false,
-            WorkingDirectory = workingDirectory,
-        };
-
-        startInfo.ArgumentList.Add(item: artifact);
-
-        foreach (var argument in arguments) {
-            startInfo.ArgumentList.Add(item: argument);
-        }
-
         // Acquire fallible log sinks before spawning a child. A failure here starts no World.
-        var stdout = new StreamWriter(path: Path.Combine(path1: logDirectory, path2: "stdout.log"), append: false, encoding: Utf8);
+        var stdout = new StreamWriter(path: Path.Combine(path1: logDirectory, path2: $"{logPrefix}stdout.log"), append: false, encoding: Utf8);
         StreamWriter? stderr = null;
         Process? process = null;
-        MotionWorldProcess world;
+        WorldProcess world;
 
         try {
-            stderr = new StreamWriter(path: Path.Combine(path1: logDirectory, path2: "stderr.log"), append: false, encoding: Utf8);
-            process = (Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException(message: "Failed to start dotnet."));
-            world = new MotionWorldProcess(process: process, stderr: stderr, stdout: stdout);
-            Console.Error.WriteLine(value: $"[motion.world: started process {process.Id}]");
+            stderr = new StreamWriter(path: Path.Combine(path1: logDirectory, path2: $"{logPrefix}stderr.log"), append: false, encoding: Utf8);
+            process = WorldLaunch.Contain(process: Puck.Abstractions.ChildProcess.StartRedirected(arguments: arguments, encoding: Utf8, environment: environment, fileName: fileName, workingDirectory: workingDirectory));
+            world = new WorldProcess(gpu: gpu, process: process, readiness: readiness(arg: process), stderr: stderr, stdout: stdout);
+            Console.Error.WriteLine(value: $"[world.launch: started process {process.Id}]");
         } catch {
             stdout.Dispose();
             stderr?.Dispose();
             if (process is not null) {
-                if (!process.HasExited) {
-                    process.Kill();
-                }
+                KillTree(process: process);
                 process.Dispose();
             }
             throw;
@@ -100,6 +78,19 @@ public sealed partial class MotionWorldProcess : IDisposable {
         world.Pump(reader: process.StandardError, stream: CliProcessOutputStream.Stderr);
 
         return world;
+    }
+    /// <summary>Kills a process's whole tree and waits for it to exit; a process that already exited is left as it is.</summary>
+    /// <param name="process">The process.</param>
+    public static void KillTree(Process process) {
+        try {
+            if (!process.HasExited) {
+                process.Kill(entireProcessTree: true);
+            }
+
+            process.WaitForExit();
+        } catch (InvalidOperationException) {
+            // The process exited between the check and the kill, or never started.
+        }
     }
     /// <summary>Sends one console line.</summary>
     /// <param name="line">The line, without its terminator.</param>
@@ -118,9 +109,9 @@ public sealed partial class MotionWorldProcess : IDisposable {
     /// <param name="from">The first line index to look at.</param>
     /// <param name="accept">Whether a line is the one waited for.</param>
     /// <param name="timeout">How long to wait.</param>
-    /// <param name="cancellation">Ends the attachment wait promptly when cancelled.</param>
-    /// <returns>The line, or null when cancelled, timed out or the World exited.</returns>
-    public MotionOutputLine? WaitFor(int from, Func<MotionOutputLine, bool> accept, TimeSpan timeout, CancellationToken cancellation = default) {
+    /// <param name="cancellation">Ends the wait promptly when cancelled.</param>
+    /// <returns>The line, or <see langword="null"/> when cancelled, timed out or the World exited.</returns>
+    public WorldOutputLine? WaitFor(int from, Func<WorldOutputLine, bool> accept, TimeSpan timeout, CancellationToken cancellation = default) {
         var deadline = (Stopwatch.GetTimestamp() + ((long)(timeout.TotalSeconds * Stopwatch.Frequency)));
         var cursor = from;
         using var registration = cancellation.Register(callback: () => {
@@ -158,7 +149,7 @@ public sealed partial class MotionWorldProcess : IDisposable {
     /// <summary>Returns the lines from a position on.</summary>
     /// <param name="from">The first line index.</param>
     /// <returns>A copy of the lines.</returns>
-    public IReadOnlyList<MotionOutputLine> LinesFrom(int from) {
+    public IReadOnlyList<WorldOutputLine> LinesFrom(int from) {
         lock (m_gate) {
             return [.. m_lines.Skip(count: from)];
         }
@@ -170,6 +161,7 @@ public sealed partial class MotionWorldProcess : IDisposable {
         if (m_process.WaitForExit(timeout: timeout)) {
             m_process.WaitForExit();
             JoinPumps();
+            ReleaseGpu();
 
             return m_process.ExitCode;
         }
@@ -178,19 +170,11 @@ public sealed partial class MotionWorldProcess : IDisposable {
 
         return null;
     }
-    /// <summary>Stops this process tree.</summary>
+    /// <summary>Stops this process tree and releases its GPU lease.</summary>
     public void Kill() {
-        try {
-            if (!m_process.HasExited) {
-                m_process.Kill(entireProcessTree: true);
-            }
-
-            m_process.WaitForExit();
-        } catch (InvalidOperationException) {
-            // The World exited between the check and the kill.
-        }
-
+        KillTree(process: m_process);
         JoinPumps();
+        ReleaseGpu();
     }
     /// <inheritdoc/>
     public void Dispose() {
@@ -200,15 +184,17 @@ public sealed partial class MotionWorldProcess : IDisposable {
         m_stdout.Dispose();
     }
 
+    private void ReleaseGpu() => Interlocked.Exchange(location1: ref m_gpu, value: null)?.Dispose();
     private void Pump(StreamReader reader, CliProcessOutputStream stream) {
         var thread = new Thread(start: () => {
             while (reader.ReadLine() is { } text) {
                 lock (m_gate) {
-                    m_lines.Add(item: new MotionOutputLine(Index: m_lines.Count, Stream: stream, Text: text));
+                    m_lines.Add(item: new WorldOutputLine(Index: m_lines.Count, Stream: stream, Text: text));
 
                     var log = ((stream == CliProcessOutputStream.Stdout) ? m_stdout : m_stderr);
 
                     log.WriteLine(value: text);
+                    m_readiness.Observe(line: text, stdout: (stream == CliProcessOutputStream.Stdout));
                     log.Flush();
                     Monitor.PulseAll(obj: m_gate);
                 }

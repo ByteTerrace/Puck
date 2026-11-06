@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Puck.Assets.Documents;
@@ -87,27 +86,30 @@ public static partial class CanaryCommand {
         }
         if (broken) { File.Delete(path: Path.Combine(path1: payload, path2: "Puck.World.exe")); }
         _ = PublishRelease(key: key, payloadDirectory: payload, releaseDirectory: source, sequence: 2, version: StubReleaseVersion);
-        string[] Arguments(string version, string state) => [
-            "--world", Path.Combine(install, "versions", version, "worlds", "debug", "debug.world.json"),
-            "--update-config-file", Path.Combine(path1: run, path2: "update-config.json"),
-            "--state-dir", Path.Combine(path1: run, path2: state), "--headless", "true", "--devices", "none"
-        ];
+        var stub = Path.Combine(path1: install, path2: "Puck.Launcher.Stub.exe");
+        WorldLaunchRequest Arguments(string version, string state) => new(Artifact: stub, Step: "canary") {
+            Arguments = ["--update-config-file", Path.Combine(path1: run, path2: "update-config.json")],
+            Executable = stub,
+            ExitAfterSeconds = manifest.TimeoutSeconds,
+            StateDirectory = Path.Combine(path1: run, path2: state),
+            World = Path.Combine(install, "versions", version, "worlds", "debug", "debug.world.json"),
+        };
         var baseline = LaunchStub(Arguments(state: "state-baseline", version: StubBaselineVersion),
-            (broken ? "update.check\nupdate.apply\nwire.errors\n" : ReadScriptWithSubstitution(leg: leg, runDirectory: run)), install, manifest, budget);
+            (broken ? "update.check\nupdate.apply\nwire.errors\n" : ReadScriptWithSubstitution(leg: leg, runDirectory: run)), manifest, budget);
 
         File.WriteAllText(Path.Combine(path1: run, path2: "baseline-stdout.log"), baseline.Stdout);
         File.WriteAllText(Path.Combine(path1: run, path2: "baseline-stderr.log"), baseline.Stderr);
         CliProcessResult boot1;
 
         if (broken) {
-            var failed = LaunchStub(Arguments(state: "state-broken", version: StubReleaseVersion), string.Empty, install, manifest, budget);
+            var failed = LaunchStub(Arguments(state: "state-broken", version: StubReleaseVersion), string.Empty, manifest, budget);
 
             boot1 = failed with { Stdout = (baseline.Stdout + failed.Stdout), Stderr = (baseline.Stderr + failed.Stderr) };
         } else {
             boot1 = baseline;
         }
         var boot2 = LaunchStub(Arguments(state: "state-final", version: (broken ? StubBaselineVersion : StubReleaseVersion)),
-            "update.status\nworld.status\nwire.errors\n", install, manifest, budget);
+            "update.status\nworld.status\nwire.errors\n", manifest, budget);
 
         WriteLegConfirmationFixtures(installDirectory: install, runDirectory: run);
         return BuildStubLegRun(boot1: boot1, boot2: boot2, invariants: [
@@ -170,19 +172,11 @@ public static partial class CanaryCommand {
     }
     // Every stub boot ends the World it launches the way every other leg does: the runner's quit follows the boot's
     // input, and --exit-after-seconds at the leg's own timeout stops a World this runner can no longer kill.
-    private static CliProcessResult LaunchStub(IReadOnlyList<string> arguments, string input, string installDirectory, CanaryManifest manifest, CanaryBudget budget) {
-        WorldAdmission.Wait(cancellationToken: budget.Cancellation, step: "canary", worldArguments: arguments);
+    private static CliProcessResult LaunchStub(WorldLaunchRequest request, string input, CanaryManifest manifest, CanaryBudget budget) {
+        using var launch = WorldLaunch.Admit(cancellationToken: budget.Cancellation, request: request);
 
-        var result = CliProcess.RunCaptured(
-            arguments: [
-                .. arguments,
-                "--exit-after-seconds", manifest.TimeoutSeconds.ToString(provider: CultureInfo.InvariantCulture),
-            ],
+        var result = launch.Run(
             cancellationToken: budget.Cancellation,
-            fileName: Path.Combine(
-                path1: installDirectory,
-                path2: "Puck.Launcher.Stub.exe"
-            ),
             input: (input + RunnerQuit),
             timeout: TimeSpan.FromSeconds(value: manifest.TimeoutSeconds)
         );

@@ -1,7 +1,5 @@
 using System.Globalization;
 
-using Puck.Cli.Gate;
-
 namespace Puck.Cli.Host;
 
 /// <summary>Waits for the machine to be idle and stay idle, by the same readings <c>puck host load</c> prints
@@ -28,16 +26,15 @@ public static class HostQuiet {
                     : string.Create(provider: CultureInfo.InvariantCulture, handler: $"the machine is loaded: cpu={sample.CpuPercent:0}% (idle needs a mean under {thresholds.CapacityCpuPercent:0.#}%) freeRAM={sample.FreeRamGb:0.0}GB (needs over {thresholds.CapacityRamGb:0.0}GB) freeDisk={sample.FreeDiskGb:0.0}GB{(double.IsNaN(d: sample.CommitPercent) ? string.Empty : $" commit={sample.CommitPercent:0}% (needs under {thresholds.CapacityCommitPercent:0.#}%)")}"))));
 
     /// <summary>Takes readings until the machine has stayed idle (<see cref="Busy"/>) for the settle period without a break.</summary>
-    /// <param name="composition">The verbs composed beside this one whose own arguments decide whether a run is GPU work.</param>
     /// <param name="settle">How long the machine must stay idle.</param>
     /// <param name="timeout">How long to wait, at most, from the first reading.</param>
     /// <param name="progress">Receives a line when the start is announced and whenever what the wait is on changes.</param>
     /// <param name="clock">The clock the bounds are measured on.</param>
     /// <param name="cancellationToken">Stops the wait.</param>
     /// <returns><see langword="null"/> once the machine has been idle for <paramref name="settle"/>; otherwise why it was not by <paramref name="timeout"/>.</returns>
-    public static async Task<string?> SettleAsync(GateComposition composition, TimeSpan settle, TimeSpan timeout, TextWriter progress, TimeProvider clock, CancellationToken cancellationToken) {
+    public static async Task<string?> SettleAsync(TimeSpan settle, TimeSpan timeout, TextWriter progress, TimeProvider clock, CancellationToken cancellationToken) {
         var thresholds = HostLoadThresholds.ThisMachine;
-        var probe = new HostProbe(checkoutRoot: Environment.CurrentDirectory, gpuVerbGrammars: composition.GpuVerbGrammars);
+        var probe = new HostProbe(checkoutRoot: Environment.CurrentDirectory);
         var monitor = new HostLoadMonitor(cpuSamples: Window, thresholds: thresholds);
         var started = clock.GetTimestamp();
         long? idleSince = null;

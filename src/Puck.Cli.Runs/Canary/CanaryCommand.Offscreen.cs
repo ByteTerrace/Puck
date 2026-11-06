@@ -79,35 +79,38 @@ public static partial class CanaryCommand {
             : $"on {named} only (--backend {named}), not on {string.Join(separator: " and ", values: skipped)}");
     }
 
-    // The boot-shape arguments of one leg process. An offscreen leg lets its world's host.presentation decide the shape
-    // (a --headless value would force windowed or none over it), names the backend explicitly, and carries the run's
-    // validation-layer choice for that backend. A windowed leg forces a window, and when its proof declares backends it
-    // names the backend and carries the validation-layer choice the same way. Both boot with the physical input devices
-    // off (WorldDevices), so the owner's pads never drive a gate.
-    private static string[] BootShapeArguments(CanaryManifest manifest, string? backend, bool debugLayers) => manifest.BootShape switch {
-        CanaryBootShape.Offscreen => [
-            .. WorldDevices.NoneArguments,
-            .. BackendArguments(
-                backend: backend!,
-                debugLayers: debugLayers
-            ),
-        ],
-        CanaryBootShape.Headless => ["--headless", "true"],
-        _ => [.. WorldDevices.NoneArguments, "--headless", "false", .. ((backend is null)
-            ? []
-            : BackendArguments(
-                backend: backend,
-                debugLayers: debugLayers
-            ))],
+    /// <summary>Returns how a World of a boot shape presents: an offscreen leg lets its world's
+    /// <c>host.presentation</c> decide (a <c>--headless</c> value would force windowed or none over it), a windowed leg
+    /// forces a window, and the rest boot headless.</summary>
+    /// <param name="shape">The manifest's boot shape.</param>
+    /// <returns>The World's shape.</returns>
+    public static WorldShape ShapeOf(CanaryBootShape shape) => shape switch {
+        CanaryBootShape.Offscreen => WorldShape.Document,
+        CanaryBootShape.Windowed => WorldShape.Windowed,
+        _ => WorldShape.Headless,
     };
-    // Waits for the host's headroom before one leg process starts, as a World of this boot shape would need it. The wait is
-    // bounded by the admission and stops with the run's own cancellation.
-    private static void AdmitWorld(CanaryManifest manifest, string? backend, bool debugLayers, CanaryBudget budget) => WorldAdmission.Wait(
-        cancellationToken: budget.Cancellation,
-        step: "canary",
-        worldArguments: BootShapeArguments(backend: backend, debugLayers: debugLayers, manifest: manifest)
-    );
-    private static string[] BackendArguments(string backend, bool debugLayers) => ["--backend", backend, .. DebugLayerOutput.Arguments(debugLayers: debugLayers)];
+    /// <summary>Returns whether a run of these proofs needs a World build carrying Vulkan SPIR-V
+    /// (<see cref="WorldLaunch.NeedsSpirv"/>): one of them opens a device on Vulkan, or on a backend its document
+    /// chooses.</summary>
+    /// <param name="proofs">The run's proofs.</param>
+    /// <returns><see langword="true"/> when the build must carry SPIR-V.</returns>
+    public static bool NeedsSpirv(IEnumerable<CanaryProof> proofs) =>
+        proofs.Any(predicate: static proof => WorldLaunch.NeedsSpirv(backend: WorldLaunch.ParseBackend(token: proof.Backend), shape: ShapeOf(shape: proof.Manifest.BootShape)));
+    // A leg that hides the shader compiler boots with a search path that holds none.
+    private static IReadOnlyDictionary<string, string?>? LegEnvironment(CanaryLeg leg) => (leg.HideShaderCompiler
+        ? Qualification.QualificationPackage.LegEnvironment(
+            compiler: Qualification.ReleaseCompilerDiscovery.None,
+            holdsCompiler: Qualification.QualificationPackage.HoldsCompiler,
+            searchPath: Environment.GetEnvironmentVariable(variable: "PATH")
+        )
+        : null);
+    // One leg process of a manifest's boot shape: a leg that names a backend boots on it and carries the run's
+    // validation-layer choice for that backend.
+    private static WorldLaunchRequest LegRequest(CanaryManifest manifest, string artifact, string? backend, bool debugLayers) => new(Artifact: artifact, Step: "canary") {
+        Arguments = ((backend is null) ? [] : DebugLayerOutput.Arguments(debugLayers: debugLayers)),
+        Backend = WorldLaunch.ParseBackend(token: backend),
+        Shape = ShapeOf(shape: manifest.BootShape),
+    };
 
     // A pipeline.wait outcome narrated through the World's pipeline report: "[pipeline: <name> wait <phase> <outcome>".
     [GeneratedRegex(pattern: @"^\[pipeline: (?<name>\S+) wait (?<phase>compiled|installed|captured|submitted \d+|counted \d+|resized \d+ \d+) (?<outcome>reached|failed|unsupported|timed out)")]
