@@ -870,6 +870,14 @@
                       "additionalProperties": false,
                       "default": null,
                       "description": "Foam or a wet margin where an opaque surface behind the glass comes within reach of its surface, revealed through the slot\u0027s flow coverage (null = none)."
+                    },
+                    "shadowDensity": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "Shadow extinction per creation unit, finite and non-negative (null = zero)."
                     }
                   },
                   "required": [

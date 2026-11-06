@@ -96,6 +96,7 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
             device: Device,
             heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK,
             initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
+            memory: deviceContext.Memory,
             sizeBytes: sizeBytes
         );
         void* mapped;
@@ -106,6 +107,10 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
                 resource: buffer
             );
         } catch {
+            DirectXDeviceMemory.CountReleased(
+                memory: deviceContext.Memory,
+                resource: ((nint)buffer)
+            );
             _ = ((IUnknown*)buffer)->Release();
 
             throw;
@@ -120,6 +125,7 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
         return new DirectXGpuReadbackBuffer(
             bufferHandle: ((nint)buffer),
             mapped: mapped,
+            memory: deviceContext.Memory,
             sizeBytes: sizeBytes
         );
     }

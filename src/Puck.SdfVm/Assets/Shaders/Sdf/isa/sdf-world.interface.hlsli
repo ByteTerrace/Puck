@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/cb1b4fae290cf0f57275beee782e371503f6f3822f8a96695117d38b0db6d3d9). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/d95d86a753a3a3f6d3e145f8e857ebd4a472277841e6c47b18528be8a7d22afe). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -235,8 +235,8 @@ struct SdfWorldPass {
     [[vk::offset(1020)]] uint _pad1020;
     [[vk::offset(1024)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa796CBFB5 : register(b0, space3);
-#define passGroup passGroupIsa796CBFB5
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa9B5B9B94 : register(b0, space3);
+#define passGroup passGroupIsa9B5B9B94
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<float> reactivityRW : register(u3, space3);
@@ -250,8 +250,11 @@ struct SdfWorldPass {
 [[vk::binding(42, 3)]] Texture2D<float4> meshShadowFarExit : register(t42, space3);
 [[vk::binding(43, 3)]] Texture2D<float4> meshShadowSecondExit : register(t43, space3);
 [[vk::binding(44, 3)]] RWStructuredBuffer<uint> workCounters : register(u44, space3);
-[[vk::binding(45, 3)]] StructuredBuffer<uint> sdfMeshPyramid : register(t45, space3);
-[[vk::binding(46, 3)]] RWStructuredBuffer<uint> sdfMeshPyramidRW : register(u46, space3);
+[[vk::binding(45, 3)]] StructuredBuffer<uint> meshShadowNearOptical : register(t45, space3);
+[[vk::binding(46, 3)]] StructuredBuffer<uint> meshShadowFarOptical : register(t46, space3);
+[[vk::binding(47, 3)]] StructuredBuffer<uint> meshShadowSecondOptical : register(t47, space3);
+[[vk::binding(48, 3)]] StructuredBuffer<uint> sdfMeshPyramid : register(t48, space3);
+[[vk::binding(49, 3)]] RWStructuredBuffer<uint> sdfMeshPyramidRW : register(u49, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,

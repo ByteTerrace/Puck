@@ -1683,6 +1683,7 @@ public static partial class WorldModelShape {
                 M("scatter", typeof(global::System.String), typeof(global::Puck.World.Authoring.PaletteGlassDocument), "Scatter", Read | Write, static value => ((global::Puck.World.Authoring.PaletteGlassDocument)value).Scatter),
                 M("scattering", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.PaletteGlassDocument), "Scattering", Read | Write, static value => ((global::Puck.World.Authoring.PaletteGlassDocument)value).Scattering),
                 M("contact", typeof(global::Puck.World.Authoring.PaletteGlassContactDocument), typeof(global::Puck.World.Authoring.PaletteGlassDocument), "Contact", Read | Write, static value => ((global::Puck.World.Authoring.PaletteGlassDocument)value).Contact),
+                M("shadowDensity", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.PaletteGlassDocument), "ShadowDensity", Read | Write, static value => ((global::Puck.World.Authoring.PaletteGlassDocument)value).ShadowDensity),
             ],
             []),
         T(typeof(global::Puck.World.Authoring.PaletteInsetDocument), true, JsonTypeInfoKind.Object, null,

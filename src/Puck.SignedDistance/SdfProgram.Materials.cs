@@ -12,7 +12,7 @@ public sealed partial class SdfProgram {
     // index says glass; 31 the glass's medium: (scatter colour, scattering per world unit), zero for none (KEEP IN SYNC
     // with sdfGlassContact and the medium in passes/sdf-glass.comp.hlsl); 22..25 the material's own cel style (SdfToon.WriteRows; KEEP IN SYNC with
     // sdfToonStyle in shade/sdf-toon.hlsli), all zero to inherit the world's default, a mode of -1 for a style that
-    // keeps the material continuous.
+    // keeps the material continuous. Row 25.w carries glass shadow extinction per world unit, independent of cel ink RGB.
     // Bleed occupies 2.w/7.zw, and indirect receive is 3.w. Weathering pattern XYZ uses
     // 15.w/17.w/19.z; noise coverage is 19.w; reveal softness is 17.z. The second octave's frequency ratio is 15.z and
     // its gain 18.w (zero reads one octave); the turn is row 26 as a unit quaternion (x, y, z, w). A reveal stage is
@@ -89,7 +89,7 @@ public sealed partial class SdfProgram {
                 paintCursor += PaintVectorsPerEntry;
             }
             if (m.Toon is { } toon) {
-                toon.WriteRows(inkW: 0f, mode: (toon.Enabled ? toon.Mode : -1f), rows: toonRows);
+                toon.WriteRows(inkW: (m.Glass?.ShadowDensity ?? 0f), mode: (toon.Enabled ? toon.Mode : -1f), rows: toonRows);
                 for (var row = 0; (row < toonRows.Length); row++) {
                     Row(row: (22 + row), value: toonRows[row]);
                 }
@@ -119,6 +119,8 @@ public sealed partial class SdfProgram {
                     )
                 );
                 Row(row: 31, value: new(value: glass.Scatter, w: glass.Scattering));
+                // Row 25.w is independent of the cel ink's RGB; keep the existing table stride.
+                if (m.Toon is null) { Row(row: 25, value: new Vector4(0f, 0f, 0f, glass.ShadowDensity)); }
             }
             if (m.Inset is { } inset) {
                 var paint = inset.Paint;

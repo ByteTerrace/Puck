@@ -1231,6 +1231,14 @@
                         "additionalProperties": false,
                         "default": null,
                         "title": "PaletteGlassContactDocument"
+                      },
+                      "shadowDensity": {
+                        "description": "Shadow extinction per creation unit, finite and non-negative (null = zero).",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
                       }
                     },
                     "required": [

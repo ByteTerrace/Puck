@@ -77,7 +77,7 @@ milestone. The owner requested its baseline and implementation plan, which
    ordinary work.
 10. [Water feature build](#water) ([plan](water.md#the-lanes)) [ordinary]: the
     chain as the arc has landed (the hidden chain still draws, see the packet);
-    A2 to A5 and R1 in parallel next, then R3, P1 last. The owner accepted the
+    A2 to A5 in parallel next, then R3, P1 last. The owner accepted the
     plan's three taste calls; the carved channel has landed.
 11. [Certified field contact](#certified-field-contact): box and ellipsoid
     bodies, then clearance on slopes within a third of a metre.
@@ -1089,7 +1089,7 @@ worlds in place is rewritten.
 Owner: the water feature lane (rendering, puck-world, sdf-authoring) · ordinary ·
 Next: [the water feature plan](water.md) owns the feature end to end: the arc as a
 specification, the audit, the definition of done and the lanes (A2 to A5 the world
-authoring, R1 glass shadows, R3 the particle pool, P1 the tour). The items below
+authoring, R3 the particle pool, P1 the tour). The items below
 are what the plan defers or the water strained in a system beside it.
 
 - [medium] A lattice row that is simulation only. The water chain
@@ -1136,11 +1136,16 @@ are what the plan defers or the water strained in a system beside it.
   before the opaque hit only the nearest is shaded. A 64-bit atomic k-buffer
   would lift the count once the interface generator carries 64-bit buffer
   elements and both backends enable int64 atomics.
-- [low] Edge shimmer: high-contrast silhouettes seen through water shimmer at
-  their edges. The cause is not named. Capture a presented burst at the plan's
-  tour views with exposure pinned and read it with `puck motion`, then say
-  whether it is the glass pass's own sampling or the
-  [temporal packet](#temporal-shimmer-and-cadence-flicker)'s.
+- [low] Edge shimmer: `sdfGlassLitAt` in `sdf-glass.comp.hlsl` takes one
+  bilinear refracted sample, while `reactive = saturate(length(at - own))`
+  marks refraction displacement as reactive even in a stationary scene.
+  `sdf-resolve.comp.hlsl` then suppresses history and excludes that pixel from
+  its stationary phase window: jitter moves the high-contrast silhouette
+  without temporal integration. A presented-burst diagnostic removing only
+  that reactivity suppresses the shimmer. Give refraction motion/validity and
+  footprint filtering that preserve history when valid and reject it when
+  the refracted content changes; simply zeroing reactivity would ghost motion.
+  Coordinate with the [temporal packet](#temporal-shimmer-and-cadence-flicker).
 - [low] The glass passes' GPU time is owed: read it per pass at the pool, the
   falls and the lake through [the measurement window](#measurement-window); the
   plan's budget table holds counts only, so no frame-bar claim about the glass
@@ -2243,90 +2248,108 @@ and `world.residency [radius]` reads its measures.
 #### Memory on the Deck tier
 
 [high, the Deck] The debug world's process plus GPU memory stays at or under
-10 GB on the Deck tier, measured at every settled checkpoint. A windowed World
-holds well past that, a tour roughly doubles it
+10 GB on the Deck tier, measured at every settled checkpoint. A warm windowed
+World holds well past that on a unified-memory device, a tour roughly doubles it
 ([sweep](#sweep-and-visual-checks)) and the cold bake passes it by a wide margin
 ([bake](#bake-proportional-to-change)); headless is a fraction of a gigabyte,
-so nearly all of it is presentation a player's build carries. Most of the
-process is unattributed, so physical attribution comes first. Current diagnostics
-separate process, managed, allocator, account and backend device layers; those
-overlap and cannot be added. The process and managed footprint expanded while
-mesh regions shrank. Treat that as a high-priority budget investigation; the
-[current landscape assessment](dense-landscapes.md#current-status) owns paired
-results. Matched route/state, collection and residency windows must establish
-causes. Diagnostic replay readings and Windows private bytes do not qualify
-normal-play Deck unified physical memory. Take a retained managed heap census
-with no observer or authority replay before inferring ownership from Gen1 heap
-snapshots.
+so nearly all of it is presentation a player's build carries. The latest
+attribution's readings are in the commit that landed the host-visible ledger
+rows and the idle bake-slot release.
 
-`GpuDeviceMemoryWork.IsCounted` excludes ordinary host-visible staging/upload/
-readback bytes. Their allocation count alone cannot attribute the private-memory
-gap. Owner: rendering/accounting; extend the existing role ledger with disjoint
-host-visible byte observations, preserving the aperture's device-local subset,
-then correlate them with driver budget/residency and process regions. No second
-allocation tracker or sum of overlapping layers.
+How to read it: `host.memory collect` first, then each owner by the reading the
+table names. The layers overlap and are never added: process private bytes
+include the device heaps' write-combined address space, which on a discrete
+adapter is mostly not resident, and the backend ledger (`GpuDeviceMemoryWork`,
+in `host.memory owners 0`: device-local bytes with their aperture subset, and
+disjoint host-visible bytes) agrees with the OS `GPU Process Memory(pid_*)`
+counters (dedicated and shared usage, the driver's residency) up to driver and
+swapchain memory. A page walk (`VirtualQueryEx` with `QueryWorkingSetEx`) splits
+process regions by type, write-combining and residency, and a suspended ClrMD
+walk of the live heap from its roots names managed owners. On the Deck every
+owner below is the same physical memory. Owners of a settled warm World, largest
+first:
 
-Grounded causes and leads:
+| Owner | Layer | Read by |
+|---|---|---|
+| Device-local memory no residency line names (view targets, cascades, screens, program tables, ring apertures) | device-local | ledger held less the named lines |
+| Baked meshes, GPU copy | device-local | `world.residency` `region-held` |
+| Baked meshes, CPU payloads | native (mimalloc) | account `live` in `host.memory` |
+| Managed objects beside the GI scene (field evaluator, irradiance arrays, documents and strings, capture feed) | managed | ClrMD live bytes less the scene |
+| GI trace scene, GPU copy (hierarchy, hits, feedback) | device-local | `world.residency` `trace-*` |
+| Pagefile-backed 1 GiB section not created by Puck code | mapped | page walk |
+| GI trace scene, CPU hierarchy (`SdfMeshIrradianceScene+Node[]`, geometry indices) | managed | ClrMD, `world.residency` `trace-scene-cpu-array-bytes` |
+| Native allocator slack beyond the account | native (mimalloc) | `allocator-committed` less account `live` |
+| CLR loader heaps, precode and JIT code | native | ClrMD native heaps |
+| Upload and readback heaps | host-visible | ledger host-visible held |
 
-- Owner: rendering/bake. The bake's background GPU work holds one readback, one
-  samples buffer and one point table a slot (`SdfGpuWork.SlotCount`), each grown
-  in 4 MiB granules to its largest batch (about 40 MiB of samples) and kept until
-  the tables go, and each completed batch's samples are copied into a pooled
-  managed array of that size on the bake's pool before decoding
-  (`SdfMeshBakeGpuWork.Complete`); `world.residency`'s `gpu-work` line reads the
-  bytes. Measure that line and the pool's arrays on the Deck tier before
-  shrinking or releasing them between bakes.
-- The mesh library budgets meshes residencies still hold and forgets them, so a
-  re-plan reloads a second copy (`SdfMeshLibrary.cs:32`, `:285-304`).
-- The GI probe cache is bounded by its window's resident box
-  (`SdfMeshIrradiance.Resident`, `ProbeCache.Retain`), but a batch's hit and
-  light blocks stay alive while any kept probe names them: after a tour the main
-  residency held 70,158 probes in 329 MB of blocks, about 4.7 KB a probe against
-  2,200 nominal. Re-home the kept probes of mostly forgotten blocks when
-  `Retain` compacts, measured by `world.residency`'s `probe-cache-blocks`.
-  The cache's reader also retries with `Thread.SpinWait` while a cache entry is being
-  published. Replace that custom busy wait with stable publication or an
-  appropriate host wait; measure its frequency before attributing frame stalls.
+Grounded causes and leads, largest first:
+
+- The baked meshes are held twice: the region's GPU copy and the CPU payloads
+  (positions and normals, level-0 indices and materials, levels 1 and 2;
+  `world.residency`'s `vertex-bytes` and `level0`..`level2` read each). Normals
+  and levels 1 and 2 have no CPU reader after landing except the store write,
+  material variants and a region rebuild; releasing them (and the chunked
+  parent's second index copy) needs each of those readers to read the store or
+  the GPU copy instead. Owner: rendering/bake.
+- The device-local memory no residency line names needs an owner line. The
+  render-graph nodes' `owned-bytes` gauges (`world.counters gpu --json`) run
+  past the 1 MiB an MCP answer carries, so name it with a reading that fits
+  (per-node owned bytes summed by node family) before cutting; the debug world
+  renders some thirty session views.
+- GI holds its trace scene on both sides: the CPU hierarchy feeds probe
+  placement and depth-sheet classification (`TryNearestSurface`,
+  `SdfMeshIrradiance.Placement.cs`, `SdfMeshProbeDepth.cs`) and diagnostics,
+  the GPU copy feeds the trace. Moving placement onto the GPU trace would free
+  the CPU side. The scene also retains up to `RetainedTriangles` of cached
+  claims (`SdfMeshIrradianceScene`), and a full scene build holds its pieces
+  beside the old scene. The probe cache's blocks stay alive while any kept
+  probe names them, so a tour leaves several times a probe's nominal bytes per
+  kept probe; re-home the kept probes of mostly forgotten blocks when `Retain`
+  compacts, measured by `world.residency`'s `probe-cache-blocks`. The cache's
+  reader retries with `Thread.SpinWait` while an entry is published; replace
+  that with stable publication or a host wait.
+- After a cold bake the process holds non-write-combined private memory that
+  the managed heap, the allocator and the ledger do not explain (page walk
+  private less managed and allocator committed, against a warm boot). Name it
+  (driver pipeline compilation, bake workspaces outside `IAllocator`,
+  `GpuRegion`'s `NativeMemory` growth) with a native allocation trace before
+  shrinking it.
+- After a cold bake the host-visible ledger stays above a warm boot's: placed
+  host-visible buffers released inside a shared arena heap free their range
+  but keep the heap while any other buffer sits in it (`DirectXHeapArena`), and
+  region staging buffers grow with landing.
+- The pagefile-backed 1 GiB section is created by no Puck code (`src/` has no
+  `MemoryMappedFile` or `CreateFileMapping`), and a headless World's whole
+  working set is smaller than its resident part; the
+  .NET executable allocator's double mapping and the driver are the candidates.
+  A windowed World JIT-compiles about three times the methods a headless one
+  does (`host.memory` `jit methods`), partly from `WorldCodeWarmer`; compare a
+  ReadyToRun-published World.
+- The mesh library budgets meshes residencies still hold and forgets them, so
+  a re-plan reloads a second copy (`SdfMeshLibrary.cs:32`, `:285-304`). The fix
+  is at its cause: a payload stays findable while any claim on it lives, and its
+  byte budget charges only cached-only payloads (reuse `Payload.Classify` and
+  `MemoryCategory.Cached`, no new counter). Read the crossing's
+  `[sdf.mesh-bake] start ... baking= loading= shared=` line first to name why so
+  many groups moved on a garden crossing.
+- Puck has no in-process device-memory budget reading: no DXGI
+  `QueryVideoMemoryInfo` or `VK_EXT_memory_budget` in `src/` (cite at least two
+  independent sources per API). Add usage and budget as fields of
+  `host.memory`, and let `MemoryAccount` be the one budget authority with
+  `ShaderPipelineMemoryBudget` as a reservation from it, not a second budget.
+  The account's budget is three quarters of installed RAM and sees only mesh
+  payloads, bake group workspaces and worker scratch, never the managed heap,
+  `GpuRegion` host copies, device or staging heaps, so on a unified-memory Deck
+  it pays no regard to the GPU's share of the same memory.
+- A warm load decodes the whole loaded set into managed arrays once before the
+  native copy (`SdfMeshStoreCodec.cs:177,214,321` then `SdfMesh.Storage.cs:77`).
+  A player's build also keeps the composed-document store
+  (`WorldDefinitionFileSource.cs`, `ForgetComposedDocuments` after boot; the
+  heap walk finds composed bytes and compiled source still held) and may keep
+  the authoring document tree after compiling; confirm and release what a
+  booted compiled world no longer reads.
 - A prewarmed mesh store may ship in a player's build (AGENTS.md), so a player
   need not bake cold.
-- Headless is about half a gigabyte and does not grow, and development-only
-  overhead is under about 100 MB, so a player's build of the debug world carries
-  essentially all of the windowed footprint. Roughly two thirds of a fresh
-  windowed World's private bytes are unattributed (other native memory and the
-  device's mapped heaps), the largest bucket and the first measurement. Puck
-  has no device-memory reading: no DXGI `QueryVideoMemoryInfo` or
-  `VK_EXT_memory_budget` anywhere in `src/` (cite at least two independent
-  sources per API). Add usage and budget as
-  fields of `host.memory`, and let `MemoryAccount` be the one budget authority
-  with `ShaderPipelineMemoryBudget` as a reservation from it, not a second
-  budget. The account's budget is three quarters of installed RAM and sees only
-  mesh payloads, bake group workspaces and worker scratch, never the managed
-  heap, `GpuRegion` host copies, device or staging heaps, so on a unified-memory
-  Deck it pays no regard to the GPU's share of the same memory.
-- The mesh library's fix is at its cause: a payload stays findable while any
-  claim on it lives, and its byte budget charges only cached-only payloads
-  (reuse `Payload.Classify` and `MemoryCategory.Cached`, no new counter). Read
-  the crossing's `[sdf.mesh-bake] start ... baking= loading= shared=` line first
-  to name why so many groups moved on a garden crossing (a palette shift,
-  selectors renumbered by the body leaving and returning, or distance); if the
-  cause is a static palette shift, extend renumber-sharing to static groups.
-- Managed transients the account does not see: a full GI scene build holds its
-  pieces and centroids beside the old scene (about a gigabyte in the debug
-  world, `SdfMeshIrradianceScene.cs:584-611,707-710`), the scene retains up to
-  8 M triangles of cached claims (`:60,270-281`), and a warm load decodes the
-  whole loaded set into managed arrays once before the native copy
-  (`SdfMeshStoreCodec.cs:177,214,321` then `SdfMesh.Storage.cs:77`). A player's
-  build also keeps the composed-document store (`WorldDefinitionFileSource.cs`,
-  `ForgetComposedDocuments` after boot) and may keep the authoring document tree
-  after compiling; confirm and release what a booted compiled world no longer
-  reads. Expanded mesh-store payloads now use scoped, accounted storage rather
-  than the shared array pool; the decoded mesh arrays before native publication
-  remain a separate transient to remove.
-- Order of shrinkage once attributed: the unattributed bucket, the crossing's
-  spike and the tour's growth (the probe cache's retained blocks), GI's managed working
-  set, then the mesh copies (release normals and levels 1 and 2 after landing
-  where no CPU reader needs them, and drop the chunked parent's second index
-  copy).
 
 #### Steps
 
@@ -2420,6 +2443,12 @@ failing case is argued from source, not run):
 
 ### Vulkan regressions and GPU robustness
 
+- [low · unchecked] `SdfWorldPickReadback.Dispose` returns its readback's
+  arena range (`DirectXGpuReadbackBuffer.Dispose` now reports the release), but
+  whether every retirement path of the pick readback runs after its fence
+  depends on graph teardown order and was not traced by the deck-memory review.
+  Trace each retirement path; if one can dispose before the fence, retire it
+  through the fence-ordered path the other readbacks use.
 - [medium, before V1] Draw identity is tracked twice and the occlusion visible
   bit uses neither: R2's per-mesh identity counter (`SdfMesh.cs:331-335`,
   `:612`, read at `sdf-mesh-selection.hlsli:79`) beside the residency's

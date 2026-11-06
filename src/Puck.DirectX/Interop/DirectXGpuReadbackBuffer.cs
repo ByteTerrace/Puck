@@ -5,10 +5,13 @@ namespace Puck.DirectX.Interop;
 
 /// <summary>
 /// A Direct3D 12 readback-heap buffer implementing <see cref="IGpuReadbackBuffer"/>: permanently mapped, and permanently in
-/// <c>COPY_DEST</c>; access dependencies never transition this fixed-state heap.
+/// <c>COPY_DEST</c>; access dependencies never transition this fixed-state heap. Disposal reports the release
+/// (<see cref="DirectXDeviceMemory.CountReleased"/>), which returns a placed buffer's range to its heap and counts a
+/// committed one's bytes released.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuReadbackBuffer : IGpuReadbackBuffer {
+    private readonly GpuDeviceMemoryWork? m_memory;
     private nint m_buffer;
     private void* m_mapped;
     private bool m_disposed;
@@ -18,9 +21,10 @@ public sealed unsafe class DirectXGpuReadbackBuffer : IGpuReadbackBuffer {
     /// <param name="bufferHandle">The native <c>ID3D12Resource</c>; ownership moves to the new instance.</param>
     /// <param name="sizeBytes">The buffer's size, in bytes.</param>
     /// <param name="mapped">The buffer's persistent mapping.</param>
+    /// <param name="memory">The device's memory counts its creation was counted in, or <see langword="null"/>.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bufferHandle"/> is zero.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="mapped"/> is <see langword="null"/>.</exception>
-    public DirectXGpuReadbackBuffer(nint bufferHandle, ulong sizeBytes, void* mapped) {
+    public DirectXGpuReadbackBuffer(nint bufferHandle, ulong sizeBytes, void* mapped, GpuDeviceMemoryWork? memory = null) {
         ArgumentOutOfRangeException.ThrowIfZero(value: bufferHandle);
 
         if (mapped is null) {
@@ -32,6 +36,7 @@ public sealed unsafe class DirectXGpuReadbackBuffer : IGpuReadbackBuffer {
 
         m_buffer = bufferHandle;
         m_mapped = mapped;
+        m_memory = memory;
         SizeBytes = sizeBytes;
     }
 
@@ -65,6 +70,10 @@ public sealed unsafe class DirectXGpuReadbackBuffer : IGpuReadbackBuffer {
         m_mapped = null;
 
         if (0 != m_buffer) {
+            DirectXDeviceMemory.CountReleased(
+                memory: m_memory,
+                resource: m_buffer
+            );
             _ = ((IUnknown*)m_buffer)->Release();
             m_buffer = 0;
         }

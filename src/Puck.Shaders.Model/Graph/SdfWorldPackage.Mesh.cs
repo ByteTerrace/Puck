@@ -81,10 +81,19 @@ public static partial class SdfWorldPackage {
     /// quality renders a power-of-two fraction of it (<see cref="WithShadows"/>).</summary>
     public const int MeshShadowResolution = 2048;
 
+    /// <summary>Each cascade's signed optical depth to its first opaque receiver and nearest glass entry.</summary>
+    public const string MeshShadowNearOptical = "meshShadowNearOptical";
+    /// <summary>The far cascade's optical-depth term.</summary>
+    public const string MeshShadowFarOptical = "meshShadowFarOptical";
+    /// <summary>The second light's cascade optical-depth term.</summary>
+    public const string MeshShadowSecondOptical = "meshShadowSecondOptical";
+    private static readonly string[] ShadowOpticalStorages = [Parts.ShadowNearOptical, Parts.ShadowFarOptical, Parts.ShadowSecondOptical];
+
     private static readonly string[] ShadowParts = [Parts.ShadowNear, Parts.ShadowFar, Parts.ShadowSecond];
     private static readonly string[] ShadowStorages = [
         Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth,
         Parts.ShadowNearExit, Parts.ShadowFarExit, Parts.ShadowSecondExit,
+        .. ShadowOpticalStorages,
     ];
 
     /// <summary>Returns a fragment without the shadow cascades, for a view whose quality skips shadows: no cascade pass, no
@@ -113,13 +122,13 @@ public static partial class SdfWorldPackage {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: texels, other: 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: texels, other: MeshShadowResolution);
 
-        var shaped = (second ? fragment : Without(fragment: fragment, parts: [Parts.ShadowSecond], storages: [Parts.ShadowSecondDepth, Parts.ShadowSecondExit]));
+        var shaped = (second ? fragment : Without(fragment: fragment, parts: [Parts.ShadowSecond], storages: [Parts.ShadowSecondDepth, Parts.ShadowSecondExit, Parts.ShadowSecondOptical]));
 
         return ((texels == MeshShadowResolution)
             ? shaped
             : (shaped with {
                 Resources = [.. shaped.Resources.Select(selector: resource => (ShadowStorages.Contains(value: resource.Name)
-                    ? ShadowDepth(name: resource.Name, texels: texels)
+                    ? (ShadowOpticalStorages.Contains(resource.Name) ? ShadowOptical(resource.Name, texels) : ShadowDepth(name: resource.Name, texels: texels))
                     : resource))],
             }));
     }

@@ -17,6 +17,7 @@ let waterGlass = {
   ior: 1.333
   scatter: "#1A8A94"
   scattering: 0.35
+  shadowDensity: 0.8
   contact { reach: 0.4, coverage: 0.6 }
 }
 // The white the water's foam and streaks reveal.
@@ -234,7 +235,7 @@ template riverChannel(id, region, points, ground, top = 0, bed = -0.9, bedHalf =
 // falls narrows as it ebbs; the flow's foam thins with it where the world binds the flow's coverage to a lane. The
 // endpoint visibility `state.<visible>` (one or zero) parks the edge-on ribbon when the falls runs dry; both gauges are the
 // chain's own, never the clock. The sheets are glass (`glass`):
-// the rock shows through them, and as glass they cast no shadow. A sheet's `thickness` is what a view along the wall
+// the rock shows through them and the authored glass density shades it. A sheet's `thickness` is what a view along the wall
 // crosses many times over, so a thick sheet's medium covers the rock behind it.
 template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gauge = "fallsFlow", visible = "fallsVisible", palette = waterPalette, flow = fallsFlowLayer, glass = fallsGlass) {
   prototype $"{id}" {

@@ -191,9 +191,7 @@ public sealed unsafe class DirectXHeapArena {
         ID3D12Heap* heap = null;
 
         m_calls.CreateHeap(description: &description, heap: &heap).ThrowIfFailed(calls: m_calls, operation: "ID3D12Device::CreateHeap");
-        if (m_memory is not null) {
-            _ = m_memory.CountAllocated(allocation: ((nint)heap), bytes: checked((long)bytes), device: m_device, role: key.Role);
-        }
+        m_memory?.CountAllocated(allocation: ((nint)heap), bytes: checked((long)bytes), device: m_device, role: key.Role);
 
         return new Heap(key: key, native: heap, ranges: new GpuMemoryRanges(capacity: bytes));
     }
