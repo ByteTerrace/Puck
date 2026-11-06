@@ -4,7 +4,6 @@ using System.Text;
 using Puck.Abstractions;
 using Puck.Abstractions.Presentation;
 using Puck.Confinement;
-using Puck.Hosting;
 using Puck.Testing;
 
 namespace Puck.Shaders.Tests;

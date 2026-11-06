@@ -10,6 +10,8 @@ public enum MachineRuntimeStatus {
     Stopped,
     /// <summary>A runtime fault prevents advancement.</summary>
     Faulted,
+    /// <summary>Preparation could not acquire or derive a required machine resource.</summary>
+    Refused,
 }
 /// <summary>A deterministic runtime owned by a host. Displays, audio, controls, removable content, and hardware
 /// access are optional capabilities; none is required to advance a machine.</summary>

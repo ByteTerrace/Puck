@@ -14,6 +14,9 @@
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       },
+      "ByteTerrace.Puck.Confinement": {
+        "type": "Project"
+      },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
       }

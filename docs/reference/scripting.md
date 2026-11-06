@@ -131,7 +131,7 @@ little-endian; every fixed-point value is `FixedQ4816` raw `i64` bits (`One = 0x
 `AddonAbi.AbiVersion` is the ABI's version. There is one addon ABI; this host speaks exactly that
 version, and a guest reporting any other value faults `AbiMismatch` loudly at mount and never ticks,
 naming both. A breaking change to the cell/export shape raises the version and rebuilds the
-committed guests. Adding request verbs is prefix growth: existing guests retain their declared
+source-backed guests. Adding request verbs is prefix growth: existing guests retain their declared
 verb counts and mount unchanged. `puck wasm-stdlib` regenerates the Rust constants after either kind
 of change; `puck wasm build` rebuilds guests when their source or ABI shape changes.
 

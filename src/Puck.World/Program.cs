@@ -295,6 +295,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     // The device caches are per user rather than under the state root, since each holds a pure function of its inputs and
     // the build, never of a run's state. Their per-user defaults are named here and nowhere else, like the state root's.
     var cacheRoot = parseResult.GetValue(option: cacheDirOption);
+    Puck.Assets.DerivedBytes.DefaultDirectory = cacheRoot is null ? null : Path.Join(cacheRoot, "derived");
     var caches = new WorldCacheRoots(
         compilations: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "compilations") : Path.Join(path1: cacheRoot, path2: "compilations")),
         compiledWorlds: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "compiled-worlds") : Path.Join(path1: cacheRoot, path2: "compiled-worlds")),

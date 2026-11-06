@@ -32,11 +32,11 @@ public sealed class EnvironmentReadAnalyzer : DiagnosticAnalyzer {
     public static readonly DiagnosticDescriptor Env001UnlistedEnvironmentRead = new(
         id: "ENV001",
         title: "Environment read outside the allowlist",
-        messageFormat: "'{0}' {1}; nothing in Puck is switched by an environment variable: make it a puck verb with --check, a flag, a document or profile setting, or a test fixture, or add an OS- or CI-provided variable to EnvironmentReadAllowlist with its reason",
+        messageFormat: "'{0}' {1}; nothing in Puck is switched by an environment variable: make it a puck verb with --check, a flag, a document or profile setting, or a test fixture, or add a host/toolchain variable or explicit tool location to EnvironmentReadAllowlist with its reason",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Puck reads the process environment only for values the operating system, the .NET SDK or the CI host defines, each named with its reason in one allowlist. A PUCK_* switch, a record mode or a test knob read from the environment is refused, as is any read whose variable name is not a compile-time constant."
+        description: "Puck reads the process environment for host/toolchain values and explicit external tool locations, each named with its reason in one allowlist. A behavior switch, a record mode or a test knob read from the environment is refused, as is any read whose variable name is not a compile-time constant."
     );
 
     /// <inheritdoc/>

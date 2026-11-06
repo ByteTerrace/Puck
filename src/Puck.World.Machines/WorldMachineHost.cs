@@ -823,7 +823,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
                 (namedQueued?.PendingSteps ?? 0),
                 (namedQueued?.MaximumPendingSteps ?? 0),
                 (namedQueued?.BackpressureEvents ?? 0),
-                namedQueued?.QueueFault,
+                lease.Fault,
                 cartridge,
                 MountedContent(lease: lease)
             );

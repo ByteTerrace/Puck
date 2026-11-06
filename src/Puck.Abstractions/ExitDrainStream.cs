@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
 
-namespace Puck.Hosting;
+namespace Puck.Abstractions;
 
 // Cancellation ends the wait for more pipe data, not decoding of bytes already read. Once released, take one
 // snapshot of the kernel buffer and consume it before reporting EOF. No other reader may consume this pipe.

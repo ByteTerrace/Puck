@@ -1,8 +1,7 @@
 using System.Diagnostics;
 using System.Text;
-using Puck.Networking;
 
-namespace Puck.Hosting;
+namespace Puck.Abstractions;
 
 /// <summary>
 /// <para>Starts child processes from an argument vector, never a shell expression, and owns their pipe lifecycle.</para>
@@ -18,6 +17,65 @@ namespace Puck.Hosting;
 /// then owns every redirected stream and must drain each one it does not close.</para>
 /// </summary>
 public static class ChildProcess {
+    /// <summary>Resolves an executable through an explicit location, PATH, then installed toolchain locations.</summary>
+    /// <param name="name">Executable name or explicit path.</param>
+    /// <param name="directory">An exclusive tool directory, or null for normal discovery.</param>
+    /// <returns>The absolute executable path.</returns>
+    /// <exception cref="FileNotFoundException">The executable is absent.</exception>
+    public static string FindExecutable(string name, string? directory = null) {
+        if (Path.IsPathRooted(name) || name.Contains('/') || name.Contains('\\')) {
+            if (File.Exists(name)) { return Path.GetFullPath(name); }
+        } else {
+            var file = OperatingSystem.IsWindows() && Path.GetExtension(name).ToLowerInvariant() is not (".exe" or ".cmd" or ".bat" or ".com") ? name + ".exe" : name;
+            foreach (var candidate in ExecutableDirectories(name, directory)) {
+                var path = Path.Combine(candidate.Trim('"'), file);
+                if (File.Exists(path)) { return Path.GetFullPath(path); }
+            }
+        }
+        throw new FileNotFoundException($"Cannot find {name} in the selected toolchain, PATH or standard install locations.");
+    }
+
+    private static IEnumerable<string> ExecutableDirectories(string name, string? directory) {
+        var tool = name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
+        var llvm = tool is "clang" or "ld.lld";
+        var rust = tool is "cargo" or "rustc";
+        var dxc = tool == "dxc";
+        var selected = directory ?? (llvm ? Environment.GetEnvironmentVariable("PUCK_LLVM_BIN")
+            : rust ? Environment.GetEnvironmentVariable("CARGO_HOME")
+            : dxc ? Environment.GetEnvironmentVariable("PUCK_DXC_BIN") : null);
+        if (!string.IsNullOrWhiteSpace(selected)) {
+            yield return rust && directory is null ? Path.Combine(selected, "bin") : selected;
+            yield break;
+        }
+        foreach (var entry in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)) {
+            yield return entry;
+        }
+        if (rust) {
+            yield return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cargo", "bin");
+        }
+        if (dxc && Environment.GetEnvironmentVariable("VULKAN_SDK") is { Length: > 0 } sdk) {
+            yield return Path.Combine(sdk, OperatingSystem.IsWindows() ? "Bin" : "bin");
+        }
+        if (OperatingSystem.IsWindows()) {
+            if (llvm) { yield return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LLVM", "bin"); }
+            if (dxc) {
+                var root = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory)!, "VulkanSDK");
+                foreach (var installed in InstalledDirectories(root, "*")) { yield return Path.Combine(installed, "Bin"); }
+            }
+        } else if (llvm || dxc || rust) {
+            yield return "/usr/local/bin";
+            yield return "/usr/bin";
+            if (llvm) {
+                yield return "/opt/llvm/bin";
+                foreach (var installed in InstalledDirectories("/usr/lib", "llvm-*")) { yield return Path.Combine(installed, "bin"); }
+                foreach (var installed in InstalledDirectories("/opt", "llvm-*")) { yield return Path.Combine(installed, "bin"); }
+            }
+        }
+    }
+
+    private static IEnumerable<string> InstalledDirectories(string root, string pattern) => Directory.Exists(root)
+        ? Directory.EnumerateDirectories(root, pattern).OrderDescending(StringComparer.Ordinal)
+        : [];
     /// <summary>How long to wait for EOF after exit. At expiry, readers consume the bytes still buffered in the pipe
     /// before ending, so scheduling delays cannot truncate the child's output.</summary>
     public static readonly TimeSpan ExitDrainGrace = TimeSpan.FromSeconds(seconds: 5);
@@ -36,6 +94,7 @@ public static class ChildProcess {
     /// <see cref="Timeout.InfiniteTimeSpan"/> leaves <paramref name="cancellationToken"/> as the only bound.</param>
     /// <param name="clock">The clock the timeout runs on; system time when it is <see langword="null"/>.</param>
     /// <param name="cancellationToken">The token that cancels the run.</param>
+    /// <param name="environment">Explicit child environment overrides; null values remove inherited variables.</param>
     /// <returns>The exit code and both captured texts. The texts hold everything the child wrote. A process that
     /// inherited its streams contributes through the final buffer snapshot after <see cref="ExitDrainGrace"/> on
     /// <paramref name="clock"/>, and never holds the run open. A timeout kills the whole tree, drains both streams, and
@@ -43,7 +102,7 @@ public static class ChildProcess {
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled. A token already
     /// cancelled starts nothing; one cancelled during the run first kills the whole tree and drains both streams.</exception>
     /// <exception cref="InvalidOperationException">The child could not be started.</exception>
-    public static async Task<ChildProcessResult> RunAsync(string fileName, IEnumerable<string> arguments, string? workingDirectory = null, bool capture = true, string? input = null, TimeSpan? timeout = null, TimeProvider? clock = null, CancellationToken cancellationToken = default) {
+    public static async Task<ChildProcessResult> RunAsync(string fileName, IEnumerable<string> arguments, string? workingDirectory = null, bool capture = true, string? input = null, TimeSpan? timeout = null, TimeProvider? clock = null, CancellationToken cancellationToken = default, IReadOnlyDictionary<string, string?>? environment = null) {
         cancellationToken.ThrowIfCancellationRequested();
 
         // A child that does not capture shares the caller's console. Given a hidden console of its own instead, a tool
@@ -59,6 +118,12 @@ public static class ChildProcess {
 
         if (capture) { info.StandardErrorEncoding = Encoding.UTF8; info.StandardOutputEncoding = Encoding.UTF8; }
         foreach (var argument in arguments) { info.ArgumentList.Add(item: argument); }
+        if (environment is not null) {
+            foreach (var (name, value) in environment) {
+                if (value is null) { info.Environment.Remove(name); }
+                else { info.Environment[name] = value; }
+            }
+        }
         var runClock = (clock ?? TimeProvider.System);
         using var process = (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: $"Cannot start {fileName}."));
         // Process.Dispose leaves streams that callers accessed open. Close stdin's handle even when a cancelled

@@ -1,4 +1,4 @@
-namespace Puck.Networking;
+namespace Puck.Abstractions;
 
 /// <summary>One bounded operation's cancellation: its <see cref="Token"/> cancels when <c>timeout</c> elapses on the
 /// supplied clock or when the caller's own token cancels, whichever comes first. The timer reads the

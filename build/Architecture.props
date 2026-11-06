@@ -136,14 +136,14 @@
         <!-- The neutral channel/WASM core. Its whole purpose is the ABSENCE of Puck.Commands and
              Puck.Input; exact equality is what makes that absence enforced rather than merely current.
              Puck.Abstractions arrives through Puck.Assets' shared document-identifier contract. -->
-        <PuckArchitectureProfile Include="Puck.Scripting" Closure="Puck.Abstractions;Puck.Assets;Puck.Maths" />
+        <PuckArchitectureProfile Include="Puck.Scripting" Closure="Puck.Abstractions;Puck.Assets;Puck.Confinement;Puck.Maths" />
         <!-- The field-as-data half of the SDF engine, split out of Puck.SdfVm: the instruction ISA, the packed-word
              program representation, the fluent authoring builder (including laying Puck.Text-authored strings out
              into marchable glyph geometry), and a warp-free deterministic fixed-point CPU interpreter
              (Puck.SignedDistance.Queries). Its whole purpose is the ABSENCE of every GPU/presentation/frame-
              production dependency Puck.SdfVm carries — exact equality enforces that a future member never quietly
              grows one. Puck.Abstractions arrives through Puck.Assets' shared document-identifier contract. -->
-        <PuckArchitectureProfile Include="Puck.SignedDistance" Closure="Puck.Abstractions;Puck.Assets;Puck.Maths;Puck.Text" />
+        <PuckArchitectureProfile Include="Puck.SignedDistance" Closure="Puck.Abstractions;Puck.Assets;Puck.Confinement;Puck.Maths;Puck.Text" />
         <!-- The state and rule engine as a standalone deterministic library (docs/project-map.md's Puck.State row;
              the campaign's Puck.State charter, phase one): expression syntax and tokens, the opcode enum and its
              arithmetic, tables and their document, state transforms, the validated-identifier family, and the
@@ -154,14 +154,14 @@
              predicates share with a state rule, and the document project consumes and extends it, never the
              reverse, so a card game or a turn-based resolver can run rules over Puck.Maths and this package
              alone. -->
-        <PuckArchitectureProfile Include="Puck.State" Closure="Puck.Abstractions;Puck.Assets;Puck.Maths" />
+        <PuckArchitectureProfile Include="Puck.State" Closure="Puck.Abstractions;Puck.Assets;Puck.Confinement;Puck.Maths" />
         <!-- The embedding providers (fixture and Azure OpenAI generators, batching, quantization). Puck.State for
              the one embedding-space identity each generator is built for; Puck.Maths for the signed-byte vector
              arithmetic. The edge runs one way: this project carries the Azure and OpenAI packages, and exact
              equality on the Puck.World.Server and Puck.World.Browser profiles (the latter's closure holds
              Puck.World.Transpiler) keeps them out of the server, the transpiler and the browser engine, which reach
              embeddings only through the dynamically loaded Puck.World.Embeddings extension. -->
-        <PuckArchitectureProfile Include="Puck.Embeddings" Closure="Puck.Abstractions;Puck.Assets;Puck.Maths;Puck.State" />
+        <PuckArchitectureProfile Include="Puck.Embeddings" Closure="Puck.Abstractions;Puck.Assets;Puck.Confinement;Puck.Maths;Puck.State" />
         <!-- The headless P1 split's document row (docs/project-map.md's Puck.World.Schema row; formerly
              Puck.World.Data). Puck.World.Authoring is the authored-content document row (formerly the Authoring/
              half of Puck.World.Forge; the SM83 forge half moved to Puck.HumbleGamingBrick.Forge, taking the
@@ -184,7 +184,7 @@
              reference. Puck.Scripting is absent: WorldAddonRow carries no AddonLane, so nothing in this project
              names a Puck.Scripting type — Puck.World.Server (below) is the one row that still needs it, for the
              addon host itself. -->
-        <PuckArchitectureProfile Include="Puck.World.Schema" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.World.Authoring" />
+        <PuckArchitectureProfile Include="Puck.World.Schema" Closure="Puck.Abstractions;Puck.Assets;Puck.Confinement;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.World.Authoring" />
         <!-- The world-agnostic wire substrate (docs/project-map.md's Puck.Networking row) — the socketless frame
              grammar and the bounded reader/writer pair every World socket frames its bytes through, plus the
              symmetric peer substrate (Puck.Networking.Peers: QUIC transport, identity-bound handshake, attested
@@ -192,7 +192,7 @@
              fixed-point scalar/vector/quaternion lanes the reader/writer read and write; Puck.Attestation, for the
              signed claims a peer handshake and every peer message are verified as; and Puck.Assets, whose
              AtomicFile writes a peer's private key (Puck.Abstractions arrives with it). -->
-        <PuckArchitectureProfile Include="Puck.Networking" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Maths" />
+        <PuckArchitectureProfile Include="Puck.Networking" Closure="Puck.Abstractions;Puck.Assets;Puck.Confinement;Puck.Attestation;Puck.Maths" />
         <!-- Sim-side music/rhythm state (MusicClock/MusicDirector/RhythmJudge) plus the presentation-adjacent
              fixed-point mixer/voice-synth core, bundled on one measured closure derived from what the moved
              mixer/synth files actually name (WorldMachineAudioRate relocated in, WorldVoicePatch.FromDocument's
@@ -201,22 +201,22 @@
              equality is what actually enforces the property that matters: Puck.Audio owns no world-document parser
              (and has no Puck.World.Authoring edge) and holds no presentation/backend row. Puck.Assets is inherited from
              Puck.Commands because binding group identifiers use the shared document-identifier contract. -->
-        <PuckArchitectureProfile Include="Puck.Audio" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking" />
+        <PuckArchitectureProfile Include="Puck.Audio" Closure="Puck.Abstractions;Puck.Assets;Puck.Confinement;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking" />
         <!-- The headless P1 split's wire-vocabulary row (docs/project-map.md's Puck.World.Protocol row; the residue
              of the former Puck.World.Data after Puck.World.Schema and Puck.Networking split out of it). Everything
              Puck.World.Schema's profile carries (Protocol references Schema) plus Schema itself and Puck.Networking
              (the frame/wire grammar its codecs frame payloads through). Same absence this profile enforces: no
              Backends row, no Presentation row, no Puck.Overlays, no Puck.Input, no Puck.World.Server. -->
-        <PuckArchitectureProfile Include="Puck.World.Protocol" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.World.Authoring;Puck.World.Schema" />
+        <PuckArchitectureProfile Include="Puck.World.Protocol" Closure="Puck.Abstractions;Puck.Assets;Puck.Confinement;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.World.Authoring;Puck.World.Schema" />
         <!-- Optional autonomous-participant projects consume only the public command/protocol/schema closure. Their
              top-row classification prevents the base Puck.World composition root from referencing them; these exact
              profiles prevent the reverse shortcut through Puck.World, Server, Client, Console, or Addons. -->
-        <PuckArchitectureProfile Include="Puck.World.AgentBridge" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
+        <PuckArchitectureProfile Include="Puck.World.AgentBridge" Closure="Puck.Abstractions;Puck.Assets;Puck.Confinement;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
         <!-- Local Console attachment is neutral substrate; only the optional adapter carries MCP packages.
              Hosting owns the console/capture policy and Networking owns local capability authentication.
              Neither depends on the optional MCP adapter. -->
         <PuckArchitectureProfile Include="Puck.Mcp" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Confinement;Puck.Hosting;Puck.Maths;Puck.Networking" />
-        <PuckArchitectureProfile Include="Puck.World.AgentHarness" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.World.AgentBridge;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
+        <PuckArchitectureProfile Include="Puck.World.AgentHarness" Closure="Puck.Abstractions;Puck.Assets;Puck.Confinement;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.World.AgentBridge;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
         <!-- The headless P1 split's server row (docs/project-map.md's Puck.World.Server row) — everything
              Puck.World.Protocol's profile carries (Server references both Schema and Protocol), plus Puck.Storage
              (the owned-world cloud sync substrate WorldOwnedWorldSync reads through). Puck.Attestation also arrives
@@ -286,7 +286,7 @@
              Windows surface, so an exact-equality list there would only be a second place to keep that surface
              in sync, with no forbidden edge to police (Architecture.props's own reasoning above: lane profiles
              are "the only tier doing security work"). -->
-        <PuckArchitectureProfile Include="Puck.Platform.Linux" Closure="Puck.Abstractions;Puck.Assets;Puck.Commands;Puck.Input;Puck.Maths;Puck.Platform" />
+        <PuckArchitectureProfile Include="Puck.Platform.Linux" Closure="Puck.Abstractions;Puck.Assets;Puck.Confinement;Puck.Commands;Puck.Input;Puck.Maths;Puck.Platform" />
         <!-- The launcher family's OS-neutral member (docs/project-map.md's Puck.Launcher.Linux row). Same
              reasoning as Puck.Platform.Linux above: PUCKARCH002 clause (a) already permits a Presentation-row
              project to hold a Backends assembly, so only an exact-equality closure proves it never acquires
@@ -310,7 +310,7 @@
              a browser tab instead of a desktop process. Exact equality is what proves this project never grows a
              Presentation, Backends, or Puck.World.Server edge just because it happens to sit at Composition roots'
              rank: nothing here renders, hosts a network peer, or runs authoritative mutation. -->
-        <PuckArchitectureProfile Include="Puck.World.Browser" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.Transpiler;Puck.World.Authoring;Puck.World.Schema;Puck.World.Transpiler" />
+        <PuckArchitectureProfile Include="Puck.World.Browser" Closure="Puck.Abstractions;Puck.Assets;Puck.Confinement;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.Transpiler;Puck.World.Authoring;Puck.World.Schema;Puck.World.Transpiler" />
     </ItemGroup>
 
     <!--

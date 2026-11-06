@@ -687,6 +687,7 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
         // The bind-time fault of a view or session the slot could not show (an unknown view camera, a refused session).
         // Machine faults are Machines.State's concern, and a source instance's its producer's.
         public string? DeclaredFault { get; set; }
+        public (string Fault, WorldScreenSource.Text Text)? FaultText { get; set; }
         // The WorldScreenSource this slot currently reflects — set at construction and updated by ReconcileScreens, so a
         // live UpsertScreen only re-applies its source through the runtime machinery when the source actually changed.
         public WorldScreenSource? DeclaredSource { get; set; }

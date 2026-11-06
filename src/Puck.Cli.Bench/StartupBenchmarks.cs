@@ -15,20 +15,21 @@ public static class StartupBenchmarks {
         var worlds = new Argument<string[]>(name: "worlds") { Arity = ArgumentArity.ZeroOrMore, Description = "Worlds to boot: asset package folders, sources or documents. Default: the debug world's package, worlds/debug." };
         var artifact = new Option<string?>("--world-artifact") { Description = "Existing World DLL; defaults to src/Puck.World/bin/Release/net11.0/Puck.World.dll. Never builds." };
         var output = new Option<string?>("--output") { Description = "Parent for a unique run directory containing report.json, transcripts, and captures." };
+        var cache = new Option<string?>("--cache-dir") { Description = "World cache root shared across samples; an empty directory measures a cold boot followed by warm boots." };
         var samples = new Option<int>("--samples") { DefaultValueFactory = _ => 3, Description = "Fresh processes measured per world, 1 to 100." };
         var timeout = new Option<int>("--timeout-seconds") { DefaultValueFactory = _ => 120, Description = "Seconds one sample may take before it is abandoned, 1 to 3600." };
         var headless = new Option<bool>("--headless") { Description = "Measure console readiness only; default launches the windowed renderer and requires a completed PNG capture." };
         var width = new Option<int>("--width") { DefaultValueFactory = _ => 1280, Description = "Window width in pixels for the rendered capture, 1 to 16384." };
         var height = new Option<int>("--height") { DefaultValueFactory = _ => 720, Description = "Window height in pixels for the rendered capture, 1 to 16384." };
-        var command = new Command(description: "Measure fresh-process World startup serially, with isolated persistence for every sample.", name: "startup") { worlds, artifact, output, samples, timeout, headless, width, height };
+        var command = new Command(description: "Measure fresh-process World startup serially, with isolated persistence for every sample.", name: "startup") { worlds, artifact, output, cache, samples, timeout, headless, width, height };
 
         command.SetAction(action: parse => Run(
             (parse.GetValue(argument: worlds) ?? []), parse.GetValue(option: artifact), parse.GetValue(option: output),
-            parse.GetValue(option: samples), parse.GetValue(option: timeout), parse.GetValue(option: headless), parse.GetValue(option: width), parse.GetValue(option: height)));
+            parse.GetValue(option: samples), parse.GetValue(option: timeout), parse.GetValue(option: headless), parse.GetValue(option: width), parse.GetValue(option: height), parse.GetValue(option: cache)));
         return command;
     }
 
-    private static int Run(string[] worlds, string? artifact, string? output, int samples, int timeout, bool headless, int width, int height) {
+    private static int Run(string[] worlds, string? artifact, string? output, int samples, int timeout, bool headless, int width, int height, string? cache) {
         if ((samples is < 1 or > 100) || (timeout is < 1 or > 3600) || (width is < 1 or > 16384) || (height is < 1 or > 16384)) {
             Console.Error.WriteLine(value: "startup: samples must be 1..100, timeout 1..3600 seconds, and dimensions 1..16384.");
             return 2;
@@ -62,6 +63,7 @@ public static class StartupBenchmarks {
                 Directory.CreateDirectory(path: directory);
                 var capture = $"{directory}/frame.png";
                 var arguments = new[] { artifact, "--world", worlds[index], "--devices", "none", "--headless", (headless ? "true" : "false"), "--exit-after-seconds", "0", "--width", width.ToString(provider: CultureInfo.InvariantCulture), "--height", height.ToString(provider: CultureInfo.InvariantCulture), "--state-dir", $"{directory}/state", "--capture-dir", $"{directory}/captures" };
+                if (cache is not null) { arguments = [.. arguments, "--cache-dir", Path.GetFullPath(cache)]; }
                 var input = (("world.status\n" + (headless ? "" : $"world.wait 1\nworld.screenshot {JsonSerializer.Serialize(capture, StartupJsonContext.Default.String)}\n")) + "wire.errors\n");
                 StartupSample row;
 

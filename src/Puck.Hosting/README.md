@@ -2,8 +2,8 @@
 
 Puck.Hosting provides deterministic host boundaries for simulations and
 presentation: fixed-step clocks, render-node lifecycle, and capability-owning
-host contexts. It also runs child processes for tools and coalesces dependency
-changes for presentation-side source watches.
+host contexts. It coalesces dependency changes for presentation-side source watches;
+the shared child-process runner lives in `Puck.Abstractions`.
 
 ## Documentation
 
