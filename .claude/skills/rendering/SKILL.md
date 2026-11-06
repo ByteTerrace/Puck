@@ -707,7 +707,11 @@ compares and fails naming the file that drifted, it writes nothing.
   buffers, retirement bookkeeping and the CPU shadow before publishing growth;
   a failed allocation preserves the old buffers, contents, capacity and bindings.
   `SdfWorldTables.EnsureDynamicTransformCapacity` prepares motion history before
-  growing the region and publishes capacity only after both succeed. A device with
+  growing the region and publishes capacity only after both succeed.
+  A Direct3D 12 buffer or image placed by `DirectXHeapArena` keeps its range
+  until its owner calls `DirectXDeviceMemory.CountReleased` before the last
+  `Release`; an owner that only releases the resource leaks its range and
+  keeps the heap for the run. A device with
   a large host-visible device-local heap (resizable BAR) gives a small per-frame table a ring, while the CPU fake
   device's default profile stages every region, so a region path written or
   tested for one policy alone passes the device-free suites and fails on such
@@ -832,7 +836,7 @@ banks, coalescing, waits) and how to read it is
 
 ```text
 world.cadence off      # a still scene otherwise skips frames and reads near zero
-world.rates off        # far or small work (far cascade, small windows, screens, bodies) otherwise updates at least 30 or 15 times a second
+world.rates off        # far or small work (far cascade, small windows, screens, bodies) otherwise updates at least 30 or 15 times a second, far bodies down to 5
 world.debug-view rates # tint each rated item by its tier; world.rates lists each one's size and tier (worlds/debug/range.md)
 world.counters gpu     # per-pass counted work: dispatches, shape evaluations, texels, uploads
 world.gpu-timing on    # per-pass timestamps; `world.gpu-timing timeline` orders each node's latest span on the queue's clock with the idle gap before it

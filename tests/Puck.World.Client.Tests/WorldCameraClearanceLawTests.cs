@@ -64,7 +64,7 @@ public sealed class WorldCameraClearanceLawTests {
     [Fact]
     public void EachCaseRisesToItsOwnCeilingAndMigratesToItsOwnCloseTarget() {
         // Waist-high, half a metre behind her: a level boom's eye sphere meets its top edge a few centimetres out.
-        var ledge = Walls((new Vector3(x: 0f, y: 0.5f, z: 0.6f), new Vector3(x: 4f, y: 0.5f, z: 0.1f)));
+        var ledge = Walls((new Vector3(x: 0f, y: 0.48f, z: 0.6f), new Vector3(x: 4f, y: 0.48f, z: 0.1f)));
         var desired = Desired(pitch: 0.3f, yaw: 0f);
 
         foreach (var (choice, ceiling) in new[] { (Fade, FadeRise), (Cutaway, CutawayRise) }) {
@@ -181,6 +181,34 @@ public sealed class WorldCameraClearanceLawTests {
         }
 
         return new SdfFieldEvaluator(program: builder.Build());
+    }
+    /// <summary>A held clearance answer stands while the boom drifts less than the margin it was swept wider by, and the
+    /// room it gives lies between the rooms the drifted question finds at the eye's radius and at that radius plus twice
+    /// the margin; a drift past the margin sweeps again. The wall faces the boom, so a drift toward it shortens the true
+    /// room by exactly the drift and a reused answer is told from a fresh one by its value.</summary>
+    [Fact]
+    public void AHeldRoomStandsOnlyWithinItsMarginAndNeverExceedsTheTrueRoom() {
+        var wall = Walls((new Vector3(x: 0f, y: 0f, z: 2.5f), new Vector3(x: 4f, y: 4f, z: 0.5f)));
+        var arm = new WorldCameraClearance();
+        const float Retraction = 0.05f;
+        float Room(Vector3 head) => arm.AvailableRoom(field: wall, head: head, backward: Vector3.UnitZ, length: 4.2f, scale: 1f, eyeRadius: EyeRadius, retractionSkin: Retraction);
+        float Swept(Vector3 head, float radius) {
+            Assert.True(condition: wall.SphereCast(dir: FixedVector3.FromVector3(value: Vector3.UnitZ), hit: out var hit, maxDist: FixedQ4816.FromDouble(value: 4.2), origin: At(value: head),
+                radius: FixedQ4816.FromDouble(value: radius)));
+
+            return ((float)((double)hit.Distance) - Retraction);
+        }
+
+        var first = Room(head: Vector3.Zero);
+        var near = new Vector3(x: 0f, y: 0f, z: 0.001f);
+        var held = Room(head: near);
+
+        Assert.Equal(expected: first, actual: held);
+        Assert.InRange(actual: held, low: Swept(head: near, radius: (EyeRadius + (2f / 256f))), high: Swept(head: near, radius: EyeRadius));
+
+        var far = new Vector3(x: 0f, y: 0f, z: 0.01f);
+
+        Assert.Equal(expected: (first - 0.01f), actual: Room(head: far), tolerance: 0.0005f);
     }
     // Resolves the same pose for a run of frames on the boom dynamics, returning the last eye.
     private static Vector3 Run(WorldCameraClearance arm, SdfFieldEvaluator? field, Vector3 desired, WorldChaseBody body, int frames, SdfCameraDynamics? dynamics = null, SdfCameraClearance? clearance = null) {

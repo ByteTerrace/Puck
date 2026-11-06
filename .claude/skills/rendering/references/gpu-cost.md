@@ -11,10 +11,12 @@ the measurement behind it; a general claim cites two public sources
 
 ## Attribute memory by layer
 
-`GpuDeviceMemoryWork.IsCounted` defines which resource roles the backend counters
-include. `host.memory owners 0` appends those counters, but they do not include
-ordinary host-visible upload/readback storage, driver internals or swapchain
-images. Aperture storage is already inside the device-local count. Account,
+`GpuDeviceMemoryWork.IsDeviceLocal` sorts each allocation's role into one of two
+disjoint backend rows: device-local bytes (aperture storage is already inside them)
+and host-visible bytes (upload, staging and readback heaps). `host.memory owners 0`
+appends both; neither includes driver internals or swapchain images. Device-local
+plus host-visible is what the backend's counted allocations hold, and on the Deck's
+unified memory both come out of the same physical pool. Account,
 allocator, managed-heap, resource and process readings overlap; their sum is not a
 physical total. Read full GPU node counters when ownership matters: summary
 submission counters omit the node's owned-byte gauge.

@@ -2,7 +2,7 @@ using Puck.Abstractions.Counting;
 
 namespace Puck.World.Client;
 
-/// <summary>Actual creation posing and surface-probe work across the composed World, including authored placements.</summary>
+/// <summary>Actual creation posing work across the composed World, including authored placements; their surface probes count in <see cref="WorldFieldQueryWork"/>.</summary>
 public static class WorldCreationWork {
     /// <summary>Bytes copied to retain the previous articulated pose before packing or carrying it.</summary>
     public static WorkKind PreviousPoseBytes { get; } = new(name: "sdf.creations.previous-pose.bytes-copied", unit: "bytes", workClass: WorkClass.Pacing);
@@ -22,14 +22,6 @@ public static class WorldCreationWork {
     public static WorkKind SlotsPosed { get; } = new(name: "sdf.creations.slots.posed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Transform slots retained without authored pose evaluation.</summary>
     public static WorkKind SlotsRetained { get; } = new(name: "sdf.creations.slots.retained", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Surface-target requests, including invalid or fieldless ones.</summary>
-    public static WorkKind Probes { get; } = new(name: "sdf.creations.probes.requests", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Surface-target requests answered by the existing exact-input answer cache.</summary>
-    public static WorkKind ProbeHits { get; } = new(name: "sdf.creations.probes.cache-hits", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Valid surface-target requests that missed that cache and ran the query.</summary>
-    public static WorkKind ProbeMisses { get; } = new(name: "sdf.creations.probes.cache-misses", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Requests with no field, positive reach or direction, answered without occupying the cache.</summary>
-    public static WorkKind ProbeSkipped { get; } = new(name: "sdf.creations.probes.skipped", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>New driver state initializations.</summary>
     public static WorkKind DriverInitializations { get; } = new(name: "sdf.creations.drivers.initializations", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Driver rows evaluated.</summary>
@@ -45,5 +37,5 @@ public static class WorldCreationWork {
     /// <summary>Retained static occurrences published during a visual program build.</summary>
     public static WorkKind StaticCopies { get; } = new(name: "sdf.creations.static.copies", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Process totals; read twice to measure a window. Posed, retained and rate-held partition visited registrations.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, PlacementsPosed, SlotsPosed, SlotsRetained, Probes, ProbeHits, ProbeMisses, ProbeSkipped, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, StaticTemplates, StaticCopies, PreviousPoseBytes, Packs]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, PlacementsPosed, SlotsPosed, SlotsRetained, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, StaticTemplates, StaticCopies, PreviousPoseBytes, Packs]);
 }

@@ -278,6 +278,8 @@ public sealed partial class WorldCreationInstances {
         public readonly Vector3[] EffectorNormal = new Vector3[CreationDocument.MaxEffectors];
         public readonly float[] EffectorAlign = new float[CreationDocument.MaxEffectors];
         public readonly bool[] EffectorHasTarget = new bool[CreationDocument.MaxEffectors];
+        // Each effector's held surface-probe answer, which TryProbeSurface reuses for its bit-identical next question.
+        public readonly WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer>[] EffectorProbe = new WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer>[CreationDocument.MaxEffectors];
         // A resting plant's step (CreationReplantDocument): whether the tip is mid-step, the latched point it left,
         // the point it is heading for and that point's contact normal, and how far through the step it is, in [0, 1].
         public readonly bool[] EffectorStepping = new bool[CreationDocument.MaxEffectors];

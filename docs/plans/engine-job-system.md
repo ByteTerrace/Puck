@@ -67,17 +67,18 @@ At the meadow nearly half the frame thread is CPU field queries inside
 the chase camera's clearance march, over one evaluator, the client's static
 field. What that means for the design of the packet's first item:
 
-- **Most of the effector cost is probes nobody sees.** Bodies far from every
-  view are posed and probed every frame, and three quarters of a probe's cost
-  is the gradient at its hit (`TryFieldGradient`'s six full distance
-  evaluations), at a point the march has just evaluated.
-- **The answer caches cannot work as built.** Probes with no field (bodies in
-  routed scenes) can never match (`SurfaceQuery.Matches` requires a field) and
-  evict `WorldEffectorSolver`'s ring every frame, and a camera target that
-  breathes by a tenth of a millimetre defeats `WorldCameraClearance`'s
-  bit-identical match. A cache keyed by what changed (the body's pose against
-  the field's revision, a tolerance the probe's own skin admits) serves both;
-  so does skipping a probe with no field before it reaches the ring.
+- **Most of the effector cost is probes nobody sees.** Three quarters of a
+  probe's cost is the gradient at its hit (`TryFieldGradient`'s six full
+  distance evaluations), at a point the march has just evaluated. A far body's
+  pose and probes hold between its rated packs: the bodies lever's tiers reach
+  10 and 5 Hz by the same two-pixel rule, so a 15 Hz floor slower than the frame
+  is not the only tier a distant body can take.
+- **Answers live on their owners.** Each effector and each of the chase arm's
+  clearance questions holds its own answer (`WorldFieldAnswer`), so packing on
+  a worker thread keeps its hits. A surface probe is reused only for
+  bit-identical inputs, since a ray's hit is not continuous in its origin; a
+  clearance sweep is cast a small margin wider and reused while the boom
+  drifts less than that margin (`world.counters world.field-queries`).
 
 ## 1. The scheduler
 

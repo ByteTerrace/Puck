@@ -45,7 +45,7 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
         }
         text.Append(CultureInfo.InvariantCulture, $"omitted owners={(owners.Length - shown)} owned={omittedOwned} reserved={omittedReserved}\n");
         foreach (var source in m_memorySources) { WorkCounterReport.AppendSection(builder: text, source: source); }
-        text.Append(value: "Backend counters are separate observations; host-visible-device-local bytes are a subset of device-local bytes. Process, managed, allocator, account and backend readings overlap; unified physical total is unavailable.]");
+        text.Append(value: "Backend counters are separate observations; host-visible-device-local bytes are a subset of device-local bytes, and host-visible bytes are disjoint from both. Process, managed, allocator, account and backend readings overlap; unified physical total is unavailable.]");
         return text.ToString();
     }
     private static string Mebibytes(long bytes) =>

@@ -333,7 +333,7 @@ public sealed class WorldSeatViewState {
             if (firstPerson is { } destination) {
                 var head = subject.Point(local: destination.EyePoint);
                 var probe = clearance.GetValueOrDefault();
-                var room = (WorldCameraClearance.AvailableRoom(backward: -forward, eyeRadius: probe.EyeRadius, field: field, head: head, length: authoredLength, retractionSkin: probe.RetractionSkin, scale: scale) / scale);
+                var room = (m_clearance.AvailableRoom(backward: -forward, eyeRadius: probe.EyeRadius, field: field, head: head, length: authoredLength, retractionSkin: probe.RetractionSkin, scale: scale) / scale);
 
                 m_viewTransition.Advance(destination, control.AutoFirstPerson,
                     m_viewTransition.Automatic(control: control, feel: (feel ?? WorldSeatCameraFeel.Default)), room, deltaSeconds);

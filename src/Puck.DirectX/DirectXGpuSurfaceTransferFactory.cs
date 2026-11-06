@@ -179,6 +179,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
             device: device,
             heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK,
             initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
+            memory: deviceContext.Memory,
             sizeBytes: readbackByteLength
         ));
         m_readbackSize = readbackByteLength;
@@ -314,6 +315,10 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
     }
     private void ReleaseBuffer() {
         if (0 != m_readbackBuffer) {
+            DirectXDeviceMemory.CountReleased(
+                memory: deviceContext.Memory,
+                resource: m_readbackBuffer
+            );
             _ = ((IUnknown*)m_readbackBuffer)->Release();
             m_readbackBuffer = 0;
         }

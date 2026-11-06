@@ -51,19 +51,14 @@ public static unsafe class DirectXDeviceMemory {
         return ((nint)device);
     }
 
-    /// <summary>Counts a resource created or opened on a device when its role counts
-    /// (<see cref="GpuDeviceMemoryWork.IsCounted"/>).</summary>
+    /// <summary>Counts a committed resource created or opened on a device, in the row its role names
+    /// (<see cref="GpuDeviceMemoryWork.IsDeviceLocal"/>).</summary>
     /// <param name="memory">The counts, or <see langword="null"/> to count nothing.</param>
     /// <param name="device">The device that created or opened the resource.</param>
     /// <param name="resource">The resource.</param>
     /// <param name="role">What the resource is for.</param>
     public static void CountAllocated(GpuDeviceMemoryWork? memory, ID3D12Device* device, ID3D12Resource* resource, GpuMemoryRole role) {
         if ((memory is null) || (resource is null)) {
-            return;
-        }
-        // A role the ledger holds no bytes of still counts as one allocation (GpuDeviceMemoryWork.Allocations).
-        if (!GpuDeviceMemoryWork.IsCounted(role: role)) {
-            _ = memory.CountAllocated(allocation: ((nint)resource), bytes: 0L, device: DeviceOf(resource: resource), role: role);
             return;
         }
 
@@ -85,7 +80,7 @@ public static unsafe class DirectXDeviceMemory {
             1U,
             &description
         );
-        _ = memory.CountAllocated(
+        memory.CountAllocated(
             allocation: ((nint)resource),
             bytes: checked((long)allocation.SizeInBytes),
             device: DeviceOf(resource: resource),

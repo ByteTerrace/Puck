@@ -121,7 +121,7 @@ public sealed class WorldCreationInstancesRateLawTests {
         var intervals = new SdfUpdateRateIntervals();
 
         pool.PresentAt(rate: Paced60, rates: SdfUpdateRates.All);
-        pool.RateBy(counts: counts, height: 900U, intervals: intervals, views: ViewFrom(distance: 500f));
+        pool.RateBy(counts: counts, height: 900U, intervals: intervals, views: ViewFrom(distance: 65f));
 
         var phases = new List<float>();
         var offsets = new List<Vector3>();
@@ -298,7 +298,7 @@ public sealed class WorldCreationInstancesRateLawTests {
         var readings = new SdfUpdateRateReadings();
 
         pool.PresentAt(rate: Paced60, rates: SdfUpdateRates.All);
-        pool.RateBy(codes: true, counts: null, height: 900U, intervals: null, readings: readings, views: ViewFrom(distance: 500f));
+        pool.RateBy(codes: true, counts: null, height: 900U, intervals: null, readings: readings, views: ViewFrom(distance: 65f));
 
         var codes = new List<SdfUpdateRateCode>();
 
@@ -335,6 +335,9 @@ public sealed class WorldCreationInstancesRateLawTests {
         Assert.Equal(expected: 60, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 31f, shownElsewhere: false));
         Assert.Equal(expected: 30, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 30f, shownElsewhere: false));
         Assert.Equal(expected: 15, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 15f, shownElsewhere: false));
+        Assert.Equal(expected: 10, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 10f, shownElsewhere: false));
+        Assert.Equal(expected: 5, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 5f, shownElsewhere: false));
+        Assert.Equal(expected: 5, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 0.5f, shownElsewhere: false));
         Assert.Equal(expected: 15, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 0f, shownElsewhere: true));
         Assert.Equal(expected: SdfUpdateRateTiers.HeldHertz, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 0f, shownElsewhere: false));
         Assert.Equal(expected: 60, actual: SdfUpdateRateTiers.ViewHertz(pixels: 121d));

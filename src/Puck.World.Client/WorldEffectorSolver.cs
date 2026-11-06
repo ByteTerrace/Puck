@@ -223,6 +223,8 @@ public static class WorldEffectorSolver {
         solvedTip = (root + (direction * reach));
     }
     /// <summary>Probes a query field for the surface an effector's tip is reaching toward.</summary>
+    /// <param name="answer">The effector's held probe answer (<see cref="WorldSurfaceQuery"/>): reused for
+    /// bit-identical inputs over the same field, and replaced by every probe that marches.</param>
     /// <param name="field">The static-scene query field, or <see langword="null"/> when none is resolved.</param>
     /// <param name="origin">The tip's world position — where the probe starts.</param>
     /// <param name="towards">The probe direction in the creation's own frame; rotated by
@@ -232,108 +234,96 @@ public static class WorldEffectorSolver {
     /// <param name="standoff">How far off the hit surface, along its own normal, the target sits.</param>
     /// <param name="target">The world-space target; <paramref name="origin"/> when nothing answered.</param>
     /// <param name="normal">The hit surface's unit world normal, the field gradient at the hit: back along the probe
-    /// where the field reports no gradient, and world up when nothing answered.</param>
+    /// where the march missed or the field reports no gradient, and world up when the request marches nothing (no
+    /// field, reach or direction).</param>
     /// <returns><see langword="true"/> when the march hit.</returns>
     /// <remarks>The march starts <see cref="ProbeBackoff"/> behind the origin, so a tip already resting on the surface
     /// it probes answers the same way one reaching toward it does.</remarks>
-    public static bool TryProbeSurface(SdfFieldEvaluator? field, Vector3 origin, Vector3 towards, Quaternion rootRotation, float reach, float standoff, out Vector3 target, out Vector3 normal) {
-        WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Probes);
+    public static bool TryProbeSurface(ref WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer> answer, SdfFieldEvaluator? field, Vector3 origin, Vector3 towards, Quaternion rootRotation, float reach, float standoff, out Vector3 target, out Vector3 normal) {
         if ((field is null) || (reach <= 0f) || (towards.LengthSquared() <= 0f)) {
-            WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.ProbeSkipped);
+            WorldFieldQueryWork.Surface.Skip();
             target = origin;
             normal = Vector3.UnitY;
             return false;
         }
-        // A planted foot asks the same question every frame: the answer to bit-identical inputs over the same field is the
-        // one it had, so it is reused rather than marched again.
-        var query = new SurfaceQuery(Field: field, Origin: origin, Reach: reach, Rotation: rootRotation, Standoff: standoff, Towards: towards);
-        var answers = (AnswerScratch ??= new SurfaceAnswer[SurfaceAnswers]);
 
-        foreach (ref readonly var answer in answers.AsSpan()) {
-            if (answer.Query.Matches(other: in query)) {
-                WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.ProbeHits);
-                target = answer.Target;
-                normal = answer.Normal;
+        var answered = answer.Ask(asked: new WorldSurfaceQuery(Field: field, Origin: origin, Reach: reach, Rotation: rootRotation, Standoff: standoff, Towards: towards));
 
-                return answer.Hit;
-            }
-        }
+        target = answered.Target;
+        normal = answered.Normal;
 
-        WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.ProbeMisses);
-        var hit = Probe(field: field, normal: out normal, origin: origin, reach: reach, rootRotation: rootRotation, standoff: standoff, target: out target, towards: towards);
-
-        answers[NextAnswer] = new SurfaceAnswer(Hit: hit, Normal: normal, Query: query, Target: target);
-        NextAnswer = ((NextAnswer + 1) % SurfaceAnswers);
-
-        return hit;
+        return answered.Hit;
     }
+}
+/// <summary>The answer to a <see cref="WorldSurfaceQuery"/>.</summary>
+/// <param name="Hit">Whether the march hit.</param>
+/// <param name="Target">The world-space target off the hit, or the probe's origin when nothing answered.</param>
+/// <param name="Normal">The hit surface's unit world normal; back along the probe where the march missed or the field
+/// reports no gradient.</param>
+public readonly record struct WorldSurfaceAnswer(bool Hit, Vector3 Target, Vector3 Normal);
+/// <summary>
+/// An effector's surface probe (<see cref="WorldEffectorSolver.TryProbeSurface"/>): a ray marched from behind the tip
+/// along a body-relative direction, its hit lifted off the field gradient by a standoff. A ray's hit is not continuous
+/// in its origin, so no drift bound holds for it: an answer is reused only for bit-identical inputs.
+/// </summary>
+/// <param name="Field">The static-scene query field.</param>
+/// <param name="Origin">The tip's world position, where the probe starts.</param>
+/// <param name="Towards">The probe direction in the creation's own frame; nonzero.</param>
+/// <param name="Rotation">The body/placement root's world attitude.</param>
+/// <param name="Reach">How far to march, world units; positive.</param>
+/// <param name="Standoff">How far off the hit surface, along its own normal, the target sits.</param>
+public readonly record struct WorldSurfaceQuery(SdfFieldEvaluator Field, Vector3 Origin, Vector3 Towards, Quaternion Rotation, float Reach, float Standoff) : IWorldFieldQuery<WorldSurfaceQuery, WorldSurfaceAnswer> {
+    /// <inheritdoc/>
+    public static WorldFieldQueryFamily Family => WorldFieldQueryWork.Surface;
 
-    // The surface probes a thread asked last, kept for TryProbeSurface to answer again: enough for every foot of the bodies
-    // a frame poses near the camera.
-    private const int SurfaceAnswers = 64;
-
-    [ThreadStatic] private static SurfaceAnswer[]? AnswerScratch;
-    [ThreadStatic] private static int NextAnswer;
-
-    private readonly record struct SurfaceAnswer(SurfaceQuery Query, bool Hit, Vector3 Target, Vector3 Normal);
-    private readonly record struct SurfaceQuery(SdfFieldEvaluator? Field, Vector3 Origin, Vector3 Towards, Quaternion Rotation, float Reach, float Standoff) {
-        // Compares the floats by their bits, so an answer is reused only for exactly the inputs it was marched for.
-        public bool Matches(in SurfaceQuery other) => (
-            (Field is not null) &&
-            ReferenceEquals(objA: Field, objB: other.Field) &&
-            Bits(value: Origin.X, other: other.Origin.X) && Bits(value: Origin.Y, other: other.Origin.Y) && Bits(value: Origin.Z, other: other.Origin.Z) &&
-            Bits(value: Towards.X, other: other.Towards.X) && Bits(value: Towards.Y, other: other.Towards.Y) && Bits(value: Towards.Z, other: other.Towards.Z) &&
-            Bits(value: Rotation.X, other: other.Rotation.X) && Bits(value: Rotation.Y, other: other.Rotation.Y) &&
-            Bits(value: Rotation.Z, other: other.Rotation.Z) && Bits(value: Rotation.W, other: other.Rotation.W) &&
-            Bits(value: Reach, other: other.Reach) && Bits(value: Standoff, other: other.Standoff)
-        );
-
-        private static bool Bits(float value, float other) => (BitConverter.SingleToInt32Bits(value: value) == BitConverter.SingleToInt32Bits(value: other));
-    }
-
-    private static bool Probe(SdfFieldEvaluator field, Vector3 origin, Vector3 towards, Quaternion rootRotation, float reach, float standoff, out Vector3 target, out Vector3 normal) {
-        target = origin;
-        normal = Vector3.UnitY;
-
+    /// <inheritdoc/>
+    public bool Covers(in WorldSurfaceQuery asked) => (
+        Bits(value: Origin.X, other: asked.Origin.X) && Bits(value: Origin.Y, other: asked.Origin.Y) && Bits(value: Origin.Z, other: asked.Origin.Z) &&
+        Bits(value: Towards.X, other: asked.Towards.X) && Bits(value: Towards.Y, other: asked.Towards.Y) && Bits(value: Towards.Z, other: asked.Towards.Z) &&
+        Bits(value: Rotation.X, other: asked.Rotation.X) && Bits(value: Rotation.Y, other: asked.Rotation.Y) &&
+        Bits(value: Rotation.Z, other: asked.Rotation.Z) && Bits(value: Rotation.W, other: asked.Rotation.W) &&
+        Bits(value: Reach, other: asked.Reach) && Bits(value: Standoff, other: asked.Standoff)
+    );
+    /// <inheritdoc/>
+    public WorldSurfaceAnswer March() {
         var direction = Vector3.Normalize(value: Vector3.Transform(
-            rotation: rootRotation,
-            value: towards
+            rotation: Rotation,
+            value: Towards
         ));
-        var start = (origin - (direction * ProbeBackoff));
+        var start = (Origin - (direction * WorldEffectorSolver.ProbeBackoff));
 
-        normal = -direction;
-
-        if (!field.Raycast(
+        if (!Field.Raycast(
             dir: FixedVector3.FromVector3(value: direction),
             hit: out var hit,
-            maxDist: FixedQ4816.FromDouble(value: (reach + ProbeBackoff)),
+            maxDist: FixedQ4816.FromDouble(value: (Reach + WorldEffectorSolver.ProbeBackoff)),
             origin: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: start))
         )) {
-            return false;
+            return new WorldSurfaceAnswer(Hit: false, Normal: -direction, Target: Origin);
         }
 
         // The hit point is rebuilt from the marched distance rather than read off the returned FixedPosition, so the
         // answer stays in the same float world frame the origin was expressed in whichever cell the march ended in.
         var point = (start + (direction * ((float)hit.Distance)));
+        var normal = -direction;
 
-        // The march reports no normal, so the surface's own is the field gradient at the hit — the standoff is along
-        // the SURFACE's normal, not back along the probe, so a foot on a slope stands off perpendicular to it.
+        // The march reports no normal, so the surface's own is the field gradient at the hit: the standoff is along the
+        // surface's normal, not back along the probe, so a foot on a slope stands off perpendicular to it.
         if (
-            field.TryFieldGradient(
-            gradient: out var gradient,
-            position: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point))
-        ) &&
+            Field.TryFieldGradient(
+                gradient: out var gradient,
+                position: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point))
+            ) &&
             (gradient.ToVector3() is { } surface) &&
             (surface.LengthSquared() > 0f)
         ) {
             normal = Vector3.Normalize(value: surface);
         }
 
-        target = (point + (normal * MathF.Max(
+        return new WorldSurfaceAnswer(Hit: true, Normal: normal, Target: (point + (normal * MathF.Max(
             x: 0f,
-            y: standoff
-        )));
-
-        return true;
+            y: Standoff
+        ))));
     }
+
+    private static bool Bits(float value, float other) => (BitConverter.SingleToInt32Bits(value: value) == BitConverter.SingleToInt32Bits(value: other));
 }
