@@ -74,8 +74,13 @@ Material row 25.w carries shadow density beside cel ink RGB; keep its C# pack
 and HLSL load together without changing the row stride.
 For a neutral-default comparison, omit density from both prototype palettes
 and field materials in `state.world`; changing only the prototypes leaves
-field water shadowing. Compare the original and new shadow selection/estimate
+field water shadowing. Compare the original and new surface shadow estimator
 in the same paused World to keep geometry and temporal capture state fixed.
+`world.shaders.reload` replaces that kernel but not `SdfMeshRasterPass`'s
+occlusion/selection pipeline; a selection diagnostic needs a rebuilt host.
+For an independent vertex check, `world.cull off` and one fixed `world.detail`
+level make the mesh, glass and cascades select the same geometry: each cascade
+must count twice the mesh vertices plus exactly the glass vertices.
 
 Draw selection reads the retained `SdfWorldTables` staged draw span, the same
 records whose boxes and GPU records were uploaded. Never borrow the frame source's
