@@ -23,16 +23,11 @@ namespace Puck.Cli.Search;
 // The `puck search` verb: validate the pattern once up front, enumerate the files, scan them in parallel (one engine
 // instance per worker), and emit. Returns the process exit code (0 matched, 1 no match, 2 pattern or path error).
 public static class SearchCommand {
-    // -A/-B/-C/-M are counts, so a negative one is a typo rather than a mode; -M 0 alone means unlimited.
-    private static void RejectNegative<T>(Option<T> option) {
-        option.Validators.Add(item: result => {
-            if (
-                (result.GetValueOrDefault<T>() is int value) &&
-                (value < 0)
-            ) {
-                result.AddError(errorMessage: $"{option.Name} expects a non-negative integer.");
-            }
-        });
+    // The ripgrep short flag a search option mirrors.
+    private static TOption Short<TOption>(TOption option, string alias) where TOption : Option {
+        option.Aliases.Add(item: alias);
+
+        return option;
     }
     private static int Run(SearchOptions opt) {
         // Validate the pattern by compiling once up front. A compile failure is exit 2 with the engine's
@@ -130,18 +125,9 @@ public static class SearchCommand {
     }
 
     public static Command Create() {
-        var afterOption = new Option<int?>(
-            name: "--after-context",
-            aliases: ["-A"]
-        ) { Description = "Print n context lines after each match." };
-        var beforeOption = new Option<int?>(
-            name: "--before-context",
-            aliases: ["-B"]
-        ) { Description = "Print n context lines before each match." };
-        var contextOption = new Option<int?>(
-            name: "--context",
-            aliases: ["-C"]
-        ) { Description = "Print n context lines before and after each match; an explicit -A or -B overrides that side." };
+        var afterOption = Short(alias: "-A", option: CliOptions.OptionalCount(description: "Print n context lines after each match.", minimum: 0, name: "--after-context"));
+        var beforeOption = Short(alias: "-B", option: CliOptions.OptionalCount(description: "Print n context lines before each match.", minimum: 0, name: "--before-context"));
+        var contextOption = Short(alias: "-C", option: CliOptions.OptionalCount(description: "Print n context lines before and after each match; an explicit -A or -B overrides that side.", minimum: 0, name: "--context"));
         var countsOption = new Option<bool>(
             name: "--count",
             aliases: ["-c"]
@@ -168,10 +154,7 @@ public static class SearchCommand {
             name: "--fixed-strings",
             aliases: ["-F"]
         ) { Description = "Treat the pattern as a literal string (escape it)." };
-        var maxResultsOption = new Option<int>(
-            name: "--max-results",
-            aliases: ["-M"]
-        ) { DefaultValueFactory = _ => SearchOptions.DefaultMaxResults, Description = "Stop after n results, saying so on stderr when more matched; 0 is unlimited." };
+        var maxResultsOption = Short(alias: "-M", option: CliOptions.Count(defaultValue: SearchOptions.DefaultMaxResults, description: "Stop after n results, saying so on stderr when more matched; 0 is unlimited.", minimum: 0, name: "--max-results"));
         var noLineNumbersOption = new Option<bool>(
             name: "--no-line-number",
             aliases: ["-N"]
@@ -220,10 +203,6 @@ public static class SearchCommand {
             Engine syntax extensions: _ = any char incl. newline; & = intersection;
             ~(...) = complement. Matching is leftmost-longest; no backreferences.
             """);
-        RejectNegative(option: afterOption);
-        RejectNegative(option: beforeOption);
-        RejectNegative(option: contextOption);
-        RejectNegative(option: maxResultsOption);
         command.Validators.Add(item: result => {
             if (
                 !result.GetValue(option: filesOnlyOption) &&

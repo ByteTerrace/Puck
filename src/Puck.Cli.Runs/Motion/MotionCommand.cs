@@ -18,7 +18,7 @@ public static partial class MotionCommand {
 
     private const string Verb = "motion";
 
-    private static int Run(string? scenariosPath, string[] names, bool list, bool reproduce, string? output, string? worldPath, string? worldArtifact, WorldBackendPreference? backend, string? cacheDirectory, int columns, int cellWidth, int timeoutMinutes) {
+    private static int Run(string? scenariosPath, string[] names, bool list, bool reproduce, string? output, string? worldPath, string? worldArtifact, WorldBackendPreference? backend, string? cacheDirectory, int columns, int cellWidth, int timeoutSeconds) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -30,14 +30,6 @@ public static partial class MotionCommand {
         }
         if (!MotionScenarioFile.TryParse(error: out var parseError, json: File.ReadAllText(path: scenarioFile), set: out var set)) {
             return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: scenarioFile), why: parseError);
-        }
-
-        if (list) {
-            foreach (var scenario in set.Scenarios) {
-                Console.Out.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{scenario.Name}: {scenario.Form.ToString().ToLowerInvariant()}, {scenario.Capture.Count} still(s), ticks 0..{scenario.LastTick} — {scenario.Note}"));
-            }
-
-            return CliExit.Success;
         }
 
         var selected = new List<MotionScenario>();
@@ -55,6 +47,18 @@ public static partial class MotionCommand {
                     selected.Add(item: found);
                 }
             }
+        }
+
+        if (selected.Count == 0) {
+            return CliExit.Empty(verb: Verb, selection: CliPaths.ToDisplay(fullPath: scenarioFile), why: "declares no scenario");
+        }
+
+        if (list) {
+            foreach (var scenario in selected) {
+                Console.Out.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{scenario.Name}: {scenario.Form.ToString().ToLowerInvariant()}, {scenario.Capture.Count} still(s), ticks 0..{scenario.LastTick} — {scenario.Note}"));
+            }
+
+            return CliExit.Success;
         }
 
         var world = Path.GetFullPath(path: (worldPath ?? Path.Combine(path1: repositoryRoot, path2: DefaultWorld)));
@@ -75,7 +79,7 @@ public static partial class MotionCommand {
             scenarioFile: scenarioFile,
             selected: selected,
             set: set,
-            timeoutMinutes: timeoutMinutes,
+            timeoutSeconds: timeoutSeconds,
             world: world,
             worldArtifact: worldArtifact
         );
@@ -88,16 +92,16 @@ public static partial class MotionCommand {
         var againstOption = new Option<string>(name: "--against-world-artifact") { Description = "The second route replay's World entry assembly; the first artifact again (A/A) when omitted. Both must implement the same route protocol." };
         var scenariosOption = new Option<string>(name: "--scenarios") { Description = $"The scenario file; {DefaultScenarios} when omitted." };
         var scenarioOption = new Option<string[]>(name: "--scenario") { AllowMultipleArgumentsPerToken = true, Description = "Run only the named scenario (repeat or list several); every scenario of the file when omitted." };
-        var listOption = new Option<bool>(name: "--list") { Description = "Print each scenario's name, form, stills and note, and boot nothing." };
+        var listOption = new Option<bool>(name: "--list") { Description = "Print each selected scenario's name, form, stills and note, and boot nothing." };
         var reproduceOption = new Option<bool>(name: "--reproduce") { Description = $"Run everything twice in fresh Worlds; exits 1 for unequal pose or capture hashes, missing camera images, or pixels beyond {MotionReport.MaximumResiduePixels} changed pixels per still and {MotionReport.MaximumResidueLevel} channel level." };
         var outputOption = CliOptions.Output(description: "The directory the stills, sheets, logs and manifest are written to; a kept run directory under the temporary root when omitted.");
         var worldOption = new Option<string>(name: "--world") { Description = $"The world to boot; {DefaultWorld} when omitted." };
         var artifactOption = new Option<string>(name: "--world-artifact") { Description = "Run this Puck.World entry assembly instead of the build of the checkout's sources. Never builds." };
         var backendOption = WorldLaunch.BackendOption(description: "The graphics backend the World boots on: auto, directx or vulkan; the document's when omitted.");
         var cacheOption = new Option<string>(name: "--cache-dir") { Description = "The World's device-cache root, shared by both fresh Worlds; its per-user default when omitted. Use a writable lane directory in a sandbox." };
-        var columnsOption = new Option<int>(name: "--columns") { DefaultValueFactory = static _ => 6, Description = "The most frames in one row of a contact sheet before it wraps to a new band." };
-        var cellWidthOption = new Option<int>(name: "--cell-width") { DefaultValueFactory = static _ => 480, Description = "The width each frame of a contact sheet is scaled to, in pixels." };
-        var timeoutOption = new Option<int>(name: "--timeout") { DefaultValueFactory = static _ => 25, Description = "The most minutes the whole run may take, a build excepted." };
+        var columnsOption = CliOptions.Count(defaultValue: 6, description: "The most frames in one row of a contact sheet before it wraps to a new band.", minimum: 1, name: "--columns");
+        var cellWidthOption = CliOptions.Count(defaultValue: 480, description: "The width each frame of a contact sheet is scaled to, in pixels.", maximum: 16384, minimum: 1, name: "--cell-width");
+        var timeoutOption = CliOptions.Count(defaultValue: 1500, description: "The most seconds the whole run may take, a build excepted (default 1500).", minimum: 1, name: "--timeout-seconds");
         var command = new Command(
             description: "Judge how the Moth moves: run tick-pinned scenarios in the real debug World and write stills, contact sheets and a manifest.",
             name: Verb
@@ -155,7 +159,7 @@ public static partial class MotionCommand {
             output: parseResult.GetValue(option: outputOption),
             reproduce: parseResult.GetValue(option: reproduceOption),
             scenariosPath: parseResult.GetValue(option: scenariosOption),
-            timeoutMinutes: parseResult.GetValue(option: timeoutOption),
+            timeoutSeconds: parseResult.GetValue(option: timeoutOption),
             worldArtifact: parseResult.GetValue(option: artifactOption),
             worldPath: parseResult.GetValue(option: worldOption)
             );

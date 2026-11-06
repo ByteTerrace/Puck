@@ -65,7 +65,9 @@ public static partial class CanaryCommand {
         var prepared = Path.Combine(path1: payload, path2: "worlds", path3: "debug");
         var authored = (Directory.Exists(path: leg.WorldPath) ? leg.WorldPath : Path.GetDirectoryName(path: leg.WorldPath)!);
 
-        CopyDirectoryFiles(destination: prepared, recursive: true, source: authored);
+        // The world's package directory is copied with its siblings, the packages a relative import such as
+        // ../standard reaches, so the installed world resolves every import and asset it names.
+        CopyDirectoryFiles(destination: Path.GetDirectoryName(path: prepared)!, recursive: true, source: Path.GetDirectoryName(path: Path.TrimEndingDirectorySeparator(path: authored))!);
         if (Puck.Cli.Automation.WorldPrepareCommand.Create().Parse([leg.WorldPath, "--output", prepared]).Invoke() != 0) {
             throw new IOException(message: "world prepare failed for the stub release payload");
         }

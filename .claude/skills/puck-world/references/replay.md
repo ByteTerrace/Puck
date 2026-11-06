@@ -290,10 +290,11 @@ grants, latches, the live sessions with their rows and last forwarded input
 (`WorldGrantsCheckpoint.Sessions`; a boot-image tape re-admits them through a
 first-tick prefix of `SessionAdmitted`/`SessionEmbodied` entries instead), every
 screen slot's magazine selector and link membership and every link row
-(`WorldMachineHostCheckpoint.Slots`/`Links`), and every machine core's image with
-its generation and step count (`WorldMachineHostCheckpoint.Instances`, each
-runtime's `IMachineCheckpointRuntime.CaptureCheckpoint`, taken after its accepted
-steps drain). The re-drive restores it (`WorldServer.FromCheckpoint` with
+(`WorldMachineHostCheckpoint.Slots`/`Links`), and every machine's lease kind,
+generation and step count with a running core's image (`WorldMachineHostCheckpoint.Instances`,
+each running runtime's `IMachineCheckpointRuntime.CaptureCheckpoint`, taken after its
+accepted steps drain; a refused machine's row carries no image, and a restore refuses a
+row whose kind differs from the live lease's before it changes anything). The re-drive restores it (`WorldServer.FromCheckpoint` with
 `restoreOwnedIdentities: false`) instead of booting the definition and joining the
 seats, so its seats keep the projections the population checkpoint carries; the
 restored sessions have no observer and end where the tape ends them. Encode

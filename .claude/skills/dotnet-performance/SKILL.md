@@ -8,8 +8,15 @@ description: "Tunes Puck .NET 11 performance: allocation, gen0 pauses, data layo
 Judge a change by code, disassembly and load-independent counts (allocations,
 operation counts, work counters). A wall-clock benchmark (`puck bench`) is
 evidence beside those counts, never alone, and runs as interleaved A/B rounds
-in the lead's quiet window or under the heavy lease. Keep runtime improvements
+in the lead's quiet window through `puck measure run` or `puck lease quiet`.
+The heavy lease alone does not make a timing window quiet. Keep runtime improvements
 apart from workload-specific evidence.
+
+`bench world` runs its collector against each frozen build's engine. Read a
+source's `IWorkCounterSource.WorkKinds` rather than binding the CLI to individual
+counter members: the measured source owns the kinds it exposes. Preserve the
+root exception when a frozen build cannot run the harness; a type-initializer
+wrapper hides the member or input that needs fixing.
 
 ## Route to the relevant evidence
 

@@ -2002,6 +2002,7 @@ public sealed partial class WorldReplaySnapshot {
         foreach (var instance in checkpoint.Instances) {
             var hash = Fnv1aHash.Create();
 
+            hash.Add(value: ((byte)instance.Kind));
             hash.Add(values: instance.RuntimeState);
             digests.Add(item: new WorldReplayMachineDigest(
                 Digest: hash.Value,

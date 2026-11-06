@@ -5,13 +5,9 @@ using Puck.Maths;
 
 namespace Puck.State;
 
-/// <summary>How one pinned evidence target's reference code was produced. Every field is a recorded fact about the
-/// offline build, never a property of the machine that happens to execute Puck.</summary>
-/// <param name="Sdk">The exact .NET SDK version.</param>
-/// <param name="GlobalJsonRollForward">The checkout's <c>global.json</c> roll-forward policy, which decides whether
-/// recording the SDK version pins anything at all.</param>
-/// <param name="RuntimePack">The runtime pack the reference build compiled against.</param>
-/// <param name="IlCompiler">The ILCompiler package and its host architecture.</param>
+/// <summary>How one evidence target's reference code is produced: the lowering's settings, never a property of the
+/// machine that happens to execute Puck. The toolchain is not recorded here: a capture lowers with the SDK the
+/// checkout's <c>global.json</c> names and the runtime that SDK bundles.</summary>
 /// <param name="Configuration">The build configuration.</param>
 /// <param name="RuntimeIdentifier">The runtime identifier the reference code was generated for.</param>
 /// <param name="Compilation">The compilation mode and the rooting the reference build used.</param>
@@ -21,10 +17,6 @@ namespace Puck.State;
 /// make the evidence a property of the machine that produced it.</param>
 /// <param name="ProfileGuidedOptimization">The profile data the build consumed, or <c>none</c>.</param>
 public sealed record ReferenceBuild(
-    string Sdk,
-    string GlobalJsonRollForward,
-    string RuntimePack,
-    string IlCompiler,
     string Configuration,
     string RuntimeIdentifier,
     string Compilation,
@@ -768,14 +760,6 @@ public static class ReferenceScheduleManifest {
                         element: build,
                         name: "configuration"
                     ),
-                    GlobalJsonRollForward: Text(
-                        element: build,
-                        name: "globalJsonRollForward"
-                    ),
-                    IlCompiler: Text(
-                        element: build,
-                        name: "ilCompiler"
-                    ),
                     InstructionSet: Text(
                         element: build,
                         name: "instructionSet"
@@ -795,14 +779,6 @@ public static class ReferenceScheduleManifest {
                     RuntimeIdentifier: Text(
                         element: build,
                         name: "runtimeIdentifier"
-                    ),
-                    RuntimePack: Text(
-                        element: build,
-                        name: "runtimePack"
-                    ),
-                    Sdk: Text(
-                        element: build,
-                        name: "sdk"
                     )
                 ),
                 Family: Text(

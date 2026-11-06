@@ -271,8 +271,8 @@ the lock file and writes the vectors into the compiled document, where rules rea
 them like any other cells.
 
 ```text
-puck embed lore.world.puck
-puck compile lore.world.puck --validate -o lore.world.json
+puck embed lock lore.world.puck
+puck compile lore.world.puck --validate --output lore.world.json
 ```
 
 The lock file groups entries by space. Each entry is keyed by the SHA-256 hash of
@@ -281,11 +281,11 @@ deterministically, only when its bytes change, and `puck embed` prunes entries
 that no authored text uses. You commit it with the source.
 
 `puck compile` reads vectors from the lock and never calls a model. It refuses a
-text with no lock entry ("No embedding lock entry … run puck embed"), and a space
+text with no lock entry ("No embedding lock entry … run puck embed lock"), and a space
 whose model, revision, or dimensions differ from the lock's ("Embedding space
-'lore' in lock is stale; run puck embed").
+'lore' in lock is stale; run puck embed lock").
 
-`puck embed` options:
+`puck embed lock` options:
 
 | Option | Effect |
 |---|---|
@@ -307,7 +307,7 @@ similarity and dot product, which helps you choose thresholds. The
 ### Recover from a model change
 
 Changing a space's model or revision changes every vector's coordinates, so the
-lock goes stale and the world won't compile until you re-embed. Run `puck embed`
+lock goes stale and the world won't compile until you re-embed. Run `puck embed lock`
 again: it re-embeds every authored text under the new model and rewrites the lock.
 The authored text is the source of truth, so no vector needs editing by hand.
 `puck decompile --embeddings <file>` maps vectors in a compiled document back to

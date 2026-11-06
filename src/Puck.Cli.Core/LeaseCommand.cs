@@ -15,15 +15,9 @@ public static class LeaseCommand {
     /// <summary>The resources a priority quiet reservation drains and holds, releasing in reverse order.</summary>
     public static readonly IReadOnlyList<string> QuietOrder = ["heavy", "build", "gpu"];
 
-    private static async Task<int> RunAsync(ParseResult parse, string verb, IReadOnlyList<string> names, Option<string> holder, Option<string?> lane, Option<int> wait, Option<HostStartKind?>? kind, Argument<string[]> arguments, TimeProvider clock, string? leaseRoot, Option<int>? settle, LeaseSettle? settleWait, HostAdmit? admit, CancellationToken cancellationToken) {
+    private static async Task<int> RunAsync(ParseResult parse, string verb, IReadOnlyList<string> names, Option<string> holder, Option<string> lane, Option<int> wait, Option<HostStartKind?>? kind, Argument<string[]> arguments, TimeProvider clock, string? leaseRoot, Option<int>? settle, LeaseSettle? settleWait, HostAdmit? admit, CancellationToken cancellationToken) {
         var seconds = parse.GetValue(option: wait);
-
-        if (seconds < 0) { return CliExit.Refuse(verb: verb, what: "--wait", why: "must be nonnegative."); }
-
         var settled = ((settle is null) ? 0 : parse.GetValue(option: settle));
-
-        if (settled < 0) { return CliExit.Refuse(verb: verb, what: "--settle", why: "must be nonnegative."); }
-
         var selectedKind = ((kind is null) ? null : parse.GetValue(option: kind));
         if (selectedKind is { } selected && !Enum.IsDefined(value: selected)) { return CliExit.Refuse(verb: verb, what: "--kind", why: "must name a declared HostStartKind."); }
 
@@ -34,9 +28,6 @@ public static class LeaseCommand {
         }
 
         var named = parse.GetValue(option: lane);
-
-        if ((named is not null) && (string.IsNullOrWhiteSpace(value: named) || named.Contains(value: '\n') || named.Contains(value: '\r'))) { return CliExit.Refuse(verb: verb, what: "--lane", why: "must be a single non-empty line."); }
-
         var bound = TimeSpan.FromSeconds(seconds: seconds);
         var started = clock.GetTimestamp();
         var held = new List<CliLease>();
@@ -109,6 +100,43 @@ public static class LeaseCommand {
         return text.ToString();
     }
 
+    /// <summary>Writes every lease's holder and queue as <c>puck lease list --json</c> does: one record per lease, in the
+    /// order <see cref="Render"/> prints them.</summary>
+    /// <param name="clock">The clock hold and wait times are measured against.</param>
+    /// <param name="root">The shared lease directory.</param>
+    /// <param name="output">The JSON-lines output the records go to.</param>
+    public static void WriteRecords(TimeProvider clock, string root, CliJsonLines output) {
+        var now = clock.GetUtcNow();
+
+        foreach (var name in new[] { "quiet", "build", "gpu", "heavy" }) {
+            var state = CliLease.Inspect(name: name, now: now, root: root);
+            var queue = new System.Text.Json.Nodes.JsonArray();
+
+            foreach (var ticket in state.Queue.OrderBy(keySelector: static ticket => ticket.Ahead).ThenBy(keySelector: static ticket => ticket.Id, comparer: StringComparer.Ordinal)) {
+                queue.Add(item: new System.Text.Json.Nodes.JsonObject {
+                    ["holder"] = ticket.Holder,
+                    ["lane"] = ticket.Lane,
+                    ["checkout"] = ticket.Checkout,
+                    ["since"] = ticket.Since,
+                    ["ahead"] = ticket.Ahead,
+                    ["position"] = ticket.Position,
+                    ["lanes"] = ticket.Lanes,
+                });
+            }
+
+            output.Write(record: new System.Text.Json.Nodes.JsonObject {
+                ["lease"] = name,
+                ["holder"] = state.Holder,
+                ["lane"] = state.Lane,
+                ["checkout"] = state.Checkout,
+                ["since"] = state.Since,
+                ["alive"] = ((state.Holder is null) ? null : state.HolderAlive),
+                ["queue"] = queue,
+                ["recordedProtocol"] = CliLease.RecordedProtocol(root: root),
+                ["protocol"] = CliLease.Protocol,
+            });
+        }
+    }
     private static string Age(DateTimeOffset? since, DateTimeOffset now) {
         if (since is not { } at) { return "an unknown time"; }
         var age = (now - at);
@@ -127,13 +155,11 @@ public static class LeaseCommand {
         var root = new Command(description: "Run a command under an exclusive World-build, GPU or heavy-work lease, or all three once the machine is idle.", name: "lease");
 
         foreach (var name in new[] { "build", "gpu", "heavy" }) {
-            var holder = new Option<string>(name: "--holder") { Description = "Holder name recorded with the holder process and acquisition time; its first word is the lane unless --lane names one.", Required = true };
-            var lane = new Option<string?>(name: "--lane") { Description = "The lane admission rotates between; defaults to the first word of --holder." };
-            var wait = new Option<int>(name: "--wait") { Description = "Seconds to wait for the lease; zero refuses immediately (default)." };
+            var holder = CliOptions.Name(description: "Holder name recorded with the holder process and acquisition time; its first word is the lane unless --lane names one.", name: "--holder", required: true);
+            var lane = CliOptions.Name(description: "The lane admission rotates between; defaults to the first word of --holder.", name: "--lane");
+            var wait = CliOptions.Count(defaultValue: 0, description: "Seconds to wait for the lease; zero refuses immediately (default).", minimum: 0, name: "--wait");
             var kind = ((name is "gpu" or "heavy") ? new Option<HostStartKind?>(name: "--kind") { Description = "Expected peak class of the child command (default WindowedWorld for gpu, HeavySuite for heavy); Step for a bounded focused check. Changes the memory estimate, not lease ownership or admission thresholds." } : null);
-            var arguments = CliOptions.Forwarded(description: "Executable and arguments after --; no shell expansion is performed.", name: "command");
-
-            arguments.Arity = ArgumentArity.OneOrMore;
+            var arguments = CliOptions.ForwardedCommand(description: "Executable and arguments after --; no shell expansion is performed.");
             var command = new Command(description: $"Hold the {name} lease until the command exits or is cancelled.", name: name) { holder, lane, wait, arguments };
             if (kind is not null) { command.Options.Add(item: kind); }
 
@@ -142,25 +168,31 @@ public static class LeaseCommand {
             root.Subcommands.Add(item: command);
         }
 
-        var list = new Command(description: "Print each lease with its holder, lane and hold time, and its queue in admission order with each waiter's wait.", name: "list");
+        var listJson = CliOptions.Json(description: "Write one JSON object per lease: lease, holder, lane, checkout, since, alive, queue (each waiter's holder, lane, checkout, since, ahead, position and lanes), recordedProtocol and protocol.");
+        var list = new Command(description: "Print each lease with its holder, lane and hold time, and its queue in admission order with each waiter's wait.", name: "list") { listJson };
 
         list.SetAction(action: async (parse, cancellationToken) => {
             var directory = (leaseRoot ?? await CliLease.RootAsync(checkout: RepositoryPaths.RequireRoot(), cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false));
 
-            Console.Out.Write(value: Render(clock: clock, root: directory));
+            using var json = CliJsonLines.Open(json: parse.GetValue(option: listJson));
+
+            if (json is null) {
+                Console.Out.Write(value: Render(clock: clock, root: directory));
+            } else {
+                WriteRecords(clock: clock, output: json, root: directory);
+            }
+
             return 0;
         });
-        list.Detail(detail: "Use: puck lease list\nReads .claude/leases/ without taking a ticket, dropping a dead ticket or writing a rotation serial. Each of build, gpu and heavy prints idle, or its holder (lane, how long it has held the lease) and then its live waiters in admission order: the rotation puts the oldest ticket of the lane served least recently first, so the order is the order the lease will be granted in. Each holder and waiter shows its holder, lane and the checkout it works in (when its CLI recorded one), and each waiter how long it has waited and its lane's turn among the queued lanes. Whether the holder is alive is read from the lease's guard lock, the lock that decides ownership: a holder file no process holds the lock for prints as stale, and the next acquisition replaces it. A lease a holder's descendants hold as a child of it is not shown.");
+        list.Detail(detail: "Use: puck lease list [--json]\nReads .claude/leases/ without taking a ticket, dropping a dead ticket or writing a rotation serial. Each of build, gpu and heavy prints idle, or its holder (lane, how long it has held the lease) and then its live waiters in admission order: the rotation puts the oldest ticket of the lane served least recently first, so the order is the order the lease will be granted in. Each holder and waiter shows its holder, lane and the checkout it works in (when its CLI recorded one), and each waiter how long it has waited and its lane's turn among the queued lanes. Whether the holder is alive is read from the lease's guard lock, the lock that decides ownership: a holder file no process holds the lock for prints as stale, and the next acquisition replaces it. A lease a holder's descendants hold as a child of it is not shown.");
         root.Subcommands.Add(item: list);
 
         if (settleWait is not null) {
-            var holder = new Option<string>(name: "--holder") { Description = "Holder name recorded with all three leases; its first word is the lane unless --lane names one.", Required = true };
-            var lane = new Option<string?>(name: "--lane") { Description = "The lane admission rotates between; defaults to the first word of --holder." };
-            var wait = new Option<int>(name: "--wait") { Description = "Seconds to wait, in total, for the three leases, and again beyond --settle for the machine to go idle; zero refuses at once (default)." };
-            var settle = new Option<int>(name: "--settle") { DefaultValueFactory = _ => 30, Description = "Seconds the machine must stay idle after the leases are held, before the command runs; zero skips the wait (default 30)." };
-            var arguments = CliOptions.Forwarded(description: "Executable and arguments after --; no shell expansion is performed.", name: "command");
-
-            arguments.Arity = ArgumentArity.OneOrMore;
+            var holder = CliOptions.Name(description: "Holder name recorded with all three leases; its first word is the lane unless --lane names one.", name: "--holder", required: true);
+            var lane = CliOptions.Name(description: "The lane admission rotates between; defaults to the first word of --holder.", name: "--lane");
+            var wait = CliOptions.Count(defaultValue: 0, description: "Seconds to wait, in total, for the three leases, and again beyond --settle for the machine to go idle; zero refuses at once (default).", minimum: 0, name: "--wait");
+            var settle = CliOptions.Count(defaultValue: 30, description: "Seconds the machine must stay idle after the leases are held, before the command runs; zero skips the wait (default 30).", minimum: 0, name: "--settle");
+            var arguments = CliOptions.ForwardedCommand(description: "Executable and arguments after --; no shell expansion is performed.");
             var command = new Command(description: "Hold the heavy, build and gpu leases together, wait for an idle machine, then run the command: a settle window for timing measurements.", name: "quiet") { holder, lane, wait, settle, arguments };
 
             command.SetAction(action: (parse, cancellationToken) => RunAsync(arguments: arguments, cancellationToken: cancellationToken, clock: clock, holder: holder, kind: null, lane: lane, leaseRoot: leaseRoot, names: QuietOrder, parse: parse, settle: settle, settleWait: settleWait, admit: null, verb: "lease quiet", wait: wait));

@@ -65,7 +65,7 @@ public static partial class RuleCompiler {
                 where: where
             ),
             VectorOperand.Embed embed => throw new RuleException(
-            detail: $"Embedded literal '{embed.Text}' was not resolved in lock file; run puck embed",
+            detail: $"Embedded literal '{embed.Text}' was not resolved in lock file; run puck embed lock",
             refusal: RuleRefusal.EffectSourceAmbiguous,
             ruleName: ruleName
         ),

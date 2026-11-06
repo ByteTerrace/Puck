@@ -47,7 +47,7 @@ size mismatches fail too. Read the per-still verdict in the table and
 `reproduce.json`; equal simulation hashes alone do not make a sheet repeatable.
 In a sandbox, pass `--cache-dir <lane directory>` when the per-user device
 cache is not writable. Both fresh Worlds share that derived cache while their
-state stays separate. `--timeout` budgets the whole pair, including cold
+state stays separate. `--timeout-seconds` budgets the whole pair, including cold
 baking and sheet generation, not each World; keep it inside the GPU lease's
 limit. A timeout has no reproduction verdict.
 Reach for the steps below only for a capture the scenario file cannot express,

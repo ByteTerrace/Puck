@@ -9,10 +9,10 @@ public static partial class MotionCommand {
     private const string ManifestFileName = "manifest.json";
 
     // Everything that boots a World: the build, the run or the two runs of --reproduce, and the report of each.
-    private static int RunWorld(string repositoryRoot, string scenarioFile, string world, string directory, MotionScenarioSet set, IReadOnlyList<MotionScenario> selected, bool reproduce, string? worldArtifact, WorldBackendPreference? backend, string? cacheDirectory, int columns, int cellWidth, int timeoutMinutes) {
+    private static int RunWorld(string repositoryRoot, string scenarioFile, string world, string directory, MotionScenarioSet set, IReadOnlyList<MotionScenario> selected, bool reproduce, string? worldArtifact, WorldBackendPreference? backend, string? cacheDirectory, int columns, int cellWidth, int timeoutSeconds) {
         _ = Directory.CreateDirectory(path: directory);
 
-        var deadline = TimeSpan.FromMinutes(value: timeoutMinutes);
+        var deadline = TimeSpan.FromSeconds(value: timeoutSeconds);
         var suite = System.Diagnostics.Stopwatch.StartNew();
 
         if (!WorldLaunch.TryResolve(

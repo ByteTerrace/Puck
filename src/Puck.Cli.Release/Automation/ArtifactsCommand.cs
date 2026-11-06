@@ -441,8 +441,8 @@ public static class ArtifactsCommand {
             description: "Extract this commit's archive into place without compiling.",
             name: "restore"
         );
-        var shardOption = new Option<int>(name: "--shard") { DefaultValueFactory = static _ => 0, Description = "The zero-based shard of the manifest to run." };
-        var shardsOption = new Option<int>(name: "--shards") { DefaultValueFactory = static _ => 1, Description = "The number of shards the manifest splits into, dealt round-robin in ordinal order." };
+        var shardOption = CliOptions.Count(defaultValue: 0, description: "The zero-based shard of the manifest to run, below --shards.", minimum: 0, name: "--shard");
+        var shardsOption = CliOptions.Count(defaultValue: 1, description: "The number of shards the manifest splits into, dealt round-robin in ordinal order.", minimum: 1, name: "--shards");
         var testWindows = new Command(
             description: "Run the archived test assemblies through the producer's manifest, or one shard of it.",
             name: "test-windows"

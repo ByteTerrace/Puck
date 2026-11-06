@@ -238,6 +238,7 @@ public sealed partial class GateRunLawTests : GateRunLaws {
                 ["shaders", "generate", "--check"],
                 ["wasm-stdlib", "--check"],
                 ["branding", "--check"],
+                ["packages", "--check"],
             }
         );
         // The run keeps its log and step summary: the CLI copy and the file list go when it ends.
@@ -252,7 +253,7 @@ public sealed partial class GateRunLawTests : GateRunLaws {
         var (exitCode, output, _) = Gate(branches: branches, directory: directory, runner: runner);
 
         Assert.Equal(actual: exitCode, expected: CliExit.Failed);
-        Assert.Equal(actual: runner.Steps.Count, expected: 10);
+        Assert.Equal(actual: runner.Steps.Count, expected: 11);
         Assert.Contains(actualString: output, expectedSubstring: "gate: schema FAILED (exit 1, ");
         Assert.Contains(actualString: output, expectedSubstring: "gate: FAILED: schema; full output in ");
         Assert.Contains(expectedSubstring: "===== schema (exit 1)\noutput of schema", actualString: File.ReadAllText(path: directory.PathOf(name: "gate.log")).ReplaceLineEndings(replacementText: "\n"));

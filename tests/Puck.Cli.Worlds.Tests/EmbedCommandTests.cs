@@ -40,12 +40,12 @@ public sealed class EmbedCommandTests {
         Assert.Contains(actualString: compileBeforeEmbedError, comparisonType: StringComparison.Ordinal, expectedSubstring: "PUCK079");
 
         // 2. Check before embed should report missing entries and exit 1
-        var checkBeforeEmbedCode = await SuiteRoot.InvokeAsync(args: ["embed", puckPath, "--check"]);
+        var checkBeforeEmbedCode = await SuiteRoot.InvokeAsync(args: ["embed", "lock", puckPath, "--check"]);
 
         Assert.Equal(actual: checkBeforeEmbedCode, expected: 1);
 
         // 3. puck embed generates lock file deterministically
-        var embedExitCode = await SuiteRoot.InvokeAsync(args: ["embed", puckPath]);
+        var embedExitCode = await SuiteRoot.InvokeAsync(args: ["embed", "lock", puckPath]);
 
         Assert.Equal(actual: embedExitCode, expected: 0);
         Assert.True(condition: File.Exists(path: lockPath));
@@ -64,7 +64,7 @@ public sealed class EmbedCommandTests {
         Assert.NotEmpty(collection: v2);
 
         // 4. puck embed --check should now exit 0 without errors
-        var checkAfterEmbedCode = await SuiteRoot.InvokeAsync(args: ["embed", puckPath, "--check"]);
+        var checkAfterEmbedCode = await SuiteRoot.InvokeAsync(args: ["embed", "lock", puckPath, "--check"]);
 
         Assert.Equal(actual: checkAfterEmbedCode, expected: 0);
 
@@ -75,7 +75,7 @@ public sealed class EmbedCommandTests {
 
         // 6. Running embed again should be idempotent
         var lockJsonBefore = await File.ReadAllTextAsync(lockPath, cancellationToken: TestContext.Current.CancellationToken);
-        var secondEmbedCode = await SuiteRoot.InvokeAsync(args: ["embed", puckPath]);
+        var secondEmbedCode = await SuiteRoot.InvokeAsync(args: ["embed", "lock", puckPath]);
 
         Assert.Equal(actual: secondEmbedCode, expected: 0);
         var lockJsonAfter = await File.ReadAllTextAsync(lockPath, cancellationToken: TestContext.Current.CancellationToken);
@@ -128,7 +128,7 @@ public sealed class EmbedCommandTests {
             """;
 
         await File.WriteAllTextAsync(puckPath, initialSource, cancellationToken: TestContext.Current.CancellationToken);
-        var initialEmbedCode = await SuiteRoot.InvokeAsync(args: ["embed", puckPath]);
+        var initialEmbedCode = await SuiteRoot.InvokeAsync(args: ["embed", "lock", puckPath]);
 
         Assert.Equal(actual: initialEmbedCode, expected: 0);
 
@@ -165,12 +165,12 @@ public sealed class EmbedCommandTests {
         await File.WriteAllTextAsync(puckPath, updatedSource, cancellationToken: TestContext.Current.CancellationToken);
 
         // Check should fail because of unused entries/spaces
-        var checkCode = await SuiteRoot.InvokeAsync(args: ["embed", puckPath, "--check"]);
+        var checkCode = await SuiteRoot.InvokeAsync(args: ["embed", "lock", puckPath, "--check"]);
 
         Assert.Equal(actual: checkCode, expected: 1);
 
         // Embed without --check should prune unused entries and unused spaceB
-        var pruneEmbedCode = await SuiteRoot.InvokeAsync(args: ["embed", puckPath]);
+        var pruneEmbedCode = await SuiteRoot.InvokeAsync(args: ["embed", "lock", puckPath]);
 
         Assert.Equal(actual: pruneEmbedCode, expected: 0);
 
@@ -183,7 +183,7 @@ public sealed class EmbedCommandTests {
         Assert.False(condition: prunedLock.TryGet(spaceName: "spaceA", text: "drop_me", vectorBase64Url: out _));
 
         // Check now succeeds
-        var checkAfterPrune = await SuiteRoot.InvokeAsync(args: ["embed", puckPath, "--check"]);
+        var checkAfterPrune = await SuiteRoot.InvokeAsync(args: ["embed", "lock", puckPath, "--check"]);
 
         Assert.Equal(actual: checkAfterPrune, expected: 0);
     }
@@ -216,7 +216,7 @@ public sealed class EmbedCommandTests {
 
         await File.WriteAllTextAsync(puckPath, source, cancellationToken: TestContext.Current.CancellationToken);
 
-        var embedExitCode = await SuiteRoot.InvokeAsync(args: ["embed", puckPath]);
+        var embedExitCode = await SuiteRoot.InvokeAsync(args: ["embed", "lock", puckPath]);
 
         Assert.Equal(actual: embedExitCode, expected: 0);
 
@@ -238,7 +238,7 @@ public sealed class EmbedCommandTests {
 
         await File.WriteAllTextAsync(settings, """{ "permissions": { "allow": [] } }""", cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(expected: 2, actual: await SuiteRoot.InvokeAsync(args: ["decompile", settings, "-o", output]));
+        Assert.Equal(expected: 2, actual: await SuiteRoot.InvokeAsync(args: ["decompile", settings, "--output", output]));
         Assert.False(condition: File.Exists(path: output));
     }
     [Fact]
@@ -272,7 +272,7 @@ public sealed class EmbedCommandTests {
         await File.WriteAllTextAsync(puckPath, puckSource, cancellationToken: TestContext.Current.CancellationToken);
 
         // 1. Generate lock file and compile to JSON
-        var embedExit = await SuiteRoot.InvokeAsync(args: ["embed", puckPath]);
+        var embedExit = await SuiteRoot.InvokeAsync(args: ["embed", "lock", puckPath]);
 
         Assert.Equal(actual: embedExit, expected: 0);
         var compileExit = await SuiteRoot.InvokeAsync(args: ["compile", puckPath]);
@@ -282,7 +282,7 @@ public sealed class EmbedCommandTests {
         Assert.True(condition: File.Exists(path: lockPath));
 
         // 2. Decompile with companion lock beside the file
-        var decompileWithLock = await SuiteRoot.InvokeAsync(args: ["decompile", worldJsonPath, "-o", outWithLockPath]);
+        var decompileWithLock = await SuiteRoot.InvokeAsync(args: ["decompile", worldJsonPath, "--output", outWithLockPath]);
 
         Assert.Equal(actual: decompileWithLock, expected: 0);
         Assert.True(condition: File.Exists(path: outWithLockPath));
@@ -297,7 +297,7 @@ public sealed class EmbedCommandTests {
 
         File.Copy(destFileName: isolatedJson, sourceFileName: worldJsonPath);
 
-        var decompileWithoutLock = await SuiteRoot.InvokeAsync(args: ["decompile", isolatedJson, "-o", isolatedOut]);
+        var decompileWithoutLock = await SuiteRoot.InvokeAsync(args: ["decompile", isolatedJson, "--output", isolatedOut]);
 
         Assert.Equal(actual: decompileWithoutLock, expected: 0);
         var textWithoutLock = await File.ReadAllTextAsync(isolatedOut, cancellationToken: TestContext.Current.CancellationToken);
@@ -307,7 +307,7 @@ public sealed class EmbedCommandTests {
 
         // 4. Decompile with explicit --embeddings option pointing to lockPath
         var explicitOut = Path.Combine(path1: noLockDir.RootPath, path2: "explicit.puck");
-        var decompileExplicit = await SuiteRoot.InvokeAsync(args: ["decompile", isolatedJson, "-o", explicitOut, "--embeddings", lockPath]);
+        var decompileExplicit = await SuiteRoot.InvokeAsync(args: ["decompile", isolatedJson, "--output", explicitOut, "--embeddings", lockPath]);
 
         Assert.Equal(actual: decompileExplicit, expected: 0);
         var textExplicit = await File.ReadAllTextAsync(explicitOut, cancellationToken: TestContext.Current.CancellationToken);
@@ -340,7 +340,7 @@ public sealed class EmbedCommandTests {
             """;
 
         await File.WriteAllTextAsync(tempPuck, tempSource, cancellationToken: TestContext.Current.CancellationToken);
-        var embedTempExit = await SuiteRoot.InvokeAsync(args: ["embed", tempPuck]);
+        var embedTempExit = await SuiteRoot.InvokeAsync(args: ["embed", "lock", tempPuck]);
 
         Assert.Equal(actual: embedTempExit, expected: 0);
 
@@ -387,7 +387,7 @@ public sealed class EmbedCommandTests {
 
         await File.WriteAllTextAsync(worldJsonPath, worldJson, cancellationToken: TestContext.Current.CancellationToken);
 
-        var decompileExit = await SuiteRoot.InvokeAsync(args: ["decompile", worldJsonPath, "-o", outPuckPath]);
+        var decompileExit = await SuiteRoot.InvokeAsync(args: ["decompile", worldJsonPath, "--output", outPuckPath]);
 
         Assert.Equal(actual: decompileExit, expected: 0);
 

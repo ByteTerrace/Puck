@@ -31,13 +31,24 @@ ordinary values, document references, content paths, and auxiliary asset paths;
 the same field walker reaches nested objects and array elements. Missing prepared
 assets, unknown fields, and invalid schema tags refuse before construction.
 
-Resource or provider failures during instance preparation produce a named
-`MachineRuntimeStatus.Refused` instance in the same inventory. Other instances
-still prepare and the World boots. `CommitInstances` logs each new refusal once;
-the lease's fault is shared by `machine.state`, `screen.state`, `world.status`
-and the screen's ordinary text decal. Document admission and live-link ownership
-conflicts still refuse the transaction. A refused instance schedules no work and
-keeps its refusal in checkpoints rather than pretending it has provider state.
+A named machine's lease is a closed pair, `MachineLease.Running` or
+`MachineLease.Refused`. Resource or provider failures while creating a runtime
+(`CreateRunning`) produce a refused lease, reported as
+`MachineRuntimeStatus.Refused`, in the same inventory. Other instances still
+prepare and the World boots. `CommitInstances` logs each new refusal once; the
+lease's fault is shared by `machine.state`, `screen.state`, `world.status` and the
+screen's ordinary text decal. Document admission (a screen route the provider's
+declared ports cannot take, a memory binding the runtime cannot serve) and
+live-link ownership conflicts still refuse the transaction. A refused lease
+schedules no work, is never kept across a rebuild (so a fixed cause recovers on
+the next `world.reload`), and is checkpointed as a `Refused` row with no runtime
+image.
+
+A checkpoint restore applies completely or changes nothing. `CheckpointRestore`
+is the only plan `RestoreCheckpoint` applies, and only its `Validate` builds one:
+every row's name, engine and kind against the live lease, every running row's
+image through the runtime's `TryValidateCheckpoint`, and every slot and link are
+checked before anything moves.
 
 `IMachineRuntime` requires execution status, exact-tick advancement, and disposal.
 Video, audio, normalized input ports, and removable content are optional capabilities.

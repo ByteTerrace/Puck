@@ -25,9 +25,7 @@ public static class FontAtlasCommand {
         var fontPath = Path.GetFullPath(path: fontFile);
 
         if (!File.Exists(path: fontPath)) {
-            Console.Error.WriteLine(value: $"font-atlas: source font not found: {fontPath}");
-
-            return 1;
+            return CliExit.Refuse(verb: "font-atlas", what: CliPaths.ToDisplay(fullPath: fontPath), why: "names no source font.");
         }
 
         var outputPath = Path.GetFullPath(path: (output ?? $"{Path.GetFileNameWithoutExtension(path: fontPath)}.sdf.json"));
@@ -87,55 +85,36 @@ public static class FontAtlasCommand {
                 atlas: atlas,
                 jsonPath: outputPath
             );
-            Console.Out.WriteLine(value: $"font-atlas: wrote {outputPath} and {Path.ChangeExtension(
+            Console.Out.WriteLine(value: $"font-atlas: wrote {CliPaths.ToDisplay(fullPath: outputPath)} and {CliPaths.ToDisplay(fullPath: Path.ChangeExtension(
                 extension: ".png",
                 path: outputPath
-            )} ({atlas.Glyphs.Count} glyphs, {atlas.Width}x{atlas.Height}).");
+            ))} ({atlas.Glyphs.Count} glyphs, {atlas.Width}x{atlas.Height}).");
 
-            return 0;
-        } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
-            Console.Error.WriteLine(value: "font-atlas: cancelled.");
-            return 130;
+            return CliExit.Success;
         } catch (Exception exception) when ((exception is ArgumentException or InvalidDataException or IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"font-atlas: {exception.Message}");
-
-            return 1;
+            return CliExit.Refuse(verb: "font-atlas", what: CliPaths.ToDisplay(fullPath: fontPath), why: exception.Message);
         }
     }
 
     public static Command Create() {
         var charactersOption = new Option<string>(name: "--characters") { DefaultValueFactory = static _ => string.Empty, Description = "Additional non-whitespace Unicode scalars to include." };
-        var columnsOption = new Option<int?>(name: "--columns") { Description = "Preferred glyphs per shelf row (default: 16)." };
-        var maxWorkOption = new Option<long>("--max-work") { DefaultValueFactory = static _ => new FontAtlasGenerationLimits().MaxWork, Description = "Whole-job processing work units." };
-        var maxGeometryOption = new Option<int>("--max-geometry") { DefaultValueFactory = static _ => new FontAtlasGenerationLimits().MaxGeometryElements, Description = "Whole-job geometry elements, including composite copies and boundaries." };
-        var maxPairsOption = new Option<int>("--max-kerning-pairs") { DefaultValueFactory = static _ => new FontAtlasGenerationLimits().MaxKerningPairs, Description = "Kerning entries processed or emitted, including zero matches and Unicode aliases." };
-        var maxFontBytesOption = new Option<int>("--max-font-bytes") { DefaultValueFactory = static _ => new FontAtlasGenerationLimits().MaxFontBytes, Description = "Maximum source font bytes, checked before reading." };
-        var maxGlyphsOption = new Option<int>("--max-glyphs") { DefaultValueFactory = static _ => new FontAtlasGenerationLimits().MaxGlyphs, Description = "Maximum distinct mapped source glyphs." };
-        var distanceRangeOption = new Option<float?>(name: "--distance-range") { Description = "Signed-distance band width in pixels (default: 8)." };
-        var faceIndexOption = new Option<int?>(name: "--face-index") { Description = "Zero-based face in a TTC/OTC collection (default: 0)." };
+        var columnsOption = CliOptions.OptionalCount(description: "Preferred glyphs per shelf row (default: 16).", minimum: 1, name: "--columns");
+        var maxWorkOption = CliOptions.Count(defaultValue: new FontAtlasGenerationLimits().MaxWork, description: "Whole-job processing work units.", minimum: 1L, name: "--max-work");
+        var maxGeometryOption = CliOptions.Count(defaultValue: new FontAtlasGenerationLimits().MaxGeometryElements, description: "Whole-job geometry elements, including composite copies and boundaries.", minimum: 1, name: "--max-geometry");
+        var maxPairsOption = CliOptions.Count(defaultValue: new FontAtlasGenerationLimits().MaxKerningPairs, description: "Kerning entries processed or emitted, including zero matches and Unicode aliases.", minimum: 0, name: "--max-kerning-pairs");
+        var maxFontBytesOption = CliOptions.Count(defaultValue: new FontAtlasGenerationLimits().MaxFontBytes, description: "Maximum source font bytes, checked before reading.", minimum: 1, name: "--max-font-bytes");
+        var maxGlyphsOption = CliOptions.Count(defaultValue: new FontAtlasGenerationLimits().MaxGlyphs, description: "Maximum distinct mapped source glyphs.", minimum: 1, name: "--max-glyphs");
+        var distanceRangeOption = CliOptions.Amount(description: "Signed-distance band width in pixels (default: 8).", maximum: float.MaxValue, minimum: double.Epsilon, name: "--distance-range");
+        var faceIndexOption = CliOptions.OptionalCount(description: "Zero-based face in a TTC/OTC collection (default: 0).", minimum: 0, name: "--face-index");
         var fontArgument = new Argument<string>(name: "font-file") { Description = "The source font: a standalone OpenType font or a TTC/OTC collection." };
-        var maxDimensionOption = new Option<int?>(name: "--max-dimension") { Description = "Maximum atlas side in pixels (default: 16384)." };
-        var maxPixelsOption = new Option<long?>(name: "--max-pixels") { Description = "Maximum total atlas pixels (default: 67108864)." };
-        var outputOption = new Option<string>(
-            name: "--output",
-            aliases: ["-o"]
-        ) { Description = "Output JSON path; the PNG uses the same base name (default: <font-name>.sdf.json in the current directory)." };
-        var paddingOption = new Option<int?>(name: "--padding") { Description = "Cell padding in pixels; must cover the distance range (default: 8)." };
-        var rangeOption = new Option<string[]>(
-            name: "--range",
-            aliases: ["-r"]
-        ) { DefaultValueFactory = static _ => [], Description = "Included Unicode range; repeatable, using U+0020-U+007E, U+E0A0, or * for the Basic Multilingual Plane." };
-        var sizeOption = new Option<int?>(name: "--size") { Description = "Raster em size in pixels (default: 32)." };
+        var maxDimensionOption = CliOptions.OptionalCount(description: "Maximum atlas side in pixels (default: 16384).", minimum: 1, name: "--max-dimension");
+        var maxPixelsOption = CliOptions.OptionalCount(description: "Maximum total atlas pixels (default: 67108864).", minimum: 1L, name: "--max-pixels");
+        var outputOption = CliOptions.Output(description: "Output JSON path; the PNG uses the same base name (default: <font-name>.sdf.json in the current directory).");
+        var paddingOption = CliOptions.OptionalCount(description: "Cell padding in pixels; must cover the distance range (default: 8).", minimum: 0, name: "--padding");
+        var rangeOption = new Option<string[]>(name: "--range") { DefaultValueFactory = static _ => [], Description = "Included Unicode range; repeatable, using U+0020-U+007E, U+E0A0, or * for the Basic Multilingual Plane." };
+        var sizeOption = CliOptions.OptionalCount(description: "Raster em size in pixels (default: 32).", minimum: 1, name: "--size");
         var command = new Command(
-            description: """
-            Generate a loader-compatible MTSDF atlas from a font.
-
-            The generator is fully managed and deterministic. It accepts TrueType quadratic,
-            CFF, and CFF2 outlines in standalone OpenType fonts and TTC/OTC collections. It
-            does not use an installed system font, native rasterizer, shaping engine, or Python.
-
-            Exit codes: 0 generated, 1 font or I/O failure, 130 cancelled.
-            """,
+            description: "Generate a loader-compatible MTSDF atlas from a font.",
             name: "font-atlas"
         ) {
             fontArgument,
@@ -156,14 +135,13 @@ public static class FontAtlasCommand {
             sizeOption,
         };
 
-        command.Validators.Add(item: result => {
-            if (
-                (result.GetValue(option: distanceRangeOption) is { } distanceRange) &&
-                !float.IsFinite(f: distanceRange)
-            ) {
-                result.AddError(errorMessage: "--distance-range requires a finite decimal number.");
-            }
-        });
+        command.Detail(detail: """
+            The generator is fully managed and deterministic. It accepts TrueType quadratic,
+            CFF, and CFF2 outlines in standalone OpenType fonts and TTC/OTC collections. It
+            does not use an installed system font, native rasterizer, shaping engine, or Python.
+
+            Exit codes: 0 generated, 2 a font, range or I/O refusal, 130 cancelled.
+            """);
         command.SetAction(action: (parseResult, cancellationToken) => Task.FromResult(result: Run(
             cancellationToken: cancellationToken,
             limits: new FontAtlasGenerationLimits {
@@ -175,7 +153,7 @@ public static class FontAtlasCommand {
             },
             characters: parseResult.GetValue(option: charactersOption),
             columns: parseResult.GetValue(option: columnsOption),
-            distanceRange: parseResult.GetValue(option: distanceRangeOption),
+            distanceRange: ((float?)parseResult.GetValue(option: distanceRangeOption)),
             faceIndex: parseResult.GetValue(option: faceIndexOption),
             fontFile: parseResult.GetRequiredValue(argument: fontArgument),
             maxDimension: parseResult.GetValue(option: maxDimensionOption),

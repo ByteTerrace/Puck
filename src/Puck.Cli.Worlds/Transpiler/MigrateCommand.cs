@@ -300,10 +300,7 @@ public static class PuckMigrateCommand {
     public static Command Create() {
         var nameArgument = new Argument<string>(name: "name") { Description = "The registered migration to apply; an unknown name lists the registered ones." };
         var pathArgument = new Argument<string>(name: "path") { Description = "The directory whose .puck sources are migrated, or one .puck file." };
-        var checkOption = new Option<bool>(
-            name: "--check",
-            aliases: ["-c"]
-        ) { Description = "Report what the migration would change without writing it (exit code 1 when anything would change)." };
+        var checkOption = new Option<bool>(name: "--check") { Description = "Report what the migration would change without writing it (exit code 1 when anything would change)." };
 
         var command = new Command(
             description: "Apply one named syntax-tree rewrite to every .puck source under a path, proving each rewritten source compiles to the document it did before apart from the members the migration declares.",

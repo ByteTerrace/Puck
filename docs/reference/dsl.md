@@ -200,7 +200,7 @@ field, and any other modifier on a field is refused by name.
 
 ### Vector spaces, `embeds(...)`, and vector literals
 
-The state section supports declared embedding spaces and vector rows. Run `puck embed <path>` on a source like this
+The state section supports declared embedding spaces and vector rows. Run `puck embed lock <path>` on a source like this
 one before compiling it: every text of a `space(...)` row or slot, of an `embeds(...)` table and inside `embed(...)`
 needs a locked vector, and a compile without them refuses each text with PUCK079.
 

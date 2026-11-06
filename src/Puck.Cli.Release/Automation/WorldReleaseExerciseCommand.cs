@@ -267,7 +267,7 @@ public static class WorldReleaseExerciseCommand {
 
     public static Command Create() {
         var fixture = new Argument<string>(name: "fixture-directory") { Description = "The marked disposable fixture this leg restores, advances, and reports into." };
-        var steps = new Option<int>("--steps") { DefaultValueFactory = _ => 60, Description = "Exact simulation steps in this isolated qualification leg (1–1024)." };
+        var steps = CliOptions.Count(defaultValue: 60, description: "Exact simulation steps in this isolated qualification leg (1–1024).", maximum: 1024, minimum: 1, name: "--steps");
         var command = new Command(
             description: "Run one packaged release qualification leg in a marked disposable fixture.",
             name: "exercise"

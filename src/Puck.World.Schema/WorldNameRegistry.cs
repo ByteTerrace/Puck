@@ -1342,8 +1342,20 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Binding,
             WorldExportFacet.Binding
         ),
+        // A palette slot's live cel style reads a state cell through a binding token, as a HUD element does.
+        new(
+            typeof(Puck.World.Authoring.PaletteToonSelectDocument),
+            nameof(Puck.World.Authoring.PaletteToonSelectDocument.State),
+            WorldNameKind.State,
+            WorldNameRole.Binding
+        ),
     ];
     private static readonly WorldNameExclusion[] Exclusions = [
+        new(
+            typeof(Puck.World.Authoring.PalettePaintDocument),
+            nameof(Puck.World.Authoring.PalettePaintDocument.Parent),
+            "a shape of the creation the paint's palette slot belongs to, local to that creation"
+        ),
         // Input vocabulary is shared by the composed world, like channels and seat-mode families. These are not
         // module-private state rows: selectors, binding profiles and history refer to the same semantic names.
         new(typeof(WorldInputModeFamily), nameof(WorldInputModeFamily.Name), "a composed-world input mode family"),

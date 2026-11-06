@@ -367,7 +367,7 @@ internal static class PuckEmbeddingLsp {
         sb.AppendLine(handler: $"\"{embeddedText}\"\n");
 
         if (lockFile is null) {
-            sb.AppendLine(value: "- **Lock status:** Not locked (no lock file found; run `puck embed`)");
+            sb.AppendLine(value: "- **Lock status:** Not locked (no lock file found; run `puck embed lock`)");
             sb.AppendLine(handler: $"- **Space:** `{resolvedSpace}`");
             return sb.ToString().TrimEnd();
         }
@@ -377,7 +377,7 @@ internal static class PuckEmbeddingLsp {
                 space = lockFile.Spaces.Values.First();
                 resolvedSpace = lockFile.Spaces.Keys.First();
             } else {
-                sb.AppendLine(handler: $"- **Lock status:** Not locked (space '{resolvedSpace}' not found in lock; run `puck embed`)");
+                sb.AppendLine(handler: $"- **Lock status:** Not locked (space '{resolvedSpace}' not found in lock; run `puck embed lock`)");
                 return sb.ToString().TrimEnd();
             }
         }
@@ -385,7 +385,7 @@ internal static class PuckEmbeddingLsp {
         var textHash = EmbeddingText.Hash(text: embeddedText).Hex;
 
         if (!space.Entries.TryGetValue(key: textHash, value: out var currentEntry)) {
-            sb.AppendLine(value: "- **Lock status:** Not locked (run `puck embed`)");
+            sb.AppendLine(value: "- **Lock status:** Not locked (run `puck embed lock`)");
             sb.AppendLine(handler: $"- **Space:** `{resolvedSpace}` (`{space.Identity.Model}`, rev: `{space.Identity.Revision}`, dims: {space.Identity.Dimensions})");
             return sb.ToString().TrimEnd();
         }
