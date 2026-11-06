@@ -207,9 +207,10 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
                     m_instances.TryGetValue(
                     key: source.Instance,
                     value: out var instance
-                )
+                ) &&
+                    (instance.Lease is MachineLease.Running running)
                 ) {
-                    instance.Lease.CompletedSteps++;
+                    running.CompletedSteps++;
                 }
             }
         }
@@ -823,7 +824,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             return new WorldMachineState(
                 true,
                 instance.Declaration.Engine,
-                (namedQueued?.CompletedSteps ?? lease.CompletedSteps),
+                (namedQueued?.CompletedSteps ?? CompletedSteps(lease: lease)),
                 (namedQueued?.PendingSteps ?? 0),
                 (namedQueued?.MaximumPendingSteps ?? 0),
                 (namedQueued?.BackpressureEvents ?? 0),

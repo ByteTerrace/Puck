@@ -13,6 +13,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: section.Instances,
             writeItem: static (w, row) => {
                 w.WriteString(value: row.Name); w.WriteString(value: row.Engine);
+                w.WriteByte(value: ((byte)row.Kind));
                 w.WriteUInt64(value: row.Generation); w.WriteInt64(value: row.CompletedSteps);
                 w.WriteBlock(value: row.RuntimeState);
             }
@@ -55,6 +56,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     field: "machine engine",
                     maxBytes: MaxStringBytes
                 ),
+                ((WorldMachineCheckpointKind)r.ReadByte()),
                 r.ReadUInt64(),
                 r.ReadInt64(),
                 r.ReadBlock(
@@ -94,7 +96,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         if (!reader.TryFinish(failure: out var failure)) { reason = $"machine section: {failure}"; return false; }
         if (
             (next == 0) ||
-            instances.Any(predicate: row => ((row.Generation == 0) || (row.Generation >= next) || (row.CompletedSteps < 0) || (row.RuntimeState.Length == 0))) ||
+            instances.Any(predicate: row => ((row.Generation == 0) || (row.Generation >= next) || !row.IsWellFormed)) ||
             (instances.Select(selector: row => row.Name).Distinct(comparer: StringComparer.Ordinal).Count() != instances.Length) ||
             (instances.Select(selector: row => row.Generation).Distinct().Count() != instances.Length)
         ) {
