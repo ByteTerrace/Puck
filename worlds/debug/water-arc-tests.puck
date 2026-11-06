@@ -1,51 +1,11 @@
-// The water's whole arc, simulated in fast time: the glacier melts over three hours of simulated time as (1 - t/T)^3,
-// the lake stands at its sill, the falls carry the melt and run dry at T, the river drains into the aquifer until it
-// fills, and the river then settles at one level with it (water.puck, the standard's hydrology). One scenario runs the
-// 3 h (324 000 ticks at 30 Hz) and three quarters of an hour of settling, latching every gauge at each milestone into a
-// probe table, and asserts the arc from those probes; `--reproduce` shows the run replays bit for bit.
+// The water's whole arc on the debug world with its machines stopped: the integration proof of the scenario in
+// `water-arc.puck`. The chain alone runs the same scenario in seconds (`water-chain-tests.puck`).
 schema: "puck.world.definition.v1"
 basis: "debug"
 documentId: "debug"
 import "stopped-machines"
-
-// Ticks of the melt, T, and the milestones probed: every eighth of the melt, then the settling tail at T + 15, 30 and
-// 45 minutes.
-let meltTicks = 324000
-let tail = 27000
-let milestones = concat(map(range(0, 9), i => i * meltTicks / 8), map(range(1, 4), j => meltTicks + j * tail))
-
-let probes = ["glacierAt", "lakeAt", "fallsAt", "riverAt", "aquiferAt", "poolAt"]
-state {
-  world {
-    for name in probes {
-      row {
-        name: name
-        kind: "Fixed"
-        capacity: length(milestones)
-        min: "0"
-        max: "4"
-        cells: map(range(0, length(milestones)), i => { key: $"{i}", value: "0" })
-      }
-    }
-  }
-}
-
-// Each probe fires once, on the first tick at or past its milestone (the first probe at tick 30, once the chain has
-// stepped), and copies the gauges of that tick.
-for (m, i) in milestones {
-  rule $"water-arc-probe-{i}" {
-    when $tick >= maximum(30, m)
-    mode: Edge
-    glacierAt[i] = glacier
-    lakeAt[i] = lakeLevel
-    fallsAt[i] = fallsFlow
-    riverAt[i] = riverDepth
-    aquiferAt[i] = aquiferFill
-    poolAt[i] = poolLevel
-  }
-}
-
-test "the glacier melts as (1 - t/T)^3 over three hours, the falls run dry at T, and the river settles with the aquifer" {
+import "water-arc"
+test "the water arc: glacier, lake at its sill, falls, aquifer, river" {
   when {
     ticks 405040
   }
@@ -60,23 +20,40 @@ test "the glacier melts as (1 - t/T)^3 over three hours, the falls run dry at T,
     glacierAt[6] > 0.01 and glacierAt[6] < 0.02
     glacierAt[7] > 0.0 and glacierAt[7] < 0.005
     glacierAt[8] == 0
-    // The falls carry the melt until T and run dry after it.
-    fallsAt[0] > 0
-    fallsAt[4] > 0
-    fallsAt[7] > 0
-    fallsAt[9] < 0.001
-    fallsAt[11] < 0.001
-    // The lake stands at its sill before and after the melt.
-    lakeAt[0] > 0
-    lakeAt[11] > 0
-    // The aquifer fills over the melt and holds full after it.
-    aquiferAt[0] < aquiferAt[4]
-    aquiferAt[4] < aquiferAt[8]
-    aquiferAt[7] > 0.9
-    aquiferAt[11] > 0.95
-    // The river reaches a steady level: its drift over the last quarter hour of the tail is bounded.
-    riverAt[11] > 0
-    (riverAt[11] - riverAt[10]) < 0.01 and (riverAt[10] - riverAt[11]) < 0.01
-    poolAt[11] > poolAt[0]
+    // The falls carry the melt as it melts: the discharge over the sill is the fraction of the melt's peak, (1 - t/T)^2 at
+    // each eighth within a thirtieth (0.766, 0.563, 0.391, 0.25, 0.141, 0.063, 0.016), still running at 7T/8, and dry
+    // (under 0.01) at T and every reading after, the first of them a quarter hour after T.
+    fallsAt[0] > 0.95
+    (fallsAt[1] - 0.766) < 0.03 and (0.766 - fallsAt[1]) < 0.03
+    (fallsAt[2] - 0.563) < 0.03 and (0.563 - fallsAt[2]) < 0.03
+    (fallsAt[3] - 0.391) < 0.03 and (0.391 - fallsAt[3]) < 0.03
+    (fallsAt[4] - 0.25) < 0.03 and (0.25 - fallsAt[4]) < 0.03
+    (fallsAt[5] - 0.141) < 0.03 and (0.141 - fallsAt[5]) < 0.03
+    (fallsAt[6] - 0.063) < 0.03 and (0.063 - fallsAt[6]) < 0.03
+    fallsAt[7] > 0.005
+    fallsAt[8] < 0.01 and fallsAt[9] < 0.01 and fallsAt[10] < 0.01 and fallsAt[11] < 0.01
+    // The lake stands within a few centimetres of its sill (0.4 m of water) from the first reading to the last, and rests on
+    // it once the melt has ended.
+    lakeAt[0] > 0.399 and lakeAt[1] > 0.399 and lakeAt[2] > 0.399 and lakeAt[3] > 0.399 and lakeAt[4] > 0.399 and lakeAt[5] > 0.399
+    lakeAt[6] > 0.399 and lakeAt[7] > 0.399 and lakeAt[8] > 0.399 and lakeAt[9] > 0.399 and lakeAt[10] > 0.399 and lakeAt[11] > 0.399
+    lakeAt[0] < 0.5 and lakeAt[1] < 0.5 and lakeAt[2] < 0.5
+    lakeAt[8] < 0.401 and lakeAt[9] < 0.401 and lakeAt[10] < 0.401 and lakeAt[11] < 0.401
+    // The aquifer fills over the melt, is full by 3T/4 while the falls still run, and holds full after it.
+    aquiferAt[0] < aquiferAt[1] and aquiferAt[1] < aquiferAt[2] and aquiferAt[2] < aquiferAt[3] and aquiferAt[3] < aquiferAt[4] and aquiferAt[4] < aquiferAt[5]
+    aquiferAt[6] >= 0.95
+    aquiferAt[11] > 0.999
+    // Its cells are capped, so the river takes what the melt still sends and rises past the head the aquifer holds (the
+    // river's bed at 1 m plus 0.6 m of water is the aquifer's full head of 1.6 m).
+    riverAt[8] > riverAt[6]
+    riverAt[11] > 0.6
+    // The river is settled by T + 15 min: its drift over the quarter hours ending at T + 30 and T + 45 min stays under 5 mm.
+    (riverAt[10] - riverAt[9]) < 0.005 and (riverAt[9] - riverAt[10]) < 0.005
+    (riverAt[11] - riverAt[10]) < 0.005 and (riverAt[10] - riverAt[11]) < 0.005
+    poolAt[11] > poolAt[0] and poolAt[11] < 2.35
+    // Ice plus water is conserved: the chain's total at each later reading is its first reading's.
+    (totalAt[4] - totalAt[0]) < 0.01 and (totalAt[0] - totalAt[4]) < 0.01
+    (totalAt[8] - totalAt[0]) < 0.01 and (totalAt[0] - totalAt[8]) < 0.01
+    (totalAt[11] - totalAt[0]) < 0.01 and (totalAt[0] - totalAt[11]) < 0.01
   }
 }
+
