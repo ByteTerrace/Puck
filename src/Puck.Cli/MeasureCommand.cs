@@ -16,11 +16,13 @@ public static class MeasureCommand {
         var after = new Option<string?>("--after-world-artifact") { Description = "After Puck.World.dll; its entire output directory is copied into the request." };
         var beforeCommit = new Option<string?>("--before-commit") { Description = "Commit to export and freeze with the existing World build store instead of --before-world-artifact." };
         var afterCommit = new Option<string?>("--after-commit") { Description = "Commit to export and freeze instead of --after-world-artifact." };
+        var beforeTree = new Option<string?>("--before-input-tree") { Description = "Input tree paired with --before-world-artifact: worlds and plan inputs at their repository-relative paths. Copied when filed." };
+        var afterTree = new Option<string?>("--after-input-tree") { Description = "Input tree paired with --after-world-artifact. Required for an artifact side; commit sides use their own whole tree." };
         var metrics = new Option<string[]>("--metric") { Required = true, Description = "Numeric JSON pointer in the command's report, repeatable: /metrics/idle-tick/median for bench world; /metrics/startup/median for bench startup; /signals/0/metrics/<key> for sweep." };
         var decides = new Option<string>("--decides") { Required = true, Description = "What result decides the question, including units and tolerance. Kept with the answer for the lead's judgement." };
         var command = CliOptions.Forwarded(name: "command", description: "A puck bench world, bench startup or sweep command after -- (omit puck). Sweep plans also measure headless host.frames signals. Output and World artifact are supplied by the runner.");
         command.Arity = ArgumentArity.OneOrMore;
-        var request = new Command("request", "Freeze before and after builds and queue a timing question in the main checkout's ignored scratch.") { name, before, after, beforeCommit, afterCommit, metrics, decides, command };
+        var request = new Command("request", "Freeze before and after builds and queue a timing question in the main checkout's ignored scratch.") { name, before, after, beforeCommit, afterCommit, beforeTree, afterTree, metrics, decides, command };
         request.SetAction(async (parse, token) => {
             var root = RepositoryPaths.RequireRoot();
             var queue = await QueueAsync(root, token).ConfigureAwait(false);
@@ -38,14 +40,15 @@ public static class MeasureCommand {
             var directory = Path.Combine(queue, id);
             Directory.CreateDirectory(directory);
             // request.json is the publication point: a half-frozen request is never runnable.
-            var a = Freeze(root, directory, "before", parse.GetValue(before), parse.GetValue(beforeCommit));
-            var b = Freeze(root, directory, "after", parse.GetValue(after), parse.GetValue(afterCommit));
+            var a = Freeze(root, directory, "before", parse.GetValue(before), parse.GetValue(beforeCommit), parse.GetValue(beforeTree));
+            var b = Freeze(root, directory, "after", parse.GetValue(after), parse.GetValue(afterCommit), parse.GetValue(afterTree));
+            arguments = FreezeCommand(root, arguments);
             var item = new MeasurementRequest(id, parse.GetValue(name)!, PuckPaths.Normalize(root), clock.GetUtcNow(), a, b, arguments, selected, parse.GetValue(decides)!, null);
             Write(Path.Combine(directory, "request.json"), item, MeasureJsonContext.Default.MeasurementRequest);
             Console.WriteLine($"measure: queued {id} {item.Name}; frozen builds and request at {PuckPaths.Normalize(directory)}");
             return 0;
         });
-        request.Detail("Use: puck measure request --name <question> --before-world-artifact <dll> --after-world-artifact <dll> --metric <JSON-pointer> --decides <criterion> -- bench startup <world> --headless --samples 1\nUse --before-commit and/or --after-commit instead to export and build that revision now. The request copies each build's complete output, so rebuilding or pruning the source build cannot change a queued measurement. Commands run from the requesting checkout; keep its world and plan inputs unchanged until answered. Requests contain no timing claim.");
+        request.Detail("Use: puck measure request --name <question> --before-commit <revision> --after-commit <revision> --metric <JSON-pointer> --decides <criterion> -- bench world\nA commit side freezes its entire tree and build. An artifact side requires --before-input-tree or --after-input-tree to declare the worlds and plan inputs it pairs with; git input trees copy tracked and nonignored untracked files as they are on disk. Standalone trees copy their contents. Commands use repository-relative input paths and run inside each side's frozen tree, independently of later edits or checkout removal. Requests contain no timing claim.");
         var list = new Command("list", "List pending and answered timing questions, their criteria and answer files.");
         list.SetAction(async (_, token) => {
             var queue = await QueueAsync(RepositoryPaths.RequireRoot(), token).ConfigureAwait(false);
@@ -134,23 +137,63 @@ public static class MeasureCommand {
             .Select(path => (Path: path, Item: JsonSerializer.Deserialize(File.ReadAllText(path), MeasureJsonContext.Default.MeasurementRequest) ?? throw new InvalidDataException($"Empty request: {path}")))
             .OrderBy(row => row.Item.Created).ThenBy(row => row.Item.Id, StringComparer.Ordinal);
 
-    private static string Freeze(string checkout, string directory, string side, string? artifact, string? commit) {
+    private static MeasurementSide Freeze(string checkout, string directory, string side, string? artifact, string? commit, string? inputTree) {
         if ((artifact is null) == (commit is null)) { throw new ArgumentException($"Supply exactly one of --{side}-world-artifact and --{side}-commit."); }
+        if ((commit is null) == (inputTree is null)) { throw new ArgumentException($"An artifact side requires --{side}-input-tree; a commit side uses that commit's tree."); }
+        var tree = FreezeTree(checkout, Path.Combine(directory, side, "tree"), commit, inputTree);
         if (commit is not null) {
             if (!CliGit.TryResolveCommit(checkout, commit, out var revision)) { throw new ArgumentException($"No commit {commit}."); }
-            using var export = AffectedRevisionExport.Create(checkout, revision, ["."]);
-            if (!WorldArtifactBuild.TryResolve("measure request", export.Root, new WorldArtifactStore(Path.Combine(Path.GetDirectoryName(directory)!, "build-store")), null,
+            if (!WorldArtifactBuild.TryResolve("measure request", tree, new WorldArtifactStore(Path.Combine(Path.GetDirectoryName(directory)!, "build-store")), null,
                 directory, TimeSpan.FromMinutes(30), out var built, out var error,
                 leaseRoot: () => CliLease.RootAsync(checkout).GetAwaiter().GetResult(), spirv: true)) { throw new InvalidOperationException(error); }
-            using (built) { return CopyBuild(built.Path, directory, side); }
+            using (built) { return new(CopyBuild(built.Path, directory, side), tree, revision); }
         }
         // Retain a managed-store input against pruning while copying it.
         if (!WorldArtifactBuild.TryResolveNamed(artifact, "measure request", checkout, directory, TimeSpan.FromMinutes(30), out var source, out var lease, out var refusal)) { throw new ArgumentException(refusal); }
-        using (lease) { return CopyBuild(source, directory, side); }
+        using (lease) { return new(CopyBuild(source, directory, side), tree, null); }
     }
 
+    public static string FreezeTree(string checkout, string target, string? commit, string? inputTree) {
+        if ((commit is null) == (inputTree is null)) { throw new ArgumentException("Supply one commit or input tree."); }
+        if (commit is not null) {
+            if (!CliGit.TryResolveCommit(checkout, commit, out var revision)) { throw new ArgumentException($"No commit {commit}."); }
+            using var export = AffectedRevisionExport.Create(checkout, revision, ["."]);
+            CliFiles.CopyDirectory(export.Root, target);
+        } else {
+            var source = Path.GetFullPath(inputTree!);
+            if (!Directory.Exists(source)) { throw new ArgumentException($"Input tree {source} does not exist."); }
+            if (File.Exists(Path.Combine(source, ".git")) || Directory.Exists(Path.Combine(source, ".git"))) {
+                var listing = CliGit.Run(source, "ls-files", "-z", "--cached", "--others", "--exclude-standard");
+                if (listing.ExitCode != 0) { throw new InvalidOperationException($"Cannot freeze input tree {source}: {listing.Stderr}"); }
+                var paths = listing.Stdout.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+                CliFiles.CopyDirectory(source, target, paths.Distinct(StringComparer.Ordinal).Select(p => Path.Combine(source, p)).Where(File.Exists));
+            } else {
+                if (Inside(source, target)) { throw new ArgumentException("A standalone input tree cannot contain its frozen destination."); }
+                CliFiles.CopyDirectory(source, target);
+            }
+        }
+        return PuckPaths.Normalize(Path.GetFullPath(target));
+    }
+
+    private static bool Inside(string root, string path) {
+        var relative = Path.GetRelativePath(root, path);
+        return !Path.IsPathRooted(relative) && relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
+    }
+
+    public static string[] FreezeCommand(string checkout, string[] arguments) => arguments.Select(argument => {
+        var equals = argument.StartsWith("--", StringComparison.Ordinal) ? argument.IndexOf('=') : -1;
+        var value = equals >= 0 ? argument[(equals + 1)..] : argument;
+        if (Path.IsPathRooted(value)) {
+            if (!Inside(checkout, value)) { throw new ArgumentException($"Input {value} is outside the requesting checkout; place inputs in the declared tree and use relative paths."); }
+            value = Path.GetRelativePath(checkout, value).Replace(Path.DirectorySeparatorChar, '/');
+        } else if (!value.StartsWith("--", StringComparison.Ordinal) && !Inside(checkout, Path.GetFullPath(value, checkout))) {
+            throw new ArgumentException($"Input {value} escapes the frozen input tree.");
+        }
+        return equals >= 0 ? argument[..(equals + 1)] + value : value;
+    }).ToArray();
+
     private static string CopyBuild(string source, string directory, string side) {
-        var target = Path.Combine(directory, side);
+        var target = Path.Combine(directory, side, "build");
         CliFiles.CopyDirectory(Path.GetDirectoryName(Path.GetFullPath(source))!, target);
         return PuckPaths.Normalize(Path.Combine(target, Path.GetFileName(source)));
     }
@@ -166,8 +209,9 @@ public static class MeasureCommand {
         var output = Path.Combine(directory, $"{round:D3}-{side}");
         Directory.CreateDirectory(output);
         var cli = typeof(MeasureCommand).Assembly.Location;
-        var run = await CliProcess.RunAsync("dotnet", [cli, .. item.Command, "--world-artifact", (side == "before" ? item.Before : item.After), "--output", output],
-            workingDirectory: item.Checkout, timeout: TimeSpan.FromSeconds(timeout), cancellationToken: token).ConfigureAwait(false);
+        var frozen = side == "before" ? item.Before : item.After;
+        var run = await CliProcess.RunAsync("dotnet", [cli, .. item.Command, "--world-artifact", frozen.Artifact, "--output", output],
+            workingDirectory: frozen.Tree, timeout: TimeSpan.FromSeconds(timeout), cancellationToken: token).ConfigureAwait(false);
         File.WriteAllText(Path.Combine(output, "command.stdout.log"), run.Stdout);
         File.WriteAllText(Path.Combine(output, "command.stderr.log"), run.Stderr);
         if (run.ExitCode != 0 || run.TimedOut) { throw new InvalidOperationException($"measure {item.Name} {side} #{round + 1}: command failed ({run.ExitCode}, timedOut={run.TimedOut}); {PuckPaths.Normalize(output)}"); }
@@ -251,7 +295,8 @@ public static class MeasureCommand {
     }
 }
 
-public sealed record MeasurementRequest(string Id, string Name, string Checkout, DateTimeOffset Created, string Before, string After, string[] Command, string[] Metrics, string Decides, string? Report, string? Failure = null);
+public sealed record MeasurementSide(string Artifact, string Tree, string? Revision);
+public sealed record MeasurementRequest(string Id, string Name, string Checkout, DateTimeOffset Created, MeasurementSide Before, MeasurementSide After, string[] Command, string[] Metrics, string Decides, string? Report, string? Failure = null);
 public sealed record MeasurementSample(string Side, int Round, Dictionary<string, double> Metrics, string SourceReport);
 public sealed record MeasurementDistribution(double Median, double Iqr);
 public sealed record MeasurementMetric(string Metric, MeasurementDistribution Before, MeasurementDistribution After, MeasurementDistribution Difference);
