@@ -32,7 +32,9 @@ namespace Puck.SignedDistance;
 /// <param name="ContactCoverage">The coverage the contact adds to the flow's where the opaque surface touches the glass
 /// surface, in [0, 1]. A contact needs the material's flow to name the surface its coverage reveals
 /// (<see cref="SdfMaterial.IsGlassValid"/>).</param>
-public readonly record struct SdfGlass(float Depth, float Ior, Vector3 Scatter = default, float Scattering = 0f, float ContactReach = 0f, float ContactCoverage = 0f) {
+/// <param name="ShadowDensity">The shadow extinction per world unit, finite and non-negative. Zero casts no shadow;
+/// a light path of length d transmits exp(-ShadowDensity * d).</param>
+public readonly record struct SdfGlass(float Depth, float Ior, Vector3 Scatter = default, float Scattering = 0f, float ContactReach = 0f, float ContactCoverage = 0f, float ShadowDensity = 0f) {
     /// <summary>The least index of refraction: air, which bends and reflects nothing.</summary>
     public const float MinIor = 1f;
     /// <summary>The greatest index of refraction a material may declare; diamond is 2.42.</summary>
@@ -45,12 +47,14 @@ public readonly record struct SdfGlass(float Depth, float Ior, Vector3 Scatter =
 
     /// <summary>Gets whether the glass is admissible: a finite, positive depth, an index of refraction in
     /// [<see cref="MinIor"/>, <see cref="MaxIor"/>], a scatter colour in [0, 1], a finite, non-negative scattering, a
-    /// contact reach in [0, <see cref="MaxContactReach"/>] and a contact coverage in [0, 1].</summary>
+    /// contact reach in [0, <see cref="MaxContactReach"/>], a contact coverage in [0, 1] and finite, non-negative shadow
+    /// density.</summary>
     public bool IsValid =>
         float.IsFinite(f: Depth) && (Depth > 0f) && float.IsFinite(f: Ior) && (Ior >= MinIor) && (Ior <= MaxIor) &&
         IsTint(tint: Scatter) && float.IsFinite(f: Scattering) && (Scattering >= 0f) &&
         float.IsFinite(f: ContactReach) && (ContactReach >= 0f) && (ContactReach <= MaxContactReach) &&
-        float.IsFinite(f: ContactCoverage) && (ContactCoverage >= 0f) && (ContactCoverage <= 1f);
+        float.IsFinite(f: ContactCoverage) && (ContactCoverage >= 0f) && (ContactCoverage <= 1f) &&
+        float.IsFinite(f: ShadowDensity) && (ShadowDensity >= 0f);
     /// <summary>Gets whether the glass has a contact: a positive reach and coverage.</summary>
     public bool HasContact => ((ContactReach > 0f) && (ContactCoverage > 0f));
 

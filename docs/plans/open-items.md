@@ -77,7 +77,7 @@ milestone. The owner requested its baseline and implementation plan, which
    ordinary work.
 10. [Water feature build](#water) ([plan](water.md#the-lanes)) [ordinary]: the
     chain as the arc has landed (the hidden chain still draws, see the packet);
-    A1 to A5 and R1 in parallel next, then R3, P1 last. The owner accepted the
+    A1 to A5 in parallel next, then R3, P1 last. The owner accepted the
     plan's three taste calls; A1 builds the carved channel.
 11. [Certified field contact](#certified-field-contact): box and ellipsoid
     bodies, then clearance on slopes within a third of a metre.
@@ -1089,7 +1089,7 @@ worlds in place is rewritten.
 Owner: the water feature lane (rendering, puck-world, sdf-authoring) · ordinary ·
 Next: [the water feature plan](water.md) owns the feature end to end: the arc as a
 specification, the audit, the definition of done and the lanes (A1 to A5 the world
-authoring, R1 glass shadows, R3 the particle pool, P1 the tour). The items below
+authoring, R3 the particle pool, P1 the tour). The items below
 are what the plan defers or the water strained in a system beside it.
 
 - [medium] A lattice row that is simulation only. The water chain
@@ -1129,11 +1129,16 @@ are what the plan defers or the water strained in a system beside it.
   before the opaque hit only the nearest is shaded. A 64-bit atomic k-buffer
   would lift the count once the interface generator carries 64-bit buffer
   elements and both backends enable int64 atomics.
-- [low] Edge shimmer: high-contrast silhouettes seen through water shimmer at
-  their edges. The cause is not named. Capture a presented burst at the plan's
-  tour views with exposure pinned and read it with `puck motion`, then say
-  whether it is the glass pass's own sampling or the
-  [temporal packet](#temporal-shimmer-and-cadence-flicker)'s.
+- [low] Edge shimmer: `sdfGlassLitAt` in `sdf-glass.comp.hlsl` takes one
+  bilinear refracted sample, while `reactive = saturate(length(at - own))`
+  marks refraction displacement as reactive even in a stationary scene.
+  `sdf-resolve.comp.hlsl` then suppresses history and excludes that pixel from
+  its stationary phase window: jitter moves the high-contrast silhouette
+  without temporal integration. A presented-burst diagnostic removing only
+  that reactivity suppresses the shimmer. Give refraction motion/validity and
+  footprint filtering that preserve history when valid and reject it when
+  the refracted content changes; simply zeroing reactivity would ghost motion.
+  Coordinate with the [temporal packet](#temporal-shimmer-and-cadence-flicker).
 - [low] The glass passes' GPU time is owed: read it per pass at the pool, the
   falls and the lake through [the measurement window](#measurement-window); the
   plan's budget table holds counts only, so no frame-bar claim about the glass
