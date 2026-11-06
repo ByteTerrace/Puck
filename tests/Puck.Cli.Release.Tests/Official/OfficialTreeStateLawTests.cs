@@ -7,8 +7,8 @@ namespace Puck.Cli.Release.Tests.Official;
 
 /// <summary>CONTRACT UNDER TEST: <c>puck official build</c> names the tree it built, not the build of the CLI that
 /// built it. <see cref="OfficialBuildCommand.TryReadTree"/> reads the HEAD commit of the git checkout holding the worlds
-/// directory, counts the tree dirty when git status reports anything under that directory (a tracked file modified,
-/// staged or deleted, or an untracked or ignored file) and nothing elsewhere in the checkout, and stamps
+/// directory, counts the tree dirty when git status reports a change to a file the build reads (modified, staged,
+/// deleted, untracked or ignored) and nothing else in the checkout, and stamps
 /// <see cref="OfficialBuildInfo.NoCommit"/>, dirty, for a directory no checkout holds or a checkout with no commit.
 /// Each law runs over a checkout of its own in a temporary directory, so none reads this repository's shared
 /// working-tree state.</summary>
@@ -89,12 +89,13 @@ public sealed class OfficialTreeStateLawTests {
             );
     }
 
-    private static (string Commit, bool Dirty) Read(string worldsDirectory) {
+    private static (string Commit, bool Dirty) Read(string worldsDirectory, params string[] readNames) {
         Assert.True(
             condition: OfficialBuildCommand.TryReadTree(
                 commit: out var commit,
                 dirty: out var dirty,
                 refusal: out var refusal,
+                readFiles: [Path.Combine(path1: worldsDirectory, path2: "klondike.puck"), .. readNames.Select(selector: name => Path.Combine(path1: worldsDirectory, path2: name))],
                 worldsDirectory: worldsDirectory
             ),
             userMessage: refusal
@@ -161,8 +162,23 @@ public sealed class OfficialTreeStateLawTests {
         }
 
         Assert.Equal(
-            actual: Read(worldsDirectory: checkout.WorldsDirectory),
+            actual: Read(worldsDirectory: checkout.WorldsDirectory, (change == "untracked") ? "spider.world.json" : "notes.scratch"),
             expected: (head, true)
+        );
+    }
+    /// <summary>An ignored file the build never reads leaves the tree clean.</summary>
+    [Fact]
+    public void AnIgnoredFileTheBuildNeverReadsLeavesTheTreeClean() {
+        using var checkout = new Checkout();
+
+        checkout.Write(
+            name: "worlds/notes.scratch",
+            text: "scratch\n"
+        );
+
+        Assert.Equal(
+            actual: Read(worldsDirectory: checkout.WorldsDirectory),
+            expected: (checkout.Head(), false)
         );
     }
     /// <summary>A change elsewhere in the checkout is not the worlds tree's: the build still names a clean commit.</summary>
@@ -218,33 +234,5 @@ public sealed class OfficialTreeStateLawTests {
             actual: Read(worldsDirectory: directory.PathOf(name: Worlds)),
             expected: (OfficialBuildInfo.NoCommit, true)
         );
-    }
-    /// <summary>Without <c>--allow-dirty</c>, the verb refuses a tree no commit holds before it reads the engine or
-    /// writes anything, and names why.</summary>
-    [Fact]
-    public void TheBuildRefusesATreeNoCommitHoldsWithoutAllowDirty() {
-        using var directory = new TemporaryDirectory();
-
-        directory.WriteText(
-            name: "worlds/klondike.puck",
-            text: "schema: \"puck.world.definition.v1\"\n"
-        );
-
-        var (exitCode, _, stdErr) = ConsoleCapture.RunSplit(run: () => OfficialBuildCommand.Create().Parse(args: [
-            "--tree", directory.PathOf(name: "tree"),
-            "--channel", "dev",
-            "--engine", directory.PathOf(name: "engine"),
-            "--worlds", directory.PathOf(name: Worlds),
-        ]).Invoke());
-
-        Assert.Equal(
-            actual: exitCode,
-            expected: 2
-        );
-        Assert.Contains(
-            actualString: stdErr,
-            expectedSubstring: "no commit holds the worlds directory"
-        );
-        Assert.False(condition: Directory.Exists(path: directory.PathOf(name: "tree")));
     }
 }

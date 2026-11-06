@@ -75,10 +75,10 @@ public static class CartridgeCostCommand {
 
         target.AcceptOnlyFromAmong(values: Targets);
         var command = new Command(
-            description: """
+            description: $"""
             Measure each cartridge primitive's sustained per-frame capacity on the real machines.
 
-            Boots probe cartridges on the Color, monochrome and Advanced machines and bisects, per shape, the largest per-frame
+            Boots probe cartridges on the machine of each target ({string.Join(separator: ", ", values: Targets)}) and bisects, per shape, the largest per-frame
             iteration count each machine sustains at full frame rate. Cost per iteration is inversely proportional to
             that capacity; fold the reported capacities into CartridgeCost's weights and CartridgeCostProfile's
             reservations. A row marked CLIPPED reached the search's ceiling rather than the machine's.

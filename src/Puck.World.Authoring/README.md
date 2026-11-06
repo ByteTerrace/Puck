@@ -722,8 +722,8 @@ only—no `Puck.World.Schema` type, since that project depends on this one
 (the reverse reference would cycle)—so a sculpt builds the sections it
 does not own a Schema type for (`render`, `rules`, `state`, `dynamics`,
 `cameras`, `views.layouts`, a look row) as raw JSON matching the document's
-own wire spelling, and its caller (the `creation.sculpt` console verb, or
-`puck creation sculpt`) is the one that serializes a `CreationDocument` row
+own wire spelling, and its caller (the `creation.sculpt` console verb)
+is the one that serializes a `CreationDocument` row
 through `CreationJsonContext.Document` and validates the patched WHOLE
 document through `WorldDefinitionSerialization`/`WorldDefinitionValidator`.
 
@@ -734,9 +734,7 @@ it to carry rig data forward by name; it never writes to it directly.
 `CreationSculptRegistry` ships empty—a sculpt is registered by a
 composition root or a test through `CreationSculptRegistry.Register`. Apply
 a registered sculpt live through `creation.sculpt <name>`
-(`Puck.World.Console`), or offline against a file through
-`puck creation sculpt <name> --world <path>` (`Puck.Cli`)—see the
-[CLI reference](../../docs/reference/cli.md#puck-creationcode-authored-sculpts).
+(`Puck.World.Console`).
 
 `SculptPatch.TouchedRows` groups a patch's results by row for a caller that
 resubmits whole rows: a `RemoveMember` is a modification of the row it

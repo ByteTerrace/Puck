@@ -42,14 +42,7 @@ public static class MeshIdentityCommand {
         return command;
     }
     private static int Run(string? build, string? against, string backend, bool members, string? why) {
-        var extension = backend switch {
-            "directx" => ".dxil",
-            "vulkan" => ".spv",
-            _ => null,
-        };
-
-        if (extension is null) {
-            Console.Error.WriteLine(value: $"{Verb}: unknown --backend '{backend}'; expected directx or vulkan.");
+        if (!CliWorldDocuments.TryExtension(backend: backend, extension: out var extension, verb: Verb)) {
             return 2;
         }
 

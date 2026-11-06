@@ -23,14 +23,11 @@ public interface IGateRunner {
     /// for an idle GPU, and a heavy suite also waits while another process runs one.</summary>
     bool WaitForCapacity(string repositoryRoot, string step, bool device, bool heavySuite);
 }
-/// <summary>Executes the batch plan serially, recording each step and withholding coverage on any failure.</summary>
+/// <summary>Executes the batch plan serially, recording each step.</summary>
 public static class GateRun {
     private const int FailureTail = 15;
     private const string Verb = "gate";
 
-    private static IReadOnlyList<string> Lines(string text) => [.. text.Split(separator: '\n')
-        .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
-        .Where(predicate: static line => (line.Length > 0))];
     private static void Log(StreamWriter log, string step, GateStepResult result) {
         log.WriteLine(value: $"===== {step} (exit {result.ExitCode})");
         log.WriteLine(value: result.Output.TrimEnd());
@@ -55,34 +52,28 @@ public static class GateRun {
     /// <param name="repositoryRoot">The checkout the gate qualifies.</param>
     /// <param name="target">The branch the change lands on; the change is read against its merge base with HEAD.</param>
     /// <param name="gpu">Whether to run the GPU steps after the CPU qualification.</param>
-    /// <param name="record">Whether to refresh canary coverage once every qualification step passes.</param>
     /// <param name="runner">The process and admission boundary every step runs through.</param>
     /// <param name="directory">The run directory that keeps <c>gate.log</c> and <c>gate.steps</c>.</param>
     /// <param name="clock">The CLI host's clock.</param>
     /// <param name="suiteJobs">The most suites run at once.</param>
     /// <param name="gpuJobs">The most canary legs on the GPU at once.</param>
-    /// <param name="schemaSourceTypes">The types each file <c>puck schema</c> writes is generated from (<see cref="GateComposition.SchemaSourceTypes"/>).</param>
     /// <returns>The gate's exit code.</returns>
-    public static int Run(string repositoryRoot, string target, bool gpu, bool record, IGateRunner runner, string directory, TimeProvider clock, int suiteJobs, int gpuJobs, Func<string, IReadOnlyList<Type>> schemaSourceTypes) {
-        if (record && !gpu) {
-            return CliExit.Refuse(verb: Verb, what: "--record", why: "requires --gpu and an all-green qualification.");
-        }
-        if (!TryPlan(change: out var change, error: out var error, refused: out var refused, repositoryRoot: repositoryRoot, schemaSourceTypes: schemaSourceTypes, target: target)) {
+    public static int Run(string repositoryRoot, string target, bool gpu, IGateRunner runner, string directory, TimeProvider clock, int suiteJobs, int gpuJobs) {
+        if (!TryPlan(change: out var change, error: out var error, refused: out var refused, repositoryRoot: repositoryRoot, target: target)) {
             return CliExit.Refuse(verb: Verb, what: refused, why: error);
         }
 
-        return Execute(change: change, clock: clock, directory: directory, gpu: gpu, gpuJobs: gpuJobs, record: record, repositoryRoot: repositoryRoot, runner: runner, suiteJobs: suiteJobs);
+        return Execute(change: change, clock: clock, directory: directory, gpu: gpu, gpuJobs: gpuJobs, repositoryRoot: repositoryRoot, runner: runner, suiteJobs: suiteJobs);
     }
     /// <summary>Reads what a run qualifies: the change against the merge base of HEAD and <paramref name="target"/>, and
     /// what <c>puck affected</c> chooses for it.</summary>
     /// <param name="repositoryRoot">The checkout the gate qualifies.</param>
     /// <param name="target">The branch the change lands on.</param>
-    /// <param name="schemaSourceTypes">The types each file <c>puck schema</c> writes is generated from (<see cref="GateComposition.SchemaSourceTypes"/>).</param>
     /// <param name="change">The change, when read.</param>
     /// <param name="refused">What could not be read: the target, or the merge base.</param>
     /// <param name="error">Why, or empty.</param>
     /// <returns><see langword="true"/> when the change was read and planned.</returns>
-    public static bool TryPlan(string repositoryRoot, string target, Func<string, IReadOnlyList<Type>> schemaSourceTypes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out GateChange? change, out string refused, out string error) {
+    public static bool TryPlan(string repositoryRoot, string target, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out GateChange? change, out string refused, out string error) {
         change = null;
         refused = target;
         if (!AffectedCommand.TryResolveBase(error: out error, mergeBase: target, repositoryRoot: repositoryRoot, resolved: out var mergeBase, since: null)) {
@@ -92,24 +83,23 @@ public static class GateRun {
         if (!AffectedCommand.TryReadChanged(changed: out var changed, deleted: out var deleted, error: out error, repositoryRoot: repositoryRoot, since: mergeBase)) {
             return false;
         }
-        if (!AffectedCommand.TryPlan(changed: out _, error: out error, plan: out var affected, repositoryRoot: repositoryRoot, schemaSourceTypes: schemaSourceTypes, since: mergeBase)) {
+        if (!AffectedCommand.TryPlan(changed: out _, error: out error, plan: out var affected, repositoryRoot: repositoryRoot, since: mergeBase)) {
             return false;
         }
         change = new GateChange(Affected: affected!, Changed: changed, Deleted: deleted, MergeBase: mergeBase, Target: target);
         return true;
     }
-    /// <summary>Runs the steps a planned change needs, serially, recording each and withholding coverage on any failure.</summary>
+    /// <summary>Runs the steps a planned change needs, serially, recording each.</summary>
     /// <param name="change">The change <see cref="TryPlan"/> read.</param>
     /// <param name="repositoryRoot">The checkout the gate qualifies.</param>
     /// <param name="gpu">Whether to run the GPU steps after the CPU qualification.</param>
-    /// <param name="record">Whether to refresh canary coverage once every qualification step passes.</param>
     /// <param name="runner">The process and admission boundary every step runs through.</param>
     /// <param name="directory">The run directory that keeps <c>gate.log</c> and <c>gate.steps</c>.</param>
     /// <param name="clock">The CLI host's clock.</param>
     /// <param name="suiteJobs">The most suites run at once.</param>
     /// <param name="gpuJobs">The most canary legs on the GPU at once.</param>
     /// <returns>The gate's exit code.</returns>
-    public static int Execute(GateChange change, string repositoryRoot, bool gpu, bool record, IGateRunner runner, string directory, TimeProvider clock, int suiteJobs, int gpuJobs) {
+    public static int Execute(GateChange change, string repositoryRoot, bool gpu, IGateRunner runner, string directory, TimeProvider clock, int suiteJobs, int gpuJobs) {
         var (target, mergeBase, changed, deleted, affected) = (change.Target, change.MergeBase, change.Changed, change.Deleted, change.Affected);
         var logPath = Path.Combine(path1: directory, path2: "gate.log");
         var stepsPath = Path.Combine(path1: directory, path2: "gate.steps");
@@ -134,11 +124,7 @@ public static class GateRun {
 
         Console.Out.WriteLine(value: $"gate: {changed.Count} changed file(s) against {mergeBase[..12]}, the merge base of HEAD and {target}; full output in {shownLog}; steps in {shownSteps}.");
         try {
-            foreach (var step in GatePlan.Expand(repositoryRoot, mergeBase, fileList, (sources.Count > 0), gpu, record, affected, suiteJobs, gpuJobs)) {
-                if (step.Record && (failed.Count > 0)) {
-                    Console.Out.WriteLine(value: $"gate: {step.Name} skipped; qualification failed.");
-                    continue;
-                }
+            foreach (var step in GatePlan.Expand(repositoryRoot, mergeBase, fileList, (sources.Count > 0), gpu, affected, suiteJobs, gpuJobs)) {
                 // The process runner acquires a heavy suite's lease before sampling its capacity.
                 var leasedSuite = ((step.Kind == GateStepKind.DeviceSuite) && HostProcesses.IsHeavyTestAssembly(assembly: step.Name));
 
@@ -201,7 +187,7 @@ public static class GateRun {
                 var prerequisite = (step.Kind is GateStepKind.Locks or GateStepKind.Build or GateStepKind.CopyCli);
 
                 Console.Out.WriteLine(value: $"gate: {step.Name} FAILED (exit {result.ExitCode}, {elapsed}s){(prerequisite ? "; nothing else ran." : string.Empty)}");
-                var lines = Lines(text: result.Output);
+                var lines = CliText.Lines(text: result.Output);
                 var errors = lines.Where(predicate: line => line.Contains(comparisonType: StringComparison.Ordinal, value: ": error ")).Distinct(comparer: StringComparer.Ordinal).ToArray();
 
                 foreach (var line in (report ?? ((prerequisite && (errors.Length > 0)) ? errors : lines.TakeLast(count: FailureTail)))) {

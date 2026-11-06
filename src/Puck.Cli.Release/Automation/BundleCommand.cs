@@ -2,7 +2,7 @@ using System.CommandLine;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
-using Puck.Assets;
+using Puck.Cli.Packaging;
 
 namespace Puck.Cli.Automation;
 
@@ -26,16 +26,17 @@ public static class BundleCommand {
             searchOption: SearchOption.AllDirectories,
             searchPattern: "*"
         ).Order(comparer: StringComparer.Ordinal)) {
-            files.Add(item: new JsonObject {
-                ["path"] = Path.GetRelativePath(
+            files.Add(item: ReleaseInventory.Entry(
+                name: Path.GetRelativePath(
                 path: file,
                 relativeTo: root
             ).Replace(
                 newChar: '/',
                 oldChar: '\\'
             ),
-                ["sha256"] = ContentPin.OfFile(path: file).Hex,
-            });
+                nameKey: "path",
+                path: file
+            ));
         }
         var release = new JsonObject { ["commit"] = commit, ["channel"] = "stable", ["files"] = files };
 
@@ -89,15 +90,11 @@ public static class BundleCommand {
             ) {
                 throw new InvalidDataException(message: $"Invalid or duplicate artifact path: {relative}");
             }
-            if (
-                !ContentPin.TryParseHex(
-                hex: ((string?)file["sha256"]),
-                pin: out var pin
-            ) ||
-                (ContentPin.OfFile(path: path) != pin)
-            ) {
-                throw new InvalidDataException(message: $"Artifact checksum mismatch: {relative}");
-            }
+            ReleaseInventory.Require(
+                name: relative,
+                path: path,
+                sha256: ((string?)file["sha256"])
+            );
         }
         var actual = Directory.EnumerateFiles(
             path: root,

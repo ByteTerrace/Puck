@@ -30,8 +30,8 @@ public sealed record WorldArtifact(string Path, string Key, bool Reused, FileStr
 /// (<see cref="Puck.Abstractions.CacheRetention"/>). An entry a
 /// run still holds a lease on is kept whatever its age, since opening its lease exclusively fails. A build or pruning
 /// directory left behind by a killed run, and a lease or used file whose build no longer exists, is deleted once it is
-/// older than six hours. A <c>&lt;key&gt;.build.lock</c> is never deleted, since removing a lock file a builder holds
-/// lets a second builder lock a new file at the same path.
+/// older than six hours. A <c>&lt;key&gt;.build.lock</c> nobody holds is deleted while this run holds it
+/// (<see cref="FileLock.TryAcquireForDeletion"/>), so no builder can lock the file between its release and its deletion.
 /// </para>
 /// </summary>
 /// <param name="root">The store directory; created on first use.</param>
@@ -45,8 +45,8 @@ public sealed class WorldArtifactStore(string root) {
 
     private static readonly TimeSpan AbandonedAge = TimeSpan.FromHours(value: 6);
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(value: 50);
-    // The build lock is deliberately absent: builders take it without the store lock, so deleting it would let a
-    // second builder lock a new file while the first still holds the old one (see FileLock).
+    // The build lock is deliberately absent: builders take it without the store lock, so it is deleted only while held
+    // (see PruneBuildLocks), never by a release-then-delete.
     private static readonly string[] SidecarSuffixes = [".lease", ".used"];
 
     /// <summary>Gets the store directory.</summary>
@@ -341,6 +341,19 @@ public sealed class WorldArtifactStore(string root) {
             }
 
             TryDeleteFile(path: file);
+        }
+
+        PruneBuildLocks();
+    }
+    // A build lock is an empty file per key ever built. One no builder holds is deleted with the hold itself, so no builder
+    // can take the lock between its release and its deletion.
+    private void PruneBuildLocks() {
+        foreach (var file in Directory.EnumerateFiles(path: Root, searchPattern: "*.build.lock")) {
+            try {
+                using var held = FileLock.TryAcquireForDeletion(path: file);
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                // A lock this run may not open is retried by a later run.
+            }
         }
     }
     // Pruning is optional: a candidate another run holds, or one this run may not open (a read-only or unreadable

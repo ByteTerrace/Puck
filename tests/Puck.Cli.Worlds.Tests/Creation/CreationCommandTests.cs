@@ -8,8 +8,7 @@ using System.Numerics;
 
 namespace Puck.Cli.Worlds.Tests.Creation;
 
-/// <summary><c>puck creation</c>: the shipped sculpt registry is empty, an unknown sculpt name and a malformed
-/// world file both refuse without writing, and <c>stats</c> reports the moth prototype's shape budget.</summary>
+/// <summary><c>puck creation</c>: <c>stats</c> reports the moth prototype's shape budget and constructs its contact.</summary>
 public sealed class CreationCommandTests {
     private static (int ExitCode, string Output) Invoke(params string[] args) =>
         ConsoleCapture.Run(run: () => SuiteRoot.Invoke(args: args));
@@ -20,93 +19,6 @@ public sealed class CreationCommandTests {
         name: "moth.world.json"
     );
 
-    /// <summary>A world file that is not a JSON object, requested under an unknown sculpt name, is refused before
-    /// the file is ever parsed — with an empty registry, no name reaches the JSON-parse step.</summary>
-    [Fact]
-    public void SculptRefusesAMalformedWorldFileWithoutWriting() {
-        using var directory = new TemporaryDirectory(prefix: "puck-creation-cli-");
-        var path = directory.WriteText(
-            name: "malformed.world.json",
-            text: "[1, 2, 3]"
-        );
-
-        var before = File.ReadAllBytes(path: path);
-
-        var (exitCode, output) = Invoke(
-            "creation",
-            "sculpt",
-            "not-a-real-sculpt",
-            "--world",
-            path
-        );
-
-        Assert.Equal(
-            actual: exitCode,
-            expected: 2
-        );
-        Assert.Contains(
-            actualString: output,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "unknown sculpt"
-        );
-        Assert.Equal(
-            expected: before,
-            actual: File.ReadAllBytes(path: path)
-        );
-    }
-    /// <summary>An unknown sculpt name is refused BY NAME (naming the empty registry) and the file is left
-    /// untouched.</summary>
-    [Fact]
-    public void SculptRefusesAnUnknownNameWithoutWriting() {
-        using var directory = new TemporaryDirectory();
-        var path = TempWorldCopy(directory: directory);
-        var before = File.ReadAllBytes(path: path);
-
-        var (exitCode, output) = Invoke(
-            "creation",
-            "sculpt",
-            "not-a-real-sculpt",
-            "--world",
-            path
-        );
-
-        Assert.Equal(
-            actual: exitCode,
-            expected: 2
-        );
-        Assert.Contains(
-            actualString: output,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "unknown sculpt"
-        );
-        Assert.Contains(
-            actualString: output,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "none registered"
-        );
-        Assert.Equal(
-            expected: before,
-            actual: File.ReadAllBytes(path: path)
-        );
-    }
-    /// <summary>The shipped registry carries no sculpts.</summary>
-    [Fact]
-    public void SculptsReportsAnEmptyRegistry() {
-        var (exitCode, output) = Invoke(
-            "creation",
-            "sculpts"
-        );
-
-        Assert.Equal(
-            actual: exitCode,
-            expected: 0
-        );
-        Assert.Contains(
-            actualString: output,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "none registered"
-        );
-    }
     /// <summary>Schema and render admission cannot stand in for contact compilation. A capsule scaled apart in X and Z
     /// leaves a residual Scale; nonuniform values must fail only when it is actually placed as a solid.</summary>
     [Theory]

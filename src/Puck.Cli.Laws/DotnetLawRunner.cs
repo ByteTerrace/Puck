@@ -10,9 +10,6 @@ public sealed class DotnetLawRunner(Func<IReadOnlyList<string>, TimeSpan, CliPro
 
     private const string ReportName = "law.trx";
 
-    private static string[] Lines(string text) => [.. text.Split(separator: '\n')
-        .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
-        .Where(predicate: static line => (line.Length > 0))];
 
     /// <inheritdoc/>
     public LawBuild Build(string tree, string project, string logDirectory, CancellationToken cancellationToken) {
@@ -47,7 +44,7 @@ public sealed class DotnetLawRunner(Func<IReadOnlyList<string>, TimeSpan, CliPro
                 : new LawBuild(Errors: ["the build produced no valid work-count report, so its execution cannot be judged."], Succeeded: false));
         }
 
-        var output = Lines(text: (build.Stdout + build.Stderr));
+        var output = CliText.Lines(text: (build.Stdout + build.Stderr));
         string[] errors = [.. output.Where(predicate: static line => line.Contains(comparisonType: StringComparison.Ordinal, value: ": error ")).Distinct(comparer: StringComparer.Ordinal)];
 
         return new LawBuild(
@@ -81,7 +78,7 @@ public sealed class DotnetLawRunner(Func<IReadOnlyList<string>, TimeSpan, CliPro
     /// <returns>The executed tests, or a named refusal reason.</returns>
     public static LawRun ReadRun(CliProcessResult run, string? report) {
         if (run.TimedOut || (report is null)) {
-            return new LawRun(Error: $"dotnet test exited {run.ExitCode}{(run.TimedOut ? " after its deadline" : string.Empty)} without a completed run: {string.Join(separator: " | ", values: Lines(text: (run.Stdout + run.Stderr)).TakeLast(count: 5))}", Failures: [], Tests: []);
+            return new LawRun(Error: $"dotnet test exited {run.ExitCode}{(run.TimedOut ? " after its deadline" : string.Empty)} without a completed run: {string.Join(separator: " | ", values: CliText.Lines(text: (run.Stdout + run.Stderr)).TakeLast(count: 5))}", Failures: [], Tests: []);
         }
         var parsed = LawProof.ReadReport(report: report);
 

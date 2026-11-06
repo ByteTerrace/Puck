@@ -1,18 +1,17 @@
 using System.CommandLine;
-using System.Text.Json.Nodes;
 using System.Xml.Linq;
 
 namespace Puck.Cli.NuGet;
 
 /// <summary>
-/// The GitHub side of a NuGet publication: the ref gate, the version tag, the release record, and the CLI pin
-/// adopted once the published package installs. <c>gh</c> and <c>git</c> supply authentication; GITHUB_SHA,
+/// The GitHub side of a NuGet publication: the ref gate, the version tag, the release record, and the check that the
+/// published CLI installs. <c>gh</c> and <c>git</c> supply authentication; GITHUB_SHA,
 /// GITHUB_REF, GITHUB_REPOSITORY, GITHUB_RUN_ID, and GITHUB_RUN_ATTEMPT come from the workflow.
 /// </summary>
 internal static class NuGetReleaseCommand {
     private const string Package = "byteterrace.puck.cli";
-    // nuget.org indexes a push minutes after it accepts it, so the pin waits the index out rather than failing.
-    private const int PinAttempts = 30;
+    // nuget.org indexes a push minutes after it accepts it, so the install check waits the index out rather than failing.
+    private const int InstallAttempts = 30;
 
     private static string CandidateConfig(string directory, string feed) {
         // An exclusive feed and a private cache keep a same-version official package from replacing the candidate.
@@ -129,7 +128,7 @@ internal static class NuGetReleaseCommand {
         Console.WriteLine(value: $"Puck CLI {actual}");
         return executable;
     }
-    private static async Task<int> PinAsync(string version) {
+    private static async Task<int> VerifyInstallAsync(string version) {
         var root = RepositoryPaths.RequireRoot();
         // Install attempts retry while the publication propagates, so a failed one is not evidence worth keeping.
         using var run = RunDirectory.Create(
@@ -154,20 +153,9 @@ internal static class NuGetReleaseCommand {
             fileName: executable,
             workingDirectory: root
         );
-        var manifestPath = Path.Combine(
-            path1: root,
-            path2: ".config/dotnet-tools.json"
-        );
-        var manifest = CliFiles.ReadJson(path: manifestPath);
-
-        manifest["tools"]![Package] = new JsonObject { ["version"] = version, ["commands"] = new JsonArray("puck"), ["rollForward"] = false };
-        CliFiles.WriteJson(
-            path: manifestPath,
-            value: manifest
-        );
         return 0;
     }
-    private static async Task<int> PinPublishedAsync(string packages, string patch) {
+    private static async Task<int> VerifyPublishedAsync(string packages) {
         var root = RepositoryPaths.RequireRoot();
         var version = NuGetCommand.ReadVersion(root: root);
 
@@ -175,23 +163,14 @@ internal static class NuGetReleaseCommand {
             path1: packages,
             path2: $"ByteTerrace.Puck.Cli.{version}.nupkg"
         ))) {
-            Console.WriteLine(value: "The batch does not publish the CLI; no pin to prepare.");
+            Console.WriteLine(value: "The batch does not publish the CLI; nothing to verify.");
             return 0;
         }
         await Puck.Abstractions.Retry.RetryAsync(
-            action: () => PinAsync(version: version),
-            attempts: PinAttempts,
+            action: () => VerifyInstallAsync(version: version),
+            attempts: InstallAttempts,
             delay: TimeSpan.FromSeconds(seconds: 10),
-            report: static (error, attempt) => $"Publication is not installable yet ({error.Message}); attempt {attempt}/{PinAttempts}."
-        );
-        File.WriteAllText(
-            contents: await GitAsync(
-                root,
-                "diff",
-                "--",
-                ".config/dotnet-tools.json"
-            ),
-            path: patch
+            report: static (error, attempt) => $"Publication is not installable yet ({error.Message}); attempt {attempt}/{InstallAttempts}."
         );
         return 0;
     }
@@ -410,31 +389,14 @@ internal static class NuGetReleaseCommand {
         return command;
     }
 
-    public static Command Pin() =>
+    public static Command VerifyPublished() =>
         CreateSingleArgumentCommand(
-            action: static version => PinAsync(version: version),
-            argumentDescription: "The published CLI version to adopt.",
-            argumentName: "version",
-            commandDescription: "Install a published CLI version in isolation to prove it, then pin it in the tool manifest.",
-            commandName: "pin"
+            action: static packages => VerifyPublishedAsync(packages: packages),
+            argumentDescription: "The pushed batch directory; the check runs only when it holds the CLI package.",
+            argumentName: "packages",
+            commandDescription: "Wait for the just-published CLI to become installable, install it in isolation and run it.",
+            commandName: "verify-published"
         );
-    public static Command PinPublished() {
-        var packagesArgument = new Argument<string>(name: "packages") { Description = "The pushed batch directory; the pin runs only when it holds the CLI package." };
-        var patchOption = CliOptions.Output(
-            description: "The file the tool-manifest diff for adoption is written to.",
-            required: true
-        );
-        var command = new Command(
-            description: "Wait for the just-published CLI to become installable, pin it, and write the manifest diff.",
-            name: "pin-published"
-        ) { packagesArgument, patchOption };
-
-        command.SetAction(action: (parseResult, _) => PinPublishedAsync(
-            packages: parseResult.GetRequiredValue(argument: packagesArgument),
-            patch: parseResult.GetRequiredValue(option: patchOption)
-        ));
-        return command;
-    }
     public static Command Release() =>
         CreateSingleArgumentCommand(
             action: static manifest => ReleaseAsync(manifest: manifest),

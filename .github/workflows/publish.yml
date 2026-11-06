@@ -138,12 +138,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         name: Record this batch on the GitHub Release
         run: puck nuget release release/release.json
-      - name: Verify published CLI availability and prepare its CI pin
-        run: puck nuget pin-published release --output puck-cli-pin.patch
-      - name: Upload the CLI pin update
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          if-no-files-found: ignore
-          name: puck-cli-pin
-          path: puck-cli-pin.patch
+      - name: Verify the published CLI installs
+        run: puck nuget verify-published release
     timeout-minutes: 20

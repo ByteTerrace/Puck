@@ -5,9 +5,7 @@ using System.Text;
 
 using Puck.SdfVm;
 using Puck.SignedDistance.Queries;
-using Puck.World;
 using Puck.World.Client;
-using Puck.World.Transpiler.Composition;
 
 namespace Puck.Cli.Mesh;
 
@@ -73,18 +71,16 @@ public static class MeshCommand {
         return command;
     }
     private static int Run(AuditRequest request) {
-        var extension = request.Backend switch {
-            "directx" => ".dxil",
-            "vulkan" => ".spv",
-            _ => null,
-        };
-
-        if (extension is null) {
-            Console.Error.WriteLine(value: $"{Verb}: unknown --backend '{request.Backend}'; expected directx or vulkan.");
+        if (!CliWorldDocuments.TryExtension(backend: request.Backend, extension: out var extension, verb: Verb)) {
             return 2;
         }
         if (request.History && (request.Group is null)) {
             Console.Error.WriteLine(value: $"{Verb}: --history reads every stored mesh for each group, so it needs --group to name the groups.");
+            return 2;
+        }
+
+        if (request.Cpu && request.History) {
+            Console.Error.WriteLine(value: $"{Verb}: --history reads the stored meshes of each group, and --cpu reads no stored bake.");
             return 2;
         }
 
@@ -93,19 +89,12 @@ public static class MeshCommand {
             return 2;
         }
 
-        var fullPath = Path.GetFullPath(path: request.World);
-
-        // A world's document parses masks and bindings through the Schema hooks, which the CLI installs per invocation.
-        _ = CliWorldVocabulary.EnsureInstalled();
-
-        if (!WorldDefinitionLoader.TryLoadFileForAdmission(admission: out var admission, contentHash: out _, documents: PuckDocumentComposer.Instance, path: fullPath, proveNeighbours: false, reason: out var reason)) {
-            Console.Error.WriteLine(value: $"{Verb}: '{fullPath}' failed to load — {reason}");
+        if (!CliWorldDocuments.TryLoad(definition: out var definition, fullPath: out var fullPath, path: request.World, verb: Verb)) {
             return 1;
         }
 
-        var definition = admission!.Definition;
         var buildDirectory = Path.GetFullPath(path: (request.Build ?? AppContext.BaseDirectory));
-        var meshes = Path.GetFullPath(path: ((request.CacheRoot is null) ? Puck.Abstractions.PuckUserDirectory.Resolve(name: "meshes") : Path.Join(path1: request.CacheRoot, path2: "meshes")));
+        var meshes = CliWorldDocuments.MeshStore(cacheRoot: request.CacheRoot);
 
         var identity = default(UInt128);
 
