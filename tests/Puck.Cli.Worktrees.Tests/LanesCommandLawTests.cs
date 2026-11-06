@@ -1,13 +1,15 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.Cli.Lanes;
 using Xunit;
 
 namespace Puck.Cli.Worktrees.Tests;
 
 /// <summary>CONTRACT UNDER TEST: <c>puck lanes</c> reads each worktree's git state, newest write, log, lease and stall
-/// state, matches leases to lanes by name, prints changes between polls, and leaves every file, index and lease as it found them.</summary>
+/// state, matches leases to lanes by the checkout their holders and waiters recorded, prints changes between polls, and
+/// leaves every file, index and lease as it found them.</summary>
 public sealed class LanesCommandLawTests {
     private sealed class OffsetClock(TimeSpan offset) : TimeProvider {
         public override DateTimeOffset GetUtcNow() => (DateTimeOffset.UtcNow + offset);
@@ -22,7 +24,7 @@ public sealed class LanesCommandLawTests {
     }
     private static string[] Metadata(string holder, int pid, long ticks) => [holder, DateTimeOffset.UtcNow.ToString(format: "O", formatProvider: CultureInfo.InvariantCulture), pid.ToString(provider: CultureInfo.InvariantCulture), ticks.ToString(provider: CultureInfo.InvariantCulture)];
     private static Dictionary<string, (string Text, long Written)> Snapshot(string directory) => (Directory.Exists(path: directory)
-        ? Directory.EnumerateFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*").ToDictionary(keySelector: file => Path.GetRelativePath(path: file, relativeTo: directory), elementSelector: file => (File.ReadAllText(path: file), File.GetLastWriteTimeUtc(path: file).Ticks), comparer: StringComparer.Ordinal)
+        ? Directory.EnumerateFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*").ToDictionary(keySelector: file => Path.GetRelativePath(path: file, relativeTo: directory), elementSelector: file => (((Path.GetExtension(path: file) == ".guard") ? string.Empty : File.ReadAllText(path: file)), File.GetLastWriteTimeUtc(path: file).Ticks), comparer: StringComparer.Ordinal)
         : []);
 
     private sealed class Layout : IDisposable {
@@ -46,17 +48,41 @@ public sealed class LanesCommandLawTests {
             using var self = Process.GetCurrentProcess();
             var ticks = self.StartTime.ToUniversalTime().Ticks;
 
+            // The holder and the live waiter are named for no lane; only the checkouts recorded beside them say whose
+            // they are. The guard is what makes the holder live.
             _ = Directory.CreateDirectory(path: Path.Combine(path1: Leases, path2: "gpu"));
-            File.WriteAllLines(path: Path.Combine(path1: Leases, path2: "gpu", path3: "holder"), contents: Metadata(holder: "lane-a boot", pid: Environment.ProcessId, ticks: ticks));
+            Guard = FileLock.TryAcquire(path: Path.Combine(path1: Leases, path2: "gpu.guard"));
+            File.WriteAllLines(path: Path.Combine(path1: Leases, path2: "gpu", path3: "holder"), contents: Metadata(holder: "boot-runner", pid: Environment.ProcessId, ticks: ticks));
+            File.WriteAllText(path: Path.Combine(path1: Leases, path2: "gpu", path3: "checkout"), contents: (Paths["lane-a"] + "\n"));
             _ = Directory.CreateDirectory(path: Path.Combine(path1: Leases, path2: "gpu.queue"));
             File.WriteAllLines(path: Path.Combine(path1: Leases, path2: "gpu.queue", path3: "000000000003"), contents: Metadata(holder: "lane-e dead", pid: 2147483, ticks: 1));
-            File.WriteAllLines(path: Path.Combine(path1: Leases, path2: "gpu.queue", path3: "000000000007"), contents: Metadata(holder: "lane-b capture", pid: Environment.ProcessId, ticks: ticks));
+            File.WriteAllLines(path: Path.Combine(path1: Leases, path2: "gpu.queue", path3: "000000000007"), contents: Metadata(holder: "capture-runner", pid: Environment.ProcessId, ticks: ticks));
+            _ = Directory.CreateDirectory(path: Path.Combine(path1: Leases, path2: "gpu.checkouts"));
+            File.WriteAllText(path: Path.Combine(path1: Leases, path2: "gpu.checkouts", path3: "000000000007"), contents: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Environment.ProcessId}\n{ticks}\n{Paths["lane-b"]}\n"));
             _ = Directory.CreateDirectory(path: Path.Combine(path1: Checkout.Root, path2: ".claude", path3: "scratch"));
         }
 
         public void ExitLog(string lane, string line) => File.WriteAllText(path: Path.Combine(path1: Checkout.Root, path2: ".claude", path3: "scratch", path4: (lane + ".log")), contents: ("working\n" + line + "\n"));
+        public FileStream? Guard { get; set; }
+
         public Task<IReadOnlyList<LanesCommand.LaneRow>> SnapshotAsync(TimeSpan later) => LanesCommand.SnapshotAsync(baseRef: "main", leaseRoot: Leases, now: (DateTimeOffset.UtcNow + later), repository: Checkout.Root, stall: TimeSpan.FromMinutes(minutes: 30));
-        public void Dispose() => Checkout.Dispose();
+        public void Dispose() {
+            Guard?.Dispose();
+            Checkout.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task AHolderFileNoProcessHoldsTheGuardForHoldsNothing() {
+        using var layout = new Layout();
+
+        // The holder file still names this live process, but nothing holds the guard: the lock decides, not the pid.
+        layout.Guard!.Dispose();
+        layout.Guard = null;
+        var rows = (await layout.SnapshotAsync(later: TimeSpan.Zero)).ToDictionary(keySelector: static row => row.Name);
+
+        Assert.Empty(collection: rows["lane-a"].Leases);
+        Assert.False(condition: CliLease.Inspect(name: "gpu", now: DateTimeOffset.UtcNow, root: layout.Leases).HolderAlive);
     }
 
     [Fact]

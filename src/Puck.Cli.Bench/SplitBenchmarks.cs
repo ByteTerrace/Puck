@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Diagnosers;
 using Puck.Maths;
 using QFixElem = Puck.Maths.QuadraticAlgebra<Puck.Maths.FixedQ4816>.Element;
 
@@ -9,7 +8,6 @@ namespace Puck.Cli.Bench;
 // Gate scenario "3a. split mul narrow (latency)": FixedSplit{0,+1}. A unit squeeze alternated with its conjugate keeps
 // the dependent chain bounded so the measured kernel is the closed fast path.
 [MemoryDiagnoser]
-[DisassemblyDiagnoser(maxDepth: 3)]
 public class SplitMulNarrow {
     private const int Ops = Bench.LatencyOps;
 
@@ -100,7 +98,6 @@ public class SplitMulNarrow {
 // motivated the microscope: the generic side's static-readonly callsite is where the widening-multiply recognizer
 // failed before those narrow tiers existed. Attach the disassembler and read the asm.
 [MemoryDiagnoser]
-[DisassemblyDiagnoser(maxDepth: 3)]
 public class SplitNormNarrow {
     private FixedSplit[] m_hand = [];
     private QFixElem[] m_gen = [];

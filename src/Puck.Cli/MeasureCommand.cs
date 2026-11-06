@@ -15,9 +15,9 @@ public static class MeasureCommand {
         var after = new Option<string?>("--after-world-artifact") { Description = "After Puck.World.dll; its entire output directory is copied into the request." };
         var beforeCommit = new Option<string?>("--before-commit") { Description = "Commit to export and freeze with the existing World build store instead of --before-world-artifact." };
         var afterCommit = new Option<string?>("--after-commit") { Description = "Commit to export and freeze instead of --after-world-artifact." };
-        var metrics = new Option<string[]>("--metric") { Required = true, Description = "Numeric JSON pointer in the command's report, repeatable: /Summary/MedianMilliseconds for bench startup; /signals/0/metrics/<key> for sweep." };
+        var metrics = new Option<string[]>("--metric") { Required = true, Description = "Numeric JSON pointer in the command's report, repeatable: /metrics/idle-tick/median for bench world; /metrics/startup/median for bench startup; /signals/0/metrics/<key> for sweep." };
         var decides = new Option<string>("--decides") { Required = true, Description = "What result decides the question, including units and tolerance. Kept with the answer for the lead's judgement." };
-        var command = CliOptions.Forwarded(name: "command", description: "A puck bench startup or sweep command after -- (omit puck). Sweep plans also measure headless host.frames signals. Output and World artifact are supplied by the runner.");
+        var command = CliOptions.Forwarded(name: "command", description: "A puck bench world, bench startup or sweep command after -- (omit puck). Sweep plans also measure headless host.frames signals. Output and World artifact are supplied by the runner.");
         command.Arity = ArgumentArity.OneOrMore;
         var request = new Command("request", "Freeze before and after builds and queue a timing question in the main checkout's ignored scratch.") { name, before, after, beforeCommit, afterCommit, metrics, decides, command };
         request.SetAction(async (parse, token) => {
@@ -77,7 +77,7 @@ public static class MeasureCommand {
             if (selected.Any(id => !pending.Any(row => row.Item.Id == id))) { return CliExit.Refuse("measure run", "requests", "an ID is missing or already answered."); }
             if (pending.Length == 0) { Console.WriteLine("measure: no pending questions."); return 0; }
             var leases = await CliLease.RootAsync(checkout, token).ConfigureAwait(false);
-            using var quiet = await CliLease.AcquireQuietAsync(leases, parse.GetValue(holder)!, TimeSpan.FromSeconds(waiting), clock, token, ProcessInspection.IsAncestor).ConfigureAwait(false);
+            using var quiet = await CliLease.AcquireQuietAsync(leases, parse.GetValue(holder)!, TimeSpan.FromSeconds(waiting), clock, checkout, token, ProcessInspection.IsAncestor).ConfigureAwait(false);
             if (settling > 0 && await settleWait(TimeSpan.FromSeconds(settling), TimeSpan.FromSeconds(waiting + (double)settling), Console.Error, token).ConfigureAwait(false) is { } reason) {
                 return CliExit.Refuse("measure run", "settle", reason);
             }
@@ -106,7 +106,7 @@ public static class MeasureCommand {
             }
             return 0;
         });
-        run.Detail("Use: puck measure run [request-ids...] [--repeats 5] [--wait 600] [--settle 30]\nTakes one priority quiet lease for the pending snapshot. Existing holders finish; later grants wait for the measurement window. Each request runs before, after, before, after in fresh invocations of the existing bench startup or sweep harness. No command wall clock is measured here. Missing/nonfinite metrics or failed commands refuse the answer; partial evidence stays and the request remains pending. A completed report records raw samples, median and IQR for before, after and the paired after-minus-before difference. --decides is a human criterion, never an automatic acceptance guess. New requests wait for the next window.");
+        run.Detail("Use: puck measure run [request-ids...] [--repeats 5] [--wait 600] [--settle 30]\nTakes one priority quiet lease for the pending snapshot. Existing holders finish; later grants wait for the measurement window. Each request runs before, after, before, after in fresh invocations of the existing bench world, bench startup or sweep harness. No command wall clock is measured here. Missing/nonfinite metrics or failed commands refuse the answer; partial evidence stays and the request remains pending. A completed report records raw samples, median and IQR for before, after and the paired after-minus-before difference. --decides is a human criterion, never an automatic acceptance guess. New requests wait for the next window.");
         return new Command("measure", "Queue frozen before/after timing questions and answer them in a priority quiet window.") { request, list, run };
     }
 
@@ -139,7 +139,7 @@ public static class MeasureCommand {
     }
 
     private static void ValidateCommand(string[] arguments) {
-        if (!(arguments is ["bench", "startup", ..] or ["sweep", ..])) { throw new ArgumentException("Measurement commands are bench startup or sweep (including headless frame-signal plans)."); }
+        if (!(arguments is ["bench", "world", ..] or ["bench", "startup", ..] or ["sweep", ..])) { throw new ArgumentException("Measurement commands are bench world, bench startup or sweep (including headless frame-signal plans)."); }
         if (arguments.Any(static value => value is "--world-artifact" or "--output" || value.StartsWith("--world-artifact=", StringComparison.Ordinal) || value.StartsWith("--output=", StringComparison.Ordinal))) {
             throw new ArgumentException("The measurement runner supplies --world-artifact and --output.");
         }
@@ -179,12 +179,7 @@ public static class MeasureCommand {
     }
     private static MeasurementDistribution Distribution(double[] samples) {
         var ordered = samples.Order().ToArray();
-        double Quantile(double fraction) {
-            var position = (ordered.Length - 1) * fraction;
-            var lower = (int)Math.Floor(position);
-            var upper = (int)Math.Ceiling(position);
-            return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower);
-        }
+        double Quantile(double fraction) => Puck.Cli.Bench.BenchMetric.Quantile(fraction: fraction, ordered: ordered);
         return new(Quantile(.5), Quantile(.75) - Quantile(.25));
     }
     private static void Write<T>(string path, T item, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> type) {

@@ -231,6 +231,17 @@ public sealed class EmbedCommandTests {
         Assert.Equal(actual: probeNewCode, expected: 0);
     }
     [Fact]
+    public async Task DecompileRefusesJsonThatIsNotAWorldOrACartridgeAsync() {
+        using var dir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck-decompile tests ");
+        var settings = Path.Combine(path1: dir.RootPath, path2: "settings.json");
+        var output = Path.Combine(path1: dir.RootPath, path2: "settings.puck");
+
+        await File.WriteAllTextAsync(settings, """{ "permissions": { "allow": [] } }""", cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected: 2, actual: await SuiteRoot.InvokeAsync(args: ["decompile", settings, "-o", output]));
+        Assert.False(condition: File.Exists(path: output));
+    }
+    [Fact]
     public async Task DecompileWithLockResolvesEmbedAndWithoutLockResolvesVectorAsync() {
         using var dir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck-embed tests ");
         var puckPath = Path.Combine(path1: dir.RootPath, path2: "world.puck");

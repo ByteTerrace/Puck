@@ -42,7 +42,7 @@ host tool.
 - Search paths are repository-relative unless the task says otherwise.
 - Use `-F` for literal text; otherwise the pattern is the Puck regex dialect.
 - Add `-M 0` when all results are required; the default result cap is 250 and
-  truncation is silent. `-l` lists files, `-c` counts matching lines per file,
+  only a stderr line reports a truncation. `-l` lists files, `-c` counts matching lines per file,
   and `-s` matches across whole-file text and prints line ranges.
 - Matching is case-sensitive by default. `-i` fixes the pattern and never the
   globs, and a stray case mismatch is the most common empty result.

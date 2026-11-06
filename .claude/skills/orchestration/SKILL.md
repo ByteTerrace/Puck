@@ -439,9 +439,10 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   the lead lands it, then tells every lane to merge the tip and rebuild its CLI
   copy before its next leased run (an old copy that counted a new `counters`
   process as GPU work held the gpu lease waiting on that process, which waited
-  on the lease). The tip report is a sweep without `--baseline`: a report
-  recorded against an older one keeps that comparison's red statuses, and every
-  later landing then reads a status change it did not cause. The lead runs it, and every lead verb, from a CLI built at the tip, and reinstalls the
+  on the lease). A report stores each signal's rule colour (`status`) apart
+  from its baseline comparison's (`comparison`), and a later comparison reads
+  only the rule colour, so a tip report recorded with or without `--baseline`
+  serves equally. The lead runs it, and every lead verb, from a CLI built at the tip, and reinstalls the
   global `puck` tool ([publishing](../../../docs/reference/cli.md#publishing)) once `puck --version`
   warns that it is stale: a stale global tool refuses the current sweep plan's keys, and a report taken
   against an old baseline blames the landing for the tip's own drift. A single-project `Puck.World`

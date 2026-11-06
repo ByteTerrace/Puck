@@ -177,6 +177,41 @@ public sealed class SweepLawTests {
         }
     }
     [Fact]
+    public void AComparisonsRedIsNeverCarriedIntoTheNextComparison() {
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-sweep-law-").FullName;
+
+        try {
+            var signal = new SweepSignal(Compare: new Dictionary<string, string> { ["count"] = "exact" }, Line: "l", Name: "s");
+            var metrics = new Dictionary<string, string> { ["count"] = "2" };
+            var compared = new SweepReport(
+                Baseline: "earlier/report.json",
+                Commit: "c",
+                Legs: [],
+                Scenarios: new SweepScenarioResult(Command: "puck test", Reasons: [], Status: SweepStatus.Clean, Worlds: new Dictionary<string, string>()),
+                Schema: SweepReport.SchemaName,
+                Seconds: 1,
+                Signals: [new SweepSignalResult(Changes: ["count 1 -> 2"], Comparison: SweepStatus.Red, File: "headless/s.txt", Leg: SweepLegs.Headless, Line: "l", Metrics: metrics, Name: "s", Reasons: [], Status: SweepStatus.Clean)],
+                Started: DateTimeOffset.UnixEpoch,
+                Tools: [],
+                Tour: null,
+                World: "worlds/debug"
+            );
+            var path = Path.Combine(path1: directory, path2: SweepReport.FileName);
+
+            compared.Write(path: path);
+
+            // The run that compared is red, and the report it wrote still records the rules' clean.
+            Assert.Equal(expected: SweepStatus.Red, actual: compared.Status);
+            Assert.Contains(expectedSubstring: "\"status\": \"clean\"", actualString: File.ReadAllText(path: path));
+            Assert.True(condition: SweepBaseline.TryRead(baseline: out var baseline, error: out var error, path: path), userMessage: error);
+
+            // The next comparison, over the same metrics and the same clean rules, finds nothing changed.
+            Assert.Empty(collection: baseline!.Changes(leg: SweepLegs.Headless, metrics: metrics, signal: signal, status: SweepStatus.Clean));
+        } finally {
+            ConfinedDirectory.RemoveTree(path: directory);
+        }
+    }
+    [Fact]
     public void AReportsColourIsItsWorst() {
         Assert.Equal(expected: SweepStatus.Red, actual: SweepStatus.Worse(left: SweepStatus.Amber, right: SweepStatus.Red));
         Assert.Equal(expected: SweepStatus.Unknown, actual: SweepStatus.Worse(left: SweepStatus.Amber, right: SweepStatus.Unknown));

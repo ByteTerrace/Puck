@@ -237,6 +237,7 @@ public static class WorldArtifactBuild {
                 ? null
                 : CliLease.AcquireAsync(
                     ancestor: ProcessInspection.IsAncestor,
+                    checkout: repositoryRoot,
                     clock: TimeProvider.System,
                     holder: $"{verb} {key}",
                     lane: CliLease.LaneOf(checkout: repositoryRoot),

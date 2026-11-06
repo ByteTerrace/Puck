@@ -269,6 +269,11 @@ public static partial class CanaryCommand {
             return CliExit.Refused;
         }
 
+        // A run of no proofs proves nothing, so it is refused before anything is built rather than reported as passing.
+        if (!plan && (selected.Count == 0)) {
+            return CliExit.Refuse(verb: "canary", what: "the selection", why: $"names no proof to run ({selection.Kind}); there is nothing to build or prove.");
+        }
+
         var costs = Plan(
             backends: backends,
             manifests: selected,
@@ -1440,7 +1445,7 @@ public static partial class CanaryCommand {
             }
         }
 
-        // An empty selection is a normal one: it runs nothing.
+        // An empty selection selects cleanly; Run refuses to execute it, and --plan reports its zero counts.
         return true;
     }
     private static IReadOnlyList<CanaryManifest> FilterCapability(IReadOnlyList<CanaryManifest> manifests, string capability) => capability switch {

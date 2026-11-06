@@ -74,6 +74,21 @@ internal static class SearchEmitter {
         return false;
     }
 
+    // The results the -M cap counts in the selected mode: files for -l, spans for -s, matching lines otherwise.
+    private static long Available(SearchFileResult?[] results, SearchOptions opt) => results.OfType<SearchFileResult>().Sum(selector: r => (opt.FilesWithMatches
+        ? 1L
+        : (opt.Span ? (r.Spans?.Count ?? 0) : (r.Hits?.Count ?? 0))));
+    // A run that stops at the cap says so on stderr, so a truncated listing never reads as the whole answer.
+    private static int Capped(SearchFileResult?[] results, SearchOptions opt) {
+        var available = Available(opt: opt, results: results);
+
+        if (available > opt.MaxResults) {
+            Console.Error.WriteLine(value: $"search: stopped at the -M {opt.MaxResults} cap; {available} results matched. Pass -M 0 for all of them.");
+        }
+
+        return 0;
+    }
+
     public static int Emit(SearchFileResult?[] results, SearchOptions opt) {
         var matched = false;
         var emitted = 0;
@@ -101,7 +116,7 @@ internal static class SearchEmitter {
                     emitted: ref emitted,
                     opt: opt
                 )) {
-                    return 0;
+                    return Capped(opt: opt, results: results);
                 }
 
                 continue;
@@ -121,7 +136,7 @@ internal static class SearchEmitter {
                         emitted: ref emitted,
                         opt: opt
                     )) {
-                        return 0;
+                        return Capped(opt: opt, results: results);
                     }
                 }
 
@@ -140,7 +155,7 @@ internal static class SearchEmitter {
                 opt: opt,
                 r: r
             )) {
-                return 0;
+                return Capped(opt: opt, results: results);
             }
 
             wroteBlock = true;

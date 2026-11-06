@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Diagnosers;
 using Puck.Maths;
 
 namespace Puck.Cli.Bench;
@@ -10,7 +9,6 @@ namespace Puck.Cli.Bench;
 // lane small powers of a base near one take and the limb lane with the one-shot quotient a deep negative power takes
 // — and the fused divide behind the planar and dual quotients.
 [MemoryDiagnoser]
-[DisassemblyDiagnoser(maxDepth: 3)]
 public class ScalarKernels {
     private const int Count = 1024;
 

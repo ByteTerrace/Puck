@@ -405,16 +405,12 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                 _ = metrics.Remove(key: "text");
             }
 
+            // The comparison keeps a colour of its own: the stored status stays what the signal's rules said, so a report
+            // recorded against a baseline never carries this comparison's red into the next one.
             var changes = (baseline?.Changes(leg: world.Leg, metrics: metrics, signal: (signal with { Name = name }), status: status) ?? []);
-
-            if (changes.Count > 0) {
-                reasons.AddRange(collection: changes.Select(selector: static change => $"baseline: {change}"));
-                status = SweepStatus.Worse(left: status, right: SweepStatus.Red);
-            }
-
-            progress.WriteLine(value: $"sweep: {world.Leg} {name} {status}");
-            results.Add(item: new SweepSignalResult(
+            var result = new SweepSignalResult(
                 Changes: changes,
+                Comparison: ((baseline is null) ? null : ((changes.Count > 0) ? SweepStatus.Red : SweepStatus.Clean)),
                 File: Path.GetRelativePath(path: file, relativeTo: directory).Replace(newChar: '/', oldChar: '\\'),
                 Leg: world.Leg,
                 Line: signal.Line,
@@ -422,7 +418,10 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                 Name: name,
                 Reasons: reasons,
                 Status: status
-            ));
+            );
+
+            progress.WriteLine(value: $"sweep: {world.Leg} {name} {result.Colour}");
+            results.Add(item: result);
         }
 
         return results;

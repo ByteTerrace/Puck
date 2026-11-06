@@ -2429,7 +2429,7 @@ changed under the plan's compare mode for each metric (`exact`,
 pixel counts as changed when a colour channel differs by more than the tour's
 `levelTolerance` (16 levels), and a still whose fraction exceeds
 `amberFraction` (2%) is amber; a `compare-<group>.png` sheet then sets each
-baseline still above its current one. A signal difference outside its compare tolerance is red; a baseline signal missing from a selected leg is unmeasured. The report is a derived product: keep it in an ignored lane scratch directory and never commit it.
+baseline still above its current one. A signal difference outside its compare tolerance is red; a baseline signal missing from a selected leg is unmeasured. Each signal stores its rules' colour as `status` and the comparison's as `comparison` (red when anything changed, clean otherwise, absent without `--baseline`); the run's colour is the worse of the two, and a later sweep that takes this report as its baseline compares only `status`, so a comparison's red never carries forward. The report is a derived product: keep it in an ignored lane scratch directory and never commit it.
 
 Exit codes: 0 nothing red or unmeasured, 1 something red or unmeasured, 2 a
 refusal (a plan, a baseline, a `--output` that is the `--baseline` report's
@@ -2749,18 +2749,16 @@ starts with `-`.
 Exit codes: **0** matched, **1** no match, **2** usage/pattern error (the
 engine's own parse message is printed verbatim). A path argument that names
 nothing on disk is one of those usage errors—every bad path is reported before
-the run gives up, so a typo cannot pass for "no match". The recursive walk skips
-the directories in `FileWalk.SkipDirectories` (`puck search --help` prints them), agent worktrees
-under `.claude/worktrees`, directory links (junctions and symbolic links, which the walk
-never follows), and binary files—naming one of those paths searches it anyway.
-`FileWalk.SkipDirectories` is the one prune set every tree-walking verb shares;
+the run gives up, so a typo cannot pass for "no match". The walk is `FileWalk`,
+the one walk every tree-walking verb shares: inside a git work tree it reads
+git's view of the tree (`git ls-files --cached --others --exclude-standard`),
+so ignored scratch snapshots, build output and the duplicate checkouts under
+`.claude/worktrees` never answer as live code. Outside a work tree, or under a
+root git ignores, it walks the disk and skips `FileWalk.SkipDirectories`, agent
+worktrees and directory links; the help prints that list. Binary files are
+skipped too, and naming an ignored directory or a file searches it anyway.
 `format` alone also skips the quarantined `experimental/` trees, which every
-reading verb still searches. Build-artifact
-names are on that list because this project writes into them: publishing drops a
-generated `Puck.Maths.xml` next to the executable, whose duplicated doc comments
-would otherwise drain the default `-M` cap ahead of `src/Puck.Maths/` itself.
-`.claude/worktrees` holds live duplicate checkouts, whose copies otherwise answer
-a query as if they were live consumers. The full flag, glob, and engine-semantics
+reading verb still searches. The full flag, glob, and engine-semantics
 reference—including the leftmost-longest and complement gotchas—lives in the
 `content-search` skill (`.claude/skills/content-search/SKILL.md`), which drives
 every content search in this repo through the checkout's own `puck search` build.
@@ -2775,14 +2773,14 @@ Lanes record timing questions; the lead answers them on a quiet machine. `reques
 puck measure request --name 'startup comparison' \
   --before-world-artifact /frozen/before/Puck.World.dll \
   --after-world-artifact /frozen/after/Puck.World.dll \
-  --metric /Summary/MedianMilliseconds \
+  --metric /metrics/startup/median \
   --decides 'lower startup median, with paired difference larger than the IQR' \
   -- bench startup worlds/debug --headless --samples 1
 puck measure list
 puck measure run --holder lead --repeats 5 --wait 600 --settle 30
 ```
 
-`--before-commit <revision>` and `--after-commit <revision>` replace the artifact option for their side. Forward the command after `--`, without the leading `puck`. Supported forms are `bench startup` and `sweep`; the runner supplies `--world-artifact` and `--output`, which the request must omit. A headless `host.frames` run or an individual sweep signal uses an ordinary sweep plan (`sweep --plan <plan.json> --no-scenarios`). The command runs from the requesting checkout, so retain its world and plan inputs until answered. `--metric` is a repeatable JSON pointer into the existing command's `report.json`, such as `/Summary/MedianMilliseconds` for startup or `/signals/0/metrics/<key>` for a sweep. Numeric JSON strings from sweep metrics are accepted; absent or nonfinite values refuse. Use `~1` for `/` and `~0` for `~` within a key.
+`--before-commit <revision>` and `--after-commit <revision>` replace the artifact option for their side. Forward the command after `--`, without the leading `puck`. Supported forms are `bench world`, `bench startup` and `sweep`; the runner supplies `--world-artifact` and `--output`, which the request must omit. A headless `host.frames` run or an individual sweep signal uses an ordinary sweep plan (`sweep --plan <plan.json> --no-scenarios`). The command runs from the requesting checkout, so retain its world and plan inputs until answered. `--metric` is a repeatable JSON pointer into the existing command's `report.json`, such as `/metrics/idle-tick/median` for `bench world`, `/metrics/startup/median` for startup or `/signals/0/metrics/<key>` for a sweep; both bench lanes write the one `puck.bench.v1` report described under [`puck bench world`](#puck-bench-world). Numeric JSON strings from sweep metrics are accepted; absent or nonfinite values refuse. Use `~1` for `/` and `~0` for `~` within a key.
 
 `run [request-ids...]` takes one [`quiet` lease](#puck-lease-quieta-settle-window) for the pending snapshot, then runs before, after, before, after for `--repeats` paired rounds per request (1–100, default 5). New requests wait for the next window. `--wait` bounds lease acquisition; `--settle` defaults to 30 idle seconds; `--timeout-seconds` bounds each command including shutdown (default 600). The existing bench and sweep harnesses own every measurement; this verb does not time child-process wall clocks. Reports retain raw samples and source reports, plus median and interquartile range (linearly interpolated quartiles) for before, after and the paired **after minus before** difference. The paired median is computed from each pair's difference, not by subtracting the two independent medians.
 
@@ -2859,9 +2857,17 @@ matching forward inputs during global setup.
 by-parameter argument into a `[MethodImpl(NoInlining)]` method so it cannot—the
 same two placements the gate measures.
 
-`MemoryDiagnoser` rides on every class. `DisassemblyDiagnoser` is attached only
-to the **fixed-point kernels** (scenarios 1–5); the extension scenarios are
-modular-`ulong` arithmetic, not a fixed-point kernel.
+`MemoryDiagnoser` rides on every class. Every scenario runs in the CLI's own
+process against the assemblies it was built with (BenchmarkDotNet's in-process
+emit toolchain, applied to whichever job the command line picks), so nothing is
+rebuilt from the working tree and the numbers describe that build. For machine
+code, set the JIT's own `DOTNET_JitDisasm=<method>` (with `DOTNET_JitStdOutFile`)
+for the run: BenchmarkDotNet's `DisassemblyDiagnoser` cannot read the .NET 11
+runtime and fails every case it rides on, so no class carries it.
+
+Exit **0** when every selected scenario measured, or the run only listed or
+printed help; **1** when a scenario failed validation or did not run to a
+measurement; **2** when the arguments did not parse or matched no scenario.
 
 ### Running it
 
@@ -2869,7 +2875,7 @@ modular-`ulong` arithmetic, not a fixed-point kernel.
 # Everything (balanced default job):
 puck bench kernels --filter '*'
 
-# One scenario family — the norm quirk, with the disassembler:
+# One scenario family — the norm quirk:
 puck bench kernels --filter '*Norm*'
 
 # Just the hand-vs-generic-static comparison of one class:
@@ -2887,9 +2893,10 @@ is its `hide` option) is reached past a separator: `puck bench kernels -- --help
 
 #### Job rigor
 
-No explicit job is baked into the config, so a command-line `--job` is the only
-job that runs (the harness would otherwise run its own job *alongside* one added
-here and double the output). Pick rigor on the command line:
+The config adds only the in-process toolchain, as a mutator applied to every
+job, so a command-line `--job` is the only job that runs (a plain job added in
+the config would run *alongside* it and double the output). Pick rigor on the
+command line:
 
 | Flag | Use |
 |---|---|
@@ -3082,7 +3089,27 @@ switcher as its own sub-verb rather than inside it:
 ```sh
 puck bench world
 puck bench world path/to/world.puck
+puck bench world --repeats 5 --json
+puck bench world --world-artifact /frozen/after/Puck.World.dll --output /tmp/bench
 ```
+
+Every run is also one `puck.bench.v1` report (`BenchReport`), the record
+`puck bench startup` writes too: the measured build's identity (its version with
+the commit its runtime configuration records, and the SHA-256 of its engine
+assemblies), the host load read before, every five seconds during and after the
+run (CPU mean and peak, lowest free memory, any GPU holder or other heavy test
+run), and each metric as `median`, `p10` and `p90` over `--repeats` runs with
+every sample kept. `--json` prints it on standard output (the table moves to
+standard error); `--output <dir>` writes `report.json` in a unique run directory
+under it. The metrics are the timing rows (`idle-tick`, `paced-tick`,
+`server-construction`, the value-write, cell-burst, response-change and
+scene-emission ticks, each screen machine's tick, in ms), `quiet-tick-allocation`
+in bytes and the deterministic work counts (`work.<counter>` per tick). `puck
+measure` reads the idle tick as `/metrics/idle-tick/median`. With
+`--world-artifact`, the engine assemblies (and the packages the build carries)
+load from that World build in a load context of their own beside this CLI's bench
+code, so a frozen before/after pair measures two builds rather than one CLI
+twice; a build whose engine the bench code cannot call fails by name.
 
 ### `puck bench startup`
 
@@ -3116,10 +3143,13 @@ bounds failed runs. Shutdown time is excluded from both readiness intervals.
 `--samples` defaults to 3 and `--timeout-seconds` to 120 per process. `--output`
 selects the parent of a unique run directory (default `artifacts/startup`).
 The directory holds logs, captures, and `report.json`, updated after each child.
-The report records every sample, runtime, OS, artifact, dimensions, and the
-expected sample count. Any failed or missing sample suppresses the corpus
-summary; a completed failing run exits 1. A complete successful run reports
-mean, median, nearest-rank p95, and maximum. This is process-cold startup:
+The report is the `puck.bench.v1` record [`puck bench world`](#puck-bench-world)
+describes: every sample under `startup`, the runtime and OS, the World build's
+identity, the settings, and the host load. Any failed or missing sample leaves
+`metrics` empty and `complete` false; a completed failing run exits 1. A
+complete successful run reports the metric `startup` (console readiness
+headless, the completed capture windowed, in ms) as median, p10 and p90 over
+every sample of every world; `--json` prints the report. This is process-cold startup:
 disk, driver, and shader caches are retained. Measure cold-cache behavior
 separately and label it explicitly. Use a quiet machine and repeat discrepant
 measurements before treating a difference as an improvement.
@@ -3208,11 +3238,9 @@ repository root.
 
 ## `puck scan`—source sweep
 
-Parses every `.cs` file under `<root>` **once** (the shared prune set—`.git`,
-`.tmp`, `artifacts`, `bin`, `obj`, `node_modules`, `publish`,
-`BenchmarkDotNet.Artifacts`—plus agent worktrees under `.claude/worktrees`
-pruned below the root; naming a skipped directory as the root itself still scans
-it) and
+Parses every `.cs` file under `<root>` **once** (through the shared `FileWalk`,
+which reads git's view of the tree; naming an ignored directory as the root
+itself still scans it) and
 runs the selected analyzers over that one shared corpus, so a full sweep parses
 the tree a single time rather than once per analyzer.
 
@@ -3735,9 +3763,9 @@ puck format --file-list <json-array-of-paths> [--check] [--configuration <name>]
 ```
 
 `<root>` is a directory or a single source, resolved against the working
-directory. The walk takes every `.cs` and `.puck` file under it and skips
-the shared prune set (`FileWalk.SkipDirectories`), agent worktrees under
-`.claude/worktrees`, and the quarantined `experimental` trees. Generated C# (`*.g.cs`, `*.generated.cs`) is
+directory. The walk takes every `.cs` and `.puck` file under it that the shared
+`FileWalk` admits (git's view of the tree, so nothing ignored), and skips the
+quarantined `experimental` trees. Generated C# (`*.g.cs`, `*.generated.cs`) is
 never formatted.
 
 `--file-list` takes the path of a JSON file holding an array of paths, and both
@@ -4305,7 +4333,8 @@ active  <name>  <branch>  ahead <n> files <n> commit <age> "<subject>" write <ag
 ```
 
 - `ahead` counts commits on the branch that `--base` (default:
-  the branch the main checkout holds) lacks; `files` counts paths with a staged or unstaged change.
+  the branch the main checkout holds) lacks, and a `--base` that names no commit
+  is refused (exit 2); `files` counts paths with a staged or unstaged change.
 - `commit` is the last commit's age and subject; `brief` is the last `Brief:`
   trailer between the base and HEAD.
 - `write` is the age of the newest write among the git index, the git log of
@@ -4315,9 +4344,11 @@ active  <name>  <branch>  ahead <n> files <n> commit <age> "<subject>" write <ag
   when the log ends with one.
 - `lease` lists the `gpu`, `heavy` and `build` leases the lane holds
   (`gpu:holding`) or waits for (`gpu:queued#5(2/3,ahead 4)`: ticket 5, the
-  lane's turn 2 of 3 in the round, four admissions before it). A lane is matched
-  by the lease's lane name against the worktree name, the branch, or the
-  branch's last segment.
+  lane's turn 2 of 3 in the round, four admissions before it). A holder or
+  waiter belongs to the worktree whose path it recorded as its checkout,
+  whatever its holder name; one whose CLI recorded no checkout is matched by its
+  lane name against the worktree name, the branch, or the branch's last segment.
+  A holder counts only while a process holds the lease's guard lock.
 - `mode findings-only` marks a lane that delivers a report instead of commits:
   its `.claude/scratch/<name>.task` file holds `mode: findings-only` (and may
   name `report: <path>`), or its log's Codex header names a read-only sandbox.
@@ -4372,7 +4403,7 @@ Run `puck lease gpu --holder <lane> [--lane <lane>] [--wait <seconds>] -- <execu
 
 The GPU lease defaults to the `HostStartKind.WindowedWorld` peak. For a bounded small device check that boots no World, add `--kind Step`; other declared `HostStartKind` values select their own expected peak. This changes the child command's memory estimate, while retaining GPU exclusion and the same RAM, commit, disk and idle-device admission. Full CPU/memory-heavy suites still take the heavy lease too. World-launching verbs and MCP starts retain their own World admission.
 
-The main checkout, found through Git's common directory, owns `.claude/leases/<name>/holder` for all its worktrees. The holder records the holder name, UTC acquisition time, process ID and process start ticks on four lines, and the lane on a fifth only when it is not the holder's first word. A persistent sibling `<name>.guard` file is held exclusively for the command's lifetime; it is not removed, because replacing the locked file would let competing processes lock different files. The holder directory is removed on exit, including child failure and Ctrl+C. A taken lease refuses immediately unless `--wait` supplies a nonnegative number of seconds. Waiting uses the CLI clock.
+The main checkout, found through Git's common directory, owns `.claude/leases/<name>/holder` for all its worktrees. The holder records the holder name, UTC acquisition time, process ID and process start ticks on four lines, and the lane on a fifth only when it is not the holder's first word; it is replaced whole, so a reader never sees it half written. The checkout the holder works in is recorded beside it, in `<name>/checkout`, and a ticket's in `<name>.checkouts/<ticket>` with the ticket's process ID and start ticks, rather than as a sixth line, because CLIs built before it count those lines. A persistent sibling `<name>.guard` file is held exclusively for the command's lifetime; it is not removed, because replacing the locked file would let competing processes lock different files. The holder directory is removed on exit, including child failure and Ctrl+C. A taken lease refuses immediately unless `--wait` supplies a nonnegative number of seconds. Waiting uses the CLI clock.
 
 Admission rotates between lanes and is first come, first served within a lane. A lane is the first word of `--holder` (`example-lane timing run` is lane `example-lane`), or the value of `--lane` when given; `puck_world_start` passes its `lane` argument the same way and names the checkout's directory when it gets neither `holder` nor `lane`. Every acquisition, even `--wait 0`, takes a ticket in the sibling `<name>.queue` directory: a file named by a zero-padded sequence (the highest present plus one, claimed with an exclusive create) holding the same metadata lines as a holder. Each time a lane takes the lease, the sibling `<name>.rotation` directory records it as the most recently served (one file per lane, holding a serial one above every other lane's). The guard goes to the oldest live ticket of the lane served least recently. A lane that has never held the lease takes the serial of the lane served most recently as it first queues (the same file, created whole and never over a serial a holder wrote), so a new lane ranks behind every lane served longer ago and behind a lane served at the same point whose ticket is older, never ahead of a lane that was already waiting. A lane with three queued runs gets one turn per round while other lanes wait. With lane A queued three times ahead of lanes B and C, once each, runs are admitted A1, B1, C1, A2, A3. A holder that exits and immediately acquires again queues behind every other lane already waiting, and a newcomer cannot overtake a lane that has waited, because a newcomer's lane is served after theirs. The wait message names the holder, how many tickets are ahead in this order, and the lane's turn among the queued lanes (`lane a is 2 of 3 in the round`). A ticket is removed when its waiter acquires, times out or is cancelled. A ticket whose process has exited (or whose PID was reused) is deleted by the next waiter that looks, and a ticket whose metadata never became readable is deleted once ten seconds old, so a power trip leaves nothing that blocks admission. The queue lives beside the lease, so a child lease under an ancestor holder queues in `child.queue` inside that holder's directory.
 
@@ -4407,7 +4438,7 @@ Every verb that starts a `Puck.World` process passes the same admission itself, 
 
 ### `puck lease list`—who holds what and who waits
 
-Run `puck lease list` to read the shared lease directory without changing it. For each of `build`, `gpu` and `heavy` it prints one line, `idle` or `held by <holder> (lane <lane>) for <time>` (with `, stale: its process has exited` for a holder file whose process is gone, which the next acquisition replaces), followed by the queued count. Under it, one line per live waiter in admission order, the order the lease will be granted in: its holder, lane, how long it has waited, its lane's turn among the queued lanes, and how many admissions come before it. The verb takes no ticket, deletes no dead ticket, and writes no rotation serial, so it can run at any time beside any lease (it reads through `CliLease.Inspect`, the reader `puck lanes` uses). A lease a holder's descendants hold as a `child` of it is not shown. The lead reads it for lease pressure ([orchestration](../../.claude/skills/orchestration/SKILL.md#schedule-machines)).
+Run `puck lease list` to read the shared lease directory without changing it. For each of `build`, `gpu` and `heavy` it prints one line, `idle` or `held by <holder> (lane <lane>) for <time> from <checkout>` (with `, stale: no process holds its lock` for a holder file whose guard no process holds, read from the guard itself with a momentary shared hold; the next acquisition replaces it), followed by the queued count. Under it, one line per live waiter in admission order, the order the lease will be granted in: its holder, lane, checkout, how long it has waited, its lane's turn among the queued lanes, and how many admissions come before it. The verb takes no ticket, deletes no dead ticket, and writes no rotation serial, so it can run at any time beside any lease (it reads through `CliLease.Inspect`, the reader `puck lanes` uses). A lease a holder's descendants hold as a `child` of it is not shown. The lead reads it for lease pressure ([orchestration](../../.claude/skills/orchestration/SKILL.md#schedule-machines)).
 
 ```text
 build: idle

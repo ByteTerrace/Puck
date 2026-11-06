@@ -60,7 +60,7 @@ search <pattern> [path ...]     search contents recursively (default path: cwd)
                    basename, and a matching directory is pruned; with '/' -> matches
                    the cwd-relative path of a file
   -s               span mode: run over whole-file text, print start-end line ranges
-  -M <n>           max results (default 250, 0 = unlimited) — truncation is SILENT
+  -M <n>           max results (default 250, 0 = unlimited) — truncation is on stderr only
   --files          enumerate the files that would be searched — takes NO pattern;
                    in --files mode EVERY positional is a path
   -q               quiet: exit code only (--files included)
@@ -89,20 +89,17 @@ and exit 2. Write `search --files [path ...] [-g ...] [--not ...]`. `--files -q`
 is the bare existence probe (verified): no listing, exit 0 if any file would be
 searched and 1 if none.
 
-Defaults: the recursive walk skips `.git`, `.tmp`, `artifacts`, `bin`, `obj`,
-`node_modules`, `publish`, `BenchmarkDotNet.Artifacts`, agent worktrees under
-`.claude/worktrees`, directory links (junctions and symbolic links are never
-followed), and binary files (NUL-byte sniff of the first 4 KiB). The
-build-artifact names are pruned because this repo publishes the tool into
-`src/Puck.Cli/publish/`, whose generated `.xml` doc files are duplicates of the
-sources that would otherwise drain the `-M` cap before the walk reaches
-`src/Puck.Maths/`. `.claude/worktrees` is pruned because it holds live duplicate
-checkouts of this same repository: their copies answer a tree-wide query as if
-they were live consumers, which poisons find-usages and safe-to-delete sweeps.
-Explicitly named paths partly override this
-(verified): a named directory IS searched, even `bin`, `publish`, `.git` or
-`.claude/worktrees` — though skip-named subdirectories inside it are still
-pruned, and `-g`/`--not` still apply — and so is a file named inside one. A named
+Defaults: inside a git work tree the walk reads git's view of the tree, the
+files `git ls-files --cached --others --exclude-standard` names, so ignored
+build output, `.claude/scratch` snapshots and the duplicate checkouts under
+`.claude/worktrees` never answer a tree-wide query as live consumers. Outside a
+work tree, or under a root git ignores, it walks the disk and prunes the
+`FileWalk.SkipDirectories` names the help prints, agent worktrees and directory
+links (never followed). Binary files (NUL-byte sniff of the first 4 KiB) are
+skipped either way. Explicitly named paths partly override this: a named
+ignored directory IS searched, even `bin` or `.claude/scratch` — though
+skip-named subdirectories inside it are still pruned, and `-g`/`--not` still
+apply — and so is a file named inside one. A named
 file bypasses `-g` include globs entirely but still honors `--not` and the binary
 sniff, so naming a NUL-containing file (UTF-16, `.spv`, `.dxil`) silently exits 1
 with no warning. UTF-8 with permissive fallback; a leading byte-order mark is
@@ -337,7 +334,7 @@ the bare form wrongly also returns `gamma cat dog`). The span-mode analog uses
 | `rg -g '*.cs'` / `--glob` | `-g "*.cs"` — but see Globs above: no braces/classes, and `**` needs an intermediate dir |
 | `rg -g '!*.md'` (exclude) | `--not "*.md"` |
 | `rg -g '!dir/'` (exclude a directory) | `--not "dir"` — the basename form prunes the subtree; `--not "dir/**"` only works when `dir` sits directly under the cwd |
-| `grep -rn PATTERN` | `search -M 0 PATTERN` (recursive + line numbers are the default; `-M 0` because the verb otherwise stops at 250, silently) |
+| `grep -rn PATTERN` | `search -M 0 PATTERN` (recursive + line numbers are the default; `-M 0` because the verb otherwise stops at 250, saying so only on stderr) |
 | `grep -F` | `-F` |
 | `rg -U` / `grep -Pz` multiline, `(?s)` dotall | `-s` (and `_` for any-incl-newline; mind the CRLF caveat for `$` and `\n`) |
 | `grep -L` (files without match) | `-s -l "\A~(_*PATTERN_*)\z"` |
@@ -369,8 +366,9 @@ the bare form wrongly also returns `gamma cat dog`). The span-mode analog uses
   semantics).
 - **Case-sensitive by default** — pass `-i` (pattern only; never applies to
   `-g` globs). A stray case mismatch is the most common "why no results".
-- **The default `-M` 250 cap truncates SILENTLY** — no warning, no marker, and
-  the exit code stays 0. A "result" is mode-dependent: matching lines in
+- **The default `-M` 250 cap truncates stdout** — the exit code stays 0, and the
+  only sign is one stderr line (`search: stopped at the -M 250 cap; N results
+  matched`), which a pipe that keeps stdout alone never sees. A "result" is mode-dependent: matching lines in
   default mode (context lines are free), files with `-l`, spans with `-s`. Any
   exhaustive pass (find-all-usages, `-l` inventories, piping to `wc -l`) must
   pass `-M 0`. `-c` and `--files` are never capped, so `-c` is the safe way to

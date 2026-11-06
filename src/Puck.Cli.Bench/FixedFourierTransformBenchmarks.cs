@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Diagnosers;
 using Puck.Maths;
 
 namespace Puck.Cli.Bench;
@@ -8,7 +7,6 @@ namespace Puck.Cli.Bench;
 // from the SAME FixedComplex kernel (the fft.radix2-vs-direct-sum law's reference), at a length small enough for the
 // direct sum to finish in reasonable time. A fixed-point kernel, so the disassembler rides along.
 [MemoryDiagnoser]
-[DisassemblyDiagnoser(maxDepth: 3)]
 public class FftForwardVsDirectSum {
     private const int Length = 128;
 
@@ -67,7 +65,6 @@ public class FftForwardVsDirectSum {
 // Forward and Inverse latency alone, at a length representative of a small audio block and one representative of a
 // large one.
 [MemoryDiagnoser]
-[DisassemblyDiagnoser(maxDepth: 3)]
 public class FftForwardInverse {
     private FixedComplex[] m_smallForwardInput = [];
     private FixedComplex[] m_largeForwardInput = [];
@@ -174,7 +171,6 @@ public class FftForwardInverse {
 // computed directly with the same one-rounding FixedComplex multiply, at a length large enough for the asymptotic
 // gap to show.
 [MemoryDiagnoser]
-[DisassemblyDiagnoser(maxDepth: 3)]
 public class FftConvolveVsNaive {
     private const int Length = 1024;
 

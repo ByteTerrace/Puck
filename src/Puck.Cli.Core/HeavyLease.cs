@@ -14,6 +14,6 @@ public static class HeavyLease {
     public static CliLease Acquire(string repositoryRoot, string holder, TimeProvider clock, CancellationToken cancellationToken = default) {
         var root = CliLease.RootAsync(cancellationToken: cancellationToken, checkout: repositoryRoot).GetAwaiter().GetResult();
 
-        return CliLease.AcquireAsync(ancestor: ProcessInspection.IsAncestor, cancellationToken: cancellationToken, clock: clock, holder: holder, lane: CliLease.LaneOf(checkout: repositoryRoot), name: "heavy", root: root, wait: CliLease.DefaultWait).GetAwaiter().GetResult();
+        return CliLease.AcquireAsync(ancestor: ProcessInspection.IsAncestor, cancellationToken: cancellationToken, checkout: repositoryRoot, clock: clock, holder: holder, lane: CliLease.LaneOf(checkout: repositoryRoot), name: "heavy", root: root, wait: CliLease.DefaultWait).GetAwaiter().GetResult();
     }
 }

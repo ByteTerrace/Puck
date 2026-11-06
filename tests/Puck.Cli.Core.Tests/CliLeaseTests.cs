@@ -19,7 +19,7 @@ public sealed class CliLeaseTests : IDisposable {
         using var gpu = await Take(name: "gpu", holder: "working-gpu");
         var competitor = Take(name: "heavy", holder: "queued-first", wait: TimeSpan.FromMinutes(1), clock: clock);
         await clock.WhenArmedAsync(count: 1, ct: Token, dueTime: tick);
-        var window = CliLease.AcquireQuietAsync(m_root, "measurement", TimeSpan.FromMinutes(1), clock, Token);
+        var window = CliLease.AcquireQuietAsync(m_root, "measurement", TimeSpan.FromMinutes(1), clock, m_root, Token);
         await clock.WhenArmedAsync(count: 2, ct: Token, dueTime: tick);
         await Assert.ThrowsAsync<TimeoutException>(async () => await Take(name: "build", holder: "new-build", clock: clock));
         heavy.Dispose();
@@ -32,7 +32,7 @@ public sealed class CliLeaseTests : IDisposable {
         using var quiet = await window.WaitAsync(Token);
         Assert.False(competitor.IsCompleted);
         await Assert.ThrowsAsync<TimeoutException>(async () => await Take(name: "gpu", clock: clock));
-        using (var nested = await CliLease.AcquireAsync(m_root, "build", "nested", TimeSpan.Zero, clock, Token, ancestor: (pid, _) => pid == Environment.ProcessId)) {
+        using (var nested = await CliLease.AcquireAsync(m_root, "build", "nested", TimeSpan.Zero, clock, m_root, Token, ancestor: (pid, _) => pid == Environment.ProcessId)) {
             Assert.True(File.Exists(Path.Combine(m_root, "build/child/holder")));
         }
         await clock.WhenArmedAsync(count: 1, ct: Token, dueTime: tick);
@@ -46,7 +46,7 @@ public sealed class CliLeaseTests : IDisposable {
         var clock = new VirtualClock();
         using var gpu = await Take(name: "gpu");
         using var cancel = new CancellationTokenSource();
-        var window = CliLease.AcquireQuietAsync(m_root, "measurement", TimeSpan.FromMinutes(1), clock, cancel.Token);
+        var window = CliLease.AcquireQuietAsync(m_root, "measurement", TimeSpan.FromMinutes(1), clock, m_root, cancel.Token);
         await clock.WhenArmedAsync(count: 1, ct: Token, dueTime: TimeSpan.FromMilliseconds(100));
         await cancel.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await window);
@@ -80,7 +80,7 @@ public sealed class CliLeaseTests : IDisposable {
         await clock.ExpireAsync(dueTime: TimeSpan.FromMilliseconds(milliseconds: 50), pending: waiting, ct: Token);
         await Assert.ThrowsAsync<TimeoutException>(testCode: async () => await waiting);
         using var cancel = new CancellationTokenSource();
-        var cancelled = CliLease.AcquireAsync(root: m_root, name: "gpu", holder: "waiter", wait: TimeSpan.FromSeconds(seconds: 30), clock: clock, cancellationToken: cancel.Token);
+        var cancelled = CliLease.AcquireAsync(checkout: m_root, root: m_root, name: "gpu", holder: "waiter", wait: TimeSpan.FromSeconds(seconds: 30), clock: clock, cancellationToken: cancel.Token);
 
         await cancel.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: async () => await cancelled);
@@ -164,7 +164,7 @@ public sealed class CliLeaseTests : IDisposable {
         var waiting = new List<(string Holder, Task<CliLease> Task)>();
 
         async Task Queue(string name, string? lane = null) {
-            waiting.Add(item: (name, CliLease.AcquireAsync(root: m_root, name: "gpu", holder: name, lane: lane, wait: TimeSpan.FromMinutes(minutes: 10), clock: clock, cancellationToken: Token)));
+            waiting.Add(item: (name, CliLease.AcquireAsync(checkout: m_root, root: m_root, name: "gpu", holder: name, lane: lane, wait: TimeSpan.FromMinutes(minutes: 10), clock: clock, cancellationToken: Token)));
             await clock.WhenArmedAsync(count: waiting.Count, ct: Token, dueTime: tick);
         }
 
@@ -192,6 +192,31 @@ public sealed class CliLeaseTests : IDisposable {
     // A lane that has held the lease before ranks by when it was last served; a lane that never has must not rank first
     // for that reason alone, or every new lane (one per worktree) would overtake a lane already waiting, however long.
     [Fact]
+    public async Task AHolderAndAWaiterRecordTheirCheckoutsAndTheGuardDecidesLiveness() {
+        var clock = new VirtualClock();
+        var tick = TimeSpan.FromMilliseconds(milliseconds: 100);
+        var holderCheckout = Path.Combine(path1: m_root, path2: "checkouts", path3: "holding");
+        var waiterCheckout = Path.Combine(path1: m_root, path2: "checkouts", path3: "waiting");
+        var holder = await CliLease.AcquireAsync(checkout: holderCheckout, clock: clock, holder: "boot-runner", name: "gpu", root: m_root, wait: TimeSpan.Zero, cancellationToken: Token);
+        var waiting = CliLease.AcquireAsync(checkout: waiterCheckout, clock: clock, holder: "capture-runner", name: "gpu", root: m_root, wait: TimeSpan.FromMinutes(minutes: 10), cancellationToken: Token);
+
+        await clock.WhenArmedAsync(count: 1, ct: Token, dueTime: tick);
+        var state = CliLease.Inspect(name: "gpu", now: clock.GetUtcNow(), root: m_root);
+
+        Assert.True(condition: state.HolderAlive);
+        Assert.True(condition: CliPaths.Same(left: state.Checkout!, right: holderCheckout));
+        Assert.True(condition: CliPaths.Same(left: Assert.Single(collection: state.Queue).Checkout!, right: waiterCheckout));
+        // Five metadata lines at most, the shape every CLI on the machine reads; the checkout lives beside them.
+        Assert.InRange(actual: File.ReadAllLines(path: Path.Combine(path1: m_root, path2: "gpu/holder")).Length, high: 5, low: 4);
+
+        holder.Dispose();
+        clock.Advance(by: tick);
+        using (await waiting) {
+            Assert.True(condition: CliPaths.Same(left: CliLease.Inspect(name: "gpu", now: clock.GetUtcNow(), root: m_root).Checkout!, right: waiterCheckout));
+        }
+        Assert.Empty(collection: Directory.EnumerateFiles(path: Path.Combine(path1: m_root, path2: "gpu.checkouts")));
+    }
+    [Fact]
     public async Task ALaneThatNeverHeldTheLeaseDoesNotOvertakeALaneThatWaitedBeforeIt() {
         var clock = new VirtualClock();
         var tick = TimeSpan.FromMilliseconds(milliseconds: 100);
@@ -201,7 +226,7 @@ public sealed class CliLeaseTests : IDisposable {
         var waiting = new List<(string Holder, Task<CliLease> Task)>();
 
         async Task Queue(string name) {
-            waiting.Add(item: (name, CliLease.AcquireAsync(root: m_root, name: "gpu", holder: name, wait: TimeSpan.FromMinutes(minutes: 10), clock: clock, cancellationToken: Token)));
+            waiting.Add(item: (name, CliLease.AcquireAsync(checkout: m_root, root: m_root, name: "gpu", holder: name, wait: TimeSpan.FromMinutes(minutes: 10), clock: clock, cancellationToken: Token)));
             await clock.WhenArmedAsync(count: waiting.Count, ct: Token, dueTime: tick);
         }
 
@@ -291,7 +316,7 @@ public sealed class CliLeaseTests : IDisposable {
     public async Task InvalidAcquisitionNeverCreatesALease() {
         await Assert.ThrowsAsync<ArgumentException>(testCode: async () => await Take(name: "../outside"));
         await Assert.ThrowsAsync<ArgumentException>(testCode: async () => await Take(wait: TimeSpan.FromSeconds(seconds: -1)));
-        await Assert.ThrowsAsync<ArgumentException>(testCode: async () => await CliLease.AcquireAsync(root: m_root, name: "gpu", holder: "", wait: TimeSpan.Zero, clock: TimeProvider.System, cancellationToken: Token));
+        await Assert.ThrowsAsync<ArgumentException>(testCode: async () => await CliLease.AcquireAsync(checkout: m_root, root: m_root, name: "gpu", holder: "", wait: TimeSpan.Zero, clock: TimeProvider.System, cancellationToken: Token));
         Assert.False(condition: Directory.Exists(path: m_root));
     }
     [Fact]
@@ -372,7 +397,7 @@ public sealed class CliLeaseTests : IDisposable {
         } catch (ArgumentException) { }
     }
 
-    private Task<CliLease> Take(string name = "gpu", TimeSpan wait = default, TimeProvider? clock = null, string holder = "agents-slim") => CliLease.AcquireAsync(root: m_root, name: name, holder: holder, wait: wait, clock: (clock ?? TimeProvider.System), cancellationToken: Token);
+    private Task<CliLease> Take(string name = "gpu", TimeSpan wait = default, TimeProvider? clock = null, string holder = "agents-slim") => CliLease.AcquireAsync(checkout: m_root, root: m_root, name: name, holder: holder, wait: wait, clock: (clock ?? TimeProvider.System), cancellationToken: Token);
 
     public void Dispose() {
         ConfinedDirectory.RemoveTree(path: m_root);
