@@ -12,6 +12,50 @@ public sealed class CliLeaseTests : IDisposable {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     [Fact]
+    public async Task QuietPriorityLawDrainsTwoHoldersAndBlocksEveryCompetingGrant() {
+        var clock = new VirtualClock();
+        var tick = TimeSpan.FromMilliseconds(100);
+        using var heavy = await Take(name: "heavy", holder: "working-heavy");
+        using var gpu = await Take(name: "gpu", holder: "working-gpu");
+        var competitor = Take(name: "heavy", holder: "queued-first", wait: TimeSpan.FromMinutes(1), clock: clock);
+        await clock.WhenArmedAsync(count: 1, ct: Token, dueTime: tick);
+        var window = CliLease.AcquireQuietAsync(m_root, "measurement", TimeSpan.FromMinutes(1), clock, Token);
+        await clock.WhenArmedAsync(count: 2, ct: Token, dueTime: tick);
+        await Assert.ThrowsAsync<TimeoutException>(async () => await Take(name: "build", holder: "new-build", clock: clock));
+        heavy.Dispose();
+        clock.Advance(tick);
+        await clock.WhenArmedAsync(count: 2, ct: Token, dueTime: tick);
+        Assert.False(competitor.IsCompleted);
+        Assert.False(window.IsCompleted);
+        gpu.Dispose();
+        clock.Advance(tick);
+        using var quiet = await window.WaitAsync(Token);
+        Assert.False(competitor.IsCompleted);
+        await Assert.ThrowsAsync<TimeoutException>(async () => await Take(name: "gpu", clock: clock));
+        using (var nested = await CliLease.AcquireAsync(m_root, "build", "nested", TimeSpan.Zero, clock, Token, ancestor: (pid, _) => pid == Environment.ProcessId)) {
+            Assert.True(File.Exists(Path.Combine(m_root, "build/child/holder")));
+        }
+        await clock.WhenArmedAsync(count: 1, ct: Token, dueTime: tick);
+        quiet.Dispose();
+        clock.Advance(tick);
+        using var resumed = await competitor.WaitAsync(Token);
+    }
+
+    [Fact]
+    public async Task CancelledQuietReservationReleasesPriorityAndPartialHoldings() {
+        var clock = new VirtualClock();
+        using var gpu = await Take(name: "gpu");
+        using var cancel = new CancellationTokenSource();
+        var window = CliLease.AcquireQuietAsync(m_root, "measurement", TimeSpan.FromMinutes(1), clock, cancel.Token);
+        await clock.WhenArmedAsync(count: 1, ct: Token, dueTime: TimeSpan.FromMilliseconds(100));
+        await cancel.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await window);
+        using var build = await Take(name: "build");
+        using var heavy = await Take(name: "heavy");
+        Assert.Empty(CliLease.Inspect(m_root, "quiet", clock.GetUtcNow()).Queue);
+    }
+
+    [Fact]
     public async Task ALeaseExcludesAnotherHolderAndReleasesOnDispose() {
         using (var first = await Take()) {
             var lines = File.ReadAllLines(path: Path.Combine(path1: m_root, path2: "gpu/holder"));
