@@ -157,8 +157,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public static readonly WorkKind GpuSelectNanoseconds = new(name: "sdf.mesh-gi.gpu-select-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Queued trace jobs cancelled because their scene was replaced before admission.</summary>
     public static readonly WorkKind GpuCancelled = new(name: "sdf.mesh-gi.gpu-cancelled", unit: "jobs", workClass: WorkClass.Pacing);
-    /// <summary>Traversal stack assertions; a builder-certified scene must leave this at zero.</summary>
-    public static readonly WorkKind StackOverflow = new(name: "sdf.mesh-gi.stack-overflow", unit: "walks", workClass: WorkClass.Pacing);
+    /// <summary>Traversal stack or step-limit assertions; valid scenes must leave this at zero.</summary>
+    public static readonly WorkKind TraversalFaults = new(name: "sdf.mesh-gi.traversal-faults", unit: "walks", workClass: WorkClass.Pacing);
+    /// <summary>CPU sky projections captured for probe lighting.</summary>
+    public static readonly WorkKind EnvironmentProjections = new(name: "sdf.mesh-gi.environment.projections", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts each relight cycle whose oldest lighting was past the budget's age target.</summary>
     public static readonly WorkKind Behind = new(name: "sdf.mesh-gi.behind", unit: "cycles", workClass: WorkClass.Pacing);
     /// <summary>Counts camera hit traces, including rejected samples inside opaque geometry.</summary>
@@ -171,7 +173,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     /// <summary>Device time spent gathering or tracing exposure meter samples.</summary>
     public static readonly WorkKind GpuMeterNanoseconds = new(name: "sdf.mesh-gi.gpu-meter-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
-    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, GpuRays, GpuTraceNanoseconds, GpuRelightNanoseconds, GpuSelectNanoseconds, GpuMeterNanoseconds, GpuCancelled, StackOverflow, Behind, CameraTraces, CameraRelights, Meters];
+    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, GpuRays, GpuTraceNanoseconds, GpuRelightNanoseconds, GpuSelectNanoseconds, GpuMeterNanoseconds, GpuCancelled, TraversalFaults, EnvironmentProjections, Behind, CameraTraces, CameraRelights, Meters];
 
     /// <summary>Gets the kinds the counters count, in report order, for a reader that registers the source before a
     /// volume exists.</summary>
@@ -342,7 +344,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private Task? m_build;
     private Lighting? m_lighting;
     private int m_lightingKey;
-    private int m_skyKey;
+    private SdfSkyBlock m_lightingSky;
+    private readonly SdfSkyLayer[] m_lightingSkyLayers = new SdfSkyLayer[SdfSky.MaxLayers];
     private int m_localKey;
     private int m_localVersion;
     private long m_lightingCheckedAt;
@@ -1265,7 +1268,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             captureLights = m_captureLights;
         }
         var localKey = HashCode.Combine(value1: frame.IndirectGains, value2: frame.IndirectSources, value3: MaterialsKey(program: frame.Program));
-        var skyKey = 0;
+        var sameSky = true;
+        var skyBlock = default(SdfSkyBlock);
         var records = frame.Lights.Records;
 
         for (var index = 0; (index < frame.Lights.Count); index++) {
@@ -1282,12 +1286,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             if (light.Kind == SdfLightKind.Directional) { key = HashCode.Combine(value1: key, value2: index, value3: light); }
         }
         if ((frame.IndirectSources & SdfIndirectSources.Sky) != 0) {
-            frame.Sky.Pack(captureLights, frame.FarDistance, m_skyDetails, out var block, m_skyLayers);
-            skyKey = block.GetHashCode();
-            foreach (var layer in m_skyLayers) { skyKey = HashCode.Combine(value1: skyKey, value2: layer); }
+            frame.Sky.Pack(captureLights, frame.FarDistance, m_skyDetails, out skyBlock, m_skyLayers);
+            sameSky = SdfSkyEnvironment.SameMap(skyBlock, m_skyLayers, m_lightingSky, m_lightingSkyLayers);
         }
-        if ((key == m_lightingKey) && (skyKey == m_skyKey) && (m_lighting is not null)) { return; }
-        if (!grid.Enabled && !frame.ConvergesLighting && (m_lighting is not null) && (Stopwatch.GetElapsedTime(startingTimestamp: m_lightingCheckedAt) < LightingInterval)) { return; }
+        if ((key == m_lightingKey) && sameSky && (m_lighting is not null)) { return; }
+        if (!frame.ConvergesLighting && (m_lighting is not null) && (Stopwatch.GetElapsedTime(startingTimestamp: m_lightingCheckedAt) < LightingInterval)) { return; }
 
         var skyOnly = ((key == m_lightingKey) && (m_lighting is not null));
         if ((localKey != m_localKey) || (m_lighting is null)) {
@@ -1296,12 +1299,14 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
 
         var captured = Lighting.Capture(frame: frame, captureLights: captureLights, localVersion: m_localVersion, previous: m_lighting, version: (m_lightingVersion + 1));
+        if ((frame.IndirectSources & SdfIndirectSources.Sky) != 0) { Counters.Count(EnvironmentProjections); }
         // Exposure reads the current capture's bound even when its irradiance stays in the same grid cell.
         m_skyPeak = captured.SkyPeak;
 
         m_lightingCheckedAt = Stopwatch.GetTimestamp();
         m_lightingKey = key;
-        m_skyKey = skyKey;
+        m_lightingSky = skyBlock;
+        m_skyLayers.CopyTo(m_lightingSkyLayers, 0);
         if (skyOnly && captured.SkyMatches(other: m_lighting!, exact: frame.ConvergesLighting || grid.Enabled)) { return; }
         m_lightingVersion++;
         m_lighting = captured;

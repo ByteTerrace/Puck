@@ -188,6 +188,29 @@ public sealed partial class SdfMeshIrradianceLawTests {
         return sky;
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CameraOnlyTwinkleDoesNotProjectOrRelightConvergedLighting(bool grid) {
+        var sky = UniformSky(new Vector3(0.01f, 0.02f, 0.1f));
+        _ = sky.Add(label: "camera stars", parameters: new SdfSkyStars { Brightness = 2f }, visibility: SdfSkyVisibility.Camera);
+        var gains = new SdfIndirectGains(0, 0, 0, 0, 1);
+        var frame = Frame() with {
+            Sky = sky, Lights = new SdfLights(), IndirectGains = gains, IndirectSources = gains.Sources,
+            ConvergesLighting = true, IndirectBounces = 0,
+            IndirectLightingGrid = grid ? new SdfIndirectLightingGrid(1, 0.125f) : default,
+        };
+        var volume = Volume();
+        volume.Stage(frame, SdfIndirectTier.Medium, false, _ => { });
+        var relit = volume.Counters.Read(SdfMeshIrradiance.Relit);
+        for (var tick = 1; tick <= 8; tick++) {
+            sky.First<SdfSkyStars>().TwinklePhase = tick * 0.1f;
+            volume.Stage(frame, SdfIndirectTier.Medium, false, _ => { });
+        }
+        Assert.Equal(1, volume.Counters.Read(SdfMeshIrradiance.EnvironmentProjections));
+        Assert.Equal(relit, volume.Counters.Read(SdfMeshIrradiance.Relit));
+    }
+
     /// <summary>A dim blue added to a bright red sky relights the volume: the blue the slab sends back reaches the probes
     /// as it does in a fresh volume under the new sky, though it is a two-thousandth of the red.</summary>
     [Fact]

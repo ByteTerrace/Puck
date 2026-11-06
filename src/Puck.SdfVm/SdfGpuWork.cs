@@ -367,7 +367,7 @@ public sealed class SdfGpuWork : IDisposable {
         var began = Stopwatch.GetTimestamp();
         var uploaded = 0;
         for (var index = 0; (index < SlotCount); index++) {
-            if (uploaded >= UploadBudgetBytes || Stopwatch.GetElapsedTime(began) >= HostBudget) { return; }
+            if (uploaded >= UploadBudgetBytes || Stopwatch.GetElapsedTime(began) >= HostBudget) { m_budgetHolds++; return; }
             var slot = m_slots[index];
 
             if ((slot.Job is not null) || (slot.Lease is { Released: false })) { continue; }

@@ -106,7 +106,17 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         estimatedSeconds = 0;
         lock (m_gate) {
             if (m_inFlight || !tables.BindsBackgroundWork) { return false; }
-            if (m_sceneUpload is not null) { return TakeSceneUpload(out job, out estimatedSeconds); }
+            if (m_sceneUpload is { } upload) {
+                if (!upload.Cancelled && m_volume.KeepsGpuScene(upload.Scene)) { return TakeSceneUpload(out job, out estimatedSeconds); }
+                // Stop producing immediately, but reclaim addresses only after the worker and every submitted copy
+                // retire. Completed immutable geometry is retained for the next scene, so roster churn cannot restart
+                // it forever. No frame thread joins a blocked writer or publishes an abandoned prefix.
+                upload.Cancel();
+                if (!upload.Work.IsCompleted || m_sceneInFlight != 0) { return false; }
+                if (upload.Export is { } export) { m_sceneArena.Abandon(export); }
+                upload.Dispose();
+                m_sceneUpload = null;
+            }
             if (!m_pending.TryPeek(out var pending)) { return false; }
             if (!(pending.CommitSource is null && !pending.Meter ? m_volume.KeepsGpuScene(pending.Scene) :
                 m_volume.KeepsGpuPublication(pending.Scene, pending.Geometry, pending.Window)) ||
@@ -356,7 +366,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         if (holdsOutput) { query.HeldReadback = readback; }
         else { readback.Release(); }
         var result = query.CommitSource is not null ? readWords : readWords[..^1];
-        if (query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.StackOverflow, readWords[^1]); }
+        if (query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.TraversalFaults, readWords[^1]); }
         if (query.Lighting is null && query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.GpuRays, query.Origins.Length * SdfMeshProbeDepth.HitCount); }
         if (readback.GpuSeconds is { } seconds) { m_volume.Counters.Add(query.Meter ? SdfMeshIrradiance.GpuMeterNanoseconds : query.Selection ? SdfMeshIrradiance.GpuSelectNanoseconds : query.Lighting is null && query.CommitSource is null ? SdfMeshIrradiance.GpuTraceNanoseconds : SdfMeshIrradiance.GpuRelightNanoseconds, (long)(seconds * 1e9)); }
         if (query.Meter) {
@@ -370,7 +380,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         query.Answer.SetResult(result);
     }
     public void Abandon(object job) {
-        if (job is SceneChunk) { lock (m_gate) { m_inFlight = false; } return; }
+        if (job is SceneChunk chunk) { lock (m_gate) { m_sceneInFlight--; chunk.Dispose(); } return; }
         var query = (Job)job;
         lock (m_gate) { m_inFlight = false; }
         query.Scene.Dispose();

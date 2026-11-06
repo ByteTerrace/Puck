@@ -196,7 +196,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             instances: instances,
             retained: Retain(geometries: geometries, previous: previous),
             trianglesBuilt: trianglesBuilt
-        ) { Materials = order, Counters = counters ?? new(SdfMeshIrradiance.SourceName, [SdfMeshIrradiance.StackOverflow]) };
+        ) { Materials = order, Counters = counters ?? new(SdfMeshIrradiance.SourceName, [SdfMeshIrradiance.TraversalFaults]) };
     }
 
     /// <summary>Gets the program material ids the scene's triangles carry, in increasing order: the materials a ray that
@@ -395,7 +395,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             var hitRight = Slab(low: nodes[right].Low, high: nodes[right].High, origin: origin, inverse: inverse, maximum: distance, entry: out var rightEntry);
 
             if (top + (hitLeft ? 1 : 0) + (hitRight ? 1 : 0) > stack.Length) {
-                counters.Count(SdfMeshIrradiance.StackOverflow);
+                counters.Count(SdfMeshIrradiance.TraversalFaults);
                 throw new InvalidOperationException("mesh GI traversal exceeded its builder-certified stack depth.");
             }
 

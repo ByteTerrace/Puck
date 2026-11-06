@@ -28,7 +28,9 @@ The CPU twin is `Unblocked` through `Walk` and `ILeaves` any-hit leaves.
 `Hierarchy.BuildNode` bounds both hierarchies to `StackDepth - 2` edges from
 the root, switching to median splits when only a balanced subtree fits and
 refusing a named hierarchy that cannot fit. Walks check before pushing and
-count `sdf.mesh-gi.stack-overflow`; CPU overflow also throws. GPU jobs reset
+count `sdf.mesh-gi.traversal-faults`; CPU overflow also throws. GPU walks also
+stop at `SdfMeshProbeTrace.MaxWalkSteps` node visits across both levels and
+count the same assertion, so a single-child cycle cannot hang a dispatch. GPU jobs reset
 and read the assertion word after the job's logical output under its fence.
 The entry point supplies its generated result stride; retained slot capacity
 can grow without moving that word or causing a readback of unused capacity.
@@ -82,10 +84,17 @@ top hierarchy, braid entries and instance records, and only new geometry gets
 uploaded. A worker packs these changed ranges into a bounded queue of
 `SdfGpuWork.UploadChunkBytes` blocks. B1 admits their copies under its GPU,
 host-time and byte budgets; `GpuRegion` remains the only uploader, with a
-one-word CPU shadow. No hierarchy serialization runs on the frame thread.
+one-word CPU shadow and one staging slot per service slot. Chunk arrays are pooled
+and returned only after their copy fence, or after cancellation drains the writer.
+No hierarchy serialization runs on the frame thread.
 `SdfMeshProbeGpuWork.TakeSceneUpload` excludes queries during replacement;
 the old root and allocations stay intact until the new root's last upload
-fence, then `CompleteSceneUpload` publishes and frees retired ranges. Query
+fence, then `CompleteSceneUpload` publishes and frees retired ranges. The root
+is admitted only after the channel reports completion (all chunks read) and
+every chunk fence retires. A stale scene cancels its writer; its obsolete prefix
+is reclaimed after both writer and fences retire. Immutable geometry retains
+fence-proven chunk progress in `GpuArena.Complete`, and the next export resumes
+its remaining words, so repeated roster changes cannot restart a large geometry. Query
 admission rechecks mesh residency and placement version after publication:
 an intervening mesh relocation repacks instance addresses before any trace.
 A changed mesh roster whose referenced vertex, index and material addresses

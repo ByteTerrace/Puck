@@ -1715,6 +1715,17 @@ and owns the coarse levels' connectivity visibility (G3), and the
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) holds
 the fixed poses and the approaches already rejected.
 
+- [medium] Probe scene capacity retains its high-water allocation:
+  `GpuArena.Allocate` (`src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:147`)
+  never lowers `Words`, and `RecordSceneUpload`
+  (`src/Puck.SdfVm/SdfMeshProbeGpuWork.Scene.cs:33`) only grows the region.
+  Reclaim capacity after a large scene leaves, without moving a published
+  root or storage still read by an in-flight submission. Owner: lighting batch.
+- [medium] Unify the keyed placement arenas in `SdfMeshIrradianceScene.GpuArena`
+  (`src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:140`) and `SdfMeshRegionArena`
+  (`src/Puck.SdfVm/SdfMeshRegionArena.cs:20`). Both own keyed placement over
+  shared free ranges; one mechanism should retain their distinct payloads and
+  publication lifetimes. Owner: lighting batch.
 - Attribute `SdfMeshIrradiance.DescribeRelightReference`'s outdoor next-bounce
   discrepancy at `world.probe -3 1 -5 0 1 0`, after the fixed outdoor visit
   with day held. Separate retraced hit differences, shadow rays and the
