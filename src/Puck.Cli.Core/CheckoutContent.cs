@@ -11,8 +11,9 @@ namespace Puck.Cli;
 /// inside it), and, for every path under a root that <c>git status</c> reports as modified, staged, deleted or
 /// untracked, the path, its status and the SHA-256 of the bytes on disk. Files git ignores are not inputs.
 /// A tree with no <c>.git</c> entry of its own, such as a <c>git archive</c> extraction (even one inside another
-/// repository), has no commit to read: every file under a root, except <c>bin</c> and <c>obj</c> output, is read from
-/// disk as a change.
+/// repository), has no commit to read: every file under a root that the tree's own <c>.gitignore</c> rules keep (and
+/// never <c>bin</c> or <c>obj</c> output) is read from disk as a change, so ignored output a build writes beside its
+/// sources is no input.
 /// <para>
 /// Two checkouts that read the same snapshot hold the same content under those roots. The converse does not hold:
 /// the same bytes committed in one checkout and uncommitted in another read differently, so a difference is a reason
@@ -62,14 +63,44 @@ public static class CheckoutContent {
 
         return (Directory.Exists(path: entry) || File.Exists(path: entry));
     }
-    // The tree's own bytes: every file under a root is a change, hashed from disk, with build output (bin, obj) left out
-    // as git leaves it out of a checkout, since the archive carries no ignore rules of its own.
+    // The files under the roots that the tree's own ignore rules keep, as git judges them: an archive carries its
+    // .gitignore files, so a throwaway empty repository pointed at the tree lists exactly what a checkout of it would
+    // not ignore. A build that writes ignored output beside its sources (compiled shaders) then changes no input. Null
+    // when git cannot answer, which leaves the bin/obj prune alone.
+    private static HashSet<string>? Unignored(string repositoryRoot, IReadOnlyList<string> roots) {
+        DirectoryInfo? index = null;
+
+        try {
+            index = Directory.CreateTempSubdirectory(prefix: "puck-tree-index-");
+            if (!TryGit(arguments: ["init", "--bare", "--quiet"], reason: out _, repositoryRoot: index.FullName, stdout: out _)
+                || !TryGit(
+                    arguments: [$"--git-dir={index.FullName}", "--work-tree=.", "-c", "maintenance.auto=false", "-c", "gc.auto=0", "--literal-pathspecs", "ls-files", "-z", "--others", "--exclude-standard", "--", .. roots],
+                    reason: out _,
+                    repositoryRoot: repositoryRoot,
+                    stdout: out var listed
+                )) {
+                return null;
+            }
+
+            return listed.Split(separator: '\0', options: StringSplitOptions.RemoveEmptyEntries).ToHashSet(comparer: StringComparer.Ordinal);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            return null;
+        } finally {
+            if (index is not null) {
+                try { index.Delete(recursive: true); } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) { }
+            }
+        }
+    }
+    // The tree's own bytes: every file under a root that the tree's ignore rules keep is a change, hashed from disk;
+    // build output (bin, obj) is left out even when git cannot judge the rules.
     private static bool TryReadDisk(string repositoryRoot, IReadOnlyList<string> roots, out Snapshot snapshot, out string reason) {
         snapshot = new Snapshot(Changes: [], Committed: string.Empty);
 
         var changes = new SortedDictionary<string, Change>(comparer: StringComparer.Ordinal);
+        var kept = Unignored(repositoryRoot: repositoryRoot, roots: roots);
 
         void Add(string relative) {
+            if ((kept is not null) && !kept.Contains(item: relative)) { return; }
             var content = ContentPin.OfFile(path: Path.Combine(
                 path1: repositoryRoot,
                 path2: relative
