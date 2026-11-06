@@ -43,6 +43,14 @@ public interface ISdfGpuWorkClient : IDisposable {
     /// completed. The client must not throw from this cleanup.</summary>
     /// <param name="job">The job.</param>
     void Abandon(object job);
+    /// <summary>Releases the client's own buffers for a slot that it last recorded a job into before
+    /// <paramref name="idleBefore"/>. The service calls it only for a free slot, one with no job in flight and its last
+    /// readback released (the same condition under which it reuses the slot), so no job of the client's reads the
+    /// buffers it releases; a later job in the slot creates them again at its own size.</summary>
+    /// <param name="slot">The slot, from zero to <see cref="SdfGpuWork.SlotCount"/>.</param>
+    /// <param name="idleBefore">The <see cref="Stopwatch.GetTimestamp"/> reading a slot's last recording must precede for
+    /// its buffers to go.</param>
+    void ReleaseIdle(int slot, long idleBefore) { }
     /// <summary>Gets the bytes of the client's own buffers for its jobs, by the memory they live in.</summary>
     GpuMemoryBytes OwnedBytes { get; }
     /// <summary>Gets the category the client's jobs count under in <see cref="GpuQueueWork"/>.</summary>
@@ -157,6 +165,10 @@ public readonly ref struct SdfGpuWorkRecording {
 /// (<see cref="SdfGpuWorkReadback.Release"/>). The service is the slot's one owner: a client reaches a slot only through
 /// the recording it is handed for one call and the readback it is handed until it releases it, so no caller writes a
 /// slot it did not take.</para>
+/// <para>Sizing: a slot's readback grows to the largest copy a job in it makes, and a free slot gives it back once no copy
+/// in the last <see cref="IdleSeconds"/> needed that size, as each client gives back its own buffers for a slot it has
+/// not recorded into for as long (<see cref="ISdfGpuWorkClient.ReleaseIdle"/>): buffers sized for a cold bake's largest
+/// batch go once the bake settles rather than living as long as the tables.</para>
 /// <para>Budget: the service takes at most <see cref="GpuShare"/> of the GPU's time, by each job's measured GPU time
 /// (its timestamps, or its client's estimate on a queue without them), and keeps at most <see cref="SlotCount"/> jobs in
 /// flight.</para>
@@ -166,6 +178,8 @@ public sealed class SdfGpuWork : IDisposable {
     public const int SlotCount = 4;
     /// <summary>The share of the GPU's time background work takes at most, measured over each job's GPU time.</summary>
     public const double GpuShare = 0.25;
+    /// <summary>The seconds a free slot keeps buffers no job in that span needed (<see cref="ISdfGpuWorkClient.ReleaseIdle"/>).</summary>
+    public const double IdleSeconds = 2.0;
     /// <summary>The largest host payload one background upload job stages: one MiB.</summary>
     public const int UploadChunkBytes = 1 << 20;
     /// <summary>The most host payload bytes one pump stages.</summary>
@@ -266,8 +280,8 @@ public sealed class SdfGpuWork : IDisposable {
             m_pumps++;
             Poll();
             if (m_clients.Count == 0) { return; }
-            if (!tables.BindsBackgroundWork) { m_unbound++; return; }
-            Refill(tables: tables);
+            if (tables.BindsBackgroundWork) { Refill(tables: tables); } else { m_unbound++; }
+            ReleaseIdle();
         } catch {
             m_faulted = true;
             throw;
@@ -285,7 +299,7 @@ public sealed class SdfGpuWork : IDisposable {
     }
 
     /// <summary>Describes the buffers the work holds for <c>world.residency</c>: its slots' readbacks and its clients'
-    /// own buffers, by the memory they live in, held at their largest job's size until the tables go.</summary>
+    /// own buffers, by the memory they live in, each held at the size its recent jobs needed.</summary>
     /// <returns>One line.</returns>
     public string DescribeBytes() {
         var readbacks = 0UL;
@@ -356,6 +370,27 @@ public sealed class SdfGpuWork : IDisposable {
                 client.Abandon(job: job);
                 throw;
             }
+        }
+    }
+    // Gives back what each free slot holds beyond its recent jobs' needs: every client's own buffers for it, and its
+    // readback once no copy in the last window needed its size. A free slot is the one Refill would reuse: no job in flight
+    // and its last readback released, so no job and no client reads what goes.
+    private void ReleaseIdle() {
+        var now = Stopwatch.GetTimestamp();
+        var window = (long)(IdleSeconds * Stopwatch.Frequency);
+
+        for (var index = 0; (index < SlotCount); index++) {
+            var slot = m_slots[index];
+
+            if ((slot.Job is not null) || (slot.Lease is { Released: false })) { continue; }
+            foreach (var client in m_clients) { client.ReleaseIdle(idleBefore: (now - window), slot: index); }
+            if ((now - slot.WindowStart) < window) { continue; }
+            if ((slot.Readback is { } readback) && ((slot.WindowBytes == 0UL) || (readback.SizeBytes > Granule(bytes: slot.WindowBytes)))) {
+                readback.Dispose();
+                slot.Readback = null;
+            }
+            slot.WindowStart = now;
+            slot.WindowBytes = 0UL;
         }
     }
     // Replaces a job's estimated charge with its measured GPU time, when the queue writes timestamps.
@@ -481,6 +516,7 @@ public sealed class SdfGpuWork : IDisposable {
             sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
             destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host);
         target.ReadbackBytes = bytes;
+        target.WindowBytes = Math.Max(val1: target.WindowBytes, val2: bytes);
         target.Copied = true;
     }
 
@@ -495,7 +531,8 @@ public sealed class SdfGpuWork : IDisposable {
         return (((Math.Max(val1: bytes, val2: 1UL) + (Bytes - 1UL)) / Bytes) * Bytes);
     }
     // One slot: its command buffer, fence and timestamp readback, the job in it and its client, the readback its job
-    // copied into and how many bytes, and the GPU seconds the job was charged.
+    // copied into and how many bytes, the GPU seconds the job was charged, and the window its readback's size is judged
+    // over: when it began and the most bytes a copy needed since.
     private sealed class Slot(IGpuCommandPool Commands, IGpuSubmissionFence Fence, IGpuReadbackBuffer Times) {
         public IGpuCommandPool Commands { get; } = Commands;
         public IGpuSubmissionFence Fence { get; } = Fence;
@@ -503,6 +540,8 @@ public sealed class SdfGpuWork : IDisposable {
         public SdfGpuWorkReadback? Lease { get; set; }
         public IGpuReadbackBuffer? Readback { get; set; }
         public ulong ReadbackBytes { get; set; }
+        public long WindowStart { get; set; }
+        public ulong WindowBytes { get; set; }
         public bool Copied { get; set; }
         public object? Job { get; set; }
         public ISdfGpuWorkClient? Client { get; set; }

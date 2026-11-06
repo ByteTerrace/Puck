@@ -12,6 +12,8 @@ namespace Puck.SdfVm;
 /// (<see cref="SdfMeshPathBake.Complete(SdfMeshBakeBatch, ReadOnlySpan{byte})"/>). Each slot holds the batch's own inputs and outputs: its pass block, its
 /// point table (sample points, then saved poses), its sampled table, its instance masks and samples, and a World set
 /// binding the tables' current tables with that point table and sampled table in place of theirs.
+/// <para>A slot's point and sampled tables, instance masks and samples grow to its largest batch and go once the slot has
+/// recorded no batch for <see cref="SdfGpuWork.IdleSeconds"/> (<see cref="ReleaseIdle"/>), so a settled bake holds none.</para>
 /// <para>Invariant: a batch samples the program the tables last uploaded. The bake takes a batch only for the program
 /// it meshes, and only when that is the tables' uploaded program (<see cref="SdfWorldTables.BackgroundProgram"/>), so
 /// the field the World set binds is the field the batch's groups were planned from.</para>
@@ -124,6 +126,8 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         var pointBytes = (((ulong)Math.Max(val1: 1, val2: batch.InputRows)) * PointRowBytes);
         var replaced = false;
 
+        slot.LastRecorded = System.Diagnostics.Stopwatch.GetTimestamp();
+
         var sampledBytes = (((ulong)batch.SampledWords) * sizeof(uint));
 
         slot.Points = Ensure(buffer: slot.Points, bytes: pointBytes, create: bytes => m_gpu.BufferFactory.CreateHostVisible(name: Name(part: "points", index: index), sizeBytes: bytes, usage: GpuBufferUsage.Storage), replaced: ref replaced);
@@ -203,6 +207,25 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
     }
     /// <inheritdoc/>
     public void Abandon(object job) => m_bake.Abandon(batch: (SdfMeshBakeBatch)job);
+    /// <inheritdoc/>
+    /// <remarks>Disposes the slot's point and sampled tables, instance masks and samples; the slot's next batch creates
+    /// them at its own size and rewrites its pass sets and sampled table.</remarks>
+    public void ReleaseIdle(int slot, long idleBefore) {
+        var resources = m_slots[slot];
+
+        if ((resources.LastRecorded >= idleBefore) || ((resources.Points ?? resources.Sampled ?? resources.Masks ?? resources.Samples) is null)) { return; }
+        resources.Points?.Dispose();
+        resources.Sampled?.Dispose();
+        resources.Masks?.Dispose();
+        resources.Samples?.Dispose();
+        resources.Points = null;
+        resources.Sampled = null;
+        resources.Masks = null;
+        resources.Samples = null;
+        resources.SampledWritten = null;
+        resources.SampledHandles = 0;
+        resources.PassSetsWritten = false;
+    }
     /// <inheritdoc/>
     public GpuQueueCategory Category => GpuQueueCategory.Bake;
     /// <inheritdoc/>
@@ -299,5 +322,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         public IGpuBuffer? Masks { get; set; }
         public IGpuBuffer? Samples { get; set; }
         public bool PassSetsWritten { get; set; }
+        // The Stopwatch reading of the slot's last recorded batch.
+        public long LastRecorded { get; set; }
     }
 }
