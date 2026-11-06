@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Abstractions;
 using Puck.Cli.Affected;
+using Puck.Cli.Bench;
 
 namespace Puck.Cli;
 
@@ -29,6 +30,7 @@ public static class MeasureCommand {
             if (selected.Length == 0 || selected.Any(static metric => !metric.StartsWith('/')) || selected.Distinct(StringComparer.Ordinal).Count() != selected.Length) {
                 return CliExit.Refuse("measure request", "--metric", "use distinct JSON pointers starting with /.");
             }
+            foreach (var metric in selected) { ValidateMetric(arguments, metric); }
             if (string.IsNullOrWhiteSpace(parse.GetValue(name)) || string.IsNullOrWhiteSpace(parse.GetValue(decides))) {
                 return CliExit.Refuse("measure request", "question", "--name and --decides must be nonempty.");
             }
@@ -48,7 +50,7 @@ public static class MeasureCommand {
         list.SetAction(async (_, token) => {
             var queue = await QueueAsync(RepositoryPaths.RequireRoot(), token).ConfigureAwait(false);
             foreach (var (_, item) in ReadQueue(queue)) {
-                Console.WriteLine($"{item.Id} {(item.Report is null ? "pending" : "answered")} {item.Name}: {item.Decides}{(item.Report is null ? "" : $"; {item.Report}")}");
+                Console.WriteLine($"{item.Id} {(item.Failure is not null ? "failed" : item.Report is null ? "pending" : "answered")} {item.Name}: {item.Decides}{(item.Report is null ? "" : $"; {item.Report}")}{(item.Failure is null ? "" : $"; {item.Failure}")}");
             }
             return 0;
         });
@@ -73,23 +75,34 @@ public static class MeasureCommand {
             using var runner = FileLock.TryAcquire(Path.Combine(queue, "run.guard"));
             if (runner is null) { return CliExit.Refuse("measure run", "queue", "another measurement window is already draining it."); }
             var selected = parse.GetValue(ids) ?? [];
-            var pending = ReadQueue(queue).Where(row => row.Item.Report is null && (selected.Length == 0 || selected.Contains(row.Item.Id, StringComparer.Ordinal))).ToArray();
-            if (selected.Any(id => !pending.Any(row => row.Item.Id == id))) { return CliExit.Refuse("measure run", "requests", "an ID is missing or already answered."); }
+            var pending = ReadQueue(queue).Where(row => row.Item.Report is null && row.Item.Failure is null && (selected.Length == 0 || selected.Contains(row.Item.Id, StringComparer.Ordinal))).ToArray();
+            if (selected.Any(id => !pending.Any(row => row.Item.Id == id))) { return CliExit.Refuse("measure run", "requests", "an ID is missing, failed or already answered."); }
             if (pending.Length == 0) { Console.WriteLine("measure: no pending questions."); return 0; }
             var leases = await CliLease.RootAsync(checkout, token).ConfigureAwait(false);
             using var quiet = await CliLease.AcquireQuietAsync(leases, parse.GetValue(holder)!, TimeSpan.FromSeconds(waiting), clock, checkout, token, ProcessInspection.IsAncestor).ConfigureAwait(false);
             if (settling > 0 && await settleWait(TimeSpan.FromSeconds(settling), TimeSpan.FromSeconds(waiting + (double)settling), Console.Error, token).ConfigureAwait(false) is { } reason) {
                 return CliExit.Refuse("measure run", "settle", reason);
             }
-            foreach (var (path, item) in pending) {
-                token.ThrowIfCancellationRequested();
-                var directory = Path.Combine(Path.GetDirectoryName(path)!, "answers", Guid.NewGuid().ToString("N"));
-                Directory.CreateDirectory(directory);
-                var samples = new List<MeasurementSample>();
-                var report = Path.Combine(directory, "report.json");
+            return await DrainAsync(pending, rounds, (item, side, round, directory, cancellation) => SampleAsync(item, side, round, directory, bound, cancellation), token).ConfigureAwait(false);
+        });
+        run.Detail("Use: puck measure run [request-ids...] [--repeats 5] [--wait 600] [--settle 30]\nTakes one priority quiet lease for the pending snapshot. Each request runs before, after in repeated pairs. Failed commands or missing/nonfinite metrics mark that request failed and continue the queue; partial evidence stays. Re-file a corrected request. Reports record raw samples, median and IQR for before, after and paired after-minus-before differences. --decides remains a human criterion.");
+        return new Command("measure", "Queue frozen before/after timing questions and answer them in a priority quiet window.") { request, list, run };
+    }
+
+    // One request owns its failure boundary: only a complete set of paired samples can publish an answer.
+    public static async Task<int> DrainAsync(IEnumerable<(string Path, MeasurementRequest Item)> pending, int rounds,
+        Func<MeasurementRequest, string, int, string, CancellationToken, Task<MeasurementSample>> sampleAsync, CancellationToken token) {
+        var failed = false;
+        foreach (var (path, item) in pending) {
+            token.ThrowIfCancellationRequested();
+            var directory = Path.Combine(Path.GetDirectoryName(path)!, "answers", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var samples = new List<MeasurementSample>();
+            var report = Path.Combine(directory, "report.json");
+            try {
                 for (var round = 0; round < rounds; round++) {
                     foreach (var side in new[] { "before", "after" }) {
-                        var sample = await SampleAsync(item, side, round, directory, bound, token).ConfigureAwait(false);
+                        var sample = await sampleAsync(item, side, round, directory, token).ConfigureAwait(false);
                         samples.Add(sample);
                         Write(report, new MeasurementReport(item, rounds, samples.ToArray(), []), MeasureJsonContext.Default.MeasurementReport);
                     }
@@ -103,11 +116,15 @@ public static class MeasureCommand {
                 }
                 Write(path, item with { Report = PuckPaths.Normalize(report) }, MeasureJsonContext.Default.MeasurementRequest);
                 Console.WriteLine($"measure: answered {item.Id}; {item.Decides}; report {PuckPaths.Normalize(report)}");
+            } catch (Exception error) when (error is InvalidDataException or InvalidOperationException or ArgumentException or IOException) {
+                failed = true;
+                var reason = $"measure {item.Name} ({item.Id}): {error.Message}";
+                Write(report, new MeasurementReport(item, rounds, samples.ToArray(), [], reason), MeasureJsonContext.Default.MeasurementReport);
+                Write(path, item with { Failure = reason }, MeasureJsonContext.Default.MeasurementRequest);
+                Console.Error.WriteLine($"measure: failed {reason}; evidence {PuckPaths.Normalize(report)}");
             }
-            return 0;
-        });
-        run.Detail("Use: puck measure run [request-ids...] [--repeats 5] [--wait 600] [--settle 30]\nTakes one priority quiet lease for the pending snapshot. Existing holders finish; later grants wait for the measurement window. Each request runs before, after, before, after in fresh invocations of the existing bench world, bench startup or sweep harness. No command wall clock is measured here. Missing/nonfinite metrics or failed commands refuse the answer; partial evidence stays and the request remains pending. A completed report records raw samples, median and IQR for before, after and the paired after-minus-before difference. --decides is a human criterion, never an automatic acceptance guess. New requests wait for the next window.");
-        return new Command("measure", "Queue frozen before/after timing questions and answer them in a priority quiet window.") { request, list, run };
+        }
+        return failed ? CliExit.Refused : CliExit.Success;
     }
 
     private static async Task<string> QueueAsync(string checkout, CancellationToken token) => Path.Combine(Path.GetDirectoryName(await CliLease.RootAsync(checkout, token).ConfigureAwait(false))!, "scratch/measure");
@@ -164,13 +181,58 @@ public static class MeasureCommand {
 
     public static double ReadMetric(JsonElement root, string pointer) {
         var value = root;
+        var resolved = pointer.StartsWith('/');
         foreach (var part in pointer.Split('/').Skip(1)) {
             var key = part.Replace("~1", "/", StringComparison.Ordinal).Replace("~0", "~", StringComparison.Ordinal);
-            value = value.ValueKind == JsonValueKind.Array ? value[int.Parse(key, CultureInfo.InvariantCulture)] : value.GetProperty(key);
+            if (value.ValueKind == JsonValueKind.Object && value.TryGetProperty(key, out var child)) { value = child; }
+            else if (value.ValueKind == JsonValueKind.Array && int.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var index) && index < value.GetArrayLength()) { value = value[index]; }
+            else { resolved = false; break; }
         }
-        var result = value.ValueKind == JsonValueKind.String ? double.Parse(value.GetString()!, CultureInfo.InvariantCulture) : value.GetDouble();
-        if (!double.IsFinite(result)) { throw new InvalidDataException($"Metric {pointer} is not finite."); }
-        return result;
+        if (resolved && TryNumber(value, out var result)) { return result; }
+        var schema = root.TryGetProperty("schema", out var format) ? format.GetString() : "unspecified";
+        throw new InvalidDataException($"Metric {pointer} is missing or not finite numeric data in report schema {schema}; available pointers: {string.Join(", ", NumericPointers(root))}.");
+    }
+
+    private static bool TryNumber(JsonElement value, out double number) {
+        number = double.NaN;
+        return ((value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out number)) ||
+            (value.ValueKind == JsonValueKind.String && double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out number))) && double.IsFinite(number);
+    }
+
+    private static IEnumerable<string> NumericPointers(JsonElement value, string path = "") {
+        if (TryNumber(value, out _)) { yield return path; }
+        else if (value.ValueKind == JsonValueKind.Object) {
+            foreach (var field in value.EnumerateObject()) {
+                foreach (var pointer in NumericPointers(field.Value, path + "/" + Escape(field.Name))) { yield return pointer; }
+            }
+        } else if (value.ValueKind == JsonValueKind.Array) {
+            var index = 0;
+            foreach (var child in value.EnumerateArray()) {
+                foreach (var pointer in NumericPointers(child, path + "/" + index.ToString(CultureInfo.InvariantCulture))) { yield return pointer; }
+                index++;
+            }
+        }
+    }
+
+    private static string Escape(string key) => key.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
+
+    public static void ValidateMetric(string[] command, string pointer) {
+        ValidateCommand(command);
+        var parts = pointer.Split('/');
+        if (command[0] == "bench") {
+            // Dictionary keys are authored/runtime metric names. Derive numeric members from the report's serializer.
+            var report = BenchReport.Start("schema", new BenchBuild("", "", ""), 1, new Dictionary<string, string>()) with {
+                Metrics = new Dictionary<string, BenchMetric> { ["<name>"] = BenchMetric.Of("ms", [0]) },
+            };
+            using var json = JsonDocument.Parse(report.ToJson());
+            var available = NumericPointers(json.RootElement).Where(p => p.StartsWith("/metrics/", StringComparison.Ordinal)).ToArray();
+            var canonical = parts.Length >= 3 ? "/metrics/<name>/" + string.Join('/', parts.Skip(3).Select(p => int.TryParse(p, NumberStyles.None, CultureInfo.InvariantCulture, out _) ? "0" : p)) : "";
+            if (parts.Length >= 4 && parts[0] == "" && parts[1] == "metrics" && parts[2].Length > 0 &&
+                (command[1] != "startup" || parts[2] == "startup") && available.Contains(canonical, StringComparer.Ordinal)) { return; }
+            throw new InvalidDataException($"Metric {pointer} is not numeric data in report schema {BenchReport.SchemaName}; available pointers: {string.Join(", ", available.Select(p => command[1] == "startup" ? p.Replace("<name>", "startup", StringComparison.Ordinal) : p))}.");
+        }
+        if (parts is ["", "signals", var index, "metrics", var key] && int.TryParse(index, NumberStyles.None, CultureInfo.InvariantCulture, out _) && key.Length > 0) { return; }
+        throw new InvalidDataException($"Metric {pointer} is not a signal metric in report schema {Puck.Cli.Sweep.SweepReport.SchemaName}; available pointers: /signals/<index>/metrics/<name> (numeric readings from the plan).");
     }
 
     public static MeasurementMetric Summarize(string metric, double[] before, double[] after) {
@@ -189,11 +251,11 @@ public static class MeasureCommand {
     }
 }
 
-public sealed record MeasurementRequest(string Id, string Name, string Checkout, DateTimeOffset Created, string Before, string After, string[] Command, string[] Metrics, string Decides, string? Report);
+public sealed record MeasurementRequest(string Id, string Name, string Checkout, DateTimeOffset Created, string Before, string After, string[] Command, string[] Metrics, string Decides, string? Report, string? Failure = null);
 public sealed record MeasurementSample(string Side, int Round, Dictionary<string, double> Metrics, string SourceReport);
 public sealed record MeasurementDistribution(double Median, double Iqr);
 public sealed record MeasurementMetric(string Metric, MeasurementDistribution Before, MeasurementDistribution After, MeasurementDistribution Difference);
-public sealed record MeasurementReport(MeasurementRequest Request, int Repeats, MeasurementSample[] Samples, MeasurementMetric[] Metrics);
+public sealed record MeasurementReport(MeasurementRequest Request, int Repeats, MeasurementSample[] Samples, MeasurementMetric[] Metrics, string? Failure = null);
 
 [JsonSerializable(typeof(MeasurementRequest))]
 [JsonSerializable(typeof(MeasurementReport))]
