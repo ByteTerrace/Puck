@@ -434,7 +434,12 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   (`relative:0.5` in `worlds/debug/sweep.json`); a lane runs it before hand-back
   and names any change over 10%. The lead regenerates the tip's report under the
   main checkout's ignored scratch directory (a `tip-sweep` folder) whenever the tip moves, and briefs
-  name that path. The tip report is a sweep without `--baseline`: a report
+  name that path. Lease, admission and GPU-classification files are shared by
+  every CLI copy on the machine, so a change to their meaning is a fleet event:
+  the lead lands it, then tells every lane to merge the tip and rebuild its CLI
+  copy before its next leased run (an old copy that counted a new `counters`
+  process as GPU work held the gpu lease waiting on that process, which waited
+  on the lease). The tip report is a sweep without `--baseline`: a report
   recorded against an older one keeps that comparison's red statuses, and every
   later landing then reads a status change it did not cause. The lead runs it, and every lead verb, from a CLI built at the tip, and reinstalls the
   global `puck` tool ([publishing](../../../docs/reference/cli.md#publishing)) once `puck --version`
