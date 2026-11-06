@@ -45,11 +45,10 @@ milestone. The owner requested its baseline and implementation plan, which
    [baseline and implementation order](dense-landscapes.md) keep CPU field
    queries first and connect static-copy sharing, retained updates, GPU
    instancing, geometry/shadow work and memory to one proving landscape.
-1. [Measurement window](#measurement-window) [the frame bar's evidence]: three
-   queued before/after requests and the questions no `puck measure` harness
-   can read yet (windowed boot frames, glass-pass GPU time, the tour's frame
-   percentiles, `host.frames` at the water views). Needs one quiet window and,
-   for the unread metrics, a harness.
+1. [Measurement window](#measurement-window) [the frame bar's evidence]: the
+   harness for the questions no `puck measure` report reads yet (windowed boot
+   frames, glass-pass GPU time, the tour's frame percentiles, `host.frames` at
+   the water views), then a window that answers them.
 2. [Memory](#memory-on-the-deck-tier) [high, the Deck]: the debug world's
    process plus GPU memory at or under 10 GB on the Deck tier, attribution
    first.
@@ -1160,37 +1159,15 @@ beside it.
 
 ### Measurement window
 
-Owner: the lead (one quiet window) with the measure-harness owner · ordinary ·
-Next: take a quiet window (`puck lease quiet`, then `puck measure run`) for the
-three queued requests, and build the harness the unread questions need.
+Owner: the measure-harness lane, then the lead (one quiet window) · ordinary ·
+Next: the harness the unread questions need, then a window that answers them.
 
 Evidence here is timing, so it waits for a window with no other lane building or
 running a World ([orchestration](../../.claude/skills/orchestration/SKILL.md)).
 The queue is the `measure` folder of the main checkout's ignored scratch, so it is
-machine-local; each request below is refiled with `puck measure request` (its
-frozen builds and command) if the queue is gone.
-
-Queued requests:
-
-- [medium] A same-build `bench world` control: before and after are the same
-  build, command `bench world --json`, metric `/metrics/idle-tick/median`. It
-  shows the harness's own noise: the paired difference must sit within 10 % of the
-  before median, with the IQR exposing the spread. Every other `bench world`
-  answer is read against it.
-- [medium] The startup control, refiled after a first filing named a metric the
-  report does not carry: same build on both sides, command `bench startup
-  control.world.json --headless --samples 1 --timeout-seconds 120`, metric
-  `/metrics/startup/median`, within 10 % of the before median. The earlier
-  request's failure (`/Summary/MedianMilliseconds` is not a `puck.bench.v1`
-  pointer) is the lesson: `puck measure request` validates a `bench` metric
-  against the report's schema.
-- [medium] The Deck idle tick, before and after the Deck's quiet master ticks
-  became one skipped run (the change titled `deck: skip quiet master ticks as one
-  run`; before is its parent): command `bench world --json`, metric
-  `/metrics/idle-tick/median`. It decides whether the after median falls toward
-  the slowest Deck machine's one-tick-alone time (`/metrics/machine-N-tick`) with
-  the paired after-minus-before difference beyond its IQR. Run the same-build
-  control first.
+machine-local. The same-build `bench world` and `bench startup` controls are
+answered and sit well inside their 10 % criteria; a `bench world` or
+`bench startup` answer is read against them.
 
 Questions no harness reads yet (lanes asked for each; none has a number):
 
