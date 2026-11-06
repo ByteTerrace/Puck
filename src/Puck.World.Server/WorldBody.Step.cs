@@ -358,7 +358,10 @@ public sealed partial class WorldBody {
     // resets the pose carries and only resets vertical state when switching to grounded.
     private void CommitTeleport(bool resetPosition = true, bool resetVertical = true, bool resetRotation = true) {
         // Every hard-teleport caller (Pose/Warp/Face/Reconcile, a motion-program switch) is a pose the caller
-        // directed at this body — see WorldBody.Sleep.cs's own remarks.
+        // directed at this body — see WorldBody.Sleep.cs's own remarks. It is a discontinuity: the door wakes what rests
+        // on or holds the body and forgets its contacts; it reads the contacts and the island root, never the pose the
+        // caller just wrote.
+        Disturb();
         WakeUp();
 
         if (resetPosition) {

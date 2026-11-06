@@ -35,6 +35,9 @@ internal sealed class RuleDueList {
     private readonly int m_epoch;
     private readonly Dictionary<int, int[]> m_rowReaders;
     private readonly Dictionary<(int Source, int Body), int[]> m_literalFactReaders;
+    // Every literal reader of a source, whatever body it names: a move the host reports for the source as a whole
+    // (FactRead.Whole) reaches each of them, as it reaches the source's $each and whole readers.
+    private readonly Dictionary<int, int[]> m_literalFactReadersBySource;
     private readonly Dictionary<int, int[]> m_eachFactReaders;
     private readonly Dictionary<int, int[]> m_wholeFactReaders;
     private readonly List<int> m_rows = [];
@@ -66,6 +69,7 @@ internal sealed class RuleDueList {
 
         var rowReaders = new Dictionary<int, List<int>>();
         var literal = new Dictionary<(int Source, int Body), List<int>>();
+        var literalBySource = new Dictionary<int, List<int>>();
         var each = new Dictionary<int, List<int>>();
         var whole = new Dictionary<int, List<int>>();
 
@@ -103,6 +107,7 @@ internal sealed class RuleDueList {
                         break;
                     default:
                         Add(index: literal, key: (fact.Source, fact.Body), rule: index);
+                        Add(index: literalBySource, key: fact.Source, rule: index);
                         break;
                 }
             }
@@ -113,6 +118,7 @@ internal sealed class RuleDueList {
 
         m_rowReaders = Freeze(index: rowReaders);
         m_literalFactReaders = Freeze(index: literal);
+        m_literalFactReadersBySource = Freeze(index: literalBySource);
         m_eachFactReaders = Freeze(index: each);
         m_wholeFactReaders = Freeze(index: whole);
         MarkAll();
@@ -259,6 +265,11 @@ internal sealed class RuleDueList {
         foreach (var moved in m_facts) {
             if ((moved.Body >= 0) && m_literalFactReaders.TryGetValue(key: (moved.Source, moved.Body), value: out var literal)) {
                 foreach (var reader in literal) {
+                    MarkFull(index: reader);
+                }
+            }
+            if ((moved.Body == FactRead.Whole) && m_literalFactReadersBySource.TryGetValue(key: moved.Source, value: out var anyLiteral)) {
+                foreach (var reader in anyLiteral) {
                     MarkFull(index: reader);
                 }
             }

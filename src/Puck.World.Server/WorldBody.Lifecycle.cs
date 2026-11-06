@@ -326,13 +326,12 @@ public sealed partial class WorldBody {
 
         if (m_rigid is not null) {
             // A rigid kit's contact state is its rest latch and its contact manifolds: a body a moment ago resting on
-            // the floor it just left is not resting on wherever it landed, and its warm-start impulses describe
-            // contacts it no longer has.
+            // the floor it just left is not resting on wherever it landed. CommitTeleport's discontinuity door forgets
+            // the manifolds, whose warm-start impulses describe contacts it no longer has.
             m_rigidVelocity = FixedVector3.Zero;
             m_angularVelocity = FixedVector3.Zero;
             m_resting = false;
             m_restingHoldTicks = 0UL;
-            ClearRigidContactSlots();
         }
 
         CommitTeleport();
@@ -507,17 +506,17 @@ public sealed partial class WorldBody {
             left: m_collider,
             right: collider
         );
+        var hadRigidFacet = (m_rigid is not null);
+
+        // Before the volume or the facet changes, so the door sees the body its contacts describe: a rigidity change
+        // also changes which side owns them (WorldRigidContacts.Owner).
+        if (colliderChanged || (m_rigid != rigid)) {
+            Disturb();
+            InvalidateRigidRest();
+        }
 
         m_collider = collider;
         RescaleColliderVolumes();
-
-        var hadRigidFacet = (m_rigid is not null);
-
-        if (colliderChanged || (m_rigid != rigid)) {
-            InvalidateRigidRest();
-            ClearRigidContactSlots();
-        }
-
         m_rigid = rigid;
 
         if (colliderChanged) {

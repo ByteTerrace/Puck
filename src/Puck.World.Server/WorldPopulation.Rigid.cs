@@ -35,7 +35,6 @@ public sealed partial class WorldPopulation {
     private readonly RigidSurface[] m_rigidSurfaces = new RigidSurface[WorldBody.MaximumRigidSurfaces];
     private readonly List<FixedTwoBodyContact> m_rigidCandidates = [];
     private readonly List<RigidPairHit> m_rigidPairHits = [];
-    private readonly List<int> m_rigidNeighbourScratch = [];
     private List<int>?[] m_rigidContactReferrers = [];
     private List<WorldRigidContactSlotImage>? m_viewRigidContacts;
     private FixedRigidWorld? m_rigidWorld;
@@ -187,13 +186,10 @@ public sealed partial class WorldPopulation {
 
             m_rigidCandidates.Clear();
 
-            int owner;
-            int partner;
+            var (owner, partner) = WorldRigidContacts.Owner(left: hit.Left, leftRigid: left.IsRigid, right: hit.Right, rightRigid: right.IsRigid);
 
-            if (left.IsRigid && right.IsRigid) {
-                // The lower index owns the pair and is its A side; the normal runs from right to left.
-                owner = Math.Min(val1: hit.Left, val2: hit.Right);
-                partner = Math.Max(val1: hit.Left, val2: hit.Right);
+            if (WorldRigidContacts.OwnerIsA(partnerRigid: m_entries[partner].Body!.IsRigid)) {
+                // The owner is the pair's A side; the normal runs from right to left.
                 _ = FixedRigidContacts.AppendPair(
                     a: m_entries[owner].Body!.RigidContactShape(id: owner),
                     b: m_entries[partner].Body!.RigidContactShape(id: partner),
@@ -204,9 +200,7 @@ public sealed partial class WorldPopulation {
                     sourceId: 0
                 );
             } else {
-                // The rigid side owns the pair and is its B side; the kit body is a static A side.
-                owner = (left.IsRigid ? hit.Left : hit.Right);
-                partner = (left.IsRigid ? hit.Right : hit.Left);
+                // The owner is the pair's B side; the kit body is a static A side.
                 _ = FixedRigidContacts.AppendWitness(
                     aCenter: m_entries[partner].Body!.FixedPosition,
                     aId: partner,
@@ -327,18 +321,7 @@ public sealed partial class WorldPopulation {
     // Whether a pair with a sleeper is the resting contact the sleeper was parked in: an occupied contact between them
     // whose overlap reaches no deeper than the contact reach plus the rigid support travel (FieldWakeMargin).
     private bool RestingContactHolds(int left, int right, FixedQ4816 depth) {
-        var leftBody = m_entries[left].Body!;
-        var rightBody = m_entries[right].Body!;
-        int owner;
-        int partner;
-
-        if (leftBody.IsRigid && rightBody.IsRigid) {
-            owner = Math.Min(val1: left, val2: right);
-            partner = Math.Max(val1: left, val2: right);
-        } else {
-            owner = (leftBody.IsRigid ? left : right);
-            partner = (leftBody.IsRigid ? right : left);
-        }
+        var (owner, partner) = WorldRigidContacts.Owner(left: left, leftRigid: m_entries[left].Body!.IsRigid, right: right, rightRigid: m_entries[right].Body!.IsRigid);
 
         return (
             (FindRigidContact(body: m_entries[owner].Body!, partner: partner) is { } contact) &&
@@ -359,8 +342,7 @@ public sealed partial class WorldPopulation {
         var body = m_entries[index].Body!;
 
         foreach (var contact in body.RigidContacts) {
-            // The owner is the A side of a pair with a rigid partner, and the B side of every other contact.
-            var ownerIsA = ((contact.Partner >= 0) && (m_entries[contact.Partner].Body is { IsRigid: true }));
+            var ownerIsA = WorldRigidContacts.OwnerIsA(partnerRigid: ((contact.Partner >= 0) && (m_entries[contact.Partner].Body is { IsRigid: true })));
 
             if (contact.Touched && Supports(manifold: contact.Manifold, towardB: !ownerIsA)) {
                 return true;
@@ -569,7 +551,7 @@ public sealed partial class WorldPopulation {
         }
     }
     // A captured contact image names valid slots in ascending (partner, slot) order, on a rigid body, with partners the
-    // owner rule allows: the static field, a kit body, or a rigid body of higher index.
+    // owner rule (WorldRigidContacts.Owner) gives this body: the static field, a kit body, or a rigid body of higher index.
     private void ValidateRigidContactImages(WorldPopulationEntryCheckpoint captured, WorldPopulationEntryCheckpoint?[] restored, byte seatKit) {
         if (captured.RigidContacts is null) {
             throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} has no rigid contact image.");
@@ -597,7 +579,12 @@ public sealed partial class WorldPopulation {
                     (((uint)image.Partner) >= ((uint)Capacity)) ||
                     (image.Partner == captured.Index) ||
                     (restored[image.Partner] is not { } partner) ||
-                    ((m_kits[CapturedKitIndex(captured: partner, seatKit: seatKit)].Rigid is not null) && (image.Partner < captured.Index))
+                    (WorldRigidContacts.Owner(
+                        left: captured.Index,
+                        leftRigid: true,
+                        right: image.Partner,
+                        rightRigid: (m_kits[CapturedKitIndex(captured: partner, seatKit: seatKit)].Rigid is not null)
+                    ).Owner != captured.Index)
                 ))
             ) {
                 throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} has an invalid rigid contact slot.");

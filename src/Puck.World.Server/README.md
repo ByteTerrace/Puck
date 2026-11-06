@@ -1162,10 +1162,20 @@ Once every member of a contact island rests, the population parks the island:
 its members leave the step until something wakes it (`TryApplyRigidImpulse`, a
 broadphase overlap with an awake body, `Pose`, `Glide`, `Reconcile`, a changed
 scale or collider/rigid facet, `SetContactField` handing it a different field,
-or a moved kit-body support). The island graph is the bodies' own persistent
-contacts, nothing rebuilt per tick: an occupied rigid contact joins two islands,
-and a contact with a kit body is a support whose change wakes the island it
-holds (`WorldPopulation.Sleep.cs`). This is what makes
+or a moved kit-body support). Parking reads the island from the bodies' own
+persistent contacts (an occupied rigid contact joins two bodies; a contact with
+a kit body is a support), then records it: each body is Awake or Parked(root)
+(`WorldBody.RigidSleepRootPlusOne`), indexed by root, and a wake reads that
+record and every contact the woken body owns or another owns with it, never
+slot occupancy (`WorldPopulation.Sleep.cs`). A discontinuity (a teleport, a
+collider or rigid-facet change, or a slot releasing its body) passes one door,
+`WorldPopulation.DisturbBody`, before it lands: it wakes the body's island and
+every parked island the body touches, then forgets the body's contacts on both
+sides, so whatever rests on a posed, recompiled or removed body wakes. One
+owner rule (`WorldRigidContacts.Owner`) decides which body holds a pair's
+manifold for contact generation, support and checkpoint validation. An awake
+body's nearby sleepers are found with its travel-grown sweep radius, the bound
+the pair test itself applies. This is what makes
 `$physics:quiescent`/the `resting` fact mean a body is not moving. `body.impulse`
 (`WorldCommand.RigidImpulse`, checked for `IsRigid` server-side and refused
 by name otherwise, then `WorldBody.TryApplyRigidImpulse`—refused by name a

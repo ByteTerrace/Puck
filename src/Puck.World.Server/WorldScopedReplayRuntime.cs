@@ -106,13 +106,18 @@ public sealed partial class WorldScopedReplayRuntime {
         // RestoreScope checks the whole image before it changes a column.
         m_server.Arena.RestoreScope(image: m_start);
         RestoreRules();
+        // Every body is posed before any contact is restored: a pose passes the discontinuity door, which forgets the
+        // contacts other bodies own with the posed one, so a contact restored earlier in the same pass would be lost.
         foreach (var image in m_startBodies) {
             var body = m_server.Body(index: image.Index)!;
 
             body.Pose(image.Position, image.Yaw, FixedQ4816.Zero, FixedQ4816.Zero);
             body.ApplyTransferState(state: image.DynamicState);
             body.ApplyIntegrationResidue(image.Residue, m_server.Population.ContactFieldVersion);
+        }
+        foreach (var image in m_startBodies) {
             m_server.Population.RestoreRigidContacts(images: image.RigidContacts, index: image.Index);
+            m_server.Population.AdoptRestoredIsland(index: image.Index, rootPlusOne: image.Residue.RigidSleepRootPlusOne);
         }
         if (Hash() != m_startHash) { throw new InvalidOperationException(message: "Scope starting hash MISMATCH after restore."); }
         StopInput();

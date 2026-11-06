@@ -9,16 +9,20 @@ namespace Puck.World.Server;
 /// islands in the population. A change to any member wakes the whole island before its next solve.
 /// </summary>
 public sealed partial class WorldBody {
-    private Action<int>? m_populationWake;
+    private WorldPopulation? m_population;
     private int m_populationIndex;
+    // The body's island state: 0 while Awake, otherwise Parked(root) as one plus the root slot it parked with. Only
+    // the population's island membership writes it (WorldPopulation.ParkIslandMember and WakeIsland), which indexes the
+    // same fact by root, so the two can never describe different islands.
     private int m_rigidSleepRootPlusOne;
 
     internal bool PopulationSleeping => (m_rigidSleepRootPlusOne != 0);
     internal int RigidSleepRootPlusOne => m_rigidSleepRootPlusOne;
+    internal ulong LastContactFieldVersion => m_lastContactFieldVersion;
 
-    internal void BindPopulationWake(int index, Action<int>? observer) {
+    internal void BindPopulation(int index, WorldPopulation? population) {
         m_populationIndex = index;
-        m_populationWake = observer;
+        m_population = population;
     }
     internal void ParkRigidIsland(int rootPlusOne, ulong contactFieldVersion) {
         m_rigidSleepRootPlusOne = rootPlusOne;
@@ -33,7 +37,12 @@ public sealed partial class WorldBody {
         m_rigidStepTicks = 0UL;
     }
 
-    private void NotifyPopulationWake() => m_populationWake?.Invoke(obj: m_populationIndex);
+    private void NotifyPopulationWake() => m_population?.BodyWoke(index: m_populationIndex);
+    // The body's side of the population's discontinuity door (WorldPopulation.DisturbBody): every change that makes
+    // the body's contacts describe something it no longer is (a teleport, a collider or rigid-facet change) calls this
+    // before it lands, so whatever rests on the body or holds it wakes and the contacts are forgotten. A body outside a
+    // population owns no contacts: the door forgets them before the slot lets the body go.
+    private void Disturb() => m_population?.DisturbBody(index: m_populationIndex);
 
     // 0 while awake; otherwise the simulation tick this body fell asleep at (see AsleepSinceTick's own read-back
     // contract). sleepAfterTicks is validated non-negative and this only ever gets a value at least that large, so
