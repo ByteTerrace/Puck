@@ -781,8 +781,14 @@ wrong. The contracts that bite most often:
   mesh fragment stage and `world.debug-view depth`, on both backends.
 - **A sampled field moves without a program rebuild.** `SdfProgramBuilder.SampledValues`
   names an `SdfSampledField` by handle; the frame carries its snapshots (`SdfFrame.Sampled`),
-  the geometry hashes them, and a moved snapshot restarts only the groups that read it
-  (`SdfMeshBakeGroup.Refresh`). Each bake job writes the snapshots its groups sealed into
+  the geometry hashes them, and the bake compares only `SdfSampledSet.Baked` (the handles an
+  instruction samples), so a height field's heights moving restart nothing. A moved baked snapshot
+  resamples only the reader groups (`SdfMeshPathBake.Resample`, replanned from each group's
+  planned box); a reader still baking keeps its bake and the newest plan waits as its
+  `Successor`, so a field republished every frame still lands. Never compare the whole set
+  in the bake, and never replan from `Low`/`High`, which the lattices narrow. Batch tickets
+  leave `Taken` once through `SdfMeshPathBake.Settle`, which both `Complete` and `Abandon`
+  call, so a partial answer returns exactly its unanswered lattices. Each bake job writes the snapshots its groups sealed into
   its own `sdfSampledValues` table, so a lattice never samples a newer publication; never
   put sampled values back into program words or a shared GPU buffer the bake reads
   ([sampled fields](../../../docs/rendering/sdf/handbook/sampled-fields.md)).

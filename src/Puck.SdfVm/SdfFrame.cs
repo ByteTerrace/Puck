@@ -172,7 +172,8 @@ public sealed record SdfFrame(
     /// <summary>Gets the snapshots <see cref="Program"/>'s sampled fields hold this frame, by handle
     /// (<see cref="SdfProgram.SampledFields"/>): the producer's capture (<see cref="SdfSampledSet.Capture"/>), or the
     /// program's own (<see cref="SdfProgram.Sampled"/>) when it set none. A field publishing new values moves this set and
-    /// no program word; the mesh bake plans again only the groups that read a moved field.</summary>
+    /// no program word; the mesh bake reads only its <see cref="SdfSampledSet.Baked"/> part and plans again only the
+    /// groups that read a moved field.</summary>
     public SdfSampledSet Sampled {
         get => (m_sampled ?? Program.Sampled);
         init => m_sampled = value;

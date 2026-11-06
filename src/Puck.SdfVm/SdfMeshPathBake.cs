@@ -131,8 +131,17 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
             return samples;
         }
     }
-    /// <summary>Gets whether the batch was answered or abandoned, which settles it once.</summary>
-    public bool Answered { get; internal set; }
+    // Each lattice's ticket, written only under its bake's gate by its one transition (SdfMeshPathBake.Settle).
+    internal SdfMeshBakeTicket[] States { get; } = new SdfMeshBakeTicket[Tickets.Length];
+
+    /// <summary>Returns where a lattice's ticket stands: taken until its samples reach its group or slice, or it is handed
+    /// back unanswered.</summary>
+    /// <param name="lattice">The lattice's index in <see cref="Lattices"/>.</param>
+    /// <returns>The ticket's state.</returns>
+    public SdfMeshBakeTicket StateOf(int lattice) {
+        if (Bake is not { } bake) { return States[lattice]; }
+        lock (bake.Gate) { return States[lattice]; }
+    }
 
     /// <summary>Returns the runs of the batch's point table: each points lattice's points at its first sample's place in
     /// the dispatch, then each lattice's poses from <see cref="PoseBase"/>, in table rows of one <see cref="Vector4"/>.
@@ -176,6 +185,17 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
 
         return entry;
     }
+}
+/// <summary>Where one lattice of a taken batch stands (<see cref="SdfMeshBakeBatch.StateOf"/>): each ticket leaves
+/// <see cref="Taken"/> once, for <see cref="Answered"/> or <see cref="Returned"/>, so answering and abandoning a batch,
+/// in either order or in part, settle each lattice exactly once.</summary>
+public enum SdfMeshBakeTicket {
+    /// <summary>The lattice is dispatched or awaiting its samples, and its group takes no other lattice.</summary>
+    Taken,
+    /// <summary>The lattice's samples reached its group or slice.</summary>
+    Answered,
+    /// <summary>The lattice went back to its group or slice unanswered, to be taken again.</summary>
+    Returned,
 }
 /// <summary>
 /// The baked-mesh path's bake of one residency's program: a mesh per bake group, sampled from the program on the GPU and
@@ -271,6 +291,8 @@ public sealed partial class SdfMeshPathBake {
     public SdfMeshBakeIdentity Identity { get; set; } = new(value: UInt128.Zero);
 
     private readonly Lock m_gate = new();
+    // The gate a taken batch's tickets are read under (SdfMeshBakeBatch.StateOf).
+    internal Lock Gate => m_gate;
     private readonly List<Group> m_groups = [];
     private readonly List<Group> m_retiredGroups = [];
 
@@ -280,12 +302,24 @@ public sealed partial class SdfMeshPathBake {
     private readonly Stopwatch m_clock = new();
 
     private SdfProgram? m_program;
-    // The sampled set the groups were planned at: a frame carrying another restarts the groups that read a moved field.
+    // The baked sampled set the groups were planned at (SdfSampledSet.Baked): a frame carrying another resamples the groups
+    // that read a moved field.
     private SdfSampledSet m_sampled = SdfSampledSet.Empty;
-
-
-
-
+    // The indices, ascending, of the groups whose geometry reads a sampled field: the only groups a resample can touch.
+    // Which groups read one is the program's (a group planned again at an index holds the same instances), so Restart, the
+    // one writer of a program's group list, rebuilds it (WatchSettles).
+    private readonly List<int> m_sampledReaders = [];
+    // The groups holding a successor (Group.Successor), which Promote starts once their bake lands.
+    private int m_successors;
+    // Frames prepared; restarts and the groups they planned; resamples, the readers they walked, the newer plans that
+    // replaced a waiting successor, and the successors started: what moved fields cost the frame thread, as counts.
+    private long m_preparedFrames;
+    private long m_restarts;
+    private long m_restartGroups;
+    private long m_resamples;
+    private long m_resampleGroups;
+    private long m_coalesced;
+    private long m_promoted;
     private long m_dispatches;
     private long m_samples;
     private long m_taps;
@@ -327,13 +361,14 @@ public sealed partial class SdfMeshPathBake {
         return false;
     }
 
-    /// <summary>Gets whether a group still owes a lattice the frame can dispatch, a contour still runs, or a field slice
-    /// (<see cref="Probe"/>) still samples, or a landed mesh has not reached the dressed frame yet.</summary>
+    /// <summary>Gets whether a group still owes a lattice the frame can dispatch, a contour still runs, a field slice
+    /// (<see cref="Probe"/>) still samples, a newer plan of a resampled group waits to start, or a landed mesh has not
+    /// reached the dressed frame yet.</summary>
     public bool Pending {
         get {
             lock (m_gate) {
                 if ((m_program is not null) && (m_dressedRevision != m_productRevision)) { return true; }
-                if (m_slice is not null) { return true; }
+                if ((m_slice is not null) || (m_successors > 0)) { return true; }
                 // A group's Done only turns on, so the groups before the cursor stay done until one is replaced.
                 while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
                 return (m_doneThrough < m_groups.Count);
@@ -395,7 +430,14 @@ public sealed partial class SdfMeshPathBake {
     internal FrameAccess PrepareFrame(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(frame);
         using (EnterFrameGate()) {
-            if (!ReferenceEquals(frame.Program, m_program) || !ReferenceEquals(frame.Sampled, m_sampled)) { Restart(frame); }
+            m_preparedFrames++;
+            // The bake reads only the baked handles: a frame whose height fields' heights alone moved changes nothing here.
+            if (!ReferenceEquals(frame.Program, m_program)) {
+                Restart(frame);
+            } else if (!ReferenceEquals(frame.Sampled.Baked, m_sampled)) {
+                Resample(frame);
+            }
+            if (m_successors > 0) { Promote(frame); }
             m_demandTransforms = frame.DynamicTransforms;
             m_demandCopies = frame.MeshInstances;
             if (!SameCopyLayout(frame)) { IndexCopies(frame); }
@@ -689,36 +731,25 @@ public sealed partial class SdfMeshPathBake {
     private static readonly Comparison<(float Priority, int Index)> ByPriority = static (left, right) =>
         ((right.Priority.CompareTo(value: left.Priority) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index));
 
-    /// <summary>Returns a taken batch's lattices to their groups unanswered, as when its dispatch never completed; each
-    /// group dispatches its lattice again, and the batch's samples count as discarded.</summary>
+    /// <summary>Returns a taken batch's lattices still unanswered to their groups, as when its dispatch never completed or
+    /// its answer stopped part way; each group dispatches its lattice again, and those lattices' samples count as discarded.
+    /// A lattice already answered or returned stays as it is.</summary>
     /// <param name="batch">The batch <see cref="TryTake"/> took, or <see langword="null"/>.</param>
     public void Abandon(SdfMeshBakeBatch? batch) {
         if (batch is null) { return; }
         lock (m_gate) {
-            if (batch.Answered) { return; }
-            batch.Answered = true;
-            for (var index = 0; (index < batch.Tickets.Length); index++) {
-                if (batch.Tickets[index] is Group group) { group.InFlight = false; }
-                if ((batch.Tickets[index] is SliceTicket ticket) && ReferenceEquals(objA: ticket.Slice, objB: m_slice) && (ticket.Generation == ticket.Slice.Generation)) {
-                    ticket.Slice.Return(ticket: ticket.Lattice);
-                }
-                m_discarded += batch.Lattices[index].Samples;
-            }
+            for (var index = 0; (index < batch.Tickets.Length); index++) { _ = Settle(batch: batch, index: index, to: SdfMeshBakeTicket.Returned); }
         }
     }
     /// <summary>Answers a dispatched batch with the samples its readback copied, each lattice its own slice: each group's
-    /// lattice is decoded on the calling thread and answered on the bake's workers. A batch answered or abandoned already
-    /// answers nothing.</summary>
+    /// lattice is decoded on the calling thread and answered on the bake's workers. A lattice answered or returned already
+    /// takes nothing; one whose answer throws stays taken, so <see cref="Abandon"/> returns it and every lattice after
+    /// it.</summary>
     /// <param name="batch">The batch <see cref="TryTake"/> took.</param>
     /// <param name="samples">The batch's samples, <see cref="SdfWorldPackage.MeshBakeSampleWords"/> words each, the
     /// lattices back to back.</param>
     public void Complete(SdfMeshBakeBatch batch, ReadOnlySpan<byte> samples) {
         ArgumentNullException.ThrowIfNull(argument: batch);
-
-        lock (m_gate) {
-            if (batch.Answered) { return; }
-            batch.Answered = true;
-        }
 
         var offset = 0;
 
@@ -733,8 +764,11 @@ public sealed partial class SdfMeshPathBake {
             // lattice of it before its answer lands. The queued job keeps the group's storage owner open for the
             // decoded answer, which a retired group never takes.
             if (batch.Tickets[index] is Group group) {
+                lock (m_gate) {
+                    if (batch.States[index] != SdfMeshBakeTicket.Taken) { continue; }
+                }
                 if (!group.QueueWork()) {
-                    lock (m_gate) { group.InFlight = false; }
+                    lock (m_gate) { _ = Settle(batch: batch, index: index, to: SdfMeshBakeTicket.Returned); }
                     continue;
                 }
 
@@ -746,21 +780,45 @@ public sealed partial class SdfMeshPathBake {
                     group.EndWork();
                     throw;
                 }
+
+                bool answered;
+
+                lock (m_gate) { answered = Settle(batch: batch, index: index, to: SdfMeshBakeTicket.Answered); }
+                if (!answered) {
+                    answer.Dispose();
+                    group.EndWork();
+                    continue;
+                }
                 Enqueue(group: group, urgent: true, work: _ => {
                     using (answer) { AnswerGroup(answer: answer, group: group, request: in lattice); }
                 });
                 continue;
             }
-            Complete(request: in lattice, samples: slice, ticket: batch.Tickets[index]);
+            Complete(batch: batch, index: index, request: in lattice, samples: slice);
         }
+    }
+    // The one transition of a batch's ticket out of Taken, which answering and abandoning both take: Answered once its
+    // samples reach its group or slice (the group stays in flight until its answer job runs), Returned when they never will,
+    // which hands the lattice back to be taken again. Under the gate; false when the ticket was settled already.
+    private bool Settle(SdfMeshBakeBatch batch, int index, SdfMeshBakeTicket to) {
+        if (batch.States[index] != SdfMeshBakeTicket.Taken) { return false; }
+        batch.States[index] = to;
+        if (to != SdfMeshBakeTicket.Returned) { return true; }
+        if (batch.Tickets[index] is Group group) { group.InFlight = false; }
+        if ((batch.Tickets[index] is SliceTicket ticket) && ReferenceEquals(objA: ticket.Slice, objB: m_slice) && (ticket.Generation == ticket.Slice.Generation)) {
+            ticket.Slice.Return(ticket: ticket.Lattice);
+        }
+        m_discarded += batch.Lattices[index].Samples;
+        return true;
     }
 
     // Answers a field slice's lattice.
-    private void Complete(object? ticket, in SdfMeshBakeRequest request, ReadOnlySpan<byte> samples) {
-        if (ticket is SliceTicket sliced) {
+    private void Complete(SdfMeshBakeBatch batch, int index, in SdfMeshBakeRequest request, ReadOnlySpan<byte> samples) {
+        if (batch.Tickets[index] is SliceTicket sliced) {
             bool done;
 
             lock (m_gate) {
+                if (!Settle(batch: batch, index: index, to: SdfMeshBakeTicket.Answered)) { return; }
                 // A slice a new program restarted, or one already finished, takes no answer from an earlier dispatch.
                 if (!ReferenceEquals(objA: sliced.Slice, objB: m_slice) || (sliced.Slice.Generation != sliced.Generation)) { return; }
                 done = sliced.Slice.Answer(samples: samples, ticket: sliced.Lattice);
@@ -919,19 +977,16 @@ public sealed partial class SdfMeshPathBake {
         WatchSettle(group: group, index: index);
         m_doneThrough = Math.Min(val1: m_doneThrough, val2: index);
     }
-    // Starts the bake of a new program, or of the groups of the same program that read a field the frame's sampled set
-    // moved: one group per dynamic slot and per run of static instances baked together (one rigid copy), each starting at
-    // the coarse lattice over its bounding box. The meshes of the previous groups keep drawing until each new mesh lands.
+    // Starts the bake of a new program: one group per dynamic slot and per run of static instances baked together (one rigid
+    // copy), each starting at the coarse lattice over its bounding box. The meshes of the previous groups keep drawing until
+    // each new mesh lands. A frame of the same program whose baked sampled set moved resamples instead (Resample).
     private void Restart(SdfFrame frame) {
         var restarted = Stopwatch.GetTimestamp();
         var previous = m_groups.ToDictionary(keySelector: static group => group.Selector);
         var identity = Identity.Value;
-        var resampled = ReferenceEquals(objA: frame.Program, objB: m_program);
         var program = frame.Program;
-        var sampled = frame.Sampled;
-        var plan = (resampled
-            ? new List<Group>(collection: m_groups)
-            :(((m_prepared is { } prepared) && ReferenceEquals(objA: prepared.Program, objB: program) && (prepared.FarDistance == frame.FarDistance)) ? prepared.Groups : null));
+        var sampled = frame.Sampled.Baked;
+        var plan = (((m_prepared is { } prepared) && ReferenceEquals(objA: prepared.Program, objB: program) && (prepared.FarDistance == frame.FarDistance)) ? prepared.Groups : null);
 
         m_allResident = false;
         m_demandTransforms = frame.DynamicTransforms;
@@ -941,10 +996,12 @@ public sealed partial class SdfMeshPathBake {
         m_doneThrough = 0;
         // A slice samples one program and set: a new one takes every lattice again.
         m_slice?.Reset();
+        // A successor waits on a group of the previous program; this program's plan is made at the frame's set already.
+        foreach (var old in previous.Values) { old.Successor = null; }
+        m_successors = 0;
 
-        // The same program whose set moved keeps every group but those that read a moved field; a new program takes the
-        // plan a build already made off the frame's thread (PlanAhead), with each group this restart cannot keep that read
-        // the transforms or a moved field planned again at the frame's; otherwise the whole plan.
+        // A new program takes the plan a build already made off the frame's thread (PlanAhead), with each group this restart
+        // cannot keep that read the transforms or a moved field planned again at the frame's; otherwise the whole plan.
         if (plan is not null) {
             _ = SdfMeshBakeGroup.Refresh(
                 create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
@@ -952,9 +1009,7 @@ public sealed partial class SdfMeshPathBake {
                 groups: plan,
                 program: program,
                 sampled: sampled,
-                stale: (resampled
-                    ? static _ => false
-                    : group => !(previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, identity: identity, old: old))),
+                stale: group => !(previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, identity: identity, old: old)),
                 transforms: frame.DynamicTransforms
             );
             m_groups.AddRange(collection: plan);
@@ -967,116 +1022,266 @@ public sealed partial class SdfMeshPathBake {
                 transforms: frame.DynamicTransforms
             ));
         }
-
-        // A plan made ahead for a program still building stands through a restart of the same program's moved fields.
-        if (!resampled) { m_prepared = null; }
+        m_prepared = null;
+        m_restarts++;
+        m_restartGroups += m_groups.Count;
 
         // A program rebuilt with a group's instructions unchanged keeps that group, its bake and any lattice in flight; only
-        // a group whose geometry moved bakes again (Keeps).
-        var rebaked = 0;
-        var loading = 0;
-        var shared = 0;
+        // a group whose geometry moved bakes again (Place).
+        var started = new PlaceCounts();
         var replaced = (previous.Count != m_groups.Count);
         // The group of this bake baking each geometry, which every later group of that geometry waits on (Follow).
         var leaders = new Dictionary<SdfMeshGeometry, Group>();
 
         for (var index = 0; (index < m_groups.Count); index++) {
-            var group = m_groups[index];
-
-            // A group the moved set did not touch stays the group it was, whatever it is doing.
-            if (previous.TryGetValue(key: group.Selector, value: out var old) && ReferenceEquals(objA: old, objB: group)) {
-                Replace(group: old, index: index);
-                if (!old.Done && (old.Leader is null) && (old.Replaces is null)) { _ = leaders.TryAdd(key: old.Sealed, value: old); }
-                continue;
-            }
-            group.Owner = this;
-            group.TakeDemandBox();
-            if ((old is not null) && Keeps(group: group, identity: identity, old: old)) {
-                old.AdoptSampled(planned: group);
-                Replace(group: old, index: index);
-                if (!old.Done && (old.Leader is null) && (old.Replaces is null)) { _ = leaders.TryAdd(key: old.Sealed, value: old); }
-                continue;
-            }
-            // A group outside the bake's selection finishes unbaked, so it neither bakes nor leads a selected group of
-            // its geometry to its unsampled result.
-            if ((Selection is { } selection) && !selection.Contains(item: group.Selector)) {
-                group.Outcome = "not selected";
-                group.Done = true;
-                continue;
-            }
-            // Every way below of finishing a group without a bake takes what the library holds under this identity, and
-            // a group begun bakes under it, so a later program keeps the group only while the identity stands.
-            group.Identity = identity;
-            replaced = true;
-            // A dynamic group whose shapes only took other material ids, because a palette registered before them came
-            // or went (a body leaving or entering the world), keeps its mesh renumbered by place, as a mesh taken from
-            // the library is.
-            if (
-                (old is not null) &&
-                Renumbers(group: group, identity: identity, old: old) &&
-                Library.TryTake(geometry: old.Sealed, identity: identity, materials: group.MaterialOrder, mesh: out var renumber)
-            ) {
-                old.Renumber(materials: group.MaterialOrder, mesh: renumber);
-                old.AdoptSampled(planned: group);
-                old.ResidentAt = 0;
-                Replace(group: old, index: index);
-                continue;
-            }
-            // Geometry the library holds a mesh of, baked at another index or slot, in an earlier program (a body that left
-            // the world and came back) or by another residency (a body that crossed from another world), takes that mesh: a
-            // static group's is in world space and a dynamic group's in its slot's frame, which its geometry holds.
-            if (Library.TryTake(geometry: group.Sealed, identity: identity, materials: group.MaterialOrder, mesh: out var baked)) {
-                group.Mesh = baked;
-                group.Done = true;
-                continue;
-            }
-            // Geometry an earlier bake found no surface in meshes nothing again.
-            if (Library.HoldsEmpty(geometry: group.Sealed, identity: identity)) {
-                group.Outcome = "no surface, as baked before";
-                group.Done = true;
-                continue;
-            }
-            // A dynamic group of a form the library holds a mesh of, baked with its other slots at another pose (a body
-            // crossing from another world mid-stride, or wearing a creation another body wears), takes that skinned mesh
-            // and watches its members against the pose the mesh was baked at, so it bakes again only once it settles away
-            // from it (Settle).
-            if (group.Dynamic && Library.TryTakeForm(form: group.Form, identity: identity, materials: group.MaterialOrder, mesh: out var shaped)) {
-                group.Mesh = shaped;
-                group.Done = true;
-                group.Stored = true;
-                group.Watch(baked: shaped);
-                continue;
-            }
-
-            if ((old is not null) && (old.Mesh is not null) && (old.Dynamic == group.Dynamic)) {
-                group.Mesh = old.Mesh.Acquire();
-            }
-            if (leaders.TryGetValue(key: group.Sealed, value: out var leader)) {
-                group.Leader = leader;
-                shared++;
-                continue;
-            }
-            leaders.Add(key: group.Sealed, value: group);
-            if (Begin(group: group)) {
-                loading++;
-                continue;
-            }
-            rebaked++;
+            replaced |= Place(group: m_groups[index], identity: identity, index: index, leaders: leaders, old: previous.GetValueOrDefault(key: m_groups[index].Selector), started: ref started);
         }
-        // A kept group waiting on a group this program no longer plans bakes its geometry itself.
+        // A previous group this program does not keep is retired: its queued work is dropped (TakeWork).
         var planned = new HashSet<Group>(collection: m_groups, comparer: ReferenceEqualityComparer.Instance);
 
-        // A previous group this program does not keep is retired: its queued work is dropped (TakeWork).
         foreach (var old in previous.Values) {
             if (!planned.Contains(item: old)) { m_retiredGroups.Add(item: old); old.Retired = true; }
         }
-        foreach (var group in m_groups) {
-            if (group.Done || (group.Leader is not { } waited) || planned.Contains(item: waited)) { continue; }
-            group.Leader = null;
-            if (Begin(group: group)) { loading++; } else { rebaked++; }
-        }
+        WatchSettles();
+        BeginOrphans(indices: null, started: ref started);
         Prioritize();
-        if (((rebaked + loading) + shared) > 0) {
+        BeginAccounts(fresh: true, instances: program.Instances.Count, restarted: restarted, started: started);
+        // The draws name their groups, so they are rebuilt only when a group was replaced, renumbered or dropped; a
+        // program change that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
+        // A replacement taken wholly from cache lands no later bake callback to invalidate these draws.
+        if (replaced) {
+            m_productRevision++;
+        }
+        m_restartMilliseconds = Stopwatch.GetElapsedTime(startingTimestamp: restarted).TotalMilliseconds;
+    }
+    // Plans again, at a frame's baked sampled set, the groups of the same program whose geometry hashed a snapshot the set
+    // no longer holds. Only a group whose geometry reads a sampled field can (m_sampledReaders), so the work is the readers',
+    // never the whole plan's. A reader still baking an older snapshot keeps baking it, and the newest plan waits as its
+    // successor, which the frame after it lands starts (Promote): one bake of a group in flight, the latest snapshot winning.
+    private void Resample(SdfFrame frame) {
+        var restarted = Stopwatch.GetTimestamp();
+        var sampled = frame.Sampled.Baked;
+        var identity = Identity.Value;
+
+        m_sampled = sampled;
+        m_resamples++;
+        // A slice samples every baked handle.
+        m_slice?.Reset();
+
+        var stale = new List<Group>();
+        var indices = new List<int>();
+
+        foreach (var index in m_sampledReaders) {
+            var group = m_groups[index];
+
+            m_resampleGroups++;
+            if (group.Geometry.SampledMatches(sampled: sampled)) {
+                // The set moved back to the snapshot the group bakes: a newer plan waiting on it is no longer newer.
+                DropSuccessor(group: group);
+                continue;
+            }
+            stale.Add(item: group);
+            indices.Add(item: index);
+        }
+        if (stale.Count == 0) { return; }
+
+        var plans = new List<Group>(collection: stale);
+
+        _ = SdfMeshBakeGroup.Refresh(
+            create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
+            farDistance: frame.FarDistance,
+            groups: plans,
+            program: m_program!,
+            sampled: sampled,
+            stale: static _ => false,
+            transforms: frame.DynamicTransforms
+        );
+
+        var started = new PlaceCounts();
+        var replaced = false;
+        var leaders = Leaders();
+
+        for (var at = 0; (at < plans.Count); at++) {
+            var old = stale[at];
+            var plan = plans[at];
+
+            if (ReferenceEquals(objA: old, objB: plan)) { continue; }
+            if (!old.Done) {
+                if (old.Successor is null) { m_successors++; } else { m_coalesced++; }
+                old.Successor = plan;
+                continue;
+            }
+            replaced |= Succeed(identity: identity, index: indices[at], leaders: leaders, old: old, plan: plan, started: ref started);
+        }
+        BeginOrphans(indices: m_sampledReaders, started: ref started);
+        BeginAccounts(fresh: false, instances: frame.Program.Instances.Count, restarted: restarted, started: started);
+        if (replaced) { m_productRevision++; }
+    }
+    // Starts each successor whose group has landed in that group's place (Resample): the landed mesh draws until the
+    // successor's lands.
+    private void Promote(SdfFrame frame) {
+        var restarted = Stopwatch.GetTimestamp();
+        var identity = Identity.Value;
+        var started = new PlaceCounts();
+        var replaced = false;
+        Dictionary<SdfMeshGeometry, Group>? leaders = null;
+
+        foreach (var index in m_sampledReaders) {
+            var old = m_groups[index];
+
+            if (!old.Done || (old.Successor is not { } plan)) { continue; }
+            m_promoted++;
+            replaced |= Succeed(identity: identity, index: index, leaders: (leaders ??= Leaders()), old: old, plan: plan, started: ref started);
+        }
+        if (leaders is null) { return; }
+        BeginOrphans(indices: m_sampledReaders, started: ref started);
+        BeginAccounts(fresh: false, instances: frame.Program.Instances.Count, restarted: restarted, started: started);
+        if (replaced) { m_productRevision++; }
+    }
+    // Puts a reader's newer plan in the place of the reader, which has landed (Place), dropping any successor the reader
+    // held, which the plan replaces, and retiring the reader once its place holds another group. The one door a resampled
+    // plan reaches the group list by, so the successor count stays the readers' successors.
+    private bool Succeed(Group old, Group plan, int index, UInt128 identity, Dictionary<SdfMeshGeometry, Group> leaders, ref PlaceCounts started) {
+        DropSuccessor(group: old);
+
+        var replaced = Place(group: plan, identity: identity, index: index, leaders: leaders, old: old, started: ref started);
+
+        if (!ReferenceEquals(objA: m_groups[index], objB: old)) { m_retiredGroups.Add(item: old); old.Retired = true; }
+        return replaced;
+    }
+    private void DropSuccessor(Group group) {
+        if (group.Successor is null) { return; }
+        group.Successor = null;
+        m_successors--;
+    }
+    // The readers baking a geometry no other reader waits on. A group sharing geometry with a reader hashed the same
+    // snapshot, so it is a reader too: the readers alone hold every leader a resampled group can follow.
+    private Dictionary<SdfMeshGeometry, Group> Leaders() {
+        var leaders = new Dictionary<SdfMeshGeometry, Group>();
+
+        foreach (var index in m_sampledReaders) {
+            var group = m_groups[index];
+
+            if (!group.Done && (group.Leader is null) && (group.Replaces is null)) { _ = leaders.TryAdd(key: group.Sealed, value: group); }
+        }
+        return leaders;
+    }
+
+    // What the groups a restart, resample or promotion placed began: a bake, a load from the store, or a wait on another
+    // group of the same geometry (Place).
+    private struct PlaceCounts {
+        public int Baking;
+        public int Loading;
+        public int Shared;
+    }
+
+    // Puts a newly planned group at an index in place of the group `old` the bake held at its selector: `old` itself where
+    // the plan keeps it (the same geometry and materials, or a dynamic group's form, Keeps) or renumbers it (Renumbers);
+    // otherwise the new group, finished from the library, its store or another group of its geometry when it can be, and
+    // baking while `old`'s mesh draws otherwise. Returns whether the drawn product moved. Under the gate; the caller retires
+    // `old` when the index no longer holds it.
+    private bool Place(Group group, Group? old, int index, UInt128 identity, Dictionary<SdfMeshGeometry, Group> leaders, ref PlaceCounts started) {
+        // A group the moved set did not touch stays the group it was, whatever it is doing.
+        if ((old is not null) && ReferenceEquals(objA: old, objB: group)) {
+            Replace(group: old, index: index);
+            if (!old.Done && (old.Leader is null) && (old.Replaces is null)) { _ = leaders.TryAdd(key: old.Sealed, value: old); }
+            return false;
+        }
+        group.Owner = this;
+        group.TakeDemandBox();
+        if ((old is not null) && Keeps(group: group, identity: identity, old: old)) {
+            old.AdoptSampled(planned: group);
+            Replace(group: old, index: index);
+            if (!old.Done && (old.Leader is null) && (old.Replaces is null)) { _ = leaders.TryAdd(key: old.Sealed, value: old); }
+            return false;
+        }
+        Replace(group: group, index: index);
+        // A group outside the bake's selection finishes unbaked, so it neither bakes nor leads a selected group of
+        // its geometry to its unsampled result.
+        if ((Selection is { } selection) && !selection.Contains(item: group.Selector)) {
+            group.Outcome = "not selected";
+            group.Done = true;
+            return true;
+        }
+        // Every way below of finishing a group without a bake takes what the library holds under this identity, and
+        // a group begun bakes under it, so a later program keeps the group only while the identity stands.
+        group.Identity = identity;
+        // A dynamic group whose shapes only took other material ids, because a palette registered before them came
+        // or went (a body leaving or entering the world), keeps its mesh renumbered by place, as a mesh taken from
+        // the library is.
+        if (
+            (old is not null) &&
+            Renumbers(group: group, identity: identity, old: old) &&
+            Library.TryTake(geometry: old.Sealed, identity: identity, materials: group.MaterialOrder, mesh: out var renumber)
+        ) {
+            old.Renumber(materials: group.MaterialOrder, mesh: renumber);
+            old.AdoptSampled(planned: group);
+            old.ResidentAt = 0;
+            Replace(group: old, index: index);
+            return true;
+        }
+        // Geometry the library holds a mesh of, baked at another index or slot, in an earlier program (a body that left
+        // the world and came back) or by another residency (a body that crossed from another world), takes that mesh: a
+        // static group's is in world space and a dynamic group's in its slot's frame, which its geometry holds.
+        if (Library.TryTake(geometry: group.Sealed, identity: identity, materials: group.MaterialOrder, mesh: out var baked)) {
+            group.Mesh = baked;
+            group.Done = true;
+            return true;
+        }
+        // Geometry an earlier bake found no surface in meshes nothing again.
+        if (Library.HoldsEmpty(geometry: group.Sealed, identity: identity)) {
+            group.Outcome = "no surface, as baked before";
+            group.Done = true;
+            return true;
+        }
+        // A dynamic group of a form the library holds a mesh of, baked with its other slots at another pose (a body
+        // crossing from another world mid-stride, or wearing a creation another body wears), takes that skinned mesh
+        // and watches its members against the pose the mesh was baked at, so it bakes again only once it settles away
+        // from it (Settle).
+        if (group.Dynamic && Library.TryTakeForm(form: group.Form, identity: identity, materials: group.MaterialOrder, mesh: out var shaped)) {
+            group.Mesh = shaped;
+            group.Done = true;
+            group.Stored = true;
+            group.Watch(baked: shaped);
+            return true;
+        }
+
+        if ((old is not null) && (old.Mesh is not null) && (old.Dynamic == group.Dynamic)) {
+            group.Mesh = old.Mesh.Acquire();
+        }
+        if (leaders.TryGetValue(key: group.Sealed, value: out var leader)) {
+            group.Leader = leader;
+            started.Shared++;
+            return true;
+        }
+        leaders.Add(key: group.Sealed, value: group);
+        if (Begin(group: group)) {
+            started.Loading++;
+        } else {
+            started.Baking++;
+        }
+        return true;
+    }
+    // Begins each group, of the listed indices or every one, still waiting on a leader the bake has retired: it bakes its
+    // geometry itself.
+    private void BeginOrphans(IReadOnlyList<int>? indices, ref PlaceCounts started) {
+        var count = (indices?.Count ?? m_groups.Count);
+
+        for (var at = 0; (at < count); at++) {
+            var group = m_groups[(indices?[at] ?? at)];
+
+            if (group.Done || (group.Leader is not { Retired: true })) { continue; }
+            group.Leader = null;
+            if (Begin(group: group)) { started.Loading++; } else { started.Baking++; }
+        }
+    }
+    // Opens the accounts and the start line of the work a restart, resample or promotion began, if any: a new program's, or
+    // any once the bake before it reported, whose counts and clock start again; otherwise work added to the bake still
+    // running, whose done line then covers it. A bake that began nothing and has every group done reports here or never.
+    private void BeginAccounts(bool fresh, int instances, long restarted, PlaceCounts started) {
+        var begun = ((started.Baking + started.Loading) + started.Shared);
+
+        if ((begun > 0) && (fresh || m_reported || !m_clock.IsRunning)) {
             m_dispatches = 0;
             m_samples = 0;
             m_taps = 0;
@@ -1090,16 +1295,16 @@ public sealed partial class SdfMeshPathBake {
             m_reported = false;
             m_clock.Restart();
             m_bakeStarted = restarted;
-            m_loadsQueued = loading;
+            m_loadsQueued = started.Loading;
             m_loadsDone = 0;
-            m_loadFirst = ((loading > 0) ? restarted : 0);
+            m_loadFirst = ((started.Loading > 0) ? restarted : 0);
             m_loadLast = 0;
-            Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} groups={m_groups.Count} baking={rebaked} loading={loading} shared={shared} dynamic={m_groups.Count(predicate: static group => group.Dynamic)} instances={frame.Program.Instances.Count}");
+            Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} groups={m_groups.Count} baking={started.Baking} loading={started.Loading} shared={started.Shared} dynamic={m_groups.Count(predicate: static group => group.Dynamic)} instances={instances}");
             // The store's account reads its directory, so it runs off the frame's thread.
             if (Library.Disk is { } disk) {
                 var parts = Identity;
                 var residency = Residency;
-                var baking = rebaked;
+                var baking = started.Baking;
 
                 _ = Task.Run(action: () => {
                     if (baking > 0) {
@@ -1109,18 +1314,11 @@ public sealed partial class SdfMeshPathBake {
                     }
                 });
             }
+        } else if (begun > 0) {
+            m_loadsQueued += started.Loading;
+            if ((started.Loading > 0) && (m_loadFirst == 0)) { m_loadFirst = restarted; }
         }
-        // A program that takes every group from the library lands nothing, so the started bake whose pending groups it
-        // dropped reports here or never.
         if (m_clock.IsRunning) { Finish(); }
-        // The draws name their groups, so they are rebuilt only when a group was replaced, renumbered or dropped; a
-        // program change that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
-        // A replacement taken wholly from cache lands no later bake callback to invalidate these draws.
-        if (replaced) {
-            m_productRevision++;
-        }
-        WatchSettles();
-        m_restartMilliseconds = Stopwatch.GetElapsedTime(startingTimestamp: restarted).TotalMilliseconds;
     }
     // Whether a new program's group stays the group the previous program planned at its selector: the same geometry and
     // materials, or, for a dynamic group, the same form and materials, which are the same shapes in another relative pose,
@@ -2229,6 +2427,9 @@ public sealed partial class SdfMeshPathBake {
 
         // The group of the same bake baking this group's geometry, whose mesh this one takes when it finishes, or null.
         public Group? Leader { get; set; }
+        // The plan of this group at the newest sampled set, while this group still bakes an older one (Resample): never
+        // begun, so it holds nothing, and started in this group's place once this group lands (Promote).
+        public Group? Successor { get; set; }
         // The settle watch (SdfMeshPathBake.Settle): the group a settle rebake replaces until it lands, the slots besides
         // its own its geometry reads and their poses in its frame as baked, as this frame reads them, and as they stood
         // when the group last saw them change, when that was, and whether a settle rebake at that pose was refused.

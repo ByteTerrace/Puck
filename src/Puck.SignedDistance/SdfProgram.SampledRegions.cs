@@ -93,45 +93,73 @@ public sealed class SdfSampledField {
 
 /// <summary>The snapshots of a program's sampled fields at one moment, by handle (<see cref="SdfProgram.SampledFields"/>):
 /// what a frame's sampled instructions read. Immutable; a field publishing new values makes a new set
-/// (<see cref="Capture"/>).</summary>
+/// (<see cref="Capture"/>).
+/// <para>Invariant: <see cref="Baked"/> is the identity of what the mesh bake reads, the snapshots at the handles some
+/// instruction samples (<see cref="SdfProgram.BakedSampledFields"/>). It is one object across captures whose baked handles
+/// stand, whatever a height field's heights handle does, so a consumer that reads only baked handles compares it by
+/// reference and a heights-only move costs it nothing. <see cref="Capture(SdfProgram, SdfSampledSet?)"/> is the one door
+/// that makes a set from live fields, and it reuses the previous baked identity exactly when every baked snapshot
+/// stands.</para></summary>
 public sealed class SdfSampledSet {
     private readonly SdfSampledSnapshot[] m_snapshots;
 
-    private SdfSampledSet(SdfSampledSnapshot[] snapshots) => m_snapshots = snapshots;
+    private SdfSampledSet(SdfSampledSnapshot[] snapshots, int baked, SdfSampledSet? bakedSet) {
+        m_snapshots = snapshots;
+        BakedCount = baked;
+        Baked = (bakedSet ?? ((baked == snapshots.Length) ? this : new SdfSampledSet(snapshots: snapshots[..baked], baked: baked, bakedSet: null)));
+    }
 
     /// <summary>Gets the set of a program with no sampled field.</summary>
-    public static SdfSampledSet Empty { get; } = new(snapshots: []);
+    public static SdfSampledSet Empty { get; } = new(snapshots: [], baked: 0, bakedSet: null);
 
     /// <summary>Gets the number of handles.</summary>
     public int Count => m_snapshots.Length;
+    /// <summary>Gets how many leading handles some instruction samples: the handles <see cref="Baked"/> holds.</summary>
+    public int BakedCount { get; }
+    /// <summary>Gets the set of the handles some instruction samples, the first <see cref="BakedCount"/>: this set itself
+    /// when every handle is sampled, and otherwise a set that stands, by reference, while those handles' snapshots
+    /// stand.</summary>
+    public SdfSampledSet Baked { get; }
     /// <summary>Gets a handle's snapshot.</summary>
     /// <param name="handle">The handle.</param>
     public SdfSampledSnapshot this[int handle] => m_snapshots[handle];
 
-    /// <summary>Captures each field's current snapshot. When every one is the snapshot <paramref name="previous"/> holds
-    /// at its handle, answers <paramref name="previous"/> itself, so a frame whose fields stood still carries the set the
-    /// frame before carried, and a consumer compares sets by reference.</summary>
-    /// <param name="fields">The fields, by handle.</param>
+    /// <summary>Captures each of a program's fields' current snapshot. When every one is the snapshot
+    /// <paramref name="previous"/> holds at its handle, answers <paramref name="previous"/> itself, so a frame whose fields
+    /// stood still carries the set the frame before carried and a consumer compares sets by reference; when only handles no
+    /// instruction samples moved (a height field's heights), the new set keeps <paramref name="previous"/>'s
+    /// <see cref="Baked"/>.</summary>
+    /// <param name="program">The program whose fields are captured (<see cref="SdfProgram.SampledFields"/>).</param>
     /// <param name="previous">The set captured before, or <see langword="null"/>.</param>
     /// <returns>The set.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="fields"/> is <see langword="null"/>.</exception>
-    public static SdfSampledSet Capture(IReadOnlyList<SdfSampledField> fields, SdfSampledSet? previous) {
-        ArgumentNullException.ThrowIfNull(argument: fields);
+    /// <exception cref="ArgumentNullException"><paramref name="program"/> is <see langword="null"/>.</exception>
+    public static SdfSampledSet Capture(SdfProgram program, SdfSampledSet? previous) {
+        ArgumentNullException.ThrowIfNull(argument: program);
 
+        return CaptureFields(fields: program.SampledFields, baked: program.BakedSampledFields, previous: previous);
+    }
+    // Captures fields of which the first `baked` handles are instruction-sampled.
+    internal static SdfSampledSet CaptureFields(IReadOnlyList<SdfSampledField> fields, int baked, SdfSampledSet? previous) {
         if (fields.Count == 0) { return Empty; }
-        if ((previous is not null) && (previous.Count == fields.Count)) {
+
+        var bakedStands = ((previous is not null) && (previous.Count == fields.Count) && (previous.BakedCount == baked));
+
+        for (var handle = 0; (bakedStands && (handle < baked)); handle++) {
+            bakedStands = ReferenceEquals(objA: previous!.m_snapshots[handle], objB: fields[handle].Current);
+        }
+        if (bakedStands) {
             var same = true;
 
-            for (var handle = 0; (same && (handle < fields.Count)); handle++) {
-                same = ReferenceEquals(objA: previous.m_snapshots[handle], objB: fields[handle].Current);
+            for (var handle = baked; (same && (handle < fields.Count)); handle++) {
+                same = ReferenceEquals(objA: previous!.m_snapshots[handle], objB: fields[handle].Current);
             }
-            if (same) { return previous; }
+            if (same) { return previous!; }
         }
 
         var snapshots = new SdfSampledSnapshot[fields.Count];
 
         for (var handle = 0; (handle < snapshots.Length); handle++) { snapshots[handle] = fields[handle].Current; }
-        return new SdfSampledSet(snapshots: snapshots);
+        return new SdfSampledSet(snapshots: snapshots, baked: baked, bakedSet: (bakedStands ? previous!.Baked : null));
     }
 }
 
@@ -158,6 +186,10 @@ public sealed partial class SdfProgram {
     /// <summary>Gets the program's sampled fields, by handle: a sampled instruction's Data1.z holds its field's place here
     /// as uint bits.</summary>
     public IReadOnlyList<SdfSampledField> SampledFields => m_sampledFields;
+    /// <summary>Gets how many of <see cref="SampledFields"/>' leading handles some instruction samples: what the mesh bake
+    /// reads and keys (<see cref="SdfSampledSet.Baked"/>). The handles after them are height fields' heights, which only a
+    /// draw reads.</summary>
+    public int BakedSampledFields { get; private set; }
     /// <summary>Gets the height fields the program's instances draw, in instance order: a field's reference is the
     /// instance's sampled instruction and its heights hold a handle of their own, which no instruction samples and the
     /// mesh identity never hashes.</summary>
@@ -203,6 +235,7 @@ public sealed partial class SdfProgram {
         }
         var heightFields = new List<SdfHeightFieldBinding>();
 
+        BakedSampledFields = fields.Count;
         for (var index = 0; (index < m_instances.Length); index++) {
             if (m_instances[index].HeightField is not { } heightField) { continue; }
             if (m_instances[index].IsDynamic) { throw new ArgumentException(message: "A height field is drawn by a static instance."); }
@@ -213,7 +246,7 @@ public sealed partial class SdfProgram {
         }
         m_sampledFields = [.. fields];
         HeightFields = [.. heightFields];
-        Sampled = SdfSampledSet.Capture(fields: m_sampledFields, previous: null);
+        Sampled = SdfSampledSet.CaptureFields(fields: m_sampledFields, baked: BakedSampledFields, previous: null);
     }
 }
 
