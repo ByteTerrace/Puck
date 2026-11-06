@@ -17,8 +17,8 @@ public readonly record struct SdfWorldView(SdfWorldResidency Residency, int View
 /// view each instance renders (<c>resolve</c>), and the package keeps every residency it has resolved or a recorder
 /// holds: it starts their frames, asks them whether a view is unchanged, and tells them of a device loss.
 /// <para>
-/// A pass installs only once its residency's tables exist (its build waits for them), and the frame's first pass to
-/// record submits the residency's upload ahead of the instance's submission. The screens a view shows are its
+/// A pass installs only once its residency's tables exist (its build waits for them), and the frame's preparation
+/// (<see cref="PrepareRender"/>) submits the residency's upload before any pass records. The screens a view shows are its
 /// instance's reads its graph binds to no version (<see cref="SamplesReads"/>): each pass binds the image of every
 /// screen, the first taking its lease into the frame's lease list.
 /// </para>
@@ -419,6 +419,15 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         foreach (var instance in m_entries.Keys) {
             _ = Refresh(instance: instance);
         }
+    }
+    /// <inheritdoc/>
+    /// <remarks>Stages the residency the instance renders this frame (<see cref="SdfWorldResidency.Stage"/>): its upload
+    /// is submitted and its background GPU work pumped here, ahead of the frame's batch, so no pass's recording pays for
+    /// them.</remarks>
+    public void PrepareRender(string instance, in FrameContext context) {
+        if (Refresh(instance: instance).View is not { } view) { return; }
+        Begin(residency: view.Residency);
+        _ = view.Residency.Stage(context: in context);
     }
 
     // Starts a residency's frame the first time the package meets it in this frame.

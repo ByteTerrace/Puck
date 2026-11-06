@@ -86,6 +86,14 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
             !tables.ScreenEmissionHasImages && !tables.ScreenEmissionOwes);
     }
     /// <inheritdoc/>
+    /// <remarks>Stages the producer's residency (<see cref="SdfWorldResidency.Stage"/>), whose upload the projection and
+    /// reduction read, ahead of the frame's batch.</remarks>
+    public void PrepareRender(string instance, in FrameContext context) {
+        if ((Resolve(instance: instance)?.Residency is not { IsReleased: false } residency)) { return; }
+        views.Begin(residency: residency);
+        _ = residency.Stage(context: in context);
+    }
+    /// <inheritdoc/>
     public async ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
         var registration = (Resolve(instance: context.Instance) ?? throw new InvalidOperationException(message: $"Environment instance '{context.Instance}' names no residency."));
         var residency = registration.Residency;

@@ -79,7 +79,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         var residency = m_view.Residency;
 
         m_owner.Begin(residency: residency);
-        var tables = residency.Submit(context: recording.Context);
+        var tables = residency.Staged(context: recording.Context);
         var frame = residency.Frame!;
         var index = Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1));
         var render = (Width: recording.RenderWidth, Height: recording.RenderHeight);

@@ -65,7 +65,8 @@ glass target and the glass sums) and `sdf-glass.comp` (the lit image written
 again with each glass pixel shaded) between views and the sky
 (`SdfWorldPackage.WithGlass`). The surface and views kernels call no
 field query. The region copies are the
-residency's one upload a frame (`SdfWorldResidency.Submit`); every pass after
+residency's one upload a frame, submitted by the render graph's preparation
+before any node records (`SdfWorldResidency.Stage`); every pass after
 it runs once per view as a pass of the view's `sdf.world` instance, into that
 instance's render grid. Native views use `SdfWorldPackage.NativeFragment`, whose sky and composite read
 the lit image and the visibility records views left. Views whose render-scale

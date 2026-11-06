@@ -360,27 +360,27 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             case SdfWorldPackage.Parts.Mesh: {
                     Follow();
                     m_owner.Begin(residency: m_view.Residency);
-                    return ((m_view.Residency.Submit(context: in context).OpaqueDrawCount == 0) && TargetsWritten);
+                    return ((m_view.Residency.Staged(context: in context).OpaqueDrawCount == 0) && TargetsWritten);
                 }
             // The glass pass skips a frame with no glass draw once its target holds a clear; the clear and the shading
             // pass never skip, since the shading pass writes the lit image every pass after it reads.
             case SdfWorldPackage.Parts.Glass: {
                     Follow();
                     m_owner.Begin(residency: m_view.Residency);
-                    return ((m_view.Residency.Submit(context: in context).GlassDrawCount == 0) && TargetsWritten);
+                    return ((m_view.Residency.Staged(context: in context).GlassDrawCount == 0) && TargetsWritten);
                 }
             // The surface pass reads the pyramid only for a pixel the mesh covers, which a frame with no draws has none of.
             case SdfWorldPackage.Parts.Pyramid: {
                     Follow();
                     m_owner.Begin(residency: m_view.Residency);
-                    return (m_view.Residency.Submit(context: in context).MeshDrawCount == 0);
+                    return (m_view.Residency.Staged(context: in context).MeshDrawCount == 0);
                 }
             case SdfWorldPackage.Parts.ShadowNear:
             case SdfWorldPackage.Parts.ShadowFar:
             case SdfWorldPackage.Parts.ShadowSecond: {
                     Follow();
                     m_owner.Begin(residency: m_view.Residency);
-                    var tables = m_view.Residency.Submit(context: in context);
+                    var tables = m_view.Residency.Staged(context: in context);
                     var cascades = SdfMeshShadowCascades.Fit(frame: m_view.Residency.Frame!, view: m_view.View);
 
                     return ((cascades.Count == 0) || ((tables.OpaqueDrawCount == 0) && TargetsWritten) ||
@@ -405,7 +405,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         m_owner.Begin(residency: residency);
 
-        var tables = residency.Submit(context: recording.Context);
+        var tables = residency.Staged(context: recording.Context);
 
         // The glass clear zeroes the glass sums, its one output, ahead of the glass pass's accumulation.
         if (m_part == SdfWorldPackage.Parts.GlassClear) {

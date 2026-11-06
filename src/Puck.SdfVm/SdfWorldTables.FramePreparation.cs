@@ -257,7 +257,7 @@ public sealed partial class SdfWorldTables {
     /// <summary>Packs a frame into the tables host-side: validates it, writes the dynamic transforms it moved, and packs
     /// the screen lights, the lights and the sky, the volumes
     /// and the mesh draws. Each region
-    /// owes only the words that changed; the frame's first pass sends them (<see cref="SubmitUpload"/>). The frame's values
+    /// owes only the words that changed; the frame's upload sends them (<see cref="SubmitUpload"/>). The frame's values
     /// reach the passes through each pass block (<see cref="SdfFrameBlock"/>), not the tables.</summary>
     /// <param name="frame">The frame.</param>
     /// <param name="frameSeconds">The interval the frame's presentation spans, in seconds, which sizes the owed mesh words

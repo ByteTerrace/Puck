@@ -14,8 +14,8 @@ namespace Puck.SdfVm;
 /// tables are shared by every view of the frame source. Fully backend-neutral through its device's
 /// <see cref="IGpuDeviceContext.Services"/>.
 /// <para>
-/// Each frame the residency packs the frame's rows into the regions host-side (<see cref="Pack"/>), and the first pass
-/// recording of the frame submits one upload (<see cref="SubmitUpload"/>): the owed words of every region, fenced, into
+/// Each frame the residency packs the frame's rows into the regions host-side (<see cref="Pack"/>), and its staging,
+/// before any pass records, submits one upload (<see cref="SubmitUpload"/>): the owed words of every region, fenced, into
 /// the next of <see cref="FrameRingSize"/> upload slots, whose
 /// buffers every pass of the frame binds. Before an upload rewrites a slot it waits the previous upload's fence, which
 /// signals once every submission queued before it has finished, the views that read the slot two uploads earlier among

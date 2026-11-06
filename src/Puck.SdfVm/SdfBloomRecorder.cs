@@ -52,7 +52,7 @@ internal sealed class SdfBloomRecorder : IRenderGraphPackageRecorder {
             m_view = current;
         }
         m_owner.Begin(residency: m_view.Residency);
-        var tables = m_view.Residency.Submit(context: recording.Context);
+        var tables = m_view.Residency.Staged(context: recording.Context);
         var frame = m_view.Residency.Frame!;
         var snapshot = frame.Views[Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1))];
         var bloom = (snapshot.Bloom ?? new CameraBloom());
