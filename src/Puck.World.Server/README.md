@@ -1104,9 +1104,10 @@ awake rigid body together through `Puck.Physics.FixedRigidWorld`
   the contact reach, one exact query per collider at the start pose
   (`IContactField.CollectContacts`, `FixedStaticContactSolver.CollectContacts`);
   coplanar surfaces merge into the deepest and the deepest three are kept. A
-  field that cannot answer per surface (a signed-distance field, a field
-  collider within reach, a body standing in a portal's opening, an adjacency
-  merge) is probed by one certified sweep of the predicted motion instead, whose
+  body that can travel farther than the contact reach this step, or a field that
+  cannot answer per surface (a signed-distance field, a field collider within
+  reach, a body standing in a portal's opening, an adjacency merge), is probed by
+  one certified sweep of the predicted motion instead, whose
   walkable and non-walkable normals become the surfaces; that sweep's refusal
   blocks the body for the tick. `Puck.Physics.FixedRigidContacts` spreads each
   surface over the body's support features with their own separations.
