@@ -323,10 +323,12 @@ landed geometry).
   dressed motion identities (`SdfMeshPathBake.cs:408, :425`; the `Dress` item
   under [other frame-time findings](#other-frame-time-findings)); scene
   emission's residue includes pick material labels (`WorldPickMap.cs:64`) and
-  shape-specific materials. A cold bake's remaining sites are readback-copy
-  byte arrays (`SdfMeshPathBake.cs:691`), fine-key dictionary entries
-  (`SdfSampledLattice.cs:861`) and contour merge doubles
-  (`SdfDualContouring.cs:702`). Continue with owned storage, through
+  shape-specific materials. A cold bake's remaining sites are the pooled
+  readback-copy byte arrays (`SdfMeshBakeGpuWork.Complete`), point rounds
+  (`SdfSampledLattice.CrossingPoints`, `SdfSampledLattice.GradientPoints`) and
+  contour merge doubles (`SdfDualContouring.Merge`). Refinement indexes already
+  fill owned storage directly; their managed growth/copy path is gone. Continue
+  with owned storage, through
   `IAllocator` and `MimallocAllocator` where it goes native; a shared
   cross-thread pool belongs to the memo.
 - Open from the allocation cuts:
@@ -593,15 +595,16 @@ The custom no-GC runtime port stays later work, on the
 Owner: specialist (rendering) · high · Next: the bake samples through the
 residency's background GPU work
 ([B1](graphics-architecture.md#b1-the-completion-driven-bake-service)), so
-the frame-pacing floor is gone and the cold bake is CPU-bound (102 to 125 s on
-Direct3D 12 and 129 s on Vulkan on a busy machine); narrow `SdfMeshBakeClosure` to the code that decides mesh contents and key one
+the frame-pacing floor is gone and the cold bake is CPU-bound; narrow
+`SdfMeshBakeClosure` to the code that decides mesh contents and key one
 store for both backends from the HLSL source closure of `MeshBake` and
 `MeshBakeMask`; then cut the collapse (`SdfMeshCollapse`), now the bake's
 largest CPU stage, toward the owner's bar: one minute at most per backend from
-an empty store (AGENTS.md), and work proportional to change. Two bakes of one
-build are not byte-identical (1 to 4 of about 1,306 payloads differ), so a
-product keyed across processes keys on the payload it was built from, never on
-the geometry key alone.
+an empty store (AGENTS.md), and work proportional to change. Cold-bake
+reproduction pins both authority and display time before the first frame
+(`paused` and `lockstep` at launch), then compares key sets and every decompressed
+payload. Pausing after attachment does not reproduce the initial poses; see
+[the bake procedure](../../.claude/skills/rendering/references/mesh-bake.md#reproducing-a-cold-bake).
 
 - [high] Each backend still keeps its own store because `SdfMeshBakeIdentity`
   hashes the actual mask/bake kernel bytes. The bake/dresser, view/bake parameter
@@ -612,14 +615,16 @@ the geometry key alone.
   equivalence, including compiler changes and skin/material/refinement behavior.
   The latest native forest legs have different aggregate triangle counts, so
   source equality alone is not proof of identical products or a halved cold cost.
-- The cold bake fails the one-minute bar on both backends. Its GPU half no
-  longer bounds it: the background GPU work dispatches batches as its slots
-  complete, the whole bake is 6 to 7 s of measured GPU time, and 39 to 47% of
-  the bake's takes find no group owing a lattice. The contour work saturates
-  every processor: its stages log 1,100 to 1,500 thread seconds, the collapse
-  (`SdfMeshCollapse.Levels`, the `land` stage) about 40% of the workers' CPU,
-  the crossing and prepare stages about 15 to 20% each and the contour
-  (`ExtractRefined`) about 10%. Roughly half the contour CPU has to fall.
+- The cold bake has not met the one-minute bar on either backend. The CPU
+  stages remain the target after removing the repeated refinement-index walk,
+  fine-cell sign scan and collapse fan preparation. `SdfMeshCollapse.Levels`
+  still dominates `land`; its `Measure` and `MeasureReverse` checks are the
+  next profile-led cuts. Preserve their sample order, exact distances and
+  acceptance bounds. The overall CPU-halving target remains open. Queue
+  `bench startup worlds/debug --bake --backend <backend>` through `puck measure`
+  for the quiet wall-time comparison. The stage log's `cpu` fields sum worker
+  elapsed intervals, including descheduling and GC/profiler suspension; they
+  are diagnostics, not measured processor time or a quiet-wall-time result.
 - [medium] Every view still renders every frame while a bake is pending
   (`SdfWorldResidency.IsUnchanged` returns false on `MeshPathBake.Pending`),
   which the frame-paced bake needed to dispatch and the background GPU work
@@ -653,14 +658,12 @@ the geometry key alone.
   `--profile gc-verbose` in the same leg as the memory split above, then write
   each into storage its worker owns: one `float` buffer filled once, appends
   without the wrapper, and a projection workspace per worker.
-- Next cuts, largest first: `SdfMeshCollapse` (4.8 M tried collapses for a
-  valley sector's 0.89 M triangles, about 3.5 µs each; skipping places whose
-  neighbourhood no collapse changed saves only a quarter of the tries and no
-  time, so the cost is in the tries that run); the contour's `ExtractRefined`
-  measures every fine cell's corner signs a third time, where `CrossingEdges`
-  already lists the crossed fine cells (`m_crossedFineCells`); the frame thread's
-  `SdfWorldResidency.Capture` and the render graph's per-view recording while
-  hundreds of views stand.
+- Next cuts: the exact forward/reverse sample checks in `SdfMeshCollapse`
+  (skipping unchanged neighbourhoods previously cut tries without a measured
+  CPU gain); the frame thread's `SdfWorldResidency.Capture` and the render
+  graph's per-view recording while hundreds of views stand. The crossed-cell
+  masks already flow from `CrossingEdges` to `ExtractRefined`; do not introduce
+  a second topology scan there.
 - [low] The audit counts a chunked mesh's seam edges as open edges: weld the
   joined query view's coincident seam vertices, or skip edges two chunks share,
   so a chunked group's open edges mean holes.
@@ -2347,7 +2350,7 @@ Grounded causes and leads, largest first:
   `host.memory`, and let `MemoryAccount` be the one budget authority with
   `ShaderPipelineMemoryBudget` as a reservation from it, not a second budget.
   The account's budget is three quarters of installed RAM and sees only mesh
-  payloads, bake group workspaces and worker scratch, never the managed heap,
+  payloads and bake group workspaces, never the managed heap,
   `GpuRegion` host copies, device or staging heaps, so on a unified-memory Deck
   it pays no regard to the GPU's share of the same memory.
 - A warm load decodes the whole loaded set into managed arrays once before the

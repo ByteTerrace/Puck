@@ -18,27 +18,32 @@ public static class StartupBenchmarks {
         var samples = CliOptions.Count(defaultValue: 3, description: "Fresh processes measured per world, 1 to 100.", maximum: 100, minimum: 1, name: "--samples");
         var timeout = CliOptions.Count(defaultValue: 120, description: "Seconds one sample may take before it is abandoned, 1 to 3600.", maximum: 3600, minimum: 1, name: "--timeout-seconds");
         var headless = new Option<bool>("--headless") { Description = "Measure console readiness only; default launches the windowed renderer and requires a completed PNG capture." };
+        var bake = new Option<bool>("--bake") { Description = "Measure from the first mesh-bake start through completion of all started residencies, with a fresh cache and both clocks paused. No frame capture or lighting convergence is timed." };
+        var backend = WorldLaunch.BackendOption(description: "Graphics backend for the windowed sample: auto, directx or vulkan.");
         var width = CliOptions.Count(defaultValue: 1280, description: "Window width in pixels for the rendered capture, 1 to 16384.", maximum: 16384, minimum: 1, name: "--width");
         var height = CliOptions.Count(defaultValue: 720, description: "Window height in pixels for the rendered capture, 1 to 16384.", maximum: 16384, minimum: 1, name: "--height");
         var json = new Option<bool>("--json") { Description = "Print the report (puck.bench.v1) on standard output instead of the summary line." };
-        var command = new Command(description: "Measure fresh-process World startup serially, with isolated persistence for every sample.", name: "startup") { worlds, artifact, output, cache, samples, timeout, headless, width, height, json };
+        var command = new Command(description: "Measure fresh-process World startup serially, with isolated persistence for every sample.", name: "startup") { worlds, artifact, output, cache, samples, timeout, headless, bake, backend, width, height, json };
 
         command.SetAction(action: parse => Run(
             (parse.GetValue(argument: worlds) ?? []), parse.GetValue(option: artifact), parse.GetValue(option: output),
             parse.GetValue(option: samples), parse.GetValue(option: timeout), parse.GetValue(option: headless), parse.GetValue(option: width), parse.GetValue(option: height), parse.GetValue(option: cache),
-            parse.GetValue(option: json), sampleHost));
-        command.Detail(detail: "Writes report.json (puck.bench.v1) in a unique run directory under --output after every sample: the World build's identity (version with its commit, SHA-256 of its engine assemblies), the host load sampled during the run, and the metric `startup` (console readiness headless, the completed capture windowed, in ms) as median, p10 and p90 over every sample of every world. `puck measure` reads it as /metrics/startup/median. Exit 0 when every sample passed, 1 when one failed, 2 for invalid arguments.");
+            parse.GetValue(option: json), sampleHost, parse.GetValue(option: bake), parse.GetValue(option: backend)));
+        command.Detail(detail: "Writes report.json (puck.bench.v1) in a unique run directory under --output after every sample: the World build's identity (version with its commit, SHA-256 of its engine assemblies), the host load sampled during the run, and the metric `startup` (console readiness headless, the completed capture windowed, in ms), or `cold-bake` with --bake, as median, p10 and p90. --bake times the first bake start through the last started residency's completion, excluding boot and lighting convergence. `puck measure` reads /metrics/startup/median or /metrics/cold-bake/median. Exit 0 when every sample passed, 1 when one failed, 2 for invalid arguments.");
         return command;
     }
 
-    private static int Run(string[] worlds, string? artifact, string? output, int samples, int timeout, bool headless, int width, int height, string? cache, bool json, BenchHostSample? sampleHost) {
+    private static int Run(string[] worlds, string? artifact, string? output, int samples, int timeout, bool headless, int width, int height, string? cache, bool json, BenchHostSample? sampleHost, bool bake, Puck.World.WorldBackendPreference? backend) {
+
+        if (bake && (headless || cache is not null)) { return CliExit.Refuse("bench startup", "--bake", "requires a windowed World and a fresh per-sample cache; omit --headless and --cache-dir."); }
+        if (headless && backend is not null) { return CliExit.Refuse("bench startup", "--backend", "requires a windowed sample."); }
 
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root)) { return 2; }
         var run = PuckPaths.Normalize(path: Path.Combine(path1: (output ?? Path.Combine(path1: root, path2: "artifacts/startup")), path2: Guid.NewGuid().ToString(format: "N")));
 
         Directory.CreateDirectory(path: run);
         // The build happens before the first sample, so no sample's interval holds it.
-        if (!WorldLaunch.TryResolve(build: out var build, error: out var buildError, logDirectory: run, named: artifact, repositoryRoot: root, spirv: (!headless && WorldLaunch.NeedsSpirv(backend: null, shape: WorldShape.Windowed)), verb: "startup")) {
+        if (!WorldLaunch.TryResolve(build: out var build, error: out var buildError, logDirectory: run, named: artifact, repositoryRoot: root, spirv: (!headless && WorldLaunch.NeedsSpirv(backend: backend, shape: WorldShape.Windowed)), verb: "startup")) {
             Console.Error.WriteLine(value: $"startup: {buildError}");
             return 2;
         }
@@ -57,15 +62,17 @@ public static class StartupBenchmarks {
         var start = BenchReport.Start(build: BenchBuild.Of(entryAssembly: artifact), repeats: samples, settings: new Dictionary<string, string> {
             ["worlds"] = string.Join(separator: ", ", values: worlds.Select(selector: static world => CliPaths.ToDisplay(fullPath: world))),
             ["headless"] = (headless ? "true" : "false"),
+            ["bake"] = (bake ? "true" : "false"),
+            ["backend"] = (backend?.ToString() ?? "document"),
             ["size"] = $"{width}x{height}",
             ["cacheDir"] = ((cache is null) ? "(per sample)" : PuckPaths.Normalize(path: Path.GetFullPath(path: cache))),
         }, verb: "bench startup");
         var progress = (json ? Console.Error : Console.Out);
         using var host = new BenchHostRecorder(sample: sampleHost);
         BenchReport Report(bool finished) => start with {
-            Complete = (finished && (Summarize(rows, (worlds.Length * samples), headless) is not null)),
+            Complete = (finished && (Summarize(rows, (worlds.Length * samples), headless, bake) is not null)),
             HostLoad = (finished ? host.Finish() : null),
-            Metrics = ((Summarize(rows, (worlds.Length * samples), headless) is { } metric) ? new Dictionary<string, BenchMetric> { ["startup"] = metric } : new Dictionary<string, BenchMetric>()),
+            Metrics = ((Summarize(rows, (worlds.Length * samples), headless, bake) is { } metric) ? new Dictionary<string, BenchMetric> { [(bake ? "cold-bake" : "startup")] = metric } : new Dictionary<string, BenchMetric>()),
             Startup = rows.ToArray(),
         };
 
@@ -78,33 +85,55 @@ public static class StartupBenchmarks {
                 Directory.CreateDirectory(path: directory);
                 var capture = $"{directory}/frame.png";
                 var request = new WorldLaunchRequest(Artifact: artifact, Step: "bench startup") {
-                    Arguments = ["--width", width.ToString(provider: CultureInfo.InvariantCulture), "--height", height.ToString(provider: CultureInfo.InvariantCulture), "--capture-dir", $"{directory}/captures", .. ((cache is null) ? Array.Empty<string>() : ["--cache-dir", Path.GetFullPath(cache)])],
+                    Arguments = ["--width", width.ToString(provider: CultureInfo.InvariantCulture), "--height", height.ToString(provider: CultureInfo.InvariantCulture), "--capture-dir", $"{directory}/captures", "--cache-dir", Path.GetFullPath(cache ?? $"{directory}/cache"), .. (bake ? new[] { "--paused", "--lockstep" } : [])],
+                    Backend = backend,
                     ExitAfterSeconds = 0,
                     Shape = (headless ? WorldShape.Headless : WorldShape.Windowed),
                     StateDirectory = $"{directory}/state",
                     World = worlds[index],
                 };
-                var input = (("world.status\n" + (headless ? "" : $"world.wait 1\nworld.screenshot {JsonSerializer.Serialize(capture, StartupJsonContext.Default.String)}\n")) + "wire.errors\n");
+                var input = (("world.status\n" + ((headless || bake) ? "" : $"world.wait 1\nworld.screenshot {JsonSerializer.Serialize(capture, StartupJsonContext.Default.String)}\n")) + "wire.errors\n");
+                var pendingBakes = new HashSet<string>(StringComparer.Ordinal);
+                double? firstBake = null;
+                double? lastBake = null;
+                bool BakesComplete(CliProcessOutputLine line) {
+                    if (line.Stream != CliProcessOutputStream.Stderr) { return false; }
+                    const string StartPrefix = "[sdf.mesh-bake] start residency=";
+                    const string DonePrefix = "[sdf.mesh-bake] done residency=";
+                    var starting = line.Line.StartsWith(StartPrefix, StringComparison.Ordinal);
+                    if (!starting && !line.Line.StartsWith(DonePrefix, StringComparison.Ordinal)) { return false; }
+                    var tail = line.Line.AsSpan((starting ? StartPrefix : DonePrefix).Length);
+                    var residency = tail[..tail.IndexOf(' ')].ToString();
+                    if (starting) { firstBake ??= line.ElapsedMilliseconds; pendingBakes.Add(residency); }
+                    else { pendingBakes.Remove(residency); lastBake = line.ElapsedMilliseconds; }
+                    return !starting && firstBake is not null && pendingBakes.Count == 0;
+                }
                 StartupSample row;
 
                 try {
                     using var launch = WorldLaunch.Admit(request: request);
 
                     var result = launch.Run(input: input, timeout: TimeSpan.FromSeconds(seconds: timeout),
-                        continueWhen: line => (headless
+                        continueWhen: line => (bake ? BakesComplete(line) : headless
                             ? ((line.Stream == CliProcessOutputStream.Stdout) && (line.Line == "[wire.errors: 0 rejected]"))
                             : IsCaptureCompletion(capture: capture, line: line)),
                         continuationInput: "quit\n");
 
                     File.WriteAllText($"{directory}/stdout.log", result.Stdout);
                     File.WriteAllText($"{directory}/stderr.log", result.Stderr);
-                    row = Assess(worlds[index], sample, result, headless, capture);
+                    row = Assess(worlds[index], sample, result, (headless || bake), capture);
+                    if (bake) {
+                        row = row with { BakeMilliseconds = lastBake - firstBake, Error = row.Error ?? ((firstBake is null || lastBake is null || pendingBakes.Count != 0) ? "missing complete cold bake" : null) };
+                        if (result.OutputLines.Any(static line => line.Stream == CliProcessOutputStream.Stderr && line.Line.StartsWith("[sdf.mesh-bake]", StringComparison.Ordinal) && (line.Line.Contains("failed:", StringComparison.Ordinal) || line.Line.Contains("refused:", StringComparison.Ordinal)))) {
+                            row = row with { Error = row.Error ?? "a bake stage failed or refused its group" };
+                        }
+                    }
                 } catch (Exception exception) when ((exception is Win32Exception or IOException or InvalidOperationException or TimeoutException)) {
                     row = new(worlds[index], sample, null, null, null, exception.Message);
                 }
                 rows.Add(item: row);
                 progress.WriteLine(value: ((row.Error is null)
-                    ? $"{CliPaths.ToDisplay(fullPath: worlds[index])} #{sample}: console {row.ConsoleMilliseconds:F1} ms, capture {row.CaptureMilliseconds:F1} ms"
+                    ? (bake ? $"{CliPaths.ToDisplay(fullPath: worlds[index])} #{sample}: cold bake {row.BakeMilliseconds:F1} ms" : $"{CliPaths.ToDisplay(fullPath: worlds[index])} #{sample}: console {row.ConsoleMilliseconds:F1} ms, capture {row.CaptureMilliseconds:F1} ms")
                     : $"FAIL {CliPaths.ToDisplay(fullPath: worlds[index])} #{sample}: {row.Error}"));
                 // Persist partial evidence after every child; interruption never turns the completed prefix into a full run.
                 _ = Report(finished: false).Write(directory: run);
@@ -138,16 +167,19 @@ public static class StartupBenchmarks {
         line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[capture] ") &&
         line.Line.Replace(newChar: '/', oldChar: '\\').EndsWith($" -> {capture.Replace(newChar: '/', oldChar: '\\')}", StringComparison.Ordinal));
 
-    // The `startup` metric: every sample of every world, or null until all of them passed.
-    public static BenchMetric? Summarize(IReadOnlyList<StartupSample> rows, int expected, bool headless) {
+    // Every sample of every world, or null until all of them passed.
+    public static BenchMetric? Summarize(IReadOnlyList<StartupSample> rows, int expected, bool headless, bool bake = false) {
         if ((rows.Count != expected) || (rows.Count == 0) || rows.Any(predicate: row => (row.Error is not null))) { return null; }
-        var values = rows.Select(selector: row => (headless ? row.ConsoleMilliseconds : row.CaptureMilliseconds)).ToArray();
+        var values = rows.Select(selector: row => (bake ? row.BakeMilliseconds : headless ? row.ConsoleMilliseconds : row.CaptureMilliseconds)).ToArray();
 
         if (values.Any(predicate: value => ((value is null) || !double.IsFinite(d: value.Value) || (value.Value < 0)))) { return null; }
         return BenchMetric.Of(samples: [.. values.Select(selector: static value => value!.Value)], unit: "ms");
     }
 }
-public sealed record StartupSample(string World, int Sample, double? ConsoleMilliseconds, double? CaptureMilliseconds, int? ExitCode, string? Error);
+public sealed record StartupSample(string World, int Sample, double? ConsoleMilliseconds, double? CaptureMilliseconds, int? ExitCode, string? Error) {
+    /// <summary>Gets the first bake start through completion of every started residency, in milliseconds.</summary>
+    public double? BakeMilliseconds { get; init; }
+}
 
 [JsonSerializable(typeof(string))]
 internal sealed partial class StartupJsonContext : JsonSerializerContext;

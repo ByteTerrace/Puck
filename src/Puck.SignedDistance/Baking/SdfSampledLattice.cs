@@ -307,7 +307,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private readonly OwnedBuffer<long> m_crossingKeys;
     // The fine key of the low corner of each crossed fine cell of a refined cell, in the order CrossingEdges reads the
     // cells, which GradientPoints reads again rather than measuring every fine cell's corners a second time.
-    private readonly OwnedBuffer<int> m_crossedFineCells;
+    private readonly OwnedBuffer<SdfCrossedCell> m_crossedFineCells;
 
     private bool m_crossingsPrepared;
     private bool m_rootsPrepared;
@@ -434,13 +434,12 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// the samples put it: the parts of a union whose own detail is finer than the lattice. Empty for none. Where every
     /// region's cells would measure more fine samples than the refinement's budget, the regions covering the fewest cells
     /// are refined and the rest contour at the lattice's own spacing.</param>
-    /// <param name="scratch">The caller's exclusive reusable fine-sample index, or null for storage owned by this call.</param>
     /// <returns>The fine samples to measure, in the lattice's frame, in the order <see cref="AnswerRefinement"/> takes
     /// their answers; empty when no cell needs refining or even two fine cells a side would measure too many, and the
     /// lattice then contours at its own spacing.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="factor"/> is less than two.</exception>
     /// <exception cref="InvalidOperationException">The lattice is already refined.</exception>
-    public Vector3[] Refine(int factor, ReadOnlySpan<SdfLatticeRegion> regions = default, RefinementScratch? scratch = null) {
+    public Vector3[] Refine(int factor, ReadOnlySpan<SdfLatticeRegion> regions = default) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: factor, other: 2);
 
         if (m_factor != 1) {
@@ -750,6 +749,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         bool[]? chosen = null;
         var chosenSplit = 0;
         var chosenServed = -1;
+        var chosenSamples = 0;
         // The cells whose fine samples the count holds, the samples each added that no cell counted before it held, and
         // their sum: the distinct fine samples of the counted cells.
         var countedCells = new bool[essential.Length];
@@ -797,6 +797,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             }
             if (served > chosenServed) {
                 (chosen, chosenSplit, chosenServed) = (mask, split, served);
+                chosenSamples = ((int)counted);
             }
             if (served == order.Count) { break; }
         }
@@ -809,16 +810,21 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             var z = (cell / (cellsX * cellsY));
             var fresh = 0;
 
-            for (var lz = 0; (lz <= split); lz++) {
-                for (var ly = 0; (ly <= split); ly++) {
-                    for (var lx = 0; (lx <= split); lx++) {
-                        var faceX = ((lx == 0) || (lx == split));
-                        var faceY = ((ly == 0) || (ly == split));
-                        var faceZ = ((lz == 0) || (lz == split));
+            // Ownership depends only on which cell faces a sample touches. Count each of the 27 boundary/interior
+            // classes once; an interior axis represents exactly split - 1 samples with the same holders.
+            for (var iz = 0; (iz < 3); iz++) {
+                for (var iy = 0; (iy < 3); iy++) {
+                    for (var ix = 0; (ix < 3); ix++) {
+                        var faceX = (ix != 1);
+                        var faceY = (iy != 1);
+                        var faceZ = (iz != 1);
+                        var lx = ((ix == 2) ? split : ix);
+                        var ly = ((iy == 2) ? split : iy);
+                        var lz = ((iz == 2) ? split : iz);
 
                         if (faceX && faceY && faceZ) { continue; }
                         if ((faceX || faceY || faceZ) && HeldByCounted(lx: lx, ly: ly, lz: lz, split: split, x: x, y: y, z: z)) { continue; }
-                        fresh++;
+                        fresh += (((faceX ? 1 : (split - 1)) * (faceY ? 1 : (split - 1))) * (faceZ ? 1 : (split - 1)));
                     }
                 }
             }
@@ -879,35 +885,28 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             refinedCount += (cell ? 1 : 0);
         }
 
-        // The fine samples of every measured cell, its faces included, that are not coarse samples. A refinement that would
-        // measure more than MaxFineSamples splits each cell into fewer fine cells rather than none: a sheet thinner than
-        // the coarse cell is caught by any refinement and lost by the coarse contour.
-        scratch ??= new RefinementScratch();
-        var keys = scratch.Keys;
-        var cellBlocks = scratch.CellBlocks;
-        var blockSlots = scratch.BlockSlots;
-
-        while (!FineKeys(split: factor)) {
-            if (--factor < 2) {
-                return [];
-            }
-        }
+        // Admission already counted the distinct samples of these cells. Fill their final owned indexes directly:
+        // no growing worker lists, retained scratch or copies into the lattice's identical buffers.
+        m_fineKeys.Resize(length: chosenSamples, clear: false, preserve: false);
+        FineKeys(split: factor);
 
         // Numbers the fine samples in the order the cells, then each cell's samples, first reach them, and indexes each
         // measured cell's block of (split + 1)^3 slots (FineSlot), -1 at its coarse corners. A sample on a cell's face, edge
         // or corner takes the slot of the earliest measured cell holding it: each holder past the cell along an axis where
         // the sample lies on the cell's face, at the sample's place in it.
-        bool FineKeys(int split) {
+        void FineKeys(int split) {
             var fineX = ((cellsX * split) + 1);
             var fineY = ((cellsY * split) + 1);
             var side = (split + 1);
             var block = ((side * side) * side);
 
-            keys.Clear();
-            blockSlots.Clear();
-            CollectionsMarshal.SetCount(list: cellBlocks, count: measured.Length);
+            m_cellBlocks.Resize(length: measured.Length, clear: false, preserve: false);
+            m_blockSlots.Resize(length: checked(measuredCount * block), clear: false, preserve: false);
 
-            var cellSpan = CollectionsMarshal.AsSpan(list: cellBlocks);
+            var cellSpan = m_cellBlocks.GetSpan();
+            var slotSpan = m_blockSlots.GetSpan();
+            var keys = m_fineKeys.GetSpan();
+            var samples = 0;
             var blocks = 0;
 
             for (var z = 0; (z < cellsZ); z++) {
@@ -923,10 +922,6 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
                         var at = (blocks++ * block);
 
-                        CollectionsMarshal.SetCount(list: blockSlots, count: (at + block));
-
-                        var slotSpan = CollectionsMarshal.AsSpan(list: blockSlots);
-
                         for (var lz = 0; (lz < side); lz++) {
                             for (var ly = 0; (ly < side); ly++) {
                                 for (var lx = 0; (lx < side); lx++, at++) {
@@ -938,20 +933,16 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                                     var held = EarlierHolder(cellSpan: cellSpan, lx: lx, ly: ly, lz: lz, slotSpan: slotSpan, split: split, x: x, y: y, z: z);
 
                                     if (held < 0) {
-                                        held = keys.Count;
-                                        keys.Add(item: ((((x * split) + lx) + (fineX * (((y * split) + ly) + (fineY * ((z * split) + lz)))))));
+                                        held = samples++;
+                                        keys[held] = (((x * split) + lx) + (fineX * (((y * split) + ly) + (fineY * ((z * split) + lz)))));
                                     }
                                     slotSpan[at] = held;
                                 }
                             }
                         }
-                        if (keys.Count > MaxFineSamples) {
-                            return false;
-                        }
                     }
                 }
             }
-            return true;
         }
         // The slot an earlier measured cell gave a sample of cell (x, y, z) at (lx, ly, lz), or -1: a holder steps -1
         // along an axis where the sample lies on the cell's low face, +1 where on its high face, and comes earlier in
@@ -986,17 +977,14 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_refined.CopyFrom(source: refined);
         MeasuredCells = measuredCount;
         RefinedCells = refinedCount;
-        m_fineKeys.CopyFrom(source: CollectionsMarshal.AsSpan(list: keys));
-        m_fineValues.Resize(keys.Count);
-        m_fineMaterials.Resize(keys.Count);
-        m_cellBlocks.CopyFrom(source: CollectionsMarshal.AsSpan(list: cellBlocks));
-        m_blockSlots.CopyFrom(source: CollectionsMarshal.AsSpan(list: blockSlots));
+        m_fineValues.Resize(chosenSamples);
+        m_fineMaterials.Resize(chosenSamples);
 
-        var points = new Vector3[keys.Count];
+        var points = new Vector3[chosenSamples];
         var fine = ContourCell;
 
-        for (var slot = 0; (slot < keys.Count); slot++) {
-            var (fx, fy, fz) = FineCoordinates(key: keys[slot]);
+        for (var slot = 0; (slot < chosenSamples); slot++) {
+            var (fx, fy, fz) = FineCoordinates(key: m_fineKeys[slot]);
 
             points[slot] = (m_origin + (new Vector3(x: fx, y: fy, z: fz) * fine));
         }
@@ -1004,33 +992,6 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         return points;
     }
 
-    /// <summary>Temporary fine-sample indexing retained by one refinement worker. A call to <see cref="Refine"/>
-    /// borrows it exclusively until return; the lattice copies every index it keeps.</summary>
-    public sealed class RefinementScratch {
-        internal List<int> Keys = [];
-        internal List<int> CellBlocks = [];
-        internal List<int> BlockSlots = [];
-
-        /// <summary>Ends a worker's borrow and bounds aggregate idle index storage to one fine-sample budget.
-        /// Larger one-off workspaces are released; common jobs reuse their slot's retained capacity.</summary>
-        /// <param name="workers">The number of slots sharing that retention budget.</param>
-        public void TrimForWorkers(int workers) {
-            var limit = (MaxFineSamples / Math.Max(val1: 1, val2: workers));
-
-            if (Keys.Capacity > limit) { Keys = []; } else { Keys.Clear(); }
-            if (CellBlocks.Capacity > limit) { CellBlocks = []; } else { CellBlocks.Clear(); }
-            // A block holds (split + 1)^3 slots for split^3 fine cells: at most about four slots a fine sample.
-            if (BlockSlots.Capacity > (4 * limit)) { BlockSlots = []; } else { BlockSlots.Clear(); }
-        }
-        /// <summary>Releases every retained index, for a worker with no bake left to run.</summary>
-        public void Release() {
-            Keys = [];
-            CellBlocks = [];
-            BlockSlots = [];
-        }
-        /// <summary>Gets the bytes the retained indexes hold: four an entry of each.</summary>
-        public long RetainedBytes => ((((long)Keys.Capacity) + CellBlocks.Capacity + BlockSlots.Capacity) * sizeof(int));
-    }
     /// <summary>Returns the most fine samples <see cref="Refine"/> measures in a lattice: every cell split
     /// <paramref name="factor"/> times along each axis, less its coarse corners, at most <see cref="MaxFineSamples"/>; zero
     /// for a factor that refines nothing.</summary>
@@ -1451,7 +1412,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
                     // This refined cell's crossed fine cells, which CrossingEdges listed in this order.
                     for (; (crossed < m_crossedFineCells.Length); crossed++) {
-                        var (fx, fy, fz) = FineCoordinates(key: m_crossedFineCells[crossed]);
+                        var (fx, fy, fz) = FineCoordinates(key: m_crossedFineCells[crossed].Corner);
 
                         if (((fx / factor) != x) || ((fy / factor) != y) || ((fz / factor) != z)) { break; }
                         for (var offset = 0; (offset < 8); offset++) {
@@ -1743,18 +1704,17 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 // The sample's six neighbours whose sign differs from its own, a bit each at 2 * axis + (1 for the step
                 // up): a face alternates in sign only where both of the sample's neighbours on it differ from the
                 // sample, so a face missing either is passed before any of its corners is read.
-                var inside = FineInside(x: x, y: y, z: z);
+                var inside = FineInside(key: key);
                 var differs = 0;
 
-                for (var axis = 0; (axis < 3); axis++) {
-                    for (var up = 0; (up < 2); up++) {
-                        p[0] = x;
-                        p[1] = y;
-                        p[2] = z;
-                        p[axis] += ((2 * up) - 1);
-                        if (Within(at: p) && (FineInside(x: p[0], y: p[1], z: p[2]) != inside)) { differs |= (1 << ((2 * axis) + up)); }
-                    }
-                }
+                if ((x > 0) && (FineInside(key: (key - 1)) != inside)) { differs |= 1; }
+                if (((x + 1) < fine[0]) && (FineInside(key: (key + 1)) != inside)) { differs |= 2; }
+                if ((y > 0) && (FineInside(key: (key - fine[0])) != inside)) { differs |= 4; }
+                if (((y + 1) < fine[1]) && (FineInside(key: (key + fine[0])) != inside)) { differs |= 8; }
+                if ((z > 0) && (FineInside(key: (key - (fine[0] * fine[1]))) != inside)) { differs |= 16; }
+                if (((z + 1) < fine[2]) && (FineInside(key: (key + (fine[0] * fine[1]))) != inside)) { differs |= 32; }
+                // An alternating face needs differing neighbours on two distinct axes.
+                if (((differs & 3) == 0) ? (((differs & 12) == 0) || ((differs & 48) == 0)) : ((differs & 60) == 0)) { continue; }
 
                 // Each face the sample is a corner of, as the face's lowest corner shifted by (du, dv) on its two axes.
                 for (var normal = 0; (normal < 3); normal++) {
@@ -1919,7 +1879,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private long[] CrossingEdges() {
         var edges = new List<long>();
         var seen = new HashSet<long>();
-        var crossedFine = new List<int>();
+        var crossedFine = new List<SdfCrossedCell>();
         var cellsX = (m_samplesX - 1);
         var cellsY = (m_samplesY - 1);
         var cellsZ = (m_samplesZ - 1);
@@ -1927,15 +1887,15 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var fineX = ((cellsX * factor) + 1);
         var fineY = ((cellsY * factor) + 1);
 
-        // Adds a cell's sign-changing edges; false when its corners all lie on one side.
-        bool AddCell(int x, int y, int z, int stride) {
+        // Adds a cell's sign-changing edges and returns its corner mask.
+        byte AddCell(int x, int y, int z, int stride) {
             var mask = 0;
 
             for (var offset = 0; (offset < 8); offset++) {
                 mask |= (FineInside(x: (x + ((offset & 1) * stride)), y: (y + (((offset >> 1) & 1) * stride)), z: (z + (((offset >> 2) & 1) * stride))) ? (1 << offset) : 0);
             }
             if ((mask == 0) || (mask == 0xFF)) {
-                return false;
+                return ((byte)mask);
             }
 
             for (var axis = 0; (axis < 3); axis++) {
@@ -1959,7 +1919,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 }
             }
 
-            return true;
+            return ((byte)mask);
         }
 
         for (var z = 0; (z < cellsZ); z++) {
@@ -1974,7 +1934,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                     for (var fz = (z * factor); (fz < ((z + 1) * factor)); fz++) {
                         for (var fy = (y * factor); (fy < ((y + 1) * factor)); fy++) {
                             for (var fx = (x * factor); (fx < ((x + 1) * factor)); fx++) {
-                                if (AddCell(stride: 1, x: fx, y: fy, z: fz)) { crossedFine.Add(item: (fx + (fineX * (fy + (fineY * fz))))); }
+                                var mask = AddCell(stride: 1, x: fx, y: fy, z: fz);
+
+                                if ((mask != 0) && (mask != 0xFF)) { crossedFine.Add(item: new SdfCrossedCell(Corner: (fx + (fineX * (fy + (fineY * fz)))), Mask: mask)); }
                             }
                         }
                     }
@@ -2049,6 +2011,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// is dropped: the specks a sheet leaves where it thins below the fine spacing.</summary>
     /// <returns>The surface; empty when no lattice edge changes sign.</returns>
     public SdfContour Contour() {
+        PrepareCrossings();
         var surface = ((m_factor > 1)
             ? SdfDualContouring.ExtractRefined(grid: new Lattice(owner: this))
             : SdfDualContouring.Extract(grid: new Lattice(owner: this)));
@@ -2446,6 +2409,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             }
         }
         public int Refinement => owner.m_factor;
+        public ReadOnlySpan<SdfCrossedCell> CrossedFineCells => owner.m_crossedFineCells.GetSpan();
 
         public bool Refined(int x, int y, int z) => owner.m_refined[(x + ((owner.m_samplesX - 1) * (y + ((owner.m_samplesY - 1) * z))))];
         public bool Measured(int x, int y, int z) => owner.m_measured[(x + ((owner.m_samplesX - 1) * (y + ((owner.m_samplesY - 1) * z))))];
