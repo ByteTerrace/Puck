@@ -85,9 +85,17 @@ public sealed class GpuPassPipelineCache {
         ArgumentNullException.ThrowIfNull(argument: key);
         ArgumentNullException.ThrowIfNull(argument: ledger);
 
-        var gpu = GpuWorkCounting.Wrap(
-            ledger: ledger,
-            services: device.Services
+        // The cache's one ledger counts creations on every device it serves, and a ledger counts one ordered queue
+        // (GpuWorkLedger.BindTransferQueue). A build creates objects and submits nothing, so it wraps the two factories it
+        // counts and never the device's queue.
+        var services = device.Services;
+        var shaderModules = GpuWorkCounting.Wrap(
+            factory: services.ShaderModuleFactory,
+            ledger: ledger
+        );
+        var pipelines = GpuWorkCounting.Wrap(
+            factory: services.PipelineFactory,
+            ledger: ledger
         );
         var name = new GpuObjectName(
             detail: key.ContentKey,
@@ -100,33 +108,33 @@ public sealed class GpuPassPipelineCache {
             cancellationToken.ThrowIfCancellationRequested();
 
             if (key.Compute is { } compute) {
-                built.Primary = gpu.ShaderModuleFactory.Create(
+                built.Primary = shaderModules.Create(
                     bytecode: key.Primary,
                     stage: GpuShaderStage.Compute
                 );
                 cancellationToken.ThrowIfCancellationRequested();
-                built.Compute = gpu.PipelineFactory.Create(
+                built.Compute = pipelines.Create(
                     computeShaderModule: built.Primary,
                     description: compute,
                     name: name
                 );
             } else {
-                built.Primary = gpu.ShaderModuleFactory.Create(
+                built.Primary = shaderModules.Create(
                     bytecode: key.Primary,
                     stage: GpuShaderStage.Vertex
                 );
                 cancellationToken.ThrowIfCancellationRequested();
-                built.Secondary = gpu.ShaderModuleFactory.Create(
+                built.Secondary = shaderModules.Create(
                     bytecode: key.Secondary,
                     stage: GpuShaderStage.Fragment
                 );
                 cancellationToken.ThrowIfCancellationRequested();
-                built.RenderPass = gpu.RenderPassFactory.Create(
+                built.RenderPass = services.RenderPassFactory.Create(
                     description: key.RenderPass!,
                     name: name
                 );
                 cancellationToken.ThrowIfCancellationRequested();
-                built.Graphics = gpu.PipelineFactory.Create(
+                built.Graphics = pipelines.Create(
                     description: key.Graphics!,
                     fragmentShaderModule: built.Secondary,
                     name: name,

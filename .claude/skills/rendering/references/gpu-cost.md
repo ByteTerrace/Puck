@@ -412,13 +412,21 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
   after it on the queue, so every sampling node would split the frame. The
   submitters drop a wait whose fence already reached its value
   (`GpuExternalWait.IsReached`), and `waits` / `waits-reached` count both.
-  `transfer.door` is an export's completion signal, which reads the queue door.
+  An export's completion signal reads the queue door, which would split the
+  batch, so the runtime completes exports after `FlushBatch`
+  (`RenderGraphRuntime.CompleteOwedExports`): `transfer.door` stays zero, and the
+  reader's wait ends when the whole batch has run rather than after the exporting
+  node's lists.
 - **`world.counters render.record`** (`RenderRecordWork`) gives the host time of
   render nodes' record jobs per phase: preparation, recording and commit, the
   serial record sum, and `longest-microseconds`, each frame's longest single
   recording. Divided by `frames`, the longest is the critical path a frame would
   keep with its jobs recorded side by side; its gap to the serial sum is all that
-  concurrent recording could save.
+  concurrent recording could save. The counter is process-wide: the instance behind
+  the critical path is on `world.budget`'s live-frame rows and in `pipeline.inspect`,
+  which carry each node's `record-jobs`, `last-` and `mean-` `prepare`, `record` and
+  `commit` microseconds and its `longest-record-us`
+  (`ShaderPipelineRenderNode.AppendRecordTimes`).
 
 ## Puck's open cases
 
