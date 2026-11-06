@@ -45,71 +45,81 @@ milestone. The owner requested its baseline and implementation plan, which
    [baseline and implementation order](dense-landscapes.md) keep CPU field
    queries first and connect static-copy sharing, retained updates, GPU
    instancing, geometry/shadow work and memory to one proving landscape.
-1. [Memory](#memory-on-the-deck-tier) [high, the Deck]: the debug world's
+1. [Measurement window](#measurement-window) [the frame bar's evidence]: three
+   queued before/after requests and the questions no `puck measure` harness
+   can read yet (windowed boot frames, glass-pass GPU time, the tour's frame
+   percentiles, `host.frames` at the water views). Needs one quiet window and,
+   for the unread metrics, a harness.
+2. [Memory](#memory-on-the-deck-tier) [high, the Deck]: the debug world's
    process plus GPU memory at or under 10 GB on the Deck tier, attribution
    first.
-2. [Lighting and GI](#lighting-and-gi) [high]: the
+3. [Lighting and GI](#lighting-and-gi) [high]: the
    [graphics architecture plan](graphics-architecture.md)'s G1 acceptance work:
    reduce the landed GPU trace/relight's lockstep drain to a frame's work;
    the authored capture grid bounds when changing lighting owes a drain,
    while each boundary still needs the same full convergence.
-3. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
+4. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
    M1 read, after the draw-identity fix R2's review found
    ([GPU robustness](#vulkan-regressions-and-gpu-robustness)).
-4. [Transmission](transmission.md) [high]: its implementation lanes in order,
+5. [Transmission](transmission.md) [high]: its implementation lanes in order,
    once the owner's look calls are answered or the design's choices stand.
-5. [Bake proportional to change](#bake-proportional-to-change) [high, the
+6. [Bake proportional to change](#bake-proportional-to-change) [high, the
    cold-bake bar]: a static copy bakes in its prototype's frame and is shared,
    bake grouping and detail derive from meaning rather than spelling, then
    narrow the closure and share one store across both backends.
-6. [Disclosure](disclosure.md#the-build-order) [high, the long pole before
+7. [Disclosure](disclosure.md#the-build-order) [high, the long pole before
    `main`]: steps 1-6 behind the harness, step 0b's principals, and the
    owner's search-output decision.
-7. [Rule faults](rule-faults.md) [high, before `main`]: build the designed
+8. [Rule faults](rule-faults.md) [high, before `main`]: build the designed
    outcome type, single interpreter and journal-backed firing in its steps,
    each reviewed.
-8. [Engine job system](#engine-job-system) [high]: scheduling, the
+9. [Engine job system](#engine-job-system) [high]: scheduling, the
    garbage-collection cuts, then J1; the replay burst's tick budget and F17 as
    ordinary work.
-9. [Certified field contact](#certified-field-contact): box and ellipsoid
-   bodies, then clearance on slopes within a third of a metre.
-10. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
+10. [Water feature build](#water) ([plan](water.md#the-lanes)) [ordinary, gated on
+    the owner]: H1, the chain as the arc, first, then A1 to A5 and R1 in
+    parallel, R3, P1 last. Its three taste calls are under
+    [owner decisions](#owner-decisions); H1 and A1 wait on them, and the lanes
+    that need none of them (R1, the mechanisms the plan lists) can start.
+11. [Certified field contact](#certified-field-contact): box and ellipsoid
+    bodies, then clearance on slopes within a third of a metre.
+12. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
     to 10.
-11. [Language and authoring](#language-and-authoring) and [author leaks to the
+13. [Language and authoring](#language-and-authoring) and [author leaks to the
     standard](#author-leaks-to-the-standard): what lang-2 leaves of S11, the
     cost corpus, the overlay text advance.
-12. Antigravity's coding trial ([agent tooling](#agent-tooling-and-skills)),
+14. Antigravity's coding trial ([agent tooling](#agent-tooling-and-skills)),
     once the current batch has landed.
-13. [Delivery](#delivery-launcher-and-ci): the production deploy, CI's steady
+15. [Delivery](#delivery-launcher-and-ci): the production deploy, CI's steady
     state, the shader cache and the GC-hole retirement.
-14. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
+16. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
     the meadow (lane 9) now; then the second seat, the authored passes and the
     quilt, each ahead of the job-system step it proves.
-15. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
+17. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
     the boot's JSON round trip in `BindLive`, then a reboot for an edit outside
     `PuckHotReload`; measure the cold and warm builds.
-16. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
+18. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
     meter), with steps 2, 3, 6 and step 4's bound fix in parallel.
-17. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
+19. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
     growth path with the uniform view limit enforced there, the two overlay
     writers, the survey's remaining groups.
-18. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups sharp
+20. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups sharp
     boxes left worse.
-19. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
+21. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
     levels or the sky term the moment a view arrives; the rest after the image
     meter.
-21. [Test runner and replay](#test-runner-and-replay): profile what recording
+22. [Test runner and replay](#test-runner-and-replay): profile what recording
     still folds whole every tick before choosing the next segment.
-22. [Bake detail](#bake-detail): measure the static round-section term.
-23. [Residency and streaming](#residency-and-streaming): step 2 after the memo
+23. [Bake detail](#bake-detail): measure the static round-section term.
+24. [Residency and streaming](#residency-and-streaming): step 2 after the memo
     names GI's work units.
-24. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
+25. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
     the crossing frame and the pixel-pass gap.
-25. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
+26. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
     schema switch; the stale lease holder.
-26. [Tests (suspended)](#tests-suspended): triage the failing Windows shards by
+27. [Tests (suspended)](#tests-suspended): triage the failing Windows shards by
     cause.
-27. [Card tables](#card-tables-in-the-board-game-room) (the windowed look, then
+28. [Card tables](#card-tables-in-the-board-game-room) (the windowed look, then
     Spider), [Debug tools](#debug-tools) (windowed checks and exhibits),
     [Sweep](#sweep-and-visual-checks) (the paired tour) and
     [Temporal](#temporal-shimmer-and-cadence-flicker) (the blink re-measure).
@@ -125,6 +135,34 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   bake's memory ([memory](#memory-on-the-deck-tier),
   [sweep](#sweep-and-visual-checks)); and the frame bar failing at every stop
   ([frame-time findings](#other-frame-time-findings)).
+- Pushing `main` (owner-only: a push to `main` deploys to Azure). The
+  integration branch `lead/velocity` is far ahead of `main`, hundreds of commits.
+  Recommendation: push once the milestone's riskiest areas have had a fresh fix
+  pass and their invariant checks have run (AGENTS.md); the red tests listed
+  under [Tests](#tests-suspended) hold nothing back while test requirements are
+  suspended.
+- The water plan's three taste calls ([the water plan](water.md#the-lanes)),
+  each with the plan's own choice as the recommendation. H1 and A1 build
+  against them, so each waits on the owner's answer:
+  - The lake stands near its sill. After the melt the lake rests at its outlet
+    sill, and the falls are dry (`fallsFlow` below 0.01) within 15 minutes of
+    simulated time after T, instead of the lake storing the melt (today its
+    level rises to 1.30 at T/2 and drains over the hour after T,
+    [gap S2](water.md#the-gap-list)). Recommended: yes, as the plan's H1
+    states it, since the owner's arc has the falls dry when the melt ends.
+  - A confined aquifer that fills by 3T/4, with the river then held at a level
+    it settles to. The aquifer's head is capped at `fullHead`, so the reservoir
+    fills and then backs the river up, and the river reaches homeostasis (drift
+    under 0.005 m over any quarter hour) within 30 minutes after T
+    ([gaps S3 and S4](water.md#the-gap-list), H1). Recommended: yes, as the
+    plan's H1 states it, which is the owner's "fills up and then allows the
+    river level to rise ... homeostasis".
+  - A carved river channel. The lawn and terrain are cut along the river's legs
+    from the plunge basin to the pool's north bank, with banks, a bed and
+    riffle stones, and the water a body filling the channel to the level the
+    chain sets, instead of a slab standing over the turf
+    ([gap G1](water.md#the-gap-list), A1). Recommended: yes, as A1 states it;
+    the current slab reads as a film over grass.
 - What the chase camera does with its back to the stair wall: swing the boom,
   rise over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
@@ -570,6 +608,29 @@ The custom no-GC runtime port stays later work, on the
   predicate (`src/Puck.World.Console/WorldWaitCommandModule.cs:259`) to the
   particular residency and upload fence; distinguish continuous new demand
   from an upload completion that cannot retire before changing the predicate.
+- [medium] `PackagesBeginFrame` carries 2 to 3 ms of host work a frame
+  (`src/Puck.Shaders/Graph/RenderGraphRuntime.Packages.cs:328`, called from
+  `RenderGraphRuntime.cs:1253`): the residency's capture
+  (`SdfWorldResidency.Capture`, `src/Puck.SdfVm/SdfWorldResidency.cs:854`) and
+  pack (`tables.Pack`, `:569`), and `StageChangedDraws`
+  (`src/Puck.SdfVm/SdfWorldTables.MeshRegion.cs:242`, `:324`). Attribute it with
+  a frame-thread trace at the debug world's slow stops, then make each part
+  proportional to what changed.
+- [low] The residency's upload ring is two slots deep
+  (`SdfWorldTables.FrameRingSize = 2`, `src/Puck.SdfVm/SdfWorldTables.cs:69`)
+  while the graph allows three frames in flight
+  (`RenderGraphRuntime.DefaultInFlightFrames = 3`,
+  `src/Puck.Shaders/Graph/RenderGraphRuntime.cs:190`). Measure whether a frame
+  ever waits on a ring slot's fence before deciding to follow the graph's count.
+- [low] Probe work submits about 1.07 unbatched executes a frame
+  (`world.counters gpu` queue attribution): the background GPU work submits at
+  its pumps so its jobs start before the frame records, outside the frame's
+  batch. Move the submission into the graph's preparation or batch it, and read
+  the executes again.
+- [low · held] J6, concurrent recording of the frame's nodes, waits until the
+  frame's critical path shows recording as the cost
+  ([frame lessons](frame-source-lessons.md), "J6 owner"): do not build it ahead
+  of that reading.
 
 ### Bake proportional to change
 
@@ -1102,6 +1163,78 @@ beside it.
   before the opaque hit only the nearest is shaded. A 64-bit atomic k-buffer
   would lift the count once the interface generator carries 64-bit buffer
   elements and both backends enable int64 atomics.
+- [low] Edge shimmer: high-contrast silhouettes seen through water shimmer at
+  their edges. The cause is not named. Capture a presented burst at the plan's
+  tour views with exposure pinned and read it with `puck motion`, then say
+  whether it is the glass pass's own sampling or the
+  [temporal packet](#temporal-shimmer-and-cadence-flicker)'s.
+- [low] The glass passes' GPU time is owed: read it per pass at the pool, the
+  falls and the lake through [the measurement window](#measurement-window); the
+  plan's budget table holds counts only, so no frame-bar claim about the glass
+  rests on a time yet.
+- [low] The glass kernel's register count is owed (a GPU shader profile on the
+  RTX 2060). It decides whether a third interface or a heavier tint fits the
+  occupancy the kernel has today.
+- [low · unchecked] Whether a state-bound water colour rebuilds the field
+  program every frame while it moves: `WorldFieldEmitter.Emit`
+  (`src/Puck.World.Client/WorldFieldEmitter.cs`) is the emission door. Count
+  emissions and program builds per frame across the melt with a bound colour
+  moving, and bind the colour as data the program reads if either grows with
+  frames.
+
+### Measurement window
+
+Owner: the lead (one quiet window) with the measure-harness owner · ordinary ·
+Next: take a quiet window (`puck lease quiet`, then `puck measure run`) for the
+three queued requests, and build the harness the unread questions need.
+
+Evidence here is timing, so it waits for a window with no other lane building or
+running a World ([orchestration](../../.claude/skills/orchestration/SKILL.md)).
+The queue is the `measure` folder of the main checkout's ignored scratch, so it is
+machine-local; each request below is refiled with `puck measure request` (its
+frozen builds and command) if the queue is gone.
+
+Queued requests:
+
+- [medium] A same-build `bench world` control: before and after are the same
+  build, command `bench world --json`, metric `/metrics/idle-tick/median`. It
+  shows the harness's own noise: the paired difference must sit within 10 % of the
+  before median, with the IQR exposing the spread. Every other `bench world`
+  answer is read against it.
+- [medium] The startup control, refiled after a first filing named a metric the
+  report does not carry: same build on both sides, command `bench startup
+  control.world.json --headless --samples 1 --timeout-seconds 120`, metric
+  `/metrics/startup/median`, within 10 % of the before median. The earlier
+  request's failure (`/Summary/MedianMilliseconds` is not a `puck.bench.v1`
+  pointer) is the lesson: `puck measure request` validates a `bench` metric
+  against the report's schema.
+- [medium] The Deck idle tick, before and after the Deck's quiet master ticks
+  became one skipped run (the change titled `deck: skip quiet master ticks as one
+  run`; before is its parent): command `bench world --json`, metric
+  `/metrics/idle-tick/median`. It decides whether the after median falls toward
+  the slowest Deck machine's one-tick-alone time (`/metrics/machine-N-tick`) with
+  the paired after-minus-before difference beyond its IQR. Run the same-build
+  control first.
+
+Questions no harness reads yet (lanes asked for each; none has a number):
+
+- Windowed boot frames: the frame times of a windowed debug-world boot, for the
+  boot-spike lane.
+- The glass passes' GPU time at the pool, the falls and the lake, for the two
+  glass interfaces a pixel ([water](#water)).
+- The sweep tour's frame time at the 50th and 99th percentiles, for the sky
+  staging change ([sweep](#sweep-and-visual-checks)).
+- `host.frames` at the water views, for [the water plan's P1](water.md#p1-the-tour-and-the-budget).
+
+The gap: `puck measure` runs `bench world`, `bench startup` or `sweep` (its
+headless frame-signal plans) and reads a JSON pointer from the report
+(`MeasureCommand.ValidateCommand` and `SampleAsync`), so none of those reports
+carries a windowed frame time or a per-pass GPU time. Both are read today from a
+live World by hand (`host.frames`, `world.gpu-timing`) under the GPU lease, and
+no verb emits them as report metrics. Build the harness: a windowed World leg, launched through
+`WorldLaunch` inside `puck lease quiet`, that arms the boot or the tour and
+writes a `puck.bench.v1` report of frame-time percentiles and per-pass GPU
+times, so `puck measure request` can pair two builds on them.
 
 ### Author shaders
 
@@ -1306,6 +1439,44 @@ lowers it to the same JSON as before, except where the look changes on purpose.
   `ContactDampingRatio`, `ContactSpeed` in `FixedRigidSolverOptions`) is an
   engine default the World never authors; give `collision.bodyContacts` the
   fields with neutral defaults.
+- [low] A stack's base under more than about two bodies' load can settle below
+  the rest band (the one rigid solver's lane; no scene or counter recorded
+  here). Build the three-high and four-high stack scenes, read the base body's
+  penetration against the band, and fix the solver's load sharing at its cause.
+
+Rigid step lifecycle lows (read at the cited lines; none run):
+
+- [low] A rigid kit with a motion cadence is prepared twice: on every tick with
+  the solver step (`WorldPopulation.Rigid.cs:138-140`) and again with the
+  accumulated motion ticks (`WorldBody.Step.cs:60`), about twice the damping and
+  rest hold. Refuse a cadence for rigid kits, or always prepare with the solver
+  step.
+- [low] A carried body's contacts are never released: the rigid roster skips
+  `CarriedBy` bodies (`WorldPopulation.Rigid.cs:132`) and
+  `ReleaseUntouchedRigidContacts` runs for the roster alone (`:278-280`), so the
+  box beneath cannot park during the carry. Release a body's contacts when a
+  carry begins.
+- [low] One refused probe drops a body's surface warm start:
+  `if (probe.Refused) { continue; }` (`WorldPopulation.Rigid.cs:157-161`) leaves
+  its contacts untouched, and `ReleaseUntouchedRigidContacts` (`:413-431`) then
+  releases them, a one-step sink or jitter. Mark the contacts touched, or skip
+  the release for refused bodies.
+- [low] The rest latch's hold counter keeps growing after the latch:
+  `m_restingHoldTicks += stepTicks` (`WorldBody.Rigid.cs:866-873`) has no
+  clamp at `policy.RestHoldTicks`, so a still body's replay hash can move every
+  tick. Clamp it.
+- [low] `FixedPairManifoldSlotTable` states a slot's persistent state three
+  times and none of it is read: `IsPersistentStateEqual`
+  (`src/Puck.Physics/FixedPairManifoldSlotTable.cs:93-102`) and `Fold`
+  (`:199-217`, which also omits the anchors) have no caller. Delete the dead
+  members.
+- [low] A lattice spill into an empty slot under an envelope minimum accepts
+  more than it was offered and faults the tick: the host's scalar add returns
+  `clamped - current` (`src/Puck.World.Server/WorldTick.Fields.cs:149-172`),
+  which exceeds the offer when the envelope minimum is above the slot's value,
+  and `FieldLattice` throws on it (`src/Puck.Physics/Fields/FieldLattice.cs:935-944`).
+  Clamp the accepted amount to [0, offered]. No world in `worlds/` uses
+  `spillRow`.
 
 Engine defaults that carry a look or a rule of play, which the authors rule
 wants authored with a neutral engine default (each one sits in C# or HLSL,
@@ -2068,6 +2239,23 @@ reproduce worker for what remains.
 - `WorldDocumentPaths.RelocateBetween` writes rooted paths into relative-only
   fields when the test directory and worktree sit on different Windows drives,
   failing `puck test` there (read from the code, not reproduced).
+- [medium] The authority-level replay start commits before it validates: when
+  the run edited geometry or machine configuration after the checkpoint,
+  `WorldPersistence.ReplayStart.cs:46-51` installs the machine reconfiguration
+  (the machine host's plan `Commit` and `Finish`) and the definition, and only then does
+  `RestoreCheckpointCore` validate the checkpoint, so a checkpoint that refuses
+  leaves the machines and definition already moved. The debugger's
+  machine-snapshot restore has the same shape
+  (`src/Puck.World.Addons/WorldAddonRuntime.Debugger.cs:148` calls
+  `RestoreCheckpoint` directly). Validate first: `TryValidateCheckpoint` on the
+  runtime (`IMachineCheckpointRuntime`) before any commit, as
+  `WorldMachineHost.Checkpoint.cs` does for a whole restore.
+- [low · unconfirmed] A scoped restore may leave a checkpoint that then fails
+  validation: the checks at `WorldPopulation.Checkpoint.cs:596-640` refuse an
+  invalid sleeping rigid island or carrier link, and a scoped restore that
+  restores part of an island or a carry pair could leave one. Reproduce with a
+  scoped restore of one body in a parked island, then capture again and
+  validate.
 - A crossing scenario's sibling verdict is "held on some tick", so a negative
   claim about a visit (flight refused there) is settled on what she brings home;
   and a destination reaped when it empties leaves nothing to export
@@ -2230,12 +2418,54 @@ Grounded causes and leads:
   grown region carries its words) would move no byte across the bus and keep
   the old draws drawable until the copy completes; relocations are rare, so it
   waits for a case that shows them.
-- `world.wait residency` never settles in the windowed debug world: with the
+- `world.wait residency` never settles in the windowed debug world, and did not
+  before the mesh landing moved to the background GPU work: with the
   world residency owing nothing, some
   routed, view or infinity residency `WorldScreenBinder.ViewsBake(resident:
-  true)` checks stays not resident (a residency never staged has no tables, so
+  true)` checks (`src/Puck.World/WorldScreenBinder.Device.Bakes.cs:55-71`) stays
+  not resident (a residency never staged has no tables, so
   `MeshesResident` is false). Name it (the wait's reason does not), then decide
   whether an unstaged residency counts.
+
+Bake and probe residency lifecycle lows (each read at the cited lines; a
+failing case is argued from source, not run):
+
+- [low] A probe-scene export that throws after allocating its prefix leaks the
+  prefix: `SdfMeshIrradianceScene.CreateGpuExport`
+  (`src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:47`) allocates it from the
+  arena before the geometry loop and frees nothing on a throw, and the scene
+  upload's `Dispose` swallows the faulted work
+  (`src/Puck.SdfVm/SdfMeshProbeGpuWork.Scene.cs:112-120`). Free the allocation
+  where the export throws, and count faulted work on cancel.
+- [low · plausible] A probe job cancelled by the admission timeout never reads
+  as stale-scene evidence: `SdfMeshProbeGpuWork.cs:155-162` dequeues the head
+  after `AdmissionWait`, counts `GpuCancelled` and answers cancelled, while
+  `m_traceOwed` stays set (cleared only at `SdfMeshIrradiance.cs:1608`, `:1612`
+  and `:1697`), so with an unplaced mesh every query is cancelled in turn and the
+  scene cannot rebuild while the bake is pending. The trigger was not traced.
+  Count the timeout as stale-scene evidence.
+- [low · plausible] A timestamp pair with end before start poisons the GPU-time
+  credit: `SdfGpuWork.Settle` (`src/Puck.SdfVm/SdfGpuWork.cs:369-376`) masks the
+  wrapped difference, so a 64-bit counter yields about 1e10 seconds, and
+  `m_credit += estimate - seconds` (`:374`) drives the credit to about -1e10;
+  `Accrue` only caps it from above (`:384`), so `m_credit <= 0` (`:398`) holds
+  all bake and probe GPU work for good. Needs a driver timestamp anomaly to
+  occur; clamp each charge, floor the credit and count the clamps.
+- [low] The mesh store's documentation promises more than it does: it says a
+  set a World is baking or loading is never cut short by another's write
+  (`src/Puck.SdfVm/SdfMeshStore.cs:18-25`), but a write protects only its own
+  set (`inUse: path`, `:251-256`). Two 4 GiB sets against the 8 GiB cap can
+  evict a peer's live set, which then rebakes. Correct the documentation, or
+  give a recently stamped set a grace window.
+- [low] A full disk leaves temporary files behind: `ContentAddressedStore`
+  writes the temporary copy outside its `try` (`src/Puck.Assets/ContentAddressedStore.cs:161-170`)
+  and nothing sweeps `tmp/` when the store opens (`:54-65`). Write inside the
+  `try` and sweep `tmp/` on open.
+- [low · plausible] A cache set directory that vanishes mid-listing resets the
+  retention tally to an undercount: `CacheRetention.EnforceSetsCore`
+  (`src/Puck.Abstractions/CacheRetention.cs:285-313`) catches the whole walk's
+  `IOException`, and the tally takes the partial result (`:241-246`). Catch per
+  child directory, or mark the listing incomplete.
 
 ### Vulkan regressions and GPU robustness
 
@@ -2322,6 +2552,45 @@ crossing frame and the pixel-pass gap at locked clocks.
 - Repeat the `world.wait` and `world.reload` over MCP against a windowed World on
   the mesh path at quality high, where frames are slowest; only headless runs
   have shown it.
+- [low · owner: rendering] Vulkan counts exactly four more host-visible uploads
+  on every pass than Direct3D 12 in the `puck counters` report, which points to
+  one Vulkan-only upload source per frame. Read each pass's upload attribution
+  on both backends and name the source; check it against the imported-image
+  acquire below first, since it is the one per-frame Vulkan-only submission
+  known.
+
+Render-graph lifecycle lows (read at the cited lines; none run):
+
+- [low] `ShaderPipelineRenderNode`'s frame recording is several machines with no
+  one owner. The design (a `FrameJob` owning the recording, the cadence
+  checkpoint, the copy recording, the publication and the error generation)
+  fixes the three below together; build it as one change.
+  - `LastRecordError` is sticky: set by `NoteRecordFailure`
+    (`src/Puck.Shaders/ShaderPipelineRenderNode.Recording.cs:130-137`), cleared
+    only when a frame commits (`:141`), and `OnDeviceLost`
+    (`ShaderPipelineRenderNode.cs:1601`) leaves it. After a failure followed by
+    a recount or a device loss, `RenderGraphRuntime.Completion.cs:150` reports a
+    waiting frame as refused and armed captures are refused. Clear it on device
+    loss and on install, or key it to the generation it belongs to.
+  - [plausible] The published layout and binding are assigned while recording
+    (`ShaderPipelineRenderNode.Tracker.cs:300-315`); a paused step that fails
+    after `FinalizeOutputs` leaves captures reading the owner's ring image in the
+    wrong layout. Assign them at commit.
+  - `AbandonRecording` disposes the old command pool and then creates its
+    replacement (`ShaderPipelineRenderNode.Recording.cs:105-114`); if creation
+    throws, the next frame uses a freed handle. Create the replacement, then
+    swap.
+- [low] `VulkanImportedWritableImage.BeginWrite`
+  (`src/Puck.Vulkan/VulkanImportedWritableImage.cs:266-292`) submits the queue
+  family acquire through the queue door every frame, so the frame batch splits
+  there and the submit count differs from Direct3D 12's. Defer the acquire into
+  the batch. Whether the submitter now defers this submission was not traced.
+- [low] The drain split is attributed to different cells on each backend:
+  Direct3D 12's device `WaitIdle` attributes the `Drain` category and splits
+  through the queue-handle read (`src/Puck.DirectX/Interop/DirectXDeviceContext.cs:167-176`,
+  cause `QueueDoor`), while Vulkan's splits with `GpuQueueCause.Drain`
+  (`src/Puck.Vulkan/Interop/VulkanLogicalDevice.cs:131-139`). Use one form on
+  both.
 
 ### MCP and the operator attachment
 
@@ -2377,6 +2646,26 @@ or deletes tests freely.
   after a deliberate change, update or delete; timing-dependent, fix or delete;
   a real regression, fix. Read the failures with `gh run view --log-failed` on
   the latest `main` run.
+- [medium] Failures the lanes met on their own bases, each to triage by the same
+  three causes (reported by the lanes that hit them, not re-run for this file):
+  - `McpInteropTests` placement counts: a reload gives 5,977 placements where
+    5,994 are expected, and two fresh boots whose documents differ by one
+    placement do not differ by one in the count.
+  - `LanesCommandLawTests`, three cases.
+  - The `docs links` symbol control in the DocsLinks laws.
+  - `FormatProjectionLawTests`: six `worlds/` sources differ from the printer.
+    Format them (`puck format`) or fix the printer, whichever is wrong.
+  - `ShippedSourceLintLawTests`: `worlds/standard/hydrology.puck` trips
+    PUCK_LINT_003. Fix the source or the lint.
+  - The `SweepEvidenceLawTests` index.
+  - `GpuRegion`'s `AStagedRegionPastTwoGiB…` law, and the SdfVm residency and
+    cadence laws the mesh-landing lane listed as failing on its base.
+- [medium] A real defect among them, not a test: `Puck.World`'s `--workers`
+  validator reads a value whose parse already failed
+  (`src/Puck.World/Program.cs:150-154`, `result.GetValueOrDefault<int?>()`), so
+  `--workers abc` crashes with a stack trace instead of a named refusal. Skip
+  the check when the parse failed, as the option layer's validators do
+  (`CliOptions` in `src/Puck.Cli.Core/CliOptions.cs`).
 - [low] `SdfWorldPassesLawTests` holds laws that fail under machine load and
   pass alone (`ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput`,
   `CadenceVisualChangesLeaveConvergedHistoryAndItsRingStanding`,
@@ -3293,6 +3582,150 @@ ordinary · Next: new content and art on the owner's call.
   account's kind only, since a deal's variants read one row; SKU and region are rows the
   lectern reads. The pieces are dealt placements, not bodies, so a seated player inspects
   and cannot yet pick one up; moving a piece (`deal.preserve`, `reflow`) is unused here.
+
+### CLI and lease machinery
+
+Owner: tooling lane (specialist, CLI) · ordinary · Next: the `puck integrate`
+verb, then the launch and process lifecycles below, each as one change that
+gives its lifecycle an explicit state. Each item is read at the cited lines; a
+failing case marked "argued" is read from source, not run.
+
+- [medium] `puck integrate`: the lead's integration steps as one verb, in
+  place of the hand-run sequence. It composes the existing pieces under one
+  report: the build, each generator's `--check`, `puck docs links`, a headless
+  boot of the debug world, windowed Direct3D 12 and Vulkan boots, and named
+  laws. Reuse `GatePlan` for the steps, `WorldLaunch` for the boots and
+  `puck lease` for the GPU, rather than a second runner.
+- [low] An old-protocol CLI that already holds a lease keeps it. The grant door
+  refuses a lower protocol, and `puck lease` checks the recorded stamp
+  (`LeaseCommand.cs:82`), but `HostAdmission.Wait`
+  (`src/Puck.Cli.Gate/Host/HostAdmission.cs:98`, `:163`) does not read
+  `CliLease.RecordedProtocol` (`src/Puck.Cli.Core/CliLease.cs:193`), so a copy
+  speaking an older protocol still passes admission beside newer holders. Check
+  it in `Wait`.
+- [low] Linux has no kill-on-close: `ChildProcessJob`
+  (`src/Puck.Cli.Harness/ChildProcessJob.cs`) is a Windows job object, so a
+  killed CLI on Linux leaves its Worlds running. Use the host's primitive for
+  it (a parent-death signal or a process group), never a polling watcher.
+- [low] `puck test` strands temporary run directories that contain links:
+  `build/RunDirectory.cs`'s sweep never removes a directory holding a link, so
+  every later process prints the same "run directory not removed" lines and the
+  directory stays. Remove a link without following it, or create none.
+- [low] The measure request leaves a half-frozen directory on failure:
+  `MeasureCommand.cs:38-44` creates the request directory and freezes the
+  before side, and a failed after side leaves that copy with no
+  `request.json`. It is never runnable, but never deleted. Stage and rename, or
+  delete the directory on failure.
+
+Launch and process lifecycles:
+
+- [low] The started-World and worker lifecycle has no explicit state. A World
+  that exits without a stop keeps its `m_started` entry and state directory
+  until a stop (`src/Puck.Mcp/OperatorWorlds.cs:107`, `:311`, `:558`), and on
+  Linux a reused process id is misreported or wrongly stopped. The front
+  removes routes only for superseded idle workers (`InspectAsync`,
+  `src/Puck.Mcp/OperatorMcpFront.cs:168-200`) and never on a stop, so after a
+  process id is reused an unrelated World reads `started: true`
+  (`OperatorMcpFront.cs:152-154`, `:303-309`). The pending-start table evicts in
+  hash order (`OperatorWorlds.cs:215-220`), so a just-completed start can be
+  evicted and answer "Unknown startId". Give each World an entry state
+  (`Booting | Running | Exited | Stopped`) whose exit transition deregisters,
+  frees its state directory and removes its routes, key it by (process id,
+  start ticks), and evict the oldest start.
+- [low] `WorldProcess` has no state between running and drained
+  (`src/Puck.Cli.Harness/WorldProcess.cs`): `WaitFor` treats exit as drained
+  after one rescan (`:114-148`), so a final line that arrives milliseconds later
+  reads as no answer. `Dispose` kills the tree and joins the pumps for at most
+  five seconds before it disposes the logs (`:174-187`, `:211-215`), so a descendant holding
+  the pipes can write after the dispose and the pump thread's
+  `ObjectDisposedException` ends the CLI (argued; no known World descendant
+  outlives the World). Count pump end-of-stream per stream
+  (`Running | Exited | Drained`) and set a disposed flag under the gate.
+- [low] A joiner of a faulted GPU hold gets an instant `TimeoutException`:
+  `WorldGpuHold.AcquireAsync` (`src/Puck.Cli.Harness/WorldGpuHold.cs:45-63`)
+  shares one entry per (root, holder, lane) and nothing replaces an entry whose
+  lease completed unsuccessfully. Replace it.
+- [low] Under a shared hold the requeue loop logs "released it" while the lease
+  stays held over an idle GPU (`WorldLaunch.cs:228-256`, `gpu.Dispose()` at
+  `:252`): `Share.Dispose` releases only when the last share goes. Have it
+  report whether it released, and say so.
+- [low] `WorldReadiness.Observe` (`src/Puck.Cli.Core/WorldReadiness.cs:52-64`)
+  sets its marked flag before the mark write, so a failed write is never
+  retried; and a windowed World nobody asks to wait is counted as still growing
+  for its whole life, because the readiness line is printed only by the
+  `world.wait` forms (`src/Puck.World.Console/WorldWaitCommandModule.cs:253`),
+  so admission over-reserves. Have the World print its own readiness line once
+  ready, and set the flag after the write.
+- [low] `puck lease gpu --wait 3600` takes the lease and then waits for memory,
+  so the GPU idles under it (`LeaseCommand.cs:49-72`), while `WorldLaunch`
+  waits for headroom first, takes the lease, and judges again
+  (`WorldLaunch.cs:225-257`): two implementations of one admit, lease and
+  rejudge order. Share the one helper.
+- [low] The sweep's budget pause exists twice and canary has neither:
+  `SweepBudget.Pause` (`src/Puck.Cli.Runs/Sweep/SweepBudget.cs:41-52`) and
+  `WorldOffscreenLeg.Pause` (`src/Puck.Cli.Harness/WorldOffscreenLeg.cs:229-235`)
+  stop a clock while a leg queues for a lease, while canary's budget
+  (`CanaryCommand.cs`, `CanaryLegRun.BudgetExpired`) still counts queueing, so a
+  later leg can read `BudgetExpired`. Keep one pausable clock; delete
+  `SweepCommand.SamePath` (`src/Puck.Cli.Runs/Sweep/SweepCommand.cs:294`), which
+  nothing calls.
+- [low · plausible, Linux only] `FileLock.TryAcquireForDeletion`
+  (`src/Puck.Abstractions/FileLock.cs:49-68`) deletes a lock file while it holds
+  it, and the artifact store deletes keyed locks
+  (`src/Puck.Cli.Harness/WorldArtifactStore.cs`): on Linux two builders can lock
+  different inodes at one path and build the same key twice. Check the inode
+  after locking, or stop deleting keyed locks.
+
+CLI maturity remainders (each a [low]):
+
+- Refusals still come in several shapes: `ERROR: ...` lines in `puck test`
+  (`src/Puck.Cli.Worlds/Test/TestCommand.cs:30`, `:36`, `:47`, `:106`, `:252`),
+  `landing` (`src/Puck.Cli.Source/Landing/LandingCommand.cs:66-146`), `parity`,
+  `canary` and `bench world`, against the shared
+  `puck <verb>: <what>: <why>` line of `CliExit.Refuse`. Route them through it.
+- A lease refusal and the child's own failure can both exit 2
+  (`LeaseCommand.cs:167` describes it), so a script cannot tell them apart.
+- The test batch watchdog writes its cause only to the batch's `.stderr.log`
+  (`src/Puck.Cli.Worlds/Test/TestCommand.Batch.cs:85-89`); the console shows a
+  per-world "did not finish". Print the cause.
+- `sweep` regex-scrapes `puck test`'s standard output for verdict counts
+  (`src/Puck.Cli.Runs/Sweep/SweepCommand.cs:432-435`), so a wording change
+  loses the per-world detail. Read a report file instead.
+- Synchronous actions get no cancellation token (`MotionCommand.cs:141`,
+  `CountersCommand.cs:298`, `:325`), so an interrupt ends a World-starting verb
+  without its cleanup or exit 130.
+- `puck counters` has no `--world-artifact`
+  (`src/Puck.Cli.Runs/Counters/CountersCommand.cs`) and always builds the
+  checkout's current sources, so a before/after counter comparison across
+  builds cannot be made with it.
+- The standalone `Puck.Cli.Worlds` apphost never installs World admission
+  (`src/Puck.Cli.Worlds/Program.cs`; `puck` does at
+  `src/Puck.Cli/PuckRootCommand.cs:75`), so boots through it skip host
+  admission.
+- `puck compile --watch` watches `*.puck` under the source's own directory only
+  (`src/Puck.Cli.Worlds/Transpiler/CompileCommand.cs:307-310`), though its help
+  promises the imported dependencies.
+- `puck world release checkpoint` prints an indented JSON document and then a
+  plain `Recovery point:` line on the same output
+  (`src/Puck.Cli.Release/Automation/WorldReleaseCommand.cs:524-528`), so the
+  output does not parse as JSON.
+- `puck bundle verify` dereferences null on a `release.json` with no `files`
+  member (`src/Puck.Cli.Release/Automation/BundleCommand.cs:72`), and
+  `puck official build --channel` goes unvalidated into `Path.Combine`
+  (`src/Puck.Cli.Release/Official/OfficialBuildCommand.cs:192-197`).
+- `puck affected` and `puck gate` cannot be narrowed to one suite or step
+  (`src/Puck.Cli.Gate/Affected/AffectedCommand.cs:456-467`).
+- Not re-read at the head, from the audit's own list, so verify before acting:
+  option names that drift between siblings (`--keep` and `--output`, minutes and
+  seconds); `disclosure` overrides that skip the fixture's validation; absolute
+  backslash paths in `lint`, `decompile`, `creation`, `mesh`, `font-atlas` and
+  `embed`; no `--json` on `lint`, `compile` and `embed --check`;
+  `cartridge-cost`'s text-only output; `docs build --site` and `laws prove`
+  refusing late; the mesh and creation verbs' copied helpers;
+  `official verify`'s nested records read strictly; `setup-puck` repeating the
+  `nuget smoke` logic in bash; `bench world`'s unpaced idle-tick row, its
+  discarding every row on a late exception and `bench startup`'s pooled
+  summary; `bench state-evidence`'s stale pinned digests.
 
 ### Agent tooling and skills
 
