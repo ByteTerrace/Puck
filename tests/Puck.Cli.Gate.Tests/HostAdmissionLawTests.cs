@@ -407,6 +407,18 @@ public sealed class HostAdmissionLawTests {
         _ = tracker.Judge(reading: Sample(), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
         Assert.Equal(expected: (2 * HostLoadThresholds.HeadlessWorldPeakGb), actual: tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld));
     }
+    // A process is its id and start ticks: a headless World that reuses a finished heavy suite's id is a new start, so the
+    // suite's 15 GB peak is measured for heavy suites when it exits and never carried into the headless kind.
+    [Fact]
+    public void AReusedProcessIdIsANewStartAndCarriesNoPeakFromTheOneBefore() {
+        var tracker = new HostStartTracker();
+        var clock = new GateClock();
+
+        _ = tracker.Judge(reading: Sample(starts: [new(Id: 7, Kind: HostStartKind.HeavySuite, PrivateGb: 15, StartTicks: 1)]), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
+        _ = tracker.Judge(reading: Sample(starts: [new(Id: 7, Kind: HostStartKind.HeadlessWorld, PrivateGb: 0.5, StartTicks: 2)]), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
+        _ = tracker.Judge(reading: Sample(), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
+        Assert.Equal(expected: (15.0, HostLoadThresholds.HeadlessWorldPeakGb), actual: (tracker.ExpectedPeakGb(kind: HostStartKind.HeavySuite), tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld)));
+    }
     // A machine whose commit limit sits near one World's peak still admits it when nothing else grows; a platform with no
     // commit reading is never judged.
     [Fact]

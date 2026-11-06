@@ -44,8 +44,9 @@ or commits, the bench startup or sweep command, JSON-pointer metrics and what
 decides it) and hands back on its load-independent evidence; `puck measure run`
 answers it in the lead's window. The [CLI reference](../../../docs/reference/cli.md#puck-measurequeued-measurement-windows)
 owns the forms. Lanes' processes keep running; their next leased grant waits
-for the measurement window. Quiet priority is enforced at `CliLease.TryAcquire`,
-under the same short lock that registers tickets, before any resource grant.
+for the measurement window, while acquisitions nested under a current holder
+still go ahead. Quiet priority is enforced at `CliLease.TryAcquire`, under the
+same short lock that registers tickets, before any resource grant.
 
 Writing is cheap and verifying is expensive: builds, boots, suites and GPU
 windows on one shared machine set the pace, so the work in flight is bounded by
@@ -436,10 +437,12 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   main checkout's ignored scratch directory (a `tip-sweep` folder) whenever the tip moves, and briefs
   name that path. Lease, admission and GPU-classification files are shared by
   every CLI copy on the machine, so a change to their meaning is a fleet event:
-  the lead lands it, then tells every lane to merge the tip and rebuild its CLI
-  copy before its next leased run (an old copy that counted a new `counters`
-  process as GPU work held the gpu lease waiting on that process, which waited
-  on the lease). A report stores each signal's rule colour (`status`) apart
+  it raises `CliLease.Protocol`, the lead lands it, then tells every lane to
+  merge the tip and rebuild its CLI copy before its next leased run (an old copy
+  that counted a new `counters` process as GPU work held the gpu lease waiting
+  on that process, which waited on the lease). A copy below the lease root's
+  recorded protocol refuses to queue by name rather than deadlocking, so a lane
+  that missed the message finds out at its next lease. A report stores each signal's rule colour (`status`) apart
   from its baseline comparison's (`comparison`), and a later comparison reads
   only the rule colour, so a tip report recorded with or without `--baseline`
   serves equally. The lead runs it, and every lead verb, from a CLI built at the tip, and reinstalls the

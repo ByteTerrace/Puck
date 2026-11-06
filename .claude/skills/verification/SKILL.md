@@ -402,10 +402,14 @@ acquisition (heavy, the World build, `puck sweep`'s GPU lease, a World start)
 does this; [lease reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work).
 A timing measurement runs under `puck lease quiet --holder <lane> --wait 600 --settle 30 -- <command...>`,
 which queues a priority reservation before draining heavy, build and GPU.
-No grant is issued while quiet is queued or held except to the quiet owner or
-its validated descendants; `CliLease.TryAcquire` enforces it under the same
-short file lock that registers tickets. Current holders finish without being
+No root grant is issued while quiet is queued or held: only the reservation's
+drains and acquisitions nested under a live holder (proved by its guard and its
+process ID and start ticks) go ahead, so a holder's own descendants always
+finish. `CliLease.TryAcquire` decides that route afresh on every pass under the
+same short file lock that registers tickets. Current holders finish without being
 stopped, bounded by `--wait`; other wait lines name the measurement window.
+A copy whose `CliLease.Protocol` is below the lease root's recorded protocol
+refuses to queue, naming both protocols: merge the tip, rebuild and refresh the copy.
 Ordinary lane rotation resumes afterwards. The reservation holds all three and waits until `puck host load`'s
 readings show an idle machine for `--settle` seconds, then runs the command, with
 `puck sweep` and Worlds nesting inside it. `puck measure run` uses the same

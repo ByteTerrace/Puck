@@ -301,6 +301,10 @@ public static class WorldArtifactBuild {
             error = $"the Puck.World build of source state {key} waited the whole {Minutes(span: limit)}-minute limit for other runs' builds: {exception.Message}";
 
             return false;
+        } catch (LeaseProtocolException exception) {
+            error = $"the Puck.World build lease was refused: {exception.Message}";
+
+            return false;
         } catch (InvalidOperationException exception) {
             error = $"the shared lease directory for the Puck.World build could not be found: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
