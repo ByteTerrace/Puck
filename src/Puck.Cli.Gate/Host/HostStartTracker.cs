@@ -30,7 +30,7 @@ public readonly record struct HostStartDemand(bool Covered, double HeadroomGb, d
 /// those another process admits at the same instant, whose processes are counted once they run.</para>
 /// </summary>
 public sealed class HostStartTracker {
-    private sealed record Reservation(HostStartKind Kind, long At, double Gb, HashSet<int> Known);
+    private sealed record Reservation(HostStartKind Kind, long At, double Gb, HashSet<(int Id, long StartTicks)> Known);
 
     /// <summary>How long an admitted start holds its full expected peak before its live process is expected to show.</summary>
     public static readonly TimeSpan ReservationHold = TimeSpan.FromSeconds(seconds: 90);
@@ -38,7 +38,8 @@ public sealed class HostStartTracker {
     private readonly Lock m_gate = new();
     private readonly Dictionary<HostStartKind, double> m_measured = [];
     private readonly List<Reservation> m_reservations = [];
-    private readonly Dictionary<int, (HostStartKind Kind, double PeakGb)> m_seen = [];
+    // Keyed by process id and start ticks: a recycled id is another start, and carries none of the last one's peak.
+    private readonly Dictionary<(int Id, long StartTicks), (HostStartKind Kind, double PeakGb)> m_seen = [];
 
     /// <summary>Gets the tracker of this process's host session, which the admission of a real machine reading uses.</summary>
     public static HostStartTracker Session { get; } = new();
@@ -72,10 +73,10 @@ public sealed class HostStartTracker {
     public HostStartDemand Judge(HostSample reading, HostStartKind kind, HostLoadThresholds thresholds, TimeProvider clock, bool reserve) {
         lock (m_gate) {
             var live = (reading.Starts ?? []);
-            var liveIds = new HashSet<int>(collection: live.Select(selector: static start => start.Id));
+            var liveIds = new HashSet<(int Id, long StartTicks)>(collection: live.Select(selector: static start => (start.Id, start.StartTicks)));
 
             foreach (var start in live) {
-                m_seen[start.Id] = (start.Kind, Math.Max(val1: start.PrivateGb, val2: (m_seen.TryGetValue(key: start.Id, value: out var seen) ? seen.PeakGb : 0)));
+                m_seen[(start.Id, start.StartTicks)] = (start.Kind, Math.Max(val1: start.PrivateGb, val2: (m_seen.TryGetValue(key: (start.Id, start.StartTicks), value: out var seen) ? seen.PeakGb : 0)));
             }
             foreach (var (id, seen) in m_seen.Where(predicate: pair => !liveIds.Contains(item: pair.Key)).ToArray()) {
                 m_measured[seen.Kind] = Math.Max(val1: seen.PeakGb, val2: (m_measured.TryGetValue(key: seen.Kind, value: out var measured) ? measured : 0));
@@ -84,7 +85,7 @@ public sealed class HostStartTracker {
 
             // A reservation ends when its hold passes or a live process of its kind it did not know of appears; each new
             // process answers one reservation.
-            var claimed = new HashSet<int>();
+            var claimed = new HashSet<(int Id, long StartTicks)>();
             List<Reservation> kept = [];
 
             foreach (var reservation in m_reservations) {
@@ -93,7 +94,7 @@ public sealed class HostStartTracker {
                 var answered = false;
 
                 foreach (var start in live) {
-                    if ((start.Kind == reservation.Kind) && !reservation.Known.Contains(item: start.Id) && claimed.Add(item: start.Id)) {
+                    if ((start.Kind == reservation.Kind) && !reservation.Known.Contains(item: (start.Id, start.StartTicks)) && claimed.Add(item: (start.Id, start.StartTicks))) {
                         answered = true;
 
                         break;

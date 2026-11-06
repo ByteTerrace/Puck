@@ -151,7 +151,9 @@ public sealed partial class HostProbe(string checkoutRoot) {
             var label = $"{name} {id.ToString(provider: CultureInfo.InvariantCulture)}";
 
             if (HostProcesses.RunningStart(commandLine: commandLine, name: name) is { } kind) {
-                starts.Add(item: new HostRunningStart(Id: id, Kind: kind, PrivateGb: privateGb, Ready: ready.Contains(item: (id, tree[id].Started.ToUniversalTime().Ticks))));
+                var startTicks = tree[id].Started.ToUniversalTime().Ticks;
+
+                starts.Add(item: new HostRunningStart(Id: id, Kind: kind, PrivateGb: privateGb, Ready: ready.Contains(item: (id, startTicks)), StartTicks: startTicks));
             }
 
             if ((holder is null) && !own.Contains(item: id) && HostProcesses.IsGpuWork(commandLine: commandLine, name: name)) {

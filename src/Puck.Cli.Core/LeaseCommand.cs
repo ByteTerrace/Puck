@@ -88,6 +88,9 @@ public static class LeaseCommand {
         var now = clock.GetUtcNow();
         var text = new System.Text.StringBuilder();
 
+        if (CliLease.RecordedProtocol(root: root) is var recorded && (recorded > CliLease.Protocol)) {
+            _ = text.Append(value: $"protocol: the lease directory records lease protocol {recorded}, and this CLI speaks {CliLease.Protocol}; rebuild this CLI before queuing\n");
+        }
         foreach (var name in new[] { "quiet", "build", "gpu", "heavy" }) {
             var state = CliLease.Inspect(name: name, now: now, root: root);
 

@@ -43,6 +43,7 @@ public sealed class CliLease : IDisposable {
     /// <returns>The held lease.</returns>
     /// <exception cref="ArgumentException">The name, holder, lane, checkout or wait is invalid.</exception>
     /// <exception cref="TimeoutException">The lease remains held at the deadline.</exception>
+    /// <exception cref="LeaseProtocolException">The lease directory records a newer lease protocol than <see cref="Protocol"/>.</exception>
     public static Task<CliLease> AcquireAsync(string root, string name, string holder, TimeSpan wait, TimeProvider clock, string checkout, CancellationToken cancellationToken = default, Func<int, long, bool>? ancestor = null, string? lane = null) {
         if (name is not ("build" or "gpu" or "heavy")) { throw new ArgumentException("Use AcquireQuietAsync for a measurement reservation.", nameof(name)); }
         return AcquireCoreAsync(root, name, holder, wait, clock, checkout, cancellationToken, ancestor, lane, null);
@@ -80,52 +81,24 @@ public sealed class CliLease : IDisposable {
         lane = (lane?.Trim() ?? DefaultLane(holder: holder));
         checkout = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: checkout)).Replace(oldChar: '\\', newChar: '/');
         Directory.CreateDirectory(path: root);
-        var directory = Path.Combine(path1: root, path2: name);
+        var request = new Request(Ancestor: Remembered(ancestor: ancestor), Checkout: checkout, Clock: clock, Holder: holder, Lane: lane, Name: name, Quiet: quiet, Root: root);
         var started = clock.GetTimestamp();
         string? reported = null;
         var reportedAt = started;
-        string? ticket = null;
+        Ticket? ticket = null;
 
         try {
             do {
                 cancellationToken.ThrowIfCancellationRequested();
-                // An outer `puck lease` still owns the machine lease. Its descendants compete for one
-                // child lease instead of waiting on their parent; siblings never borrow each other's hold.
-                var metadata = ReadHolder(directory: directory);
+                var pass = await PassAsync(cancellationToken: cancellationToken, request: request, ticket: ticket).ConfigureAwait(continueOnCapturedContext: false);
 
-                if ((metadata is { Length: (4 or 5) }) && int.TryParse(s: metadata[2], result: out var pid) && long.TryParse(s: metadata[3], result: out var ticks) && (ancestor?.Invoke(pid, ticks) == true)) {
-                    Leave(ticket: ticket);
-                    ticket = null;
-                    directory = Path.Combine(path1: directory, path2: "child");
-                    continue;
-                }
-                // Admission rotates between lanes: the lease goes to the oldest ticket of the lane served least recently,
-                // and within a lane first come, first served.
-                var queue = (directory + ".queue");
-
-                if ((ticket is null) || !File.Exists(path: ticket)) {
-                    // Register priority tickets under the same short lock as grants. A grant cannot slip between
-                    // checking for a quiet ticket and publishing the holder. Never wait with this lock held.
-                    using var admission = FileLock.TryAcquire(Path.Combine(root, "admission.guard"));
-                    if (admission is not null) {
-                        Stamp(lane: lane, rotation: (directory + ".rotation"));
-                        ticket = Enqueue(checkout: checkout, clock: clock, holder: holder, lane: lane, queue: queue);
-                    }
-                }
-                var place = (ticket is null ? new Place(0, 0, 0) : Admission(now: clock.GetUtcNow(), rotation: (directory + ".rotation"), ticket: ticket));
-                var ahead = place.Ahead;
-                var measurement = false;
-
-                if (ticket is not null) {
-                    var lease = TryAcquire(checkout: checkout, clock: clock, directory: directory, holder: holder, lane: lane, root: root, name: name, quiet: quiet, ancestor: ancestor, eligible: ((ahead == 0) || quiet is not null), measurement: out measurement);
-
-                    if (lease is not null) { return lease; }
-                }
+                ticket = pass.Ticket;
+                if (pass.Lease is { } lease) { return lease; }
                 var remaining = (wait - clock.GetElapsedTime(startingTimestamp: started));
 
-                if (remaining <= TimeSpan.Zero) { throw new TimeoutException(message: $"{name} lease is held or queued at {CliPaths.ToDisplay(fullPath: directory)}; use --wait <seconds> to wait."); }
-                var waitingOn = ((metadata is { Length: > 0 }) ? metadata[0] : null);
-                var report = $"lease: {holder} waiting for {name} lease{(measurement ? " for the measurement window" : ((waitingOn is null) ? ((ahead == 0) ? " held by another holder" : string.Empty) : $" held by {waitingOn}"))}{((ahead == 0) ? string.Empty : $"; {ahead} queued ahead, lane {lane} is {place.Position} of {place.Lanes} in the round")}.";
+                if (remaining <= TimeSpan.Zero) { throw new TimeoutException(message: $"{name} lease is held or queued at {CliPaths.ToDisplay(fullPath: (pass.Directory ?? Path.Combine(path1: root, path2: name)))}; use --wait <seconds> to wait."); }
+                var ahead = pass.Place.Ahead;
+                var report = $"lease: {holder} waiting for {name} lease{(pass.Directory is null ? " behind the admission lock" : (pass.Measurement ? " for the measurement window" : ((pass.HeldBy is null) ? ((ahead == 0) ? " held by another holder" : string.Empty) : $" held by {pass.HeldBy}")))}{((ahead == 0) ? string.Empty : $"; {ahead} queued ahead, lane {lane} is {pass.Place.Position} of {pass.Place.Lanes} in the round")}.";
 
                 if ((reported != report) || (clock.GetElapsedTime(startingTimestamp: reportedAt) >= Heartbeat)) {
                     var waited = clock.GetElapsedTime(startingTimestamp: started);
@@ -137,8 +110,104 @@ public sealed class CliLease : IDisposable {
                 await Task.Delay(delay: ((remaining < TimeSpan.FromMilliseconds(milliseconds: 100)) ? remaining : TimeSpan.FromMilliseconds(milliseconds: 100)), timeProvider: clock, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             } while (true);
         } finally {
-            Leave(ticket: ticket);
+            Leave(ticket: ticket?.Path);
         }
+    }
+
+    /// <summary>What one acquisition asks for, fixed for its whole wait.</summary>
+    private sealed record Request(string Root, string Name, string Holder, string Lane, string Checkout, TimeProvider Clock, CliLease? Quiet, Func<int, long, bool>? Ancestor);
+    /// <summary>A waiter's ticket: its file and the queue directory it was taken in.</summary>
+    private sealed record Ticket(string Path, string Queue);
+    /// <summary>What one pass through the grant door decided: the lease when granted, the ticket the waiter holds now, and
+    /// what a wait line names. <see cref="Directory"/> is null when the admission lock stayed busy past its bound.</summary>
+    private readonly record struct Pass(CliLease? Lease, Ticket? Ticket, string? Directory, Place Place, string? HeldBy, bool Measurement);
+
+    /// <summary>How an acquisition reaches its grant. A <see cref="Root"/> acquisition takes the lease itself and waits while a
+    /// quiet reservation is queued or held. A <see cref="Nested"/> one runs under a live ancestor that holds the lease, proved by
+    /// that holder's guard and its process identity, and takes a child lease that quiet never blocks: a current holder's
+    /// process tree always finishes. A <see cref="Quiet"/> one is the measurement reservation itself or a resource it drains.</summary>
+    private enum Route { Root, Nested, Quiet }
+
+    /// <summary>The one decision of how an acquisition is granted, made afresh under the admission lock on every pass: an ancestor
+    /// that held the lease when the waiter queued may have released it since, so a route is never carried over.</summary>
+    private static (Route Route, string Directory) Decide(Request request, DateTimeOffset now) {
+        var directory = Path.Combine(path1: request.Root, path2: request.Name);
+        var nested = false;
+
+        // An outer `puck lease` still owns the machine lease. Its descendants compete for one child lease beside it instead of
+        // waiting on their parent; siblings never borrow each other's hold. The proof is the parent's guard, held now, and a
+        // holder identity (process id and start ticks) that is this process's ancestor; metadata alone proves nothing.
+        while ((request.Ancestor is { } ancestor) && (ReadHolder(directory: directory) is { } holder) && (Identity(lines: holder) is { } identity) && GuardHeld(directory: directory, holder: holder, now: now) && ancestor(identity.Pid, identity.Ticks)) {
+            directory += ChildSuffix;
+            nested = true;
+        }
+        return (nested ? Route.Nested : (((request.Quiet is not null) || (request.Name == "quiet")) ? Route.Quiet : Route.Root), directory);
+    }
+    /// <summary>A child lease's directory sits beside its parent's, never inside it, so a parent's release cannot delete a
+    /// descendant's ticket, rotation or holder.</summary>
+    private const string ChildSuffix = ".child";
+    /// <summary>The lock every ticket registration, protocol stamp and grant is made under. It is held for one pass and never
+    /// across a wait.</summary>
+    private const string AdmissionGuard = "admission.guard";
+    /// <summary>How long a pass waits for <see cref="AdmissionGuard"/>, which another process holds only for its own pass; a
+    /// pass that cannot take it counts as a pass without a grant, so even <c>--wait 0</c> is decided on the lease itself.</summary>
+    private static readonly TimeSpan AdmissionLockBound = TimeSpan.FromSeconds(seconds: 30);
+
+    /// <summary>Remembers an ancestry verdict per holder identity for one acquisition, whose passes run one at a time, so the
+    /// process-tree walk stays out of the admission lock after the first pass that meets a holder: a process identified by id
+    /// and start ticks is this process's ancestor for its whole life or never, and the guard check beside the verdict on every
+    /// pass says whether that holder still holds.</summary>
+    private static Func<int, long, bool>? Remembered(Func<int, long, bool>? ancestor) {
+        if (ancestor is null) { return null; }
+        var verdicts = new Dictionary<(int, long), bool>();
+
+        return (pid, ticks) => {
+            if (!verdicts.TryGetValue(key: (pid, ticks), value: out var verdict)) { verdicts[(pid, ticks)] = verdict = ancestor(pid, ticks); }
+            return verdict;
+        };
+    }
+    /// <summary>The process a holder file or ticket names, by id and start ticks; null when its metadata is unrecognized.</summary>
+    private static (int Pid, long Ticks)? Identity(string[] lines) =>
+        (((lines.Length is (4 or 5)) && int.TryParse(s: lines[2], provider: CultureInfo.InvariantCulture, result: out var pid) && (pid > 0) && long.TryParse(s: lines[3], provider: CultureInfo.InvariantCulture, result: out var ticks)) ? (pid, ticks) : null);
+
+    /// <summary>Takes the admission lock, bounded, and passes through the grant door once.</summary>
+    private static async Task<Pass> PassAsync(Request request, Ticket? ticket, CancellationToken cancellationToken) {
+        var asked = Stopwatch.GetTimestamp();
+
+        using var admission = await FileLock.AcquireAsync(cancellationToken: cancellationToken, expired: () => (Stopwatch.GetElapsedTime(startingTimestamp: asked) >= AdmissionLockBound), path: Path.Combine(path1: request.Root, path2: AdmissionGuard)).ConfigureAwait(continueOnCapturedContext: false);
+
+        return ((admission is null) ? new Pass(Directory: null, HeldBy: null, Lease: null, Measurement: false, Place: default, Ticket: ticket) : TryAcquire(request: request, ticket: ticket));
+    }
+
+    /// <summary>The lease protocol this CLI speaks. Every CLI copy on a machine shares the lease root, so two copies must agree on
+    /// what its files mean: holders, tickets and sidecars, rotation, the quiet reservation, the child layout, readiness marks,
+    /// and how host admission classifies the processes it waits on (<c>HostProcesses</c>). Raise it in any change to one of
+    /// those meanings: a copy built before the change then refuses by name instead of deadlocking against a newer one.</summary>
+    public const int Protocol = 1;
+    private const string ProtocolFile = "protocol";
+
+    /// <summary>Reads the lease protocol a lease root records: the highest any CLI that queued there spoke; zero when none has
+    /// recorded one.</summary>
+    /// <param name="root">The shared lease directory.</param>
+    /// <returns>The recorded protocol.</returns>
+    public static int RecordedProtocol(string root) =>
+        (((ReadLines(path: Path.Combine(path1: root, path2: ProtocolFile)) is [var line, ..]) && int.TryParse(s: line, provider: CultureInfo.InvariantCulture, result: out var recorded)) ? recorded : 0);
+    /// <summary>Refuses a lease root a newer CLI has stamped, and raises an older stamp to this CLI's protocol. Called only under
+    /// <see cref="AdmissionGuard"/>, so a raise and every grant under the old protocol are ordered.</summary>
+    private static void AgreeOnProtocol(string root) {
+        var recorded = RecordedProtocol(root: root);
+
+        if (recorded > Protocol) { throw new LeaseProtocolException(recorded: recorded, root: root, spoken: Protocol); }
+        if (recorded < Protocol) { WriteMetadata(contents: Protocol.ToString(provider: CultureInfo.InvariantCulture) + "\n", path: Path.Combine(path1: root, path2: ProtocolFile)); }
+    }
+    /// <summary>Whether a quiet reservation is queued or held: a live quiet ticket, or the quiet guard taken.</summary>
+    private static bool QuietPending(string root, DateTimeOffset now) {
+        var directory = Path.Combine(path1: root, path2: "quiet");
+        var queue = (directory + ".queue");
+
+        // Placing a ticket name no waiter holds counts every live ticket ahead of it.
+        return ((Directory.Exists(path: queue) && (Admission(now: now, rotation: (directory + ".rotation"), ticket: Path.Combine(path1: queue, path2: "probe")).Ahead > 0))
+            || GuardHeld(directory: directory, holder: (ReadHolder(directory: directory) ?? []), now: now));
     }
 
     /// <summary>One live waiter in a lease queue.</summary>
@@ -179,7 +248,7 @@ public sealed class CliLease : IDisposable {
             holderName = holder[0];
             holderLane = ((holder.Length == 5) ? holder[4] : DefaultLane(holder: holder[0]));
             alive = GuardHeld(directory: directory, holder: holder, now: now);
-            holderCheckout = ReadLines(path: Path.Combine(path1: directory, path2: CheckoutFile))?.FirstOrDefault();
+            holderCheckout = CheckoutOf(owner: holder, sidecar: Path.Combine(path1: directory, path2: CheckoutFile));
         }
         var queue = (directory + ".queue");
         var tickets = new List<LeaseTicket>();
@@ -191,7 +260,7 @@ public sealed class CliLease : IDisposable {
 
                 tickets.Add(item: new LeaseTicket(
                     Ahead: place.Ahead,
-                    Checkout: TicketCheckout(ticket: file, lines: lines),
+                    Checkout: CheckoutOf(owner: lines, sidecar: TicketCheckoutPath(ticket: file)),
                     Holder: lines[0],
                     Id: Path.GetFileName(path: file).TrimStart(trimChar: '0'),
                     Lane: ((lines.Length == 5) ? lines[4] : DefaultLane(holder: lines[0])),
@@ -204,12 +273,17 @@ public sealed class CliLease : IDisposable {
         return new LeaseState(Checkout: holderCheckout, Holder: holderName, HolderAlive: alive, Lane: holderLane, Queue: tickets, Since: ((holder is { Length: > 0 }) ? Stamped(lines: holder) : null));
     }
 
-    // The checkout is recorded beside the holder file and each ticket rather than as a metadata line: CLIs built before
-    // it count a holder's or ticket's lines (four or five), and one that read a sixth would drop the ticket and refuse
-    // to nest a child under the holder. A holder's checkout is `checkout` in the holder directory; a ticket's is a file
-    // of the ticket's name under `<name>.checkouts`, holding the ticket's process id, start ticks and checkout, so a
-    // file left by a crashed waiter is never read for a later ticket that reuses its number.
+    // The checkout is recorded beside the holder file and each ticket rather than as a metadata line, which keeps a holder or
+    // ticket at four or five lines. A holder's checkout is `checkout` in the holder directory; a ticket's is a file of the
+    // ticket's name under `<name>.checkouts`. Both hold the owner's process id, start ticks and checkout, and are read only
+    // for the owner they name, so a file a crashed holder or waiter left is never read for the next one.
     private const string CheckoutFile = "checkout";
+
+    /// <summary>The contents of a checkout sidecar: the owner's process id and start ticks, then the checkout.</summary>
+    private static string Sidecar(string checkout, string[] metadata) => $"{metadata[2]}\n{metadata[3]}\n{checkout}\n";
+    /// <summary>The checkout a sidecar records, when the sidecar names the process the holder or ticket metadata names.</summary>
+    private static string? CheckoutOf(string sidecar, string[] owner) =>
+        (((owner.Length >= 4) && (ReadLines(path: sidecar) is [var pid, var ticks, var checkout]) && (pid == owner[2]) && (ticks == owner[3])) ? checkout : null);
 
     /// <summary>Whether a process holds a lease's guard: a momentary shared hold succeeds only when no exclusive holder has
     /// it. A guard that cannot be probed for another reason falls back to the holder file's process identity.</summary>
@@ -230,9 +304,6 @@ public sealed class CliLease : IDisposable {
 
         return Path.Combine(path1: (queue[..^".queue".Length] + ".checkouts"), path2: Path.GetFileName(path: ticket));
     }
-    /// <summary>The checkout a ticket's sidecar records, when the sidecar names the ticket's own process.</summary>
-    private static string? TicketCheckout(string ticket, string[] lines) =>
-        ((ReadLines(path: TicketCheckoutPath(ticket: ticket)) is [var pid, var ticks, var checkout]) && (pid == lines[2]) && (ticks == lines[3])) ? checkout : null;
     /// <summary>Records a ticket's checkout, and drops sidecars whose ticket is gone.</summary>
     private static void RecordTicketCheckout(string ticket, string[] metadata, string checkout) {
         var path = TicketCheckoutPath(ticket: ticket);
@@ -241,7 +312,7 @@ public sealed class CliLease : IDisposable {
 
         try {
             Directory.CreateDirectory(path: directory);
-            AtomicFile.WriteAllText(path: path, contents: $"{metadata[2]}\n{metadata[3]}\n{checkout}\n");
+            AtomicFile.WriteAllText(path: path, contents: Sidecar(checkout: checkout, metadata: metadata));
             foreach (var sidecar in Directory.EnumerateFiles(path: directory)) {
                 if ((Path.GetExtension(path: sidecar).Length == 0) && !File.Exists(path: Path.Combine(path1: queue, path2: Path.GetFileName(path: sidecar)))) {
                     try { File.Delete(path: sidecar); } catch (IOException) { } catch (UnauthorizedAccessException) { }
@@ -441,36 +512,49 @@ public sealed class CliLease : IDisposable {
         return Task.FromResult(result: Path.Combine(path1: mainCheckout, path2: ".claude/leases"));
     }
 
-    private static CliLease? TryAcquire(string directory, string holder, string lane, string checkout, TimeProvider clock, string root, string name, CliLease? quiet, Func<int, long, bool>? ancestor, bool eligible, out bool measurement) {
-        measurement = false;
-        using var admission = FileLock.TryAcquire(Path.Combine(root, "admission.guard"));
-        if (admission is null) { return null; }
-        // The single grant door: while a quiet ticket is queued or held, no resource grant is issued
-        // except to the quiet capability or a validated descendant of its holder.
-        var quietDirectory = Path.Combine(root, "quiet");
-        var owner = ReadHolder(quietDirectory);
-        var nested = owner is { Length: 4 or 5 } && int.TryParse(owner[2], out var pid) && long.TryParse(owner[3], out var ticks) && ancestor?.Invoke(pid, ticks) == true;
-        if (name != "quiet" && quiet is null && !nested) {
-            var queue = quietDirectory + ".queue";
-            var queued = Directory.Exists(queue) && Admission(Path.Combine(queue, "probe"), quietDirectory + ".rotation", clock.GetUtcNow()).Ahead > 0;
-            using var idle = FileLock.TryAcquire(quietDirectory + ".guard");
-            if (queued || idle is null) { measurement = true; return null; }
+    /// <summary>
+    /// The single grant door, entered only under <see cref="AdmissionGuard"/>. It agrees on the protocol, decides the route
+    /// (<see cref="Decide"/>), moves the waiter's ticket into that route's queue, and grants when the route allows it: a root
+    /// acquisition never while a quiet reservation is queued or held, a nested or quiet one whatever quiet holds; every route
+    /// but a quiet reservation's drains in rotation order; and only to the process that takes the exclusive guard. Every check
+    /// is made again on every pass, under the same lock as the grant it decides.
+    /// </summary>
+    private static Pass TryAcquire(Request request, Ticket? ticket) {
+        AgreeOnProtocol(root: request.Root);
+        var now = request.Clock.GetUtcNow();
+        var (route, directory) = Decide(now: now, request: request);
+        var queue = (directory + ".queue");
+        var rotation = (directory + ".rotation");
+
+        if ((ticket is null) || (ticket.Queue != queue) || !File.Exists(path: ticket.Path)) {
+            Leave(ticket: ticket?.Path);
+            Stamp(lane: request.Lane, rotation: rotation);
+            ticket = new Ticket(Path: Enqueue(checkout: request.Checkout, clock: request.Clock, holder: request.Holder, lane: request.Lane, queue: queue), Queue: queue);
         }
-        if (!eligible) { return null; }
+        // Admission rotates between lanes: the lease goes to the oldest ticket of the lane served least recently, and within a
+        // lane first come, first served.
+        var place = Admission(now: now, rotation: rotation, ticket: ticket.Path);
+        var heldBy = ((ReadHolder(directory: directory) is { Length: > 0 } holder) && GuardHeld(directory: directory, holder: holder, now: now)) ? holder[0] : null;
+        var waiting = new Pass(Directory: directory, HeldBy: heldBy, Lease: null, Measurement: false, Place: place, Ticket: ticket);
+
+        if ((route == Route.Root) && QuietPending(now: now, root: request.Root)) { return (waiting with { Measurement = true }); }
+        if ((place.Ahead > 0) && (request.Quiet is null)) { return waiting; }
         // Keep the guard inode: unlinking it lets two processes lock different files at the same path.
         if (FileLock.TryAcquire(path: (directory + ".guard")) is not { } gate) {
-            return null;
+            return waiting;
         }
         try {
             // The exclusive guard is the ownership proof. Leftover metadata can name a still-live adapter
             // whose World exited while a reader delayed cleanup; it must not strand the released lease.
             Directory.CreateDirectory(path: directory);
             try {
+                var metadata = Metadata(clock: request.Clock, holder: request.Holder, lane: request.Lane);
+
                 // The checkout lands first, so a reader that sees the new holder sees its checkout.
-                WriteMetadata(path: Path.Combine(path1: directory, path2: CheckoutFile), contents: (checkout + "\n"));
-                WriteMetadata(path: Path.Combine(path1: directory, path2: "holder"), contents: string.Concat(values: Metadata(clock: clock, holder: holder, lane: lane).Select(selector: static line => (line + "\n"))));
-                Serve(lane: lane, rotation: (directory + ".rotation"));
-                return new CliLease(directory: directory, gate: gate);
+                WriteMetadata(path: Path.Combine(path1: directory, path2: CheckoutFile), contents: Sidecar(checkout: request.Checkout, metadata: metadata));
+                WriteMetadata(path: Path.Combine(path1: directory, path2: "holder"), contents: string.Concat(values: metadata.Select(selector: static line => (line + "\n"))));
+                Serve(lane: request.Lane, rotation: rotation);
+                return (waiting with { Lease = new CliLease(directory: directory, gate: gate) });
             } catch {
                 try { ConfinedDirectory.RemoveTree(path: directory); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) { }
                 throw;
@@ -492,11 +576,11 @@ public sealed class CliLease : IDisposable {
     }
     /// <summary>Decides from a queued ticket's metadata whether its process is gone; null when the metadata is unrecognized.</summary>
     private static bool? ProcessGone(string[] lines, DateTimeOffset now) {
-        if ((lines.Length is not (4 or 5)) || !int.TryParse(s: lines[2], result: out var pid) || (pid <= 0) || !long.TryParse(s: lines[3], result: out var ticks)) { return null; }
+        if (Identity(lines: lines) is not { } identity) { return null; }
         try {
-            using var process = Process.GetProcessById(processId: pid);
+            using var process = Process.GetProcessById(processId: identity.Pid);
 
-            return (process.HasExited || (process.StartTime.ToUniversalTime().Ticks != ticks));
+            return (process.HasExited || (process.StartTime.ToUniversalTime().Ticks != identity.Ticks));
         } catch (ArgumentException) { return true; } catch (InvalidOperationException) { return true; } catch (System.ComponentModel.Win32Exception) {
             // If the OS cannot inspect this queued process, fall back to the ticket's age.
             return (DateTimeOffset.TryParse(input: lines[1], formatProvider: CultureInfo.InvariantCulture, styles: DateTimeStyles.RoundtripKind, result: out var acquired) && ((now - acquired) > TimeSpan.FromHours(hours: 1)));

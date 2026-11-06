@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using Puck.Abstractions;
 using Puck.Confinement;
 using Puck.Testing;
 using Xunit;
@@ -33,12 +34,124 @@ public sealed class CliLeaseTests : IDisposable {
         Assert.False(competitor.IsCompleted);
         await Assert.ThrowsAsync<TimeoutException>(async () => await Take(name: "gpu", clock: clock));
         using (var nested = await CliLease.AcquireAsync(m_root, "build", "nested", TimeSpan.Zero, clock, m_root, Token, ancestor: (pid, _) => pid == Environment.ProcessId)) {
-            Assert.True(File.Exists(Path.Combine(m_root, "build/child/holder")));
+            Assert.True(File.Exists(Path.Combine(m_root, "build.child/holder")));
         }
         await clock.WhenArmedAsync(count: 1, ct: Token, dueTime: tick);
         quiet.Dispose();
         clock.Advance(tick);
         using var resumed = await competitor.WaitAsync(Token);
+    }
+
+    // Law (the grant door's invariant): a current holder's process tree always finishes. Lane A holds gpu and its canary nests
+    // a gpu acquisition; a measurement window holds heavy and build and waits for gpu. The nested acquisition is granted at
+    // once beside its parent's lease, and the window takes gpu when lane A releases it.
+    [Fact]
+    public async Task ANestedAcquisitionUnderAHolderProceedsWhileQuietWaitsAndQuietThenGetsTheLease() {
+        var clock = new VirtualClock();
+        var tick = TimeSpan.FromMilliseconds(100);
+        var laneA = await Take(name: "gpu", holder: "lane-a run");
+        var window = CliLease.AcquireQuietAsync(m_root, "measurement", TimeSpan.FromMinutes(1), clock, m_root, Token);
+        await clock.WhenArmedAsync(count: 1, ct: Token, dueTime: tick);
+        Assert.False(window.IsCompleted);
+        using (var canary = await CliLease.AcquireAsync(m_root, "gpu", "lane-a canary", TimeSpan.Zero, clock, m_root, Token, ancestor: Self)) {
+            Assert.Equal("lane-a canary", File.ReadAllLines(Path.Combine(m_root, "gpu.child/holder"))[0]);
+            Assert.False(window.IsCompleted);
+        }
+        laneA.Dispose();
+        clock.Advance(tick);
+        using var quiet = await window.WaitAsync(Token);
+        Assert.Equal("measurement", File.ReadAllLines(Path.Combine(m_root, "gpu/holder"))[0]);
+    }
+
+    // Law: holder metadata that names an ancestor proves nothing without its guard, so an acquisition beside a stale holder
+    // file takes the lease itself instead of a child lease no one guards.
+    [Fact]
+    public async Task HolderMetadataNamingAnAncestorWithoutItsGuardIsNoProofToNest() {
+        using var process = Process.GetCurrentProcess();
+        Directory.CreateDirectory(Path.Combine(m_root, "gpu"));
+        File.WriteAllLines(Path.Combine(m_root, "gpu/holder"), ["gone parent", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture), process.Id.ToString(CultureInfo.InvariantCulture), process.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture)]);
+        using var lease = await CliLease.AcquireAsync(m_root, "gpu", "orphan", TimeSpan.Zero, TimeProvider.System, m_root, Token, ancestor: Self);
+        Assert.Equal("orphan", File.ReadAllLines(Path.Combine(m_root, "gpu/holder"))[0]);
+        Assert.False(Directory.Exists(Path.Combine(m_root, "gpu.child")));
+    }
+
+    // Law: the route is decided again on every pass. A descendant waiting on its parent's child lease, whose parent then
+    // releases to another lane, queues for the lease itself: it never takes the child lease while the other lane holds gpu,
+    // and the parent's release cannot delete the child state beside it.
+    [Fact]
+    public async Task ANestedWaiterWhoseParentReleasesQueuesForTheLeaseItselfAndNeverTakesTheChild() {
+        var clock = new VirtualClock();
+        var tick = TimeSpan.FromMilliseconds(100);
+        var parent = await Take(name: "gpu", holder: "lane-a run");
+        var sibling = await CliLease.AcquireAsync(m_root, "gpu", "lane-a sibling", TimeSpan.Zero, clock, m_root, Token, ancestor: Self);
+        // The sibling is another process under the parent, never the canary's ancestor.
+        Impersonate(directory: "gpu.child", holder: "lane-a sibling");
+        var waiting = CliLease.AcquireAsync(m_root, "gpu", "lane-a canary", TimeSpan.FromMinutes(10), clock, m_root, Token, ancestor: Self);
+        await clock.WhenArmedAsync(count: 1, ct: Token, dueTime: tick);
+        parent.Dispose();
+        Assert.True(File.Exists(Path.Combine(m_root, "gpu.child/holder")));
+        using var other = await Take(name: "gpu", holder: "lane-b run");
+        // Lane B is another process: its holder identity is no ancestor of lane A's canary.
+        Impersonate(directory: "gpu", holder: "lane-b run");
+        clock.Advance(tick);
+        await clock.WhenArmedAsync(count: 1, ct: Token, dueTime: tick);
+        sibling.Dispose();
+        clock.Advance(tick);
+        await clock.WhenArmedAsync(count: 1, ct: Token, dueTime: tick);
+        Assert.False(waiting.IsCompleted);
+        Assert.False(Directory.Exists(Path.Combine(m_root, "gpu.child")));
+        other.Dispose();
+        clock.Advance(tick);
+        using var granted = await waiting.WaitAsync(Token);
+        Assert.Equal("lane-a canary", File.ReadAllLines(Path.Combine(m_root, "gpu/holder"))[0]);
+    }
+
+    // Law: an acquisition is decided on the lease, not on the admission lock another waiter holds for its own pass, so
+    // `--wait 0` on an idle lease is granted once that pass ends.
+    [Fact]
+    public async Task AZeroWaitOnAnIdleLeaseIsGrantedPastABusyAdmissionLock() {
+        Directory.CreateDirectory(m_root);
+        var admission = FileLock.TryAcquire(Path.Combine(m_root, "admission.guard"));
+        Assert.NotNull(admission);
+        var taking = Take(name: "gpu");
+        await Task.Delay(TimeSpan.FromMilliseconds(200), Token);
+        Assert.False(taking.IsCompleted);
+        admission.Dispose();
+        using var lease = await taking.WaitAsync(TimeSpan.FromSeconds(30), Token);
+    }
+
+    // Law: a CLI that speaks a lower lease protocol than the lease directory records refuses by name, naming both protocols
+    // and the rebuild, instead of queuing beside CLIs that read the files differently; `lease list` names the mismatch.
+    [Fact]
+    public async Task ALowerProtocolCliIsRefusedByNameAndQueuesNothing() {
+        Directory.CreateDirectory(m_root);
+        File.WriteAllText(Path.Combine(m_root, "protocol"), (CliLease.Protocol + 1).ToString(CultureInfo.InvariantCulture) + "\n");
+        var refused = await Assert.ThrowsAsync<LeaseProtocolException>(async () => await Take(wait: TimeSpan.FromMinutes(1)));
+        Assert.Equal((CliLease.Protocol + 1, CliLease.Protocol), (refused.Recorded, refused.Spoken));
+        Assert.Contains($"lease protocol {CliLease.Protocol + 1}", refused.Message, StringComparison.Ordinal);
+        Assert.Contains($"lease protocol {CliLease.Protocol}:", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("rebuild the CLI", refused.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(m_root, "gpu.queue")));
+        Assert.Equal(CliLease.Protocol + 1, CliLease.RecordedProtocol(m_root));
+        Assert.StartsWith("protocol: ", LeaseCommand.Render(TimeProvider.System, m_root), StringComparison.Ordinal);
+    }
+
+    // Law: the newest CLI to queue raises the stamp under the admission lock, and a waiter already queued from an older CLI
+    // leaves the queue by name on its next pass instead of waiting beside it.
+    [Fact]
+    public async Task AHigherProtocolRaisesTheStampAndAQueuedLowerWaiterLeavesByName() {
+        var clock = new VirtualClock();
+        var tick = TimeSpan.FromMilliseconds(100);
+        Directory.CreateDirectory(m_root);
+        File.WriteAllText(Path.Combine(m_root, "protocol"), "0\n");
+        using var holder = await Take(holder: "holder");
+        Assert.Equal(CliLease.Protocol, CliLease.RecordedProtocol(m_root));
+        var waiting = Take(wait: TimeSpan.FromMinutes(10), clock: clock, holder: "waiting");
+        await clock.WhenArmedAsync(count: 1, ct: Token, dueTime: tick);
+        File.WriteAllText(Path.Combine(m_root, "protocol"), (CliLease.Protocol + 1).ToString(CultureInfo.InvariantCulture) + "\n");
+        clock.Advance(tick);
+        await Assert.ThrowsAsync<LeaseProtocolException>(async () => await waiting.WaitAsync(Token));
+        Assert.Empty(Directory.GetFiles(Path.Combine(m_root, "gpu.queue")));
     }
 
     [Fact]
@@ -395,6 +508,21 @@ public sealed class CliLeaseTests : IDisposable {
 
             Assert.True(condition: child.HasExited);
         } catch (ArgumentException) { }
+    }
+
+    // This process, recognized by its id and start ticks, as an acquisition nested under a lease this process holds sees its
+    // holder; a holder file naming any other start ticks is another process.
+    private static bool Self(int pid, long ticks) {
+        using var process = Process.GetCurrentProcess();
+
+        return ((pid == process.Id) && (ticks == process.StartTime.ToUniversalTime().Ticks));
+    }
+
+    // Rewrites a lease this process holds so its holder file names another process: this process's id with other start ticks.
+    private void Impersonate(string directory, string holder) {
+        using var process = Process.GetCurrentProcess();
+
+        File.WriteAllLines(path: Path.Combine(path1: m_root, path2: directory, path3: "holder"), contents: [holder, DateTimeOffset.UtcNow.ToString(format: "O", formatProvider: CultureInfo.InvariantCulture), process.Id.ToString(provider: CultureInfo.InvariantCulture), (process.StartTime.ToUniversalTime().Ticks + 1).ToString(provider: CultureInfo.InvariantCulture)]);
     }
 
     private Task<CliLease> Take(string name = "gpu", TimeSpan wait = default, TimeProvider? clock = null, string holder = "agents-slim") => CliLease.AcquireAsync(checkout: m_root, root: m_root, name: name, holder: holder, wait: wait, clock: (clock ?? TimeProvider.System), cancellationToken: Token);
