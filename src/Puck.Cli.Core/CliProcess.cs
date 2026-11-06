@@ -121,9 +121,10 @@ public static class CliProcess {
 
         return text.ToString();
     }
-    private static async Task<CliProcessResult> RunCapturedAsync(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout,
-        Func<CliProcessOutputLine, bool>? continueWhen, string continuationInput, Task? continuationGate, TimeProvider clock, CancellationToken cancellationToken, string? workingDirectory,
-        IReadOnlyDictionary<string, string?>? environment, Action<CliProcessOutputLine>? onOutput, bool retainOutput, Action<Process>? started) {
+    public static async Task<CliProcessResult> RunCapturedAsync(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout,
+        Func<CliProcessOutputLine, bool>? continueWhen = null, string continuationInput = "", Task? continuationGate = null, TimeProvider? clock = null, CancellationToken cancellationToken = default, string? workingDirectory = null,
+        IReadOnlyDictionary<string, string?>? environment = null, Action<CliProcessOutputLine>? onOutput = null, bool retainOutput = true, Action<Process>? started = null) {
+        clock ??= TimeProvider.System;
         cancellationToken.ThrowIfCancellationRequested();
 
         var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);

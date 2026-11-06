@@ -210,8 +210,11 @@ public static class MeasureCommand {
         Directory.CreateDirectory(output);
         var cli = typeof(MeasureCommand).Assembly.Location;
         var frozen = side == "before" ? item.Before : item.After;
-        var run = await CliProcess.RunAsync("dotnet", [cli, .. item.Command, "--world-artifact", frozen.Artifact, "--output", output],
-            workingDirectory: frozen.Tree, timeout: TimeSpan.FromSeconds(timeout), cancellationToken: token).ConfigureAwait(false);
+        var run = await CliProcess.RunCapturedAsync("dotnet", [cli, .. item.Command, "--world-artifact", frozen.Artifact, "--output", output], input: string.Empty,
+            workingDirectory: frozen.Tree, timeout: TimeSpan.FromSeconds(timeout), cancellationToken: token, started: process => {
+                ChildProcessJob.Assign(process);
+                Console.Error.WriteLine($"measure: {item.Name} {side} #{round + 1} process {process.Id}");
+            }).ConfigureAwait(false);
         File.WriteAllText(Path.Combine(output, "command.stdout.log"), run.Stdout);
         File.WriteAllText(Path.Combine(output, "command.stderr.log"), run.Stderr);
         if (run.ExitCode != 0 || run.TimedOut) { throw new InvalidOperationException($"measure {item.Name} {side} #{round + 1}: command failed ({run.ExitCode}, timedOut={run.TimedOut}); {PuckPaths.Normalize(output)}"); }
