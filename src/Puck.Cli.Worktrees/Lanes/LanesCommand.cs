@@ -17,7 +17,7 @@ public static partial class LanesCommand {
     private const int LogTailBytes = 8192;
 
     private static readonly string[] Leases = ["gpu", "heavy", "build"];
-    private static readonly JsonSerializerOptions JsonOptions = new() { NewLine = "\n", PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private static readonly string[] GitPrefix = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "maintenance.auto=false", "-c", "gc.auto=0"];
 
     private const int LogHeadBytes = 4096;
@@ -430,12 +430,13 @@ public static partial class LanesCommand {
         return messages;
     }
 
-    /// <summary>Prints one snapshot, as lines or as JSON.</summary>
+    /// <summary>Prints one snapshot, as lines or as JSON lines (<see cref="CliJsonLines"/>): one record per lane, the row's
+    /// members with the base, the reading time, the stall bound and each age in seconds beside them.</summary>
     /// <param name="repository">Any worktree of the repository.</param>
     /// <param name="leaseRoot">The lease directory, or null for the main checkout's.</param>
     /// <param name="baseRef">The integration branch commits ahead are counted from.</param>
     /// <param name="stall">How long an active lane may go without a write before it is marked stalled.</param>
-    /// <param name="json">Whether to print the rows as a JSON array.</param>
+    /// <param name="json">Whether to print one JSON record per lane.</param>
     /// <param name="clock">The CLI clock.</param>
     /// <param name="cancellationToken">Cancels the reads.</param>
     /// <returns>The exit code.</returns>
@@ -443,8 +444,20 @@ public static partial class LanesCommand {
         var now = clock.GetUtcNow();
         var rows = await SnapshotAsync(baseRef: baseRef, cancellationToken: cancellationToken, leaseRoot: leaseRoot, now: now, repository: repository, stall: stall).ConfigureAwait(continueOnCapturedContext: false);
 
-        if (json) {
-            Console.Out.WriteLine(value: JsonSerializer.Serialize(options: JsonOptions, value: new { @base = baseRef, now, stallMinutes = stall.TotalMinutes, lanes = rows.Select(selector: row => new { row, writeAgeSeconds = AgeSeconds(time: row.WriteAt, now: now), commitAgeSeconds = AgeSeconds(time: row.CommitAt, now: now), logAgeSeconds = AgeSeconds(time: row.LogAt, now: now) }) }));
+        using var records = CliJsonLines.Open(json: json);
+
+        if (records is not null) {
+            foreach (var row in rows) {
+                var record = JsonSerializer.SerializeToNode(options: JsonOptions, value: row)!.AsObject();
+
+                record["base"] = baseRef;
+                record["now"] = now;
+                record["stallMinutes"] = stall.TotalMinutes;
+                record["writeAgeSeconds"] = AgeSeconds(time: row.WriteAt, now: now);
+                record["commitAgeSeconds"] = AgeSeconds(time: row.CommitAt, now: now);
+                record["logAgeSeconds"] = AgeSeconds(time: row.LogAt, now: now);
+                records.Write(record: record);
+            }
         } else {
             foreach (var row in rows) { Console.Out.WriteLine(value: Line(row: row, now: now)); }
         }
@@ -489,7 +502,7 @@ public static partial class LanesCommand {
     /// <returns>The command.</returns>
     public static Command Create(TimeProvider clock) {
         var baseOption = new Option<string?>(name: "--base") { Description = "The integration branch commits ahead are counted from; defaults to the branch the main checkout holds." };
-        var jsonOption = new Option<bool>(name: "--json") { Description = "Print the rows as one JSON document." };
+        var jsonOption = CliOptions.Json(description: "Write one JSON object per lane: its row's members, with base, now, stallMinutes and each age in seconds.");
         var stallOption = CliOptions.Count(defaultValue: 30, description: "Minutes without progress (a writer's write, a findings-only lane's log output) after which an active lane that holds no lease and waits for none is marked STALL.", minimum: 1, name: "--stall");
         var watchOption = CliOptions.OptionalCount(description: "Poll for this many minutes (0 until cancelled) and print only what changes: a lane finishing, stalling or resuming, a lease changing, a lane appearing or leaving.", minimum: 0, name: "--watch");
         var intervalOption = CliOptions.Count(defaultValue: 30, description: "Seconds between polls under --watch.", minimum: 1, name: "--interval");

@@ -597,12 +597,10 @@ internal static class WorldBenchmarks {
     /// <see langword="null"/> to write none.</param>
     /// <param name="json">Whether the report goes to standard output, with the table on standard error.</param>
     /// <param name="sampleHost">The host sampler, or <see langword="null"/> to record no host load.</param>
-    /// <returns>0 when every repeat measured, 1 when the world could not load or run, 2 for invalid arguments, no
+    /// <returns>0 when every repeat measured, 2 when the world could not load or run, for invalid arguments, no
     /// repository root for the default world, or a package that names no entry.</returns>
     public static int Run(string? world, int repeats, string? artifact, string? output, bool json, BenchHostSample? sampleHost) {
-        if (repeats is < 1 or > 100) {
-            return CliExit.Refuse(verb: "bench world", what: "--repeats", why: "must be 1 to 100.");
-        }
+
         if ((artifact is not null) && !File.Exists(path: artifact)) {
             return CliExit.Refuse(verb: "bench world", what: artifact, why: "names no World build (a Puck.World.dll).");
         }
@@ -683,9 +681,7 @@ internal static class WorldBenchmarks {
         }
         if (json) { Console.Out.WriteLine(value: report.ToJson()); }
         if (error is not null) {
-            Console.Error.WriteLine(value: $"ERROR: {error}");
-
-            return 1;
+            return CliExit.Refuse(verb: "bench world", what: "the world", why: $"could not load or run: {error}");
         }
 
         return 0;

@@ -30,14 +30,14 @@ public static partial class CanaryCommand {
         var mergeOption = new Option<bool>(name: "--merge") { Description = "Run what a merge needs: the automatic set plus every proof requiring gpu." };
         var jobsOption = CliOptions.Jobs(defaultValue: DefaultJobs, description: "Maximum World processes to run at once (default: the logical processor count). A federated leg holds one per process. Proof reports remain in authored order.");
         var gpuJobsOption = CanaryGpuJobs.Create();
+        var jsonOption = CliOptions.Json(description: "With --plan, write one JSON object per proof (proof, legs, worldBoots, spawns, budgetSeconds, placement) and one of totals; with --list, one per manifest (id, shape, backends, requirements, automatic, world, binding). Text lines go to standard error.");
         var planOption = new Option<bool>(name: "--plan") { Description = "Print what the selection would run — proofs, legs, World boots, process spawns, builds, and the summed leg budget — without building or running." };
         var worldArtifactOption = new Option<string?>(name: "--world-artifact") { Description = "Run every leg on this Puck.World entry assembly, such as a producer-built package's, instead of the build of the checkout's sources. Never builds." };
         var debugLayersOption = new Option<bool>(name: DebugLayerOutput.Flag) { Description = "Boot every leg that names a backend with --debug-layers, the validation layer of that backend, and fail any such leg whose stderr has a validation message or says the layer never loaded." };
-        var keepTranscriptsOption = new Option<bool>(name: "--keep-transcripts") { Description = "Keep every leg's run directory whatever its verdict, for a caller that reads the transcripts afterwards and owns their removal; by default a held proof's legs are deleted and a failed proof's are kept." };
         var command = new Command(
             description: "Run bounded, two-leg behavioral proofs against the real Puck.World executable.",
             name: "canary"
-        ) { idsArgument, allOption, backendOption, capabilityOption, debugLayersOption, gpuJobsOption, jobsOption, keepTranscriptsOption, listOption, mergeOption, planOption, worldArtifactOption };
+        ) { idsArgument, allOption, backendOption, capabilityOption, debugLayersOption, gpuJobsOption, jobsOption, jsonOption, listOption, mergeOption, planOption, worldArtifactOption };
 
         command.Detail(detail: $"""
               no selection           run the automatic set: headless shape and no environmental requirements
@@ -51,7 +51,7 @@ public static partial class CanaryCommand {
                                      backend's validation layer, and fail a leg on any validation message
                                      or an unloaded layer
               --plan                 print the selection's counts without building or running
-              --keep-transcripts     keep every leg's run directory whatever its verdict
+              --json                 with --plan or --list, write one JSON object per line instead
               --jobs <n>             run at most n World processes at once (default: logical processors)
               --gpu-jobs <n>         run at most n legs on the GPU at once (default {CanaryGpuJobs.Default})
 
@@ -76,6 +76,12 @@ public static partial class CanaryCommand {
 
 
         command.Validators.Add(item: result => {
+            if (result.GetValue(option: jsonOption) && !result.GetValue(option: planOption) && !result.GetValue(option: listOption)) {
+                result.AddError(errorMessage: "--json reports --plan or --list; a run prints its verdict as text.");
+
+                return;
+            }
+
             var capability = result.GetValue(option: capabilityOption);
             var ids = (result.GetValue(argument: idsArgument) ?? []);
             var forms = (((((result.GetValue(option: allOption)
@@ -150,7 +156,7 @@ public static partial class CanaryCommand {
                 GpuLegs: parseResult.GetValue(option: gpuJobsOption),
                 Processes: parseResult.GetValue(option: jobsOption)
             ),
-            keepTranscripts: parseResult.GetValue(option: keepTranscriptsOption),
+            json: parseResult.GetValue(option: jsonOption),
             list: parseResult.GetValue(option: listOption),
             merge: parseResult.GetValue(option: mergeOption),
             plan: parseResult.GetValue(option: planOption),
@@ -174,7 +180,6 @@ public static partial class CanaryCommand {
             debugLayers: debugLayers,
             ids: [.. ids],
             capacity: CanaryCapacity.Default,
-            keepTranscripts: false,
             list: false,
             merge: false,
             plan: false,
@@ -207,7 +212,8 @@ public static partial class CanaryCommand {
         value: "input:"
     ) && (capability.Length > 6))
     );
-    private static int Run(bool all, IReadOnlyList<string> backends, string? capability, IReadOnlyCollection<string> debugLayers, string[] ids, CanaryCapacity capacity, bool keepTranscripts, bool list, bool merge, bool plan, string? worldArtifact) {
+    private static int Run(bool all, IReadOnlyList<string> backends, string? capability, IReadOnlyCollection<string> debugLayers, string[] ids, CanaryCapacity capacity, bool list, bool merge, bool plan, string? worldArtifact, bool json = false) {
+        using var records = CliJsonLines.Open(json: json);
         var selection = ToSelection(
             all: all,
             capability: capability,
@@ -242,6 +248,7 @@ public static partial class CanaryCommand {
 
         if (selection.Kind == CanarySelectionKind.List) {
             List(
+                json: records,
                 manifests: manifests,
                 repositoryRoot: repositoryRoot
             );
@@ -260,9 +267,16 @@ public static partial class CanaryCommand {
             return CliExit.Refused;
         }
 
-        // A run of no proofs proves nothing, so it is refused before anything is built rather than reported as passing.
-        if (!plan && (selected.Count == 0)) {
-            return CliExit.Refuse(verb: "canary", what: "the selection", why: $"names no proof to run ({selection.Kind}); there is nothing to build or prove.");
+        // A run or plan of no proofs proves nothing, so it says so before anything is built or counted rather than
+        // reporting a pass or a plan that would still build the World. Only the plan of the automatic set, which the
+        // caller did not name, is a notice.
+        if (selected.Count == 0) {
+            return CliExit.Empty(
+                named: (!plan || (selection.Kind != CanarySelectionKind.Automatic)),
+                selection: $"the {selection.Kind.ToString().ToLowerInvariant()} selection",
+                verb: "canary",
+                why: "selects no proof"
+            );
         }
 
         var costs = Plan(
@@ -271,7 +285,9 @@ public static partial class CanaryCommand {
             namedWorldArtifact: (worldArtifact is not null)
         );
 
-        if (plan) {
+        if (plan && (records is not null)) {
+            WritePlan(output: records, plan: costs);
+        } else if (plan) {
             PrintPlan(plan: costs);
         }
 
@@ -284,7 +300,6 @@ public static partial class CanaryCommand {
                     debugLayers: debugLayers,
                     explicitAll: (selection.Kind == CanarySelectionKind.All),
                     capacity: capacity,
-                    keepTranscripts: keepTranscripts,
                     manifests: selected,
                     plan: costs,
                     repositoryRoot: repositoryRoot,
@@ -315,7 +330,7 @@ public static partial class CanaryCommand {
         : runExit
     );
 
-    private static int RunSelected(IReadOnlyList<CanaryManifest> manifests, CanaryPlan plan, string repositoryRoot, bool explicitAll, CanaryCapacity capacity, bool keepTranscripts, string? worldArtifact, IReadOnlyCollection<string> debugLayers) {
+    private static int RunSelected(IReadOnlyList<CanaryManifest> manifests, CanaryPlan plan, string repositoryRoot, bool explicitAll, CanaryCapacity capacity, string? worldArtifact, IReadOnlyCollection<string> debugLayers) {
         IReadOnlyList<CanaryProof> proofs = [.. plan.Proofs.Select(selector: static proof => proof.Proof)];
         var scope = BackendScope(proofs: proofs);
         var scoped = ((scope is null)
@@ -508,8 +523,7 @@ public static partial class CanaryCommand {
                         endings.Add(item: EndingOf(leg: legs[reported, 0]));
                         endings.Add(item: EndingOf(leg: legs[reported, 1]));
                         ConcludeLegs(
-                            keepTranscripts: keepTranscripts,
-                            legs: [legs[reported, 0], legs[reported, 1]],
+                                    legs: [legs[reported, 0], legs[reported, 1]],
                             passed: verdict.Passed
                         );
                         failed |= !verdict.Passed;
@@ -537,7 +551,6 @@ public static partial class CanaryCommand {
             // A leg whose proof never reported belongs to a run that stopped; its evidence is kept.
             for (var index = reported; (index < proofs.Count); index++) {
                 ConcludeLegs(
-                    keepTranscripts: keepTranscripts,
                     legs: [results[index, 0], results[index, 1]],
                     passed: false
                 );
@@ -1345,8 +1358,22 @@ public static partial class CanaryCommand {
                 : "FAIL")}: {assertion.Detail}");
         }
     }
-    private static void List(IReadOnlyList<CanaryManifest> manifests, string repositoryRoot) {
+    private static void List(IReadOnlyList<CanaryManifest> manifests, string repositoryRoot, CliJsonLines? json) {
         foreach (var manifest in manifests) {
+            if (json is not null) {
+                json.Write(record: new System.Text.Json.Nodes.JsonObject {
+                    ["id"] = manifest.Id,
+                    ["shape"] = manifest.BootShape.ToString().ToLowerInvariant(),
+                    ["backends"] = new System.Text.Json.Nodes.JsonArray([.. manifest.Backends.Select(selector: static backend => (System.Text.Json.Nodes.JsonNode?)backend)]),
+                    ["requirements"] = new System.Text.Json.Nodes.JsonArray([.. manifest.Requirements.Select(selector: static requirement => (System.Text.Json.Nodes.JsonNode?)requirement)]),
+                    ["automatic"] = manifest.IsAutomatic,
+                    ["world"] = CliPaths.ToDisplay(relativeTo: repositoryRoot, fullPath: manifest.Positive.WorldPath),
+                    ["binding"] = manifest.Binding,
+                });
+
+                continue;
+            }
+
             var requirements = ((manifest.Requirements.Count == 0)
                 ? "none"
                 : string.Join(
@@ -1399,7 +1426,7 @@ public static partial class CanaryCommand {
             }
         }
 
-        // An empty selection selects cleanly; Run refuses to execute it, and --plan reports its zero counts.
+        // An empty selection selects cleanly; Run reports it through CliExit.Empty before building or planning anything.
         return true;
     }
     private static IReadOnlyList<CanaryManifest> FilterCapability(IReadOnlyList<CanaryManifest> manifests, string capability) => capability switch {
@@ -1487,14 +1514,9 @@ public static partial class CanaryCommand {
     public static string CreateRunDirectory(string id, string leg) =>
         RunDirectory.CreatePath(prefix: $"{ScratchPrefix}{id}-{leg}-");
 
-    // Concludes a reported proof's legs with its verdict: a held proof's are deleted, a failed one's are kept and named,
-    // and --keep-transcripts leaves every one to its caller. A leg that never ran, or never created its directory, has
-    // nothing to conclude.
-    private static void ConcludeLegs(IEnumerable<CanaryLegRun?> legs, bool passed, bool keepTranscripts) {
-        if (keepTranscripts) {
-            return;
-        }
-
+    // Concludes a reported proof's legs with its verdict: a held proof's are deleted, a failed one's are kept and named.
+    // A leg that never ran, or never created its directory, has nothing to conclude.
+    private static void ConcludeLegs(IEnumerable<CanaryLegRun?> legs, bool passed) {
         foreach (var leg in legs) {
             if (leg is not null) {
                 RunDirectory.Conclude(

@@ -54,7 +54,7 @@ public static class MeshSceneCommand {
         }
 
         if (!CliWorldDocuments.TryLoad(definition: out var definition, fullPath: out var fullPath, path: world, verb: Verb)) {
-            return 1;
+            return CliExit.Refused;
         }
 
         var buildDirectory = Path.GetFullPath(path: (build ?? AppContext.BaseDirectory));
@@ -80,8 +80,7 @@ public static class MeshSceneCommand {
             labels.Add(item: scene.Label(group: group, owner: null));
         }
         if (draws.Count == 0) {
-            Console.Error.WriteLine(value: $"{Verb}: the store {meshes} holds no static mesh of the world under bake identity {identity:x32}. Boot the world once with the build whose meshes to read, then name its directory with --build.");
-            return 1;
+            return CliExit.Empty(verb: Verb, selection: CliPaths.ToDisplay(fullPath: meshes), why: $"holds no static mesh of the world under bake identity {identity:x32}: boot the world once with the build whose meshes to read, then name its directory with --build");
         }
 
         var changed = -1;

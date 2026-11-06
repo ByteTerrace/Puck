@@ -32,14 +32,6 @@ public static partial class MotionCommand {
             return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: scenarioFile), why: parseError);
         }
 
-        if (list) {
-            foreach (var scenario in set.Scenarios) {
-                Console.Out.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{scenario.Name}: {scenario.Form.ToString().ToLowerInvariant()}, {scenario.Capture.Count} still(s), ticks 0..{scenario.LastTick} — {scenario.Note}"));
-            }
-
-            return CliExit.Success;
-        }
-
         var selected = new List<MotionScenario>();
 
         if (names.Length == 0) {
@@ -55,6 +47,18 @@ public static partial class MotionCommand {
                     selected.Add(item: found);
                 }
             }
+        }
+
+        if (selected.Count == 0) {
+            return CliExit.Empty(verb: Verb, selection: CliPaths.ToDisplay(fullPath: scenarioFile), why: "declares no scenario");
+        }
+
+        if (list) {
+            foreach (var scenario in selected) {
+                Console.Out.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{scenario.Name}: {scenario.Form.ToString().ToLowerInvariant()}, {scenario.Capture.Count} still(s), ticks 0..{scenario.LastTick} — {scenario.Note}"));
+            }
+
+            return CliExit.Success;
         }
 
         var world = Path.GetFullPath(path: (worldPath ?? Path.Combine(path1: repositoryRoot, path2: DefaultWorld)));
@@ -88,7 +92,7 @@ public static partial class MotionCommand {
         var againstOption = new Option<string>(name: "--against-world-artifact") { Description = "The second route replay's World entry assembly; the first artifact again (A/A) when omitted. Both must implement the same route protocol." };
         var scenariosOption = new Option<string>(name: "--scenarios") { Description = $"The scenario file; {DefaultScenarios} when omitted." };
         var scenarioOption = new Option<string[]>(name: "--scenario") { AllowMultipleArgumentsPerToken = true, Description = "Run only the named scenario (repeat or list several); every scenario of the file when omitted." };
-        var listOption = new Option<bool>(name: "--list") { Description = "Print each scenario's name, form, stills and note, and boot nothing." };
+        var listOption = new Option<bool>(name: "--list") { Description = "Print each selected scenario's name, form, stills and note, and boot nothing." };
         var reproduceOption = new Option<bool>(name: "--reproduce") { Description = $"Run everything twice in fresh Worlds; exits 1 for unequal pose or capture hashes, missing camera images, or pixels beyond {MotionReport.MaximumResiduePixels} changed pixels per still and {MotionReport.MaximumResidueLevel} channel level." };
         var outputOption = CliOptions.Output(description: "The directory the stills, sheets, logs and manifest are written to; a kept run directory under the temporary root when omitted.");
         var worldOption = new Option<string>(name: "--world") { Description = $"The world to boot; {DefaultWorld} when omitted." };

@@ -43,8 +43,7 @@ public static partial class CompileCommand {
 
         if (WorldDocumentName.IsDocumentFile(path: fullPath)) {
             if (watch || updateAssets) {
-                Console.Error.WriteLine(value: "error: --watch and --update-assets apply to .puck sources; a world document compiles only to its compiled world.");
-                return 1;
+                return CliExit.Refuse(verb: "compile", what: CliPaths.ToDisplay(fullPath: fullPath), why: "--watch and --update-assets apply to .puck sources; a world document compiles only to its compiled world.");
             }
 
             return CompileDocument(
@@ -106,8 +105,7 @@ public static partial class CompileCommand {
             return ExecuteWorldCompilation(imports: imports, outputPath: outputPath, source: sourceText, sourcePath: sourcePath, strict: strict, updateAssets: updateAssets, validate: validate, written: written);
         }
         if (updateAssets) {
-            Console.Error.WriteLine(value: "error: --update-assets applies to world asset references; cartridge sources do not use a world asset lock.");
-            return 1;
+            return CliExit.Refuse(verb: "compile", what: "--update-assets", why: "applies to world asset references; cartridge sources do not use a world asset lock.");
         }
 
         var (effectiveAst, loweredJson) = CompileSource(

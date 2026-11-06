@@ -380,7 +380,30 @@ public static class AffectedCommand {
 
     }
 
-    private static int Run(string? since, string? mergeBase, bool run, bool gpu, int gpuJobs, int suiteJobs, RootCommand root) {
+    /// <summary>Writes a plan as <c>puck affected --json</c> does: one record of what was compared, then one per chosen item
+    /// in <see cref="Describe"/>'s order, each its <c>kind</c> (suite, test, canary, canary-check, docs-links, parity,
+    /// baseline), its <c>name</c> and, where the gate runs a command for it, that <c>command</c>.</summary>
+    /// <param name="plan">The plan.</param>
+    /// <param name="changed">The changed files the plan was read from.</param>
+    /// <param name="against">The revision the working tree was compared against.</param>
+    /// <param name="output">The JSON-lines output.</param>
+    public static void WriteRecords(AffectedPlan plan, int changed, string against, CliJsonLines output) {
+        static System.Text.Json.Nodes.JsonObject Item(string kind, string? name, IEnumerable<string>? command = null) => new() {
+            ["kind"] = kind,
+            ["name"] = name,
+            ["command"] = ((command is null) ? null : $"puck {string.Join(separator: ' ', values: command)}"),
+        };
+
+        output.Write(record: new System.Text.Json.Nodes.JsonObject { ["changed"] = changed, ["against"] = against, ["everything"] = plan.Everything });
+        foreach (var suite in plan.Suites) { output.Write(record: Item(kind: "suite", name: suite)); }
+        foreach (var world in plan.Worlds) { output.Write(record: Item(kind: "test", name: world, command: ["test", world])); }
+        foreach (var canary in plan.Canaries) { output.Write(record: Item(kind: "canary", name: canary)); }
+        foreach (var canary in plan.CanaryChecks) { output.Write(record: Item(kind: "canary-check", name: canary, command: CanaryCheckArguments(ids: plan.CanaryChecks))); }
+        if (plan.DocsLinks) { output.Write(record: Item(kind: "docs-links", name: null, command: DocsLinksArguments)); }
+        if (plan.Parity) { output.Write(record: Item(kind: "parity", name: null)); }
+        foreach (var baseline in plan.Baselines) { output.Write(record: Item(kind: "baseline", name: baseline.Name, command: baseline.CheckArguments())); }
+    }
+    private static int Run(string? since, string? mergeBase, bool run, bool gpu, int gpuJobs, int suiteJobs, bool json, RootCommand root) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refuse(verb: Verb, what: Environment.CurrentDirectory, why: "is not inside the Puck repository.");
         }
@@ -401,6 +424,8 @@ public static class AffectedCommand {
             return CliExit.Refuse(verb: Verb, what: resolved, why: error);
         }
 
+        using var records = CliJsonLines.Open(json: json);
+
         Console.Out.WriteLine(value: ((mergeBase is null)
             ? $"affected: {changed.Count} changed file(s) against {resolved}."
             : $"affected: {changed.Count} changed file(s) against {resolved[..12]}, the merge base of HEAD and {mergeBase}."));
@@ -409,10 +434,14 @@ public static class AffectedCommand {
             Console.Out.WriteLine(value: "affected: build infrastructure changed, which reaches every suite.");
         }
 
-        Describe(
-            into: Console.Out,
-            plan: plan
-        );
+        if (records is null) {
+            Describe(
+                into: Console.Out,
+                plan: plan
+            );
+        } else {
+            WriteRecords(against: resolved, changed: changed.Count, output: records, plan: plan);
+        }
 
         return (run
             ? Execute(gpu: gpu, gpuJobs: gpuJobs, plan: plan, repositoryRoot: repositoryRoot, root: root, suiteJobs: suiteJobs)
@@ -439,10 +468,13 @@ public static class AffectedCommand {
         var gpuOption = Gpu();
         var gpuJobsOption = CanaryGpuJobs.Create();
         var suiteJobsOption = AffectedSuites.Jobs();
+        var jsonOption = CliOptions.Json(description: "Write the plan as one JSON object per line: what was compared (changed, against, everything), then each chosen item's kind, name and gate command; every text line, a run's included, goes to standard error.");
         var command = new Command(
             description: "Name the test suites and canaries a change needs, and with --run run exactly those.",
             name: Verb
-        ) { sinceOption, mergeBaseOption, runOption, gpuOption, gpuJobsOption, suiteJobsOption };
+        ) { sinceOption, mergeBaseOption, runOption, gpuOption, gpuJobsOption, suiteJobsOption, jsonOption };
+
+        CliOptions.Exclusive(command, sinceOption, mergeBaseOption);
 
         command.Detail(detail: $"""
               Changed files are the working tree against --since (or against the merge base of HEAD
@@ -497,6 +529,7 @@ public static class AffectedCommand {
         command.SetAction(action: parseResult => Run(
             gpu: parseResult.GetValue(option: gpuOption),
             gpuJobs: parseResult.GetValue(option: gpuJobsOption),
+            json: parseResult.GetValue(option: jsonOption),
             mergeBase: parseResult.GetValue(option: mergeBaseOption),
             run: parseResult.GetValue(option: runOption),
             since: parseResult.GetValue(option: sinceOption),

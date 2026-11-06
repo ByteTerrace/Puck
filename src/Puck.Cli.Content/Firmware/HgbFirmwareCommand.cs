@@ -34,12 +34,11 @@ internal static class HgbFirmwareCommand {
         } catch (AggregateException exception) when (exception.Flatten().InnerExceptions.All(predicate: IsReported)) {
             // A revision that fails to calibrate surfaces from the concurrent build wrapped with any others that failed.
             foreach (var inner in exception.Flatten().InnerExceptions) {
-                Console.Error.WriteLine(value: $"firmware hgb: {inner.Message}");
+                Console.Error.WriteLine(value: $"puck firmware hgb: {inner.Message}");
             }
-            return 1;
+            return CliExit.Refused;
         } catch (Exception exception) when (IsReported(exception: exception)) {
-            Console.Error.WriteLine(value: $"firmware hgb: {exception.Message}");
-            return 1;
+            return CliExit.Refuse(verb: "firmware hgb", what: "the build", why: exception.Message);
         }
     }
 

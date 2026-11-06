@@ -30,7 +30,7 @@ public sealed class FirmwareCommandTests {
 
         Assert.Equal(
             actual: result,
-            expected: 1
+            expected: CliExit.Refused
         );
         Assert.Equal(
             expected: previous,

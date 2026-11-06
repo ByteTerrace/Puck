@@ -100,6 +100,43 @@ public static class LeaseCommand {
         return text.ToString();
     }
 
+    /// <summary>Writes every lease's holder and queue as <c>puck lease list --json</c> does: one record per lease, in the
+    /// order <see cref="Render"/> prints them.</summary>
+    /// <param name="clock">The clock hold and wait times are measured against.</param>
+    /// <param name="root">The shared lease directory.</param>
+    /// <param name="output">The JSON-lines output the records go to.</param>
+    public static void WriteRecords(TimeProvider clock, string root, CliJsonLines output) {
+        var now = clock.GetUtcNow();
+
+        foreach (var name in new[] { "quiet", "build", "gpu", "heavy" }) {
+            var state = CliLease.Inspect(name: name, now: now, root: root);
+            var queue = new System.Text.Json.Nodes.JsonArray();
+
+            foreach (var ticket in state.Queue.OrderBy(keySelector: static ticket => ticket.Ahead).ThenBy(keySelector: static ticket => ticket.Id, comparer: StringComparer.Ordinal)) {
+                queue.Add(item: new System.Text.Json.Nodes.JsonObject {
+                    ["holder"] = ticket.Holder,
+                    ["lane"] = ticket.Lane,
+                    ["checkout"] = ticket.Checkout,
+                    ["since"] = ticket.Since,
+                    ["ahead"] = ticket.Ahead,
+                    ["position"] = ticket.Position,
+                    ["lanes"] = ticket.Lanes,
+                });
+            }
+
+            output.Write(record: new System.Text.Json.Nodes.JsonObject {
+                ["lease"] = name,
+                ["holder"] = state.Holder,
+                ["lane"] = state.Lane,
+                ["checkout"] = state.Checkout,
+                ["since"] = state.Since,
+                ["alive"] = ((state.Holder is null) ? null : state.HolderAlive),
+                ["queue"] = queue,
+                ["recordedProtocol"] = CliLease.RecordedProtocol(root: root),
+                ["protocol"] = CliLease.Protocol,
+            });
+        }
+    }
     private static string Age(DateTimeOffset? since, DateTimeOffset now) {
         if (since is not { } at) { return "an unknown time"; }
         var age = (now - at);
@@ -131,15 +168,23 @@ public static class LeaseCommand {
             root.Subcommands.Add(item: command);
         }
 
-        var list = new Command(description: "Print each lease with its holder, lane and hold time, and its queue in admission order with each waiter's wait.", name: "list");
+        var listJson = CliOptions.Json(description: "Write one JSON object per lease: lease, holder, lane, checkout, since, alive, queue (each waiter's holder, lane, checkout, since, ahead, position and lanes), recordedProtocol and protocol.");
+        var list = new Command(description: "Print each lease with its holder, lane and hold time, and its queue in admission order with each waiter's wait.", name: "list") { listJson };
 
         list.SetAction(action: async (parse, cancellationToken) => {
             var directory = (leaseRoot ?? await CliLease.RootAsync(checkout: RepositoryPaths.RequireRoot(), cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false));
 
-            Console.Out.Write(value: Render(clock: clock, root: directory));
+            using var json = CliJsonLines.Open(json: parse.GetValue(option: listJson));
+
+            if (json is null) {
+                Console.Out.Write(value: Render(clock: clock, root: directory));
+            } else {
+                WriteRecords(clock: clock, output: json, root: directory);
+            }
+
             return 0;
         });
-        list.Detail(detail: "Use: puck lease list\nReads .claude/leases/ without taking a ticket, dropping a dead ticket or writing a rotation serial. Each of build, gpu and heavy prints idle, or its holder (lane, how long it has held the lease) and then its live waiters in admission order: the rotation puts the oldest ticket of the lane served least recently first, so the order is the order the lease will be granted in. Each holder and waiter shows its holder, lane and the checkout it works in (when its CLI recorded one), and each waiter how long it has waited and its lane's turn among the queued lanes. Whether the holder is alive is read from the lease's guard lock, the lock that decides ownership: a holder file no process holds the lock for prints as stale, and the next acquisition replaces it. A lease a holder's descendants hold as a child of it is not shown.");
+        list.Detail(detail: "Use: puck lease list [--json]\nReads .claude/leases/ without taking a ticket, dropping a dead ticket or writing a rotation serial. Each of build, gpu and heavy prints idle, or its holder (lane, how long it has held the lease) and then its live waiters in admission order: the rotation puts the oldest ticket of the lane served least recently first, so the order is the order the lease will be granted in. Each holder and waiter shows its holder, lane and the checkout it works in (when its CLI recorded one), and each waiter how long it has waited and its lane's turn among the queued lanes. Whether the holder is alive is read from the lease's guard lock, the lock that decides ownership: a holder file no process holds the lock for prints as stale, and the next acquisition replaces it. A lease a holder's descendants hold as a child of it is not shown.");
         root.Subcommands.Add(item: list);
 
         if (settleWait is not null) {

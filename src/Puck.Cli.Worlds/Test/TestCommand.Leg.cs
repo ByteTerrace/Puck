@@ -422,6 +422,7 @@ public static partial class TestCommand {
             DefaultValueFactory = static _ => null,
             Description = "Require each world's per-tick authority hashes, delivered snapshot entries, exports and crossing log to match the recording --record wrote under <dir>/<world>.",
         };
+        var jsonOption = CliOptions.Json(description: "Write one JSON object per world (world, path, verdict, comparison, hostBoots, exportedTicks, artifacts) and one of totals (worlds, verdict, diverged, workProcesses, hostBoots, exportedTicks); every text line goes to standard error.");
         var command = new Command(
             description: "Boot each test world through the real Puck.World executable and judge its verdict rows.",
             name: "test"
@@ -436,6 +437,7 @@ public static partial class TestCommand {
             recordOption,
             compareOption,
             filterOption,
+            jsonOption,
         };
 
         command.Detail(detail: """
@@ -457,6 +459,7 @@ public static partial class TestCommand {
             record: parseResult.GetValue(option: recordOption),
             workers: parseResult.GetValue(option: workersOption),
             jobs: parseResult.GetValue(option: jobsOption),
+            json: parseResult.GetValue(option: jsonOption),
             keep: parseResult.GetValue(option: keepOption),
             path: (parseResult.GetValue(argument: pathArgument) ?? string.Empty),
             reproduce: parseResult.GetValue(option: reproduceOption),

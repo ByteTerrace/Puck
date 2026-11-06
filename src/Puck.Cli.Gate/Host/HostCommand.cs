@@ -7,7 +7,8 @@ namespace Puck.Cli.Host;
 public static class HostCommand {
     private const string LoadVerb = "host load";
 
-    private static int Load(bool watch, int interval, int window, HostLoadThresholds thresholds, CancellationToken cancellationToken) {
+    private static int Load(bool watch, int interval, int window, HostLoadThresholds thresholds, bool json, CancellationToken cancellationToken) {
+        using var records = CliJsonLines.Open(json: json);
         var probe = new HostProbe(checkoutRoot: Environment.CurrentDirectory);
         var spacing = TimeSpan.FromSeconds(seconds: interval);
 
@@ -15,8 +16,25 @@ public static class HostCommand {
         var monitor = new HostLoadMonitor(cpuSamples: (watch ? window : 1), thresholds: thresholds);
 
         do {
-            foreach (var line in monitor.Observe(sample: probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)))) {
-                Console.Out.WriteLine(value: line);
+            var sample = probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1));
+            var lines = monitor.Observe(sample: sample);
+
+            if (records is null) {
+                foreach (var line in lines) {
+                    Console.Out.WriteLine(value: line);
+                }
+            } else if (lines.Count > 0) {
+                records.Write(record: new System.Text.Json.Nodes.JsonObject {
+                    ["at"] = sample.At,
+                    ["cpuPercent"] = Finite(value: monitor.CpuMean),
+                    ["freeRamGb"] = Finite(value: sample.FreeRamGb),
+                    ["freeDiskGb"] = Finite(value: sample.FreeDiskGb),
+                    ["commitPercent"] = Finite(value: sample.CommitPercent),
+                    ["reuseNodes"] = sample.ReuseNodes,
+                    ["gpuHolder"] = sample.GpuHolder,
+                    ["heavyTestHolder"] = sample.HeavyTestHolder,
+                    ["admission"] = monitor.Admission,
+                });
             }
 
             Console.Out.Flush();
@@ -32,7 +50,9 @@ public static class HostCommand {
             ? CliExit.Cancelled
             : CliExit.Success);
     }
+    private static double? Finite(double value) => (double.IsFinite(d: value) ? Math.Round(value: value, digits: 1) : null);
     private static Command CreateLoad() {
+        var jsonOption = CliOptions.Json(description: "Write one JSON object per reading that prints a line: at, cpuPercent (the window's mean), freeRamGb, freeDiskGb, commitPercent, reuseNodes, gpuHolder, heavyTestHolder and admission (PRESSURE with its reasons, CAPACITY, LOADED or null).");
         var watchOption = new Option<bool>(name: "--watch") { Description = "Keep reading every --interval seconds and print a line on each transition, until cancelled." };
         var intervalOption = CliOptions.Count(defaultValue: 10, description: "Seconds between readings with --watch.", minimum: 1, name: "--interval");
         var windowOption = CliOptions.Count(defaultValue: 6, description: "Readings the CPU mean covers with --watch; CAPACITY waits until that many exist.", minimum: 1, name: "--window");
@@ -46,7 +66,7 @@ public static class HostCommand {
         var command = new Command(
             description: "Report CPU, memory, disk and GPU busyness as admission lines: GPU busy|idle, PRESSURE, CAPACITY, LOADED.",
             name: "load"
-        ) { watchOption, intervalOption, windowOption, capacityCpuOption, capacityRamOption, capacityCommitOption, pressureRamOption, pressureDiskOption };
+        ) { watchOption, intervalOption, windowOption, capacityCpuOption, capacityRamOption, capacityCommitOption, pressureRamOption, pressureDiskOption, jsonOption };
 
         command.Detail(detail: $"""
               Lines (each carries cpu=, freeRAM=, freeDisk=, commit= where the platform reports a commit limit, and reuseNodes=):
@@ -81,6 +101,7 @@ public static class HostCommand {
         command.SetAction(action: (parseResult, cancellationToken) => Task.Run(function: () => Load(
             cancellationToken: cancellationToken,
             interval: parseResult.GetValue(option: intervalOption),
+            json: parseResult.GetValue(option: jsonOption),
             thresholds: new HostLoadThresholds(
                 CapacityCpuPercent: parseResult.GetValue(option: capacityCpuOption),
                 CapacityCommitPercent: parseResult.GetValue(option: capacityCommitOption),

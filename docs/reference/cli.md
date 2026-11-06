@@ -772,7 +772,10 @@ break, and nothing wider. `--merge-base <revision>` takes the base as the merge
 base of `HEAD` and that revision instead, so the commits a target branch gained
 after the branch left it are never read as the branch's change; diffing against
 the target's tip would count them. `--since` and `--merge-base` each name the
-base, so passing both is refused.
+base, so passing both is refused. `--json` writes the plan as one JSON object
+per line: what was compared (`changed`, `against`, `everything`), then each
+chosen item's `kind` (suite, test, canary, canary-check, docs-links, parity,
+baseline), `name` and the `command` the gate runs for it.
 
 - **Suites** follow the project graph. A changed project chooses its own suite
   and the suite of every project that references it, transitively, counting a
@@ -1031,6 +1034,10 @@ PRESSURE <reason> cpu=<percent> freeRAM=<GB> freeDisk=<GB> reuseNodes=<count>
 CAPACITY cpu=<percent> freeRAM=<GB> freeDisk=<GB> reuseNodes=<count>
 ```
 
+`--json` writes one JSON object per reading that prints a line instead: `at`,
+`cpuPercent` (the window's mean), `freeRamGb`, `freeDiskGb`, `commitPercent`,
+`reuseNodes`, `gpuHolder`, `heavyTestHolder` and `admission`.
+
 - `GPU busy` or `GPU idle` appears at the first reading and on every change
   after. GPU work is the World (`Puck.World` or `Puck.World.dll`) when its
   arguments open a device, or a test host for an assembly in
@@ -1281,7 +1288,7 @@ puck canary --backend <name> ...    run every backend-declaring proof on vulkan 
 puck canary --jobs <n>              run at most n World processes at once (n ≥ 1)
 puck canary --gpu-jobs <n>          run at most n legs on the GPU at once (n ≥ 1)
 puck canary --plan                  print a selection's counts without building or running
-puck canary --keep-transcripts ...  keep every leg's run directory whatever its verdict
+puck canary --plan|--list --json    the plan or the listing as one JSON object per line
 ```
 
 Each leg runs in its own run directory under the temporary directory, which
@@ -1289,9 +1296,9 @@ the leg's `canary <id> <leg>: transcripts <path>` line names. A proof that
 holds deletes both legs' directories once its report prints; a proof that fails
 keeps both and names each with a `run directory kept:` line, as does a run that
 stops before every proof reported (see [Conventions](#conventions)). The run's
-shader packages follow the run's verdict the same way. `--keep-transcripts`
-leaves every leg's directory in place for a caller that reads the transcripts
-afterwards and removes them itself.
+shader packages follow the run's verdict the same way. A selection, or the
+plan of a named selection, that names no proof is refused before anything is
+built; the plan of an empty automatic set is a notice.
 
 `puck canary --merge` is the merge gate. The automatic set alone skips every
 offscreen GPU proof, because each requires `gpu`; `--merge` runs the union of
@@ -1622,8 +1629,14 @@ puck test <path> --record <dir>        keep each world's hashes, snapshots, expo
                                        under <dir>/<world> (lane scratch, never committed)
 puck test <path> --compare <dir>       require each world to match its recording under <dir>
 puck test <path> --cache-dir <dir>     share this device-cache root across workers and runs
+puck test <path> --json                one JSON object per world, then one of totals, on standard
+                                       output; every text line goes to standard error
 puck test -h / --help                  this text
 ```
+
+A world whose reproduction, worker counts or recording diverge fails the run
+(exit 1), as a failing verdict does; a leg that did not finish, a missing
+recording or a world that cannot be judged refuses it (exit 2).
 
 Without `--keep`, the run uses a run directory under the temporary directory
 that a passing run deletes and a failing run keeps and names (see
@@ -2957,7 +2970,7 @@ kernel source's current digest:
 puck bench state-evidence --inventory --output artifacts/state-evidence/inventory.json
 ```
 
-The inventory records the manifest digest, pinned SDK and roll-forward policy,
+The inventory records the manifest digest,
 every Native AOT entry point and symbol, each kernel source's current SHA-256,
 per-target unresolved analyzer findings, the per-vocabulary coverage with each
 unmodeled operation named, and every missing memory coefficient. A nonzero exit
@@ -2966,8 +2979,9 @@ the manifest. Run it from the
 repository checkout; the command locates the checkout by ascending to `Puck.slnx`.
 
 Each kernel artifact campaign must use the inventory's exact source digest and the
-per-target `referenceBuild` settings in `ReferenceSchedule.json`: the SDK
-`global.json` pins, the recorded runtime pack and ILCompiler, Release Native AOT,
+per-target `referenceBuild` settings in `ReferenceSchedule.json` with the
+toolchain the checkout derives (the SDK `global.json` names and the runtime that
+SDK bundles, which the Native AOT runtime pack and ILCompiler carry), Release Native AOT,
 explicit `IlcInstructionSet` (`x86-64-v3` or `armv8.2-a`), no method-body
 folding, and no PGO. Retain the complete disassembly for the named symbol and
 every reachable helper, including refusal paths. Run `llvm-mca` at the version
@@ -3008,7 +3022,7 @@ absent.
 
 | Option | Default |
 |---|---|
-| `--ilc <path>` | `<packages>/runtime.<host>.microsoft.dotnet.ilcompiler/<version>/tools/ilc.exe`, taken from the manifest's `ilCompiler`. |
+| `--ilc <path>` | `<packages>/runtime.<host>.microsoft.dotnet.ilcompiler/<version>/tools/ilc.exe`, `<version>` being the runtime the SDK `global.json` names bundles. |
 | `--llvm-objdump <path>` | `PATH`, then `C:/Program Files/LLVM/bin` on Windows. |
 | `--llvm-mca <path>` | The same search. |
 | `--nuget-packages <dir>` | `NUGET_PACKAGES`, then the user profile's package root. |
@@ -4335,6 +4349,10 @@ with read-only calls and stats the git index, the changed files, the worktree's
 active  <name>  <branch>  ahead <n> files <n> commit <age> "<subject>" write <age> log <age> lease gpu:queued#<ticket>(<turn>/<lanes>,ahead <n>) brief <id> done
 ```
 
+`--json` writes one JSON object per lane instead: the row's members with
+`base`, `now`, `stallMinutes` and each age in seconds; it does not combine with
+`--watch`.
+
 - `ahead` counts commits on the branch that `--base` (default:
   the branch the main checkout holds) lacks, and a `--base` that names no commit
   is refused (exit 2); `files` counts paths with a staged or unstaged change.
@@ -4476,6 +4494,11 @@ gpu: held by <lane-a> timing run (lane <lane-a>) for <time>; 2 queued
   2. <lane-a> retime (lane <lane-a>) waiting <time>; lane 2 of 2 in the round, 1 ahead
 heavy: idle
 ```
+
+`puck lease list --json` writes one JSON object per lease instead: `lease`,
+`holder`, `lane`, `checkout`, `since`, `alive`, its `queue` in admission order
+(each waiter's `holder`, `lane`, `checkout`, `since`, `ahead`, `position` and
+`lanes`), and the `recordedProtocol` and `protocol`.
 
 ### `puck lease quiet`—a settle window
 

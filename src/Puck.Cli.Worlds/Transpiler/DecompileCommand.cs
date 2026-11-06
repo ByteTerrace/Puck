@@ -20,8 +20,7 @@ public static class DecompileCommand {
         var fullPath = Path.GetFullPath(path: path);
 
         if (!File.Exists(path: fullPath)) {
-            Console.Error.WriteLine(value: $"error: JSON world definition file not found: '{fullPath}'");
-            return 2;
+            return CliExit.Refuse(verb: "decompile", what: CliPaths.ToDisplay(fullPath: fullPath), why: "does not exist.");
         }
 
         var outputPath = ((output is not null)
@@ -33,8 +32,7 @@ public static class DecompileCommand {
             File.Exists(path: outputPath) &&
             !overwrite
         ) {
-            Console.Error.WriteLine(value: $"error: Destination file '{outputPath}' already exists. Use --overwrite to overwrite.");
-            return 1;
+            return CliExit.Refuse(verb: "decompile", what: CliPaths.ToDisplay(fullPath: outputPath), why: "already exists; pass --overwrite to replace it.");
         }
 
         EmbeddingLock? lockFile = null;
@@ -43,15 +41,13 @@ public static class DecompileCommand {
             var lockPath = Path.GetFullPath(path: embeddings);
 
             if (!File.Exists(path: lockPath)) {
-                Console.Error.WriteLine(value: $"error: Embedding lock file not found: '{lockPath}'");
-                return 2;
+                return CliExit.Refuse(verb: "decompile", what: CliPaths.ToDisplay(fullPath: lockPath), why: "names no embedding lock file.");
             }
 
             try {
                 lockFile = EmbeddingLock.Parse(json: File.ReadAllText(path: lockPath));
-            } catch (Exception ex) {
-                Console.Error.WriteLine(value: $"error: Failed to parse embedding lock file '{lockPath}': {ex.Message}");
-                return 2;
+            } catch (Exception ex) when (ex is System.Text.Json.JsonException or IOException or InvalidDataException or ArgumentException) {
+                return CliExit.Refuse(verb: "decompile", what: CliPaths.ToDisplay(fullPath: lockPath), why: $"is not an embedding lock file: {ex.Message}");
             }
         } else {
             lockFile = (EmbeddingLock.TryLoad(rootSourcePath: outputPath) ?? EmbeddingLock.TryLoad(rootSourcePath: fullPath));
@@ -61,9 +57,8 @@ public static class DecompileCommand {
 
         try {
             json = File.ReadAllText(path: fullPath);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(value: $"error: Could not read JSON file '{fullPath}': {ex.Message}");
-            return 2;
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            return CliExit.Refuse(verb: "decompile", what: CliPaths.ToDisplay(fullPath: fullPath), why: ex.Message);
         }
 
         System.Text.Json.Nodes.JsonObject? document;
@@ -96,9 +91,8 @@ public static class DecompileCommand {
 
             // Decompiled source that will not parse back is a defect in the decompiler, never something to write out.
             puckSource = (printed.Value ?? throw new InvalidOperationException(message: $"the decompiled source does not parse: {printed.Diagnostics.First(predicate: static diagnostic => (diagnostic.Severity == Puck.Transpiler.Diagnostics.DiagnosticSeverity.Error)).Message}"));
-        } catch (Exception ex) {
-            Console.Error.WriteLine(value: $"error: Failed to decompile world definition '{fullPath}': {ex.Message}");
-            return 1;
+        } catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or System.Text.Json.JsonException or NotSupportedException) {
+            return CliExit.Refuse(verb: "decompile", what: CliPaths.ToDisplay(fullPath: fullPath), why: $"could not be decompiled: {ex.Message}");
         }
 
         try {
@@ -119,9 +113,8 @@ public static class DecompileCommand {
 
             Console.WriteLine(value: $"Successfully decompiled '{Path.GetFileName(path: fullPath)}' -> '{outputPath}' ({byteCount:N0} bytes).");
             return 0;
-        } catch (Exception ex) {
-            Console.Error.WriteLine(value: $"error: Failed to write output file '{outputPath}': {ex.Message}");
-            return 2;
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            return CliExit.Refuse(verb: "decompile", what: CliPaths.ToDisplay(fullPath: outputPath), why: $"could not be written: {ex.Message}");
         }
     }
 

@@ -23,13 +23,16 @@ public static class CliExit {
     /// <summary>The invocation was cancelled (Ctrl+C or SIGTERM), the shell's own code for an interrupt.</summary>
     public const int Cancelled = 130;
 
-    /// <summary>Writes a refusal as one line on standard error and returns <see cref="Refused"/>.</summary>
+    /// <summary>Writes a refusal as one line on standard error and returns <see cref="Refused"/>. A reason naming a member a
+    /// strict reader does not know is followed by the stale-revision warning when this CLI was built at another revision
+    /// (<see cref="CliRevision.ExplainUnknownMember"/>).</summary>
     /// <param name="verb">The command path that refused, such as <c>format</c> or <c>pull-request format</c>.</param>
     /// <param name="what">What was refused: a path, a value, an operation.</param>
     /// <param name="why">Why it was refused.</param>
     /// <returns><see cref="Refused"/>.</returns>
     public static int Refuse(string verb, string what, string why) {
         Console.Error.WriteLine(value: $"puck {verb}: {what}: {why}");
+        CliRevision.ExplainUnknownMember(reason: why);
 
         return Refused;
     }
@@ -111,6 +114,7 @@ public static class CliExit {
             ? $"puck: {message}"
             : $"puck {path}: {message}"
         ));
+        CliRevision.ExplainUnknownMember(reason: message);
         // Programming faults need their call site; a one-line refusal cannot tell an author which mechanism broke.
         if (exception is NullReferenceException or IndexOutOfRangeException or InvalidCastException) {
             Console.Error.WriteLine(value: exception.StackTrace);

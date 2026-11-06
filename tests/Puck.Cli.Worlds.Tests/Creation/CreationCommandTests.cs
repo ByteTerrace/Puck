@@ -22,7 +22,7 @@ public sealed class CreationCommandTests {
     /// <summary>Schema and render admission cannot stand in for contact compilation. A capsule scaled apart in X and Z
     /// leaves a residual Scale; nonuniform values must fail only when it is actually placed as a solid.</summary>
     [Theory]
-    [InlineData(true, true, 1)]
+    [InlineData(true, true, 2)]
     [InlineData(true, false, 0)]
     [InlineData(false, true, 0)]
     public void StatsConstructsContactForSolidPlacements(bool solid, bool nonuniform, int expectedExitCode) {
@@ -227,7 +227,7 @@ public sealed class CreationCommandTests {
         );
     }
     /// <summary><c>shape</c> reads the named shapes' laws in the order named, refuses an unknown prototype or shape by
-    /// name (exit 2), and a file that does not load (exit 1).</summary>
+    /// name (exit 2), and a file that does not load (exit 2).</summary>
     [Fact]
     public void ShapeReadsNamedShapesAndRefusesUnknownNames() {
         using var directory = new TemporaryDirectory();
@@ -252,7 +252,7 @@ public sealed class CreationCommandTests {
         Assert.Contains(expectedSubstring: "shapes: pelvis, torso,", actualString: output, comparisonType: StringComparison.Ordinal);
 
         (exitCode, output) = Invoke("creation", "shape", "--world", directory.WriteText(name: "malformed.world.json", text: "[1, 2, 3]"), "--prototype", "moth");
-        Assert.Equal(expected: 1, actual: exitCode);
+        Assert.Equal(expected: 2, actual: exitCode);
         Assert.Contains(expectedSubstring: "failed to load", actualString: output, comparisonType: StringComparison.Ordinal);
     }
     /// <summary><c>stats</c> composes <c>worlds/debug/debug.puck</c> directly — including its grant masks and state

@@ -116,11 +116,17 @@ public static partial class EvalsRun {
         return command;
     }
 
-    /// <summary>Keeps the case directories whose name matches any glob (<c>*</c> and <c>?</c>, case-sensitive), or every
-    /// case when no glob is given.</summary>
-    private static IReadOnlyList<string> SelectCases(IReadOnlyList<string> caseDirectories, IReadOnlyList<string> globs) => ((globs.Count == 0)
-        ? caseDirectories
-        : [.. caseDirectories.Where(predicate: directory => globs.Any(predicate: glob => System.IO.Enumeration.FileSystemName.MatchesSimpleExpression(expression: glob, name: Path.GetFileName(path: directory), ignoreCase: false)))]);
+    /// <summary>Keeps the case directories whose name matches any glob (<c>*</c> and <c>?</c>, case-sensitive) and that
+    /// carry any of the tags; no glob or no tag leaves that filter out.</summary>
+    private static IReadOnlyList<string> SelectCases(IReadOnlyList<string> caseDirectories, IReadOnlyList<string> globs, IReadOnlyList<string> tags) => [
+        .. caseDirectories
+            .Where(predicate: directory => ((globs.Count == 0) || globs.Any(predicate: glob => System.IO.Enumeration.FileSystemName.MatchesSimpleExpression(expression: glob, name: Path.GetFileName(path: directory), ignoreCase: false))))
+            .Where(predicate: directory => ((tags.Count == 0) || CaseFiles.Tags(caseDirectory: directory).Intersect(second: tags, comparer: StringComparer.Ordinal).Any())),
+    ];
+    private static string SelectionText(Settings settings) => string.Join(separator: ' ', values: [
+        .. ((settings.Cases.Count == 0) ? [] : (IEnumerable<string>)["--cases", .. settings.Cases]),
+        .. ((settings.Tags.Count == 0) ? [] : (IEnumerable<string>)["--tag", .. settings.Tags]),
+    ]);
 
     private static int Tier(string model) => ((FullModelId().Match(input: model) is { Success: true } match) ? System.Array.IndexOf(array: Tiers, value: match.Groups["tier"].Value) : -1);
     private static string Quote(string argument) => ((argument.Length != 0) && !argument.Any(predicate: static c => (char.IsWhiteSpace(c: c) || (c is '"' or '\'' or '*' or '?' or '[' or '$')))) ? argument : $"'{argument.Replace(oldValue: "'", newValue: "'\\''")}'";
@@ -199,12 +205,10 @@ public static partial class EvalsRun {
 
         if (settings.Runs is { } runs) { arguments.AddRange(collection: ["--runs", runs.ToString(provider: CultureInfo.InvariantCulture)]); }
         // Case selection is this verb's, not the runner's: claude plugin eval --case takes one glob, without braces or
-        // lists, so the frozen tree keeps only the selected cases and the runner runs every case it finds there.
-        var selected = SelectCases(caseDirectories: CaseFiles.Enumerate(evals: Path.Combine(root, ".claude", "skills", settings.Skill, "evals")), globs: settings.Cases);
+        // lists, so the frozen tree keeps only the cases --cases and --tag select and the runner runs every case there.
+        var selected = SelectCases(caseDirectories: CaseFiles.Enumerate(evals: Path.Combine(root, ".claude", "skills", settings.Skill, "evals")), globs: settings.Cases, tags: settings.Tags);
 
-        if (selected.Count == 0) { return CliExit.Refuse(verb: Verb, what: $"--cases {string.Join(separator: ' ', values: settings.Cases)}", why: $"matches no case under {evalsPath}/."); }
-        // --tag takes a list, so it goes last, where nothing after it can be read as one of its values.
-        if (settings.Tags.Count != 0) { arguments.AddRange(collection: ["--tag", .. settings.Tags]); }
+        if (selected.Count == 0) { return CliExit.Empty(verb: Verb, selection: ((SelectionText(settings: settings) is { Length: > 0 } named) ? named : $"{evalsPath}/"), why: "selects no case"); }
 
         Console.WriteLine(value: $"{Verb}: {settings.Skill} at {settings.Revision} ({revision[..12]}), cases from HEAD ({head[..12]}){((revision == head) ? string.Empty : ", copied into the old tree")}");
         Console.WriteLine(value: $"{Verb}: frozen tree {Display(path: tree)} (detached at {revision[..12]}; {(settings.KeepTree ? "kept" : "removed after the run")})");
@@ -232,9 +236,9 @@ public static partial class EvalsRun {
                 }
             }
             var found = CaseFiles.Enumerate(evals: Path.Combine(target, "evals"));
-            var caseDirectories = SelectCases(caseDirectories: found, globs: settings.Cases);
+            var caseDirectories = SelectCases(caseDirectories: found, globs: settings.Cases, tags: settings.Tags);
 
-            if (caseDirectories.Count == 0) { return CliExit.Refuse(verb: Verb, what: $"--cases {string.Join(separator: ' ', values: settings.Cases)}", why: $"matches no case in the frozen tree's {evalsPath}/."); }
+            if (caseDirectories.Count == 0) { return CliExit.Empty(verb: Verb, selection: ((SelectionText(settings: settings) is { Length: > 0 } named) ? named : $"the frozen tree's {evalsPath}/"), why: "selects no case"); }
             foreach (var unselected in found.Except(second: caseDirectories, comparer: StringComparer.Ordinal)) { Directory.Delete(path: unselected, recursive: true); }
 
             if (settings.Fixture) {

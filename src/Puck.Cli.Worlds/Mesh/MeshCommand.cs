@@ -90,7 +90,7 @@ public static class MeshCommand {
         }
 
         if (!CliWorldDocuments.TryLoad(definition: out var definition, fullPath: out var fullPath, path: request.World, verb: Verb)) {
-            return 1;
+            return CliExit.Refused;
         }
 
         var buildDirectory = Path.GetFullPath(path: (request.Build ?? AppContext.BaseDirectory));
@@ -150,12 +150,10 @@ public static class MeshCommand {
         Console.Out.Write(value: output.ToString());
 
         if ((stored == 0) && request.Cpu) {
-            Console.Error.WriteLine(value: $"{Verb}: the CPU bake found no surface in the selected groups.");
-            return 1;
+            return CliExit.Empty(verb: Verb, selection: "the selected groups", why: "the CPU bake found no surface in them");
         }
         if (stored == 0) {
-            Console.Error.WriteLine(value: $"{Verb}: the store holds no mesh of the selected groups under bake identity {identity:x32}. Boot the world once with the build whose meshes to audit (Puck.World --world {CliPaths.ToDisplay(fullPath: fullPath)}{((request.CacheRoot is null) ? string.Empty : $" --cache-dir {request.CacheRoot}")}) to bake and store them, then audit with --build naming its directory.");
-            return 1;
+            return CliExit.Empty(verb: Verb, selection: "the selected groups", why: $"the store holds no mesh of them under bake identity {identity:x32}: boot the world once with the build whose meshes to audit (Puck.World --world {CliPaths.ToDisplay(fullPath: fullPath)}{((request.CacheRoot is null) ? string.Empty : $" --cache-dir {request.CacheRoot}")}), then audit with --build naming its directory");
         }
 
         return 0;

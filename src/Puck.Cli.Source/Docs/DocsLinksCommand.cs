@@ -627,6 +627,11 @@ public static class DocsLinksCommand {
             }
 
             if (parseResult.GetValue(argument: documentsArgument) is { Length: > 0 } documents) {
+                // A named file that is not markdown holds no link this verb reads, so checking it would pass on nothing.
+                if (documents.FirstOrDefault(predicate: static document => !string.Equals(a: Path.GetExtension(path: document), b: ".md", comparisonType: StringComparison.OrdinalIgnoreCase)) is { } other) {
+                    return CliExit.Refuse(verb: "docs links", what: CliPaths.ToDisplay(fullPath: Path.GetFullPath(path: other)), why: "is not a markdown document.");
+                }
+
                 return Run(
                     documents: documents,
                     repositoryRoot: repositoryRoot
