@@ -509,6 +509,7 @@ public sealed partial class WorldBody {
         );
 
         m_collider = collider;
+        m_grounded &= CanBeGrounded;
         RescaleColliderVolumes();
 
         var hadRigidFacet = (m_rigid is not null);
@@ -1012,6 +1013,8 @@ public sealed partial class WorldBody {
     /// <summary>Gets a value indicating whether the body is grounded this tick (resting on a walkable contact surface) — the
     /// <c>world.contacts</c> read-back.</summary>
     public bool Grounded => m_grounded;
+    // Only a body with a collider runs the contact solve (ResolveProgramContacts), so only it can stand on support.
+    private bool CanBeGrounded => (m_collider is not null);
     /// <summary>Gets this body's publishable fact mask this tick — evaluated through the SAME predicate the kit's
     /// action gates read (<c>FactHolds</c>), so the snapshot, the gates, and the <c>body.where</c> echo can never
     /// disagree. Facts are not mutually exclusive: a body can be grounded and rising in one tick, and a body holding
