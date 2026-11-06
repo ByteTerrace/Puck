@@ -422,7 +422,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     }
     /// <inheritdoc/>
     /// <remarks>Stages the residency the instance renders this frame (<see cref="SdfWorldResidency.Stage"/>): its upload
-    /// is submitted and its background GPU work pumped here, ahead of the frame's batch, so no pass's recording pays for
+    /// is submitted and its background GPU work pumped here, before any pass records, so no pass's recording pays for
     /// them.</remarks>
     public void PrepareRender(string instance, in FrameContext context) {
         if (Refresh(instance: instance).View is not { } view) { return; }

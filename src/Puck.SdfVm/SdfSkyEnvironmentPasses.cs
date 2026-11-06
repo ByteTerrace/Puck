@@ -87,9 +87,9 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
     }
     /// <inheritdoc/>
     /// <remarks>Stages the producer's residency (<see cref="SdfWorldResidency.Stage"/>), whose upload the projection and
-    /// reduction read, ahead of the frame's batch.</remarks>
+    /// reduction read, before any pass records.</remarks>
     public void PrepareRender(string instance, in FrameContext context) {
-        if ((Resolve(instance: instance)?.Residency is not { IsReleased: false } residency)) { return; }
+        if (Resolve(instance: instance)?.Residency is not { IsReleased: false } residency) { return; }
         views.Begin(residency: residency);
         _ = residency.Stage(context: in context);
     }

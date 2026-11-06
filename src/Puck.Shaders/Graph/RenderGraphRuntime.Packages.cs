@@ -322,7 +322,7 @@ public sealed partial class RenderGraphRuntime {
                 }
             }
         }
-        RenderRecordWork.Process.PreparedPackages(ticks:(System.Diagnostics.Stopwatch.GetTimestamp() - began));
+        RenderRecordWork.Process.PreparedPackages(ticks: (System.Diagnostics.Stopwatch.GetTimestamp() - began));
     }
     // Starts the frame for every package's factory.
     private void PackagesBeginFrame(in FrameContext context) {

@@ -262,31 +262,27 @@ abandoned and its instance refused, never published
 ([runtime contracts](../../.claude/skills/rendering/references/runtime-contracts.md#1-image-lifetime-is-leased-per-image-and-per-reader)).
 `world.counters render.record` (`RenderRecordWork`) measures the jobs.
 
-**Remaining: concurrent recording (step 3), held until it pays.** The
-measurements say it does not pay yet on the lead machine. At the spawn the
-serial record sum was 10 to 14 ms a frame over 15 to 17 jobs, and the longest
-single recording, the critical path concurrency could not shorten, was 7 to 11
-ms of it; at the forest pose the sum was 1.4 to 5 ms with a 0.6 to 4 ms critical
-path. One node's recording dominates, with periodic produce spikes of 300 to 450
-ms inside it. So the next lever is that node's own host work, moved into the
-coordinator's preparation and measured, not workers. Which node it is has not
-been read from `render.record`, which is process-wide; each instance's prepare,
-record and commit time is on its `world.budget` live-frame row and in
-`pipeline.inspect` (`ShaderPipelineRenderNode.AppendRecordTimes`). The candidate
-is a world node's SDF pass, whose first recording runs the residency's frame
-staging, upload and background pump.
-Concurrency also needs, before it is safe: package recorders that keep no host
-state shared across nodes (the residency's once-a-frame `Submit`), a
-thread-safe pipeline cache lookup and counting recorder, and per-worker command
-pools under the existing scheduler, with queue operations still serialized and
-the join before commit.
+**Remaining: concurrent recording (step 3), held until it pays.** The node that
+dominated the serial record sum was the residency's environment producer
+(`world$environment`), whose first recording of each frame staged the residency.
+Almost all of that time was the upload's host wait on the previous upload's
+fence, the CPU pacing behind the GPU, not host work. The staging now runs in the
+frame's package preparation before any job records
+([runtime contracts](../../.claude/skills/rendering/references/runtime-contracts.md#1-image-lifetime-is-leased-per-image-and-per-reader)),
+timed apart as `render.record.packages-microseconds`. With it gone from the jobs,
+the serial record sum on the lead machine is about a millisecond a frame at the
+spawn and forest poses, and the critical path about half of it, so concurrency
+could save at most that half millisecond: not yet worth workers. Concurrency
+also needs, before it is safe: a thread-safe pipeline cache lookup and counting
+recorder, and per-worker command pools under the existing scheduler, with queue
+operations still serialized and the join before commit.
 
-**Mechanical check for step 3.** With the residency's host work in preparation,
-`render.record` shows the per-frame critical path (`longest-microseconds` over
-`frames`) well below the serial sum on the spawn and forest poses; only then run
-independent jobs concurrently and compare record sum, critical path, worker
-waits, `gpu.queue` executes, private bytes and whole-frame p50/p99 against the
-serial path on both backends.
+**Mechanical check for step 3.** On a workload whose `render.record` serial sum
+(`record-microseconds` over `frames`) is several milliseconds with the critical
+path (`longest-microseconds` over `frames`) well below it, run independent jobs
+concurrently and compare record sum, critical path, worker waits, `gpu.queue`
+executes, private bytes and whole-frame p50/p99 against the serial path on both
+backends.
 
 ### 2. Let G1 strengthen B1 without creating another GPU scheduler
 
