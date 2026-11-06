@@ -610,5 +610,56 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "symmetric-solve.general3-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedLinearSolve",
+        "Name": "TrySolve3"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedLinearSolve.TrySolve3 — the refuse/succeed outcome and every solved component of a general (non-symmetric) 3×3 system, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band with nine independent entries",
+        "Against": "Oracles.TrySolveGeneral3 — classical column-replacement Cramer's rule with every determinant expanded by the rule of Sarrus in BigInteger, no cofactor or adjugate formed, no preconditioning and no intermediate rounding, so a transposed adjugate, a cofactor sign slip or a shift-budget defect in the subject cannot also appear in the oracle",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the fold keeps every operand strictly below the 3×3 target-plus-one of 2^41, so the shared preconditioning shift is a lossless left shift on every draw and exact agreement is provable; the lossy corner's singularity decision is pinned by symmetric-solve.general3-pinned-and-refusals",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.general3-pinned-and-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedLinearSolve",
+        "Name": "TrySolve3"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedLinearSolve.TrySolve3 answers the hand-solved non-symmetric system [[2,1,0],[0,3,1],[1,0,4]]·x = (1,2,3), x = (7,11,17)/25, exactly at shift 16 (its transpose solves differently, so a transposed adjugate fails), and refuses with every out parameter zero for a negative shift, the all-zero operand set, a moderate rank-two matrix and a rank-two matrix with entries near 4·10^18 that force the lossy preconditioning corner, where only the exact raw determinant check keeps rounded entries from fabricating a finite answer",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

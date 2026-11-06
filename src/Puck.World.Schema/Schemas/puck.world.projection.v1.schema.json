@@ -27975,18 +27975,13 @@
               "type": "integer",
               "default": 8
             },
-            "rigidRestLinearSpeed": {
-              "description": "Below this linear speed (world units/second) a grounded rigid body counts toward the resting hold window (RigidRestHoldSeconds). Non-negative; the default reproduces the engine\u0027s original hard-coded threshold.",
+            "rigidRestSpeed": {
+              "description": "Below this speed (world units/second) of its fastest point, the centre\u0027s linear speed plus its angular speed times its bounding radius, a grounded rigid body counts toward the resting hold window (RigidRestHoldSeconds). It scales with each body\u0027s live scale, so a long piece turning slowly about its centre stays awake while its ends still move. Non-negative.",
               "type": "number",
               "default": 0.05
             },
-            "rigidRestAngularSpeed": {
-              "description": "Below this angular speed (radians/second) a grounded rigid body counts toward the resting hold window, on the same terms as RigidRestLinearSpeed. Non-negative.",
-              "type": "number",
-              "default": 0.1
-            },
             "rigidRestHoldSeconds": {
-              "description": "How long a rigid body must stay under both rest thresholds while grounded before the resting latch actually closes \u2014 long enough that crossing a contact skin\u0027s noise band for one tick never freezes a body mid-roll. Non-negative.",
+              "description": "How long a rigid body must stay under the rest speed while grounded before the resting latch actually closes \u2014 long enough that crossing a contact skin\u0027s noise band for one tick never freezes a body mid-roll. Non-negative.",
               "type": "number",
               "default": 0.25
             },

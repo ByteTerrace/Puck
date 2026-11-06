@@ -20,12 +20,14 @@ internal struct WorldColliderBox {
     /// <summary>Grows the box over one collider's padded world bounds.</summary>
     /// <param name="collider">The collider.</param>
     public void Fold(in FixedStaticCollider collider) {
-        if (collider.WorldHalfExtent() is not { } extent) {
+        var box = FixedColliderBox.Of(collider: in collider);
+
+        if (!box.IsBounded) {
             Any = true;
             Unbounded = true;
             return;
         }
-        Fold(minimum: (collider.Center - extent), maximum: (collider.Center + extent));
+        Fold(minimum: (box.Center - box.Extent), maximum: (box.Center + box.Extent));
     }
     /// <summary>Determines whether a sphere about a point, grown by a margin, meets the box.</summary>
     /// <param name="position">The sphere's centre, in metres.</param>

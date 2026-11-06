@@ -19,6 +19,13 @@ public sealed class FixedStaticContactSolverTests {
                 z: 0d
             )
         );
+    // The per-tick colliders, as a caller that recomputes them each tick publishes them.
+    private static FixedStaticColliderSet Refreshed(FixedStaticCollider[] colliders) {
+        var set = new FixedStaticColliderSet();
+
+        set.Refresh(colliders: colliders);
+        return set;
+    }
     private static FixedStaticContactSolver Solver(int iterations = 4) =>
         new(
             ContactSkin: FixedQ4816.Zero,
@@ -57,8 +64,8 @@ public sealed class FixedStaticContactSolverTests {
         FixedStaticCollider[] colliders = [Floor(height: 0d)];
 
         var resolution = Solver().Resolve(
-            colliders: colliders,
-            dynamicColliders: [],
+            colliders: new(colliders: colliders),
+            dynamicColliders: FixedStaticColliderSet.Empty,
             orientation: FixedQuaternion.Identity,
             up: Vector(
                 x: 0d,
@@ -115,8 +122,8 @@ public sealed class FixedStaticContactSolverTests {
         ];
 
         var resolution = Solver().Resolve(
-            colliders: colliders,
-            dynamicColliders: [],
+            colliders: new(colliders: colliders),
+            dynamicColliders: FixedStaticColliderSet.Empty,
             orientation: FixedQuaternion.Identity,
             up: Vector(
                 x: 0d,
@@ -172,8 +179,8 @@ public sealed class FixedStaticContactSolverTests {
         var combinedVelocity = FixedVector3.Zero;
 
         var splitResolution = Solver().Resolve(
-            colliders: floor,
-            dynamicColliders: wall,
+            colliders: new(colliders: floor),
+            dynamicColliders: Refreshed(colliders: wall),
             orientation: FixedQuaternion.Identity,
             up: Vector(
                 x: 0d,
@@ -185,8 +192,8 @@ public sealed class FixedStaticContactSolverTests {
             volumes: volumes
         );
         var combinedResolution = Solver().Resolve(
-            colliders: [.. floor, .. wall],
-            dynamicColliders: [],
+            colliders: new(colliders: [.. floor, .. wall]),
+            dynamicColliders: FixedStaticColliderSet.Empty,
             orientation: FixedQuaternion.Identity,
             up: Vector(
                 x: 0d,
@@ -223,8 +230,8 @@ public sealed class FixedStaticContactSolverTests {
         FixedBodyColliderVolume[] volumes = [UnitSphere()];
 
         var resolution = Solver().Resolve(
-            colliders: [],
-            dynamicColliders: [],
+            colliders: FixedStaticColliderSet.Empty,
+            dynamicColliders: FixedStaticColliderSet.Empty,
             orientation: FixedQuaternion.Identity,
             up: Vector(
                 x: 0d,
@@ -260,7 +267,7 @@ public sealed class FixedStaticContactSolverTests {
         FixedStaticCollider[] colliders = [FixedStaticCollider.AxisAlignedBox(
             center: Vector(x: (wall ? 0d : 20d), y: 1d, z: 0d), halfExtents: Vector(x: 0.05d, y: 2d, z: 2d))];
         FixedBodyColliderVolume[] volumes = [UnitSphere() with { Radius = FixedQ4816.FromDouble(value: 0.25d) }];
-        var result = Solver().ResolveSweep(colliders: colliders, dynamicColliders: [], previousPosition: start,
+        var result = Solver().ResolveSweep(colliders: new(colliders: colliders), dynamicColliders: FixedStaticColliderSet.Empty, previousPosition: start,
             position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: volumes, up: FixedVector3.UnitY);
 
         Assert.Equal(expected: ContactRefusal.None, actual: result.Refusal);
@@ -283,7 +290,7 @@ public sealed class FixedStaticContactSolverTests {
         FixedStaticCollider[] colliders = [FixedStaticCollider.AxisAlignedBox(center: Vector(x: 500d, y: 1d, z: 0d),
             halfExtents: Vector(x: 0.05d, y: 2d, z: 2d))];
         FixedBodyColliderVolume[] volumes = [UnitSphere() with { Radius = FixedQ4816.FromDouble(value: 0.25d) }];
-        var result = Solver().ResolveSweep(colliders: colliders, dynamicColliders: [], previousPosition: start,
+        var result = Solver().ResolveSweep(colliders: new(colliders: colliders), dynamicColliders: FixedStaticColliderSet.Empty, previousPosition: start,
             position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: volumes, up: FixedVector3.UnitY);
 
         Assert.True(condition: result.Unproved);
@@ -294,21 +301,18 @@ public sealed class FixedStaticContactSolverTests {
         Assert.Equal(expected: FixedQ4816.FromInteger(value: 30000), actual: velocity.X);
     }
     // A small, fast body crossing space no collider's bounds reach arrives at its endpoint proved.
-    [InlineData(false)]
-    [InlineData(true)]
-    [Theory]
-    public void AMoveThroughClearSpaceReachesItsEndpointInOneSolve(bool culled) {
+    [Fact]
+    public void AMoveThroughClearSpaceReachesItsEndpointInOneSolve() {
         var start = Vector(x: 0d, y: 1d, z: 0d);
         var end = Vector(x: 2d, y: 1d, z: 0d);
         var position = end;
         var velocity = Vector(x: 60d, y: 0d, z: 0d);
         FixedStaticCollider[] colliders = [FixedStaticCollider.AxisAlignedBox(center: Vector(x: 1d, y: 1d, z: 50d),
             halfExtents: Vector(x: 0.05d, y: 2d, z: 2d))];
-        FixedVector3?[] extents = (culled ? [colliders[0].WorldHalfExtent()] : []);
         FixedBodyColliderVolume[] volumes = [UnitSphere() with { Radius = FixedQ4816.FromDouble(value: 0.01d) }];
-        var result = Solver().ResolveSweep(colliders: colliders, dynamicColliders: [], previousPosition: start,
+        var result = Solver().ResolveSweep(colliders: new(colliders: colliders), dynamicColliders: FixedStaticColliderSet.Empty, previousPosition: start,
             position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: volumes,
-            up: FixedVector3.UnitY, colliderExtents: extents);
+            up: FixedVector3.UnitY);
 
         Assert.False(condition: result.Unproved);
         Assert.Equal(expected: end, actual: position);
