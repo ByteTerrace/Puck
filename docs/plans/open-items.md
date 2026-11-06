@@ -2436,6 +2436,12 @@ failing case is argued from source, not run):
 
 ### Vulkan regressions and GPU robustness
 
+- [low · unchecked] `SdfWorldPickReadback.Dispose` returns its readback's
+  arena range (`DirectXGpuReadbackBuffer.Dispose` now reports the release), but
+  whether every retirement path of the pick readback runs after its fence
+  depends on graph teardown order and was not traced by the deck-memory review.
+  Trace each retirement path; if one can dispose before the fence, retire it
+  through the fence-ordered path the other readbacks use.
 - [medium, before V1] Draw identity is tracked twice and the occlusion visible
   bit uses neither: R2's per-mesh identity counter (`SdfMesh.cs:331-335`,
   `:612`, read at `sdf-mesh-selection.hlsli:79`) beside the residency's
