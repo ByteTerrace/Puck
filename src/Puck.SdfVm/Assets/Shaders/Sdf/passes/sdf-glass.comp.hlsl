@@ -3,7 +3,8 @@
 // front face at before its opaque hit. Such a pixel is shaded as glass (SdfWorldPackage.WithGlass):
 // - its surface is the glass draw's triangle at the ray's hit, normal and material resolved as the surface pass resolves
 //   an opaque hit (sdfMeshSurfaceNormal, sdfMeshMaterial), its index of refraction and absorption the material's
-//   (sdfMaterialLoad) and its frost the material's roughness;
+//   (sdfMaterialLoad) and its frost the material's roughness; a material's flow layer moves its shading as on an opaque
+//   surface (sdfShadeFlow, the one flow layer), tilting the normal it reflects and refracts by;
 // - the distance the ray travels through glass is the glass sums' (frame/sdf-glass.hlsli), so a hollow shell absorbs
 //   over both its walls and a solid holding an opaque object over the glass before it, and the light through it is the
 //   lit image behind, absorbed over that distance by Beer–Lambert (exp(-absorption * distance));
@@ -12,17 +13,30 @@
 //   slab, and read at the pixel's own sample where that lands on a nearer surface; frost spreads the read over a disc of
 //   taps whose radius grows with the roughness and the distance from the glass to what lies behind, turned by a
 //   per-pixel pattern that never moves between frames;
-// - the sky reflects in it by Fresnel (Schlick over the index's normal reflectance), read from the residency's
-//   environment map under the sky's reflection gain, and each light of the lights table adds its highlight through the
-//   one GGX lobe (sdfMaterialSpecular), both through the atmosphere's transmittance over the glass's own distance; the
-//   light through the glass carries the atmosphere over the opaque hit's distance already.
+// - a medium that scatters (SdfGlass.Scatter, Scattering) shows its own light over a share 1 - exp(-scattering *
+//   distance) of the glass, the light arriving at the surface as a surface of the scatter colour would show it
+//   (sdfGlassReceived), and the light behind over the rest, so a deep body takes the scatter colour and a shallow margin
+//   shows what lies behind;
+// - a contact (sdfGlassContact) adds coverage to the flow's where the opaque hit lies within its reach of the surface,
+//   and the coverage the flow reveals covers the glass as its revealed surface, lit diffusely by the same arriving light;
+// - its surroundings reflect in it by Fresnel (Schlick over the index's normal reflectance): the sky the lighting sees,
+//   blurred by the roughness (worldEnvironmentReflection), occluded by the irradiance volume and replaced by the light its
+//   probes measured where they do not see the sky (sdfMeshReflection), as an opaque surface reflects them; where no probe
+//   answers, the sky alone. Each light adds its highlight through the one light interface (sdfLightResponse), its
+//   shadowing read from the probes, since the glass casts into no cascade and reads none. Reflection, medium and
+//   revealed surface pass through the atmosphere's transmittance over the glass's own distance; the light through the
+//   glass carries the atmosphere over the opaque hit's distance already.
 // The glass pixel's coverage is the light behind's, darkened by the glass's luminous transmittance, so the sky the
 // composite puts behind it shows through a clear pane at the pixel's own direction, unrefracted and untinted but
-// darkened. In a temporal view the pixel's reactivity is raised to one where the refracted read comes from a pixel
-// away or more, since the resolve's history follows the opaque hit the record names, not what the glass shows; a flat
-// pane bending nothing keeps its history and its edges resolve like any other. A debug view's lit image passes through.
-// Transmission integrates each glass material before the opaque hit, including glass behind glass. Reflection and
-// refraction use the nearest front face; farther interfaces do not contribute separate reflected images.
+// darkened; a revealed surface covers it. In a temporal view the pixel's reactivity is raised to one where the refracted
+// read comes from a pixel away or more, since the resolve's history follows the opaque hit the record names, not what the
+// glass shows; a flat pane bending nothing keeps its history and its edges resolve like any other. A debug view's lit
+// image passes through.
+// Transmission integrates each glass material before the opaque hit, including glass behind glass; scattering, contact
+// and flow are the nearest front face's material's. Reflection and refraction use the nearest front face; farther
+// interfaces do not contribute separate reflected images. The pixel reads the lit image once (or the frost's disc): the
+// medium, the contact and the revealed surface are functions of the thickness, the distance to the opaque hit and the
+// arriving light alone.
 // The eye inside a glass solid sees no front face, so the pixel passes through.
 #define SDF_DYNAMIC_TRANSFORMS
 #include "../isa/sdf-glass.interface.hlsli"
@@ -35,7 +49,9 @@
 #include "../frame/sdf-mesh.hlsli"
 #include "../frame/sdf-lights.hlsli"
 #include "../frame/sdf-glass.hlsli"
-#include "../shade/sdf-sky-environment.hlsli"
+#include "../shade/sdf-sky-reflection.hlsli"
+#include "../shade/sdf-light.hlsli"
+#include "../shade/shade-flow.hlsli"
 #include "../shade/sdf-transport.hlsli"
 
 // The frost's taps and the most render pixels their disc spans.
@@ -66,52 +82,61 @@ float4 sdfGlassLitAt(float2 at, uint2 extent) {
 
     return lit.SampleLevel(samplers[SDF_FILTER_LINEAR], (clamped / float2(extent)), 0);
 }
-// The sky in a direction from the residency's environment map, the layers the lighting sees, under the sky's reflection
-// gain.
-float3 sdfGlassSky(float3 direction) {
-    if (sdfSky[0].Reflection <= 0.0) {
-        return float3(0.0, 0.0, 0.0);
+// The coverage a glass's contact adds to its flow's at a distance `behind` from the surface to the opaque hit along the
+// ray: the material's contact coverage where the opaque surface touches the glass, falling smoothly to zero at its reach;
+// zero for a material with no contact (row 20.w's halves, KEEP IN SYNC with SdfProgram.PackMaterials).
+float sdfGlassContact(SdfMaterialData material, float behind) {
+    if ((material.contactReach <= 0.0) || (material.contactCoverage <= 0.0)) {
+        return 0.0;
     }
 
-    uint taps[4];
-    float weights[4];
-    float3 color = float3(0.0, 0.0, 0.0);
-
-    sdfSkyEnvironmentTaps(direction, taps, weights);
-    [unroll] for (uint i = 0u; i < 4u; i++) {
-        color += (weights[i] * sdfSkyEnvironmentUnpack(sdfSkyEnvironment[taps[i]]));
-    }
-
-    return (color * sdfSky[0].Reflection);
+    return (material.contactCoverage * (1.0 - smoothstep(0.0, material.contactReach, behind)));
 }
-// The lights' highlights on the glass: each directional's and point's GGX lobe through the glass's own Fresnel
-// reflectance, unshadowed, since the glass casts into no cascade and reads none, scaled by the light's illuminance as
-// sdfLightResponse scales a surface's.
-float3 sdfGlassHighlights(SdfMaterialData material, float3 position, float3 normal, float3 rayDirection) {
-    float3 highlights = float3(0.0, 0.0, 0.0);
-    uint count = worldLightCount();
+// The light arriving at the glass's surface as a white surface there would show it, the radiance the medium scatters and
+// a revealed surface reflects, and in `highlights` the lights' highlights on the glass: every light through the one
+// interface (sdfLightResponse) at an unoccluded surface the cascades do not reach, so a shadowing light's visibility is
+// the probes' (`probes`, `probed` while the irradiance volume is on), the sky's ambient where the volume's sky does not
+// replace it, and the volume's indirect light as a surface receives it. `incoming` is that light's luminance before the
+// indirect gains, what the local adaptation meters (sdfLocalAdaptationGain).
+float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal, float3 rayDirection, bool probed, SdfMeshProbes probes,
+    out float3 highlights, out float incoming) {
+    SdfShadeSurface surface;
 
+    surface.position = position;
+    surface.normal = normal;
+    surface.rayDirection = rayDirection;
+    surface.material = material;
+    surface.toon = (SdfToonStyle)0;
+    surface.ambientOcclusion = 1.0;
+    surface.shadowVisibility = float4(1.0, 1.0, 1.0, 1.0);
+    surface.cascaded = false;
+    surface.probed = probed;
+    surface.probes = probes;
+
+    bool indirectSky = (probed && ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u));
+    float3 radiance = (indirectSky ? float3(0.0, 0.0, 0.0) : worldSkyIrradiance(normal));
+    uint count = sdfLightCount();
+
+    highlights = float3(0.0, 0.0, 0.0);
     [loop]
     for (uint index = 0u; (index < count); index++) {
-        if (!worldLightSelected(index)) {
+        SdfLightSource light;
+
+        if (!sdfLightAt(index, light)) {
             continue;
         }
 
-        SdfLight light = sdfLights[index];
+        SdfLightResponse response = sdfLightResponse(light, surface);
 
-        if (light.Kind == SDF_LIGHT_DIRECTIONAL) {
-            highlights += (light.Color * sdfMaterialSpecular(material, normal, -rayDirection, light.Direction, (SDF_PI * light.Weight)));
-        } else if (light.Kind == SDF_LIGHT_POINT) {
-            float3 pointDirection;
-            float reach = (light.Weight * sdfPointReach(light, worldPointLightPosition(light), position, pointDirection));
-
-            if (reach > 0.0) {
-                highlights += (light.Color * sdfMaterialSpecular(material, normal, -rayDirection, pointDirection, (SDF_PI * reach)));
-            }
-        }
+        radiance += response.diffuse;
+        highlights += response.specular;
     }
 
-    return highlights;
+    float3 indirect = (probed ? sdfMeshIndirect(probes, normal) : float3(0.0, 0.0, 0.0));
+
+    incoming = dot((radiance + indirect), SDF_LUMINANCE);
+
+    return (radiance + (indirect * (passGroup.indirectApply.rgb * (material.receive * passGroup.indirectApply.w))));
 }
 
 [numthreads(8, 8, 1)]
@@ -143,14 +168,32 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float3 normal = sdfMeshSurfaceNormal(draw, triangleIndex, surfacePoint, rayDirection, face, curvature, frameSlot);
         SdfMaterialData material = sdfMaterialLoad(sdfMeshMaterial(draw, triangleIndex));
         float ior = max(material.ior, 1.0);
+        float roughness = material.roughness;
         uint word = sdfGlassSumWord(pixel, extent);
         float thickness = sdfGlassThicknessAt(word, t, opaque);
-        float3 transmittance = exp(-max(sdfGlassOpticalDepthAt(word), 0.0));
+        float behind = max(((opaque - t) - thickness), 0.0);
+        float footprint = ((2.0 * view.right.w) / max(float(extent.y), 1.0));
+
+        // The flow moves the surface's shading: its tilt bends the normal the glass reflects and refracts by, and its
+        // coverage, raised by the contact, is the share its revealed surface covers.
+        float3 layerPoint;
+        float3 layerNormal;
+        float3 layerRay;
+        float4 layerRotation;
+        float revealed;
+
+        sdfLayerFrame(frameSlot, surfacePoint, normal, rayDirection, layerPoint, layerNormal, layerRay, layerRotation);
+        normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, layerRotation, frameSlot, draw, (footprint * t), sdfFrameLanes(frameSlot),
+            sdfGlassContact(material, (opaque - t)), material, revealed);
+
+        // The medium's share of what the glass shows over its thickness, the rest the light behind.
+        float haze = (1.0 - exp(-(max(material.scattering, 0.0) * thickness)));
+        float3 transmittance = (exp(-max(sdfGlassOpticalDepthAt(word), 0.0)) * (1.0 - haze));
+        float3 medium = (material.scatter * haze);
 
         // The ray bent into the glass leaves it `thickness` along, then carries on parallel to the pixel's ray to the
         // opaque hit's depth: where that lands on the render grid is where the light through the glass is read.
         float3 refracted = refract(rayDirection, normal, (1.0 / ior));
-        float behind = max(((opaque - t) - thickness), 0.0);
         float3 samplePoint = ((surfacePoint + (refracted * thickness)) + (rayDirection * behind));
         float forward;
         float2 at = sdfGlassProject(view, samplePoint, extent, forward);
@@ -170,8 +213,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
         // The frost: a disc of taps whose radius is the roughness's share of the spread over the distance behind the
         // glass, in render pixels at the opaque hit's depth.
-        float footprint = ((2.0 * view.right.w) / max(float(extent.y), 1.0));
-        float radius = min(((material.roughness * GlassFrostSpread * behind) / max((footprint * opaque), 1.0e-4)), GlassFrostMaxPixels);
+        float radius = min(((roughness * GlassFrostSpread * behind) / max((footprint * opaque), 1.0e-4)), GlassFrostMaxPixels);
         float4 through;
 
         if (radius < 0.5) {
@@ -197,16 +239,30 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float fresnel = (f0 + ((1.0 - f0) * pow((1.0 - cosine), 5.0)));
         float air = sdfAirTransmittance(origin, rayDirection, t);
 
-        // The GGX lobe reads the glass's own reflectance and nothing of a metal or a coat.
+        // The GGX lobe reads the glass's own reflectance and nothing of a metal or a coat; the flow's revealed surface
+        // covers the glass rather than roughening it.
         material.specular = f0;
         material.metal = 0.0;
         material.coat = 0.0;
+        material.roughness = roughness;
 
-        float3 reflection = ((sdfGlassSky(reflect(rayDirection, normal)) * fresnel) + sdfGlassHighlights(material, surfacePoint, normal, rayDirection));
-        float3 passed = (((1.0 - fresnel) * transmittance) * through.rgb);
+        bool probed = sdfMeshIrradianceEnabled();
+        SdfMeshProbes probes = sdfMeshProbesAt(surfacePoint, normal);
+        float3 highlights;
+        float incoming;
+        float3 received = (sdfGlassReceived(material, surfacePoint, normal, rayDirection, probed, probes, highlights, incoming) * sdfLocalAdaptationGain(incoming));
+        float3 reflectDirection = reflect(rayDirection, normal);
+        float3 environment = worldEnvironmentReflection(reflectDirection, roughness);
+
+        if (probed && (probes.share > 0.0)) {
+            environment = sdfMeshReflection(probes, reflectDirection, environment);
+        }
+
+        float3 shaded = ((((environment * fresnel) + highlights) + (((1.0 - fresnel) * medium) * received)) * air) + (((1.0 - fresnel) * transmittance) * through.rgb);
         float luminous = dot(transmittance, SDF_LUMINANCE);
+        float coverage = (1.0 - ((1.0 - through.a) * ((1.0 - fresnel) * luminous)));
 
-        color = float4(((reflection * air) + passed), (1.0 - ((1.0 - through.a) * ((1.0 - fresnel) * luminous))));
+        color = float4(lerp(shaded, ((material.flowColor.rgb * received) * air), revealed), lerp(coverage, 1.0, revealed));
         reactive = saturate(length(at - own));
     }
 
