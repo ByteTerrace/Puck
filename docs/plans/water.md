@@ -54,15 +54,17 @@ mechanism; another world chooses its own.
 | Remaining glacier | (1 − t/T)³ of the starting ice, exactly zero at T; the `glacier` gauge reads it in [0, 1] | `meltExponent: 3`; `hydroTarget`, `hydroRemaining`, `glacier` |
 | Starting ice | 20 units (two source cells of `waterPerCell` 10) | `waterPerCell: 10`, `hydrologyStages[source]` |
 | Conservation | ice + water across the chain is the start's total; `world.fields` prints each row's `total` | the lattice's `transform` and `flow` reactions |
-| Lake | stands at its sill (0.4 m over a bed of 2 at a sill of 2.4) whenever the chain is in steady state; rises while the melt exceeds what the sill passes | `hydrologyStages[lake, sill]`; `lakeLevel` |
-| Falls | carry the melt (`fallsFlow` > 0) until T; `meltStrength` folds the sheets edge-on and `meltVisible` parks them at T; at T the falls are dry and stay dry | `fallsFlow`, `meltStrength`, `meltVisible` |
-| River and aquifer | the river's four cells (bed 1) and the aquifer's ten (bed 0) level against each other: the aquifer takes the river's water while its head is lower, gives it back as the head rises above the river's bed, and both meet at one level | `hydrologyStages[river, aquifer]`, `flow(... over: [hydroBed])` |
-| Steady state | with 22.9 units in the chain and 1.2 retained at the lake's sill, 21.7 units share 14 cells at one head: aquifer 1.84 m (`aquiferFill` 1.02 → clamped 1.0 against `fullHead` 1.8), river 0.84 m (`riverDepth`), pool 2.34 m over its floor (`poolLevel`, under its `poolLevelMax` 2.35) | `fullHead: 1.8`, `poolBase: 1.5`, `poolLevelMax: 2.35` |
-| Order | the aquifer fills before the falls dry; the river rises with the aquifer's head once that head passes the river's bed; after T the river settles to the shared head | the chain's geometry |
+| Lake | rests at its outlet sill (0.4 m of water over a bed of 2 at a sill of 2.4) through the whole arc: it stands a few centimetres over the sill while the melt is at its peak, and on it from T | `hydrologyStages[lake, sill]`; `lakeLevel` |
+| Falls | `fallsFlow`, the discharge over the sill as a fraction of the melt's peak, equals the melt's own (1 − t/T)² while the chain keeps up, and is dry (under 0.01) from T; `fallsVisible` parks the sheets when it is under 0.002 | `fallsFlow`, `fallsVisible`; the looks bind to them |
+| Aquifer | confined: no cell holds more than `fullHead` (1.6 m) of water; full (`aquiferFill` ≥ 0.95) by 3T/4 | `fullHead`; `hydroWater`'s `max` |
+| River | the river's four cells (bed 1) and the aquifer's ten (bed 0) level against each other until the aquifer is full; the river then takes the rest of the melt and rises (the falls' lower cells, under its head, rise with it), and is settled (drift under 0.005 m over a quarter hour) from T | `hydrologyStages[river, aquifer]`, `flow(... over: [hydroBed])` |
+| Steady state | the chain's 21.77 m of water and ice: 1.2 m rests in the lake, 16 m in the aquifer (ten cells at `fullHead`), and the rest stands at one head across the river and the falls' lower cells, 1.824 m over the aquifer's bed: river 0.824 m (`riverDepth`), pool 2.324 m over its floor (`poolLevel`, under its `poolLevelMax` 2.35) | `fullHead: 1.6`, `poolBase: 1.5`, `poolLevelMax: 2.35` |
+| Order | the aquifer fills before the falls dry; the river rises with the aquifer's head once that head passes the river's bed and then past it as the aquifer fills | the chain's geometry |
 
-The steady-state figures above are arithmetic from the authored chain
-(cells × beds × starting water); [the audit](#the-audit) replaces them with the
-run's own probes.
+[The audit](#the-audit) holds the run's own probes against these. The chain's
+stores hold 1 024 units to a metre of water (`hydrology`'s `resolution`), so the
+flow's fixed-point floor, under which a cell stops giving, lies below the
+slowest discharge the arc reads.
 
 ## The audit
 
@@ -73,79 +75,51 @@ driven to each stage by `water.speed` (four minutes of simulation a backend).
 
 ### The arc, run
 
-`worlds/debug/water-arc-tests.puck` is the arc's proof and the audit's
-simulation leg: one scenario on the debug basis (machines stopped) that runs
-the 3 h of simulated time and 45 min of settling (405 040 ticks), with an
-Edge rule per milestone that latches the six gauges into keyed probe rows
-(`glacierAt`, `lakeAt`, `fallsAt`, `riverAt`, `aquiferAt`, `poolAt`, one cell
-per milestone: every eighth of T, then T + 15, 30 and 45 min), and `expect`
-lines over the probes. It runs under `puck test worlds/debug/water-arc-tests.puck`
-and reproduces under `--reproduce`.
+The arc's proof is one scenario run on two worlds. `worlds/debug/water-arc.puck`
+holds its probes: an Edge rule per milestone that latches the gauges into keyed
+rows (`glacierAt`, `lakeAt`, `fallsAt`, `riverAt`, `aquiferAt`, `poolAt` and the
+conserved `totalAt`, one cell per milestone: every eighth of T, then T + 15, 30
+and 45 min). `water-arc-tests.puck` runs it on the debug basis (machines
+stopped, the integration proof) and `water-chain-tests.puck` on
+[`water-chain.puck`](../../worlds/debug/water-chain.puck), one `hydrology`
+expansion at `water.puck`'s numbers (the inner loop, the chain independent of the
+world around it). Each carries the same `expect` lines, since a `test` block
+stands in its own document. Both run 405 040 ticks (T and 45 min of settling) and
+reproduce under `--reproduce`; the debug basis also ticks the paintings' garden
+and night field beside the chain.
 
 The run at the authored pace (`hydroSpeed` 1), headless and unpaced, every
 probe a fixed-point reading of that tick:
 
 | Milestone | glacier | lake | falls | river | aquifer | pool |
 |---|---|---|---|---|---|---|
-| 0 (tick 30) | 0.9997 | 0.499 | 0.198 | 0.149 | 0.000 | 1.649 |
-| T/8 | 0.669921875 | | | | | |
-| T/4 | 0.421875 | | | | | |
-| 3T/8 | 0.244140625 | | | | | |
-| T/2 | 0.125 | | 0.801 | | 0.258 | |
-| 5T/8 | 0.052734375 | | | | | |
-| 3T/4 | 0.015625 | | | | | |
-| 7T/8 | 0.001953125 | | 0.608 | | | |
-| T | 0 | | | | 0.655 | |
-| T + 15 min | | | 0.398 | | | |
-| T + 30 min | | 0.449 | 0.227 | 0.834 | 0.751 | 2.334 |
-| T + 45 min | | 0.449 | 0.124 | 0.834 | 0.787 | 2.334 |
-
-(The scenario latches every gauge at every milestone; the table shows the
-cells its claims read, and a run under `puck test --keep <dir>` exports the
-rest for the lane that retunes the chain.)
+| 0 (tick 30) | 0.9997 | 0.466 | 1.000 | 0.035 | 0.000 | 1.535 |
+| T/8 | 0.670 | 0.458 | 0.781 | 0.030 | 0.368 | 1.530 |
+| T/4 | 0.422 | 0.443 | 0.575 | 0.154 | 0.669 | 1.654 |
+| 3T/8 | 0.244 | 0.430 | 0.401 | 0.386 | 0.832 | 1.886 |
+| T/2 | 0.125 | 0.419 | 0.259 | 0.535 | 0.937 | 2.035 |
+| 5T/8 | 0.053 | 0.411 | 0.147 | 0.654 | 0.997 | 2.154 |
+| 3T/4 | 0.016 | 0.405 | 0.067 | 0.772 | 1.000 | 2.272 |
+| 7T/8 | 0.002 | 0.401 | 0.018 | 0.817 | 1.000 | 2.317 |
+| T | 0 | 0.400 | 0.0001 | 0.824 | 1.000 | 2.324 |
+| T + 15 min | 0 | 0.400 | 0.0000 | 0.824 | 1.000 | 2.324 |
+| T + 30 min | 0 | 0.400 | 0.0000 | 0.824 | 1.000 | 2.324 |
+| T + 45 min | 0 | 0.400 | 0.0000 | 0.824 | 1.000 | 2.324 |
 
 What it settles:
 
 - **The glacier is the specification exactly.** `glacier` equals (1 − t/T)³ to
-  the fixed-point digit at every eighth and is exactly zero at T. The melt
-  mechanism (`hydroTarget` as a remaining-volume target, the lattice's debiting
-  `transform`) needs no change.
-- **The falls do not run dry at T.** The sill passes less than the melt, so the
-  lake stores it (0.5 at the start against a 0.4 sill, 1.3 at T/2 in the
-  speed-60 reading) and drains it over the hour after T: the falls carry 0.40
-  fifteen minutes after the glacier is gone and 0.23 thirty minutes after.
-  Meanwhile `meltVisible` parks the sheets at T, so the look stops before the
-  water does. The claims `fallsAt[9..10] < 0.001` are the ones that fail.
-- **The aquifer fills last, and the river rises with it, not after it.** 0.26
-  full at T/2, 0.66 at T, 0.75 at T + 30 min; the river rises from 0.15 to 0.83
-  across the melt. The claim `aquiferAt[10] > 0.95` fails.
-- **Homeostasis is past the window.** The river still moves more than 0.01 m a
-  quarter hour at T + 30 min, since ten aquifer cells level by hops at the one
-  authored rate. The drift claim fails.
-- **Conservation holds**: `world.fields` reads `hydroIce` + `hydroWater` as the
-  start's 22.9 units at every reading.
-
-So 19 of the scenario's 23 claims pass, and the four that fail are the chain's
-four gaps (S1 to S4 in [the gap list](#the-gap-list)). The scenario is
-committed red as the specification H1 meets; it is not a stop (the campaign's
-test ruling), and its expectations are the numbers H1 tunes the chain to.
-
-**Its cost, and the twin.** On the debug basis 378 041 ticks (the audit's run,
-before the scenario gained its T + 45 min milestone) took 32.6 min of
-authored time with the machines stopped, beside other lanes' builds (5.2 ms a
-tick), and the run ticked 1 134 123 authority ticks: the debug world's
-paintings boot the garden and the night field beside it, so the proof ticks
-three worlds. The same arc over the chain alone,
-[`water-chain-tests.puck`](../../worlds/debug/water-chain-tests.puck) on
-[`water-chain.puck`](../../worlds/debug/water-chain.puck) (one `hydrology`
-expansion at `water.puck`'s numbers and a `bodies` section, the probes and
-the test composed over it as a `basis`, since a second `state.world` in the
-same document as the template's is refused), runs 405 041 ticks in 22.3 s
-(55 µs a tick) and lands every probe on the same fixed-point digits as the
-debug basis: the chain is independent of the world around it. The twin is
-the inner loop and the debug-basis scenario the integration proof; the lane
-drops the paintings' frames from the latter as `garden-tests.puck` drops the
-garden's. Neither shortens the arc.
+  the fixed-point digit at every eighth and is exactly zero at T.
+- **The falls are the discharge.** `fallsFlow` tracks the melt's own (1 − t/T)²
+  within a thirtieth at every eighth (0.766, 0.563, 0.391, 0.25, 0.141, 0.063,
+  0.016), runs at 7T/8 and is dry at T. The lake passes what melts as it melts,
+  resting within 7 cm of its sill at the start and on it from T.
+- **The aquifer fills by 5T/8 and the river then backs up.** The aquifer's
+  ten cells are capped at `fullHead`, full from 5T/8; the river climbs with the
+  aquifer's head and past it (0.65 to 0.82 as the last of the melt arrives),
+  and stands settled from T, the pool under its `poolLevelMax`.
+- **Conservation holds.** `hydroTotal` (ice plus water) reads the start's
+  21.77 m at every milestone.
 
 ### The captures
 
@@ -154,7 +128,9 @@ settled, exposure pinned at EV100 13.83 from the river view, driven through
 the arc by `water.speed 60` with each stage landed by `world.wait until`. The
 stills and their contact sheet are the audit's hand-back (the commit that
 lands this plan names where they were written); the gauges of each stage's
-tick are in the table. Every view is an operator camera pose
+tick are in the table. The captures were taken on the chain before its retune, whose
+gauges (the falls' depth, the lake's storage) read otherwise; the tour retakes
+them on the current chain. Every view is an operator camera pose
 (`view.override camera look <eye> <target>` in metres, or `pose`):
 
 | View | Pose | Stage 1 (glacier 1.00, falls 0.20) | Stage 2 (glacier 0.22, falls 0.79) | Stage 3 (aquifer 0.36, river 0.53) | Stage 4 (glacier 0, falls 0.47, `meltVisible` 0) | Stage 5 (falls 0.13, river 0.84, aquifer 0.81, pool 2.34) |
@@ -205,12 +181,7 @@ the code or capture shows, and the lane that closes it.
 
 | Id | Gap | What the code and the run show | Lane |
 |---|---|---|---|
-| S1 | The falls park on the clock, not on the discharge | `fallsRibbon` folds its sheets by `meltStrength` and parks them by `meltVisible` ([`water.puck`](../../worlds/standard/water.puck)), both functions of the melt clock alone (`hydrology`'s `hydro-melt` rule); `impactSpray` scales by `meltStrength` too. At T the chain's `fallsFlow` is 0.46 (above its 0.28 at the start) and 0.06 three quarters of an hour later: the sheets vanish while the simulation still carries water over the sill. A look that parks water the system still moves fakes the system it shows. | H1 |
-| S2 | The lake stores the melt instead of passing it | `lakeLevel` rises from 0.4 (the sill) to 1.30 at T/2 and drains back over the hour after T, so the falls carry the lake's storage long after the glacier is gone. The owner's arc has the falls dry when the melt ends. | H1 |
-| S3 | The aquifer does not fill before the river rises | `aquiferFill` is 0.67 at T and 0.87 at T + 45 min; `riverDepth` rises from 0.10 to 0.84 across the whole melt, beside the aquifer rather than after it. The chain levels ten aquifer cells against four river cells with no ceiling on the aquifer (`hydroWater`'s `max` is 4 for every cell), so the aquifer's "capacity" is most of the water and it fills last. The owner's arc has the reservoir fill and then let the river rise. | H1 |
-| S4 | Homeostasis is slow and unbounded | The aquifer's cells level by one-dimensional hops at `rate` 0.000625 a tick, so the river drifts 0.014 m a quarter hour at T + 45 min and the chain's steady state lies hours past T; no number says when the river is settled. | H1 |
-| S5 | The hidden chain is drawn | `hydroWater` and `hydroBed` carry `heightScale: 1` and a colour, and `WorldFieldEmitter` draws every row with a height scale, so the 24-cell chain 90 m under the floor bakes and draws two height fields nobody sees. | H1 |
-| S6 | The arc had no proof | The scenario grid is lowered into `schedule.settleTicks`, which the validator capped at 4 096 ticks, so no scenario could run the 324 000-tick melt. The cap is gone (this plan's change; `WorldScheduleLawTests` pinned it and lost that case), and the arc scenarios exist; their cost is in [the audit](#the-arc-run). | H1 |
+| S5 | The hidden chain is drawn | `hydroWater` and `hydroBed` carry `heightScale: 1` and a colour, and `WorldFieldEmitter` draws every row with a height scale, so the 24-cell chain 90 m under the floor bakes and draws two height fields nobody sees. The flow cannot drop the scale in data: `FieldLattice.StepFlow` reads a row's own height only when its `heightScale` is above zero, and an `over` row counts only with one, so leveling water against a bed needs both rows to carry a scale, and the emitter draws every row that carries one. Closing it takes a way to mark a lattice row as simulation only (not drawn, not collidable), which is engine code, not data ([open items](open-items.md#water)). | open item |
 | S7 | No stage checkpoint | A stage is reached live by `water.speed k` or by `replay.drive` to a recorded tick; `world.save` writes the authored document with state as authored, `world.state.cell.set` writes scalar rows only, and no verb writes a lattice cell or saves a live arena with its lattices. | D1 |
 
 #### Geometry
@@ -230,7 +201,7 @@ the code or capture shows, and the lane that closes it.
 |---|---|---|---|
 | L2 | The falls core reads pale | `fallsGlass` scatters 0.8 per metre of `#1A8A94` under the full sun through a 0.2 m sheet; the record's capture reads the core as pale sage, the art's as transparent turquoise with selective white edges. | A3 |
 | L3 | No wet rock | Nothing darkens the fall line, the splash zone or the banks; the art names wet rock as a coloured darker material region. | A3, A4 |
-| L4 | Spray and splash | The spray is one cloud volume (`impactSpray`), scaled by the melt clock (S1); there are no foam rings in the plunge pocket, no droplets, no splash: the particle pool (W3) is not built. | R3 |
+| L4 | Spray and splash | The spray is one cloud volume (`impactSpray`), scaled by `fallsFlow`; there are no foam rings in the plunge pocket, no droplets, no splash: the particle pool (W3) is not built. | R3 |
 | L5 | Reflections of the near geometry | Glass reflects the probe gather and the sky (W4a); the bridge and the pavilion do not reflect in the pool (W4b, a measured enhancement). | R4 |
 
 #### Debug tooling
@@ -252,22 +223,24 @@ counter or a state reading named here, never by watching the arc in real time.
 ### The arc's proof is a scenario
 
 The simulation half of done is `puck test worlds/debug/water-arc-tests.puck`
-green, with `--reproduce` showing the run replays bit for bit, on the merged
-head. Its claims, each read from a probe at a simulated milestone:
+and `water-chain-tests.puck` green, with `--reproduce` showing the run replays
+bit for bit, on the merged head. The claims, each read from a probe at a
+simulated milestone (`worlds/debug/water-arc.puck` holds the probes):
 
 | Milestone (simulated) | Claim | Probe |
 |---|---|---|
-| t = 0 (tick 30) | glacier = 1 within 0.01; falls on; lake at or over its sill | `glacierAt[0]`, `fallsAt[0]`, `lakeAt[0]` |
-| t = T/8 … 7T/8 | glacier = (1 − t/T)³ within 0.01 (0.670, 0.422, 0.244, 0.125, 0.053, 0.016, 0.002); falls on at every one | `glacierAt[1..7]`, `fallsAt[1..7]` |
-| t = T | glacier exactly 0; `meltVisible` 0 | `glacierAt[8]` |
-| t = T + 15 min and after | falls dry (`fallsFlow` < 0.001) and stay dry | `fallsAt[9..11]` |
-| over the melt | aquifer rises monotonically at the eighths and reaches its full head (`aquiferFill` ≥ 0.95) by T + 45 min | `aquiferAt[0..11]` |
-| T + 30 min to T + 45 min | river drift under 0.01 m over the last quarter hour (homeostasis); river and pool above their start | `riverAt[10..11]`, `poolAt[0..11]` |
-| order | the aquifer reaches 0.9 of its head before T (the aquifer fills before the falls dry) | `aquiferAt[7]` |
+| t = 0 (tick 30) | glacier = 1 within 0.01; falls at the melt's peak (over 0.95) | `glacierAt[0]`, `fallsAt[0]` |
+| t = T/8 … 7T/8 | glacier = (1 − t/T)³ within 0.01 (0.670, 0.422, 0.244, 0.125, 0.053, 0.016, 0.002); `fallsFlow` = (1 − t/T)² within 0.03, and running at 7T/8 | `glacierAt[1..7]`, `fallsAt[1..7]` |
+| every milestone | the lake within a few centimetres of its sill (over 0.399 m of water, under 0.5 while the melt is near its peak) and on it (under 0.401) from T | `lakeAt[0..11]` |
+| t = T | glacier exactly 0 | `glacierAt[8]` |
+| t = T and after | falls dry (`fallsFlow` < 0.01), the first reading after T a quarter hour on | `fallsAt[8..11]` |
+| over the melt | aquifer rises monotonically at the eighths to 5T/8 and is full (`aquiferFill` ≥ 0.95) by 3T/4, while the falls still run | `aquiferAt[0..6]`, `fallsAt[7]` |
+| after the fill | the river rises past the head the aquifer holds (`riverDepth` over 0.6, the river bed's 1 m below the aquifer's 1.6) and is settled: drift under 0.005 m over the quarter hours ending at T + 30 and T + 45 min; the pool above its start and under its cap | `riverAt[6..11]`, `poolAt[0]`, `poolAt[11]` |
+| conservation | `hydroTotal` (ice plus water) within 0.01 m of its first reading at 4T/8, T and T + 45 min | `totalAt[0, 4, 8, 11]` |
 
 A scenario that cannot express this cheaply is a gap fixed at its cause (the
 simulation's own fast-forward or rate scaling), never an arc shortened for
-the test. The run's cost today is in [the audit](#the-arc-run).
+the test. [The audit](#the-arc-run) holds the run's probes.
 
 ### Visual acceptance is per stage and per view
 
@@ -288,9 +261,9 @@ at speed 60 (T = 5 400 ticks after the speed is set):
 |---|---|---|
 | 1 full glacier | +30 | `glacier` ≥ 0.99, `fallsFlow` > 0 |
 | 2 mid-melt, falls running | +1 350 (T/4) | `glacier` 0.42 ± 0.02, `fallsFlow` > 0 |
-| 3 aquifer filling | the tick at which `aquiferFill` first passes 0.5 (from the arc's probes) | 0.4 < `aquiferFill` < 0.6 |
-| 4 falls dry, river rising | +5 460 | `glacier` = 0, `fallsFlow` < 0.001 (today 0.47: H1's target), `riverDepth` below its settled value |
-| 5 homeostasis | +6 750 | `riverDepth` within 0.01 of `riverAt[11]` |
+| 3 aquifer filling, river rising | the tick at which `aquiferFill` first passes 0.5 (from the arc's probes, between T/8 and T/4) | 0.4 < `aquiferFill` < 0.6 |
+| 4 falls dry, lake at its sill | +5 460 | `glacier` = 0, `fallsFlow` < 0.01, `lakeLevel` within 0.01 of 0.4 |
+| 5 homeostasis | +6 750 | `riverDepth` within 0.005 of `riverAt[11]`, `aquiferFill` ≥ 0.99 |
 
 The views, each an operator camera pose (`view.override camera look …`,
 [the audit's table](#the-captures)), and what each must show at each stage,
@@ -366,18 +339,8 @@ reservoir's pane reads them.
 The owner's rulings on the three taste calls: the lake rests at its outlet
 sill and the falls run dry within 15 simulated minutes after T; the aquifer is
 confined, fills by 3T/4 and then backs the river up to a held level; and the
-river runs in a carved channel, not a slab over the turf. H1 and A1 build them
-as stated below.
-
-### H1. The chain is the arc
-
-**Outcome.** The hydrology produces the owner's arc as specified, and every look binds to a gauge the chain writes, never to the clock. In `worlds/standard/hydrology.puck` and `worlds/debug/water.puck`: a confined aquifer (its head capped at `fullHead`, so the reservoir fills and then backs the river up) sized to fill by 3T/4; a sill and falls that pass the melt so the lake stands near its sill and the falls are dry (`fallsFlow` < 0.01) within 15 min of simulated time after T; a river that reaches homeostasis (drift under 0.005 m over any quarter hour) within 30 min after T. The falls' fold and visibility, the spray and the lake's level bind to `fallsFlow` and `lakeLevel`; `meltStrength` and `glacier` drive the glacier alone. The hidden chain's rows lose their height scale and colour, so nothing bakes under the floor. The scenarios `worlds/debug/water-arc-tests.puck` and a chain-only twin are the specification's pins: their `expect` lines carry the numbers above.
-
-**Invariant and its door.** Ice plus water is conserved and the arc's milestones hold; the lattice's reactions enforce conservation (`FieldLattice.StepFlow` moves water only between cells, the melt `transform` debits ice for what the water cell receives) and the arc scenario enforces the milestones. Where it stops: a gauge read live is one tick's value; the scenario reads the same tick every run.
-
-**Reuse.** The `hydrology` template, `FieldLattice`'s `flow` and `transform` reactions, the gauges, `water.speed`, the test grid. No new rule kind; a ceiling on a store is the row's `max` or an authored cap in the template, never engine code.
-
-**Check.** `puck test worlds/debug/water-arc-tests.puck --reproduce --jobs 1` green; `world.fields` shows `hydroIce` + `hydroWater` constant across a run; `world.budget` and `[sdf.mesh-bake] done` show no `hydro` groups.
+river runs in a carved channel, not a slab over the turf. The chain builds the
+first two ([the arc](#the-arc-run)); A1 builds the third.
 
 ### A1. The river in its channel
 
@@ -449,7 +412,7 @@ Deferred to [open items](open-items.md#water) with its mechanism named: a verb t
 
 ### Order
 
-H1 first: the simulation is the feature's truth and every look binds to it. A1 to A5 run in parallel after it (A5's pane acceptance waits on the two-glass-layers lane). R3 next, since it adds a pass. P1 lands with the last authoring lane. R4 and D1 after the integration acceptance.
+The simulation is the feature's truth and every look binds to it. A1 to A5 run in parallel (A5's pane acceptance waits on the two-glass-layers lane). R3 next, since it adds a pass. P1 lands with the last authoring lane. R4 and D1 after the integration acceptance.
 
 ## The mechanisms under the water
 
@@ -524,8 +487,8 @@ stream segment is one still sheet wearing `streamFlowLayer`; the debug world
 places the one `stream` prototype eight times. The falls is fourteen sheets
 wearing `fallsFlowLayer`, one world-space downward velocity that runs down
 every sheet at its own slope; each sheet folds about its own flow axis by
-`meltStrength`, and its foam coverage follows world lane 4, which the debug
-world binds to `state.meltStrength`. The lake keeps its level slide and wears
+`fallsFlow`, the chain's discharge over the sill, and its foam coverage follows
+world lane 4, which the debug world binds to `state.fallsFlow`. The lake keeps its level slide and wears
 `lakeFlowLayer`. The meadow's grass wears `meadowWind`, the same layer with a
 wind vector.
 

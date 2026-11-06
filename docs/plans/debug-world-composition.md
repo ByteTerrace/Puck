@@ -296,7 +296,7 @@ is the conserved total. `water.speed 60` accelerates the clock and transport tog
 The scenery comes from [standard water families](../../worlds/standard/water.puck).
 The glacier contracts uniformly about its cradle using `CreationDocument.SizeBy`
 and the authored linear fraction; zero parks the creation. The falls is fourteen
-still sheets down the wall's profile, parked by its endpoint visibility; its
+still sheets down the wall's profile, folded and parked by the chain's `fallsFlow` and `fallsVisible` gauges; its
 shading falls down each sheet through the standard's flow layer
 ([the water feature, W2](water.md#w2-as-built)). Impact spray is a state-scaled cloud volume. The lake's
 outlet is a terrain subtraction, shared by the rendered mass and its collider.
