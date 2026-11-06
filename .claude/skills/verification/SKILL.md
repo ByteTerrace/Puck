@@ -422,8 +422,9 @@ readings show an idle machine for `--settle` seconds, then runs the command, wit
 `puck sweep` and Worlds nesting inside it. `puck measure run` uses the same
 reservation and settle sampler once for the lead's queued questions.
 
-In PowerShell, quote forwarded `'-nodeReuse:false'` after `--`; otherwise the
-shell can split the colon-bearing switch before the lease receives it
+In PowerShell, quote every forwarded colon-bearing switch after `--`, including
+`'-m:2'`, `'-nodeReuse:false'` and `'-p:Name=value'`; otherwise the shell can
+split the switch before the lease receives it
 ([toolchain caution](../../../docs/development/contributing.md#hardware-and-toolchain-cautions)).
 The lease starts its child without a shell, so on Windows a forwarded bare `bash`
 resolves through `PATH` to WSL's `bash.exe`, which cannot see `D:/` paths, has no

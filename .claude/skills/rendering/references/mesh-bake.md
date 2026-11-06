@@ -36,8 +36,10 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   counts distinct samples by the cell faces they touch: low boundary, interior,
   or high boundary on each axis. Every interior coordinate has the same holders,
   so its class contributes `split - 1` samples per interior axis. The selected
-  count sizes the lattice's `OwnedBuffer` indexes; `FineKeys` fills them in the
-  original cell/sample order without growing managed lists and copying them.
+  count admits cells. `FineKeys` numbers their slots in the original cell/sample
+  order, then sizes the key buffer from its own count and fills it through those
+  slots. Every sample buffer takes that key buffer's length, independently of
+  admission's estimate, without growing managed lists and copying them.
   Preserve that order and the region admission order: both feed the bake.
 - **Collapse line samples have one owner.** `SdfMeshCollapse.Collapser.AppendLine` links
   samples by index and retains each edge's append order when a collapse moves
