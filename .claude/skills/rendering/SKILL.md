@@ -457,10 +457,13 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `sdfGlassAccumulate`): never read a glass shape's thickness from its mesh, and
   never accumulate a sum in floats, whose rounding follows raster order and whose
   per-face terms cancel badly against the far sky. Transmission integrates every
-  glass material before the opaque hit; only the nearest front face reflects and
-  refracts. `SdfGlassSumsDeviceLawTests` runs the accumulation in many orders on
+  glass material before the opaque hit; two interfaces reflect, refract and
+  scatter: the target's nearest front face and the second the sums' second
+  record names (`sdfGlassSecondInterface`, exact up to three front faces), each
+  shaded by the one loop body, the far one composed inside the near one's
+  transmission. `SdfGlassSumsDeviceLawTests` runs the accumulation in many orders on
   both backends. The glass pass reuses the opaque path's mechanisms, never a copy:
-  one probe gather (`sdfMeshProbesAt`) for its reflection (`worldEnvironmentReflection`,
+  one probe gather an interface (`sdfMeshProbesAt`) for its reflection (`worldEnvironmentReflection`,
   `shade/sdf-sky-reflection.hlsli`, then `sdfMeshReflection`, the sky alone where
   `probes.share` is zero), the light walk (`sdfLightResponse`, uncascaded, probe
   shadowing) for its highlights and the light its medium receives, and the flow

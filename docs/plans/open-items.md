@@ -1097,11 +1097,11 @@ beside it.
   `WorldControlCommandModule` owns a separate local console endpoint; do not
   conflate those lifetimes when reproducing the report. Reset and reload now
   reseed lattice stores alongside scalar state.
-- [medium] Glass transmission integrates each intervening material, but
-  reflection and refraction use only the nearest interface
-  (`sdf-glass.comp.hlsl`); the two-glass-layers lane extends that shared path so
-  the reservoir reads through the pavilion's pane. Do not add a water-specific
-  shader.
+- [low] A pixel shades two glass interfaces
+  ([option 3 as built](water.md#option-3-as-built)); past three front faces
+  before the opaque hit only the nearest is shaded. A 64-bit atomic k-buffer
+  would lift the count once the interface generator carries 64-bit buffer
+  elements and both backends enable int64 atomics.
 
 ### Author shaders
 

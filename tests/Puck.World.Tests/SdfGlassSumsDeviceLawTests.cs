@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
+using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
@@ -11,7 +12,9 @@ namespace Puck.World.Tests;
 /// <summary>Both hardware backends execute the production glass accumulation (<c>frame/sdf-glass.hlsli</c>) over the
 /// same faces in many orders.
 /// <para>Raster order is unspecified, so the sums a pixel's faces leave must not depend on it: every order of one
-/// case's faces leaves identical words. The decoded optical depth of each channel is the exact Beer-Lambert integral,
+/// case's faces leaves identical words, but for the second record's front entries, which hold the same set of front
+/// faces (each case has at most three) in whatever order they claimed them, and its nearest back face is the nearest
+/// back face before the opaque hit. The decoded optical depth of each channel is the exact Beer-Lambert integral,
 /// the sum over each solid's interval before the opaque hit of its material's absorption times the interval's length,
 /// to within the encoding's quantization; it carries no error proportional to the opaque hit's distance, so glass seen
 /// against the far sky reads as it does against a near wall.</para></summary>
@@ -20,7 +23,13 @@ namespace Puck.World.Tests;
 public sealed class SdfGlassSumsDeviceLawTests {
     private const string Kernel = "sdf-glass-sums.comp";
     private const int Orders = 24;
-    private const int Rows = 5;
+    private const int Words = (int)SdfWorldPackage.GlassSumWords;
+    private const int Rows = (1 + ((Words + 1) / 2));
+    // The second record's words, frame/sdf-glass.hlsli's SdfGlassFrontCountWord on.
+    private const int FrontCountWord = 8;
+    private const int FrontEntryWord = 9;
+    private const int FrontEntries = 3;
+    private const int NearestBackWord = 15;
 
     // A face: its ray distance, the opaque hit's distance, whether it faces the camera, and its absorption's index.
     private readonly record struct Face(float T, float Opaque, bool Front, int Absorption);
@@ -80,9 +89,21 @@ public sealed class SdfGlassSumsDeviceLawTests {
             var results = Run(extension: extension, glassCase: glassCase, orders: orders, services: services);
             var words = Enumerable.Range(start: 0, count: Orders).Select(selector: order => WordsOf(results: results, order: order)).ToArray();
 
-            for (var order = 1; (order < Orders); order++) {
-                Assert.True(condition: words[0].AsSpan().SequenceEqual(other: words[order]),
-                    userMessage: $"{glassCase.Name}: order {order} left [{string.Join(separator: ' ', values: words[order])}], order 0 [{string.Join(separator: ' ', values: words[0])}].");
+            var fronts = glassCase.Faces.Select(selector: static (face, index) => (face, index)).Where(predicate: static pair => pair.face.Front)
+                .Select(selector: static pair => (((uint)pair.index + 1u), ((3u * (uint)pair.index) + 1u))).Order().ToArray();
+            var backs = glassCase.Faces.Where(predicate: static face => !face.Front).Select(selector: static face => face.T).ToArray();
+
+            for (var order = 0; (order < Orders); order++) {
+                var held = words[order];
+                var entries = Enumerable.Range(start: 0, count: Math.Min(val1: fronts.Length, val2: FrontEntries))
+                    .Select(selector: entry => (held[(FrontEntryWord + (2 * entry))], held[(FrontEntryWord + (2 * entry) + 1)])).Order().ToArray();
+
+                Assert.True(condition: (words[0].AsSpan(start: 0, length: FrontEntryWord).SequenceEqual(other: held.AsSpan(start: 0, length: FrontEntryWord)) &&
+                    (words[0][NearestBackWord] == held[NearestBackWord])),
+                    userMessage: $"{glassCase.Name}: order {order} left [{string.Join(separator: ' ', values: held)}], order 0 [{string.Join(separator: ' ', values: words[0])}].");
+                Assert.Equal(expected: (uint)fronts.Length, actual: held[FrontCountWord]);
+                Assert.Equal(expected: fronts, actual: entries);
+                Assert.Equal(expected: ((backs.Length == 0) ? 0u : ~BitConverter.SingleToUInt32Bits(value: backs.Min())), actual: held[NearestBackWord]);
             }
             var decoded = results[0];
             // Each face's distance to the opaque hit is quantized to 2^-15 m and each absorption to 2^-16 per metre.
@@ -110,13 +131,13 @@ public sealed class SdfGlassSumsDeviceLawTests {
         return orders;
     }
     private static uint[] WordsOf(Vector4[] results, int order) {
-        var words = new uint[8];
+        var words = new uint[Words];
 
-        for (var texel = 0; (texel < 4); texel++) {
+        for (var texel = 0; (texel < (Rows - 1)); texel++) {
             var halves = results[(((1 + texel) * Orders) + order)];
 
             words[(2 * texel)] = (((uint)halves.X) | (((uint)halves.Y) << 16));
-            words[((2 * texel) + 1)] = (((uint)halves.Z) | (((uint)halves.W) << 16));
+            if (((2 * texel) + 1) < Words) { words[((2 * texel) + 1)] = (((uint)halves.Z) | (((uint)halves.W) << 16)); }
         }
         return words;
     }
@@ -137,7 +158,7 @@ public sealed class SdfGlassSumsDeviceLawTests {
         using var faceBuffer = services.BufferFactory.CreateHostVisible(name: default, sizeBytes: ((ulong)faces.Length * 16UL), usage: GpuBufferUsage.Storage);
         using var absorptionBuffer = services.BufferFactory.CreateHostVisible(name: default, sizeBytes: ((ulong)absorptions.Length * 16UL), usage: GpuBufferUsage.Storage);
         using var orderBuffer = services.BufferFactory.CreateHostVisible(name: default, sizeBytes: ((ulong)orders.Length * 4UL), usage: GpuBufferUsage.Storage);
-        using var sums = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: (Orders * 8UL * 4UL), usage: GpuBufferUsage.Storage);
+        using var sums = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: (Orders * (ulong)Words * 4UL), usage: GpuBufferUsage.Storage);
         using var output = services.ImageFactory.Create(format: GpuPixelFormat.R32G32B32A32Float, height: Rows, name: default,
             usage: GpuImageUsage.Storage, width: Orders);
         using var readback = services.SurfaceTransferFactory.CreateReadback();

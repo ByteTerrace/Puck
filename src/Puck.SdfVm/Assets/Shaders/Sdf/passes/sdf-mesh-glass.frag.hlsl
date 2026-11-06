@@ -5,7 +5,8 @@
 // hold the same words whatever order the faces rasterize in. A front face then writes the glass target as the mesh
 // pass writes its target (the ray parameter, the draw plus one, the triangle) through the pass's own reversed-Z depth, so
 // the nearest front face wins; a back face, or a face behind the opaque hit, writes the far plane's depth and fails the
-// test. Every fragment counts one texel. A face is a front face when its triangle's authored outward normal (the bake's
+// test. The sums' second record takes every counted face too (a front face's draw and triangle, a back face's distance),
+// from which the shading pass names the second-nearest front face. Every fragment counts one texel. A face is a front face when its triangle's authored outward normal (the bake's
 // winding, which curvature also reads) faces the camera; the rasterizer's facing is not used, since its sense follows each
 // backend's winding and viewport conventions rather than the mesh.
 #include "../isa/sdf-mesh.interface.hlsli"
@@ -40,7 +41,7 @@ GlassFragment PSMain(MeshRasterVertex input) {
     if (counts && !IsHelperLane()) {
         SdfMaterialData material = sdfMaterialLoad(sdfMeshMaterial(input.draw, input.triangleIndex));
 
-        sdfGlassAccumulate(sdfGlassSumWord(pixel, passGroup.imageExtent), t, opaque, front, material.absorption);
+        sdfGlassAccumulate(sdfGlassSumWord(pixel, passGroup.imageExtent), t, opaque, front, material.absorption, input.draw, input.triangleIndex);
     }
     puckCountFragmentWork(0u, 1u);
 

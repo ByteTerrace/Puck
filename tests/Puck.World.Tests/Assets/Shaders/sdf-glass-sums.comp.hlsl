@@ -10,7 +10,8 @@
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-glass.hlsli"
 
 // Each face: its ray distance, the opaque hit's distance, one for a front face or zero for a back face, and the index
-// of its absorption. Each order: the faces of one workgroup, as indices into the faces. The first texel of a column
+// of its absorption; a face's draw is its index into the faces and its triangle three times that plus one. Each order:
+// the faces of one workgroup, as indices into the faces. The first texel of a column
 // holds the decoded optical depth and thickness (the thickness measured from the order's first face); the rest hold
 // the pixel's raw words as 16-bit halves, which a float holds exactly.
 [numthreads(1, 1, 1)]
@@ -21,9 +22,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint word = (SDF_GLASS_SUM_WORDS * id.x);
 
     for (uint index = 0u; (index < faces); index++) {
-        float4 face = glassFaces[glassOrders[((id.x * faces) + index)]];
+        uint faceIndex = glassOrders[((id.x * faces) + index)];
+        float4 face = glassFaces[faceIndex];
 
-        sdfGlassAccumulate(word, face.x, face.y, (face.z > 0.5), glassAbsorptions[(uint)face.w].xyz);
+        sdfGlassAccumulate(word, face.x, face.y, (face.z > 0.5), glassAbsorptions[(uint)face.w].xyz, faceIndex, ((3u * faceIndex) + 1u));
     }
     float4 first = glassFaces[glassOrders[(id.x * faces)]];
 
