@@ -16,7 +16,7 @@ namespace Puck.Mcp;
 /// <summary>What the Operator adapter needs to start Worlds: the checkout it serves and the machine's GPU lease.</summary>
 /// <param name="Checkout">The adapter's own Puck checkout, the default checkout a start boots from; its repository's
 /// worktrees are the only other checkouts a start accepts.</param>
-/// <param name="AcquireGpuLease">Takes the machine's exclusive GPU lease for a holder and the lane it works for (null
+/// <param name="AcquireGpuLease">Takes the machine's exclusive GPU lease for the checkout a start boots, a holder and the lane it works for (null
 /// takes the holder's first word), waiting in the machine's queue for as long as the CLI's lease policy allows, which is
 /// never the start's own timeout, and returns the held lease, which releases on disposal; throws
 /// <see cref="TimeoutException"/> when it stays held.</param>
@@ -30,7 +30,7 @@ namespace Puck.Mcp;
 /// build that carries Vulkan SPIR-V, which a Vulkan start needs.</param>
 public sealed record OperatorWorldLaunch(
     string Checkout,
-    Func<string, string?, CancellationToken, Task<IDisposable>> AcquireGpuLease,
+    Func<string, string, string?, CancellationToken, Task<IDisposable>> AcquireGpuLease,
     Func<string, bool, Action<string>, CancellationToken, Task<bool>> Admit,
     Func<string, bool, CancellationToken, Task<OperatorWorldBuild>> ResolveBuild
 );
@@ -273,7 +273,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             progress.Stage = "gpu-lease";
 
             try {
-                lease = await launch!.AcquireGpuLease(holder, lane, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                lease = await launch!.AcquireGpuLease(checkout, holder, lane, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             } catch (TimeoutException error) {
                 resolved.Lease?.Dispose();
 

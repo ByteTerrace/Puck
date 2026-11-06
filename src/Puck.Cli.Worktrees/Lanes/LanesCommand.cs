@@ -309,13 +309,16 @@ public static partial class LanesCommand {
             report = reports.FirstOrDefault(predicate: Delivered)?.Replace(oldChar: '\\', newChar: '/');
         }
         var names = LaneNames(branch: worktree.Branch, name: name);
+        // A holder or waiter that recorded its checkout belongs to the worktree at that path, whatever it is called; only
+        // one whose CLI recorded none is matched by name.
+        bool Mine(string? checkout, string? lane) => ((checkout is not null) ? CliPaths.Same(left: checkout, right: worktree.Path) : ((lane is not null) && names.Contains(item: lane)));
         var uses = new List<LeaseUse>();
 
         foreach (var resource in Leases) {
             var state = CliLease.Inspect(name: resource, now: now, root: leaseRoot);
 
-            if (state.HolderAlive && (state.Lane is not null) && names.Contains(item: state.Lane)) { uses.Add(item: new LeaseUse(Ahead: null, Lanes: null, Position: null, Resource: resource, State: "holding", Ticket: null)); }
-            foreach (var ticket in state.Queue.Where(predicate: ticket => names.Contains(item: ticket.Lane))) {
+            if (state.HolderAlive && Mine(checkout: state.Checkout, lane: state.Lane)) { uses.Add(item: new LeaseUse(Ahead: null, Lanes: null, Position: null, Resource: resource, State: "holding", Ticket: null)); }
+            foreach (var ticket in state.Queue.Where(predicate: ticket => Mine(checkout: ticket.Checkout, lane: ticket.Lane))) {
                 uses.Add(item: new LeaseUse(Ahead: ticket.Ahead, Lanes: ticket.Lanes, Position: ticket.Position, Resource: resource, State: "queued", Ticket: ticket.Id));
                 break;
             }
@@ -507,8 +510,9 @@ public static partial class LanesCommand {
             main checkout, and shows its final `codex exit N` / `agy exit N` line. lease lists the
             gpu, heavy and build leases the lane holds (gpu:holding) or waits for
             (gpu:queued#5(2/3,ahead 4): ticket 5, its lane's turn 2 of 3 in the round, 4
-            admissions before it), matched by lane name: the worktree name, the branch, or the
-            branch's last segment.
+            admissions before it), matched by the checkout path the holder or waiter recorded,
+            or, for one whose CLI recorded none, by lane name: the worktree name, the branch, or
+            the branch's last segment. A --base that names no commit is refused (exit 2).
 
             mode is write, or findings-only for a lane that delivers a report instead of commits:
             its .claude/scratch/<name>.task file says `mode: findings-only` (and may name
@@ -543,6 +547,9 @@ public static partial class LanesCommand {
                 baseRef = given;
             } else if (!CliGit.TryResolveIntegrationBranch(repository: ".", branch: out baseRef)) {
                 return Task.FromResult(result: CliExit.Refuse(verb: Verb, what: "--base", why: "has no default: the main checkout holds no branch; pass the integration branch."));
+            }
+            if (!CliGit.TryResolveCommit(repository: ".", resolved: out _, revision: baseRef)) {
+                return Task.FromResult(result: CliExit.Refuse(verb: Verb, what: $"--base {baseRef}", why: "names no commit in this repository, so no lane's commits ahead could be counted."));
             }
             return ((watch is { } minutes)
                 ? WatchAsync(baseRef: baseRef, cancellationToken: cancellationToken, clock: clock, interval: TimeSpan.FromSeconds(seconds: interval), leaseRoot: null, minutes: minutes, repository: ".", stall: TimeSpan.FromMinutes(minutes: stall))

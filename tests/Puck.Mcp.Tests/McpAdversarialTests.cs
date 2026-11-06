@@ -425,7 +425,7 @@ public sealed class McpAdversarialTests {
             createSession: () => new ScriptedSession(entered: null),
             directory: scratch.RootPath,
             launch: new OperatorWorldLaunch(
-                AcquireGpuLease: static (_, _, _) => throw new InvalidOperationException(message: "a refused build takes no lease"),
+                AcquireGpuLease: static (_, _, _, _) => throw new InvalidOperationException(message: "a refused build takes no lease"),
                 Admit: static (_, _, _, _) => throw new InvalidOperationException(message: "a refused build is never admitted"),
                 Checkout: scratch.RootPath,
                 ResolveBuild: (checkout, spirv, _) => {
@@ -472,7 +472,7 @@ public sealed class McpAdversarialTests {
             createSession: () => new ScriptedSession(entered: null),
             directory: scratch.RootPath,
             launch: new OperatorWorldLaunch(
-                AcquireGpuLease: (_, _, _) => Task.FromResult<IDisposable>(result: new Release(release: () => gpuReleased = true)),
+                AcquireGpuLease: (_, _, _, _) => Task.FromResult<IDisposable>(result: new Release(release: () => gpuReleased = true)),
                 Admit: (checkout, device, stage, _) => {
                     asked.Add(item: (checkout, device));
                     stage(obj: "waiting for memory headroom: commit 90% of limit");

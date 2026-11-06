@@ -34,18 +34,22 @@ public sealed class CliLease : IDisposable {
     /// <param name="holder">The lane name.</param>
     /// <param name="wait">The maximum wait.</param>
     /// <param name="clock">The deadline and stale-age clock.</param>
+    /// <param name="checkout">The checkout the holder works in, recorded beside its holder file and ticket so a reader
+    /// (<c>puck lanes</c>) can tell which worktree holds or waits for the lease whatever the holder is called.</param>
     /// <param name="cancellationToken">Cancels acquisition.</param>
     /// <param name="ancestor">Recognizes a live ancestor holder by PID and start ticks, allowing a serialized child lease.</param>
     /// <param name="lane">The lane the holder works for, which admission rotates between; null takes the holder's first word.</param>
     /// <returns>The held lease.</returns>
-    /// <exception cref="ArgumentException">The name, holder, lane or wait is invalid.</exception>
+    /// <exception cref="ArgumentException">The name, holder, lane, checkout or wait is invalid.</exception>
     /// <exception cref="TimeoutException">The lease remains held at the deadline.</exception>
-    public static async Task<CliLease> AcquireAsync(string root, string name, string holder, TimeSpan wait, TimeProvider clock, CancellationToken cancellationToken = default, Func<int, long, bool>? ancestor = null, string? lane = null) {
+    public static async Task<CliLease> AcquireAsync(string root, string name, string holder, TimeSpan wait, TimeProvider clock, string checkout, CancellationToken cancellationToken = default, Func<int, long, bool>? ancestor = null, string? lane = null) {
         if ((name is not ("build" or "gpu" or "heavy")) || string.IsNullOrWhiteSpace(value: holder) || holder.Contains(value: '\n') || holder.Contains(value: '\r') || (wait < TimeSpan.Zero)
-            || ((lane is not null) && (string.IsNullOrWhiteSpace(value: lane) || lane.Contains(value: '\n') || lane.Contains(value: '\r')))) {
-            throw new ArgumentException(message: "A lease requires build, gpu or heavy, a single-line holder and lane, and a nonnegative wait.");
+            || ((lane is not null) && (string.IsNullOrWhiteSpace(value: lane) || lane.Contains(value: '\n') || lane.Contains(value: '\r')))
+            || string.IsNullOrWhiteSpace(value: checkout) || checkout.Contains(value: '\n') || checkout.Contains(value: '\r')) {
+            throw new ArgumentException(message: "A lease requires build, gpu or heavy, a single-line holder, lane and checkout, and a nonnegative wait.");
         }
         lane = (lane?.Trim() ?? DefaultLane(holder: holder));
+        checkout = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: checkout)).Replace(oldChar: '\\', newChar: '/');
         Directory.CreateDirectory(path: root);
         var directory = Path.Combine(path1: root, path2: name);
         var started = clock.GetTimestamp();
@@ -72,13 +76,13 @@ public sealed class CliLease : IDisposable {
 
                 if ((ticket is null) || !File.Exists(path: ticket)) {
                     Stamp(lane: lane, rotation: (directory + ".rotation"));
-                    ticket = Enqueue(clock: clock, holder: holder, lane: lane, queue: queue);
+                    ticket = Enqueue(checkout: checkout, clock: clock, holder: holder, lane: lane, queue: queue);
                 }
                 var place = Admission(now: clock.GetUtcNow(), rotation: (directory + ".rotation"), ticket: ticket);
                 var ahead = place.Ahead;
 
                 if (ahead == 0) {
-                    var lease = TryAcquire(clock: clock, directory: directory, holder: holder, lane: lane);
+                    var lease = TryAcquire(checkout: checkout, clock: clock, directory: directory, holder: holder, lane: lane);
 
                     if (lease is not null) { return lease; }
                 }
@@ -110,16 +114,22 @@ public sealed class CliLease : IDisposable {
     /// <param name="Position">The ticket's lane's turn among the queued lanes in the current round.</param>
     /// <param name="Lanes">How many lanes are queued.</param>
     /// <param name="Since">When the waiter took the ticket, or null when its time is unreadable.</param>
-    public sealed record LeaseTicket(string Id, string Holder, string Lane, int Ahead, int Position, int Lanes, DateTimeOffset? Since = null);
+    /// <param name="Checkout">The checkout the waiter works in, or null when its writer recorded none.</param>
+    public sealed record LeaseTicket(string Id, string Holder, string Lane, int Ahead, int Position, int Lanes, DateTimeOffset? Since = null, string? Checkout = null);
     /// <summary>What a lease directory shows at one moment.</summary>
     /// <param name="Holder">The holder name, or null when nothing holds the lease.</param>
     /// <param name="Lane">The holder's lane, or null when nothing holds the lease.</param>
-    /// <param name="HolderAlive">Whether the holder's process still runs; false for a holder file left by an exited process.</param>
+    /// <param name="HolderAlive">Whether a process holds the lease's guard lock, the lock that decides ownership; false
+    /// for a holder file no process holds the lock for.</param>
     /// <param name="Queue">The live waiters in queue order.</param>
     /// <param name="Since">When the holder acquired the lease, or null when nothing holds it or its time is unreadable.</param>
-    public sealed record LeaseState(string? Holder, string? Lane, bool HolderAlive, IReadOnlyList<LeaseTicket> Queue, DateTimeOffset? Since = null);
+    /// <param name="Checkout">The checkout the holder works in, or null when nothing holds the lease or its writer recorded
+    /// none.</param>
+    public sealed record LeaseState(string? Holder, string? Lane, bool HolderAlive, IReadOnlyList<LeaseTicket> Queue, DateTimeOffset? Since = null, string? Checkout = null);
 
-    /// <summary>Reads a lease without changing it: no ticket is taken, no dead ticket or stale holder is removed, no rotation serial is written.</summary>
+    /// <summary>Reads a lease without changing it: no ticket is taken, no dead ticket or stale holder is removed, no rotation
+    /// serial is written. Whether the holder is alive is read from its guard lock through a momentary shared hold, which an
+    /// acquirer racing it retries past.</summary>
     /// <param name="root">The shared lease directory.</param>
     /// <param name="name">The resource: build, gpu or heavy.</param>
     /// <param name="now">The time the metadata of a process the OS cannot name is judged against.</param>
@@ -127,32 +137,26 @@ public sealed class CliLease : IDisposable {
     public static LeaseState Inspect(string root, string name, DateTimeOffset now) {
         var directory = Path.Combine(path1: root, path2: name);
         var holder = ReadHolder(directory: directory);
-        string? holderName = null, holderLane = null;
+        string? holderName = null, holderLane = null, holderCheckout = null;
         var alive = false;
 
         if (holder is { Length: > 0 }) {
             holderName = holder[0];
             holderLane = ((holder.Length == 5) ? holder[4] : DefaultLane(holder: holder[0]));
-            alive = (ProcessGone(lines: holder, now: now) == false);
+            alive = GuardHeld(directory: directory, holder: holder, now: now);
+            holderCheckout = ReadLines(path: Path.Combine(path1: directory, path2: CheckoutFile))?.FirstOrDefault();
         }
         var queue = (directory + ".queue");
         var tickets = new List<LeaseTicket>();
 
         if (Directory.Exists(path: queue)) {
             foreach (var file in Directory.EnumerateFiles(path: queue).Order(comparer: StringComparer.Ordinal)) {
-                string[] lines;
-
-                try {
-                    using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: file, share: FileShare.ReadWrite | FileShare.Delete);
-                    using var reader = new StreamReader(stream: stream);
-
-                    lines = reader.ReadToEnd().Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: '\n');
-                } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { continue; }
-                if ((ProcessGone(lines: lines, now: now) != false) || (lines.Length is not (4 or 5))) { continue; }
+                if ((ReadLines(path: file) is not { } lines) || (ProcessGone(lines: lines, now: now) != false) || (lines.Length is not (4 or 5))) { continue; }
                 var place = Admission(drop: false, now: now, rotation: (directory + ".rotation"), ticket: file);
 
                 tickets.Add(item: new LeaseTicket(
                     Ahead: place.Ahead,
+                    Checkout: TicketCheckout(ticket: file, lines: lines),
                     Holder: lines[0],
                     Id: Path.GetFileName(path: file).TrimStart(trimChar: '0'),
                     Lane: ((lines.Length == 5) ? lines[4] : DefaultLane(holder: lines[0])),
@@ -162,7 +166,63 @@ public sealed class CliLease : IDisposable {
                 ));
             }
         }
-        return new LeaseState(Holder: holderName, HolderAlive: alive, Lane: holderLane, Queue: tickets, Since: ((holder is { Length: > 0 }) ? Stamped(lines: holder) : null));
+        return new LeaseState(Checkout: holderCheckout, Holder: holderName, HolderAlive: alive, Lane: holderLane, Queue: tickets, Since: ((holder is { Length: > 0 }) ? Stamped(lines: holder) : null));
+    }
+
+    // The checkout is recorded beside the holder file and each ticket rather than as a metadata line: CLIs built before
+    // it count a holder's or ticket's lines (four or five), and one that read a sixth would drop the ticket and refuse
+    // to nest a child under the holder. A holder's checkout is `checkout` in the holder directory; a ticket's is a file
+    // of the ticket's name under `<name>.checkouts`, holding the ticket's process id, start ticks and checkout, so a
+    // file left by a crashed waiter is never read for a later ticket that reuses its number.
+    private const string CheckoutFile = "checkout";
+
+    /// <summary>Whether a process holds a lease's guard: a momentary shared hold succeeds only when no exclusive holder has
+    /// it. A guard that cannot be probed for another reason falls back to the holder file's process identity.</summary>
+    private static bool GuardHeld(string directory, string[] holder, DateTimeOffset now) {
+        var guard = (directory + ".guard");
+
+        if (!File.Exists(path: guard)) { return false; }
+        try {
+            using var probe = FileLock.TryAcquireShared(path: guard);
+
+            return (probe is null);
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
+            return (ProcessGone(lines: holder, now: now) == false);
+        }
+    }
+    private static string TicketCheckoutPath(string ticket) {
+        var queue = Path.GetDirectoryName(path: ticket)!;
+
+        return Path.Combine(path1: (queue[..^".queue".Length] + ".checkouts"), path2: Path.GetFileName(path: ticket));
+    }
+    /// <summary>The checkout a ticket's sidecar records, when the sidecar names the ticket's own process.</summary>
+    private static string? TicketCheckout(string ticket, string[] lines) =>
+        ((ReadLines(path: TicketCheckoutPath(ticket: ticket)) is [var pid, var ticks, var checkout]) && (pid == lines[2]) && (ticks == lines[3])) ? checkout : null;
+    /// <summary>Records a ticket's checkout, and drops sidecars whose ticket is gone.</summary>
+    private static void RecordTicketCheckout(string ticket, string[] metadata, string checkout) {
+        var path = TicketCheckoutPath(ticket: ticket);
+        var directory = Path.GetDirectoryName(path: path)!;
+        var queue = Path.GetDirectoryName(path: ticket)!;
+
+        try {
+            Directory.CreateDirectory(path: directory);
+            AtomicFile.WriteAllText(path: path, contents: $"{metadata[2]}\n{metadata[3]}\n{checkout}\n");
+            foreach (var sidecar in Directory.EnumerateFiles(path: directory)) {
+                if ((Path.GetExtension(path: sidecar).Length == 0) && !File.Exists(path: Path.Combine(path1: queue, path2: Path.GetFileName(path: sidecar)))) {
+                    try { File.Delete(path: sidecar); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                }
+            }
+        } catch (IOException) { } catch (UnauthorizedAccessException) { }
+    }
+    /// <summary>Reads a small metadata file's non-empty trimmed lines without stopping its writer from replacing or deleting
+    /// it; null when it is absent or unreadable.</summary>
+    private static string[]? ReadLines(string path) {
+        try {
+            using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: path, share: FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream: stream);
+
+            return reader.ReadToEnd().Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: '\n');
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { return null; }
     }
 
     /// <summary>The acquisition or ticket time a holder file or ticket records on its second line.</summary>
@@ -183,7 +243,7 @@ public sealed class CliLease : IDisposable {
         return ((lane == DefaultLane(holder: holder)) ? lines : [.. lines, lane]);
     }
     /// <summary>Takes the next ticket in a queue directory: a file named by a zero-padded sequence, holding the same lines as a holder.</summary>
-    private static string Enqueue(string queue, string holder, string lane, TimeProvider clock) {
+    private static string Enqueue(string queue, string holder, string lane, string checkout, TimeProvider clock) {
         Directory.CreateDirectory(path: queue);
         var lines = Metadata(clock: clock, holder: holder, lane: lane);
         var floor = 1L;
@@ -199,10 +259,11 @@ public sealed class CliLease : IDisposable {
 
             try {
                 // CreateNew is the atomic claim: a racing newcomer that computed the same sequence fails here and recomputes.
-                using var stream = new FileStream(access: FileAccess.Write, mode: FileMode.CreateNew, path: path, share: FileShare.ReadWrite | FileShare.Delete);
-                using var writer = new StreamWriter(stream: stream);
-
-                foreach (var line in lines) { writer.WriteLine(value: line); }
+                using (var stream = new FileStream(access: FileAccess.Write, mode: FileMode.CreateNew, path: path, share: FileShare.ReadWrite | FileShare.Delete))
+                using (var writer = new StreamWriter(stream: stream)) {
+                    foreach (var line in lines) { writer.WriteLine(value: line); }
+                }
+                RecordTicketCheckout(checkout: checkout, metadata: lines, ticket: path);
                 return path;
             } catch (IOException) when (File.Exists(path: path)) { }
             // Windows refuses a name whose deleted file is still held open elsewhere, and the listing may not show it:
@@ -321,16 +382,11 @@ public sealed class CliLease : IDisposable {
     private static void Leave(string? ticket) {
         if (ticket is null) { return; }
         try { File.Delete(path: ticket); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        try { File.Delete(path: TicketCheckoutPath(ticket: ticket)); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
-    private static string[]? ReadHolder(string directory) {
-        try {
-            // A diagnostic reader must not prevent the holder from releasing its directory on Windows.
-            using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: Path.Combine(path1: directory, path2: "holder"), share: FileShare.ReadWrite | FileShare.Delete);
-            using var reader = new StreamReader(stream: stream);
-
-            return reader.ReadToEnd().Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: '\n');
-        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { return null; }
-    }
+    // A diagnostic reader must not prevent the holder from releasing its directory on Windows, which ReadLines's sharing
+    // allows.
+    private static string[]? ReadHolder(string directory) => ReadLines(path: Path.Combine(path1: directory, path2: "holder"));
 
     /// <summary>Names the lane a checkout's own runs take the lease for: its directory name, one lane per worktree.</summary>
     /// <param name="checkout">The working checkout.</param>
@@ -350,7 +406,7 @@ public sealed class CliLease : IDisposable {
         return Task.FromResult(result: Path.Combine(path1: mainCheckout, path2: ".claude/leases"));
     }
 
-    private static CliLease? TryAcquire(string directory, string holder, string lane, TimeProvider clock) {
+    private static CliLease? TryAcquire(string directory, string holder, string lane, string checkout, TimeProvider clock) {
         // Keep the guard inode: unlinking it lets two processes lock different files at the same path.
         if (FileLock.TryAcquire(path: (directory + ".guard")) is not { } gate) {
             return null;
@@ -360,7 +416,9 @@ public sealed class CliLease : IDisposable {
             // whose World exited while a reader delayed cleanup; it must not strand the released lease.
             Directory.CreateDirectory(path: directory);
             try {
-                File.WriteAllLines(path: Path.Combine(path1: directory, path2: "holder"), contents: Metadata(clock: clock, holder: holder, lane: lane));
+                // The checkout lands first, so a reader that sees the new holder sees its checkout.
+                WriteMetadata(path: Path.Combine(path1: directory, path2: CheckoutFile), contents: (checkout + "\n"));
+                WriteMetadata(path: Path.Combine(path1: directory, path2: "holder"), contents: string.Concat(values: Metadata(clock: clock, holder: holder, lane: lane).Select(selector: static line => (line + "\n"))));
                 Serve(lane: lane, rotation: (directory + ".rotation"));
                 return new CliLease(directory: directory, gate: gate);
             } catch {
@@ -370,6 +428,16 @@ public sealed class CliLease : IDisposable {
         } catch {
             gate.Dispose();
             throw;
+        }
+    }
+    /// <summary>Writes a guard owner's metadata file whole, so a reader never sees it half written. A leftover file that a
+    /// reader holds open without delete sharing cannot be renamed over; only the guard owner writes here, so that file is
+    /// overwritten in place, which such a reader permits.</summary>
+    private static void WriteMetadata(string path, string contents) {
+        try {
+            AtomicFile.WriteAllText(path: path, contents: contents);
+        } catch (IOException) when (File.Exists(path: path)) {
+            File.WriteAllText(path: path, contents: contents);
         }
     }
     /// <summary>Decides from a queued ticket's metadata whether its process is gone; null when the metadata is unrecognized.</summary>

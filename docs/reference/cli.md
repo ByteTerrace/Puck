@@ -4394,7 +4394,8 @@ active  <name>  <branch>  ahead <n> files <n> commit <age> "<subject>" write <ag
 ```
 
 - `ahead` counts commits on the branch that `--base` (default:
-  the branch the main checkout holds) lacks; `files` counts paths with a staged or unstaged change.
+  the branch the main checkout holds) lacks, and a `--base` that names no commit
+  is refused (exit 2); `files` counts paths with a staged or unstaged change.
 - `commit` is the last commit's age and subject; `brief` is the last `Brief:`
   trailer between the base and HEAD.
 - `write` is the age of the newest write among the git index, the git log of
@@ -4404,9 +4405,11 @@ active  <name>  <branch>  ahead <n> files <n> commit <age> "<subject>" write <ag
   when the log ends with one.
 - `lease` lists the `gpu`, `heavy` and `build` leases the lane holds
   (`gpu:holding`) or waits for (`gpu:queued#5(2/3,ahead 4)`: ticket 5, the
-  lane's turn 2 of 3 in the round, four admissions before it). A lane is matched
-  by the lease's lane name against the worktree name, the branch, or the
-  branch's last segment.
+  lane's turn 2 of 3 in the round, four admissions before it). A holder or
+  waiter belongs to the worktree whose path it recorded as its checkout,
+  whatever its holder name; one whose CLI recorded no checkout is matched by its
+  lane name against the worktree name, the branch, or the branch's last segment.
+  A holder counts only while a process holds the lease's guard lock.
 - `mode findings-only` marks a lane that delivers a report instead of commits:
   its `.claude/scratch/<name>.task` file holds `mode: findings-only` (and may
   name `report: <path>`), or its log's Codex header names a read-only sandbox.
@@ -4461,7 +4464,7 @@ Run `puck lease gpu --holder <lane> [--lane <lane>] [--wait <seconds>] -- <execu
 
 The GPU lease defaults to the `HostStartKind.WindowedWorld` peak. For a bounded small device check that boots no World, add `--kind Step`; other declared `HostStartKind` values select their own expected peak. This changes the child command's memory estimate, while retaining GPU exclusion and the same RAM, commit, disk and idle-device admission. Full CPU/memory-heavy suites still take the heavy lease too. World-launching verbs and MCP starts retain their own World admission.
 
-The main checkout, found through Git's common directory, owns `.claude/leases/<name>/holder` for all its worktrees. The holder records the holder name, UTC acquisition time, process ID and process start ticks on four lines, and the lane on a fifth only when it is not the holder's first word. A persistent sibling `<name>.guard` file is held exclusively for the command's lifetime; it is not removed, because replacing the locked file would let competing processes lock different files. The holder directory is removed on exit, including child failure and Ctrl+C. A taken lease refuses immediately unless `--wait` supplies a nonnegative number of seconds. Waiting uses the CLI clock.
+The main checkout, found through Git's common directory, owns `.claude/leases/<name>/holder` for all its worktrees. The holder records the holder name, UTC acquisition time, process ID and process start ticks on four lines, and the lane on a fifth only when it is not the holder's first word; it is replaced whole, so a reader never sees it half written. The checkout the holder works in is recorded beside it, in `<name>/checkout`, and a ticket's in `<name>.checkouts/<ticket>` with the ticket's process ID and start ticks, rather than as a sixth line, because CLIs built before it count those lines. A persistent sibling `<name>.guard` file is held exclusively for the command's lifetime; it is not removed, because replacing the locked file would let competing processes lock different files. The holder directory is removed on exit, including child failure and Ctrl+C. A taken lease refuses immediately unless `--wait` supplies a nonnegative number of seconds. Waiting uses the CLI clock.
 
 Admission rotates between lanes and is first come, first served within a lane. A lane is the first word of `--holder` (`example-lane timing run` is lane `example-lane`), or the value of `--lane` when given; `puck_world_start` passes its `lane` argument the same way and names the checkout's directory when it gets neither `holder` nor `lane`. Every acquisition, even `--wait 0`, takes a ticket in the sibling `<name>.queue` directory: a file named by a zero-padded sequence (the highest present plus one, claimed with an exclusive create) holding the same metadata lines as a holder. Each time a lane takes the lease, the sibling `<name>.rotation` directory records it as the most recently served (one file per lane, holding a serial one above every other lane's). The guard goes to the oldest live ticket of the lane served least recently. A lane that has never held the lease takes the serial of the lane served most recently as it first queues (the same file, created whole and never over a serial a holder wrote), so a new lane ranks behind every lane served longer ago and behind a lane served at the same point whose ticket is older, never ahead of a lane that was already waiting. A lane with three queued runs gets one turn per round while other lanes wait. With lane A queued three times ahead of lanes B and C, once each, runs are admitted A1, B1, C1, A2, A3. A holder that exits and immediately acquires again queues behind every other lane already waiting, and a newcomer cannot overtake a lane that has waited, because a newcomer's lane is served after theirs. The wait message names the holder, how many tickets are ahead in this order, and the lane's turn among the queued lanes (`lane a is 2 of 3 in the round`). A ticket is removed when its waiter acquires, times out or is cancelled. A ticket whose process has exited (or whose PID was reused) is deleted by the next waiter that looks, and a ticket whose metadata never became readable is deleted once ten seconds old, so a power trip leaves nothing that blocks admission. The queue lives beside the lease, so a child lease under an ancestor holder queues in `child.queue` inside that holder's directory.
 
@@ -4496,7 +4499,7 @@ Every verb that starts a `Puck.World` process passes the same admission itself, 
 
 ### `puck lease list`—who holds what and who waits
 
-Run `puck lease list` to read the shared lease directory without changing it. For each of `build`, `gpu` and `heavy` it prints one line, `idle` or `held by <holder> (lane <lane>) for <time>` (with `, stale: its process has exited` for a holder file whose process is gone, which the next acquisition replaces), followed by the queued count. Under it, one line per live waiter in admission order, the order the lease will be granted in: its holder, lane, how long it has waited, its lane's turn among the queued lanes, and how many admissions come before it. The verb takes no ticket, deletes no dead ticket, and writes no rotation serial, so it can run at any time beside any lease (it reads through `CliLease.Inspect`, the reader `puck lanes` uses). A lease a holder's descendants hold as a `child` of it is not shown. The lead reads it for lease pressure ([orchestration](../../.claude/skills/orchestration/SKILL.md#schedule-machines)).
+Run `puck lease list` to read the shared lease directory without changing it. For each of `build`, `gpu` and `heavy` it prints one line, `idle` or `held by <holder> (lane <lane>) for <time> from <checkout>` (with `, stale: no process holds its lock` for a holder file whose guard no process holds, read from the guard itself with a momentary shared hold; the next acquisition replaces it), followed by the queued count. Under it, one line per live waiter in admission order, the order the lease will be granted in: its holder, lane, checkout, how long it has waited, its lane's turn among the queued lanes, and how many admissions come before it. The verb takes no ticket, deletes no dead ticket, and writes no rotation serial, so it can run at any time beside any lease (it reads through `CliLease.Inspect`, the reader `puck lanes` uses). A lease a holder's descendants hold as a `child` of it is not shown. The lead reads it for lease pressure ([orchestration](../../.claude/skills/orchestration/SKILL.md#schedule-machines)).
 
 ```text
 build: idle

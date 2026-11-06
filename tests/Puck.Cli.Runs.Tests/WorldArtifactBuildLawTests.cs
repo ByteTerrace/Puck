@@ -228,7 +228,7 @@ public sealed class WorldArtifactBuildLawTests {
         var buildTimeout = TimeSpan.FromMinutes(minutes: 7);
         TimeSpan? given = null;
 
-        using var holder = await CliLease.AcquireAsync(clock: TimeProvider.System, holder: "holder", name: "build", root: leases.RootPath, wait: TimeSpan.Zero, cancellationToken: TestContext.Current.CancellationToken);
+        using var holder = await CliLease.AcquireAsync(checkout: leases.RootPath, clock: TimeProvider.System, holder: "holder", name: "build", root: leases.RootPath, wait: TimeSpan.Zero, cancellationToken: TestContext.Current.CancellationToken);
         var release = Task.Run(action: () => { Thread.Sleep(millisecondsTimeout: 1500); holder.Dispose(); }, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(
