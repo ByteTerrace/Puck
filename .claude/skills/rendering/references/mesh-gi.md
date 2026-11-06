@@ -88,6 +88,9 @@ the old root and allocations stay intact until the new root's last upload
 fence, then `CompleteSceneUpload` publishes and frees retired ranges. Query
 admission rechecks mesh residency and placement version after publication:
 an intervening mesh relocation repacks instance addresses before any trace.
+A changed mesh roster whose referenced vertex, index and material addresses
+did not move owes no scene upload. The retained placement snapshot contains
+only meshes that scene names.
 `world.residency` reports completed scene changes, total payload bytes and the
 last change's payload bytes, separately from staging allocation sizes.
 One admitted query owns the shared scene and feedback regions until its fence completes;
@@ -233,10 +236,17 @@ after the main residency's done line; a nested residency's done line is insuffic
   cube and the traced-light bits, shaded under the current lighting. The
   lighting version advances on a change of the directional or traced lights,
   the gains, the sources, the bounce switch, the scene's materials or the sky
-  (the packed sky's key, then its projected irradiance against `SkyTolerance`
-  in each colour channel apart, relative to that channel's own largest
-  coefficient, so a twinkle relights nothing and a dim channel's change still
-  counts). A relight's bounce reads the volume about each hit as it stands, so
+  (the packed sky's key, then its projected irradiance). `render.indirect.lightingGrid`
+  authors direction steps in degrees and fractional radiance steps; zero is the
+  neutral engine default. `SdfIndirectLightingGrid` snaps the directional records
+  once for both the key and capture. Sky coefficients share a quantum per colour
+  channel, anchored to the current channel peak's power-of-two range; tiny
+  coefficients do not each trigger a new capture. These are functions of the
+  current frame, never the last capture. Gridded lighting uses this policy in
+  asynchronous and converged modes without the wall-clock capture throttle.
+  Converged sky comparison is exact, with or without a grid. Only continuous
+  asynchronous skies retain `SkyTolerance` against the preceding capture.
+  A relight's bounce reads the volume about each hit as it stands, so
   the bounce is one iteration over the whole window: a sweep relights every
   probe once, and another follows while any probe of the last moved past
   `ConvergedShare` (plus `ConvergedFloor` nits) in any colour channel of any

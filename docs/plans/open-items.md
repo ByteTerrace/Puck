@@ -51,8 +51,8 @@ milestone. The owner requested its baseline and implementation plan, which
 2. [Lighting and GI](#lighting-and-gi) [high]: the
    [graphics architecture plan](graphics-architecture.md)'s G1 acceptance work:
    reduce the landed GPU trace/relight's lockstep drain to a frame's work;
-   the sun's fixed grid stays the lockstep drain's correctness
-   fix beside it.
+   the authored capture grid bounds when changing lighting owes a drain,
+   while each boundary still needs the same full convergence.
 3. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
    M1 read, after the draw-identity fix R2's review found
    ([GPU robustness](#vulkan-regressions-and-gpu-robustness)).
@@ -1723,6 +1723,11 @@ the fixed poses and the approaches already rejected.
   `SdfMeshProbeRelight.OutputWords` prefix and publication copies the device
   buffer. Preserve the source output's readback-token/fence ownership through
   commit; do not trade that lifetime guarantee for fewer copied bytes.
+  `SdfMeshProbeGpuWork.Complete` (`src/Puck.SdfVm/SdfMeshProbeGpuWork.cs:352-358`)
+  also allocates the full readback and copies its payload again to strip the
+  assertion word. Carry an explicit logical length through the answer instead
+  of copying that payload; count answer bytes and allocations beside relight
+  time when compacting it.
 
 - [medium] GPU probe work still duplicates memory and copies.
   - The probe service's feedback region keeps a CPU copy as large as the
@@ -1733,10 +1738,10 @@ the fixed poses and the approaches already rejected.
     interleaves records; one scatter dispatch replaces them.
   - The bloom kernels (`sdf-bloom-down`, `sdf-bloom-apply`) and the overlay
     keep literal luminance weights instead of the generated `SDF_LUMINANCE`.
-  - `SdfMeshProbeGpuWork.Abandon` leaves the scene carry to the next
-    completion.
-  - Relight, select, meter and cache have no CPU/GPU parity law; only
-    `world.probe`'s relight reference compares them.
+  - Full relight, selection, metering and hit-cache paths need CPU/GPU parity
+    coverage. The trace law covers miss-only directional visibility and the
+    gather law covers receiver lookup; `world.probe` supplies the broader
+    relight reference.
 
 - [high] Night lighting, from the owner's walkthrough at the lawn's trees:
   - **The jump to night is wrong.** Forcing midnight
@@ -1756,32 +1761,6 @@ the fixed poses and the approaches already rejected.
     mean luma. This is probably stepped relighting or exposure updates. Check it
     against the lockstep relight work below.
 
-- [high] Under lockstep a moving sun relights the whole probe window every tick
-  from no bounce: a lockstep frame drains the irradiance relight to the end
-  before it renders (`SdfMeshIrradiance.Stage`, `SdfMeshIrradiance.cs:538-563`),
-  and the day cycle moves the lighting version in `DrainKey()` (`:578`) every
-  tick, the capture limit skipped at `:1084`. A lockstep tick with the day
-  running therefore takes seconds, so the sweep's windowed leg cannot run with
-  the day cycle ([sweep](#sweep-and-visual-checks)). Fix at the cause: quantize
-  the sun on a fixed grid under lockstep (never against the last capture, which
-  would make the image depend on when a run started), so a lockstep frame
-  relights only what its own time moved. One function snaps the directional
-  lights' direction and radiance, read by both `RefreshLighting`'s key
-  (`SdfMeshIrradiance.cs:1076`) and `Lighting.Capture` (`:1092`), so the drained
-  light stays a pure function of the frame; the windowed path can take the same
-  snapped key in place of its wall-clock `LightingInterval`, leaving one policy.
-  The sky-only tolerance (`SkyMatches`, `:1086,1097`) compares against the
-  previous capture too, so lockstep's sky bounce also depends on history; the
-  same quantization removes it. A drain relights the whole window from no
-  bounce until a pass moves nothing, and that from-no-bounce invariant stays.
-  Measured in the debug world at High: with the day running at its authored
-  1/1440 per second, every lockstep tick advanced `sdf.mesh-gi.relit` by
-  1,032,192 (73,728 probes × 14 passes); with the day pinned, 100 stationary
-  lockstep ticks relit nothing, and each window move (a `debug.go`, a tier
-  switch) relit the same 1,032,192 once, which a walk crossing a window's band
-  repeats. Prove it by `sdf.mesh-gi.relit` per tick and drains per 100
-  ticks under lockstep with the day cycle running, and by two lockstep runs
-  started at different ticks capturing an identical still at one tick.
 - From step 1: stretching the far cascade to cover the valley costs too much,
   so the valley waits for the terrain pass's step 7 static cascade; indoors a
   cel style tints bounced light as its shadow band, so banded materials in the

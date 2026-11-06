@@ -1120,6 +1120,18 @@ takes whole bounce sweeps. A sweep retains its initial phase across listings,
 even when later batches shade under newer lighting, and a lockstep drain always visits every cell from
 no bounce. These bounds describe demand under the budget, not guaranteed wall
 time when the device is overloaded.
+
+Indirect capture precision is authored as `render.indirect.lightingGrid`.
+Its neutral engine default is continuous; the standard chooses angular and
+radiometric steps. Directional records used for the lighting key and shading
+come from one snap function. Projected sky coefficients use a fixed quantum
+per colour channel and power-of-two range, rather than a tolerance relative
+to an earlier capture. Converged captures compare the resulting values
+exactly, including with a zero grid. Thus a frame's drained bounce depends
+on its own lighting, scene and window, not when earlier captures happened.
+Crossing a grid boundary still drains from no bounce; within a grid cell the
+moving sun does not owe another full window. The same grid governs ordinary
+asynchronous captures; coarse-level interleave remains a separate work policy.
 Below its bound, a probe outside every local view's frustum gets less age
 priority, and a probe whose last light changed gets more. Neither weight
 removes work. Overdue probes ignore both weights. The budget diagnostic

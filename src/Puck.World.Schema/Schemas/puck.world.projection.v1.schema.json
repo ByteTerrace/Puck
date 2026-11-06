@@ -10536,6 +10536,34 @@
               "additionalProperties": false,
               "default": null,
               "title": "WorldRenderIndirectBudget"
+            },
+            "lightingGrid": {
+              "description": "Fixed angular and radiometric grids for indirect captures; absent leaves them continuous.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "directionDegrees": {
+                  "description": "Directional azimuth and elevation step in degrees, from zero through 180.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "radiance": {
+                  "description": "Fractional radiance step per power-of-two range, from zero through one.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "additionalProperties": false,
+              "default": null,
+              "title": "WorldRenderIndirectLightingGrid"
             }
           },
           "additionalProperties": false,

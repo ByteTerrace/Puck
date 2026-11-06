@@ -229,8 +229,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // measures what has landed without restarting on every arrival. Presentation only: the scene a frame lights by is
     // never simulation state.
     private static readonly TimeSpan PendingSceneInterval = TimeSpan.FromSeconds(value: 4d);
-    // The least wall time between two captures of a changing lighting outside lockstep: a capture renders and projects
-    // the sky on the frame's thread, and a day's sun moves a fortieth of a degree in this time.
+    // Continuous asynchronous captures are throttled because they render and project the sky on the frame thread.
     private static readonly TimeSpan LightingInterval = TimeSpan.FromSeconds(value: 0.1d);
     // The most relights a probe takes under one lighting while its bounce converges, and the change a relight may make
     // to an axis's luminance, as a share of it plus a floor in nits, for the bounce to count as converged.
@@ -241,8 +240,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private const int MaxVersionTimes = 4096;
     private const float ConvergedShare = 0.02f;
     private const float ConvergedFloor = 1.0e-3f;
-    // The share of a colour channel's largest projected sky coefficient a sky change must move one of that channel's by
-    // before the probes are relit.
+    // Continuous asynchronous skies suppress capture-to-capture changes below this share of each channel's peak.
     private const float SkyTolerance = 1.0e-3f;
     // The least wall time between two behind lines.
     private static readonly TimeSpan BehindInterval = TimeSpan.FromSeconds(value: 10d);
@@ -435,10 +433,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public float SkyPeakLuminance {
         get {
             lock (m_gate) {
-                return (m_lighting?.SkyPeak ?? 0f);
+                return m_lighting is null ? 0f : m_skyPeak;
             }
         }
     }
+    private float m_skyPeak;
     /// <summary>Gets whether probes are being traced or relit or wait to reach the volume table: true throughout a
     /// lighting that changes every frame.</summary>
     public bool Settling {
@@ -1253,10 +1252,18 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // Captures the lighting the probes are relit under, and owes a relight when it changes: the directional lights and the
     // static point and spot lights, whole, so a fixture switched off relights the bounce it cast; the sky the bounce
     // reflects; the gains, the sources, the sweeps and what the scene's materials reflect and emit. Outside lockstep a
-    // lighting that changes every frame is captured at most every LightingInterval: the capture renders the sky. A
-    // change of the packed sky alone that leaves its projected irradiance within SkyTolerance (a star's twinkle) keeps
-    // the lighting the probes hold.
+    // Continuous asynchronous lighting is rate-limited because a capture renders the sky. An authored grid instead
+    // gives both modes a fixed, history-independent capture policy. Converged lighting compares sky captures exactly.
+    private readonly SdfLights m_captureLights = new();
     private void RefreshLighting(SdfFrame frame, Layout layout) {
+        var grid = frame.IndirectLightingGrid;
+        grid.Validate();
+        var captureLights = frame.Lights;
+        if (grid.Enabled) {
+            m_captureLights.CopyFrom(frame.Lights);
+            for (var index = 0; index < frame.Lights.Count; index++) { m_captureLights.Set(index, grid.Snap(frame.Lights[index])); }
+            captureLights = m_captureLights;
+        }
         var localKey = HashCode.Combine(value1: frame.IndirectGains, value2: frame.IndirectSources, value3: MaterialsKey(program: frame.Program));
         var skyKey = 0;
         var records = frame.Lights.Records;
@@ -1267,20 +1274,20 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             if (light.IsTraced && (light.Kind != SdfLightKind.Directional)) { localKey = HashCode.Combine(value1: localKey, value2: index, value3: light); }
         }
 
-        var key = HashCode.Combine(value1: localKey, value2: layout.Bounce);
+        var key = HashCode.Combine(localKey, layout.Bounce, grid, frame.ConvergesLighting);
 
         for (var index = 0; (index < frame.Lights.Count); index++) {
-            var light = records[index];
+            var light = captureLights[index];
 
             if (light.Kind == SdfLightKind.Directional) { key = HashCode.Combine(value1: key, value2: index, value3: light); }
         }
         if ((frame.IndirectSources & SdfIndirectSources.Sky) != 0) {
-            frame.Sky.Pack(frame.Lights, frame.FarDistance, m_skyDetails, out var block, m_skyLayers);
+            frame.Sky.Pack(captureLights, frame.FarDistance, m_skyDetails, out var block, m_skyLayers);
             skyKey = block.GetHashCode();
             foreach (var layer in m_skyLayers) { skyKey = HashCode.Combine(value1: skyKey, value2: layer); }
         }
         if ((key == m_lightingKey) && (skyKey == m_skyKey) && (m_lighting is not null)) { return; }
-        if (!frame.ConvergesLighting && (m_lighting is not null) && (Stopwatch.GetElapsedTime(startingTimestamp: m_lightingCheckedAt) < LightingInterval)) { return; }
+        if (!grid.Enabled && !frame.ConvergesLighting && (m_lighting is not null) && (Stopwatch.GetElapsedTime(startingTimestamp: m_lightingCheckedAt) < LightingInterval)) { return; }
 
         var skyOnly = ((key == m_lightingKey) && (m_lighting is not null));
         if ((localKey != m_localKey) || (m_lighting is null)) {
@@ -1288,12 +1295,14 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             m_localVersion++;
         }
 
-        var captured = Lighting.Capture(frame: frame, localVersion: m_localVersion, previous: m_lighting, version: (m_lightingVersion + 1));
+        var captured = Lighting.Capture(frame: frame, captureLights: captureLights, localVersion: m_localVersion, previous: m_lighting, version: (m_lightingVersion + 1));
+        // Exposure reads the current capture's bound even when its irradiance stays in the same grid cell.
+        m_skyPeak = captured.SkyPeak;
 
         m_lightingCheckedAt = Stopwatch.GetTimestamp();
         m_lightingKey = key;
         m_skyKey = skyKey;
-        if (skyOnly && captured.SkyMatches(other: m_lighting!)) { return; }
+        if (skyOnly && captured.SkyMatches(other: m_lighting!, exact: frame.ConvergesLighting || grid.Enabled)) { return; }
         m_lightingVersion++;
         m_lighting = captured;
         m_versionTimes.Add(item: captured.CapturedAt);
@@ -2901,8 +2910,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // Whether another capture's sky lights the probes as this one's does: in each colour channel apart, every projected
         // coefficient within SkyTolerance of that channel's own largest in either capture, so a dim channel's change
         // counts however bright the others are, since a material that rejects the bright channels sees only it.
-        public bool SkyMatches(Lighting other) {
+        public bool SkyMatches(Lighting other, bool exact) {
             if (Sky != other.Sky) { return false; }
+            if (exact) { return SkyCoefficients.AsSpan().SequenceEqual(other.SkyCoefficients); }
 
             var largest = Vector3.Zero;
 
@@ -2922,11 +2932,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // The sky's cosine-weighted mean radiance about a normal: its irradiance over pi, the views pass's unit.
         public Vector3 SkyIrradiance(Vector3 normal) => (SdfSkyEnvironment.Irradiance(coefficients: SkyCoefficients, normal: normal) / MathF.PI);
         // Captures a frame's lighting; the materials are the previous capture's while the program is the same one.
-        public static Lighting Capture(SdfFrame frame, Lighting? previous, int version, int localVersion) {
+        public static Lighting Capture(SdfFrame frame, SdfLights captureLights, Lighting? previous, int version, int localVersion) {
             var lights = new List<SdfLight>();
             var indices = new List<int>();
             var points = new List<TracedLight>();
-            var records = frame.Lights.Records;
+            var records = captureLights.Records;
 
             for (var index = 0; (index < frame.Lights.Count); index++) {
                 var light = records[index];
@@ -2947,12 +2957,14 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 var map = new Vector3[SdfSkyEnvironment.Texels];
                 var layers = new SdfSkyLayer[SdfSky.MaxLayers];
 
-                frame.Sky.Pack(frame.Lights, frame.FarDistance, new SdfSkyDetails(), out var block, layers);
+                frame.Sky.Pack(captureLights, frame.FarDistance, new SdfSkyDetails(), out var block, layers);
                 SdfSkyEnvironment.Render(block: in block, layers: layers, map: map);
                 SdfSkyEnvironment.Project(coefficients: coefficients, map: map);
                 foreach (var texel in map) {
                     skyPeak = MathF.Max(x: skyPeak, y: SdfPhotometry.LuminanceOf(color: texel));
                 }
+                frame.IndirectLightingGrid.SnapRadiance(coefficients);
+                skyPeak = frame.IndirectLightingGrid.SnapScalar(skyPeak);
             }
 
             return new Lighting {
