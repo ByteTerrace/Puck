@@ -298,7 +298,7 @@ The glacier contracts uniformly about its cradle using `CreationDocument.SizeBy`
 and the authored linear fraction; zero parks the creation. The falls is fourteen
 still sheets down the wall's profile, parked by its endpoint visibility; its
 shading falls down each sheet through the standard's flow layer
-([water rendering, W2](water-rendering.md#w2-as-built)). Impact spray is a state-scaled cloud volume. The lake's
+([the water feature, W2](water.md#w2-as-built)). Impact spray is a state-scaled cloud volume. The lake's
 outlet is a terrain subtraction, shared by the rendered mass and its collider.
 
 `waterBasin` constructs the pool, plunge basin and reservoir chamber. `waterViews`

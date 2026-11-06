@@ -129,7 +129,7 @@ and the resolve's reprojection all read that one resolver, so they see one
 surface; the draw's box spans its displacement's band of heights. A height field
 is dynamic for lighting, so the irradiance volume's static scene leaves it out.
 The guarantee and its limits are in the
-[water plan](../../../plans/water-rendering.md#field-surfaces-move-at-draw-time).
+[water plan](../../../plans/water.md#field-surfaces-move-at-draw-time).
 
 ---
 
