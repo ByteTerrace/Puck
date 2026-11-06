@@ -21,6 +21,7 @@ public sealed partial class WorldRenderSettings {
     private SdfUpdateRates m_updateRates;
     private bool m_dynamicResolution;
     private SdfIndirectTier m_indirectTier;
+    private float? m_exposurePin;
     private float m_renderScale;
     private int m_revision;
     private ShadowTier m_shadows;
@@ -61,6 +62,26 @@ public sealed partial class WorldRenderSettings {
     /// world); the <c>world.ao</c> verb toggles it live (it rides each view's
     /// <see cref="Puck.SdfVm.SdfViewQuality.DisableAmbientOcclusion"/> lane, so no rebuild).</summary>
     public bool AmbientOcclusion { get => m_ambientOcclusion; set { m_ambientOcclusion = value; m_revision++; } }
+    /// <summary>The exposure pin (<c>world.exposure pin</c>): an <c>EV100</c> every view the session presents renders
+    /// manual at, with no local adaptation (<see cref="SdfExposure.HeldAt"/>), so look comparisons hold one exposure;
+    /// <see langword="null"/> (the default) leaves each world's authored and held exposure exactly as it is. Presentation
+    /// only: it never reaches a document or simulation state.</summary>
+    public float? ExposurePin {
+        get => m_exposurePin;
+        set {
+            if (value is { } ev100 && (!float.IsFinite(f: ev100) || (ev100 < SdfPhotometry.MinimumEv100) || (ev100 > SdfPhotometry.MaximumEv100))) {
+                throw new ArgumentOutOfRangeException(paramName: nameof(value));
+            }
+            m_exposurePin = value;
+            m_revision++;
+        }
+    }
+    /// <summary>Returns a world's resolved exposure under the session's pin: held at the pin while one is set, unchanged
+    /// otherwise.</summary>
+    /// <param name="exposure">The world's resolved exposure.</param>
+    /// <param name="pin">The pin, or <see langword="null"/> for none.</param>
+    /// <returns>The exposure its views render with.</returns>
+    public static SdfExposure Pinned(SdfExposure exposure, float? pin) => ((pin is { } ev100) ? exposure.HeldAt(ev100: ev100) : exposure);
     /// <summary>The indirect-light tier, which sizes the irradiance volume. It boots from <c>render.indirect.tier</c>,
     /// Medium when absent, and follows the live session lever or quality preset thereafter.</summary>
     public SdfIndirectTier IndirectTier {

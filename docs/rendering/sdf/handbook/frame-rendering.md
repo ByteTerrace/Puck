@@ -47,9 +47,11 @@ camera: camera mode selects `views.cameraRig`, and a routed seat inherits the
 destination world's render settings. Placement eligibility uses these composed
 views. Resolved lens settings are values and allocate no objects each frame.
 
-For on/off evidence, pin exposure (`render.exposure.hold` above zero disables local
-adaptation too), pause the world with `world.rate pause`, and capture both states at
-that tick. Record `world.exposure` for each capture. An HDR energy invariant does not
+For on/off evidence, pin exposure with `world.exposure pin` (the first view's current
+`EV100`) or `world.exposure pin <ev100>`, which holds every view the session presents
+manual with no local adaptation, as a document's `render.exposure.hold` does, without
+touching the document or its state; `world.exposure pin off` releases it. Pause the
+world with `world.rate pause`, and capture both states at that tick. Record `world.exposure` for each capture. An HDR energy invariant does not
 imply equal PNG means after a nonlinear tonemap, and an adapting exposure is a
 different input even when the camera has not moved.
 

@@ -42,6 +42,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
     private static readonly CommandForms WorldQualityForms = CommandForms.Of(verb: "world.quality", $"[{string.Join(separator: "|", values: QualityTiers.Names)}|next]");
     private static readonly CommandForms WorldToonForms = CommandForms.Of(verb: "world.toon", "[on|off|toggle]");
     private static readonly CommandForms WorldIndirectForms = CommandForms.Of(verb: "world.indirect", "[off|medium|high]");
+    private static readonly CommandForms WorldExposureForms = CommandForms.Of(verb: "world.exposure", "[pin [<ev100>|off]]");
     private static readonly CommandForms WorldResidencyForms = CommandForms.Of(verb: "world.residency", "[radius]");
     private static readonly CommandForms WorldProbeForms = CommandForms.Of(verb: "world.probe", "<x> <y> <z> [<nx> <ny> <nz>]");
     private static readonly CommandForms WorldSkyFieldScaleForms = WorldSessionLevers.SkyFieldScaleForms;
@@ -566,19 +567,42 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.exposure",
-            description: "Reads the camera exposure: world.exposure. Echoes the world's render.exposure (mode, ev100, bounds, compensation, adaptation, local adaptation) and, for each view of the world's latest frame, the EV100 it renders at, its multiplier per nit and the luminance its meter read about the camera (none while the irradiance volume has no probe there, or the exposure is manual).",
-            handler: (_, args) => {
+            description: $"Reads or pins the camera exposure: {WorldExposureForms.Spelling}. No argument echoes the world's render.exposure (mode, ev100, bounds, compensation, adaptation, local adaptation), the session's pin and, for each view of the world's latest frame, the EV100 it renders at, its multiplier per nit and the luminance its meter read about the camera (none while the irradiance volume has no probe there, or the exposure is manual). 'pin <ev100>' holds every view the session presents, nested worlds included, manual at that EV100 with no local adaptation, as render.exposure.hold does; 'pin' alone holds the first view's current EV100; 'pin off' releases it. Presentation only: the pin never reaches the document or simulation state.",
+            forms: WorldExposureForms,
+            handler: (context, args) => {
                 var exposure = WorldRenderExposure.Resolve(exposure: server.Definition.Render.Exposure);
                 var authored = string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, $"mode={exposure.Mode.ToString().ToLowerInvariant()} ev100={exposure.Ev100:0.##} minimum={exposure.Minimum:0.##} maximum={exposure.Maximum:0.##} compensation={exposure.Compensation:0.##} adaptation={exposure.Adaptation:0.##}s local={exposure.Local:0.##}");
+                string Pin() => ((settings.ExposurePin is { } pinned) ? pinned.ToString(format: "0.##", provider: CultureInfo.InvariantCulture) : "off");
+                // The lever lands through the server, after this answer: echo what was asked.
+                static Func<CommandResult> PinEcho(string pin) => () => new(Output: $"[world.exposure: pin={pin}]");
 
-                if (CommandResult.RequireNoArguments(args: in args, verb: "world.exposure") is { } refusal) {
-                    return refusal;
+                if (args.Count > 0) {
+                    if ((args[0] is not "pin") || (args.Count > 2)) {
+                        return WorldExposureForms.Refuse();
+                    }
+                    if ((args.Count == 2) && (args[1] is "off")) {
+                        return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.ExposurePin, a: 0d, b: 0d, formatEcho: PinEcho(pin: "off"));
+                    }
+
+                    float ev100;
+
+                    if (args.Count == 2) {
+                        if (!args.TryFloats(count: 1, start: 1, values: out var values) || !float.IsFinite(f: values[0]) || (values[0] < SdfPhotometry.MinimumEv100) || (values[0] > SdfPhotometry.MaximumEv100)) {
+                            return WorldExposureForms.Refuse();
+                        }
+                        ev100 = values[0];
+                    } else if ((renderProbe.Residency?.Exposures.Ev100Of(view: 0) is { } current) && float.IsFinite(f: current)) {
+                        ev100 = current;
+                    } else {
+                        return CommandResult.Error(output: "[world.exposure: no view has rendered an exposure to pin yet; name the EV100]");
+                    }
+                    return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.ExposurePin, a: ev100, b: 1d, formatEcho: PinEcho(pin: ev100.ToString(format: "0.##", provider: CultureInfo.InvariantCulture)));
                 }
                 if (renderProbe.Residency is not { } node) {
-                    return new CommandResult(Output: $"[world.exposure: {authored}; renderer not built yet]");
+                    return new CommandResult(Output: $"[world.exposure: {authored} pin={Pin()}; renderer not built yet]");
                 }
 
-                return new CommandResult(Output: $"[world.exposure: {authored}; {string.Join(separator: "; ", values: node.Exposures.Describe())}]");
+                return new CommandResult(Output: $"[world.exposure: {authored} pin={Pin()}; {string.Join(separator: "; ", values: node.Exposures.Describe())}]");
             }
         );
         yield return CommandDefinition.WithWireArgs(

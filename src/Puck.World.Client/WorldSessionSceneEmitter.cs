@@ -219,8 +219,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// session's own first, it adds a view of each camera of the destination a screen shows, at an index the caller
     /// records. <see langword="null"/>, the default, films none.</summary>
     public Action<List<SdfViewSnapshot>>? Film { get; set; }
-    /// <summary>The host's live cel-shading override, or null to follow this world's document default.</summary>
-    public Func<bool?>? ToonOverride { get; init; }
+    /// <summary>The host's live render levers that reach this world (its cel-shading override and exposure pin), or
+    /// <see langword="null"/> to follow this world's document alone.</summary>
+    public WorldRenderSettings? Session { get; init; }
     /// <summary>Gets or sets what fits the named sky layers to the final consuming views. The callback receives the
     /// destination's resolved sky and the frame dimensions after its cameras have been dressed.</summary>
     public Action<List<SdfViewSnapshot>, SdfSky, uint, uint>? FitSkyViews { get; set; }
@@ -586,8 +587,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             IndirectLightingGrid = environment.Indirect.LightingGrid,
             IndirectApply = environment.Indirect.Apply,
             Lights = environment.Lights,
-            Exposure = environment.Exposure,
-            Toon = ToonStyleDocument.ResolveDefault(toon: m_mirror.Definition.Render.Toon, enabled: ToonOverride?.Invoke()),
+            Exposure = WorldRenderSettings.Pinned(exposure: environment.Exposure, pin: Session?.ExposurePin),
+            Toon = ToonStyleDocument.ResolveDefault(toon: m_mirror.Definition.Render.Toon, enabled: Session?.ToonOverride),
             Sky = environment.Sky,
             // The mirrored world's static placements' meshes, then its stamp pool's.
             MeshDraws = meshDraws,

@@ -51,10 +51,9 @@ namespace Puck.World;
 /// </remarks>
 public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresenter, IWorldViewHost {
     public WorldSkyAudition? SkyLayers { get; init; }
-    /// <summary>The host's live cel-shading override for nested worlds.</summary>
-    public Func<bool?>? ToonOverride { get; init; }
-    /// <summary>The observer's live optical settings, applied only to actual filmed cameras.</summary>
-    public WorldRenderSettings? BloomSettings { get; init; }
+    /// <summary>The observer's live render levers: the optical settings, applied only to actual filmed cameras, and the
+    /// cel-shading override and exposure pin, which reach nested worlds.</summary>
+    public WorldRenderSettings? Settings { get; init; }
 
     // The quiet zone a live screen.source <index> qr uses when the verb names none.
     private const int QrDefaultQuietZoneModules = 4;

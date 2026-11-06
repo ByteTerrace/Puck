@@ -69,6 +69,17 @@ public readonly record struct SdfExposure(SdfExposureMode Mode, float Ev100, flo
         ? MathF.Min(x: Minimum, y: Ev100)
         : Ev100));
 
+    /// <summary>Returns this exposure held at one <c>EV100</c>: manual at that value with no local adaptation, so every
+    /// view maps luminance alike whatever its meter reads. Both holds use it: a document's bindable
+    /// <c>render.exposure.hold</c> and the presentation lever <c>world.exposure pin</c>. The bounds stay as authored, so a
+    /// hold never changes the range each point and spot light is sized by.</summary>
+    /// <param name="ev100">The held <c>EV100</c>.</param>
+    /// <returns>The held exposure.</returns>
+    public SdfExposure HeldAt(float ev100) => (this with {
+        Ev100 = ev100,
+        Local = 0f,
+        Mode = SdfExposureMode.Manual,
+    });
     /// <summary>Returns the <c>EV100</c> an automatic exposure aims for at a metered average luminance: the meter's reading
     /// less the compensation, within the bounds.</summary>
     /// <param name="luminance">The metered average luminance, in nits.</param>

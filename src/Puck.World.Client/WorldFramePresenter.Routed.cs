@@ -182,7 +182,7 @@ public sealed partial class WorldFramePresenter {
         endpoint: endpoint,
         hostFrame: () => m_dressedFrame,
         skyLayers: m_settings.SkyLayers,
-        toonOverride: () => m_settings.ToonOverride,
+        session: m_settings,
         shadowSettings: () => m_settings.ShadowSlots
     );
 }

@@ -247,8 +247,8 @@ public sealed partial class WorldScreenBinder {
                 Camera: snapshot,
                 Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
             ) {
-                Bloom = BloomSettings?.ResolveBloom(mirror.Definition.Render, camera.Camera.Rig.Bloom),
-                BloomQuality = (BloomSettings?.BloomQualityOf(view: camera.Name) ?? Puck.Hosting.BloomQuality.Off),
+                Bloom = Settings?.ResolveBloom(mirror.Definition.Render, camera.Camera.Rig.Bloom),
+                BloomQuality = (Settings?.BloomQualityOf(view: camera.Name) ?? Puck.Hosting.BloomQuality.Off),
                 BloomStandalone = true,
                 Quality = quality,
             });
