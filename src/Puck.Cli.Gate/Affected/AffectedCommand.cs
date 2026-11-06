@@ -23,9 +23,6 @@ public static class AffectedCommand {
         newChar: '/',
         oldChar: '\\'
     );
-    private static IReadOnlyList<string> Lines(string text) => [.. text.Split(separator: '\n')
-        .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
-        .Where(predicate: static line => (line.Length > 0))];
 
     /// <summary>Reads the working tree's changes against <paramref name="since"/>: tracked files that differ from it,
     /// staged or not, plus untracked files git does not ignore; and of those, the ones deleted since it.</summary>
@@ -63,8 +60,8 @@ public static class AffectedCommand {
             return false;
         }
 
-        changed = [.. Lines(text: diff.Stdout).Concat(second: Lines(text: untracked.Stdout)).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal)];
-        deleted = Lines(text: removed.Stdout).ToHashSet(comparer: StringComparer.Ordinal);
+        changed = [.. CliText.Lines(text: diff.Stdout).Concat(second: CliText.Lines(text: untracked.Stdout)).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal)];
+        deleted = CliText.Lines(text: removed.Stdout).ToHashSet(comparer: StringComparer.Ordinal);
         error = string.Empty;
 
         return true;

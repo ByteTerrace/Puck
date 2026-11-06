@@ -33,14 +33,12 @@ using Puck.Cli.Parity;
 using Puck.Cli.PublishRelease;
 using Puck.Cli.PullRequest;
 using Puck.Cli.Qualification;
-using Puck.Cli.Refusals;
 using Puck.Cli.Scan;
 using Puck.Cli.Schema;
 using Puck.Cli.Search;
 using Puck.Cli.Shaders;
 using Puck.Cli.Sweep;
 using Puck.Cli.WasmStdlib;
-using Puck.Cli.WorktreeBase;
 using Puck.Cli.WorktreeReport;
 
 namespace Puck.Cli;
@@ -109,7 +107,6 @@ public static class PuckRootCommand {
             PullRequestCommand.Create(),
             QualifyCommand.Create(),
             ReferencesCommand.Create(),
-            RefusalsCommand.Create(),
             ScanCommand.Create(),
             SchemaCommand.Create(clock: clock),
             SearchCommand.Create(),
@@ -117,7 +114,6 @@ public static class PuckRootCommand {
             SweepCommand.Create(),
             WasmBuildCommand.Create(),
             WasmStdlibCommand.Create(),
-            WorktreeBaseCommand.Create(),
             WorktreeReportCommand.Create(clock: clock),
             WorldCommand.Create(clock: clock),
             .. WorldsRoot.Verbs(),

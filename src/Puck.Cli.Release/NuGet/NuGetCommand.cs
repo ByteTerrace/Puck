@@ -6,7 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
-using Puck.Assets;
+using Puck.Cli.Packaging;
 
 namespace Puck.Cli.NuGet;
 
@@ -59,7 +59,7 @@ public static class NuGetCommand {
                         path2: name
                     )
                 );
-                files.Add(item: ((JsonNode)new JsonObject { ["name"] = name, ["sha256"] = ContentPin.OfFile(path: path).Hex }));
+                files.Add(item: ((JsonNode)ReleaseInventory.Entry(name: name, nameKey: "name", path: path)));
             }
             packages.Add(item: ((JsonNode)new JsonObject { ["id"] = package.Id, ["version"] = version, ["files"] = files }));
         }
@@ -171,16 +171,14 @@ public static class NuGetCommand {
                     name.Contains(value: '/') ||
                     name.Contains(value: '\\')
                 ) { throw new InvalidDataException(message: "Invalid artifact filename."); }
-                if (!string.Equals(
-                    a: ContentPin.OfFile(path: Path.Combine(
+                ReleaseInventory.Require(
+                    name: name,
+                    path: Path.Combine(
                         path1: directory,
                         path2: name
-                    )).Hex,
-                    b: ((string?)files[index]!["sha256"]),
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    throw new InvalidDataException(message: $"Artifact checksum mismatch: {name}.");
-                }
+                    ),
+                    sha256: ((string?)files[index]!["sha256"])
+                );
             }
         }
         return manifest;

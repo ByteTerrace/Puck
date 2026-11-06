@@ -92,19 +92,19 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck branding`](#puck-brandingmaintained-assets) | synchronize and check canonical product marks, icons, palette tokens, and their consumers. |
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
-| [`puck cartridge-cost`](#puck-cartridge-costcartridge-cost-measurement) | measures each cartridge primitive's sustained per-frame capacity on both real machines, the evidence the cartridge cost model's weights come from. |
-| [`puck cartridges`](#puck-cartridgestool-built-cartridges) | rebuilds or verifies the shipped cartridges built by repository tooling: `deck` writes the Humble Gaming Deck's test `.nes` images. |
+| [`puck cartridge-cost`](#puck-cartridge-costcartridge-cost-measurement) | measures each cartridge primitive's sustained per-frame capacity on the machine of each target (`cgb`, `dmg`, `agb`), the evidence the cartridge cost model's weights come from. |
+| [`puck cartridges`](#puck-cartridgestool-built-cartridges) | rebuilds the shipped cartridges built by repository tooling: `deck` writes the Humble Gaming Deck's test `.nes` images. |
 | [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`, with each world document's compiled world (`.puckb`) beside it; all three are derived products that `.gitignore` excludes, never committed; a `.world.json` path compiles to its compiled world alone. |
 | [`puck counters`](#puck-counterswork-counter-collector) | the work-counter collector: boots the authored counters workload offscreen once per backend, writes a `puck.counters.report.v1` report with every count tagged by class, and checks the deterministic counts agree across backends; `counters compare` holds two reports to each other. |
-| [`puck creation`](#puck-creationcode-authored-sculpts) | the offline twin of `creation.sculpt(s)` and `creation.shape`: list registered sculpts, apply one to a world file, report a creation's shape budget/feature usage, or read each shape's law (exact, bound or uncertified distance, CPU and contact verdicts). |
+| [`puck creation`](#puck-creationcreation-reads) | the offline twin of `creation.shape`: report a creation's shape budget/feature usage, or read each shape's law (exact, bound or uncertified distance, CPU and contact verdicts). |
 | [`puck declarations`](#puck-declarationsdeclaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
 | [`puck decompile`](#the-puck-dsl-verbs) | renders a world JSON document back as `.puck` source—a one-time import, not a synced mirror; optionally resolves companion vector locks with `--embeddings`. |
 | [`puck determinism`](#puck-determinismcross-host-determinism-attestation) | boots the scenarios of a determinism manifest headless in-process and records per-tick, per-system state hashes and document-level hashes into a strict stream; `determinism compare` names the first tick and system, or document hash, where two hosts' streams differ. |
 | [`puck disclosure`](#puck-disclosurethe-noninterference-harness) | boots one headless world per variant of a world's `<stem>.disclosure.json` fixture (and the first again as the control), drives the same non-operator principals with the same scripted and seeded inputs in each, and names every principal whose ordered stream of received events differs, where it first differs and at which doors. |
 | [`puck docs`](#puck-docsthe-documentation-family) | the documentation family: `build` stages the website reference, `links` checks relative links and cited repository paths, and `citations` checks the console-verb tokens skills and XML docs cite, including a live `Puck.World` console boot. |
-| [`puck evals`](#puck-evalsskill-evaluation) | the skill evaluation family over `claude plugin eval`: `evals run` runs a skill's suite on a frozen worktree with the rules-file fixture, `evals compare` compares two results on the comparable score, and `evals graders` lists the graders to hand-label. |
 | [`puck embed`](#the-puck-dsl-verbs) | resolves authored `embed(...)` text into committed `.embeddings.json` lock files, or probes cosine similarity rankings. |
-| [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
+| [`puck evals`](#puck-evalsskill-evaluation) | the skill evaluation family over `claude plugin eval`: `evals run` runs a skill's suite on a frozen worktree with the rules-file fixture, `evals compare` compares two results on the comparable score, and `evals graders` lists the graders to hand-label. |
+| [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds the HGB boot ROMs and AGB BIOS from their maintained sources; no mode verifies them. |
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
 | [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: checks the lock files with a locked restore, builds the solution and the file app, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations. | |
@@ -128,7 +128,6 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck pull-request`](#puck-pull-requestautomatic-pr-formatting) | the formatting bot's two halves: `format` prepares a pull request's formatting artifact, and `submit-format` is CI's trusted applier. |
 | [`puck qualify`](#puck-qualifypackage-qualification) | qualifies a producer-built `Puck.World` package against a release profile: the functional canaries on the package's own World, then the stability matrix offscreen, each cell judged pass, fail or blocked. |
 | [`puck references`](#puck-referencessemantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
-| [`puck refusals`](#puck-refusalsrefusal-census) | the source census of the refusals `world.refusals` lists, which the refusal-catalog-census canary holds the running World's scan to. |
 | [`puck registry`](#puck-registryworld-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
 | [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones, identity counters, exact cache keys. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1` and the dashboard portal's TypeScript types derived from it, checked and regenerated. |
@@ -140,7 +139,6 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck vocabulary`](#puck-vocabularyworld-authoring-vocabulary) | the world authoring vocabulary `docs/reference/world-vocabulary.md`, generated from the one construct table the parser, the printer and the language server read, and checked against it. |
 | [`puck wasm`](../../wasm/README.md) | derives Rust guest variants through the runtime cache and exports ignored modules. |
 | [`puck wasm-stdlib`](#puck-wasm-stdlibwasm-standard-library-sources) | regenerates every generated Rust source of the WASM standard library: `FixedQ4816`'s Rust port and known-answer vectors, and the addon ABI's Rust mirror; `--check` compares them with the files on disk and their staged copies. |
-| [`puck worktree-base`](#puck-worktree-baseworktree-base-guard) | puts a worktree's HEAD at a named base commit, refusing rather than resetting a dirty tree. |
 | [`puck worktree-report`](#puck-worktree-reportremoval-report) | reports which local branches and worktrees have landed and are safe to remove. |
 | [`puck world`](#automation-commands) | prepare hosted world documents, prepare release manifests, inspect deployment-group state, or probe a QUIC endpoint. |
 
@@ -269,7 +267,7 @@ puck cartridge-cost
 puck cartridge-cost --target cgb
 ```
 
-The verb boots `CartridgeCostMeasurement`'s probe cartridges on the Color and Advanced machines. For each shape it
+The verb boots `CartridgeCostMeasurement`'s probe cartridges on the Color, monochrome and Advanced machines (`--target` names one of `cgb`, `dmg`, `agb`). For each shape it
 bisects the largest per-frame iteration count the machine sustains at full frame rate, and prints one row per shape:
 the count and the cost model's units for the largest sustained probe. A `CLIPPED` row reached the search's ceiling
 rather than the machine's. Cost per iteration is inversely proportional to that capacity, so the rows are what
@@ -741,22 +739,6 @@ writes each as `<interface>.interface.hlsli` beside its source instead, which an
 engine package, compiled at build, checks in, and `--echo` also generates each
 interface's echo pass as `<interface>.echo.hlsl`.
 
-`interface <canary-directory> --echo-fixtures --write` synchronizes the
-`interface-echo` canary as one family. It rebuilds the `sdf-world`
-graph blocks from the current engine packages, generates every declared echo
-and its deliberate last-member, next-word sentinel discriminator, and updates
-graph widths and capture extents, including the region before the last pixel.
-The commands and observations' expected outcomes remain authored. Planning
-completes before any file is written; no shader compiler or GPU is needed.
-Use `--check` instead of `--write` to report drift without changing files (exit
-1). This mode requires exactly one of those options and excludes `--package`
-and `--echo`:
-
-```text
-puck shaders interface tests/Puck.World.Canaries/interface-echo --echo-fixtures --write
-puck shaders interface tests/Puck.World.Canaries/interface-echo --echo-fixtures --check
-```
-
 `package` compiles a graph document or one-off shader and writes its
 `puck.shader.package.v1` package to `--output`: the source closure, each pass's
 interface and generated declarations, and its SPIR-V and DXIL binaries, with a
@@ -906,7 +888,7 @@ projects, then runs their CPU tests (`--filter-not-trait Category=Gpu`) side by
 side on that build, then `puck test` on the chosen worlds,
 and exits 1 when any of them fails. At most `--suite-jobs` suites run at
 once (default: a quarter of the logical processors). A heavy suite
-(`Puck.World.Tests` or `Puck.World.Presentation.Tests`) starts first and holds
+(an assembly in `HostProcesses.HeavyTestAssemblies`) starts first and holds
 the shared `heavy` lease through host admission and its whole run. Admission
 also samples unleased heavy processes and memory/disk headroom
 (see [`puck gate`](#puck-gatethe-change-scoped-gate)). Each suite prints one verdict line with its wall time
@@ -996,7 +978,7 @@ CPU is over the capacity threshold (50%) runs, and the gate prints the load it
 ran under; the gate never waits or refuses for CPU alone. A step that opens a
 device (the canaries, parity, each device suite, counters and citations, the steps that run only with `--gpu`) also waits for an idle GPU; the
 build, affected run and baseline checks run no `Gpu`-trait test and never wait
-on a GPU holder. A heavy suite (`Puck.World.Tests` or `Puck.World.Presentation.Tests`, whatever its filter) also
+on a GPU holder. A heavy suite (an assembly in `HostProcesses.HeavyTestAssemblies`, whatever its filter) also
 holds the same `heavy` lease as `puck lease heavy` through admission and execution.
 It samples capacity only after acquiring that lease, so two sampled-idle runs
 cannot overlap. A validated ancestor lease admits one child lease at a time;
@@ -1041,11 +1023,12 @@ CAPACITY cpu=<percent> freeRAM=<GB> freeDisk=<GB> reuseNodes=<count>
 ```
 
 - `GPU busy` or `GPU idle` appears at the first reading and on every change
-  after. GPU work is the World (`Puck.World` or `Puck.World.dll`), a
-  `canary`, `parity` or `counters` verb, or a test host for
-  `Puck.DirectX.Tests`, `Puck.Vulkan.Tests`, `Puck.World.Tests` or
-  `Puck.Platform.Windows.Tests`, whose
+  after. GPU work is the World (`Puck.World` or `Puck.World.dll`) when its
+  arguments open a device, the `canary` verb or a verb in
+  `GateComposition.GpuVerbGrammars`, or a test host for an assembly in
+  `HostProcesses.DeviceTestAssemblies`, whose
   device laws open the GPU, when its arguments can select a `Gpu`-trait test.
+  `puck host load --help` prints both lists as the code holds them.
   A run carrying affected's CPU selection, `--filter-not-trait Category=Gpu`,
   opens no device whatever else it filters, so it counts no GPU work; a run
   with no such exclusion, or one reading a response file (`@file`), counts.
@@ -2747,36 +2730,24 @@ and lookaround; no backreferences. `_` is any character including newline.
 
 ```text
 puck search <pattern> [path ...]        content search (default path: cwd)
-  -i / --ignore-case                    case-insensitive
-  -F / --fixed-strings                  literal string (escape the pattern)
-  -l / --files-with-matches             files-with-matches only (wins over -c)
-  -c / --count                          per-file matching-line counts
-  -n / --line-number                    line numbers on (the default)
-  -N / --no-line-number                 line numbers off (wins over -n)
-  -A / --after-context <n>              n context lines after
-  -B / --before-context <n>             n context lines before
-  -C / --context <n>                    both sides; an explicit -A or -B overrides that side
-  -g / --glob <glob>                    include glob (repeatable; no '/' matches basename)
-  --not <glob>                          exclude glob (repeatable; no '/' matches a file OR directory basename)
-  -s / --span                           span mode: run over whole-file text, print start-end line ranges
-  -M / --max-results <n>                max results (default 250, 0 = unlimited)
-  --files                               enumerate the files that would be searched
-  -q / --quiet                          quiet: exit code only (--files included)
-  --                                    end of options: every later argument is pattern/paths
-  -h / --help                           this text
 ```
+
+`puck search --help` prints every flag. The ones that change what a result means are
+`-F` (a literal pattern), `-s` (span mode: whole-file text, line ranges printed),
+`-M` (the result cap; 250 by default and silent when reached, 0 for unlimited),
+`--files` (the files the walk would read) and a literal `--` before a pattern that
+starts with `-`.
 
 Exit codes: **0** matched, **1** no match, **2** usage/pattern error (the
 engine's own parse message is printed verbatim). A path argument that names
 nothing on disk is one of those usage errors—every bad path is reported before
 the run gives up, so a typo cannot pass for "no match". The recursive walk skips
-`.git`, `.tmp`, `artifacts`, `bin`, `obj`, `node_modules`, `publish`,
-`BenchmarkDotNet.Artifacts`, agent worktrees under `.claude/worktrees`,
-directory links (junctions and symbolic links, which the walk never follows),
-and binary files—naming one of those paths searches it anyway. That set is
-`FileWalk.SkipDirectories`, the one prune set every tree-walking verb shares;
+the directories in `FileWalk.SkipDirectories` (`puck search --help` prints them), agent worktrees
+under `.claude/worktrees`, directory links (junctions and symbolic links, which the walk
+never follows), and binary files—naming one of those paths searches it anyway.
+`FileWalk.SkipDirectories` is the one prune set every tree-walking verb shares;
 `format` alone also skips the quarantined `experimental/` trees, which every
-reading verb still searches. The build-artifact
+reading verb still searches. Build-artifact
 names are on that list because this project writes into them: publishing drops a
 generated `Puck.Maths.xml` next to the executable, whose duplicated doc comments
 would otherwise drain the default `-M` cap ahead of `src/Puck.Maths/` itself.
@@ -2784,7 +2755,7 @@ would otherwise drain the default `-M` cap ahead of `src/Puck.Maths/` itself.
 a query as if they were live consumers. The full flag, glob, and engine-semantics
 reference—including the leftmost-longest and complement gotchas—lives in the
 `content-search` skill (`.claude/skills/content-search/SKILL.md`), which drives
-every content search in this repo through the published `puck search`.
+every content search in this repo through the checkout's own `puck search` build.
 
 ---
 
@@ -3124,27 +3095,6 @@ measurements before treating a difference as an improvement.
 
 ---
 
-## `puck refusals`—refusal census
-
-Counts every enum member tagged `[Refusal(...)]`, and the distinct doors they
-name, in the projects whose assemblies the World's refusal catalog anchors, by
-reading their sources with Roslyn rather than loading the World. It prints the
-count as the header `world.refusals` prints over the whole catalog, then the
-projects it counted.
-
-```text
-puck refusals               print the census and the projects counted
-puck refusals -h / --help   this text
-```
-
-The `refusal-catalog-census` canary spells the token `{refusal-census}` in a
-line expectation, and the runner replaces it with this census, so the running
-World's reflective scan is held to an independent count rather than to a number
-written into the manifest. Two laws hold both sides to the projects whose
-sources tag a refusal: `RefusalCensusLawTests` for this verb's project list and
-`RefusalCatalogAnchorLawTests` for the catalog's anchors. Exit codes: **0**
-counted, **2** missing repository root.
-
 ## `puck registry`—world name registry
 
 Writes `docs/world-name-registry.md` from `Puck.World.WorldNameRegistry`
@@ -3284,14 +3234,12 @@ makes the check a tautology rather than evidence.
 
 ---
 
-## `puck creation`—code-authored sculpts
+## `puck creation`—creation reads
 
-The offline twin of the in-engine `creation.sculpt(s)` console verbs (see
-`Puck.World.Authoring`'s README for the sculpting library itself—
-`CreationBuilder`/`StateHoisting`/`SculptPatch`/`ICreationSculpt`):
+The offline reads of a creation. The sculpting library itself (see
+`Puck.World.Authoring`'s README: `CreationBuilder`/`StateHoisting`/`SculptPatch`/`ICreationSculpt`)
+is reached through the in-engine `creation.sculpt(s)` console verbs.
 
-- `puck creation sculpts`—lists every registered sculpt (`CreationSculptRegistry.All`) by name and description.
-- `puck creation sculpt <name> --world <path>`—reads the world file, runs the named sculpt's `SculptPatch` against it, echoes every operation's `(kind, path, verdict)`, then parses and validates the PATCHED document through `WorldDefinitionSerialization`/`WorldDefinitionValidator` before writing it back canonically. A refusal (unknown sculpt, malformed JSON, a patch fault, a validation failure) leaves the file untouched. Exit codes: 0 wrote, 1 the patch faulted or the patched document was refused, 2 a usage error (unknown sculpt, missing file).
 - `puck creation stats --world <path> [--prototype <id>]`—reports a creation's expanded field work, bake groups and encoded program/pose bytes, counts by primitive and blend op, and which shapes use domain ops, onion, twist, bend, rounding, dilate, lift, chamfer, or a panel, plus palette slot usage and named flare/shear/bumps/erode/cells shapes. It builds unit-scale static and pooled rest geometry through the live stampers and lists the global step scale plus every non-unit field-scope clamp, its instance/instruction range, and how many shapes share it, then each program's segments (rigid ones counted). Animated prototypes use the pooled path. Text-bearing prototypes report clamp inspection unavailable because the offline command has no resolved font atlas; inspect `world.budget` in the render host. Field bounds are not measured GPU-time or march-count multipliers. Defaults to every prototype carrying a creation document; a geometry inspection failure exits 1.
 - `puck creation shape --world <path> --prototype <id> [--shape <name>...]`—the offline twin of the in-engine `creation.shape`: one line per shape (every shape, or the named ones in the order named) with its authored type, profile, lift, scale and facets, `lowered=` the instructions the renderer emits for the shape alone, `distance=exact`, `bound gain=<g>` (the field is at least `g` times the distance: a non-uniform `Scale` or the superellipsoid gauge) or `uncertified` (a warp, field op, path or sweep), `step=` the march clamp a warp or blend bakes, `cpu=` whether the fixed-point evaluator interprets it as the renderer draws it (the render reading the mesh audit measures a bake against; a regular polygon is the one lowering it refuses), `contact=` what deterministic contact makes of it on a solid placement, and `contact-omits=` the instructions contact drops, under a summary line counting each verdict. It reads the creation canonical and in the engine frame, as a boot composes it. Exit codes: 0 read, 1 the file did not load, 2 an unknown prototype or shape name.
 
@@ -3302,19 +3250,6 @@ even with `--prototype` or when text prevents render-clamp inspection. It report
 the unsupported operation, including residual nonuniform `Scale`. Non-solid
 placements and unplaced prototypes need no contact representation. Acceptance
 does not imply render/contact parity: presentation-only facets remain omitted.
-
-`puck creation sculpt` writing to disk goes through the SAME canonical
-serializer `world.save` does, so an UNTOUCHED section of the file (one the
-named sculpt's patch never references) can still change shape—every
-optional field the schema declares gets written out explicitly rather than
-omitted, and every derived field (a camera program operation's `opcode`, a
-rule effect's default `target`) gets filled in. This is not specific to a
-sculpt; it is what routing a document through the typed `WorldDefinition`
-model at all does.
-
-The shipped `CreationSculptRegistry` carries no sculpts—`puck creation
-sculpts` reports "none registered" until a composition root or a test
-registers one.
 
 ## `puck mesh audit`—baked-mesh audit
 
@@ -3770,8 +3705,7 @@ puck format --file-list <json-array-of-paths> [--check] [--configuration <name>]
 
 `<root>` is a directory or a single source, resolved against the working
 directory. The walk takes every `.cs` and `.puck` file under it and skips
-the shared prune set (`.git`, `.tmp`, `artifacts`, `BenchmarkDotNet.Artifacts`,
-`bin`, `node_modules`, `obj`, `publish`), agent worktrees under
+the shared prune set (`FileWalk.SkipDirectories`), agent worktrees under
 `.claude/worktrees`, and the quarantined `experimental` trees. Generated C# (`*.g.cs`, `*.generated.cs`) is
 never formatted.
 
@@ -4257,25 +4191,6 @@ of the working directory. Exit codes: **0** wrote every file, **2** usage error,
 repository root not found, or a destination directory missing.
 
 ---
-
-## `puck worktree-base`—worktree base guard
-
-A git worktree an agent is handed can sit at a stale base. `puck worktree-base
-<sha-or-ref> [--path <worktree>]` resolves HEAD and `<sha-or-ref>^{commit}` in
-the target worktree (default `--path`: the current directory) and shells out to
-`git` to reconcile them:
-
-- HEAD already at the base—prints "at base", exits 0.
-- Clean tree, wrong base—`git reset --hard <base>`, prints old → new, exits 0.
-- Dirty tree, wrong base—prints what is dirty and refuses, exits 2, resets
-  nothing.
-- Git failure, not a git tree, or an unresolvable ref—exits 2.
-
-"Dirty" is a tracked modification (`git status --porcelain
---untracked-files=no` nonempty); untracked files never block a reset. Always
-prints the worktree's toplevel path it acted on, relative to the working
-directory when at or beneath it, and absolute otherwise. Shells out to `git`
-rather than adding a git library dependency.
 
 ## `puck worktree-report`—removal report
 

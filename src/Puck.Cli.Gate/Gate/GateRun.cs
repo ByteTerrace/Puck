@@ -28,9 +28,6 @@ public static class GateRun {
     private const int FailureTail = 15;
     private const string Verb = "gate";
 
-    private static IReadOnlyList<string> Lines(string text) => [.. text.Split(separator: '\n')
-        .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
-        .Where(predicate: static line => (line.Length > 0))];
     private static void Log(StreamWriter log, string step, GateStepResult result) {
         log.WriteLine(value: $"===== {step} (exit {result.ExitCode})");
         log.WriteLine(value: result.Output.TrimEnd());
@@ -190,7 +187,7 @@ public static class GateRun {
                 var prerequisite = (step.Kind is GateStepKind.Locks or GateStepKind.Build or GateStepKind.CopyCli);
 
                 Console.Out.WriteLine(value: $"gate: {step.Name} FAILED (exit {result.ExitCode}, {elapsed}s){(prerequisite ? "; nothing else ran." : string.Empty)}");
-                var lines = Lines(text: result.Output);
+                var lines = CliText.Lines(text: result.Output);
                 var errors = lines.Where(predicate: line => line.Contains(comparisonType: StringComparison.Ordinal, value: ": error ")).Distinct(comparer: StringComparer.Ordinal).ToArray();
 
                 foreach (var line in (report ?? ((prerequisite && (errors.Length > 0)) ? errors : lines.TakeLast(count: FailureTail)))) {

@@ -53,7 +53,6 @@ public static class GatePlan {
         ["packages"] = "Its valued --check needs the document whose generated package section is checked.",
         ["embed"] = "Needs an authored embedding root; checked by its owning change.",
         ["migrate"] = "Needs a named migration and source path; no migration is implied by qualification.",
-        ["shaders interface"] = "Its --check needs the interface-echo canary directory, quarantined under experimental/ with its canary.",
     };
 
     private static GateStep DeviceSuite(string suite, string[] selection) => new(suite, GateStepKind.DeviceSuite,

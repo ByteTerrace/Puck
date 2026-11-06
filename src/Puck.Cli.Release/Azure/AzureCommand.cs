@@ -40,7 +40,6 @@ public static partial class AzureCommand {
             defaultPath: "artifacts/world-release",
             description: "The directory that receives the bound worlds and their release.json."
         );
-        var digestOutput = CliOptions.Output(description: "A file to receive the pushed digest.");
         var build = new Command(
             description: "Build the application bundle: Functions, the browser engine, the official tree, hosted worlds, the dashboard, and the documentation, with its release manifest.",
             name: "build"
@@ -91,16 +90,6 @@ public static partial class AzureCommand {
             description: "Publish the Template Specs the platform composes from, refusing a changed version.",
             name: "publish-template-specs"
         );
-        var publishContainer = new Command(
-            description: "Push one built image to the registry and print its digest.",
-            name: "publish-container"
-        ) {
-            new Option<string>(name: "--registry") { Description = "The container registry name.", Required = true },
-            new Option<string>(name: "--repository") { Description = "web-actors or world-silo.", Required = true },
-            commitOption,
-            new Option<string?>(name: "--archive") { Description = "A saved image archive to load first." },
-            digestOutput,
-        };
         var functionsAccess = new Command(
             description: "Admit this runner to the Functions deployment endpoint, or restore the saved restrictions.",
             name: "functions-access"
@@ -126,14 +115,6 @@ public static partial class AzureCommand {
         ) {
             new Option<string>(name: "--image") { Description = "The built world-silo image.", Required = true },
         };
-        var testWorldRelease = new Command(
-            description: "Verify the running world worker matches the requested release digest and reports healthy.",
-            name: "test-world-release"
-        ) {
-            new Option<string?>(name: "--resource-group") { Description = "With --scale-set, verify without deployment outputs." },
-            new Option<string?>(name: "--scale-set") { Description = "The worker scale set." },
-            new Option<string?>(name: "--image") { Description = "The expected digest; defaults to artifacts/world-silo.digest." },
-        };
         var testWorldMcp = new Command(
             description: "Exercise the live MCP endpoint with delegated authorization.",
             name: "test-world-mcp"
@@ -147,10 +128,6 @@ public static partial class AzureCommand {
             resourceGroupOption,
             new Option<string?>(name: "--container-app") { Description = "The actors app; defaults to the compiled parameters." },
         };
-        var stageWorldImage = new Command(
-            description: "Publish the world image and stage its worlds for a deployment; the registry name comes from artifacts/production-parameters.json (build-infrastructure).",
-            name: "stage-world-image"
-        ) { commitOption };
         var current = new Command(
             description: "Set the deploy output to whether GITHUB_SHA is still the tip of GITHUB_REF.",
             name: "current"
@@ -159,8 +136,8 @@ public static partial class AzureCommand {
             description: "Build, deploy, publish, and verify Puck's Azure production.",
             name: "azure"
         ) {
-            build, buildInfrastructure, deployInfrastructure, deployApplications, deployWorldPlatform, deployWorldMcp, prepareWorldRelease, publishStatic, publishTemplateSpecs, publishContainer,
-            functionsAccess, vaultAccess, testProduction, testWorldContainer, testWorldRelease, testWorldMcp, buildActors, stageWorldImage, current,
+            build, buildInfrastructure, deployInfrastructure, deployApplications, deployWorldPlatform, deployWorldMcp, prepareWorldRelease, publishStatic, publishTemplateSpecs,
+            functionsAccess, vaultAccess, testProduction, testWorldContainer, testWorldMcp, buildActors, current,
         };
 
         Bind(command: build, work: (parseResult, _) => BuildAsync(
@@ -191,13 +168,6 @@ public static partial class AzureCommand {
         });
         Bind(command: publishStatic, work: (parseResult, _) => PublishStaticAsync(bundle: parseResult.GetRequiredValue<string>(name: "--bundle-directory")));
         Bind(command: publishTemplateSpecs, work: (_, _) => PublishTemplateSpecsAsync());
-        Bind(command: publishContainer, work: (parseResult, _) => PublishContainerAsync(
-            archive: (parseResult.GetValue<string?>(name: "--archive") ?? ""),
-            commit: parseResult.GetRequiredValue(option: commitOption),
-            output: (parseResult.GetValue(option: digestOutput) ?? ""),
-            registry: parseResult.GetRequiredValue<string>(name: "--registry"),
-            repository: parseResult.GetRequiredValue<string>(name: "--repository")
-        ));
         Bind(command: functionsAccess, work: (parseResult, _) => FunctionsAccessAsync(
             group: parseResult.GetRequiredValue(option: resourceGroupOption),
             name: parseResult.GetValue<string?>(name: "--name"),
@@ -213,12 +183,6 @@ public static partial class AzureCommand {
             clock: clock,
             image: parseResult.GetRequiredValue<string>(name: "--image")
         ));
-        Bind(command: testWorldRelease, work: (parseResult, _) => TestWorldReleaseAsync(
-            clock: clock,
-            group: parseResult.GetValue<string?>(name: "--resource-group"),
-            image: parseResult.GetValue<string?>(name: "--image"),
-            scaleSet: parseResult.GetValue<string?>(name: "--scale-set")
-        ));
         Bind(command: testWorldMcp, work: (_, _) => TestWorldMcpAsync());
         Bind(command: buildActors, work: (parseResult, _) => BuildActorsAsync(
             containerApp: parseResult.GetValue<string?>(name: "--container-app"),
@@ -226,7 +190,6 @@ public static partial class AzureCommand {
             noRestart: parseResult.GetValue<bool>(name: "--no-restart"),
             registry: parseResult.GetValue<string?>(name: "--registry")
         ));
-        Bind(command: stageWorldImage, work: (parseResult, _) => StageWorldImageAsync(commit: parseResult.GetRequiredValue(option: commitOption)));
         Bind(command: current, work: (_, _) => CurrentAsync());
         return command;
     }

@@ -219,8 +219,7 @@ registered by a composition root or a test. The document
 stays the source of truth either way: a sculpt only ever produces a patch a
 caller applies, validates, and (for the live world) composes into ordinary
 `WorldMutation` rows through the `world.row.set`/`.remove` section table under
-the issuing principal (`creation.sculpt <name>`) or writes to disk offline
-(`puck creation sculpt <name> --world <path>`) — it never bypasses
+the issuing principal (`creation.sculpt <name>`) — it never bypasses
 whole-document revalidation or the per-section `Mutate` grant check.
 
 ## Document composition (`basis` and `imports`)

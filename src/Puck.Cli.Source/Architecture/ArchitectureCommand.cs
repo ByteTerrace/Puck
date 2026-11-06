@@ -318,10 +318,6 @@ public static class ArchitectureCommand {
             _ = output
                 .AppendLine(value: "  No project declares a CONDITIONAL <ProjectReference>, so the project graph does not vary by")
                 .AppendLine(value: "  configuration, target framework or runtime identifier, and this single pass covers all of them.")
-                .AppendLine(value: "  Two conditional ItemGroups do carry references and neither changes the graph: Directory.Build.props")
-                .AppendLine(value: "  injects the analyzer with ReferenceOutputAssembly=false (never an assembly edge), and")
-                .AppendLine(value: "  WindowsCaptureProjection.targets adds PACKAGE references under an OS condition. If that ever stops")
-                .AppendLine(value: "  being true this section says so on its own.")
                 .AppendLine();
 
             return;

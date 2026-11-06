@@ -324,7 +324,11 @@ back. Most review highs go back to the lane that wrote the code, which keeps its
 and resumes in place (`SendMessage`); once its worktree is removed, a fresh
 lane must rebuild that context from the brief and the findings. Prune after
 the review's findings are routed, and delete the lane branch once its fix
-round is merged too.
+round is merged too. `puck worktree-report --into <integration branch>`
+([reference](../../../docs/reference/cli.md#puck-worktree-reportremoval-report))
+lists each local branch and worktree with whether its work has landed and what
+blocks its removal; it changes nothing, so the lead removes what it marks
+removable.
 
 The sweep is the batch's proof: the whole debug world, every signal compared with
 the previous sweep ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)).
