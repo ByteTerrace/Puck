@@ -6,7 +6,7 @@ namespace Puck.World.Server;
 /// The deterministic work <see cref="WorldPopulation"/> spends stepping bodies, counted in a
 /// <see cref="WorkCounterSet"/> and read through <see cref="IWorkCounterSource"/> under the source name
 /// <see cref="SourceName"/>: the bodies a tick advances, the parked rigid bodies a contact-field change woke or left
-/// asleep because the change could not reach them, and the gyroscopic steps rigid bodies took or refused.
+/// asleep because the change could not reach them, and the gyroscopic steps rigid bodies took, refused, or took without their rescale.
 /// </summary>
 /// <remarks>Each count is a monotonic total over the ledger's life, never reset; a reader takes a window by reading
 /// twice and subtracting. None is part of simulation state: nothing hashes, exports or checkpoints them. Every kind is
@@ -16,7 +16,7 @@ public sealed class WorldBodyWork : IWorkCounterSource {
     public const string SourceName = "physics.bodies";
 
     private readonly WorkCounterSet m_counts = new(
-        kinds: [Advances, FieldWakes, FieldObserved, GyroscopicSteps, GyroscopicRefusals],
+        kinds: [Advances, FieldWakes, FieldObserved, GyroscopicSteps, GyroscopicRefusals, GyroscopicRescaleSkips],
         name: SourceName
     );
 
@@ -34,6 +34,10 @@ public sealed class WorldBodyWork : IWorkCounterSource {
     /// <summary>Gets the kind counting gyroscopic steps refused, leaving angular velocity unchanged: a degenerate inertia,
     /// a spin past the step's representable range, or a singular Jacobian.</summary>
     public static WorkKind GyroscopicRefusals { get; } = new(name: "physics.bodies.gyroscopic-refusals", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting applied gyroscopic steps whose restoring rescale was skipped, leaving the Newton
+    /// step's dissipation in place: a spin the step brought to zero, or one past the rescale's representable range
+    /// (<see cref="Puck.Physics.GyroscopicStepOutcome.AppliedUnrescaled"/>).</summary>
+    public static WorkKind GyroscopicRescaleSkips { get; } = new(name: "physics.bodies.gyroscopic-rescale-skips", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the ledger a host's populations count into. Declared after the kinds, which its counter set reads
     /// as it is created.</summary>
     public static WorldBodyWork Process { get; } = new();

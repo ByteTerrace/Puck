@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions;
-using Puck.Networking;
 using Puck.World.Server;
 
 namespace Puck.World.Silo;

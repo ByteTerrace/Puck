@@ -28,7 +28,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
-    public void AFailedWriterAndUnattemptedWritersLeaveNoSchedulingHistory(bool deviceLoss) {
+    public void AFailedWriterLeavesNoSchedulingHistoryWhileTheOthersRender(bool deviceLoss) {
         var gpu = new FakePipelineGpu();
         var recorders = new Recorders(Camera);
         using var runtime = Runtime(gpu, recorders, Set(Instance("first"), Instance("second")), "second",
@@ -41,9 +41,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var second = previous.LatestFrame(index: 1);
 
         recorders.Of(instance: "first").RefuseRecording = true;
-        Assert.Throws<InvalidOperationException>(testCode: () => frames.Next());
+        _ = frames.Next();
+        Assert.Contains(expectedSubstring: "recording failed", actualString: runtime.NodeOf(instance: "first")!.LastRecordError);
         Assert.Equal(first, runtime.Latest!.Next.LatestFrame(index: 0));
-        Assert.Equal(second, runtime.Latest.Next.LatestFrame(index: 1));
+        Assert.True(condition: (runtime.Latest.Next.LatestFrame(index: 1) > second));
+        second = runtime.Latest.Next.LatestFrame(index: 1);
         if (deviceLoss) {
             runtime.OnDeviceLost();
             Assert.Null(@object: runtime.Latest);

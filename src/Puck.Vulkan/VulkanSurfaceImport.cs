@@ -99,6 +99,7 @@ public sealed class VulkanSurfaceImport : IDisposable {
     // layout once; the producer's per-frame writes land in the same memory, ordered only by the producer's CPU wait
     // before it publishes a write and the consumer's CPU lease on what it samples (see the type's remarks).
     private void TransitionToShaderReadable(VulkanLogicalDevice device) {
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Transfer);
         var commandBufferHandle = m_commandResources!.CommandBufferHandles[0];
 
         m_commandBufferRecordingApi.BeginCommandBuffer(

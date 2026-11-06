@@ -716,6 +716,11 @@ public sealed partial class WorldBody {
                 m_angularVelocity = gyroscopicVelocity;
                 WorldBodyWork.Process.Add(amount: 1, kind: WorldBodyWork.GyroscopicSteps);
                 break;
+            case GyroscopicStepOutcome.AppliedUnrescaled:
+                m_angularVelocity = gyroscopicVelocity;
+                WorldBodyWork.Process.Add(amount: 1, kind: WorldBodyWork.GyroscopicSteps);
+                WorldBodyWork.Process.Add(amount: 1, kind: WorldBodyWork.GyroscopicRescaleSkips);
+                break;
             case GyroscopicStepOutcome.Refused:
                 WorldBodyWork.Process.Add(amount: 1, kind: WorldBodyWork.GyroscopicRefusals);
                 break;

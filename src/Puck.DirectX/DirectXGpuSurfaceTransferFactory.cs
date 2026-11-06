@@ -118,9 +118,12 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
                 width: width
             );
 
+            using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Readback);
             var executable = ((ID3D12CommandList*)commandList);
+            var queue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
 
-            ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle)->ExecuteCommandLists(
+            GpuQueueWork.Process.Execute(cause: GpuQueueCause.Drain, lists: 1);
+            queue->ExecuteCommandLists(
                 NumCommandLists: 1,
                 ppCommandLists: &executable
             );

@@ -18,7 +18,8 @@ public interface IGpuQueueSubmitter {
     /// after it on the queue, starts only once the shared fence reaches the value. A consumer adds the wait for the value
     /// a producer's write signals when it acquires the image, before it records the submission that samples it, so the
     /// order is kept on the GPU and nothing blocks. A submission with no command buffers keeps the list for the next one.
-    /// Called on the thread that submits.</summary>
+    /// A wait whose fence has already reached its value (<see cref="GpuExternalWait.IsReached"/>) is dropped: the write
+    /// it orders after has completed. Called on the thread that submits.</summary>
     /// <param name="wait">The fence, created on or imported into this device, and the value to wait for.</param>
     /// <exception cref="ArgumentException">The wait's value is zero, or its fence belongs to another backend.</exception>
     void AddExternalWait(GpuExternalWait wait);

@@ -6,14 +6,16 @@ namespace Puck.Physics.Tests;
 /// <see cref="FixedGyroscopicStep"/> in free flight. A body spun about an axis that is not principal is advanced the
 /// way the rigid integrator advances it: the gyroscopic step on the world angular velocity, then the orientation
 /// rotated by <c>exp(ω·h/2)</c> and renormalized, 300 steps at 60 Hz. Its world angular momentum <c>R·I_b·Rᵀ·ω</c>,
-/// whose true value is constant, and its kinetic energy are measured in double precision. Three runs are compared:
-/// the fixed-point integrator with the step, the same scheme in double precision (an independent reference with its
-/// own quaternion and Cramer arithmetic), and the integrator without the step, which holds world angular velocity
-/// constant. A running World cannot show this: conservation is a property of the integrator over many steps.
+/// whose true value is constant, and its kinetic energy are measured in double precision. Four runs are compared: the
+/// fixed-point integrator with the step, the same scheme in double precision (an independent reference with its own
+/// quaternion and Cramer arithmetic), that reference without the restoring rescale (the implicit Newton step alone),
+/// and the integrator without the step, which holds world angular velocity constant. A running World cannot show
+/// this: conservation is a property of the integrator over many steps.
 /// </summary>
-/// <remarks>The implicit Euler step's own truncation is first order and dissipative, so momentum is not conserved
-/// to the fixed-point resolution at 60 Hz; it is conserved to the scheme's truncation, and the fixed-point run
-/// tracks the exact-arithmetic scheme to rounding. The laws below pin those two facts separately.</remarks>
+/// <remarks>The implicit Euler step's own truncation is first order and dissipative; the rescale returns the spin it
+/// loses as far as neither the momentum magnitude nor the energy before the step is exceeded. The world momentum's
+/// direction still carries the scheme's truncation, so it is conserved to that truncation, and the fixed-point run
+/// tracks the exact-arithmetic scheme to rounding. The laws below pin those facts separately.</remarks>
 public sealed class GyroscopicStepLawTests {
     private const int InverseInertiaFractionBits = 40;
     private const int Steps = 300;
@@ -28,35 +30,47 @@ public sealed class GyroscopicStepLawTests {
 
     [Theory]
     [MemberData(nameof(Bodies))]
-    public void FreeFlightTracksTheExactSchemeAndNeverGainsEnergyOrMomentum(string body, double ixx, double iyy, double izz) {
+    public void FreeFlightTracksTheExactSchemeRestoresLostSpinAndNeverGainsEnergyOrMomentum(string body, double ixx, double iyy, double izz) {
         var fixedRun = FlyFixed(ixx: ixx, iyy: iyy, izz: izz, applyGyroscopicStep: true);
+        var repeat = FlyFixed(ixx: ixx, iyy: iyy, izz: izz, applyGyroscopicStep: true);
         var held = FlyFixed(ixx: ixx, iyy: iyy, izz: izz, applyGyroscopicStep: false);
-        var exact = FlyExact(ixx: ixx, iyy: iyy, izz: izz);
-        var summary = $"{body}: fixed {fixedRun.MaximumMomentumError:P3}, exact scheme {exact.MaximumMomentumError:P3}, held {held.MaximumMomentumError:P3}";
+        var exact = FlyExact(ixx: ixx, iyy: iyy, izz: izz, rescale: true);
+        var newtonOnly = FlyExact(ixx: ixx, iyy: iyy, izz: izz, rescale: false);
+        var summary = $"{body}: over {Steps} steps world momentum drifts {fixedRun.MaximumMomentumError:P3} and |L| {fixedRun.MaximumMagnitudeError:P3} (exact scheme {exact.MaximumMomentumError:P3} and {exact.MaximumMagnitudeError:P3}, Newton step alone {newtonOnly.MaximumMomentumError:P3} and {newtonOnly.MaximumMagnitudeError:P3}, held {held.MaximumMomentumError:P3} and {held.MaximumMagnitudeError:P3})";
 
+        TestContext.Current.TestOutputHelper?.WriteLine(summary);
         Assert.True(fixedRun.Refusals == 0, $"{summary}; {fixedRun.Refusals} steps refused");
+        Assert.True(fixedRun.Unrescaled == 0, $"{summary}; {fixedRun.Unrescaled} steps skipped the rescale");
+        // Two runs from the same start are bit-identical.
+        Assert.Equal(fixedRun.FinalOmega, repeat.FinalOmega);
+        Assert.Equal(fixedRun.FinalOrientation, repeat.FinalOrientation);
         // The fixed-point run is the exact scheme to rounding: its final momentum lies within 0.1% of the
         // double-precision scheme's.
         Assert.True(
             (Distance(fixedRun.FinalMomentum, exact.FinalMomentum) / Length(exact.FinalMomentum)) <= 1e-3d,
             $"{summary}; final momentum {fixedRun.FinalMomentum} against the exact scheme's {exact.FinalMomentum}"
         );
-        // The step corrects the precession that constant world angular velocity produces, by a wide margin.
+        // The step corrects the precession that constant world angular velocity produces, by a wide margin. The rescale
+        // returns at least a third of the momentum magnitude the Newton step alone dissipates (all of it where the
+        // momentum factor binds, less where the energy factor does); what world drift remains is the scheme's error in
+        // the momentum's direction.
         Assert.True((4d * fixedRun.MaximumMomentumError) <= held.MaximumMomentumError, summary);
-        // Implicit Euler on the gyroscopic term is dissipative: neither |L| nor the kinetic energy rises in a step by
-        // more than the step's rounding can add.
-        Assert.True(
-            fixedRun.MaximumMomentumRise <= fixedRun.RoundingSlack,
-            $"{summary}; |L| rose by {fixedRun.MaximumMomentumRise:E3} in one step (slack {fixedRun.RoundingSlack:E3})"
-        );
+        Assert.True(fixedRun.MaximumMomentumError < newtonOnly.MaximumMomentumError, summary);
+        Assert.True((1.5d * fixedRun.MaximumMagnitudeError) <= newtonOnly.MaximumMagnitudeError, summary);
+        // The rescale never overshoots either invariant: the energy does not rise in a step, nor |L| above its initial
+        // value, by more than rounding can add.
         Assert.True(
             fixedRun.MaximumEnergyRise <= fixedRun.RoundingSlack,
             $"{summary}; energy rose by {fixedRun.MaximumEnergyRise:E3} in one step (slack {fixedRun.RoundingSlack:E3})"
         );
+        Assert.True(
+            fixedRun.MaximumMomentumExcess <= fixedRun.RoundingSlack,
+            $"{summary}; |L| exceeded |L₀| by {fixedRun.MaximumMomentumExcess:E3} (slack {fixedRun.RoundingSlack:E3})"
+        );
     }
 
     [Fact]
-    public void SphericalInertiaStillnessAndDegenerateInertiaLeaveVelocityUnchanged() {
+    public void SphericalInertiaStillnessDegenerateInertiaAndAVanishingCorrectionLeaveVelocityUnchanged() {
         var omega = new FixedVector3(X: FixedQ4816.FromDouble(value: 1.5d), Y: FixedQ4816.FromDouble(value: -2d), Z: FixedQ4816.FromDouble(value: 0.25d));
         var orientation = FixedQuaternion.Exp(bivector: new FixedVector3(X: FixedQ4816.FromDouble(value: 0.2d), Y: FixedQ4816.Zero, Z: FixedQ4816.FromDouble(value: 0.1d))).Normalize();
         var h = FixedQ4816.FromDouble(value: StepSeconds);
@@ -68,15 +82,33 @@ public sealed class GyroscopicStepLawTests {
         Assert.Equal(omega, degenerate);
         Assert.Equal(GyroscopicStepOutcome.Unneeded, FixedGyroscopicStep.Advance(angularVelocity: FixedVector3.Zero, orientation: orientation, inverseInertiaXX: One, inverseInertiaYY: (2L * One), inverseInertiaZZ: (3L * One), stepSeconds: h, advanced: out var still));
         Assert.Equal(FixedVector3.Zero, still);
+
+        // A spin of a few raw units makes a correction that rounds to zero; the step, rescale included, then leaves
+        // the velocity bit-identical.
+        var creep = new FixedVector3(X: FixedQ4816.FromRawBits(value: 3L), Y: FixedQ4816.FromRawBits(value: -2L), Z: FixedQ4816.FromRawBits(value: 1L));
+
+        Assert.Equal(GyroscopicStepOutcome.Applied, FixedGyroscopicStep.Advance(angularVelocity: creep, orientation: orientation, inverseInertiaXX: One, inverseInertiaYY: (2L * One), inverseInertiaZZ: (3L * One), stepSeconds: h, advanced: out var crept));
+        Assert.Equal(creep, crept);
+
+        // A spin of 2^23 rad/s about the axis of the largest moment weighs in at 2^63, past the rescale's range: the
+        // Newton correction is still applied, and the rescale is skipped rather than saturated.
+        var whirl = new FixedVector3(X: FixedQ4816.FromRawBits(value: (1L << 39)), Y: FixedQ4816.FromRawBits(value: (1L << 20)), Z: FixedQ4816.Zero);
+
+        Assert.Equal(GyroscopicStepOutcome.AppliedUnrescaled, FixedGyroscopicStep.Advance(angularVelocity: whirl, orientation: FixedQuaternion.Identity, inverseInertiaXX: One, inverseInertiaYY: (2L * One), inverseInertiaZZ: (3L * One), stepSeconds: h, advanced: out var whirled));
+        Assert.NotEqual(whirl, whirled);
     }
 
     private readonly record struct Flight(
         double MaximumMomentumError,
-        double MaximumMomentumRise,
+        double MaximumMagnitudeError,
+        double MaximumMomentumExcess,
         double MaximumEnergyRise,
         double RoundingSlack,
         (double X, double Y, double Z) FinalMomentum,
-        int Refusals
+        FixedVector3 FinalOmega,
+        FixedQuaternion FinalOrientation,
+        int Refusals,
+        int Unrescaled
     );
 
     private static readonly (double X, double Y, double Z) InitialOmega = (1d, 4d, 0.5d);
@@ -95,10 +127,14 @@ public sealed class GyroscopicStepLawTests {
         var orientation = FixedQuaternion.Exp(bivector: ToFixed(v: InitialAttitude)).Normalize();
         var tracker = new Tracker(ixx: ixx, iyy: iyy, izz: izz, orientation: ToDouble(q: orientation), omega: ToDoubleVector(v: omega));
         var refusals = 0;
+        var unrescaled = 0;
 
         for (var step = 0; (step < Steps); ++step) {
             if (applyGyroscopicStep) {
-                if (FixedGyroscopicStep.Advance(angularVelocity: omega, orientation: orientation, inverseInertiaXX: a, inverseInertiaYY: b, inverseInertiaZZ: c, stepSeconds: h, advanced: out var advanced) == GyroscopicStepOutcome.Refused) { ++refusals; }
+                switch (FixedGyroscopicStep.Advance(angularVelocity: omega, orientation: orientation, inverseInertiaXX: a, inverseInertiaYY: b, inverseInertiaZZ: c, stepSeconds: h, advanced: out var advanced)) {
+                    case GyroscopicStepOutcome.Refused: ++refusals; break;
+                    case GyroscopicStepOutcome.AppliedUnrescaled: ++unrescaled; break;
+                }
 
                 omega = advanced;
             }
@@ -111,9 +147,9 @@ public sealed class GyroscopicStepLawTests {
         // that rounding can add is a small multiple of the largest moment times |ω| at that resolution.
         var slack = (16d * Math.Max(ixx, Math.Max(iyy, izz)) * Length(InitialOmega) * Math.Pow(2d, -16d));
 
-        return tracker.Finish(roundingSlack: slack, refusals: refusals);
+        return tracker.Finish(roundingSlack: slack, finalOmega: omega, finalOrientation: orientation, refusals: refusals, unrescaled: unrescaled);
     }
-    private static Flight FlyExact(double ixx, double iyy, double izz) {
+    private static Flight FlyExact(double ixx, double iyy, double izz, bool rescale) {
         var omega = InitialOmega;
         var orientation = Exp(v: InitialAttitude);
         var tracker = new Tracker(ixx: ixx, iyy: iyy, izz: izz, orientation: orientation, omega: omega);
@@ -129,42 +165,55 @@ public sealed class GyroscopicStepLawTests {
             );
 
             omega = Subtract(omega, Rotate(q: orientation, v: correction));
+
+            if (rescale) {
+                // s = √min(|I·w₀|² / |I·w₁|², E₀ / E₁), never below one.
+                var after = Subtract(w, correction);
+                var momentumRatio = (SquaredBodyMomentum(w, ixx, iyy, izz) / SquaredBodyMomentum(after, ixx, iyy, izz));
+                var energyRatio = (BodyEnergy(w, ixx, iyy, izz) / BodyEnergy(after, ixx, iyy, izz));
+
+                omega = Scale(omega, Math.Sqrt(Math.Max(1d, Math.Min(momentumRatio, energyRatio))));
+            }
+
             orientation = Normalize(q: Multiply(Exp(v: Scale(omega, (0.5d * h))), orientation));
             tracker.Observe(orientation: orientation, omega: omega);
         }
 
-        return tracker.Finish(roundingSlack: 0d, refusals: 0);
+        return tracker.Finish(roundingSlack: 0d, finalOmega: default, finalOrientation: default, refusals: 0, unrescaled: 0);
     }
 
     private sealed class Tracker((double X, double Y, double Z, double W) orientation, (double X, double Y, double Z) omega, double ixx, double iyy, double izz) {
         private readonly (double X, double Y, double Z) m_initial = Momentum(orientation, omega, ixx, iyy, izz);
-        private double m_magnitude = Length(Momentum(orientation, omega, ixx, iyy, izz));
         private double m_energy = Energy(orientation, omega, ixx, iyy, izz);
         private double m_maximumError;
-        private double m_maximumMomentumRise = double.NegativeInfinity;
+        private double m_maximumMagnitudeError;
+        private double m_maximumMomentumExcess = double.NegativeInfinity;
         private double m_maximumEnergyRise = double.NegativeInfinity;
         private (double X, double Y, double Z) m_final = Momentum(orientation, omega, ixx, iyy, izz);
 
         public void Observe((double X, double Y, double Z, double W) orientation, (double X, double Y, double Z) omega) {
             var momentum = Momentum(orientation, omega, ixx, iyy, izz);
-            var magnitude = Length(momentum);
             var energy = Energy(orientation, omega, ixx, iyy, izz);
 
             m_maximumError = Math.Max(m_maximumError, (Distance(momentum, m_initial) / Length(m_initial)));
-            m_maximumMomentumRise = Math.Max(m_maximumMomentumRise, (magnitude - m_magnitude));
+            m_maximumMagnitudeError = Math.Max(m_maximumMagnitudeError, (Math.Abs(Length(momentum) - Length(m_initial)) / Length(m_initial)));
+            m_maximumMomentumExcess = Math.Max(m_maximumMomentumExcess, (Length(momentum) - Length(m_initial)));
             m_maximumEnergyRise = Math.Max(m_maximumEnergyRise, (energy - m_energy));
-            m_magnitude = magnitude;
             m_energy = energy;
             m_final = momentum;
         }
-        public Flight Finish(double roundingSlack, int refusals) =>
+        public Flight Finish(double roundingSlack, FixedVector3 finalOmega, FixedQuaternion finalOrientation, int refusals, int unrescaled) =>
             new(
                 FinalMomentum: m_final,
+                FinalOmega: finalOmega,
+                FinalOrientation: finalOrientation,
                 MaximumEnergyRise: m_maximumEnergyRise,
+                MaximumMagnitudeError: m_maximumMagnitudeError,
                 MaximumMomentumError: m_maximumError,
-                MaximumMomentumRise: m_maximumMomentumRise,
+                MaximumMomentumExcess: m_maximumMomentumExcess,
                 Refusals: refusals,
-                RoundingSlack: roundingSlack
+                RoundingSlack: roundingSlack,
+                Unrescaled: unrescaled
             );
     }
 
@@ -173,11 +222,12 @@ public sealed class GyroscopicStepLawTests {
 
         return Rotate(q: q, v: ((ixx * w.X), (iyy * w.Y), (izz * w.Z)));
     }
-    private static double Energy((double X, double Y, double Z, double W) q, (double X, double Y, double Z) omega, double ixx, double iyy, double izz) {
-        var w = Rotate(q: Conjugate(q: q), v: omega);
-
-        return (0.5d * ((((ixx * w.X) * w.X) + ((iyy * w.Y) * w.Y)) + ((izz * w.Z) * w.Z)));
-    }
+    private static double Energy((double X, double Y, double Z, double W) q, (double X, double Y, double Z) omega, double ixx, double iyy, double izz) =>
+        BodyEnergy(Rotate(q: Conjugate(q: q), v: omega), ixx, iyy, izz);
+    private static double BodyEnergy((double X, double Y, double Z) w, double ixx, double iyy, double izz) =>
+        (0.5d * ((((ixx * w.X) * w.X) + ((iyy * w.Y) * w.Y)) + ((izz * w.Z) * w.Z)));
+    private static double SquaredBodyMomentum((double X, double Y, double Z) w, double ixx, double iyy, double izz) =>
+        ((((ixx * w.X) * (ixx * w.X)) + ((iyy * w.Y) * (iyy * w.Y))) + ((izz * w.Z) * (izz * w.Z)));
     private static (double X, double Y, double Z) Cross((double X, double Y, double Z) l, (double X, double Y, double Z) r) =>
         (((l.Y * r.Z) - (l.Z * r.Y)), ((l.Z * r.X) - (l.X * r.Z)), ((l.X * r.Y) - (l.Y * r.X)));
     private static (double X, double Y, double Z) Scale((double X, double Y, double Z) v, double s) => ((v.X * s), (v.Y * s), (v.Z * s));

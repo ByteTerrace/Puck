@@ -491,8 +491,8 @@ queries, region and collision events, and `SubmitMutation` of whole state
 rows, with no toolchain beyond the engine.
 
 `wasm/puck-addon-default/dist/puck-addon-default.wasm` (source under
-`wasm/puck-addon-default/`) — no world mounts it; it is committed beside its
-crate, ready to author into any world's `addons` row: the
+`wasm/puck-addon-default/`) — no world mounts it; its logical module derives from its
+crate through the counted `DerivedBytes` cache, ready to author into any world's `addons` row: the
 dead-reckoning clamp-walk ghost — consumes the `GrantedBody` disclosure for
 a Drive handle, asks for Observe, dead-reckons off pose answers, and emits
 NOTHING when no pose is held (a refused grant leaves the ghost standing,

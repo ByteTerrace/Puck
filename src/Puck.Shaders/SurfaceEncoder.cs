@@ -252,6 +252,7 @@ public sealed class SurfaceEncoder : IDisposable {
             );
         }
         recorder.EndCommandBuffer(commandBufferHandle: command);
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Readback);
         gpu.QueueSubmitter.SubmitAndWait(commandBufferHandles: [command]);
         m_targetLayout = GpuImageLayout.ShaderReadOnly;
 

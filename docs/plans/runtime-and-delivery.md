@@ -78,9 +78,10 @@ a gate: no test, battery stage or CI job depends on an image outside git
    a hand-authored replacement image is source, and its bytes stay in git beside
    their license; an image generated from a program (`puck firmware`) is a
    derived product, built on demand and removed from git, and the generator's
-   `--verify` is deleted ([derived products](open-items.md#derived-products-are-caches)).
-   The AGB BIOS stays packaged under the measured missing-toolchain exception in
-   the [decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth).
+   `--verify` is deleted. The AGB BIOS and Rust guests also derive on demand;
+   LLVM and Rust are documented machine requirements, and player publishing
+   prewarms their caches under the
+   [decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth).
    `corpus` entries name open conformance suites fetched into the local cache
    (`version`, `archive` and its `sha256`, `root`, `license`, `homepage`).
    `external` entries describe images whose bytes never enter git. `CorpusManifest`

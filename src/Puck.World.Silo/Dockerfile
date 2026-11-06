@@ -3,8 +3,18 @@
 # shader compiles.
 FROM scratch AS shader-cache
 
+FROM rust:1.96.0 AS rust-toolchain
+
 FROM mcr.microsoft.com/dotnet/sdk:11.0.100-rc.3 AS build
 WORKDIR /source
+COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
+COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo RUSTUP_HOME=/usr/local/rustup
+ENV PATH="/usr/local/cargo/bin:/opt/llvm/bin:${PATH}"
+ADD https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.6/LLVM-19.1.6-Linux-X64.tar.xz /tmp/llvm.tar.xz
+RUN echo 'd55dcbb309de7ade4e3073ec3ac3fac4d3ff236d54df3c4de04464fe68bec531  /tmp/llvm.tar.xz' | sha256sum -c - \
+    && mkdir -p /opt/llvm && tar -xJf /tmp/llvm.tar.xz -C /opt/llvm --strip-components=1 \
+    && rustup target add --toolchain 1.96.0 wasm32-unknown-unknown
 # The same archive and checksum .github/actions/setup-dxc installs on Linux: the cache keys every entry by the DXC
 # binaries' content, so a different DXC here would miss every entry CI restores.
 ADD https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2609/linux_dxc_2026_09_28.x86_x64.tar.gz /tmp/dxc.tar.gz

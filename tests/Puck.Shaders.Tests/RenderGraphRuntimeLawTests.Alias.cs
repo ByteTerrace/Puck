@@ -249,11 +249,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
             frames.Settle();
             recorders.Of(instance: "main").Outcome = RenderGraphPackageOutcome.DrewNothing;
 
-            var refusal = Assert.Throws<InvalidOperationException>(testCode: () => frames.Next());
-
+            _ = frames.Next();
             Assert.Contains(
                 expectedSubstring: "Package pass 'over' drew nothing, but its output 'composed' is read by another pass",
-                actualString: refusal.Message
+                actualString: runtime.NodeOf(instance: "main")!.LastRecordError
             );
         }
     }
@@ -304,16 +303,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
             gpu.Recording = true;
             recorders.Of(instance: "main").Outcome = RenderGraphPackageOutcome.DrewNothing;
 
-            var refusal = Record.Exception(testCode: () => {
-                for (var frame = 0; (frame < 3); frame++) {
-                    _ = frames.Next();
-                }
-            });
-
+            // The refused recording is abandoned before submission, so only its frame's barriers are recorded.
+            _ = frames.Next();
             AssertTransitionsContinue(gpu: gpu);
             Assert.Contains(
                 expectedSubstring: "Package pass 'over' drew nothing, but its output 'composed' would stand for the previous frame of 'acc'",
-                actualString: Assert.IsType<InvalidOperationException>(@object: refusal).Message
+                actualString: runtime.NodeOf(instance: "main")!.LastRecordError
             );
         }
     }
@@ -333,11 +328,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
             frames.Settle();
             recorders.Of(instance: "main").Outcome = RenderGraphPackageOutcome.DrewNothing;
 
-            var refusal = Assert.Throws<InvalidOperationException>(testCode: () => frames.Next());
-
+            _ = frames.Next();
             Assert.Contains(
                 expectedSubstring: "Package pass 'over' drew nothing, but its output 'composed' would stand for 'lit', which pass 'tone' overwrites later in the frame",
-                actualString: refusal.Message
+                actualString: runtime.NodeOf(instance: "main")!.LastRecordError
             );
         }
     }

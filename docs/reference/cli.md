@@ -138,7 +138,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck test`](#puck-testtest-worlds) | compiles a `.puck` source's `test` blocks — a world's own, a module's under the arguments a test gives it, and a module's own at every instantiation — into test worlds, boots each through the real `Puck.World` executable, headless, and reads its verdict rows out of the state export the world writes at its own declared export tick. |
 | [`puck verbs`](#puck-verbsconsole-verb-catalog) | the console verb catalog `src/Puck.World.Vocabulary/Assets/puck.console.verbs.json`, every verb any boot shape registers, read from a headless and a windowed World's `world.affordances` and checked against them; authored commands are validated against it. |
 | [`puck vocabulary`](#puck-vocabularyworld-authoring-vocabulary) | the world authoring vocabulary `docs/reference/world-vocabulary.md`, generated from the one construct table the parser, the printer and the language server read, and checked against it. |
-| [`puck wasm`](../../wasm/README.md) | builds every committed WASM guest and writes each to its committed paths. |
+| [`puck wasm`](../../wasm/README.md) | derives Rust guest variants through the runtime cache and exports ignored modules. |
 | [`puck wasm-stdlib`](#puck-wasm-stdlibwasm-standard-library-sources) | regenerates every generated Rust source of the WASM standard library: `FixedQ4816`'s Rust port and known-answer vectors, and the addon ABI's Rust mirror. |
 | [`puck worktree-base`](#puck-worktree-baseworktree-base-guard) | puts a worktree's HEAD at a named base commit, refusing rather than resetting a dirty tree. |
 | [`puck worktree-report`](#puck-worktree-reportremoval-report) | reports which local branches and worktrees have landed and are safe to remove. |
@@ -248,7 +248,7 @@ From a clean checkout, use `dotnet run --project src/Puck.Cli -c Release -- firm
 
 ```sh
 puck firmware hgb --output .claude/scratch/hgb-firmware
-puck firmware agb --source src/Puck.AdvancedGamingBrick/Firmware --output src/Puck.AdvancedGamingBrick/Firmware/puck-agb.bin --clang <clang-executable> --linker <ld.lld-executable>
+puck firmware agb --source src/Puck.AdvancedGamingBrick/Firmware --output artifacts/firmware/puck-agb.bin --clang <clang-executable> --linker <ld.lld-executable>
 ```
 
 The HGB command runs `BootRomBuilder.Build` with the compatible cartridge policy for every `ConsoleModel`.
@@ -340,10 +340,11 @@ world's directory. The silo image and the Azure release prepare the debug world,
 rebases provider-declared asset paths from nested documents to the common worlds
 directory; the image retains the neighbouring asset directories. `world probe` checks
 QUIC reachability and the endpoint's expected public key; it requires QUIC support
-and contacts the supplied host. `wasm build` builds every committed WebAssembly guest with Cargo, one build per variant
-each crate declares under `[package.metadata.puck]` in its `Cargo.toml`, writes each module to every repository path
-its build names, and prints each module's content hash for the `addons` rows that pin it. It refuses before building
-when a tracked `.wasm` under `wasm/` or `src/` is no declared build's output.
+and contacts the supplied host. `wasm build` exports the Rust guest variants
+in `wasm/builds.json` through the addon loader's counted cache; its `dist` outputs
+are ignored exports. `world prepare` also writes a prewarmed `derived` store into
+its output. `world prewarm --output <player>` prepares the same BIOS and addon store
+for a player executable directory. Publishing `Puck.World` runs this automatically.
 `world release prepare` loads the validated silo inventory, requires one canonical
 composed `*.world.json` output for every owner/world row, and writes a
 content-addressed manifest (`release.json` in the package directory unless
@@ -3128,8 +3129,11 @@ arguments select another workload:
 puck bench startup --samples 3
 puck bench startup worlds/debug --samples 3 --width 640 --height 360
 puck bench startup --headless --world-artifact src/Puck.World/bin/Release/net11.0/Puck.World.dll
+puck bench startup --headless --samples 2 --cache-dir artifacts/startup-cold-cache
 ```
 
+`--cache-dir` forwards the World's cache root to every sample: an empty root
+shows counted cold misses and subsequent warm hits, including firmware and addons.
 The default windowed run uses 1280×720. Each sample receives a new persistence
 directory, requests `world.status`, waits one tick, requests a frame capture,
 and checks `wire.errors`. Console readiness is the observed status response;
