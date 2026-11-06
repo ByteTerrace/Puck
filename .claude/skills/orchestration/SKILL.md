@@ -34,6 +34,11 @@ bottleneck).**
 | Integrate | the lead, once per landing batch | full reproduce suites, the sweep against the tip report, windowed boots on both backends, over the merged batch | per-lane repetition of the same suites |
 | Measure | the lead, in a scheduled quiet window after each batch (about every two to three hours) | lanes queue `puck measure request` with frozen before/after builds, metrics and what decides it; the lead reads `puck measure list` and drains it with `puck measure run`: one priority quiet lease, repeated ABAB, median, IQR and paired difference from the existing bench/sweep reports | a lane timing its own change; a window that waits for the machine to go quiet by itself |
 
+A window has a stated end: the lead's open message names the time it closes,
+and a lane resumes on that time if no close message arrived first (a window
+whose close was never sent left four lanes idle past it). The lead sends the
+close the moment its legs finish.
+
 A lane with a timing question uses `puck measure request` (the frozen builds
 or commits, the bench startup or sweep command, JSON-pointer metrics and what
 decides it) and hands back on its load-independent evidence; `puck measure run`
