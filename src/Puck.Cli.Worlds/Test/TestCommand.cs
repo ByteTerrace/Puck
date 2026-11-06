@@ -23,7 +23,7 @@ public static partial class TestCommand {
     private const string ScratchPrefix = "puck-test-";
 
 
-    private static int Run(string path, string? worldArtifact, string? keep, int jobs, bool reproduce, string? cacheDirectory, string? workers, string? record, string? compare) {
+    private static int Run(string path, string? worldArtifact, string? keep, int jobs, bool reproduce, string? cacheDirectory, string? workers, string? record, string? compare, string[] filters) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             Console.Error.WriteLine(value: "ERROR: puck test must run inside the repository.");
 
@@ -49,6 +49,7 @@ public static partial class TestCommand {
 
             try {
                 return RunIn(
+                    filters: filters,
                     cacheDirectory: cacheDirectory,
                     compare: compare,
                     jobs: jobs,
@@ -68,6 +69,7 @@ public static partial class TestCommand {
         using var run = RunDirectory.Create(prefix: ScratchPrefix);
 
         return run.Conclude(exitCode: RunIn(
+            filters: filters,
             cacheDirectory: cacheDirectory,
             compare: compare,
             jobs: jobs,
@@ -82,11 +84,13 @@ public static partial class TestCommand {
     }
     // One run of the verb inside runDirectory: the --keep directory, or a run directory the caller concludes with the
     // exit code this returns.
-    private static int RunIn(string path, string? worldArtifact, int jobs, bool reproduce, string repositoryRoot, string runDirectory, string? cacheDirectory, IReadOnlyList<TestLeg> legs, string? record, string? compare) {
+    private static int RunIn(string path, string? worldArtifact, int jobs, bool reproduce, string repositoryRoot, string runDirectory, string? cacheDirectory, IReadOnlyList<TestLeg> legs, string? record, string? compare, string[] filters) {
         var preparation = new WorldBootWork();
         using var attribution = WorldBootWork.Attribute(work: preparation);
 
         if (!TryCollectWorlds(
+            filters: filters.Select(static pattern => new CliGlob(pattern)).ToArray(),
+            filtered: out var filtered,
             generatedDirectory: Path.Combine(
             path1: runDirectory,
             path2: "generated"
@@ -100,6 +104,8 @@ public static partial class TestCommand {
             return 2;
         }
 
+        Console.WriteLine($"test: selected {worlds.Count} world(s); skipped {filtered} world(s) by --filter.");
+        if (worlds.Count == 0) { return CliExit.Refuse("test", "--filter", "no test worlds matched."); }
         Console.WriteLine(value: $"test: preparation worlds={worlds.Count} compiles={preparation.Read(kind: WorldBootWork.Compiles)} compositions={preparation.Read(kind: WorldBootWork.Compositions)} shared={preparation.Read(kind: WorldBootWork.CompositionsShared)}");
 
         if (!TryResolveArtifact(

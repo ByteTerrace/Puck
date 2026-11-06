@@ -444,7 +444,7 @@ its own.
 | Rank | Step | Mechanism | Expected frame cost | Memory and bake | What it proves on the debug world |
 |---|---|---|---|---|---|
 | 1 | **W2** ([as built](#w2-as-built)). The flow layer, with the constant and lane sources, and the stream, falls and lake moved onto it as static geometry | W2; M1 (the eight stream legs share one geometry) | Two noise evaluations and a gradient per covered pixel, on water pixels only (Vlachos's 2 fetches and 21 ALU on 2010 hardware); the mesh pass loses 8 moving groups and their transform rows | The stream's bake groups go from eight to one shared; the falls' fourteen sheets and the foam paints stop being animated groups; `world.budget` and `[sdf.mesh-bake] done` read the cut | The stream flows and the falls fall in a presented burst with no draw record changing; a settled capture is still; lockstep stills repeat across two Worlds; the meadow's wind shimmer uses the same layer with a wind vector |
-| 2 | **W1.** The medium response on the glass pass (in-scatter, contact ramp) and W4a (probes on glass), with every water surface on `glass` rows | W1, W4 | A probe gather and a few ALU per glass pixel; no new pass | None; the water's four field surfaces already bake as glass | The pool reads turquoise at depth and clear at the margin, with foam at the steps and the bridge piers; the falls sheet transmits the rock; the hall's windows and the lift's glass reflect their rooms; `world.counters gpu pass sdf.world$glass-shade` before and after |
+| 2 | **W1** ([as built](#w1-as-built), its GPU checks owed). The medium response on the glass pass (in-scatter, contact ramp) and W4a (probes on glass), with every water surface on `glass` rows | W1, W4 | A probe gather and a few ALU per glass pixel; no new pass | None; the water's four field surfaces already bake as glass | The pool reads turquoise at depth and clear at the margin, with foam at the steps and the bridge piers; the falls sheet transmits the rock; the hall's windows and the lift's glass reflect their rooms; `world.counters gpu pass sdf.world$glass-shade` before and after |
 | 3 | **W3.** The particle pool with an authored emitter and generic motion, collided against a brick derived from the bake, drawn as quads split by the glass target | W3; M1 (the brick), M4 (capacity and the visibility box) | A fixed step over the pool's capacity and a fill-rate bounded by sprite size; the Deck decides the capacity the standard chooses | A pool's buffers at its capacity; a brick per region at the bake's cell | Splash at the plunge pool and droplets at the falls' foot, refracted where they fall behind the surface; leaves in the forest from the same pool; a presented burst at `debug.go pool` with `host.frames` before and after on both backends |
 | 4 | **W2's field source.** A flow row sampled through a sampled field, and the hydrology's derived transfer row, read from the frame's sampled table the [field surfaces](#field-surfaces-move-at-draw-time) introduced | W2 on M3 | One sampled-field read per covered pixel | A row per lattice | The stream bends around the bridge piers with no authored comb; `world.fields` shows the derived row |
 | 5 | **W4b.** The bounded screen-space march on glass | W4 | The authored tap count per glass pixel; measured first | None | The bridge reflects in the pool at the 4070's bar; the Deck's count decides whether the standard enables it |
@@ -489,6 +489,41 @@ schedules legs under `puck lease gpu`. Every look stays authored: the
 standard package (`worlds/standard/water.puck`, `foliage.puck`) chooses the
 water's and the meadow's values, and every engine default is the neutral one
 that reproduces today's image.
+
+### W1 as built
+
+**What landed.** `SdfGlass` carries a medium (`Scatter`, `Scattering`, material
+row 31) and a contact (`ContactReach`, `ContactCoverage`, row 20.w's halves);
+the [handbook](../rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)
+states both. The glass pass reuses the opaque path's mechanisms rather than
+copying them: one probe gather (`sdfMeshProbesAt`) feeds its reflection
+(`worldEnvironmentReflection`, then `sdfMeshReflection`, the sky alone where no
+probe answers), the one light walk (`sdfLightResponse`, uncascaded, probe
+shadowing) gives its highlights and the light its medium and revealed flow
+surface receive, and the flow layer runs through `sdfShadeFlow`, shared with
+the light stage. In the standard every water surface wears a glass row:
+`waterGlass` on the field surfaces, thinner-body variants on the stream
+(`streamGlass`), the falls (`fallsGlass`) and the lake (`lakeGlass`), each a
+template parameter.
+
+**Invariant and its door.** A glass pixel reads the lit image once
+(`sdfGlassLitAt`, or the frost's disc); the medium, the contact and the
+revealed surface are functions of the thickness, `opaque - t` and the arriving
+light alone. `sdf-glass.comp.hlsl` is the one read site. Where it stops: glass
+behind glass reads the opaque image behind the nearer pane (option 3 above).
+
+**Owed.** The GPU checks have not run: settled captures at `debug.go pool`
+from the path's end and from the bridge on both backends (turquoise depth, a
+clear margin, foam at the steps and piers, the falls' rock through its sheet,
+the hall's windows reflecting their rooms, the reservoir through the
+pavilion's pane, which decides option 3), the flow moving on glass in a
+presented burst, `world.counters gpu pass sdf.world$glass-shade` and
+`world.gpu-timing` against the previous build, the glass kernel's registers
+beside the views kernel's, and the lockstep still. The standard's medium values
+are first choices that those captures tune. The stream sheet stands about
+10 cm over the lawn, with no bed cut beneath it, so it scatters strongly per
+metre and its contact reaches less than its depth. The falls, now glass, cast
+no shadow ([owned question](#owned-questions)).
 
 ### W2 as built
 
@@ -551,10 +586,6 @@ lake keeps its level slide, a state gauge's legitimate rig use, and wears
 `lakeFlowLayer`, world-space breeze ripples. The meadow's grass
 (`windMeadowTile` in `foliage.puck`) wears `meadowWind`, a world-space flow
 whose paler gust patches cross every tile and blade together.
-
-**Not yet.** The glass pass does not run the layer, so a water surface on a
-glass row (W1) needs `sdfApplyFlow` in `sdf-glass.comp.hlsl` before the stream
-moves to glass.
 
 ### Field surfaces move at draw time
 
@@ -661,47 +692,6 @@ header of its own grid; the bake's per-job table stays the bake's.
 document and the tick. **Reuse.** `SdfSampledField`, `sdfFrameSampled`,
 `sdfApplyFlow`. **Check.** The stream bends around the bridge piers with no
 authored comb in a presented burst; `world.fields` shows the derived row.
-
-### W1. The medium response on glass
-
-**Family and model.** A Claude `specialist` or Codex Sol: the result is
-specified and the pass is one file, but the material pair and the probe
-gather's register cost in the glass kernel want reading on both backends.
-
-**Outcome.** `SdfGlass` gains a medium: a scatter colour and coefficient
-(the medium's in-scatter, `scatter · (1 - exp(-σ_s · thickness))` under the
-irradiance the probe gather gives at the surface) and a contact response
-(an authored ramp over the distance from the surface to the opaque hit,
-writing a coverage the material's coverage colour fills before the
-transmission). The glass pass reads the probe gather (`sdfMeshProbesAt`,
-`sdfMeshReflection`) for its reflection as the opaque path does, blended
-with the sky by roughness. Every water surface in the standard wears a
-`glass` row: `waterPalette[0]` gains `waterMaterial`'s glass and the medium
-the standard chooses, so the stream, lake and falls transmit. Defaults are
-zero scatter, no contact response, and the sky-only reflection where no
-probe answers, which is today's image.
-
-**Invariant and enforcement.** A glass pixel's transmitted light is read
-once, from the lit image at the refracted point, and absorbed over the sums'
-thickness; the medium response adds to it and never reads a second image.
-Enforced by the pass's structure: there is one `sdfGlassLitAt` read per
-pixel (or the frost's disc), and the contact ramp and in-scatter are
-functions of `thickness`, `opaque - t` and the gather alone. Where it stops:
-glass behind glass still reads the opaque image behind the nearer pane (the
-handbook's limit; option 3 above).
-
-**Reuse, no second mechanism.** The glass passes as they stand; the probe
-gather the views pass uses; the material packing and the sync pair; the
-standard's palette. No water shader, no second glass layer, no new pass.
-
-**Checks.** Settled captures at `debug.go pool` from the path's end and from
-the bridge on both backends: turquoise depth, a clear margin, foam at the
-steps and piers, the falls' rock showing through its sheet, the hall's
-windows reflecting their rooms; the reservoir through the pavilion's pane
-(decides option 3); `world.counters gpu pass sdf.world$glass-shade` texels
-and `world.gpu-timing` for the glass passes before and after on the 4070;
-the register count of `sdf-glass.comp.hlsl` read in RenderDoc or PIX on
-both backends beside the views kernel's; the lockstep still.
 
 ### W3. The presentation particle pool
 

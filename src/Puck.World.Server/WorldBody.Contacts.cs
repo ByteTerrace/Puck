@@ -30,9 +30,11 @@ public sealed partial class WorldBody {
             var step = new BodyContactStep(
                 entityIndex: scratch.EntityIndex,
                 field: field,
+                memo: ref scratch.SupportMemo,
                 orientation: scratch.Orientation,
                 up: scratch.Up,
-                volumes: ScaledColliderVolumes()
+                volumes: ScaledColliderVolumes(),
+                volumesRevision: BroadphaseRadiusComputations
             );
             var contactResolution = step.Sweep(
                 position: ref scratch.NextPosition,
@@ -325,15 +327,60 @@ public sealed partial class WorldBody {
         m_position += displacement;
     }
 
-    // One body's swept contact solve, bound to its pose and volumes: the ordinary step and every step-up move run
-    // through it, so an entity-aware field resolves each of them against the other bodies too.
-    private readonly ref struct BodyContactStep(IContactField field, int entityIndex, FixedQuaternion orientation, FixedVector3 up, ReadOnlySpan<FixedBodyColliderVolume> volumes) : IFixedContactStep {
-        private readonly IContactField m_field = field;
-        private readonly int m_entityIndex = entityIndex;
-        private readonly FixedQuaternion m_orientation = orientation;
-        private readonly FixedVector3 m_axis = up;
-        private readonly ReadOnlySpan<FixedBodyColliderVolume> m_volumes = volumes;
+    // One body step's support-distance answer, so the step's two ground snaps (the support search before integration
+    // and the crest snap after the move) ask their field once where the body has not moved between them. It is keyed by
+    // everything the query reads: the field, the volumes' derivation (BroadphaseRadiusComputations moves on every write
+    // of the scale or the collider, RescaleColliderVolumes), the start, the orientation, the up axis and the reach, and
+    // it lives in the step's BodyMotionScratch, so no answer outlives the step that asked. BodyContactStep reaches the
+    // field's support query only through Query, the one place the sharing is decided.
+    private struct BodySupportMemo {
+        private IContactField? m_field;
+        private long m_volumes;
+        private FixedVector3 m_position;
+        private FixedQuaternion m_orientation;
+        private FixedVector3 m_up;
+        private FixedQ4816 m_reach;
+        private bool m_met;
+        private FixedQ4816 m_descent;
 
+        public bool Query(IContactField field, long volumesRevision, in FixedVector3 position, in FixedQuaternion orientation,
+            ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) {
+            if (!(ReferenceEquals(objA: m_field, objB: field) && (m_volumes == volumesRevision) && (m_position == position) &&
+                (m_orientation == orientation) && (m_up == up) && (m_reach == reach))) {
+                m_met = field.TrySupportDistance(descent: out m_descent, orientation: in orientation, position: in position,
+                    reach: reach, up: in up, volumes: volumes);
+                (m_field, m_volumes, m_position, m_orientation, m_up, m_reach) = (field, volumesRevision, position, orientation, up, reach);
+            }
+            descent = m_descent;
+            return m_met;
+        }
+    }
+    // One body's swept contact solve, bound to its pose and volumes: the ordinary step and every step-up move run
+    // through it, so an entity-aware field resolves each of them against the other bodies too. Its support distance is
+    // asked through the step's memo.
+    private readonly ref struct BodyContactStep : IFixedContactStep {
+        private readonly IContactField m_field;
+        private readonly int m_entityIndex;
+        private readonly FixedQuaternion m_orientation;
+        private readonly FixedVector3 m_axis;
+        private readonly ReadOnlySpan<FixedBodyColliderVolume> m_volumes;
+        private readonly long m_volumesRevision;
+        private readonly ref BodySupportMemo m_memo;
+
+        public BodyContactStep(IContactField field, int entityIndex, FixedQuaternion orientation, FixedVector3 up,
+            ReadOnlySpan<FixedBodyColliderVolume> volumes, long volumesRevision, ref BodySupportMemo memo) {
+            m_field = field;
+            m_entityIndex = entityIndex;
+            m_orientation = orientation;
+            m_axis = up;
+            m_volumes = volumes;
+            m_volumesRevision = volumesRevision;
+            m_memo = ref memo;
+        }
+
+        public bool TrySupportDistance(in FixedVector3 start, FixedQ4816 reach, out FixedQ4816 descent) =>
+            m_memo.Query(descent: out descent, field: m_field, orientation: in m_orientation, position: in start, reach: reach,
+                up: in m_axis, volumes: m_volumes, volumesRevision: m_volumesRevision);
         public ContactResolution Sweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
             ((m_field is IEntityContactField entityField)
                 ? entityField.ResolveEntitySweep(

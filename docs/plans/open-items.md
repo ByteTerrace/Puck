@@ -737,9 +737,13 @@ Remaining:
   form would not tighten the enclosure, which is already the exact range of
   each octave's blend over the box, and an octave cut is only the drawn relief's
   own cut (the terrain pass's step 3), never a contact approximation.
-- `FixedStepUp.TrySnap`'s landing probes issue most relief contact queries while
-  walking, and the snap now also runs on unproved steps. Measure whether each
-  probe is needed before cutting the solve itself.
+- A ground snap's support distance against a field collider (relief) still
+  brackets that collider's own push by halving the reach
+  (`FixedSupportDistance.FieldProbes` solves), where a convex collider takes a
+  Newton step or two. A directed certified descent over the field's box bounds
+  would replace the bracket; the one certified sweep (`CertifiedFieldSweep`)
+  lives in `Puck.SignedDistance`, out of `Puck.Physics`' reach, so the field
+  collider would carry it as an `ICertifiedSweepQuery` the World supplies.
 - [low] Relieved instances are never culled from `WorldSolidField`'s program,
   because `NoiseDisplace` has no reach certificate (`SdfFieldEvaluator.Cull.cs`,
   `TryCertifyInstance`).
@@ -1069,11 +1073,12 @@ Owner: debug-world content lane (rendering, puck-world, sdf-authoring) · ordina
 Next: what the water as a forcing workload showed
 ([C3 as built](debug-world-composition.md#c3-as-built)); each item is a system
 the water strained, measured, and not yet fixed. The rendering capabilities
-the water lacks (a medium response on the glass pass, flow-driven shading,
-presentation particles, reflections of geometry on glass) are planned in
-[water rendering](water-rendering.md), whose W2 flow layer is in
-([as built](water-rendering.md#w2-as-built)) and whose W1, W3 and W2's field
-source are the next lanes here; the items below are the system work beside them.
+the water lacks (presentation particles, near-geometry reflections on glass)
+are planned in [water rendering](water-rendering.md), whose W2 flow layer
+([as built](water-rendering.md#w2-as-built)) and W1 glass medium
+([as built](water-rendering.md#w1-as-built), its GPU checks owed) are in, and
+whose W3 and W2's field source are the next lanes here; the items below are the
+system work beside them.
 
 - [medium] Cold mesh residency still misses the one-minute target. Attribute the
   remaining large water meshes with `puck mesh audit --prototype` (now selects
@@ -1998,8 +2003,8 @@ colliders report's only red findings left are the valley's relief
 - A creation whose contact shapes blend other than by hard union collides as
   its composed field (`WorldColliderSet.CollidesAsField`), relieved or not. A
   cheaper exact join would be a smooth-union primitive pair with its k/4 seam
-  bound, if the field's cost ever becomes the limit; on the rim the step-up's
-  landing probes (`FixedStepUp.TrySnap`) are the larger share
+  bound, if the field's cost ever becomes the limit; on the rim the ground
+  snap's field bracket (`FixedSupportDistance`) is the share to measure first
   ([certified field contact](#certified-field-contact)).
 - The bake-side causes live in the [rendering plan's](rendering.md)
   bake items: a long thin member of a static union baking at the union's capped

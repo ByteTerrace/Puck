@@ -67,8 +67,10 @@ public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, f
     /// <summary>Gets whether the material is glass: it carries a <see cref="Glass"/> response.</summary>
     public bool IsGlass => (Glass is not null);
     /// <summary>Gets whether the glass response, when present, is admissible with this material's albedo as its tint
-    /// (<see cref="SdfGlass.IsValid"/>, <see cref="SdfGlass.IsTint"/>); an opaque material always is.</summary>
-    public bool IsGlassValid => ((Glass is not { } glass) || (glass.IsValid && SdfGlass.IsTint(tint: Albedo)));
+    /// (<see cref="SdfGlass.IsValid"/>, <see cref="SdfGlass.IsTint"/>), and a contact (<see cref="SdfGlass.HasContact"/>)
+    /// has a flow naming the surface its coverage reveals; an opaque material always is.</summary>
+    public bool IsGlassValid => ((Glass is not { } glass) ||
+        (glass.IsValid && SdfGlass.IsTint(tint: Albedo) && (!glass.HasContact || (Flow?.Surface is not null))));
 
     /// <summary>The roughness whose GGX alpha (<c>sqrt(roughness^2 + SdfRoughnessFloorSquared)</c>, see
     /// <see cref="Roughness"/>) equals the Walter et al. (2007) Blinn-Phong-equivalent alpha of exponent 32,

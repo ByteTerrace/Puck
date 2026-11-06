@@ -9,6 +9,29 @@ namespace Puck.Cli.Worlds.Tests;
 /// build <c>Puck.World</c> again: the test project already depends on that build.</remarks>
 public sealed class TestCommandLawTests {
     [Fact]
+    public void FilterSelectsAuthoredNamesAndGeneratedGlobsForReproduceRecordAndCompare() {
+        using var directory = new TemporaryDirectory(prefix: "puck-test-filter-");
+        directory.WriteText(name: "selection.puck", text: """
+            schema: "puck.world.definition.v1"
+            documentId: "selection"
+            state { world { table value { "0" = 7 } } }
+            test "chosen scenario" { expect { value[0] == 7 } }
+            test "unselected failure" { expect { value[0] == 99 } }
+            """);
+        var source = directory.PathOf("selection.puck");
+        var recorded = directory.PathOf("recorded");
+        var (exit, output) = RunTest(source, "--filter", "chosen scenario", "--reproduce", "--record", recorded);
+        Assert.True(exit == 0, output);
+        Assert.Contains("selected 1 world(s); skipped 1 world(s) by --filter", output);
+        Assert.Contains("processes=1 host-boots=1 world-runs=1", output);
+        Assert.Single(Directory.GetDirectories(recorded));
+        var (compared, comparedOutput) = RunTest(source, "--filter", "*~chosen-*", "--reproduce", "--compare", recorded);
+        Assert.True(compared == 0, comparedOutput);
+        var (missing, missingOutput) = RunTest(source, "--filter", "absent");
+        Assert.Equal(2, missing);
+        Assert.Contains("no test worlds matched", missingOutput);
+    }
+    [Fact]
     public void AScopedInputDeniedAuthorityIsRecordedInTheManifestAndRefusalReport() {
         using var directory = new TemporaryDirectory(prefix: "puck-test-scope-refusal-");
 

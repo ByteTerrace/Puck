@@ -117,6 +117,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck locks`](#puck-locksrestore-lock-files) | re-records the solution's `packages.lock.json` files after a reference change, takes newer packages with `--update`, or with `--check` runs a locked restore and names each project whose lock file drifted, writing nothing. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
 | [`puck mcp`](../../src/Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator [--attach <attachment file\|latest>]`, attaching to a World that ran `world.control start` or was launched with `--control`, and starting and stopping Worlds of its own with `puck_world_start` and `puck_world_stop`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape runs the silo with the installed `Puck.Mcp` [extension](extensions.md) as its hosted control, and standalone silo and World have no MCP dependency. Both shapes speak MCP protocol version `2026-07-28`. |
+| [`puck measure`](#puck-measurequeued-measurement-windows) | queue frozen before/after builds and timing questions with `request`, inspect them with `list`, and drain them under one priority quiet lease with `run`, reporting median, IQR and paired differences from the existing bench or sweep reports. |
 | [`puck mesh`](#puck-mesh-auditbaked-mesh-audit) | `mesh audit` measures the meshes a World's bake stored against the fields they were baked from and reports each group's defects, worst first, located and named by shape; `mesh scene` times the irradiance volume's trace scene over them, built whole and updated for one draw's change; `mesh identity` prints the bake identity a build keys them by and what differs from another build's. |
 | [`puck migrate`](#the-puck-dsl-verbs) | applies one named syntax-tree rewrite to every `.puck` source under a path, proving each rewritten source still compiles to the document it did apart from the members the migration declares. |
 | [`puck motion`](#puck-motiontick-pinned-motion-stills-and-contact-sheets) | judges how the Moth moves: boots the debug world's real `Puck.World`, runs the tick-pinned scenarios of `worlds/debug/motion.scenarios.json` through the `motion` layout's four cameras, and writes per-camera stills, labelled contact sheets and a manifest; `--reproduce` runs everything twice in fresh Worlds and compares pose hashes and pixels. |
@@ -124,6 +125,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck official`](#puck-officialthe-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.manifest.v1` tree—the shipped engine, the authoring workspace, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
 | [`puck packages`](#puck-packagespublished-nuget-package-report) | the published `ByteTerrace.Puck.*` NuGet package report—id/description/tags—checked and regenerated against `docs/site/index.html`. |
 | [`puck parity`](#puck-paritycross-backend-parity-over-the-authored-parity-world) | boots a parity world it is given offscreen once per graphics backend and judges every capture it schedules: content gate, exact state hash, an exact reference image where a station names one, and per-tile pixels. |
+| [`puck prewarm`](../../src/Puck.Cli.Worlds/PlayerDerivedProducts.cs) | produces the AGB BIOS and Rust addon derived caches into a player output through the runtime loaders. |
 | [`puck publish`](#puck-publishunsigned-release-source-trees) | writes an unsigned `puck.release.manifest.v1` release-source tree from one runtime identifier's built output. |
 | [`puck pull-request`](#puck-pull-requestautomatic-pr-formatting) | the formatting bot's two halves: `format` prepares a pull request's formatting artifact, and `submit-format` is CI's trusted applier. |
 | [`puck qualify`](#puck-qualifypackage-qualification) | qualifies a producer-built `Puck.World` package against a release profile: the functional canaries on the package's own World, then the stability matrix offscreen, each cell judged pass, fail or blocked. |
@@ -1458,6 +1460,12 @@ refusal.
 
 ## `puck test`—test worlds
 
+Use `--filter '<name-or-glob>'` to select generated world names (`<source>~<test-slug>`) or authored test names. `*` and `?` are glob wildcards; repeat the option for alternatives. Selection happens before staging/composing the selected worlds and before deciding whether the run needs the heavy lease. The verb prints selected and skipped world counts; zero matches refuses with exit 2. The same selection applies to `--reproduce`, `--record`, `--compare` and every `--workers` leg. For example:
+
+```sh
+puck test worlds/debug/chess-tests.puck --filter '*illegal-knight*' --reproduce --jobs 1
+```
+
 The debug world's scoped replay proof runs with
 `puck test worlds/debug/chess-tests.puck --reproduce --jobs 1`: it derives the
 historical game's tape through the table's real move door, checks subsequent
@@ -2759,7 +2767,30 @@ every content search in this repo through the checkout's own `puck search` build
 
 ---
 
+## `puck measure`—queued measurement windows
+
+Lanes record timing questions; the lead answers them on a quiet machine. `request` freezes the complete output directory of each `Puck.World.dll`, records the command, numeric metrics and decision criterion, and publishes the request in the main checkout's ignored measurement scratch, shared across worktrees beside the leases. It prints the complete directory; `MeasureCommand` owns its location. Rebuilding the source output or pruning its build store cannot change the copied pair. Use one artifact or commit per side; commit inputs are exported through `AffectedRevisionExport` and built through `WorldArtifactBuild`, including both shader formats, before publication.
+
+```sh
+puck measure request --name 'startup comparison' \
+  --before-world-artifact /frozen/before/Puck.World.dll \
+  --after-world-artifact /frozen/after/Puck.World.dll \
+  --metric /Summary/MedianMilliseconds \
+  --decides 'lower startup median, with paired difference larger than the IQR' \
+  -- bench startup worlds/debug --headless --samples 1
+puck measure list
+puck measure run --holder lead --repeats 5 --wait 600 --settle 30
+```
+
+`--before-commit <revision>` and `--after-commit <revision>` replace the artifact option for their side. Forward the command after `--`, without the leading `puck`. Supported forms are `bench startup` and `sweep`; the runner supplies `--world-artifact` and `--output`, which the request must omit. A headless `host.frames` run or an individual sweep signal uses an ordinary sweep plan (`sweep --plan <plan.json> --no-scenarios`). The command runs from the requesting checkout, so retain its world and plan inputs until answered. `--metric` is a repeatable JSON pointer into the existing command's `report.json`, such as `/Summary/MedianMilliseconds` for startup or `/signals/0/metrics/<key>` for a sweep. Numeric JSON strings from sweep metrics are accepted; absent or nonfinite values refuse. Use `~1` for `/` and `~0` for `~` within a key.
+
+`run [request-ids...]` takes one [`quiet` lease](#puck-lease-quieta-settle-window) for the pending snapshot, then runs before, after, before, after for `--repeats` paired rounds per request (1–100, default 5). New requests wait for the next window. `--wait` bounds lease acquisition; `--settle` defaults to 30 idle seconds; `--timeout-seconds` bounds each command including shutdown (default 600). The existing bench and sweep harnesses own every measurement; this verb does not time child-process wall clocks. Reports retain raw samples and source reports, plus median and interquartile range (linearly interpolated quartiles) for before, after and the paired **after minus before** difference. The paired median is computed from each pair's difference, not by subtracting the two independent medians.
+
+Each completed report is written under the request's `answers/` directory before the request is marked answered. A failed command, cancellation or missing metric preserves partial evidence and leaves the request pending; rerun its ID to retry. `--decides` is the lead's recorded criterion, not an inferred automatic pass. `list` includes pending and answered requests, their criteria and report paths. A second concurrent runner refuses rather than scheduling another window. All requests, frozen builds, transcripts and reports stay uncommitted.
+
 ## `puck bench`—the Puck.Maths microscope
+
+Queue timing comparisons for the lead's quiet window with [`puck measure`](#puck-measurequeued-measurement-windows).
 
 The on-demand **microscope** for the `Puck.Maths`, signed-distance and state
 kernels, and the only place their timing is measured. The law suite states cost only as a deterministic count, so it answers
@@ -4388,7 +4419,9 @@ heavy: idle
 
 ### `puck lease quiet`—a settle window
 
-Run `puck lease quiet --holder <lane> [--lane <lane>] [--wait <seconds>] [--settle <seconds>] -- <executable> <arguments...>` to hold a measurement window: no other lane builds, tests or uses the GPU while the command runs. The verb takes the `heavy`, `build` and `gpu` leases in that one order (the order a heavy suite, a World build and a World boot already nest in, so it cannot deadlock against them), then samples the machine with the same readings [`puck host load`](#puck-host-loadadmission-lines-for-the-machine) prints until it has been idle for `--settle` seconds (default 30; zero skips the wait). Idle means no GPU work, no heavy test run another process started, and CAPACITY by the host-load thresholds (the CPU mean and free memory). The wait prints to standard error what it is waiting on whenever that changes (`the GPU is held by <process> <pid>`, `a heavy test run is held by ...`, `the machine is loaded: cpu=...`). `--wait` bounds the three acquisitions in total and, added to `--settle`, the wait for an idle machine; a lease or a machine that does not come free in time is refused (exit 2) with every lease already taken released. Then the command runs, and the leases are released in reverse on every exit path. A command run under it that takes any of the three leases (`puck sweep`, `puck_world_start`, a World build, `puck lease gpu`) nests under the quiet holder instead of waiting on it; another process's lease waits in the queue until the window closes. Child failure preserves its exit code; cancellation exits 130 and kills the child tree before releasing the leases.
+Run `puck lease quiet --holder <lane> [--lane <lane>] [--wait <seconds>] [--settle <seconds>] -- <executable> <arguments...>` to reserve a priority measurement window. Once a quiet ticket is queued, **no grant is issued except to the quiet owner or a process nested under it**. `CliLease.TryAcquire` is the single grant door; its short `admission.guard` lock also serializes ticket registration, closing the check/grant race. Current holders finish without being stopped; later grants wait and say they are waiting for the measurement window. Ordinary work keeps its lane rotation.
+
+The reservation drains and holds `heavy`, `build` and `gpu`, then samples the same readings [`puck host load`](#puck-host-loadadmission-lines-for-the-machine) prints until the machine stays idle for `--settle` seconds (default 30; zero explicitly skips settling). Idle means no GPU work, no other heavy test run and host capacity. `--wait` bounds acquisition in total, including a current holder that does not finish; the settling bound is `--wait` plus `--settle`. A refusal releases the reservation and all partial holdings. The command's descendants can take serialized nested leases for sweeps, Worlds and builds. Every exit releases resources in reverse before releasing the reservation. Child failure preserves its exit code; cancellation kills the child tree and exits 130. Processes outside the lease protocol remain visible to the idle sampler; quiet never suspends or kills them.
 
 The exclusive guard handle proves ownership; holder metadata is diagnostic. Once the admitted waiter owns the guard, it replaces leftover metadata, including missing or malformed data and an alive adapter PID left when a Windows reader delayed cleanup after a World exited. Disposal always releases the guard even when directory deletion is delayed. Metadata readers permit deletion, and an unreadable queue ticket counts as occupied until it can be read or disappears. A live guard never expires. Never unlink its file or remove an active holder manually. The sandbox must allow writes to the shared lease directory; a refusal to write is an infrastructure error, never permission to run without the lease.
 

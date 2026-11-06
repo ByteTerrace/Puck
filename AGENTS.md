@@ -99,7 +99,11 @@ agent works in that mode by default, without asking:
   deleting one. Exact-output hashes and recorded artifacts that prove real
   behaviour (render floors over committed test ROMs, determinism replay
   hashes) are worth keeping. Eradication is for ledgers, dead internals and
-  duplicates, not for its own sake.
+  duplicates, not for its own sake. `puck` verbs are tooling, not product
+  capabilities (the owner's ruling): a verb, subcommand or option that does not
+  truly pull its weight (no workflow, skill, gate, verb or regular use relies
+  on it, or it cannot do what it says) is deleted with its docs and tests, without
+  asking.
 - Suspended during the refactoring campaign above. The owner's target for the
   suite is the smallest set of tests that reaches 100% line coverage. It also
   includes a short keep-list of invariant tests the owner approves

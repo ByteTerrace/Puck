@@ -507,6 +507,7 @@ public static partial class TestCommand {
     /// <summary>Creates the <c>test</c> verb.</summary>
     /// <returns>The command.</returns>
     public static Command Create() {
+        var filterOption = new Option<string[]>("--filter") { Description = "Run only worlds whose generated name or authored test name matches a glob (* and ?); repeat to select alternatives. Applies to reproduce, record and compare; reports the skipped count. No matches refuses." };
         var pathArgument = new Argument<string>(name: "path") {
             Description = "A .puck source whose `test` blocks generate test worlds, a test-world document, or a directory of either.",
         };
@@ -564,9 +565,11 @@ public static partial class TestCommand {
             workersOption,
             recordOption,
             compareOption,
+            filterOption,
         };
 
         command.SetAction(action: parseResult => Run(
+            filters: parseResult.GetValue(filterOption) ?? [],
             cacheDirectory: parseResult.GetValue(option: cacheOption),
             compare: parseResult.GetValue(option: compareOption),
             record: parseResult.GetValue(option: recordOption),
