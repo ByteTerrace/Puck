@@ -87,8 +87,8 @@ The [debug meadow](../debug/meadow.md) is the worked placement and wind example.
 
 `hydrology.puck` is a library: `hydrology(...)` authors a conserved water cycle on a flow lattice (a melt clock, a
 glacier's meltwater, a lake at its sill, falls, a river and an aquifer that levels against it) and its gauges, and
-`water.puck` is the scenery bound to them (`streamSegment`, `fallsRibbon`, `glacierMass`, `lakeSurface`, `floatGauge`,
-`stoneBridge`). The stream and the falls are still geometry whose shading flows: the standard's `streamFlowLayer`,
+`water.puck` is the scenery bound to them (`riverChannel`, `fallsRibbon`, `glacierMass`, `lakeSurface`, `floatGauge`,
+`stoneBridge`). The river is a `waterViews` field body in a cut channel and the falls are geometry, each with shading that flows: the standard's `streamFlowLayer`,
 `fallsFlowLayer` and `lakeFlowLayer` are palette `flow` layers, and `foliage.puck`'s `meadowWind` runs the same layer in
 world space over the meadow's grass. `kits.puck`'s `swimHold` is the hold a kit leads its list with to swim where a world has a medium. The
 debug world's [water](../debug/debug.md#water) is the worked example.
