@@ -577,6 +577,8 @@ internal static class WorldBenchmarks {
             metrics[name] = new System.Text.Json.Nodes.JsonObject { ["unit"] = unit, ["samples"] = new System.Text.Json.Nodes.JsonArray(items: [.. values.Select(selector: static value => (System.Text.Json.Nodes.JsonNode?)value)]) };
         }
         return new System.Text.Json.Nodes.JsonObject {
+            // Where the measured server actually loaded from, read inside the context that ran it.
+            ["engine"] = PuckPaths.Normalize(path: typeof(Puck.World.Server.WorldServer).Assembly.Location),
             ["error"] = error,
             ["metrics"] = metrics,
             ["repeats"] = finished,
@@ -636,7 +638,6 @@ internal static class WorldBenchmarks {
         var build = BenchBuild.Of(entryAssembly: (artifact ?? CliPaths.Tool));
         var start = BenchReport.Start(build: build, repeats: repeats, settings: new Dictionary<string, string> {
             ["world"] = CliPaths.ToDisplay(fullPath: path),
-            ["engine"] = ((artifact is null) ? "this CLI's own assemblies" : "the World build's assemblies, loaded beside this CLI's bench code"),
         }, verb: "bench world");
         string payload;
         BenchHostLoad? load;
@@ -664,6 +665,7 @@ internal static class WorldBenchmarks {
             HostLoad = load,
             Metrics = metrics,
             Rows = rows,
+            Settings = new Dictionary<string, string>(collection: start.Settings) { ["engine"] = answer["engine"]!.GetValue<string>() },
         };
 
         if (output is not null) {
