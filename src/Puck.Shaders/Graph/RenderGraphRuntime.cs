@@ -1318,10 +1318,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             (convergence.Samples >= convergence.Request.Converge) &&
             (m_nodes[m_captureInstance]?.PendingCapturePath == convergence.Request.Path));
 
-        // The packages' shared frame work (an SDF residency's upload and pump) is done before the batch opens, so it reaches
-        // the queue ahead of every render and no node's recording pays for it.
-        PackagesPrepareRenders(context: in context, renders: renders);
-
         // The frame's renders reach the queue together: every node's submission joins one batch, flushed once they have all
         // recorded (IGpuQueueSubmitter.BeginBatch), so a frame costs the queue one call rather than one a node.
         var queue = m_device.Services.QueueSubmitter;
@@ -1329,6 +1325,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         queue.BeginBatch();
         try {
+            // The packages' shared frame work (an SDF residency's upload and pump) is done before any render records, so no
+            // node's recording pays for it; its submissions open the frame's batch, ahead of every render's.
+            PackagesPrepareRenders(context: in context, holdingConvergence: holdingConvergence, renders: renders);
+
             for (var position = 0; (position < renders.Count); position++) {
                 var index = renders[position];
                 var row = schedule.Instances[index];

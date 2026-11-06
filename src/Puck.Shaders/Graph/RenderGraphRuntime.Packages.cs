@@ -293,14 +293,19 @@ public sealed partial class RenderGraphRuntime {
 
     // Asks the factory of every package pass of every scheduled render to prepare it (IRenderGraphPackageFactory.PrepareRender),
     // once per factory and render, before any render records. An external producer's or an uploaded source's render runs
-    // no package pass.
-    private void PackagesPrepareRenders(IReadOnlyList<int> renders, in FrameContext context) {
+    // no package pass, and a render a held capture withholds this frame (holdingConvergence) records nothing.
+    private void PackagesPrepareRenders(IReadOnlyList<int> renders, bool holdingConvergence, in FrameContext context) {
         var began = System.Diagnostics.Stopwatch.GetTimestamp();
 
         for (var position = 0; (position < renders.Count); position++) {
             var index = renders[position];
 
-            if ((m_producers[index] is not null) || (m_sources[index] is not null) || (m_graphs[index] is not { } graph)) { continue; }
+            if (
+                (m_producers[index] is not null) || (m_sources[index] is not null) || (m_graphs[index] is not { } graph) ||
+                (holdingConvergence && m_convergenceInstances.Contains(item: index))
+            ) {
+                continue;
+            }
 
             var passes = graph.Pipeline.Plan.Passes;
             var instance = m_set.Instances[index].Name;

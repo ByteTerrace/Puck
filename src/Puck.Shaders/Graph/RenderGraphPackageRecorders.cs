@@ -314,8 +314,9 @@ public interface IRenderGraphPackageFactory {
     /// <summary>Prepares a scheduled render of an instance one of whose passes runs the factory's package: the frame's
     /// shared work its recording reads (an upload, a background pump), done once here so that no node's recording pays
     /// for it. The runtime calls it on the frame thread once the frame is scheduled, for every render the schedule
-    /// names, before the frame's submission batch opens and before any instance renders; work submitted here reaches
-    /// the queue ahead of the frame's batch. A render the frame then withholds was still prepared.</summary>
+    /// names, inside the frame's submission batch and before any instance renders, so work submitted here joins the
+    /// batch ahead of every render's submission. A render whose node then records nothing (paused, or waiting on an
+    /// extent) was still prepared.</summary>
     /// <param name="instance">The scheduled instance.</param>
     /// <param name="context">The host's frame context of the frame being produced.</param>
     void PrepareRender(string instance, in FrameContext context) { }
