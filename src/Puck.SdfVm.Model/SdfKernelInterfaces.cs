@@ -200,6 +200,8 @@ public sealed class SdfKernelInterfaces {
                 )),
                 Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshRegion),
                 Read(element: ShaderValueType.Float4, name: SdfWorldPackage.DynamicTransforms),
+                // The heights a height field's draw is displaced by (frame/sdf-mesh.hlsli, sdfMeshDisplaced).
+                Read(element: ShaderValueType.Uint, name: SdfWorldPackage.FrameSampled),
                 ShaderWorkCounters.BufferMember,
                 // The glass raster pass reads each pixel's opaque hit and accumulates its faces' distances; the mesh and
                 // shadow passes bind the tables' dummy at both.

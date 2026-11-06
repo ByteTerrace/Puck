@@ -265,6 +265,23 @@ public sealed record SdfMeshLevel(ReadOnlyMemory<uint> Indices, ReadOnlyMemory<u
 /// <param name="Orientation">How it was turned there. A vertex riding the member is carried into the slot's frame by the
 /// inverse of this pose, then out by the slot's transform in the frame that draws it.</param>
 public readonly record struct SdfMeshMember(int SlotOffset, Vector3 Position, Quaternion Orientation);
+/// <summary>The heights a height field's draw is displaced by as it is drawn (<see cref="SdfHeightField"/>): the handle
+/// the frame's sampled table holds them at (<see cref="SdfProgram.HeightFields"/>), and the band of object-space heights
+/// every displaced point lies in, which the draw's box holds in place of its baked reference's.</summary>
+/// <param name="Handle">The heights' handle in the frame's program.</param>
+/// <param name="Low">The least object-space height a displaced point takes.</param>
+/// <param name="High">The greatest object-space height a displaced point takes.</param>
+public readonly record struct SdfMeshDisplacement(int Handle, float Low, float High) {
+    /// <summary>Returns the displacement of a program's height field.</summary>
+    /// <param name="binding">The height field's binding.</param>
+    /// <returns>The displacement.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="binding"/> is <see langword="null"/>.</exception>
+    public static SdfMeshDisplacement Of(SdfHeightFieldBinding binding) {
+        ArgumentNullException.ThrowIfNull(argument: binding);
+
+        return new(Handle: binding.Handle, High: binding.Field.DrawnHigh, Low: binding.Field.DrawnLow);
+    }
+}
 /// <summary>One placement of an <see cref="SdfMesh"/> in a frame.</summary>
 /// <param name="Mesh">The triangles to draw.</param>
 /// <param name="ObjectToWorld">The object-to-world transform, in the row-vector convention of
@@ -310,6 +327,9 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// negative is not drawn, in any view or shadow. Zero, the default, draws everything; a body straddling a portal's
     /// glass is drawn clipped to the glass's front on each side.</summary>
     public Vector4 ClipPlane { get; init; }
+    /// <summary>Gets the heights the draw's mesh, a height field's baked reference, is displaced by as it is drawn, or
+    /// <see langword="null"/> for a draw drawn as its mesh was baked.</summary>
+    public SdfMeshDisplacement? Displacement { get; init; }
     /// <summary>Returns whether two draws stage the same GPU record, bounds, picking identity and motion interpretation,
     /// including the exact bits of each floating-point field.</summary>
     /// <param name="other">The draw to compare.</param>
@@ -324,6 +344,7 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
             (this.UsesRootMaterialFrame != other.UsesRootMaterialFrame) ||
             !Equals(objA: this.MotionIdentity, objB: other.MotionIdentity) ||
             (BitConverter.SingleToInt32Bits(value: this.CarryScale) != BitConverter.SingleToInt32Bits(value: other.CarryScale)) ||
+            (this.Displacement != other.Displacement) ||
             !Equals(objA: this.Identity, objB: other.Identity)
         ) {
             return false;
@@ -638,7 +659,7 @@ public static class SdfMeshRegion {
         var meshChanged = (!retained || !ReferenceEquals(objA: mesh, objB: previous.Mesh));
         var matrixChanged = (!retained || !SameDrawBits(left: in matrix, right: in previousMatrix));
         var normalChanged = (!retained || !SameNormalBasis(left: in matrix, right: in previousMatrix));
-        var boxChanged = (meshChanged || normalChanged || !SameDrawTranslation(left: in matrix, right: in previousMatrix) || !SameDrawBits(left: in carry, right: in previousCarry) ||
+        var boxChanged = (meshChanged || normalChanged || (draw.Displacement != previous.Displacement) || !SameDrawTranslation(left: in matrix, right: in previousMatrix) || !SameDrawBits(left: in carry, right: in previousCarry) ||
             !SameDrawBits(left: in shift, right: in previousShift) ||
             (BitConverter.SingleToUInt32Bits(draw.CarryScale) != BitConverter.SingleToUInt32Bits(previous.CarryScale)));
         var writer = new DrawRecordWriter(record[..SdfMeshRecord.DrawWords], retained);
@@ -669,6 +690,7 @@ public static class SdfMeshRegion {
         writer[SdfMeshRecord.ClipPlaneWord + 3] = BitConverter.SingleToUInt32Bits(clip.W);
         writer[SdfMeshRecord.LevelTableWord] = ((uint)(placement.IndexWord + (3 * mesh.LevelledTriangleCount)));
         writer[SdfMeshRecord.LevelTableWord + 1] = ((uint)mesh.Levels.Count);
+        writer[SdfMeshRecord.DisplacementWord] = ((draw.Displacement is { } displacement) ? ((uint)displacement.Handle) : SdfFrameSampled.None);
 
         var selection = record.Slice(length: 16, start: SdfMeshRecord.SelectionWord);
         var boxed = (retained && ((selection[3] & 1u) == 0u));

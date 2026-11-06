@@ -32711,11 +32711,6 @@
                   "additionalProperties": false,
                   "default": null,
                   "title": "PaletteEntryDocument"
-                },
-                "surfaceStep": {
-                  "description": "The height, in world units, the drawn surface moves by. The renderer redraws a column only once its raised height has moved a whole step from the height drawn, and then draws it at the nearest whole step, so a value that changes continuously (a flowing or filling store) rebakes its surface once a step rather than every lattice step, a value hovering about a step boundary redraws nothing, and a height it returns to draws a mesh already baked. 0 draws at the baked mesh\u0027s own resolution (SdfMeshGeometryBuilder.PositionSteps). Presentation only: bodies and media read the full value.",
-                  "type": "number",
-                  "default": 0
                 }
               },
               "required": [

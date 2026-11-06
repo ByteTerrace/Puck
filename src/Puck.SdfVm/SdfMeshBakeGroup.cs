@@ -45,6 +45,10 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// probe. A glass instance never bakes with an opaque one, so a static group is glass or opaque whole; a dynamic
     /// group is glass only while every instance riding its slot is, and the world group never is.</summary>
     public bool Glass { get; private set; }
+    /// <summary>Gets the heights a static group of one height field's instance is displaced by as it is drawn
+    /// (<see cref="SdfProgram.HeightFields"/>), with the handle of the program the group was planned of; <see langword="null"/>
+    /// for a group drawn as it was baked. A height field's instance bakes alone: no instance bakes with it.</summary>
+    public SdfMeshDisplacement? Displacement { get; private set; }
 
     /// <summary>Gets each static instance's bounding sphere, which a union of several sizes its lattice by, the finest
     /// feature it declares (<see cref="SdfInstanceRange.Detail"/>), which refines its lattice, and the box that refinement
@@ -103,14 +107,16 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// which a bake job writes into the table its kernel reads, so its samples never read another snapshot.</summary>
     public (int Handle, SdfSampledSnapshot Snapshot)[] SampledSnapshots { get; private set; } = [];
 
-    /// <summary>Takes the snapshots of a group another program planned at this group's place with the same geometry, whose
-    /// handles are that program's: a group kept from one program into the next samples the next program's handles.</summary>
+    /// <summary>Takes the snapshots and displacement of a group another program planned at this group's place with the same
+    /// geometry, whose handles are that program's: a group kept from one program into the next samples and draws through
+    /// the next program's handles.</summary>
     /// <param name="planned">The group the next program planned.</param>
     /// <exception cref="ArgumentNullException"><paramref name="planned"/> is <see langword="null"/>.</exception>
     internal void AdoptSampled(SdfMeshBakeGroup planned) {
         ArgumentNullException.ThrowIfNull(argument: planned);
 
         SampledSnapshots = planned.SampledSnapshots;
+        Displacement = planned.Displacement;
     }
 
     /// <summary>Gets or sets the low corner of the group's box: its members' bounds when planned, then what the bake's
@@ -221,6 +227,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         replanned.Low = group.Low;
         replanned.High = group.High;
         replanned.Glass = group.Glass;
+        replanned.Displacement = group.Displacement;
         replanned.Clamped = group.Clamped;
         replanned.Detail = group.Detail;
         replanned.DetailLow = group.DetailLow;
@@ -322,7 +329,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                     group.High = Vector3.Max(value1: group.High, value2: (center + new Vector3(value: radius)));
                     group.Glass &= glass;
                 }
-            } else if (instance.BakesWithPrevious && (staticRun is { } run) && !glass && !run.Glass && ((-(run.Selector + 1) + run.Instances) == index)) {
+            } else if (instance.BakesWithPrevious && (instance.HeightField is null) && (staticRun is { } run) && !glass && !run.Glass && (run.Displacement is null) && ((-(run.Selector + 1) + run.Instances) == index)) {
                 group = run;
                 group.Instances++;
                 group.Low = Vector3.Min(value1: group.Low, value2: (instance.Center - new Vector3(value: radius)));
@@ -332,6 +339,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                 group.Low = (instance.Center - new Vector3(value: radius));
                 group.High = (instance.Center + new Vector3(value: radius));
                 group.Glass = glass;
+                group.Displacement = ((instance.HeightField is null) ? null : DisplacementOf(program: program, instance: index));
                 groups.Add(item: group);
             }
             if (!instance.IsDynamic) {
@@ -441,6 +449,13 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         Geometry.WritePoseRows(first: first, rows: rows.AsSpan(start: 1));
         PoseFirst = first;
         PoseRows = rows;
+    }
+    // The displacement of the height field a program's instance draws.
+    private static SdfMeshDisplacement DisplacementOf(SdfProgram program, int instance) {
+        foreach (var binding in program.HeightFields) {
+            if (binding.Instance == instance) { return SdfMeshDisplacement.Of(binding: binding); }
+        }
+        throw new InvalidOperationException(message: $"Instance {instance} draws a height field its program binds no handle for.");
     }
     // A position rounded to the steps a metre the geometry rounds a slot's position to.
     private static Vector3 Rounded(Vector3 value) => new(x: Rounded(value: value.X), y: Rounded(value: value.Y), z: Rounded(value: value.Z));

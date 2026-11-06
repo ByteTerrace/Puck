@@ -5,8 +5,8 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 // The host-written tables: program words, dynamic transforms, screen surfaces, screen mappings,
-// volumes, glyph decals, mesh draws, the lights and the sky's block and layers, plus the staged
-// shadow handoff controls. Each table uses a GpuRegion under the policy GpuResidency.Select chooses for
+// volumes, glyph decals, mesh draws, the lights and the sky's block and layers, the staged
+// shadow handoff controls and the frame's sampled values. Each table uses a GpuRegion under the policy GpuResidency.Select chooses for
 // its size with the upload ring's readers in flight, a ring's buffers in the memory GpuResidency.RingMemory chooses. A
 // frame writes each table into its region, which owes only the words that differ; the upload flushes its ring slot's
 // share (the previous upload's fence has retired the views that read it), records each staged region's copy, then one
@@ -21,7 +21,7 @@ public sealed partial class SdfWorldTables {
     private const int MeshRegionIndex = 6;
     private const int ProgramRegionIndex = 0;
     // The per-frame regions RegionAt names.
-    private const int RegionCount = 11;
+    private const int RegionCount = 12;
     private const int ScreenMappingRegionIndex = 5;
     private const int ScreenSurfaceRegionIndex = 2;
     private const int VolumeRegionIndex = 3;
@@ -162,6 +162,7 @@ public sealed partial class SdfWorldTables {
         LightRegionIndex => m_lightRegion,
         SkyRegionIndex => m_skyRegion,
         SkyLayerRegionIndex => m_skyLayerRegion,
+        FrameSampledRegionIndex => m_frameSampledRegion,
         _ => m_shadowHandoffRegion,
     };
     // The debug name of region index's objects, its reserved copy sets included: its table's role.
@@ -176,6 +177,7 @@ public sealed partial class SdfWorldTables {
         LightRegionIndex => "lights",
         SkyRegionIndex => "sky",
         SkyLayerRegionIndex => "sky-layers",
+        FrameSampledRegionIndex => "frame-sampled",
         _ => "shadow-handoffs",
     });
     // Creates the one copy pool of every region the tables may create, each region's sets named as its region: the pool its admission states (RegionCopyPoolSizes).

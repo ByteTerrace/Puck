@@ -298,9 +298,11 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
   creation palette's, a height field's, a text screen's ink and `{state.*}`
   placeholders), read through the mirror's color and number slots; the scene
   and field emitters and the decal cache follow a bound one's move with a
-  rebuild. `WorldFieldEmitter` bakes each height field's sampled values from
-  the field row's slot and publishes them as a snapshot of its `SdfSampledField`,
-  which moves no program revision, the same slot a pass's array bound to `state.<field>` reads.
+  rebuild. `WorldFieldEmitter` publishes each height field's column heights from
+  the field row's slot into its `SdfHeightField`, the same slot a pass's array
+  bound to `state.<field>` reads; the renderer displaces the field's baked
+  reference by them as it draws, so a height change moves no program revision
+  and keys no mesh.
   Text screens accept `{state.<row>[.<key>][.$target]}` for declared Int, Fixed,
   Bool and Text rows; `$body` has no screen context and is refused. `{{` and
   `}}` display literal braces, so `{{state.count}}` displays `{state.count}`.

@@ -1080,10 +1080,9 @@ source are the next lanes here; the items below are the system work beside them.
   static and animated placements), and profile bake admission, landing and
   illumination together. The stream is eight placements of one still segment
   and the falls still sheets, their motion the flow layer's shading.
-  Drawn heights move by an authored `surfaceStep` with hysteresis, and each
-  step publishes a new snapshot of the field's `SdfSampledField` without
-  rebuilding the program, so only that field's group rebakes. Run costs and
-  before/after evidence live in the water follow-up commits.
+  Drawn heights move at draw time over a reference mesh keyed by the raised
+  columns alone ([field surfaces](water-rendering.md#field-surfaces-move-at-draw-time)),
+  so a moving level rebakes nothing.
   The prototype audits also flag normal/topology defects in the glacier, lake and falls
   despite finding no uncovered surface. Inspect those witnesses through the
   existing mesh-audit image output before attributing them to authored style.
