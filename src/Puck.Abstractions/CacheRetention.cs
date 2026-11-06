@@ -12,6 +12,10 @@ public readonly record struct CacheBound(int MaxEntries, long MaxBytes) {
     /// <param name="maxEntries">The most entries kept.</param>
     /// <returns>The bound.</returns>
     public static CacheBound Entries(int maxEntries) => new(MaxBytes: long.MaxValue, MaxEntries: maxEntries);
+
+    /// <summary>Gets the bound an enforcement on write trims to once the cache passes this one: an eighth below it in
+    /// bytes and in entries (at least one entry), so the writes that follow fit the headroom before the next listing.</summary>
+    public CacheBound LowWater => new(MaxBytes: (MaxBytes - (MaxBytes / 8)), MaxEntries: Math.Max(val1: 1, val2: (MaxEntries - (MaxEntries / 8))));
 }
 /// <summary>One entry a cache holds: a file or a directory, when it was last used, and how many bytes it holds.</summary>
 /// <param name="Path">The entry's full path.</param>
@@ -37,16 +41,25 @@ public readonly record struct CacheRetentionResult(int Removed, long RemovedByte
 /// because a reader holds it open is in use, and stays.
 /// </para>
 /// <para>
+/// An enforcement on write lists the directory only when the bound may have been passed: each process keeps a tally per
+/// directory of what its last listing kept plus what it has written since, and lists again once that tally passes the
+/// bound or <see cref="EnforceInterval"/> has gone by. A listing over the bound trims to its
+/// <see cref="CacheBound.LowWater"/>, so a full cache lists once per eighth of its bound written rather than on every
+/// write. One process's writes therefore never leave the cache over its bound. Writers in other processes are counted
+/// only by the next listing: while several processes write one directory at once, the cache can pass its bound by what
+/// the others wrote since this process last listed, beyond the headroom, until one of them lists again.
+/// </para>
+/// <para>
 /// A stamp is file-system metadata and a cache's contents are content-addressed, so retention never decides what a
 /// cache answers: an evicted entry costs its next reader a derivation, never a different result.
 /// </para>
 /// </summary>
 public static class CacheRetention {
-    /// <summary>How long after one enforcement of a directory a process skips the next: a writer that publishes many
-    /// entries in a row lists the directory once, not once per entry.</summary>
+    /// <summary>The longest a writing process goes without listing a directory it writes, so that it counts other
+    /// processes' writes; within it, it lists only when its own tally passes the bound.</summary>
     public static readonly TimeSpan EnforceInterval = TimeSpan.FromMinutes(minutes: 1);
 
-    private static readonly ConcurrentDictionary<string, long> Enforced = new(comparer: StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, Tally> Tallies = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Records that <paramref name="path"/> was used now. A stamp that cannot be written costs at most an
     /// early eviction, so a missing or refusing entry is left as it is.</summary>
@@ -128,58 +141,25 @@ public static class CacheRetention {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
         ArgumentNullException.ThrowIfNull(argument: isEntry);
 
-        var entries = new List<CacheEntry>();
-
-        try {
-            foreach (var file in new DirectoryInfo(path: directory).EnumerateFiles(searchOption: search, searchPattern: "*")) {
-                if (isEntry(arg: file)) {
-                    entries.Add(item: new CacheEntry(Bytes: file.Length, LastUsedUtc: file.LastWriteTimeUtc, Path: file.FullName));
-                }
-            }
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            // A directory that is missing or cannot be listed holds nothing this enforcement can remove.
-        }
-
-        var removed = 0;
-        var removedBytes = 0L;
-
-        foreach (var eviction in SelectEvictions(bound: bound, entries: entries, inUse: ((inUse is null) ? null : Path.GetFullPath(path: inUse)), usedSinceUtc: usedSinceUtc)) {
-            try {
-                File.Delete(path: eviction.Path);
-                removed++;
-                removedBytes += eviction.Bytes;
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                // Held open by a reader, so in use: it stays.
-            }
-        }
-
-        return new CacheRetentionResult(
-            Kept: (entries.Count - removed),
-            KeptBytes: (entries.Sum(selector: static entry => entry.Bytes) - removedBytes),
-            Removed: removed,
-            RemovedBytes: removedBytes
-        );
+        return EnforceFiles(bound: bound, directory: directory, inUse: inUse, isEntry: isEntry, search: search, trimTo: bound, usedSinceUtc: usedSinceUtc).Result;
     }
-    /// <summary>Enforces <paramref name="bound"/> on a directory (<see cref="Enforce"/>) unless this process already did
-    /// within <see cref="EnforceInterval"/>: what an owner calls after each write.</summary>
+    /// <summary>Holds a directory of file entries to <paramref name="bound"/> after a write (<see cref="Enforce"/>),
+    /// listing it only when this process's tally of it may have passed the bound or <see cref="EnforceInterval"/> has
+    /// gone by since its last listing, and trimming a cache over its bound to <see cref="CacheBound.LowWater"/>: what an
+    /// owner calls after each write.</summary>
     /// <param name="directory">The cache directory.</param>
     /// <param name="bound">The bound.</param>
     /// <param name="isEntry">Which files are entries.</param>
     /// <param name="search">Whether entries lie in subdirectories too.</param>
-    /// <param name="inUse">The entry the owner just wrote or is using, or <see langword="null"/>.</param>
-    /// <returns>Whether the enforcement ran.</returns>
+    /// <param name="inUse">The entry the owner just wrote, counted into the tally, or <see langword="null"/>.</param>
+    /// <returns>Whether the directory was listed.</returns>
     public static bool EnforceOnWrite(string directory, CacheBound bound, Func<FileInfo, bool> isEntry, SearchOption search = SearchOption.TopDirectoryOnly, string? inUse = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
+        ArgumentNullException.ThrowIfNull(argument: isEntry);
 
         var key = Path.GetFullPath(path: directory);
 
-        if (!Due(key: key)) {
-            return false;
-        }
-
-        _ = Enforce(bound: bound, directory: key, inUse: inUse, isEntry: isEntry, search: search);
-
-        return true;
+        return OnWrite(bound: bound, key: key, newUnit: true, written: inUse, enforce: () => EnforceFiles(bound: bound, directory: key, inUse: inUse, isEntry: isEntry, search: search, trimTo: bound.LowWater, usedSinceUtc: null));
     }
     /// <summary>Holds a directory whose entries come in sets to <paramref name="bound"/>, a set at a time: each
     /// subdirectory is one set, its entries the files <paramref name="isEntry"/> accepts anywhere beneath it, its bytes
@@ -202,6 +182,107 @@ public static class CacheRetention {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
         ArgumentNullException.ThrowIfNull(argument: isEntry);
 
+        return EnforceSetsCore(bound: bound, directory: directory, inUse: inUse, isEntry: isEntry, trimTo: bound).Result;
+    }
+    /// <summary>Holds a directory of sets to <paramref name="bound"/> after a write (<see cref="EnforceSets"/>), listing
+    /// it only when this process's tally of it may have passed the bound or <see cref="EnforceInterval"/> has gone by
+    /// since its last listing, and trimming a cache over its bound to <see cref="CacheBound.LowWater"/> a set at a time:
+    /// what an owner whose entries come in sets calls after each write.</summary>
+    /// <param name="directory">The cache directory.</param>
+    /// <param name="bound">The bound.</param>
+    /// <param name="isEntry">Which files are entries.</param>
+    /// <param name="inUse">The entry the owner just wrote, counted into the tally, or <see langword="null"/>.</param>
+    /// <returns>Whether the directory was listed.</returns>
+    /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/>, empty or white
+    /// space.</exception>
+    public static bool EnforceSetsOnWrite(string directory, CacheBound bound, Func<FileInfo, bool> isEntry, string? inUse = null) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
+        ArgumentNullException.ThrowIfNull(argument: isEntry);
+
+        var key = Path.GetFullPath(path: directory);
+
+        return OnWrite(bound: bound, key: key, newUnit: false, written: inUse, enforce: () => EnforceSetsCore(bound: bound, directory: key, inUse: inUse, isEntry: isEntry, trimTo: bound.LowWater));
+    }
+
+    // Counts a write into the directory's tally and lists the directory when the tally may have passed the bound, the
+    // interval has gone by, or this process never listed it; the listing resets the tally to what it kept. A written
+    // unit is a new entry (flat) or, for sets, a set the last listing did not hold. Holding the tally's lock across the
+    // listing keeps one process's writers from listing twice for one overflow; an overestimate (a rewritten entry
+    // counted again) only lists earlier.
+    private static bool OnWrite(string key, CacheBound bound, string? written, bool newUnit, Func<Listing> enforce) {
+        var tally = Tallies.GetOrAdd(key: key, valueFactory: static _ => new Tally());
+        var bytes = 0L;
+        var path = ((written is null) ? null : Path.GetFullPath(path: written));
+
+        if (path is not null) {
+            try {
+                bytes = new FileInfo(fileName: path).Length;
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                // Gone already: it adds nothing.
+            }
+        }
+
+        lock (tally) {
+            var now = Environment.TickCount64;
+
+            tally.Bytes += bytes;
+            if (path is not null) {
+                if (newUnit) {
+                    tally.Units++;
+                } else if (tally.Sets is { } sets && sets.Add(item: SetOf(root: key, path: path))) {
+                    tally.Units++;
+                }
+            }
+            if (tally.Listed && (tally.Bytes <= bound.MaxBytes) && (tally.Units <= bound.MaxEntries) && ((now - tally.ListedAt) < ((long)EnforceInterval.TotalMilliseconds))) {
+                return false;
+            }
+
+            var listing = enforce();
+
+            tally.Bytes = listing.Result.KeptBytes;
+            tally.Units = listing.KeptUnits;
+            tally.Sets = listing.KeptSets;
+            tally.ListedAt = Environment.TickCount64;
+            tally.Listed = true;
+
+            return true;
+        }
+    }
+    // Lists a flat directory, then removes entries down to trimTo when the listing is over bound (or the age bound
+    // applies). When bound and trimTo are one bound this is the ordinary enforcement.
+    private static Listing EnforceFiles(string directory, CacheBound bound, CacheBound trimTo, Func<FileInfo, bool> isEntry, SearchOption search, string? inUse, DateTime? usedSinceUtc) {
+        var entries = new List<CacheEntry>();
+
+        try {
+            foreach (var file in new DirectoryInfo(path: directory).EnumerateFiles(searchOption: search, searchPattern: "*")) {
+                if (isEntry(arg: file)) {
+                    entries.Add(item: new CacheEntry(Bytes: file.Length, LastUsedUtc: file.LastWriteTimeUtc, Path: file.FullName));
+                }
+            }
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            // A directory that is missing or cannot be listed holds nothing this enforcement can remove.
+        }
+
+        var total = entries.Sum(selector: static entry => entry.Bytes);
+        var removed = 0;
+        var removedBytes = 0L;
+
+        if ((usedSinceUtc is not null) || (entries.Count > bound.MaxEntries) || (total > bound.MaxBytes)) {
+            foreach (var eviction in SelectEvictions(bound: trimTo, entries: entries, inUse: ((inUse is null) ? null : Path.GetFullPath(path: inUse)), usedSinceUtc: usedSinceUtc)) {
+                if (TryDelete(path: eviction.Path)) {
+                    removed++;
+                    removedBytes += eviction.Bytes;
+                }
+            }
+        }
+
+        var result = new CacheRetentionResult(Kept: (entries.Count - removed), KeptBytes: (total - removedBytes), Removed: removed, RemovedBytes: removedBytes);
+
+        return new Listing(KeptSets: null, KeptUnits: result.Kept, Result: result);
+    }
+    // Lists a directory of sets, then removes sets (and, when the set in use alone is over, that set's own entries) down
+    // to trimTo when the listing is over bound. When bound and trimTo are one bound this is the ordinary enforcement.
+    private static Listing EnforceSetsCore(string directory, CacheBound bound, CacheBound trimTo, Func<FileInfo, bool> isEntry, string? inUse) {
         var root = Path.GetFullPath(path: directory);
         var used = ((inUse is null) ? null : Path.GetFullPath(path: inUse));
         var sets = new List<(CacheEntry Set, List<CacheEntry> Entries)>();
@@ -231,94 +312,70 @@ public static class CacheRetention {
 
         var removed = 0;
         var removedBytes = 0L;
-        var inUseSet = ((used is null) ? -1 : sets.FindIndex(match: set => set.Entries.Any(predicate: entry => IsInUse(entry: entry, inUse: used))));
+        var gone = new HashSet<string>(comparer: PuckPaths.Comparer);
+        var totalBytes = sets.Sum(selector: static set => set.Set.Bytes);
 
-        // The set in use trims itself first when it alone holds more than the bound.
-        if ((inUseSet >= 0) && (sets[inUseSet].Set.Bytes > bound.MaxBytes)) {
-            var (set, entries) = sets[inUseSet];
-            var kept = set.Bytes;
+        if ((sets.Count > bound.MaxEntries) || (totalBytes > bound.MaxBytes)) {
+            var inUseSet = ((used is null) ? -1 : sets.FindIndex(match: set => set.Entries.Any(predicate: entry => IsInUse(entry: entry, inUse: used))));
 
-            foreach (var eviction in SelectEvictions(bound: new CacheBound(MaxBytes: bound.MaxBytes, MaxEntries: int.MaxValue), entries: entries, inUse: used)) {
-                if (TryDelete(path: eviction.Path)) {
-                    removed++;
-                    removedBytes += eviction.Bytes;
-                    kept -= eviction.Bytes;
+            // The set in use trims itself first when it alone holds more than the bound.
+            if ((inUseSet >= 0) && (sets[inUseSet].Set.Bytes > trimTo.MaxBytes)) {
+                var (set, entries) = sets[inUseSet];
+                var kept = set.Bytes;
+
+                foreach (var eviction in SelectEvictions(bound: new CacheBound(MaxBytes: trimTo.MaxBytes, MaxEntries: int.MaxValue), entries: entries, inUse: used)) {
+                    if (TryDelete(path: eviction.Path)) {
+                        removed++;
+                        removedBytes += eviction.Bytes;
+                        kept -= eviction.Bytes;
+                    }
                 }
+
+                sets[inUseSet] = ((set with { Bytes = kept }), entries);
             }
 
-            sets[inUseSet] = ((set with { Bytes = kept }), entries);
-        }
+            foreach (var eviction in SelectEvictions(bound: trimTo, entries: sets.Select(selector: static set => set.Set), inUse: ((inUseSet >= 0) ? sets[inUseSet].Set.Path : null))) {
+                var whole = true;
 
-        foreach (var eviction in SelectEvictions(bound: bound, entries: sets.Select(selector: static set => set.Set), inUse: ((inUseSet >= 0) ? sets[inUseSet].Set.Path : null))) {
-            foreach (var entry in sets.First(predicate: set => string.Equals(a: set.Set.Path, b: eviction.Path, comparisonType: PuckPaths.Comparison)).Entries) {
-                if (TryDelete(path: entry.Path)) {
-                    removed++;
-                    removedBytes += entry.Bytes;
+                foreach (var entry in sets.First(predicate: set => string.Equals(a: set.Set.Path, b: eviction.Path, comparisonType: PuckPaths.Comparison)).Entries) {
+                    if (TryDelete(path: entry.Path)) {
+                        removed++;
+                        removedBytes += entry.Bytes;
+                    } else {
+                        whole = false;
+                    }
                 }
-            }
-            if (Directory.Exists(path: eviction.Path)) {
-                try {
-                    Directory.Delete(path: eviction.Path, recursive: true);
-                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                    // A file a reader holds keeps what is left of the set until a later enforcement.
+                if (Directory.Exists(path: eviction.Path)) {
+                    try {
+                        Directory.Delete(path: eviction.Path, recursive: true);
+                    } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                        // A file a reader holds keeps what is left of the set until a later enforcement.
+                        whole = false;
+                    }
+                }
+                if (whole) {
+                    _ = gone.Add(item: eviction.Path);
                 }
             }
         }
 
         var total = sets.Sum(selector: static set => set.Entries.Count);
-
-        return new CacheRetentionResult(
+        var keptSets = new HashSet<string>(collection: sets.Select(selector: static set => set.Set.Path).Where(predicate: path => !gone.Contains(item: path)), comparer: PuckPaths.Comparer);
+        var result = new CacheRetentionResult(
             Kept: (total - removed),
             KeptBytes: (sets.Sum(selector: static set => set.Entries.Sum(selector: static entry => entry.Bytes)) - removedBytes),
             Removed: removed,
             RemovedBytes: removedBytes
         );
+
+        return new Listing(KeptSets: keptSets, KeptUnits: keptSets.Count, Result: result);
     }
-    /// <summary>Enforces <paramref name="bound"/> on a directory of sets (<see cref="EnforceSets"/>) unless this process
-    /// already enforced the directory within <see cref="EnforceInterval"/>: what an owner whose entries come in sets calls
-    /// after each write.</summary>
-    /// <param name="directory">The cache directory.</param>
-    /// <param name="bound">The bound.</param>
-    /// <param name="isEntry">Which files are entries.</param>
-    /// <param name="inUse">The entry the owner just wrote or is using, or <see langword="null"/>.</param>
-    /// <returns>Whether the enforcement ran.</returns>
-    /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/>, empty or white
-    /// space.</exception>
-    public static bool EnforceSetsOnWrite(string directory, CacheBound bound, Func<FileInfo, bool> isEntry, string? inUse = null) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
+    // The set a written path belongs to: the top-level subdirectory of root holding it, or the file itself directly in root.
+    private static string SetOf(string root, string path) {
+        var relative = Path.GetRelativePath(path: path, relativeTo: root);
+        var separator = relative.IndexOfAny(anyOf: [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]);
 
-        var key = Path.GetFullPath(path: directory);
-
-        if (!Due(key: key)) {
-            return false;
-        }
-
-        _ = EnforceSets(bound: bound, directory: key, inUse: inUse, isEntry: isEntry);
-
-        return true;
-    }
-
-    // Whether this process enforces a directory now: not within EnforceInterval of its last enforcement, which this
-    // records.
-    private static bool Due(string key) {
-        var now = Environment.TickCount64;
-        var interval = ((long)EnforceInterval.TotalMilliseconds);
-
-        while (true) {
-            if (Enforced.TryGetValue(key: key, value: out var last)) {
-                if ((now - last) < interval) {
-                    return false;
-                }
-
-                if (!Enforced.TryUpdate(comparisonValue: last, key: key, newValue: now)) {
-                    continue;
-                }
-            } else if (!Enforced.TryAdd(key: key, value: now)) {
-                continue;
-            }
-
-            return true;
-        }
+        return ((separator < 0) ? path : Path.Combine(path1: root, path2: relative[..separator]));
     }
     // Deletes a file, answering whether it went: one a reader holds open is in use, and stays.
     private static bool TryDelete(string path) {
@@ -333,4 +390,16 @@ public static class CacheRetention {
 
     private static bool IsInUse(CacheEntry entry, string? inUse) =>
         ((inUse is not null) && string.Equals(a: entry.Path, b: inUse, comparisonType: PuckPaths.Comparison));
+
+    // What one listing kept: the result, the units it counts against the bound's entries (entries, or sets), and for a
+    // directory of sets the sets it kept, so a later write can tell a new set from a kept one.
+    private readonly record struct Listing(CacheRetentionResult Result, long KeptUnits, HashSet<string>? KeptSets);
+    // A process's tally of one directory since its last listing.
+    private sealed class Tally {
+        public long Bytes;
+        public bool Listed;
+        public long ListedAt;
+        public HashSet<string>? Sets;
+        public long Units;
+    }
 }

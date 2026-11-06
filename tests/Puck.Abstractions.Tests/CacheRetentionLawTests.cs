@@ -143,7 +143,7 @@ public sealed class CacheRetentionLawTests {
         }
         Assert.Equal(actual: File.Exists(path: held), expected: OperatingSystem.IsWindows());
 
-        // A writer enforces once an interval, and a missing directory holds nothing.
+        // A missing directory holds nothing.
         var other = cache.PathOf(name: "other");
 
         Assert.True(condition: CacheRetention.EnforceSetsOnWrite(bound: bound, directory: other, isEntry: static _ => true));
@@ -151,19 +151,48 @@ public sealed class CacheRetentionLawTests {
         Assert.Equal(expected: default, actual: CacheRetention.EnforceSets(bound: bound, directory: other, isEntry: static _ => true));
     }
     [Fact]
-    public void AWriterListsADirectoryOnceAnInterval() {
+    public void AWriterListsWithinTheIntervalOnlyOnceItsWritesPassTheBound() {
         using var cache = new TemporaryDirectory(prefix: "puck-cache-retention-law-");
-        var bound = CacheBound.Entries(maxEntries: 1);
+        var bound = new CacheBound(MaxBytes: 16, MaxEntries: 100);
+        var written = cache.WriteText(name: "a.bin", text: "aaaa");
 
-        _ = cache.WriteText(name: "a.bin", text: "a");
-        _ = cache.WriteText(name: "b.bin", text: "b");
+        Assert.True(condition: CacheRetention.EnforceOnWrite(bound: bound, directory: cache.RootPath, inUse: written, isEntry: static _ => true));
 
-        Assert.True(condition: CacheRetention.EnforceOnWrite(bound: bound, directory: cache.RootPath, isEntry: static _ => true));
-        Assert.Single(collection: Directory.GetFiles(path: cache.RootPath));
+        // Within the bound, a write inside the interval lists nothing.
+        written = cache.WriteText(name: "b.bin", text: "bbbb");
+        Assert.False(condition: CacheRetention.EnforceOnWrite(bound: bound, directory: cache.RootPath, inUse: written, isEntry: static _ => true));
 
-        _ = cache.WriteText(name: "c.bin", text: "c");
+        // A write that passes the bound lists at once and trims to the low water (14 bytes): the written entry and the
+        // two most recently used fit it, the oldest goes.
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: DateTime.UtcNow.AddMinutes(value: -10), path: cache.PathOf(name: "a.bin"));
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: DateTime.UtcNow.AddMinutes(value: -5), path: cache.PathOf(name: "b.bin"));
+        written = cache.WriteText(name: "c.bin", text: "cccc");
+        Assert.False(condition: CacheRetention.EnforceOnWrite(bound: bound, directory: cache.RootPath, inUse: written, isEntry: static _ => true));
+        written = cache.WriteText(name: "d.bin", text: "ddddd");
+        Assert.True(condition: CacheRetention.EnforceOnWrite(bound: bound, directory: cache.RootPath, inUse: written, isEntry: static _ => true));
+        Assert.Equal(actual: Directory.GetFiles(path: cache.RootPath).Select(selector: Path.GetFileName).Order(comparer: StringComparer.Ordinal), expected: ["b.bin", "c.bin", "d.bin"]);
+        Assert.Equal(expected: new CacheBound(MaxBytes: 14, MaxEntries: 88), actual: bound.LowWater);
+    }
+    [Fact]
+    public void ASetWriterNeverLeavesTheDirectoryOverItsBound() {
+        using var cache = new TemporaryDirectory(prefix: "puck-cache-retention-law-");
+        var bound = new CacheBound(MaxBytes: 64, MaxEntries: 100);
 
-        Assert.False(condition: CacheRetention.EnforceOnWrite(bound: bound, directory: cache.RootPath, isEntry: static _ => true));
-        Assert.Equal(actual: Directory.GetFiles(path: cache.RootPath).Length, expected: 2);
+        // An older set fills most of the bound; a new set written past it lists within the interval and drops the old
+        // set whole, however soon after the first listing its writes land.
+        for (var index = 0; index < 6; index++) {
+            File.SetLastWriteTimeUtc(lastWriteTimeUtc: DateTime.UtcNow.AddHours(value: -1), path: cache.WriteText(name: $"old/{index}.bin", text: "01234567"));
+        }
+
+        var listings = 0;
+
+        for (var index = 0; index < 6; index++) {
+            var written = cache.WriteText(name: $"new/{index}.bin", text: "01234567");
+
+            listings += (CacheRetention.EnforceSetsOnWrite(bound: bound, directory: cache.RootPath, inUse: written, isEntry: static _ => true) ? 1 : 0);
+            Assert.True(condition: (Directory.GetFiles(path: cache.RootPath, searchOption: SearchOption.AllDirectories, searchPattern: "*").Sum(selector: static file => new FileInfo(fileName: file).Length) <= bound.MaxBytes));
+        }
+        Assert.False(condition: Directory.Exists(path: cache.PathOf(name: "old")));
+        Assert.Equal(expected: 2, actual: listings);
     }
 }

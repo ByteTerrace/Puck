@@ -26,7 +26,8 @@ in `tests/Shared` that runs the copy kernel.
 `CacheRetentionLawTests` holds the per-user caches' one retention policy: least
 recently used out under a count and a byte bound, the entry in use kept and
 counted first, an age bound, an enforcement that leaves a file a reader holds,
-and a writer that lists a directory at most once an interval. It reads file
+and a writer that lists a directory within the interval only once its own writes
+pass the bound, trimming to the low water, so one writer never leaves a cache over it. It reads file
 identities through the Windows file API and skips elsewhere. It carries the
 `BuildTree` trait: `puck gate` runs it in the checkout it built, and CI's test
 job, which restores an archive of `bin` outputs rather than building, leaves it
