@@ -308,8 +308,10 @@ gust's patches run continuously across separately swaying blades.
 The phase comes from the presented tick: the host integrates it into the pass
 block's `flowClock` (`SdfWorldPackage.FlowClock`), the one way it enters the
 kernels, so a settled capture holds still and lockstep stills repeat. The
-layer runs in the views pass's light stage after the weathering; the glass
-pass does not run it yet.
+layer runs in the views pass's light stage after the weathering and in the
+glass pass (`sdfShadeFlow`, the one flow layer): on glass the tilt bends the
+normal the surface reflects and refracts by, and the coverage covers the glass
+with its revealed surface, lit diffusely.
 
 ## Render lanes
 
