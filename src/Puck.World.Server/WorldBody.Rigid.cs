@@ -627,9 +627,10 @@ public sealed partial class WorldBody {
     /// <summary>Finds the static surfaces within this step's reach: one exact query per surface the body's volume grown by
     /// the step's travel (its mean velocity under its prepared acceleration) and the contact reach meets, each
     /// surface reporting its gap at the start. Coplanar surfaces merge into the deepest of them, and the deepest few are
-    /// kept. A field that cannot answer per surface is probed instead by one certified sweep of the predicted motion,
-    /// whose walkable and non-walkable normals become the surfaces, and whose refusal blocks the body for the tick.
-    /// Nothing moves here; the solve decides where the body goes.</summary>
+    /// kept. A body that can travel farther than the reach this step, or a field that cannot answer per surface, is
+    /// probed instead by one certified sweep of the predicted motion, whose walkable and non-walkable normals become the
+    /// surfaces, and whose refusal blocks the body for the tick. Nothing moves here; the solve decides where the body
+    /// goes.</summary>
     /// <param name="reach">The non-negative distance past the step's travel a surface still counts within.</param>
     /// <param name="surfaces">The destination for the surfaces; holds at least <see cref="MaximumRigidSurfaces"/>.</param>
     /// <returns>The probe.</returns>
@@ -650,13 +651,21 @@ public sealed partial class WorldBody {
 
         Span<FixedSurfaceContact> found = stackalloc FixedSurfaceContact[16];
         var volume = RigidWitnessVolume();
-        var collected = field.CollectContacts(
-            destination: found,
-            margin: (ContactTravel(stepTicks: m_rigidStepTicks) + reach),
-            orientation: in m_orientation,
-            position: in root,
-            volume: in volume
-        );
+        var travel = ContactTravel(stepTicks: m_rigidStepTicks);
+        // The per-surface query states each surface as a plane through its nearest feature at the start pose. Over a
+        // move longer than the reach that plane parts from the real surface: a body falling past a table's edge meets
+        // the plane through the edge's slanted normal and is knocked over by a surface it never touches. A body that
+        // can move that far is certified by one sweep of its predicted motion instead, which pushes only what it
+        // actually meets.
+        var collected = ((travel <= reach)
+            ? field.CollectContacts(
+                destination: found,
+                margin: (travel + reach),
+                orientation: in m_orientation,
+                position: in root,
+                volume: in volume
+            )
+            : -1);
 
         if (collected >= 0) {
             var count = 0;
