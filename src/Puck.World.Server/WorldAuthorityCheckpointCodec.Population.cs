@@ -171,6 +171,21 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             residue: entry.Residue
         );
+        writer.WriteArray(
+            items: entry.RigidContacts,
+            writeItem: static (w, slot) => {
+                w.WriteInt32(value: slot.Partner);
+                w.WriteInt32(value: slot.Slot);
+                w.WriteInt32(value: slot.SourceId);
+                w.WriteInt32(value: slot.FeatureId);
+                w.WriteFixedVector(value: slot.AnchorA);
+                w.WriteFixedVector(value: slot.AnchorB);
+                w.WriteFixedVector(value: slot.Normal);
+                w.WriteInt64(value: slot.NormalImpulseRaw);
+                w.WriteFixedVector(value: slot.FrictionImpulse);
+                w.WriteInt32(value: slot.IdleSteps);
+            }
+        );
         WorldIdentityProjectionWire.WriteOptional(
             projection: entry.Profile,
             writer: writer
@@ -292,6 +307,22 @@ public static partial class WorldAuthorityCheckpointCodec {
         var yaw = reader.ReadFixed();
         var dynamicState = ReadTransferState(reader: ref reader);
         var residue = ReadResidue(reader: ref reader);
+        var rigidContacts = reader.ReadArray(
+            field: "population entry rigid contacts",
+            readItem: static (ref WireReader r) => new WorldRigidContactSlotImage(
+                Partner: r.ReadInt32(),
+                Slot: r.ReadInt32(),
+                SourceId: r.ReadInt32(),
+                FeatureId: r.ReadInt32(),
+                AnchorA: r.ReadFixedVector(),
+                AnchorB: r.ReadFixedVector(),
+                Normal: r.ReadFixedVector(),
+                NormalImpulseRaw: r.ReadInt64(),
+                FrictionImpulse: r.ReadFixedVector(),
+                IdleSteps: r.ReadInt32()
+            ),
+            maximum: WorldPopulation.MaximumRigidContactSlotsPerBody
+        );
         var profile = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
         var navigation = reader.ReadOptional(
             readValue: static (ref WireReader r) => new WorldPopulationNavigationCheckpoint(
@@ -344,6 +375,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             ProducerWeaveFrequency: producerWeaveFrequency,
             Profile: profile,
             Residue: residue,
+            RigidContacts: rigidContacts,
             Scale: scale,
             SelectedKit: selectedKit,
             SelectedLook: selectedLook,
@@ -397,10 +429,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeItem: WritePopulationEntry
         );
         writer.WriteArray(items: section.EventBodies, writeItem: static (w, index) => w.WriteInt32(value: index));
-        writer.WriteArray(items: section.SleepingSupports, writeItem: static (w, edge) => {
-            w.WriteInt32(value: edge.Support);
-            w.WriteInt32(value: edge.Body);
-        });
         writer.WriteArray(items: section.SleepingGravity, writeItem: static (w, row) => {
             w.WriteInt32(value: row.Body);
             w.WriteOptional(value: row.Acceleration, writeValue: static (v, acceleration) => v.WriteFixedVector(value: acceleration));
@@ -474,8 +502,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var eventBodies = reader.ReadArray(field: "population event bodies", maximum: WorldBodiesLimits.CapacityCeiling,
             readItem: static (ref WireReader r) => r.ReadInt32());
-        var supports = reader.ReadArray(field: "population sleeping supports", maximum: MaxCollectionCount,
-            readItem: static (ref WireReader r) => (r.ReadInt32(), r.ReadInt32()));
         var gravity = reader.ReadArray(field: "population sleeping gravity", maximum: WorldBodiesLimits.CapacityCeiling,
             readItem: static (ref WireReader r) => (r.ReadInt32(), r.ReadOptional(readValue: static (ref WireReader v) => v.ReadFixedVector())));
         var attached = reader.ReadArray(field: "population attached solids", maximum: MaxCollectionCount,
@@ -497,8 +523,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             SeatKit: seatKit,
             SharedNavigation: shared,
             SimulatedCount: simulatedCount,
-            SleepingGravity: gravity,
-            SleepingSupports: supports
+            SleepingGravity: gravity
         );
         reason = string.Empty;
 

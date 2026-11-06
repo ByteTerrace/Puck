@@ -154,7 +154,7 @@ public sealed class WorldRigidCommandLawTests {
             LinearDamping: 0.05f,
             Mass: 1f,
             Restitution: 0.1f,
-            RollingFriction: 0.2f
+            RollingResistance: 0.002f
         );
 
         return source with {
@@ -285,7 +285,7 @@ public sealed class WorldRigidCommandLawTests {
     // opposite sign — the artifact a starved InverseInertia (kept at the FULL-SIZE body's magnitude while
     // InverseMass already reflects the shrunk one) produces when friction keeps subtracting linear momentum with
     // nowhere for it to go. Scale 1 is the control (ScaleRigid's own identity fast path — this law's fixture never
-    // reaches the overflow branch there, unlike the garden's own rollingFriction=1.2 configuration, which reverses
+    // reaches the overflow branch there, unlike the garden's own rolling-resistance configuration, which reverses
     // at EVERY scale including 1 for a strong enough strike — a separate, scale-independent friction/rolling
     // overshoot this law does not exercise); scale 0.2 sits past this fixture's own overflow threshold (~0.07,
     // below the garden billiard ball's ~0.135 — a smaller unscaled 1/I here) and additionally proves spin develops

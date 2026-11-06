@@ -1178,10 +1178,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteBoolean(value: residue.RigidResting);
         writer.WriteUInt64(value: residue.RigidRestingHoldTicks);
         writer.WriteInt32(value: residue.RigidSleepRootPlusOne);
-        writer.WriteBoolean(value: residue.RigidGroundContacting);
-        writer.WriteBoolean(value: residue.RigidObstructionContacting);
-        writer.WriteInt32(value: residue.RigidGroundMissStreak);
-        writer.WriteInt32(value: residue.RigidObstructionMissStreak);
         writer.WriteInt32(value: residue.Carrying);
         writer.WriteInt32(value: residue.CarriedBy);
     }
@@ -1227,10 +1223,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         var rigidResting = reader.ReadBoolean();
         var rigidRestingHoldTicks = reader.ReadUInt64();
         var rigidSleepRootPlusOne = reader.ReadInt32();
-        var rigidGroundContacting = reader.ReadBoolean();
-        var rigidObstructionContacting = reader.ReadBoolean();
-        var rigidGroundMissStreak = reader.ReadInt32();
-        var rigidObstructionMissStreak = reader.ReadInt32();
         var carrying = reader.ReadInt32();
         var carriedBy = reader.ReadInt32();
 
@@ -1264,10 +1256,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             PositionRemainderZ: positionRemainderZ,
             PreviousPosition: previousPosition,
             RigidAngularVelocity: rigidAngularVelocity,
-            RigidGroundContacting: rigidGroundContacting,
-            RigidGroundMissStreak: rigidGroundMissStreak,
-            RigidObstructionContacting: rigidObstructionContacting,
-            RigidObstructionMissStreak: rigidObstructionMissStreak,
             RigidResting: rigidResting,
             RigidRestingHoldTicks: rigidRestingHoldTicks,
             RigidSleepRootPlusOne: rigidSleepRootPlusOne,

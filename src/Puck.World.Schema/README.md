@@ -2784,45 +2784,27 @@ contact. `candidateBudget` limits inspected broadphase candidates per body,
 tick. Established relationships are considered first. Setting
 `maxPairsPerBody` to zero disables body-pair begin/end events.
 
-`collision.bodyContacts` independently bounds physical depenetration between
-two `solid` kits. Its `candidateBudget` caps inspected box-overlapping sweep
-pairs per body (default 32, maximum 256); `maxPairsPerBody` caps corrections
-incident to one body per tick (default 8, maximum 16). Saturation omits later
-stable-index pairs, so even a fully coincident 4096-body stadium has linear,
-authored work rather than an accidental all-pairs frame. Its
-`rigidSubstepCeiling` (default 8, maximum 32) bounds a rigid body's own
-per-tick continuous-collision substep count—the actual count is DERIVED
-per body per tick from speed and collider size against `rigidSubstepTravelFraction`
-(default 0.5, strictly positive—the fraction of the collider's own
-bounding radius one substep may travel) floored by `rigidSubstepMinimumTravel`
-(default 0.001 world units, strictly positive), never authored directly; the
-ceiling only bounds worst-case cost. `rigidRestSpeed` (default 0.05,
-non-negative) and `rigidRestHoldSeconds` (default 0.25, non-negative) are the
-threshold and hold window that decide when a grounded rigid body's `Resting`
-fact latches. The threshold reads the speed of the body's fastest point, its
-linear speed plus its angular speed times its bounding radius (the same
-quantity the substep count is derived from), and scales with each body's own
-live `Scale` (see "Body scale" above). `rigidPairRestitutionSpeed` (default
-0.05, non-negative) is the closing-speed floor below which a rigid-vs-rigid
-contact restitutes at zero rather than the authored coefficient—a rigid
-pair carries no rising-edge latch, so without this floor two touching bodies
-would restitute a hair apart every tick they are found overlapping and never
-fully settle. `rigidManifoldIterations` (default 4, maximum 16, strictly
-positive) is the sequential-impulse pass count a box or capsule rigid body's
-own ground support manifold (up to four box corners, or two capsule cap
-points lying on a side) resolves over each substep, distributing the normal
-impulse across every manifold point rather than one—what keeps an upright
-body's centre of mass over its support polygon without artificial damping.
-`rigidPairIterationCeiling` (default 4, maximum 16, strictly positive) bounds
-the EXTRA full sweeps (fresh broadphase and narrowphase, over the same
-bodies' now-current positions) `WorldPopulation.ResolveDynamicContacts` runs
-past the first, derived down from the first pass's own resolved-pair count,
-so an impulse crosses more than one pair-hop within the same tick (a rack
-break, a falling domino line);
-the count actually run is derived DOWN from this ceiling by
-`rigidPairIterationBudget` (default 64, maximum 4096, strictly positive)
-divided by the first pass's own resolved-pair count, so a lightly loaded tick
-gets every authored pass and a crowded one stays bounded. See the
+`collision.bodyContacts` independently bounds body-to-body contact between
+two `solid` kits and tunes the rigid solver. Its `candidateBudget` caps inspected
+box-overlapping sweep pairs per body (default 32, maximum 256); `maxPairsPerBody`
+caps the contacts incident to one body per tick (default 8, maximum 16) and sizes
+the rigid contact registry, since a rigid body carries at most that many body
+contacts plus its surface contact. Saturation omits later stable-index pairs, so
+even a fully coincident 4096-body stadium has linear, authored work rather than an
+accidental all-pairs frame. `rigidSubstepCeiling` (default 8, maximum 32) is the
+rigid solver's substeps a tick; the contact softness is formed at that substep
+width. `rigidSubstepTravelFraction` (default 0.5, strictly positive) is the
+fraction of a body's bounding radius its solved motion may depart from its
+predicted motion before a guard sweep re-certifies it, floored by
+`rigidSubstepMinimumTravel` (default 0.001 world units, strictly positive).
+`rigidRestSpeed` (default 0.05, non-negative) and `rigidRestHoldSeconds` (default
+0.25, non-negative) are the threshold and hold window that decide when a
+supported rigid body's `Resting` fact latches; the threshold reads the speed of
+the body's fastest point, its linear speed plus its angular speed times its
+bounding radius, and scales with each body's own live `Scale` (see "Body scale"
+above). `rigidPairRestitutionSpeed` (default 0.05, non-negative) is the closing
+speed below which a rigid contact restitutes at zero rather than its pair's
+coefficient, so bodies at rest never micro-bounce. See the
 [server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
 
 ### Kit and look selected by a body's register
@@ -2878,7 +2860,7 @@ wake conditions.
 ### Rigid dynamics (`WorldRigid.cs`)
 
 A kit's optional `rigid` facet (`WorldRigid`: `mass`, `restitution`,
-`friction`, `rollingFriction`, `linearDamping`, `angularDamping`) hands its
+`friction`, `rollingResistance`, `linearDamping`, `angularDamping`) hands its
 bodies to the rigid solver instead of a locomotion motion program—a passive
 physical entity such as a billiard ball, a bowling pin, or a chess piece.
 Rigid is a kit FACET, never a second body kind: any kit may carry it, and the
@@ -2886,7 +2868,9 @@ facet's presence alone is the switch.
 `mass` is required and strictly positive; `restitution` lies in `[0, 1]`;
 `friction` is a Coulomb coefficient at a contact point (non-negative, not
 bounded by 1)—the SAME meaning against the static world and, as the pair's
-average, against another rigid body; `rollingFriction`/`linearDamping`/`angularDamping`
+average, against another rigid body; `rollingResistance` is a non-negative
+lever in metres at scale one (each contact point resists rolling with a torque
+of at most the lever times its normal force); `linearDamping`/`angularDamping`
 are non-negative per-second decay RATES (applied as `1 - rate·dt`, never a
 flat per-tick fraction, so the same authored value decays identically at any
 simulation rate). A rigid kit REQUIRES `collider` with one sphere, capsule,

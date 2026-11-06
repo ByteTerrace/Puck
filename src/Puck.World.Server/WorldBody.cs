@@ -52,7 +52,7 @@ public sealed partial class WorldBody {
     private PlayerIntent m_channelReadHeld;
     private FixedWorldCollider? m_collider;
     // The kit's rigid-dynamics facet, or null for a locomotion kit — see WorldBody.Rigid.cs. Non-null routes Advance
-    // through AdvanceRigid instead of the grounded/free motion program entirely.
+    // through the population's rigid solve instead of the grounded/free motion program entirely.
     private FixedWorldRigid? m_rigid;
     // The kit's carry facet, or null for a kit that can never pick up a rigid body — see WorldBody.Carry.cs.
     private FixedWorldCarry? m_carry;

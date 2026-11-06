@@ -53,7 +53,7 @@ public sealed class WorldCarryCommandLawTests : IDisposable {
             LinearDamping: 0f,
             Mass: ballMass,
             Restitution: 0.2f,
-            RollingFriction: 0.1f
+            RollingResistance: 0.001f
         ),
             Carry = null,
         };
@@ -133,7 +133,7 @@ public sealed class WorldCarryCommandLawTests : IDisposable {
             LinearDamping: 0f,
             Mass: 60f,
             Restitution: 0.2f,
-            RollingFriction: 0.1f
+            RollingResistance: 0.001f
         ),
             Carry = new WorldCarry(
             Offset: new Vector3(
@@ -156,7 +156,7 @@ public sealed class WorldCarryCommandLawTests : IDisposable {
             LinearDamping: 0f,
             Mass: 0.3f,
             Restitution: 0.2f,
-            RollingFriction: 0.1f
+            RollingResistance: 0.001f
         ),
             Carry = new WorldCarry(
             Offset: new Vector3(
@@ -179,7 +179,7 @@ public sealed class WorldCarryCommandLawTests : IDisposable {
             LinearDamping: 0f,
             Mass: 0.3f,
             Restitution: 0.2f,
-            RollingFriction: 0.1f
+            RollingResistance: 0.001f
         ),
             Carry = null,
         };

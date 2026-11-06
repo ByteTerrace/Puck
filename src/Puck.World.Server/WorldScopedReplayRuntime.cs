@@ -112,6 +112,7 @@ public sealed partial class WorldScopedReplayRuntime {
             body.Pose(image.Position, image.Yaw, FixedQ4816.Zero, FixedQ4816.Zero);
             body.ApplyTransferState(state: image.DynamicState);
             body.ApplyIntegrationResidue(image.Residue, m_server.Population.ContactFieldVersion);
+            m_server.Population.RestoreRigidContacts(images: image.RigidContacts, index: image.Index);
         }
         if (Hash() != m_startHash) { throw new InvalidOperationException(message: "Scope starting hash MISMATCH after restore."); }
         StopInput();
