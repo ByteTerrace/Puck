@@ -14,6 +14,15 @@ public interface IFixedContactStep {
     /// removed.</param>
     /// <returns>The move's resolution.</returns>
     ContactResolution Sweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity);
+    /// <summary>Finds how far the body descends along its up axis from <paramref name="start"/> before anything the
+    /// sweep resolves against first comes within the contact skin, as <see cref="IContactField.TrySupportDistance"/>
+    /// does.</summary>
+    /// <param name="start">The foot point the descent starts from.</param>
+    /// <param name="reach">The greatest descent searched, in metres, positive.</param>
+    /// <param name="descent">The least descent, in metres, at which the body first comes within the skin of a
+    /// surface.</param>
+    /// <returns><see langword="true"/> when a surface is met within the reach.</returns>
+    bool TrySupportDistance(in FixedVector3 start, FixedQ4816 reach, out FixedQ4816 descent);
 }
 /// <summary>The accepted outcome of <see cref="FixedStepUp.TryStep{TStep}"/>.</summary>
 /// <param name="Position">The foot point on the riser's landing surface, including its rounded edge.</param>
@@ -29,21 +38,21 @@ public readonly record struct FixedStepUpResult(FixedVector3 Position, FixedVect
 /// the blocked step did. Otherwise the blocked step stands, so a riser taller than the step height, or any wall, is
 /// still a wall.</para>
 /// <para>The lowering reaches no further than where the original step would have ended along the up axis, so a step
-/// that was rising (a jump) lands on nothing it would not otherwise have reached. It finds the support by bisection,
-/// <see cref="LandingProbes"/> sweeps from the raised point, and lands at the shallowest descent found to meet it:
-/// a provider whose sweep is only an endpoint solve then meets the riser's top by less than the probe resolution
-/// and resolves it as ground, where one deep move would read the riser's side as the nearer face.</para>
-/// <para>Bounded: two sweeps reject a wall, and an accepted step costs <see cref="LandingProbes"/> plus four.</para>
+/// that was rising (a jump) lands on nothing it would not otherwise have reached. It asks the sweep's own support
+/// distance (<see cref="IFixedContactStep.TrySupportDistance"/>) and lands <see cref="LandingDepth"/> past it: the
+/// landing meets the riser's top by that sliver and resolves it as ground, where one deep move would read the riser's
+/// side as the nearer face.</para>
+/// <para>Bounded: two sweeps reject a wall, and an accepted step costs four sweeps and one support-distance query.</para>
 /// </remarks>
 public static class FixedStepUp {
-    /// <summary>The bisection sweeps the landing search spends: the support height is found to within the descent
-    /// divided by two to this power.</summary>
-    public const int LandingProbes = 8;
+    /// <summary>Gets how far, in metres, a landing descends past the support distance, so its sweep meets the support
+    /// it lowers onto by that sliver and measures it: the support distance stands the body exactly the contact skin
+    /// off the surface, where no push grounds it.</summary>
+    public static FixedQ4816 LandingDepth { get; } = FixedQ4816.FromRawBits(value: 16L);
 
-    private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
-
-    /// <summary>Finds the first walkable support below a position within a caller-supplied snap distance.
-    /// Uses the same sweep and bounded landing search as a step up; an unsuccessful search changes nothing.</summary>
+    /// <summary>Finds the first walkable support below a position within a caller-supplied snap distance: one
+    /// support-distance query, then one landing sweep that descends <see cref="LandingDepth"/> past it. Shared by a
+    /// step up's lowering; an unsuccessful search changes nothing.</summary>
     /// <typeparam name="TStep">The caller's contact sweep.</typeparam>
     /// <param name="step">The contact sweep.</param>
     /// <param name="start">The position to lower from.</param>
@@ -60,23 +69,10 @@ public static class FixedStepUp {
         in FixedVector3 up, FixedQ4816 distance, out FixedStepUpResult result, ContactUncertainty uncertain = default)
         where TStep : IFixedContactStep, allows ref struct {
         result = default;
-        if ((distance <= FixedQ4816.Zero) || !Meets(above: in start, descent: distance, step: ref step,
-            up: in up, velocity: in velocity)) {
+        if ((distance <= FixedQ4816.Zero) || !step.TrySupportDistance(descent: out var descent, reach: distance, start: in start)) {
             return false;
         }
-        var clear = FixedQ4816.Zero;
-        var meet = distance;
-
-        for (var probe = 0; (probe < LandingProbes); probe++) {
-            var middle = ((clear + meet) / Two);
-
-            if (Meets(above: in start, descent: middle, step: ref step, up: in up, velocity: in velocity)) {
-                meet = middle;
-            } else {
-                clear = middle;
-            }
-        }
-        var landed = (start - (up * meet));
+        var landed = (start - (up * (descent + LandingDepth)));
         var moved = velocity;
         var landing = step.Sweep(position: ref landed, previousPosition: in start, velocity: ref moved);
 
@@ -86,22 +82,6 @@ public static class FixedStepUp {
         result = new FixedStepUpResult(Position: landed,
             Velocity: moved.RejectFrom(unitAxis: landing.GroundNormal), Resolution: landing);
         return true;
-    }
-
-    // Whether lowering the body by descent from above meets anything: the sweep stops, or the endpoint solve pushes.
-    private static bool Meets<TStep>(ref TStep step, in FixedVector3 above, in FixedVector3 up, FixedQ4816 descent, in FixedVector3 velocity)
-        where TStep : IFixedContactStep, allows ref struct {
-        var target = (above - (up * descent));
-        var probe = target;
-        var scratch = velocity;
-
-        _ = step.Sweep(
-            position: ref probe,
-            previousPosition: in above,
-            velocity: ref scratch
-        );
-
-        return (probe != target);
     }
 
     /// <summary>Tries the step-up for one blocked step.</summary>
@@ -176,8 +156,8 @@ public static class FixedStepUp {
             return false;
         }
 
-        // Lower onto the support: bisect for the shallowest descent that meets it, down to where the original step
-        // would have ended along up. Nothing met in that range leaves the body in the air, which is not a step.
+        // Lower onto the support, down to where the original step would have ended along up. Nothing met in that range
+        // leaves the body in the air, which is not a step.
         if (!TrySnap(distance: (lift - vertical), result: out var landingResult, start: in across, step: ref step,
             up: in up, velocity: in moved)) {
             return false;

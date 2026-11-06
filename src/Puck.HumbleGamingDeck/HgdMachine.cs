@@ -94,12 +94,18 @@ public sealed class HgdMachine : ISnapshotableMachine {
     /// <summary>Gets the completed master-tick count.</summary>
     public ulong MasterTicks => Clock.MasterTicks;
 
-    /// <summary>Advances a cumulative budget of master ticks; previous manual stepping overshoot is carried.</summary>
+    /// <summary>Advances a cumulative budget of master ticks; previous manual stepping overshoot is carried. Ticks that end
+    /// no dot and carry no M2 edge or read point are skipped as a run, which leaves the state stepping each through
+    /// <see cref="StepMasterTick"/> would.</summary>
     /// <param name="masterTicks">The master-tick budget, independent of instruction boundaries.</param>
     /// <exception cref="OverflowException">The accumulated run target exceeds <see cref="ulong.MaxValue"/>.</exception>
     public void RunCycles(ulong masterTicks) {
         Clock.AddBudget(masterTicks: masterTicks);
-        while (Clock.MasterTicks < Clock.RunTargetCycles) {
+        while (true) {
+            Clock.SkipQuietTicks();
+            if (Clock.MasterTicks >= Clock.RunTargetCycles) {
+                return;
+            }
             StepMasterTick();
         }
     }
@@ -119,7 +125,8 @@ public sealed class HgdMachine : ISnapshotableMachine {
 
         // The board's IRQ output trails its inputs: a request raised by the address a dot drives, or by the write that
         // lands, on the tick M2 falls reaches the CPU's next sample, while an acknowledgement that lands then counts.
-        var boardIrq = Bus.Mapper.Irq;
+        // Only the falling tick samples it.
+        var boardIrq = ((edge == HgdM2Edge.Falling) && Bus.Mapper.Irq);
 
         if (ppuDot) {
             Ppu.StepDot(masterTick: Clock.MasterTicks);

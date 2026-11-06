@@ -93,6 +93,7 @@ public static class PuckRootCommand {
             LawsCommand.Create(),
             LeaseCommand.Create(admit: HostAdmission.For(clock: clock), clock: clock, settleWait: (settle, timeout, progress, cancellationToken) => HostQuiet.SettleAsync(cancellationToken: cancellationToken, clock: clock, progress: progress, settle: settle, timeout: timeout)),
             LocksCommand.Create(),
+            MeasureCommand.Create(clock: clock, settleWait: (settle, timeout, progress, cancellationToken) => HostQuiet.SettleAsync(cancellationToken: cancellationToken, clock: clock, progress: progress, settle: settle, timeout: timeout)),
             McpCommand.Create(),
             MotionCommand.Create(),
             NuGetCommand.Create(),

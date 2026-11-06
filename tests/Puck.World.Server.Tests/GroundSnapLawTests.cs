@@ -12,18 +12,21 @@ public sealed class GroundSnapLawTests {
             up = FixedVector3.UnitY;
             return true;
         }
-        public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity,
-            in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
-            var normal = ((crest && (position.Z <= FixedQ4816.Zero)) ? FixedVector3.UnitY
-                : new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One,
-                    Z: FixedQ4816.FromDouble(value: (crest ? 0.25 : -0.25))).Normalize());
+        private static readonly FixedStaticContactSolver Solver = new(ContactSkin: FixedQ4816.FromDouble(value: 0.001),
+            GroundedThreshold: FixedQ4816.FromDouble(value: 0.5), MaxIterations: 4);
 
-            return new FixedStaticContactSolver(ContactSkin: FixedQ4816.FromDouble(value: 0.001),
-                GroundedThreshold: FixedQ4816.FromDouble(value: 0.5), MaxIterations: 4)
-                .Resolve(colliders: new(colliders: [FixedStaticCollider.HalfSpace(point: FixedVector3.Zero, normal: normal)]),
-                    dynamicColliders: FixedStaticColliderSet.Empty, position: ref position, velocity: ref velocity,
-                    orientation: in orientation, volumes: volumes, up: in up);
-        }
+        // The ground under a foot point: flat behind a crest's edge, a slope everywhere else.
+        private FixedStaticColliderSet Ground(in FixedVector3 position) => new(colliders: [FixedStaticCollider.HalfSpace(point: FixedVector3.Zero,
+            normal: ((crest && (position.Z <= FixedQ4816.Zero)) ? FixedVector3.UnitY
+                : new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.FromDouble(value: (crest ? 0.25 : -0.25))).Normalize()))]);
+        public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity,
+            in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
+            Solver.Resolve(colliders: Ground(position: in position), dynamicColliders: FixedStaticColliderSet.Empty, position: ref position,
+                velocity: ref velocity, orientation: in orientation, volumes: volumes, up: in up);
+        public bool TrySupportDistance(in FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes,
+            in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) =>
+            Solver.TrySupportDistance(colliders: Ground(position: in position), descent: out descent, dynamicColliders: FixedStaticColliderSet.Empty,
+                orientation: in orientation, position: in position, reach: reach, up: in up, volumes: volumes);
     }
 
     [InlineData(true)]

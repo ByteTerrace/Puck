@@ -48,6 +48,21 @@ public interface IContactField {
             velocity: ref velocity,
             volumes: volumes
         );
+    /// <summary>Finds the support distance below a body: the least descent along the opposite of
+    /// <paramref name="up"/>, within <paramref name="reach"/>, at which anything this field resolves against first comes
+    /// within its contact skin of the body. A ground snap lowers by it and lands with one sweep
+    /// (<see cref="FixedStepUp.TrySnap{TStep}"/>); it moves nothing and proves no support, which only that landing
+    /// sweep does.</summary>
+    /// <param name="position">The body's foot point before the descent.</param>
+    /// <param name="orientation">The body's local-to-world orientation.</param>
+    /// <param name="volumes">The body's compiled convex volumes.</param>
+    /// <param name="up">The body's unit up axis.</param>
+    /// <param name="reach">The greatest descent searched, in metres, positive.</param>
+    /// <param name="descent">The least descent, in metres, at which the body first comes within the skin of a surface:
+    /// zero when it already is.</param>
+    /// <returns><see langword="true"/> when a surface is met within the reach.</returns>
+    bool TrySupportDistance(in FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes,
+        in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent);
     /// <summary>Returns this provider's ambient up candidate at a position. The consuming integrator decides whether
     /// that geometric fact may orient a body; contact providers do not own body-frame policy.</summary>
     /// <param name="position">The body's foot point.</param>

@@ -45,6 +45,18 @@ before the measured interval when comparing only the boot world's work. Use
 not totals that include neighboring worlds' earlier work.
 ## The landing bar
 
+Iteration uses load-independent evidence and only the scenarios a change
+reaches: `puck test <source> --filter '<test-name-or-glob>' --reproduce --jobs 1`.
+Repeat `--filter` for alternatives; generated world names and authored test
+names both match, and the verb reports the skipped count. The same selection
+governs `--record` and `--compare`. The lead runs full suites once per batch.
+Timing questions go to `puck measure request` with frozen before/after World
+artifacts (or commits), the bench startup or sweep command, numeric JSON-pointer
+metrics and `--decides`. `puck measure list` shows the queue; the lead's
+`puck measure run` takes quiet once and drains it with ABAB pairs, reporting
+median, IQR and paired differences from those existing measurement harnesses.
+See the [measurement reference](../../../docs/reference/cli.md#puck-measurequeued-measurement-windows).
+
 A queued World build can outlive a cancelled start. Do not change a checkout's
 sources until its build has finished. The artifact resolver checks the source
 key after build admission and after compilation, and discards a build if either
@@ -389,9 +401,15 @@ does not wait on itself and siblings still exclude one another; every
 acquisition (heavy, the World build, `puck sweep`'s GPU lease, a World start)
 does this; [lease reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work).
 A timing measurement runs under `puck lease quiet --holder <lane> --wait 600 --settle 30 -- <command...>`,
-which holds the heavy, build and GPU leases together, waits until `puck host load`'s
+which queues a priority reservation before draining heavy, build and GPU.
+No grant is issued while quiet is queued or held except to the quiet owner or
+its validated descendants; `CliLease.TryAcquire` enforces it under the same
+short file lock that registers tickets. Current holders finish without being
+stopped, bounded by `--wait`; other wait lines name the measurement window.
+Ordinary lane rotation resumes afterwards. The reservation holds all three and waits until `puck host load`'s
 readings show an idle machine for `--settle` seconds, then runs the command, with
-`puck sweep` and Worlds nesting inside it; the lead's settle windows use it.
+`puck sweep` and Worlds nesting inside it. `puck measure run` uses the same
+reservation and settle sampler once for the lead's queued questions.
 
 In PowerShell, quote forwarded `'-nodeReuse:false'` after `--`; otherwise the
 shell can split the colon-bearing switch before the lease receives it

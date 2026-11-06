@@ -195,6 +195,13 @@ public sealed class WorldPortalHoleContactField : IContactField {
         );
     }
     /// <inheritdoc/>
+    /// <remarks>The wrapped field's own: an opening takes back a push only at a landing, so the landing sweep, which runs
+    /// through this field, is what lets a body standing in a door drop through it instead of standing on the ground
+    /// behind its glass.</remarks>
+    public bool TrySupportDistance(in FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes,
+        in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) =>
+        m_inner.TrySupportDistance(descent: out descent, orientation: in orientation, position: in position, reach: reach, up: in up, volumes: volumes);
+    /// <inheritdoc/>
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) => m_inner.TryUp(
         position: in position,
         up: out up

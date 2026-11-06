@@ -32289,6 +32289,46 @@
                             "null"
                           ],
                           "default": null
+                        },
+                        "scatter": {
+                          "description": "The colour the glass scatters as a medium, the colour a deep body of it reads as under the light arriving at its surface (null = none).",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "scattering": {
+                          "description": "How much the medium scatters, per creation unit, finite and non-negative; it also dims what lies behind (null = 0, no scattering).",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "contact": {
+                          "description": "Foam or a wet margin where an opaque surface behind the glass comes within reach of its surface, revealed through the slot\u0027s flow coverage (null = none).",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "reach": {
+                              "description": "The distance, in creation units along the view from the glass surface to the opaque surface behind it, over which the added coverage falls to zero; positive.",
+                              "type": "number"
+                            },
+                            "coverage": {
+                              "description": "The coverage added where the opaque surface touches the glass\u0027s, in [0, 1].",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "reach",
+                            "coverage"
+                          ],
+                          "additionalProperties": false,
+                          "default": null,
+                          "title": "PaletteGlassContactDocument"
                         }
                       },
                       "required": [

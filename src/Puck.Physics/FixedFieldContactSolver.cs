@@ -467,6 +467,26 @@ public sealed class FixedFieldContactSolver(
         );
     }
 
+    /// <inheritdoc/>
+    /// <remarks>The whole field is one field collider, so each volume's support distance is that collider's own
+    /// (<see cref="FixedSupportDistance.TryDescend"/>), measured against the given up axis.</remarks>
+    public bool TrySupportDistance(in FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes,
+        in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) {
+        FixedStaticContactWork.Process.CountSupportDistance();
+        var met = false;
+        var nearest = reach;
+
+        foreach (ref readonly var volume in volumes) {
+            if ((reach > FixedQ4816.Zero) && FixedSupportDistance.TryDescend(collider: in m_surface, descent: out var found, orientation: in orientation,
+                position: position, reach: nearest, skin: m_skin, up: in up, volume: in volume) && (!met || (found < nearest))) {
+                nearest = found;
+                met = true;
+            }
+        }
+        descent = (met ? nearest : FixedQ4816.Zero);
+        return met;
+    }
+
     // A refused step: the body keeps its start and reports no contact, naming why.
     private static ContactResolution Refuse(ref FixedVector3 position, in FixedVector3 previousPosition, ContactRefusal refusal) {
         position = previousPosition;

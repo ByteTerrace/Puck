@@ -18,12 +18,15 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
     public const string SourceName = "physics.contact";
 
     private readonly WorkCounterSet m_counts = new(
-        kinds: [Resolves, Queries, ConvexQueries, Supports, Pushes, FieldQueries, FieldBounds, FieldSamples, FieldReads, FieldUnproved],
+        kinds: [Resolves, SupportDistances, Queries, ConvexQueries, Supports, Pushes, FieldQueries, FieldBounds, FieldSamples, FieldReads, FieldUnproved],
         name: SourceName
     );
 
     /// <summary>Gets the kind counting resolves: one per body move or rest solved against the analytic colliders.</summary>
     public static WorkKind Resolves { get; } = new(name: "physics.contact.resolves", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting support-distance queries: one per ground snap or step-up landing asked of the
+    /// analytic colliders, beside the one landing resolve it costs.</summary>
+    public static WorkKind SupportDistances { get; } = new(name: "physics.contact.support-distances", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting exact collider queries, one per body volume and collider the bounds culls keep in
     /// each relaxation pass.</summary>
     public static WorkKind Queries { get; } = new(name: "physics.contact.queries", unit: "count", workClass: WorkClass.Deterministic);
@@ -57,6 +60,8 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
 
     /// <summary>Counts one resolve of a body against the analytic colliders.</summary>
     public void CountResolve() => m_counts.Count(kind: Resolves);
+    /// <summary>Counts one support-distance query (<see cref="FixedStaticContactSolver.TrySupportDistance"/>).</summary>
+    public void CountSupportDistance() => m_counts.Count(kind: SupportDistances);
     /// <summary>Counts one exact collider query.</summary>
     /// <param name="pushed">Whether it returned a push.</param>
     public void CountQuery(bool pushed) {
