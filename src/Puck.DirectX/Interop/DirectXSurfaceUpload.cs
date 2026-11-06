@@ -347,6 +347,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
                 device: device,
                 heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
                 initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
+                memory: m_deviceContext.Memory,
                 sizeBytes: uploadBytes
             );
         } catch {
@@ -380,7 +381,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             });
         } catch {
             DiscardTexture(texture: ((nint)texture));
-            _ = ((IUnknown*)uploadBuffer)->Release();
+            DiscardBuffer(buffer: ((nint)uploadBuffer));
 
             throw;
         }
@@ -511,10 +512,21 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             Release(pointer: ref texture);
         }
     }
+    // Counts a staging buffer no owner will hold as released and releases it.
+    private void DiscardBuffer(nint buffer) {
+        try {
+            DirectXDeviceMemory.CountReleased(
+                memory: m_deviceContext.Memory,
+                resource: buffer
+            );
+        } finally {
+            Release(pointer: ref buffer);
+        }
+    }
     // Releases a staging buffer and a texture, the texture whether or not the buffer's release failed.
     private void RetireNativeResources(nint buffer, nint texture) {
         try {
-            Release(pointer: ref buffer);
+            DiscardBuffer(buffer: buffer);
         } finally {
             DiscardTexture(texture: texture);
         }

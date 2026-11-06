@@ -644,14 +644,14 @@ public sealed unsafe class VulkanDeviceCommands {
         }
     }
     /// <summary>Counts one successful <c>vkAllocateMemory</c> into <see cref="Memory"/> at its allocation size, keyed by
-    /// this device, when its role counts (<see cref="GpuDeviceMemoryWork.IsCounted"/>); the memory type it chose never
-    /// decides. Swapchain images are never allocated through this table, so they are never counted.</summary>
+    /// this device, in the row its role names (<see cref="GpuDeviceMemoryWork.IsDeviceLocal"/>); the memory type it chose
+    /// never decides. Swapchain images are never allocated through this table, so they are never counted.</summary>
     /// <param name="memoryHandle">The <c>VkDeviceMemory</c> the allocation returned; freeing it through
     /// <see cref="FreeMemory"/> through <c>Destroy</c> counts its release.</param>
     /// <param name="allocationSize">The allocation's size, in bytes, as <c>VkMemoryAllocateInfo.allocationSize</c>.</param>
     /// <param name="role">What the allocation is for.</param>
     public void CountAllocated(nint memoryHandle, ulong allocationSize, GpuMemoryRole role) =>
-        _ = Memory?.CountAllocated(
+        Memory?.CountAllocated(
             allocation: memoryHandle,
             bytes: checked((long)allocationSize),
             device: Handle,
