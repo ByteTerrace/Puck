@@ -1007,8 +1007,9 @@ and a defined new ambient direction reseats the held axis then.
 
 A grounded walker projects velocity onto its support and follows downward surfaces
 within `motion.groundSnap` (0.3 m by default, scaled with the body). Jump and
-launch operations release support. `FixedStepUp.TrySnap` supplies the same bounded
-landing probe as step-up; there is no inward-speed bias.
+launch operations release support. `FixedStepUp.TrySnap` supplies the same landing
+as step-up: one support-distance query and one landing sweep; there is no inward-speed
+bias.
 
 A grounded walker steps up a riser no taller than its kit's
 `WorldMotion.StepHeight` (`stepHeight`, scaled with the body, zero by

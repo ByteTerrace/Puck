@@ -36,13 +36,14 @@ tick duration. `groundSnap` is the downward reach (world units, scaled with the
 body, default 0.3) within which a grounded walker follows a crest, descent or
 small edge. Walking velocity is projected onto support; jumps and upward
 launches release it. Zero disables snap. `groundStick` and its inward-speed
-bias are removed. The same bounded landing probe serves snap and step-up.
+bias are removed. The same landing (one support-distance query, then one
+landing sweep) serves snap and step-up.
 Another scalar,
 `stepHeight` (world units, scaled with the body, default 0), is the tallest
 riser a grounded walker walks up onto: when the contact solve finds a step
 blocked by a non-walkable face, `WorldBody.ResolveProgramContacts` retries it
-through `Puck.Physics`' `FixedStepUp` (raise, move, bisect down onto the
-support) and keeps the retry only if it lands grounded on a walkable surface,
+through `Puck.Physics`' `FixedStepUp` (raise, move, lower onto the support by
+its support distance) and keeps the retry only if it lands grounded on a walkable surface,
 no higher than `stepHeight`, further along than the blocked step. Never while
 airborne, held by a pull, or on a program that cedes the vertical contact
 channel. `body.motion` and `world.kits` echo it. Analytic Box placements follow

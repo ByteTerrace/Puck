@@ -1086,6 +1086,12 @@ public sealed partial class WorldColliderSet : IContactField {
             orientation: in orientation, volumes: volumes, up: in up,
             candidates: Candidates(orientation: in orientation, position: position, previousPosition: in previousPosition, volumes: volumes));
     /// <inheritdoc/>
+    public bool TrySupportDistance(in FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes,
+        in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) =>
+        m_solver.TrySupportDistance(colliders: m_staticSet, dynamicColliders: m_attachedSet, position: in position,
+            orientation: in orientation, volumes: volumes, up: in up, reach: reach, descent: out descent,
+            candidates: Candidates(orientation: in orientation, position: (position - (up * reach)), previousPosition: in position, volumes: volumes));
+    /// <inheritdoc/>
     // Searches m_holdableColliders alone (never m_attachedColliders — see the field's own remarks), with a zero
     // assist cone: a hold aims at the surface it is already touching, not at a target it is trying to acquire.
     public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
