@@ -288,6 +288,42 @@ public sealed partial class RenderGraphRuntime {
         return true;
     }
 
+    // The factories already asked to prepare the render being walked, reused frame to frame.
+    private readonly List<IRenderGraphPackageFactory> m_preparing = [];
+
+    // Asks the factory of every package pass of every scheduled render to prepare it (IRenderGraphPackageFactory.PrepareRender),
+    // once per factory and render, before any render records. An external producer's or an uploaded source's render runs
+    // no package pass, and a render a held capture withholds this frame (holdingConvergence) records nothing.
+    private void PackagesPrepareRenders(IReadOnlyList<int> renders, bool holdingConvergence, in FrameContext context) {
+        var began = System.Diagnostics.Stopwatch.GetTimestamp();
+
+        for (var position = 0; (position < renders.Count); position++) {
+            var index = renders[position];
+
+            if (
+                (m_producers[index] is not null) || (m_sources[index] is not null) || (m_graphs[index] is not { } graph) ||
+                (holdingConvergence && m_convergenceInstances.Contains(item: index))
+            ) {
+                continue;
+            }
+
+            var passes = graph.Pipeline.Plan.Passes;
+            var instance = m_set.Instances[index].Name;
+
+            m_preparing.Clear();
+            for (var pass = 0; (pass < passes.Count); pass++) {
+                if (
+                    (passes[pass].Package is { } step) &&
+                    m_packages.TryGetFactory(factory: out var factory, package: step.Package) &&
+                    !m_preparing.Contains(item: factory)
+                ) {
+                    m_preparing.Add(item: factory);
+                    factory.PrepareRender(context: in context, instance: instance);
+                }
+            }
+        }
+        RenderRecordWork.Process.PreparedPackages(ticks: (System.Diagnostics.Stopwatch.GetTimestamp() - began));
+    }
     // Starts the frame for every package's factory.
     private void PackagesBeginFrame(in FrameContext context) {
         var factories = m_packages.Factories;

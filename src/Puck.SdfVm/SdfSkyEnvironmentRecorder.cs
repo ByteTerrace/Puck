@@ -45,13 +45,13 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
             !ReferenceEquals(objA: m_built.Tables, objB: m_built.Residency.Tables) || (!Screens && !m_built.Tables.SkyEnvironmentDemand));
     }
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) {
-        var tables = m_built.Residency.Submit(context: context);
+        var tables = m_built.Residency.Staged(context: context);
 
         return (Screens ? tables.ScreenEmissionSignature(m_built.Residency, m_built.View, reads)
             : tables.SkyEnvironmentSignature(residency: m_built.Residency, view: m_built.View, reads: reads));
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-        var tables = m_built.Residency.Submit(context: recording.Context);
+        var tables = m_built.Residency.Staged(context: recording.Context);
 
         if (Screens) { _ = tables.ScreenEmissionSignature(m_built.Residency, m_built.View, recording.Reads); } else { _ = tables.SkyEnvironmentSignature(residency: m_built.Residency, view: m_built.View, reads: recording.Reads); }
         if (!Screens && !tables.SkyEnvironmentCanRecord) {

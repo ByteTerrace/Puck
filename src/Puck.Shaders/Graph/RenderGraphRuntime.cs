@@ -1325,6 +1325,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         queue.BeginBatch();
         try {
+            // The packages' shared frame work (an SDF residency's upload and pump) is done before any render records, so no
+            // node's recording pays for it; its submissions open the frame's batch, ahead of every render's.
+            PackagesPrepareRenders(context: in context, holdingConvergence: holdingConvergence, renders: renders);
+
             for (var position = 0; (position < renders.Count); position++) {
                 var index = renders[position];
                 var row = schedule.Instances[index];

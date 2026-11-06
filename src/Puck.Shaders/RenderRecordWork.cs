@@ -9,8 +9,9 @@ namespace Puck.Shaders;
 /// and committing (submission, publication, readbacks). <c>frames</c> counts render-graph frames that recorded at
 /// least one job; <c>longest-microseconds</c> sums each such frame's longest single recording, so divided by
 /// <c>frames</c> it is the recording critical path a frame would keep if its jobs ran side by side, beside
-/// <c>record-microseconds</c> divided by <c>frames</c>, the serial sum. Wall-clock readings: pacing counts, never compared
-/// between runs.
+/// <c>record-microseconds</c> divided by <c>frames</c>, the serial sum. <c>packages-microseconds</c> is the frame's
+/// package preparation that precedes every job (an SDF residency's upload and background pump), which no job pays.
+/// Wall-clock readings: pacing counts, never compared between runs.
 /// </summary>
 public sealed class RenderRecordWork : IWorkCounterSource {
     private static readonly WorkKind Frames = Kind(name: "render.record.frames", unit: "count");
@@ -20,7 +21,8 @@ public sealed class RenderRecordWork : IWorkCounterSource {
     private static readonly WorkKind Record = Kind(name: "render.record.record-microseconds", unit: "microseconds");
     private static readonly WorkKind Commit = Kind(name: "render.record.commit-microseconds", unit: "microseconds");
     private static readonly WorkKind Longest = Kind(name: "render.record.longest-microseconds", unit: "microseconds");
-    private static readonly WorkKind[] Kinds = [Frames, Jobs, Failed, Prepare, Record, Commit, Longest];
+    private static readonly WorkKind PackagePreparation = Kind(name: "render.record.packages-microseconds", unit: "microseconds");
+    private static readonly WorkKind[] Kinds = [Frames, Jobs, Failed, Prepare, Record, Commit, Longest, PackagePreparation];
     private readonly WorkCounterSet m_counts = new(name: "render.record", kinds: Kinds);
 
     private RenderRecordWork() { }
@@ -44,6 +46,10 @@ public sealed class RenderRecordWork : IWorkCounterSource {
         m_counts.Add(Record, Microseconds(ticks: recordTicks));
         m_counts.Add(Commit, Microseconds(ticks: commitTicks));
     }
+    /// <summary>Counts a frame's package preparation, the packages' shared frame work done before any job records
+    /// (<see cref="IRenderGraphPackageFactory.PrepareRender"/>).</summary>
+    /// <param name="ticks">The preparation's duration, in <see cref="Stopwatch"/> ticks.</param>
+    internal void PreparedPackages(long ticks) => m_counts.Add(PackagePreparation, Microseconds(ticks: ticks));
     /// <summary>Counts one job whose recording failed and was abandoned.</summary>
     internal void Abandoned() => m_counts.Count(Failed);
     /// <summary>Counts one render-graph frame that recorded jobs, with its longest single recording.</summary>

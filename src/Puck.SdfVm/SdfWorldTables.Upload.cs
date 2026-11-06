@@ -2,7 +2,7 @@ using Puck.Abstractions.Gpu;
 
 namespace Puck.SdfVm;
 
-// The upload: one fenced submission a frame, recorded by the frame's earliest pass, ahead of every view's submission. It takes the next ring slot, waits the previous upload's fence, which signals once every submission queued
+// The upload: one fenced submission a frame, recorded by the residency's staging before any pass records, ahead of every view's submission. It takes the next ring slot, waits the previous upload's fence, which signals once every submission queued
 // before it has finished, the views that read this slot two uploads earlier among them, flushes the slot's share of every
 // region, and records the fillers' first transitions and the regions' copies, each handing what it wrote to every shader stage that reads it in a later submission. The graph's
 // environment producer runs afterward, once its panorama images have been acquired.

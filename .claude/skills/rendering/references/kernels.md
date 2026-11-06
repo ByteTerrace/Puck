@@ -101,8 +101,8 @@ A view of a program with a glass shape runs the fragment with the glass passes
 (`SdfWorldPackage.WithGlass`): `glass-clear`, `glass` and `glass-shade` after
 `views`, chosen by `SdfWorldPasses.FragmentOf` (a bit of the render-extent
 revision, so a program gaining its first glass shape rebuilds the view).
-`world.counters gpu` lists them under the instance's name. The frame's first pass to record submits its residency's one
-upload ahead of the instance's submission (`SdfWorldResidency.Submit`), counted
+`world.counters gpu` lists them under the instance's name. The frame's preparation submits its residency's one
+upload before any node records (`SdfWorldResidency.Stage`), counted
 under the residency as `sdf:<name>` with three passes (`SdfWorldTables.PassLabels`):
 `fillers`, the fillers' first transitions and clears on the first upload;
 `upload`, the region copies; and `environment`, the

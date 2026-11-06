@@ -112,8 +112,8 @@ internal static class SdfTestPipelines {
     // A reflector for a reload's interface check; the kernels a harness reloads are SPIR-V, which needs no tool.
     public static ShaderBytecodeReflector Reflector() =>
         new(toolchain: new ShaderToolchain());
-    // Produces frames until the residency's pipeline build has built its tables, then submits that frame's upload, as a
-    // view's first pass of the frame does.
+    // Produces frames until the residency's pipeline build has built its tables, then stages that frame (its upload), as the
+    // render graph's preparation does.
     public static void ProduceFirstFrame(this SdfWorldResidency residency, in FrameContext context) {
         var copy = context;
 
@@ -126,13 +126,13 @@ internal static class SdfTestPipelines {
             reason: () => residency.NotReadyReason,
             wait: residency.WaitPipelineBuilds
         );
-        _ = residency.Submit(context: in context);
+        _ = residency.Stage(context: in context);
     }
-    // Produces one frame of a ready residency: captures and packs it and submits its upload, as a view's first pass of the
-    // frame does.
+    // Produces one frame of a ready residency: captures and packs it and submits its upload, as the render graph's
+    // preparation does.
     public static void ProduceFrame(this SdfWorldResidency residency, in FrameContext context) {
         residency.BeginFrame();
-        _ = residency.Submit(context: in context);
+        _ = residency.Stage(context: in context);
     }
     // Produces one frame when the residency can: starts it, captures and packs it, and submits its upload once its tables
     // exist, returning whether it did.
@@ -143,7 +143,7 @@ internal static class SdfTestPipelines {
             return false;
         }
 
-        _ = residency.Submit(context: in context);
+        _ = residency.Stage(context: in context);
 
         return true;
     }

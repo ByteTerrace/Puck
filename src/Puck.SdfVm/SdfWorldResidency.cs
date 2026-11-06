@@ -20,7 +20,8 @@ public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 
 /// it, or a session. Its views are <c>sdf.world</c> instances of the render graph, each running the package's passes
 /// (<see cref="SdfWorldPasses"/>) against the tables the residency holds (<see cref="SdfWorldTables"/>): once a frame it
 /// captures the frame source's frame, binds its screens, uploads a changed program and packs the frame into the tables,
-/// and the first pass of the frame to record submits the tables' upload. Fully backend-neutral: it resolves the shared
+/// and the render graph's preparation stages it (<see cref="Stage"/>), submitting the tables' upload before any pass
+/// records. Fully backend-neutral: it resolves the shared
 /// device from <see cref="FrameContext.Host"/> and builds its tables once its pipeline set, leased from the composition's
 /// cache and built off the frame thread, is ready.
 /// <para>
@@ -198,7 +199,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             MeshPathBake.DescribeResidency(radius: radius),
             (MeshPathBake.Library.Disk?.DescribeReads() ?? "store=none"),
             (m_tables?.DescribeLanding() ?? "region=none"),
-            (m_tables?.GpuWork.DescribeBytes() ?? "gpu-work=none"),
+            $"{(m_tables?.GpuWork.DescribeBytes() ?? "gpu-work=none")} late-stagings={LateStagings}",
             (m_tables?.DescribeFrameSampled() ?? "frame-sampled=none"),
             $"change-history-logical-bytes transforms={(m_frame?.MovedTransforms?.StorageBytes ?? 0)} draws={(m_frame?.MeshDrawChanges?.StorageBytes ?? 0)} dresser-scratch={m_meshDresser.ScratchBytes} staging-runs={(m_tables?.DrawChangeScratchBytes ?? 0)} (array payload; headers excluded)",
             string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"program-instances={(program?.Instances.Count ?? 0)} program-words={(program?.Words.Length ?? 0)} program-builds={(composition?.ProgramBuilds ?? 0)} emit-ms={(composition?.EmitMilliseconds ?? 0d):0.0} build-ms={(composition?.BuildMilliseconds ?? 0d):0.0}"),
@@ -621,19 +622,19 @@ public sealed partial class SdfWorldResidency : IDisposable {
             view: view
         ));
     }
-    /// <summary>Submits the frame's upload once, when the first pass of the frame records, ahead of every view's
-    /// submission, and pumps the tables' background GPU work against it (<see cref="PumpGpuWork"/>).</summary>
+    /// <summary>Stages the frame: prepares it (<see cref="Prepare"/>), then submits its upload and pumps the tables'
+    /// background GPU work against it (<see cref="PumpGpuWork"/>), once a frame, whoever asks first. The render graph's
+    /// preparation asks for every scheduled render that reads the residency, before the frame's batch opens and before any
+    /// node records (<see cref="SdfWorldPasses.PrepareRender"/>), so no node's recording pays for the frame's shared work.
+    /// This is the one place the frame's upload is submitted.</summary>
     /// <param name="context">The host's frame context.</param>
-    /// <returns>The tables, which hold the frame the pass renders.</returns>
-    /// <exception cref="InvalidOperationException">The residency has no tables: a pass records only once its residency is
-    /// ready.</exception>
-    public SdfWorldTables Submit(in FrameContext context) {
-        if (!Prepare(context: in context)) {
-            _ = (m_tables ?? throw new InvalidOperationException(message: $"Residency '{Name}' has no tables to render: {NotReadyReason}"));
-        }
+    /// <returns><see langword="true"/> when the residency has tables, whose frame is staged; <see langword="false"/> before
+    /// they are built.</returns>
+    /// <exception cref="ObjectDisposedException">The residency is released.</exception>
+    public bool Stage(in FrameContext context) {
+        _ = Prepare(context: in context);
 
-        var tables = m_tables!;
-
+        if (m_tables is not { } tables) { return false; }
         if (!m_submitted) {
             m_submitted = true;
             tables.HoldsFrame = HoldsFrame;
@@ -641,8 +642,28 @@ public sealed partial class SdfWorldResidency : IDisposable {
             tables.GpuWork.Pump(tables: tables);
         }
 
-        return tables;
+        return true;
     }
+    /// <summary>Returns the tables the frame's preparation staged (<see cref="Stage"/>), for a pass that records against
+    /// them. A recording that reaches a residency the preparation did not stage (a graph that installed during the frame
+    /// with a package the schedule did not name) stages it here, and counts it (<see cref="LateStagings"/>).</summary>
+    /// <param name="context">The host's frame context.</param>
+    /// <returns>The tables, which hold the frame the pass renders.</returns>
+    /// <exception cref="InvalidOperationException">The residency has no tables: a pass records only once its residency is
+    /// ready.</exception>
+    public SdfWorldTables Staged(in FrameContext context) {
+        if (!m_submitted) {
+            if (!Stage(context: in context)) {
+                throw new InvalidOperationException(message: $"Residency '{Name}' has no tables to render: {NotReadyReason}");
+            }
+            LateStagings++;
+        }
+
+        return m_tables!;
+    }
+    /// <summary>Gets the frames a pass's recording staged because the frame's preparation had not
+    /// (<see cref="Staged"/>); zero while every recording finds the frame's shared work done before it begins.</summary>
+    public long LateStagings { get; private set; }
     /// <summary>Pumps the tables' background GPU work (<see cref="SdfGpuWork.Pump"/>): answers the jobs that completed and
     /// submits the next while the budget allows, among them the bake's sampling. Called on the frame thread at the top of
     /// each frame, before any residency prepares, and after each upload; a residency with no tables pumps nothing.</summary>

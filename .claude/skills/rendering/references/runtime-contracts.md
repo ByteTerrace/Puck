@@ -102,11 +102,23 @@ the slot's next begin can reset them, the cadence rolls back, the frame's held
 leases retire unsampled, nothing is published or captured, and the instance is
 refused with `LastRecordError` until a later recording commits. A device loss
 still propagates to the host's recovery. `gpu.faults record <n>` fails the nth
-recording partway through its list to exercise this. The jobs run serially on
-the frame thread: package recorders (the SDF residency's upload and pump, its
-frame staging), the pipeline cache and the counting recorder share host state
-across nodes, so recording them on workers needs those split into the
-coordinator's preparation first
+recording partway through its list to exercise this.
+
+**A package's shared frame work precedes every record job.** Once the frame is
+scheduled, inside its batch and before any node renders, the runtime asks the
+factory of every package pass of every scheduled render to prepare it
+(`IRenderGraphPackageFactory.PrepareRender`, `RenderGraphRuntime.PackagesPrepareRenders`);
+a render a held capture withholds is skipped. The SDF factories stage the
+residency there (`SdfWorldResidency.Stage`): the frame's upload, including its
+wait on the previous upload's fence, and the background pump after it. `Stage`
+is the one place the upload is submitted, latched once a frame; recorders read
+the staged tables through `SdfWorldResidency.Staged`, which stages and counts a
+`late-stagings` (in `world.residency`) only for a residency the preparation did
+not reach, such as a graph installed during the frame with a package the
+schedule did not name. `render.record.packages-microseconds` times the
+preparation apart from the jobs. The jobs still run serially on the frame
+thread: the pipeline cache and the counting recorder share host state across
+nodes, so recording on workers needs those made safe first
 ([lessons plan](../../../../docs/plans/frame-source-lessons.md#1-complete-a2s-accounting-and-give-j6-immutable-recording-jobs)).
 
 ## 2. Nothing resolves silently to nothing

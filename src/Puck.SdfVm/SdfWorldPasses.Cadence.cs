@@ -10,7 +10,7 @@ public sealed partial class SdfWorldPasses {
 
         if (entry.View is not { } view) { return null; }
         Begin(residency: view.Residency);
-        var tables = view.Residency.Submit(context: in context);
+        var tables = view.Residency.Staged(context: in context);
         var frame = view.Residency.Frame!;
 
         // A held far cascade stands whatever forces the frame's other passes (SdfWorldPasses.Rates).

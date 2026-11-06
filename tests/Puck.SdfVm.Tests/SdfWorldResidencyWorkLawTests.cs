@@ -12,7 +12,7 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>
 /// Laws for the GPU work <see cref="SdfWorldResidency"/> reports when its views drive it the way a render graph does: one
-/// upload per produced frame (<see cref="SdfWorldResidency.Submit"/>), with the device resolved from the frame context,
+/// upload per produced frame (<see cref="SdfWorldResidency.Stage"/>), with the device resolved from the frame context,
 /// over <see cref="FakeGpuDevice"/>. An upload is fire-and-forget, so it is published by the next frame's, which observes
 /// its fence; before that, nothing is available.
 /// </summary>

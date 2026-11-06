@@ -311,6 +311,15 @@ public interface IRenderGraphPackageFactory {
     /// whether an instance is unchanged and before any instance renders.</summary>
     /// <param name="context">The host's frame context of the frame being produced.</param>
     void BeginFrame(in FrameContext context) { }
+    /// <summary>Prepares a scheduled render of an instance one of whose passes runs the factory's package: the frame's
+    /// shared work its recording reads (an upload, a background pump), done once here so that no node's recording pays
+    /// for it. The runtime calls it on the frame thread once the frame is scheduled, for every render the schedule
+    /// names, inside the frame's submission batch and before any instance renders, so work submitted here joins the
+    /// batch ahead of every render's submission. A render whose node then records nothing (paused, or waiting on an
+    /// extent) was still prepared.</summary>
+    /// <param name="instance">The scheduled instance.</param>
+    /// <param name="context">The host's frame context of the frame being produced.</param>
+    void PrepareRender(string instance, in FrameContext context) { }
     /// <summary>Starts a frozen capture epoch for a captured instance or one of its dependencies, including a capture
     /// requesting no additional convergence samples. A package that
     /// samples on the capture's behalf takes each render's sample index from the convergence's counted samples

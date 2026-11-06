@@ -426,7 +426,11 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
   the critical path is on `world.budget`'s live-frame rows and in `pipeline.inspect`,
   which carry each node's `record-jobs`, `last-` and `mean-` `prepare`, `record` and
   `commit` microseconds and its `longest-record-us`
-  (`ShaderPipelineRenderNode.AppendRecordTimes`).
+  (`ShaderPipelineRenderNode.AppendRecordTimes`). `packages-microseconds` is the
+  frame's package preparation before any job (the SDF residency's upload and
+  pump). Most of it is usually the upload's host wait on the previous upload's
+  fence: the CPU waiting for the GPU, which a thread-time trace shows under
+  `GpuWorkCountingFence.Wait`. Read it as GPU-bound pacing, not host work.
 
 ## Puck's open cases
 
