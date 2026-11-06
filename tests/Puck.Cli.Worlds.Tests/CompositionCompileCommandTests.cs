@@ -75,7 +75,7 @@ public sealed class CompositionCompileCommandTests {
         using var directory = new TemporaryDirectory();
         var source = directory.WriteText(name: "game.puck", text: "schema: \"puck.cartridge.v1\"");
 
-        Assert.Equal(expected: 1, actual: await SuiteRoot.InvokeAsync(args: ["compile", source, "--update-assets"]));
+        Assert.Equal(expected: CliExit.Refused, actual: await SuiteRoot.InvokeAsync(args: ["compile", source, "--update-assets"]));
         Assert.False(condition: File.Exists(path: directory.PathOf(name: "game.assets.json")));
         Assert.False(condition: File.Exists(path: directory.PathOf(name: "game.cartridge.json")));
     }

@@ -136,11 +136,11 @@ public static class PuckRootCommand {
     }
 
     // puck --version: the package version with the commit the build was made at as build metadata, then, on standard
-    // error, whether the checkout it runs in has moved past that commit. The commit is the one Puck.World.Schema embeds.
+    // error, whether the checkout it runs in has moved past that commit (CliRevision.Built).
     private sealed class RevisionVersionAction : System.CommandLine.Invocation.AsynchronousCommandLineAction {
         public override async Task<int> InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken = default) {
             var version = (System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(element: typeof(PuckRootCommand).Assembly)?.InformationalVersion ?? "0.0.0");
-            var revision = Puck.World.WorldSchema.SourceRevision;
+            var revision = CliRevision.Built;
 
             Console.Out.WriteLine(value: CliRevision.Describe(
                 revision: revision,

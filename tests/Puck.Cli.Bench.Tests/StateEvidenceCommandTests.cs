@@ -102,7 +102,7 @@ public sealed class StateEvidenceCommandTests {
         Assert.Empty(collection: Directory.GetFiles(path: directory.RootPath));
         var text = refusal;
 
-        Assert.Contains(ReferenceScheduleManifest.Targets[0].Build.IlCompiler, text, StringComparison.Ordinal);
+        Assert.Contains(actualString: text, comparisonType: StringComparison.Ordinal, expectedSubstring: "ILCompiler");
         Assert.Contains(actualString: text, comparisonType: StringComparison.Ordinal, expectedSubstring: "no-such-ilc.exe");
         Assert.Contains(actualString: text, comparisonType: StringComparison.Ordinal, expectedSubstring: "--ilc");
     }

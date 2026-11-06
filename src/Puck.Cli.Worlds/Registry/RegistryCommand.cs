@@ -44,9 +44,8 @@ public static class RegistryCommand {
 
     public static Command Create() => CliOptions.CheckVerb(
         checkDescription: "Regenerate in memory and compare against docs/world-name-registry.md; write nothing, and exit 1 naming the first differing line.",
-        description: """
-        The world name registry, generated and checked.
-
+        description: "Generate the world name registry, or check it.",
+        detail: """
         Generated from Puck.World.WorldNameRegistry (src/Puck.World.Schema) over the same
         source-generated WorldJsonContext the engine loads a world document through: every
         document field carrying a state, zone, rule, table, pattern, topology, generator,

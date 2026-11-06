@@ -43,8 +43,8 @@ public static class MeshCommand {
         var buildOption = new Option<string?>(name: "--build") { Description = "The directory of the World build whose bake stored the meshes (its Puck.World.dll's directory); the store keys each mesh by that build's bake identity. Absent uses this tool's own build." };
         var identityOption = new Option<string?>(name: "--identity") { Description = "The bake identity the meshes are stored under, as a report prints it (32 hex digits), in place of --build: a build since rebuilt keeps its stored meshes under the identity it had." };
         var backendOption = new Option<string>(name: "--backend") { DefaultValueFactory = static _ => "directx", Description = "The backend the World baked on, whose bake kernels key the meshes: directx or vulkan." };
-        var topOption = new Option<int>(name: "--top") { DefaultValueFactory = static _ => 3, Description = "The clusters each group reports, worst first." };
-        var worstOption = new Option<int>(name: "--worst") { DefaultValueFactory = static _ => 10, Description = "The clusters the closing list reports across every group, worst first." };
+        var topOption = CliOptions.Count(defaultValue: 3, description: "The clusters each group reports, worst first.", minimum: 1, name: "--top");
+        var worstOption = CliOptions.Count(defaultValue: 10, description: "The clusters the closing list reports across every group, worst first.", minimum: 0, name: "--worst");
         var imagesOption = new Option<string?>(name: "--images") { Description = "A directory to write a PNG of each cluster of the closing list into: the mesh around its worst sample from three sides, shading normals beside face normals." };
         var historyOption = new Option<bool>(name: "--history") { Description = "Also audit, for each selected group, every mesh the store holds under any bake identity whose vertices lie on the group's field, oldest first: how earlier builds' bakes of the same geometry compare. Needs --group." };
         var cpuOption = new Option<bool>(name: "--cpu") { Description = "Bake each selected group offline on the CPU, the bake's own lattices answered through the field evaluator (MeshCpuBake), and audit that mesh in place of a stored one: a bake change measured with no device. Reads no store." };
@@ -90,7 +90,7 @@ public static class MeshCommand {
         }
 
         if (!CliWorldDocuments.TryLoad(definition: out var definition, fullPath: out var fullPath, path: request.World, verb: Verb)) {
-            return 1;
+            return CliExit.Refused;
         }
 
         var buildDirectory = Path.GetFullPath(path: (request.Build ?? AppContext.BaseDirectory));
@@ -150,12 +150,10 @@ public static class MeshCommand {
         Console.Out.Write(value: output.ToString());
 
         if ((stored == 0) && request.Cpu) {
-            Console.Error.WriteLine(value: $"{Verb}: the CPU bake found no surface in the selected groups.");
-            return 1;
+            return CliExit.Empty(verb: Verb, selection: "the selected groups", why: "the CPU bake found no surface in them");
         }
         if (stored == 0) {
-            Console.Error.WriteLine(value: $"{Verb}: the store holds no mesh of the selected groups under bake identity {identity:x32}. Boot the world once with the build whose meshes to audit (Puck.World --world {CliPaths.ToDisplay(fullPath: fullPath)}{((request.CacheRoot is null) ? string.Empty : $" --cache-dir {request.CacheRoot}")}) to bake and store them, then audit with --build naming its directory.");
-            return 1;
+            return CliExit.Empty(verb: Verb, selection: "the selected groups", why: $"the store holds no mesh of them under bake identity {identity:x32}: boot the world once with the build whose meshes to audit (Puck.World --world {CliPaths.ToDisplay(fullPath: fullPath)}{((request.CacheRoot is null) ? string.Empty : $" --cache-dir {request.CacheRoot}")}), then audit with --build naming its directory");
         }
 
         return 0;

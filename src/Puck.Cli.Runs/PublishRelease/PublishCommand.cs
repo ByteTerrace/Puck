@@ -60,8 +60,8 @@ public static class PublishCommand {
             required: true
         );
         var ridOption = new Option<string>(name: "--rid") { Description = "The .NET runtime identifier this payload targets (e.g. win-x64).", Required = true };
-        var rolloutPercentOption = new Option<int>(name: "--rollout-percent") { DefaultValueFactory = _ => 100, Description = "The percentage of clients this release rolls out to." };
-        var stateGenerationOption = new Option<int>(name: "--state-generation") { DefaultValueFactory = _ => 0, Description = "The state generation this release's payload reads and writes." };
+        var rolloutPercentOption = CliOptions.Count(defaultValue: 100, description: "The percentage of clients this release rolls out to, 0 to 100.", maximum: 100, minimum: 0, name: "--rollout-percent");
+        var stateGenerationOption = CliOptions.Count(defaultValue: 0, description: "The state generation this release's payload reads and writes.", minimum: 0, name: "--state-generation");
         var versionOption = new Option<string>(name: "--version") { Description = "The release's semantic version.", Required = true };
         var command = new Command(
             description: "Write an unsigned puck.release.manifest.v1 release-source tree from a built RID's output.",

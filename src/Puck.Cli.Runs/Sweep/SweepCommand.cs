@@ -38,7 +38,7 @@ public static partial class SweepCommand {
         var backendOption = WorldLaunch.BackendOption(description: "The graphics backend for a new windowed World: auto, directx or vulkan; the document's when omitted. Requires --tour and cannot change an attached World.");
         var captureToolOption = new Option<string>(name: "--capture-tool") { Description = "Load the World's existing GPU capture tool before device creation (pix or renderdoc), so a plan can invoke gpu.capture. Requires a new windowed World." };
         var cacheOption = new Option<string>(name: "--cache-dir") { Description = "The World's device-cache root, shared by fresh Worlds; its per-user default when omitted. Use a writable lane directory in a sandbox." };
-        var timeoutOption = new Option<int>(name: "--timeout") { DefaultValueFactory = static _ => 40, Description = "The most minutes the whole run may take, a build excepted: every World call, boot, lease wait and scenario process is bounded by what remains." };
+        var timeoutOption = CliOptions.Count(defaultValue: 2400, description: "The most seconds the whole run may take, a build excepted: every World call, boot, lease wait and scenario process is bounded by what remains (default 2400).", minimum: 1, name: "--timeout-seconds");
         var command = new Command(
             description: "Sweep the debug world: run its tools, read every signal, take the capture tour, and write a report a later sweep compares with.",
             name: Verb
@@ -69,7 +69,7 @@ public static partial class SweepCommand {
 
             Silence is never success: a signal the sweep could not measure (the attachment closed, the time passed, an
             answer lacking a metric a rule reads, a tool that did not finish) is reported unmeasured and fails the run
-            like a red one. --timeout bounds the whole sweep, an attached World and the scenarios included, and an
+            like a red one. --timeout-seconds bounds the whole sweep, an attached World and the scenarios included, and an
             interrupt ends it the same way; the Worlds, the GPU lease and the processes the sweep started are released
             on every exit path.
 
@@ -90,7 +90,7 @@ public static partial class SweepCommand {
             planPath: parseResult.GetValue(option: planOption),
             scenarios: (parseResult.GetValue(option: scenariosOption) ?? []),
             stops: (parseResult.GetValue(option: stopOption) ?? []),
-            timeoutMinutes: parseResult.GetValue(option: timeoutOption),
+            timeoutSeconds: parseResult.GetValue(option: timeoutOption),
             tour: parseResult.GetValue(option: tourOption),
             worldPath: parseResult.GetValue(option: worldOption)
         )));
@@ -98,7 +98,7 @@ public static partial class SweepCommand {
         return command;
     }
 
-    private static int Run(string? planPath, string? output, string? baselinePath, bool tour, string? attach, bool noHeadless, bool noScenarios, string[] stops, string[] scenarios, string? worldPath, string? artifact, string? cacheDirectory, WorldBackendPreference? backend, string? captureTool, int timeoutMinutes, CancellationToken cancellation) {
+    private static int Run(string? planPath, string? output, string? baselinePath, bool tour, string? attach, bool noHeadless, bool noScenarios, string[] stops, string[] scenarios, string? worldPath, string? artifact, string? cacheDirectory, WorldBackendPreference? backend, string? captureTool, int timeoutSeconds, CancellationToken cancellation) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -171,8 +171,8 @@ public static partial class SweepCommand {
         // The whole sweep, a build and its lease waits excepted, is bounded by one budget, and an interrupt ends it the same way: every
         // wait of a World, a lease or a scenario honours it, and the Worlds, leases and processes below are released by
         // the scopes that own them, in order.
-        using var budget = new SweepBudget(caller: cancellation, total: TimeSpan.FromMinutes(value: timeoutMinutes));
-        var deadline = TimeSpan.FromMinutes(value: timeoutMinutes);
+        using var budget = new SweepBudget(caller: cancellation, total: TimeSpan.FromSeconds(value: timeoutSeconds));
+        var deadline = TimeSpan.FromSeconds(value: timeoutSeconds);
 
         using (build) {
             if (!noHeadless) {

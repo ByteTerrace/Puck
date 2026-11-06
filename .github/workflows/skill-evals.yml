@@ -90,7 +90,7 @@ jobs:
           read -ra globs <<< "$CASES"
           cases=()
           if (( ${#globs[@]} )); then cases=(--cases "${globs[@]}"); fi
-          puck evals run "$SKILL" "${cases[@]}" --revision "$REVISION" --model "$MODEL" --ablation "$ABLATION" --max-cost-usd "$MAX_COST" --concurrency "$CONCURRENCY"
+          puck evals run "$SKILL" "${cases[@]}" --revision "$REVISION" --model "$MODEL" --ablation "$ABLATION" --max-cost-usd "$MAX_COST" --jobs "$CONCURRENCY"
         shell: bash
       - if: always()
         name: Upload the eval results

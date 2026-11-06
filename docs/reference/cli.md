@@ -16,10 +16,7 @@ drives the verb's deadline with a virtual clock.
 
 Agents and people drive this CLI all day, so every verb behaves the same way.
 `CliConventionLawTests` walks the real command tree and checks the mechanical
-half of these rules. A verb that still breaks one is recorded, by command path
-and rule, in `tests/Puck.Cli.Tests/CliConventionExemptions.json`. That ledger
-only shrinks: the law fails on a new violation, and it fails on a recorded row
-whose command no longer breaks its rule, until the row is deleted.
+half of these rules on every command, with no exemptions.
 
 1. **The tool is `puck`.** Usage and help print `puck` whatever file the process
    started from, including `dotnet Puck.Cli.dll`.
@@ -31,8 +28,12 @@ whose command no longer breaks its rule, until the row is deleted.
    short alias is help's `-h`/`-?`. One spelling means one thing on every verb
    that has it: `--check` is the only dry mode (write nothing, exit 1 on drift),
    `--json` switches results to one JSON object per line, `--output` names the one
-   path a verb writes (never a positional argument), and `--configuration`, `--jobs`, and `--file-list <json>`
-   mean the same thing everywhere. A verb that mirrors a named external tool keeps
+   path a verb writes (never a positional argument), and `--configuration`, `--jobs`, `--timeout-seconds`
+   and `--file-list <json>` mean the same thing everywhere. A number option is built by `CliOptions.Count`
+   or `CliOptions.Amount`, which parse and bound it at parse time, so a value that is not a number or lies
+   outside its bounds is a usage error naming the option. A name a verb records (a holder, a lane, a
+   symbol) refuses a blank value, contradictory options refuse each other (`CliOptions.Exclusive`), and a
+   program a verb runs (`puck lease`) follows a literal `--`. A verb that mirrors a named external tool keeps
    that tool's short flags and mode names: `search` is ripgrep-shaped, so it keeps
    ripgrep's short flags and its `--files` list mode.
 4. **Canonical output has no style options.** A formatter or generator writes one
@@ -43,7 +44,10 @@ whose command no longer breaks its rule, until the row is deleted.
    `references`) found nothing, as with grep. 2 means a usage error, a refusal, or
    an infrastructure failure. 130 means the run was cancelled. An exception that
    escapes a verb is reported on one line, `puck <verb>: <message>`, and exits 2;
-   `CliExit` in `src/Puck.Cli.Core` owns the mapping.
+   `CliExit` in `src/Puck.Cli.Core` owns the mapping. Every refusal goes through
+   `CliExit.Refuse`, and a selection that leaves a verb nothing to do goes through
+   `CliExit.Empty`: a refusal when the caller named it, a notice on standard error
+   when it is the verb's own default, never a silent pass.
 6. **Help is layered.** The root listing is alphabetical and gives each verb one
    imperative sentence. A verb's own `--help` carries its detail: modes, exit
    codes, and examples.
@@ -123,7 +127,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck motion`](#puck-motiontick-pinned-motion-stills-and-contact-sheets) | judges how the Moth moves: boots the debug world's real `Puck.World`, runs the tick-pinned scenarios of `worlds/debug/motion.scenarios.json` through the `motion` layout's four cameras, and writes per-camera stills, labelled contact sheets and a manifest; `--reproduce` runs everything twice in fresh Worlds and compares pose hashes and pixels. |
 | [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `verify-published`, `smoke`. |
 | [`puck official`](#puck-officialthe-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.manifest.v1` tree—the shipped engine, the authoring workspace, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
-| [`puck packages`](#puck-packagespublished-nuget-package-report) | the published `ByteTerrace.Puck.*` NuGet package report—id/description/tags—checked and regenerated against `docs/site/index.html`. |
+| [`puck packages`](#puck-packagespublished-nuget-package-report) | writes the published `ByteTerrace.Puck.*` NuGet package list into `docs/site/index.html`, or checks it. |
 | [`puck parity`](#puck-paritycross-backend-parity-over-the-authored-parity-world) | boots a parity world it is given offscreen once per graphics backend and judges every capture it schedules: content gate, exact state hash, an exact reference image where a station names one, and per-tile pixels. |
 | [`puck prewarm`](../../src/Puck.Cli.Worlds/PlayerDerivedProducts.cs) | produces the AGB BIOS and Rust addon derived caches into a player output through the runtime loaders. |
 | [`puck publish`](#puck-publishunsigned-release-source-trees) | writes an unsigned `puck.release.manifest.v1` release-source tree from one runtime identifier's built output. |
@@ -648,7 +652,7 @@ generated atlases preserve source glyph IDs for it.
 puck shaders cache prune --unused-minutes <n> [--cache <directory>]
 puck shaders collect <directory>
 puck shaders compare <expected> [<actual>] [--build [--cache <directory>]]
-puck shaders compile <source> --out <directory> [--name <name>] [--toolchain <directory>] [--stage compute|vertex|fragment] [--entry <name>]
+puck shaders compile <source> --output <directory> [--name <name>] [--toolchain <directory>] [--stage compute|vertex|fragment] [--entry <name>]
 puck shaders generate [--check]
 puck shaders interface <source> [--write] [--echo]
 puck shaders package <source> --output <directory> [--root <directory>] [--toolchain <directory>] [--cache <directory>] [--json]
@@ -768,7 +772,10 @@ break, and nothing wider. `--merge-base <revision>` takes the base as the merge
 base of `HEAD` and that revision instead, so the commits a target branch gained
 after the branch left it are never read as the branch's change; diffing against
 the target's tip would count them. `--since` and `--merge-base` each name the
-base, so passing both is refused.
+base, so passing both is refused. `--json` writes the plan as one JSON object
+per line: what was compared (`changed`, `against`, `everything`), then each
+chosen item's `kind` (suite, test, canary, canary-check, docs-links, parity,
+baseline), `name` and the `command` the gate runs for it.
 
 - **Suites** follow the project graph. A changed project chooses its own suite
   and the suite of every project that references it, transitively, counting a
@@ -1027,6 +1034,10 @@ PRESSURE <reason> cpu=<percent> freeRAM=<GB> freeDisk=<GB> reuseNodes=<count>
 CAPACITY cpu=<percent> freeRAM=<GB> freeDisk=<GB> reuseNodes=<count>
 ```
 
+`--json` writes one JSON object per reading that prints a line instead: `at`,
+`cpuPercent` (the window's mean), `freeRamGb`, `freeDiskGb`, `commitPercent`,
+`reuseNodes`, `gpuHolder`, `heavyTestHolder` and `admission`.
+
 - `GPU busy` or `GPU idle` appears at the first reading and on every change
   after. GPU work is the World (`Puck.World` or `Puck.World.dll`) when its
   arguments open a device, or a test host for an assembly in
@@ -1277,7 +1288,7 @@ puck canary --backend <name> ...    run every backend-declaring proof on vulkan 
 puck canary --jobs <n>              run at most n World processes at once (n ≥ 1)
 puck canary --gpu-jobs <n>          run at most n legs on the GPU at once (n ≥ 1)
 puck canary --plan                  print a selection's counts without building or running
-puck canary --keep-transcripts ...  keep every leg's run directory whatever its verdict
+puck canary --plan|--list --json    the plan or the listing as one JSON object per line
 ```
 
 Each leg runs in its own run directory under the temporary directory, which
@@ -1285,9 +1296,9 @@ the leg's `canary <id> <leg>: transcripts <path>` line names. A proof that
 holds deletes both legs' directories once its report prints; a proof that fails
 keeps both and names each with a `run directory kept:` line, as does a run that
 stops before every proof reported (see [Conventions](#conventions)). The run's
-shader packages follow the run's verdict the same way. `--keep-transcripts`
-leaves every leg's directory in place for a caller that reads the transcripts
-afterwards and removes them itself.
+shader packages follow the run's verdict the same way. A selection, or the
+plan of a named selection, that names no proof is refused before anything is
+built; the plan of an empty automatic set is a notice.
 
 `puck canary --merge` is the merge gate. The automatic set alone skips every
 offscreen GPU proof, because each requires `gpu`; `--merge` runs the union of
@@ -1343,7 +1354,7 @@ launch takes). While it waits, the lease prints
 `lease: <holder> waiting for build lease held by <holder>; N queued ahead, ...` to standard
 error when its place changes, and again every five minutes. The build itself
 then gets its own thirty minutes (`WorldArtifactBuild.BuildTimeout`), counted from
-the moment it starts. No verb's own run budget (`puck sweep --timeout`, a
+the moment it starts. No verb's own run budget (`puck sweep --timeout-seconds`, a
 suite's leg time) counts either wait or the build: a deep queue never shortens
 the build, and never fails a run whose build was fine. `puck lease <name>
 --wait <seconds>` is the one place a caller sets the wait, and its default is
@@ -1618,8 +1629,14 @@ puck test <path> --record <dir>        keep each world's hashes, snapshots, expo
                                        under <dir>/<world> (lane scratch, never committed)
 puck test <path> --compare <dir>       require each world to match its recording under <dir>
 puck test <path> --cache-dir <dir>     share this device-cache root across workers and runs
+puck test <path> --json                one JSON object per world, then one of totals, on standard
+                                       output; every text line goes to standard error
 puck test -h / --help                  this text
 ```
+
+A world whose reproduction, worker counts or recording diverge fails the run
+(exit 1), as a failing verdict does; a leg that did not finish, a missing
+recording or a world that cannot be judged refuses it (exit 2).
 
 Without `--keep`, the run uses a run directory under the temporary directory
 that a passing run deletes and a failing run keeps and names (see
@@ -2088,8 +2105,8 @@ and still to the same ticks.
 `--cache-dir` forwards the World's device-cache root, shared by both runs;
 their state directories remain separate. In a sandbox, name a writable lane
 directory so a refused write to the per-user cache does not make every boot
-cold. `--timeout` is the minute budget for the **whole** run, both Worlds under
-`--reproduce`, excluding a build; its default is 25. Choose it within the GPU
+cold. `--timeout-seconds` is the budget for the **whole** run, both Worlds under
+`--reproduce`, excluding a build; its default is 1500. Choose it within the GPU
 lease's budget and leave time for the comparison.
 
 Per scenario the output directory holds `<name>/raw/t<offset>-<camera>.png`, one
@@ -2413,7 +2430,7 @@ call names a `pending` rule (`coverage.pending > 0`) and `maxAsks`: the sweep as
 the line again, each ask under the signal's own deadline, while the rule holds, and
 a read still pending after the last ask is unmeasured. A signal the plan marks `recheck` (the watchdog, the rule
 failures, the addons) is read again after the tour as `<name>.after-tour`.
-`--timeout` bounds the whole sweep, an attached World and the scenarios
+`--timeout-seconds` bounds the whole sweep (default 2400), an attached World and the scenarios
 included, and an interrupt ends it the same way; the Worlds, the GPU lease and
 the processes the sweep started are released on every exit path. A rule reads `<metric> <op> <value>`, with
 `==`, `!=`, `>`, `>=`, `<`, `<=` and `~` (contains), and a value that names
@@ -2702,7 +2719,7 @@ reported against it.
 The family the [skill evaluation procedure](../development/documentation.md#evaluate-an-agent-skill)
 runs on. Each verb's `--help` holds its full contract.
 
-- `puck evals run <skill> [--cases <glob>...] [--tag <tag>...] [--revision <rev>] [--model <id>] [--judge <id>] [--runs n] [--ablation with-without|none] [--max-cost-usd x] [-j n] [--no-fixture] [--preload] [--dry-run]`
+- `puck evals run <skill> [--cases <glob>...] [--tag <tag>...] [--revision <rev>] [--model <id>] [--judge <id>] [--runs n] [--ablation with-without|none] [--max-cost-usd x] [--jobs n] [--no-fixture] [--preload] [--dry-run]`
   checks `<rev>` (default HEAD) out as a detached worktree under the main
   checkout's `.claude/worktrees/`, copies HEAD's `evals/` into it when `<rev>`
   is older, puts the rules-file fixture (HEAD's `AGENTS.md` text, and the
@@ -2957,7 +2974,7 @@ kernel source's current digest:
 puck bench state-evidence --inventory --output artifacts/state-evidence/inventory.json
 ```
 
-The inventory records the manifest digest, pinned SDK and roll-forward policy,
+The inventory records the manifest digest,
 every Native AOT entry point and symbol, each kernel source's current SHA-256,
 per-target unresolved analyzer findings, the per-vocabulary coverage with each
 unmodeled operation named, and every missing memory coefficient. A nonzero exit
@@ -2966,8 +2983,9 @@ the manifest. Run it from the
 repository checkout; the command locates the checkout by ascending to `Puck.slnx`.
 
 Each kernel artifact campaign must use the inventory's exact source digest and the
-per-target `referenceBuild` settings in `ReferenceSchedule.json`: the SDK
-`global.json` pins, the recorded runtime pack and ILCompiler, Release Native AOT,
+per-target `referenceBuild` settings in `ReferenceSchedule.json` with the
+toolchain the checkout derives (the SDK `global.json` names and the runtime that
+SDK bundles, which the Native AOT runtime pack and ILCompiler carry), Release Native AOT,
 explicit `IlcInstructionSet` (`x86-64-v3` or `armv8.2-a`), no method-body
 folding, and no PGO. Retain the complete disassembly for the named symbol and
 every reachable helper, including refusal paths. Run `llvm-mca` at the version
@@ -3008,7 +3026,7 @@ absent.
 
 | Option | Default |
 |---|---|
-| `--ilc <path>` | `<packages>/runtime.<host>.microsoft.dotnet.ilcompiler/<version>/tools/ilc.exe`, taken from the manifest's `ilCompiler`. |
+| `--ilc <path>` | `<packages>/runtime.<host>.microsoft.dotnet.ilcompiler/<version>/tools/ilc.exe`, `<version>` being the runtime the SDK `global.json` names bundles. |
 | `--llvm-objdump <path>` | `PATH`, then `C:/Program Files/LLVM/bin` on Windows. |
 | `--llvm-mca <path>` | The same search. |
 | `--nuget-packages <dir>` | `NUGET_PACKAGES`, then the user profile's package root. |
@@ -3540,10 +3558,10 @@ sources are formatted by [`puck format`](#puck-formatthe-one-formatter), the one
 formatter for every source kind.
 
 ```text
-puck compile [<source.puck|document.world.json>...] [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--check]] [--validate] [--measure] [--strict] [--watch] [--update-assets]
-puck decompile <source.json> [-o <out.puck>] [--overwrite] [--embeddings <file.embeddings.json>]
-puck embed <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
-puck embed probe <path> <text> [--space <name>] [--against <table>] [--top <n>]
+puck compile [<source.puck|document.world.json>...] [--output <out.json-or-directory>] [--tree <root> [--written <report>] [--check]] [--validate] [--measure] [--strict] [--watch] [--update-assets]
+puck decompile <source.json> [--output <out.puck>] [--overwrite] [--embeddings <file.embeddings.json>]
+puck embed lock <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
+puck embed probe <path> <text> [--space <name>] [--top <n>] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--timeout-seconds <n>]
 puck lint <path> [--strict]
 puck lsp
 puck migrate <name> <path> [--check]
@@ -3692,7 +3710,7 @@ Every verb that validates or composes a world document—`compile --validate`,
 does at boot, so a document naming a shipped `screens[]` engine validates
 identically here and there.
 
-`decompile` writes beside its source when `-o` is omitted. A basis or import path
+`decompile` writes beside its source when `--output` is omitted. A basis or import path
 inside the document resolves relative to the `.puck` file, so a round trip must
 write the `.puck` next to the JSON it came from. Pass `--embeddings <file.embeddings.json>`
 to decompile vector cell arrays back into their original authored text literals when present
@@ -4194,19 +4212,10 @@ runs wrote different records.
 ## `puck packages`—published NuGet package report
 
 Enumerates every csproj under `src/` declaring `<IsPackable>true</IsPackable>`
-(see `build/Packaging.targets`) and reads the same fields `dotnet pack` reads:
-`<PackageId>`, `<Description>`, `<PackageTags>`. Projects without an explicit
-packing opt-in are omitted.
-
-```text
-puck packages                list every packable project: id, description, tags
-puck packages --check <path> compare <path>'s GENERATED package section against the
-                              current list; write nothing, exit 1 on disagreement
-puck packages --write <path> regenerate the GENERATED package section in <path>
-puck packages -h / --help    this text
-```
-
-The GENERATED section a page carries is delimited by a comment pair:
+(see `build/Packaging.targets`) by the `<PackageId>` `dotnet pack` reads, and
+writes the list, in ordinal order, into the GENERATED section of
+`docs/site/index.html`, its `<p class="libs">` paragraph, delimited by a comment
+pair:
 
 ```html
 <!-- GENERATED: puck packages -->
@@ -4214,14 +4223,16 @@ The GENERATED section a page carries is delimited by a comment pair:
 <!-- /GENERATED -->
 ```
 
-`docs/site/index.html` carries the one checked-in instance, its `<p
-class="libs">` paragraph. `--write` replaces everything between and including
-the pair; the rest of the file is untouched. Exit codes: **0**
-listed/wrote/matched, **1** `--check` found drift, **2** usage error or
-missing repository root.
+```text
+puck packages            regenerate the section; the rest of the page is untouched
+puck packages --check    regenerate it in memory and compare; write nothing, exit 1 on drift
+```
+
+The gate runs `puck packages --check`. Exit codes: **0** wrote or matched,
+**1** `--check` found drift, **2** a refusal (no repository root, no page or no
+section).
 
 ---
-
 ## `puck wasm-stdlib`—WASM standard library sources
 
 Regenerates every GENERATED Rust source registered in
@@ -4342,6 +4353,10 @@ with read-only calls and stats the git index, the changed files, the worktree's
 active  <name>  <branch>  ahead <n> files <n> commit <age> "<subject>" write <age> log <age> lease gpu:queued#<ticket>(<turn>/<lanes>,ahead <n>) brief <id> done
 ```
 
+`--json` writes one JSON object per lane instead: the row's members with
+`base`, `now`, `stallMinutes` and each age in seconds; it does not combine with
+`--watch`.
+
 - `ahead` counts commits on the branch that `--base` (default:
   the branch the main checkout holds) lacks, and a `--base` that names no commit
   is refused (exit 2); `files` counts paths with a staged or unstaged change.
@@ -4409,7 +4424,7 @@ can be found. The authoritative asset map and variant rationale live in
 
 ## puck lease—exclusive machine work
 
-Run `puck lease gpu --holder <lane> [--lane <lane>] [--wait <seconds>] -- <executable> <arguments...>`, or replace `gpu` with `heavy` for a heavy suite or `build` for a World build (the one the World build store takes itself). Options precede `--`; the executable receives the remaining argument vector without shell expansion. The child keeps the caller's output streams and exit code. A refused acquisition exits 2; cancellation exits 130 and kills the child tree before releasing the lease.
+Run `puck lease gpu --holder <lane> [--lane <lane>] [--wait <seconds>] -- <executable> <arguments...>`, or replace `gpu` with `heavy` for a heavy suite or `build` for a World build (the one the World build store takes itself). Options precede `--`, which the command must follow: a token that reaches the command before `--` (a mistyped option, or a missing separator) is refused at parse time, before any queue wait. The executable receives the remaining argument vector without shell expansion. The child keeps the caller's output streams and exit code. A refused acquisition exits 2; cancellation exits 130 and kills the child tree before releasing the lease.
 
 The GPU lease defaults to the `HostStartKind.WindowedWorld` peak. For a bounded small device check that boots no World, add `--kind Step`; other declared `HostStartKind` values select their own expected peak. This changes the child command's memory estimate, while retaining GPU exclusion and the same RAM, commit, disk and idle-device admission. Full CPU/memory-heavy suites still take the heavy lease too. A verb that starts a device World takes this same lease through its World launch, nesting under a `puck lease gpu` it runs beneath.
 
@@ -4483,6 +4498,11 @@ gpu: held by <lane-a> timing run (lane <lane-a>) for <time>; 2 queued
   2. <lane-a> retime (lane <lane-a>) waiting <time>; lane 2 of 2 in the round, 1 ahead
 heavy: idle
 ```
+
+`puck lease list --json` writes one JSON object per lease instead: `lease`,
+`holder`, `lane`, `checkout`, `since`, `alive`, its `queue` in admission order
+(each waiter's `holder`, `lane`, `checkout`, `since`, `ahead`, `position` and
+`lanes`), and the `recordedProtocol` and `protocol`.
 
 ### `puck lease quiet`—a settle window
 

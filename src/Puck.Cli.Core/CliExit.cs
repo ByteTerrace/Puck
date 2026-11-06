@@ -23,15 +23,39 @@ public static class CliExit {
     /// <summary>The invocation was cancelled (Ctrl+C or SIGTERM), the shell's own code for an interrupt.</summary>
     public const int Cancelled = 130;
 
-    /// <summary>Writes a refusal as one line on standard error and returns <see cref="Refused"/>.</summary>
+    /// <summary>Writes a refusal as one line on standard error and returns <see cref="Refused"/>. A reason naming a member a
+    /// strict reader does not know is followed by the stale-revision warning when this CLI was built at another revision
+    /// (<see cref="CliRevision.ExplainUnknownMember"/>).</summary>
     /// <param name="verb">The command path that refused, such as <c>format</c> or <c>pull-request format</c>.</param>
     /// <param name="what">What was refused: a path, a value, an operation.</param>
     /// <param name="why">Why it was refused.</param>
     /// <returns><see cref="Refused"/>.</returns>
     public static int Refuse(string verb, string what, string why) {
         Console.Error.WriteLine(value: $"puck {verb}: {what}: {why}");
+        CliRevision.ExplainUnknownMember(reason: why);
 
         return Refused;
+    }
+    /// <summary>Reports a selection that leaves a verb nothing to do, the one way every verb says so, so that zero work
+    /// never reads as a pass. A selection the caller named (a path, a filter, a tag) is a refusal on standard error; a
+    /// verb's own default selection coming up empty is a notice there, and the verb succeeds.</summary>
+    /// <param name="verb">The command path, such as <c>lint</c> or <c>docs links</c>.</param>
+    /// <param name="selection">What selected nothing: the path, the filter or the option as the caller typed it.</param>
+    /// <param name="why">What the selection lacks, such as <c>holds no .puck source</c>.</param>
+    /// <param name="named">Whether the caller named the selection; <see langword="false"/> for the verb's default.</param>
+    /// <returns><see cref="Refused"/> for a named selection; otherwise <see cref="Success"/>.</returns>
+    public static int Empty(string verb, string selection, string why, bool named = true) {
+        if (named) {
+            return Refuse(
+                verb: verb,
+                what: selection,
+                why: $"{why}, so there is nothing to do."
+            );
+        }
+
+        Console.Error.WriteLine(value: $"puck {verb}: notice: {selection}: {why}, so there is nothing to do.");
+
+        return Success;
     }
     /// <summary>Wraps the action of <paramref name="command"/> and of every command beneath it in the shared
     /// exception and cancellation mapping. A command with no action is left alone, and a command already guarded is
@@ -90,6 +114,7 @@ public static class CliExit {
             ? $"puck: {message}"
             : $"puck {path}: {message}"
         ));
+        CliRevision.ExplainUnknownMember(reason: message);
         // Programming faults need their call site; a one-line refusal cannot tell an author which mechanism broke.
         if (exception is NullReferenceException or IndexOutOfRangeException or InvalidCastException) {
             Console.Error.WriteLine(value: exception.StackTrace);

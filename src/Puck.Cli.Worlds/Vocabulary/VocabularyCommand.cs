@@ -34,9 +34,8 @@ public static class VocabularyCommand {
 
     public static Command Create() => CliOptions.CheckVerb(
         checkDescription: "Regenerate in memory and compare against docs/reference/world-vocabulary.md; write nothing, and exit 1 naming the first differing line.",
-        description: """
-        The world authoring vocabulary, generated and checked.
-
+        description: "Generate the world authoring vocabulary reference, or check it.",
+        detail: """
         Generated from Puck.World.Transpiler.Vocabulary.WorldConstructs.Table: every construct
         of puck.world.definition.v1's surface, its members with their kinds and defaults, the
         document member it lowers to, and what the printer requires before it may print a

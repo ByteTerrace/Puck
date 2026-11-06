@@ -156,6 +156,11 @@ public sealed class HostLoadMonitor(HostLoadThresholds thresholds, int cpuSample
 
     /// <summary>Whether the latest reading has capacity, whether or not this reading printed its CAPACITY line.</summary>
     public bool HasCapacity { get; private set; }
+    /// <summary>Gets the latest reading's admission state (<c>PRESSURE</c> with its reasons, <c>CAPACITY</c> or
+    /// <c>LOADED</c>), or <see langword="null"/> before capacity can be judged.</summary>
+    public string? Admission => m_admission;
+    /// <summary>Gets the CPU mean, in percent, over the readings the window holds.</summary>
+    public double CpuMean => ((m_cpu.Count == 0) ? double.NaN : m_cpu.Average());
 
     /// <summary>What capacity is waiting on, including an incomplete CPU window; null only with capacity.</summary>
     public string? CapacityWait { get; private set; } = "collecting CPU samples";

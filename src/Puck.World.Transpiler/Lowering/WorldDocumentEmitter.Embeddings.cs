@@ -106,7 +106,7 @@ public static partial class WorldDocumentEmitter {
         if (!scope.Annotations.TryGetValue(key: "EmbeddingLock", value: out var lockObj) || (lockObj is not EmbeddingLock lockFile)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.EmbeddingLockMissing,
-                message: $"No embedding lock entry for \"{text}\"; run puck embed.",
+                message: $"No embedding lock entry for \"{text}\"; run puck embed lock.",
                 span: span
             );
             return false;
@@ -129,7 +129,7 @@ public static partial class WorldDocumentEmitter {
         if (!lockFile.Spaces.TryGetValue(key: resolvedSpace, value: out var lockSpace)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.EmbeddingLockMissing,
-                message: $"No embedding lock entry for \"{text}\"; run puck embed.",
+                message: $"No embedding lock entry for \"{text}\"; run puck embed lock.",
                 span: span
             );
             return false;
@@ -143,7 +143,7 @@ public static partial class WorldDocumentEmitter {
                     if (lockFile.IsSpaceStale(identity: ReadSpaceIdentity(space: spObj), spaceName: resolvedSpace)) {
                         scope.Diagnostics.ReportError(
                             code: PuckDiagnosticCodes.EmbeddingLockStale,
-                            message: $"Embedding space '{resolvedSpace}' in lock is stale; run puck embed.",
+                            message: $"Embedding space '{resolvedSpace}' in lock is stale; run puck embed lock.",
                             span: span
                         );
                         return false;
@@ -159,7 +159,7 @@ public static partial class WorldDocumentEmitter {
 
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.EmbeddingLockMissing,
-            message: $"No embedding lock entry for \"{text}\"; run puck embed.",
+            message: $"No embedding lock entry for \"{text}\"; run puck embed lock.",
             span: span
         );
         return false;

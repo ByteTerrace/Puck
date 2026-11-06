@@ -81,20 +81,17 @@ public static class ReferenceCapture {
             return 2;
         }
 
-        var sdk = ReferenceScheduleManifest.Targets[0].Build;
-
-        if (VerifyCheckout(
-            build: sdk,
-            repositoryRoot: repositoryRoot
-        ) is { } checkoutRefusal) {
-            Console.Error.WriteLine(value: $"state-evidence: {checkoutRefusal}");
+        if (!ReferenceToolchain.TryRead(repositoryRoot: repositoryRoot, toolchain: out var toolchain, refusal: out var toolchainRefusal)) {
+            Console.Error.WriteLine(value: $"state-evidence: {toolchainRefusal}");
             return 2;
         }
+
+        Console.WriteLine(value: $"state-evidence: lowering with the checkout's SDK {toolchain.Sdk} and its runtime {toolchain.Runtime}.");
 
         var packages = ResolvePackageRoot(requested: options.NuGetPackages);
 
         if (!TryResolveCompiler(
-            build: sdk,
+            toolchain: toolchain,
             executable: out var ilc,
             packages: packages,
             refusal: out var compilerRefusal,
@@ -153,7 +150,8 @@ public static class ReferenceCapture {
                 objectPath: objectPath,
                 packages: packages,
                 plan: plan,
-                repositoryRoot: repositoryRoot
+                repositoryRoot: repositoryRoot,
+                toolchain: toolchain
             ).ConfigureAwait(continueOnCapturedContext: false) is { } compileRefusal) {
                 Console.Error.WriteLine(value: $"state-evidence: {compileRefusal}");
                 return 2;
@@ -204,6 +202,39 @@ public static class ReferenceCapture {
         return ((differences.Count == 0) ? 0 : 1);
     }
 
+    /// <summary>The toolchain a capture lowers with, derived from the checkout and never recorded: the SDK its
+    /// <c>global.json</c> names, and the runtime that SDK bundles, whose version the Native AOT runtime pack and the
+    /// ILCompiler package carry.</summary>
+    /// <param name="Sdk">The SDK version the checkout's <c>global.json</c> names.</param>
+    /// <param name="Runtime">The runtime version that SDK bundles.</param>
+    internal sealed record ReferenceToolchain(string Sdk, string Runtime) {
+        public static bool TryRead(string repositoryRoot, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out ReferenceToolchain? toolchain, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: false)] out string? refusal) {
+            toolchain = null;
+            var path = Path.Combine(path1: repositoryRoot, path2: "global.json");
+
+            if (!File.Exists(path: path)) { refusal = $"the checkout at {repositoryRoot} carries no global.json naming its SDK."; return false; }
+            using var document = JsonDocument.Parse(json: File.ReadAllText(path: path));
+
+            if (!document.RootElement.TryGetProperty(propertyName: "sdk", value: out var sdk) || !sdk.TryGetProperty(propertyName: "version", value: out var declared) || (declared.GetString() is not { Length: > 0 } version)) {
+                refusal = "the checkout's global.json names no SDK version.";
+                return false;
+            }
+
+            // The running runtime sits at <dotnet root>/shared/Microsoft.NETCore.App/<version>/, beside the root's sdk/.
+            var dotnet = Path.GetFullPath(path: Path.Combine(path1: System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(), path2: "../../.."));
+            var bundled = Path.Combine(dotnet, "sdk", version, "Microsoft.NETCoreSdk.BundledVersions.props");
+
+            if (!File.Exists(path: bundled)) { refusal = $"the SDK {version} global.json names is not installed under {dotnet} (no {bundled})."; return false; }
+            if (System.Xml.Linq.XDocument.Load(uri: bundled).Descendants().FirstOrDefault(predicate: static element => (element.Name.LocalName == "BundledNETCoreAppPackageVersion"))?.Value is not { Length: > 0 } runtime) {
+                refusal = $"{bundled} names no bundled runtime version.";
+                return false;
+            }
+
+            toolchain = new ReferenceToolchain(Runtime: runtime, Sdk: version);
+            refusal = null;
+            return true;
+        }
+    }
     private sealed record KernelEvidence(string Model, ReferencePrice Price, IReadOnlyList<string> Trace, IReadOnlyDictionary<string, string> Simulation, IReadOnlyList<string> ResourcePressure);
     private sealed record LoweringEvidence(
         ReferenceLoweringPlan Plan,
@@ -244,6 +275,7 @@ public static class ReferenceCapture {
         string objectPath,
         string ilc,
         string packages,
+        ReferenceToolchain toolchain,
         TimeProvider clock,
         CancellationToken cancellationToken
     ) {
@@ -259,9 +291,9 @@ public static class ReferenceCapture {
         if (assemblies.FirstOrDefault(predicate: static path => !File.Exists(path: path)) is { } absent) { return $"the reference build produced no {StateOutput}/{Path.GetFileName(path: absent)}."; }
 
         var pack = RuntimePackDirectory(
-            build: plan.Targets[0].Build,
             packages: packages,
-            runtimeIdentifier: plan.RuntimeIdentifier
+            runtimeIdentifier: plan.RuntimeIdentifier,
+            toolchain: toolchain
         );
         var runtime = Path.Combine(
             path1: pack,
@@ -275,7 +307,7 @@ public static class ReferenceCapture {
             path2: "native"
         );
 
-        if (!Directory.Exists(path: runtime) || !Directory.Exists(path: core)) { return $"the pinned runtime pack '{plan.Targets[0].Build.RuntimePack}' is not installed at {pack}; install it or pass --nuget-packages."; }
+        if (!Directory.Exists(path: runtime) || !Directory.Exists(path: core)) { return $"the Native AOT runtime pack {toolchain.Runtime} for {plan.RuntimeIdentifier} is not installed at {pack}; restore it or pass --nuget-packages."; }
 
         var lines = new List<string>(collection: assemblies) { $"-o:{objectPath}", "--targetos:win", $"--targetarch:{plan.Key}", "-O", "--methodbodyfolding:none", $"--instruction-set:{plan.InstructionSet}", "--nativelib" };
 
@@ -587,19 +619,12 @@ public static class ReferenceCapture {
         }
         return (executable, null);
     }
-    private static string RuntimePackDirectory(ReferenceBuild build, string packages, string runtimeIdentifier) {
-        var parts = build.RuntimePack.Split(
-            options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
-            separator: ' '
-        );
-
-        return Path.GetFullPath(path: Path.Combine(
-            path1: packages,
-            path2: parts[0].ToLowerInvariant(),
-            path3: parts[^1],
-            path4: $"runtimes/{runtimeIdentifier}"
-        ));
-    }
+    private static string RuntimePackDirectory(ReferenceToolchain toolchain, string packages, string runtimeIdentifier) => Path.GetFullPath(path: Path.Combine(
+        path1: packages,
+        path2: $"microsoft.netcore.app.runtime.nativeaot.{runtimeIdentifier}",
+        path3: toolchain.Runtime,
+        path4: $"runtimes/{runtimeIdentifier}"
+    ));
     private static async Task<IReadOnlyDictionary<string, ReferenceMeasurement>> ServiceAsync(
         string mca,
         string triple,
@@ -844,22 +869,17 @@ public static class ReferenceCapture {
         return true;
     }
     private static bool TryResolveCompiler(
-        ReferenceBuild build,
+        ReferenceToolchain toolchain,
         string packages,
         string? requested,
         out string? executable,
         out string? refusal
     ) {
-        var parts = build.IlCompiler.Split(
-            options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
-            separator: ' '
-        );
-        var host = parts[^2].TrimStart(trimChar: '(');
-        var version = parts[1];
+        var host = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
         var expected = Path.Combine(
             path1: packages,
             path2: ((CompilerPackagePrefix + host) + CompilerPackageSuffix),
-            path3: version,
+            path3: toolchain.Runtime,
             path4: (OperatingSystem.IsWindows() ? "tools/ilc.exe" : "tools/ilc")
         );
 
@@ -870,54 +890,10 @@ public static class ReferenceCapture {
             refusal = null;
             return true;
         }
-        refusal = $"the pinned {build.IlCompiler} is not installed at {executable}; install it or pass --ilc.";
+        refusal = $"the ILCompiler {toolchain.Runtime} ({host} host) is not installed at {executable}; restore it or pass --ilc.";
         executable = null;
         return false;
-    }
-    private static string? VerifyCheckout(ReferenceBuild build, string repositoryRoot) {
-        var path = Path.Combine(
-            path1: repositoryRoot,
-            path2: "global.json"
-        );
-
-        if (!File.Exists(path: path)) { return $"the checkout at {repositoryRoot} carries no global.json, so the manifest's pinned SDK {build.Sdk} pins nothing."; }
-
-        using var document = JsonDocument.Parse(json: File.ReadAllText(path: path));
-
-        if (!document.RootElement.TryGetProperty(
-            propertyName: "sdk",
-            value: out var sdk
-        )) {
-            return $"the checkout's global.json declares no sdk section, so the manifest's pinned SDK {build.Sdk} pins nothing.";
-        }
-
-        var version = (sdk.TryGetProperty(
-            propertyName: "version",
-            value: out var declared
-        )
-            ? declared.GetString()
-            : null);
-        var rollForward = (sdk.TryGetProperty(
-            propertyName: "rollForward",
-            value: out var policy
-        )
-            ? policy.GetString()
-            : null);
-
-        if (!string.Equals(
-            a: build.Sdk,
-            b: version,
-            comparisonType: StringComparison.Ordinal
-        ) || !string.Equals(
-            a: build.GlobalJsonRollForward,
-            b: rollForward,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            return $"the manifest pins SDK {build.Sdk} with rollForward {build.GlobalJsonRollForward}, but the checkout's global.json declares {version} with rollForward {rollForward}.";
-        }
-        return null;
-    }
-    private static JsonNode Render(IReadOnlyList<ReferenceLoweringPlan> plans, IReadOnlyDictionary<string, LoweringEvidence> evidence, string repositoryRoot) {
+    }    private static JsonNode Render(IReadOnlyList<ReferenceLoweringPlan> plans, IReadOnlyDictionary<string, LoweringEvidence> evidence, string repositoryRoot) {
         var manifest = JsonNode.Parse(json: File.ReadAllText(path: Path.Combine(
             path1: repositoryRoot,
             path2: ManifestPath

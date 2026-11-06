@@ -17,7 +17,7 @@ internal static class PipelineCommand {
     public static Command Create() {
         var source = new Argument<string>(name: "source") { Description = "Pipeline document, one-off shader source, or shader package directory." };
         var inspect = new Option<bool>("--inspect") { Description = "Validate and print the execution plan without compiling shaders." };
-        var toolchain = new Option<string?>("--toolchain");
+        var toolchain = CompileShaderCommand.Toolchain();
         var cache = new Option<string?>("--cache") { Description = "Shader cache directory; defaults to the per-user shader cache the build shares." };
         var command = new Command(
             description: "Validate a connected pipeline and compile every pass for both GPU backends.",

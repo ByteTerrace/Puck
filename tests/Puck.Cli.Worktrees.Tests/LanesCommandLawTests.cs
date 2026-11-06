@@ -128,11 +128,10 @@ public sealed class LanesCommandLawTests {
         var result = await ConsoleCapture.RunSplitAsync(run: () => LanesCommand.ExecuteAsync(baseRef: "main", clock: TimeProvider.System, json: true, leaseRoot: layout.Leases, repository: layout.Paths["lane-a"], stall: TimeSpan.FromMinutes(minutes: 30)));
 
         Assert.True(condition: (result.ExitCode == 0), userMessage: result.Error);
-        using var document = JsonDocument.Parse(json: result.Output);
-        var lanes = document.RootElement.GetProperty(propertyName: "lanes").EnumerateArray().ToArray();
+        var lanes = result.Output.Split(separator: '\n', options: StringSplitOptions.RemoveEmptyEntries).Select(selector: static line => JsonDocument.Parse(json: line).RootElement).ToArray();
 
         Assert.Equal(expected: 6, actual: lanes.Length);
-        Assert.Contains(collection: lanes, filter: static lane => (lane.GetProperty(propertyName: "row").GetProperty(propertyName: "name").GetString() == "lane-b"));
+        Assert.Contains(collection: lanes, filter: static lane => (lane.GetProperty(propertyName: "name").GetString() == "lane-b"));
         Assert.Equal(expected: leases, actual: Snapshot(directory: layout.Leases));
         Assert.Equal(expected: index, actual: File.ReadAllBytes(path: Path.Combine(path1: layout.Checkout.Root, path2: ".git/worktrees/lane-a/index")));
         Assert.Equal(expected: indexWritten, actual: File.GetLastWriteTimeUtc(path: Path.Combine(path1: layout.Checkout.Root, path2: ".git/worktrees/lane-a/index")));

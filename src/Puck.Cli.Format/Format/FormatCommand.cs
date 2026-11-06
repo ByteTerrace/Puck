@@ -55,18 +55,26 @@ public static class FormatCommand {
             // selection of every source under it, so file-based apps and linked sources are routed exactly as an
             // explicit selection routes them.
             if (fileList is not null) {
-                return FormatSelection.Run(
-                    check: check,
-                    configuration: configuration,
-                    manifest: fileList,
-                    root: Directory.GetCurrentDirectory(),
-                    selected: selected
-                );
+                var listed = FormatSelection.Read(manifest: fileList, root: Directory.GetCurrentDirectory());
+
+                return ((listed.Length == 0)
+                    ? CliExit.Empty(verb: "format", selection: $"--file-list {CliPaths.ToDisplay(fullPath: Path.GetFullPath(path: fileList))}", why: "lists no source")
+                    : FormatSelection.Run(
+                        check: check,
+                        configuration: configuration,
+                        root: Directory.GetCurrentDirectory(),
+                        selected: selected,
+                        targets: listed
+                    ));
             }
 
             // The walk reports a root that names nothing on disk.
             if (FormatSources.Enumerate(root: root) is not { } targets) {
                 return CliExit.Refused;
+            }
+
+            if (targets.Count == 0) {
+                return CliExit.Empty(named: (root != "."), selection: CliPaths.ToDisplay(fullPath: Path.GetFullPath(path: root)), verb: "format", why: "holds no C# or .puck source");
             }
 
             // A root naming one file formats that file, with its directory as the whitespace formatter's workspace.

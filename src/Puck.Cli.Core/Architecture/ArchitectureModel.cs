@@ -18,6 +18,20 @@ public sealed record ArchitectureProject(
     string Layer,
     string Name,
     IReadOnlyList<string> References);
+/// <summary>One lane profile: the policy a project's closure is held to, the same items the build-time gate reads.</summary>
+/// <param name="Forbid">The projects and layer rows the closure must not hold.</param>
+/// <param name="Allow">The only projects the closure may hold, or empty for no such bound.</param>
+public sealed record ArchitectureProfile(IReadOnlyList<string> Forbid, IReadOnlyList<string> Allow) {
+    /// <summary>Returns the members of a closure the profile excludes.</summary>
+    /// <param name="closure">The closure's project names.</param>
+    /// <param name="layerOf">The layer row of a project, by name.</param>
+    /// <returns>The excluded members, in the closure's order.</returns>
+    public IReadOnlyList<string> Excluded(IEnumerable<string> closure, Func<string, string> layerOf) => [
+        .. closure.Where(predicate: name =>
+            Forbid.Any(predicate: entry => string.Equals(a: entry, b: name, comparisonType: StringComparison.OrdinalIgnoreCase) || string.Equals(a: entry, b: layerOf(arg: name), comparisonType: StringComparison.OrdinalIgnoreCase)) ||
+            ((Allow.Count > 0) && !Allow.Contains(value: name, comparer: StringComparer.OrdinalIgnoreCase))),
+    ];
+}
 /// <summary>
 /// The repository's architecture as read off disk: the policy from <c>build/Architecture.props</c> and the
 /// per-project declarations from the csproj files themselves.
@@ -33,7 +47,7 @@ public sealed class ArchitectureModel {
     private ArchitectureModel(
         IReadOnlyDictionary<string, bool> kinds,
         IReadOnlyList<string> layers,
-        IReadOnlyDictionary<string, IReadOnlyList<string>> profiles,
+        IReadOnlyDictionary<string, ArchitectureProfile> profiles,
         IReadOnlyDictionary<string, ArchitectureProject> projects,
         string repositoryRoot) {
         Kinds = kinds;
@@ -47,8 +61,8 @@ public sealed class ArchitectureModel {
     public IReadOnlyDictionary<string, bool> Kinds { get; }
     /// <summary>The layer rows, top first — the index is the rank.</summary>
     public IReadOnlyList<string> Layers { get; }
-    /// <summary>Exact-equality lane profiles, project name to its permitted closure.</summary>
-    public IReadOnlyDictionary<string, IReadOnlyList<string>> Profiles { get; }
+    /// <summary>The lane profiles, project name to the policy its closure is held to.</summary>
+    public IReadOnlyDictionary<string, ArchitectureProfile> Profiles { get; }
     /// <summary>Every project in scope, by name.</summary>
     public IReadOnlyDictionary<string, ArchitectureProject> Projects { get; }
     /// <summary>The repository root every path in this model is anchored at.</summary>
@@ -145,7 +159,7 @@ public sealed class ArchitectureModel {
         ));
         var kinds = new Dictionary<string, bool>(comparer: StringComparer.OrdinalIgnoreCase);
         var layers = new List<string>();
-        var profiles = new Dictionary<string, IReadOnlyList<string>>(comparer: StringComparer.OrdinalIgnoreCase);
+        var profiles = new Dictionary<string, ArchitectureProfile>(comparer: StringComparer.OrdinalIgnoreCase);
         var projects = new Dictionary<string, ArchitectureProject>(comparer: StringComparer.OrdinalIgnoreCase);
 
         foreach (var item in Items(
@@ -170,7 +184,7 @@ public sealed class ArchitectureModel {
             ledger: ledger,
             name: "PuckArchitectureProfile"
         )) {
-            profiles[item.Attribute(name: "Include")!.Value] = Split(value: item.Attribute(name: "Closure")?.Value);
+            profiles[item.Attribute(name: "Include")!.Value] = new ArchitectureProfile(Allow: Split(value: item.Attribute(name: "Allow")?.Value), Forbid: Split(value: item.Attribute(name: "Forbid")?.Value));
         }
 
         // The scope predicate the ledger states in prose, applied: src/ and tests/ only. A quarantined tree

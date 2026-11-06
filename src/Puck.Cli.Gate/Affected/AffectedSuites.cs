@@ -39,20 +39,12 @@ public static class AffectedSuites {
 
     /// <summary>Creates <c>--suite-jobs</c>; <c>puck affected</c> and <c>puck gate</c> share it.</summary>
     /// <returns>The option.</returns>
-    public static Option<int> Jobs() {
-        var option = new Option<int>(name: "--suite-jobs") {
-            DefaultValueFactory = static _ => DefaultJobs,
-            Description = "Maximum test suites to run at once (default: a quarter of the logical processors). A heavy suite starts first and waits for host admission before it runs.",
-        };
-
-        option.Validators.Add(item: static result => {
-            if (result.GetValueOrDefault<int>() < 1) {
-                result.AddError(errorMessage: "--suite-jobs must be at least 1.");
-            }
-        });
-
-        return option;
-    }
+    public static Option<int> Jobs() => CliOptions.Count(
+        defaultValue: DefaultJobs,
+        description: "Maximum test suites to run at once (default: a quarter of the logical processors). A heavy suite starts first and waits for host admission before it runs.",
+        minimum: 1,
+        name: "--suite-jobs"
+    );
     /// <summary>The order suites start in: heavy suites first, since they run longest, then the rest in the plan's
     /// order.</summary>
     /// <param name="suites">The chosen suites, in the plan's order.</param>

@@ -28,8 +28,48 @@ public static class CliRoot {
 
         CliHelp.Install(root: root);
         CliExit.Guard(command: root);
+        GuardValidators(command: root);
 
         return root;
+    }
+    /// <summary>Wraps every command, option and argument validator in <paramref name="command"/>'s tree so that one
+    /// reading a value whose parse already failed yields to that parse error instead of throwing out of the parser. The
+    /// parser runs a symbol's validators before it converts the symbol's tokens, so a validator's read is the conversion,
+    /// and a failed conversion records its own usage error before it throws. A validator already wrapped is not wrapped
+    /// twice.</summary>
+    /// <param name="command">The root of the tree to guard.</param>
+    public static void GuardValidators(Command command) {
+        Guard(validators: command.Validators);
+
+        foreach (var option in command.Options) {
+            Guard(validators: option.Validators);
+        }
+
+        foreach (var argument in command.Arguments) {
+            Guard(validators: argument.Validators);
+        }
+
+        foreach (var subcommand in command.Subcommands) {
+            GuardValidators(command: subcommand);
+        }
+    }
+    private static void Guard<TResult>(List<Action<TResult>> validators) where TResult : SymbolResult {
+        for (var index = 0; (index < validators.Count); index++) {
+            if (validators[index].Target is not GuardedValidator<TResult>) {
+                validators[index] = new GuardedValidator<TResult>(inner: validators[index]).Validate;
+            }
+        }
+    }
+
+    private sealed class GuardedValidator<TResult>(Action<TResult> inner) where TResult : SymbolResult {
+        public void Validate(TResult result) {
+            try {
+                inner(obj: result);
+            } catch (InvalidOperationException) when (Failed(result: result)) {
+                // The failed conversion already recorded its usage error; the parser reports it.
+            }
+        }
+        private static bool Failed(SymbolResult result) => (result.Errors.Any() || ((result is CommandResult command) && command.Children.Any(predicate: static child => child.Errors.Any())));
     }
     /// <summary>Parses and runs <paramref name="args"/> against <paramref name="root"/>.</summary>
     /// <param name="args">The command-line arguments.</param>
@@ -60,7 +100,7 @@ public static class CliRoot {
     // The parser hands a misspelled option to whichever value slot is still open, so a token that
     // looks like an option is refused unless it follows "--", is a number, or reaches an argument
     // that forwards its tokens to another tool (CliOptions.Forwarded).
-    private static IEnumerable<string> OptionLikeValues(ParseResult result) {
+    private static IEnumerable<string> TokenErrors(ParseResult result) {
         var escaped = result.Tokens.SkipWhile(predicate: token => (token.Type != TokenType.DoubleDash)).Skip(count: 1).Select(selector: token => token.Value).ToList();
         var values = result.CommandResult.Children.Where(predicate: static child => (child is not ArgumentResult { Argument: CliForwardedArgument })).SelectMany(selector: child => child.Tokens).Select(selector: token => token.Value)
             .Where(predicate: value => (value.StartsWith(value: '-') && (value.Length > 1) && !double.TryParse(
@@ -71,7 +111,21 @@ public static class CliRoot {
         )));
 
         foreach (var value in values) {
-            if (!escaped.Remove(item: value)) { yield return value; }
+            if (!escaped.Remove(item: value)) { yield return $"Unrecognized option '{value}'."; }
+        }
+
+        // A program to run takes only what follows "--": whatever reached it before that is a mistyped option of the
+        // verb or a missing separator, and running it would start the wrong program after every lease and admission wait.
+        var separated = result.Tokens.SkipWhile(predicate: token => (token.Type != TokenType.DoubleDash)).Skip(count: 1).Count();
+
+        foreach (var command in result.CommandResult.Children.OfType<ArgumentResult>().Where(predicate: static child => (child.Argument is CliForwardedArgument { AfterSeparator: true }))) {
+            if (command.Tokens.Count > separated) {
+                var first = command.Tokens[0].Value;
+
+                yield return ((first.StartsWith(value: '-') && (first.Length > 1))
+                    ? $"Unrecognized option '{first}'."
+                    : $"The command to run follows a literal '--', as in '-- {first}'.");
+            }
         }
     }
 
@@ -82,7 +136,7 @@ public static class CliRoot {
     /// <returns>The parse result, or <see langword="null"/> when the arguments are a usage error.</returns>
     public static ParseResult? Parse(string[] args, RootCommand root) {
         var result = root.Parse(args: args);
-        var errors = result.Errors.Select(selector: error => error.Message).Concat(second: OptionLikeValues(result: result).Select(selector: token => $"Unrecognized option '{token}'.")).ToArray();
+        var errors = result.Errors.Select(selector: error => error.Message).Concat(second: TokenErrors(result: result)).ToArray();
 
         if (
             (result.Action is not ParseErrorAction) &&
