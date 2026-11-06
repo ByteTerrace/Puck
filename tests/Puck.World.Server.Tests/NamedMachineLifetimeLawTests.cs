@@ -59,6 +59,18 @@ public sealed class NamedMachineLifetimeLawTests {
         "counter",
         Json(json: $"{{\"schema\":\"puck.counter.config.v1\",\"seed\":{seed}}}")
     );
+    // A counter whose memory binding the counter runtime cannot serve: its runtime is created, then the document's
+    // binding fails admission, which refuses the whole transaction. A provider's own creation failure only refuses that
+    // one machine.
+    private static WorldMachine UnbindableRow(string name, int seed = 0) => (Row(name: name, seed: seed) with {
+        Memory = [new WorldMachineMemory("value", WorldMachineMemoryDirection.Read, "bus", "u8", "mirror", Address: 0UL, Access: "inspect")],
+    });
+    // The Int row UnbindableRow's binding mirrors into.
+    private static WorldDefinition WithMirror(WorldDefinition definition) => definition.WithWorldState(rows: [new WorldStateRow(
+        Name: CellName.Parse(candidate: "mirror"),
+        Kind: CellKind.Int,
+        Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Int(value: 0L))]
+    )]);
 
     [Fact]
     public void AFaultLaterInPreparationDisposesOnlyStagedDevices() {
@@ -72,16 +84,13 @@ public sealed class NamedMachineLifetimeLawTests {
             next: live
         );
         var before = host.InstanceState(name: "clock");
-        var replacement = Document(
+        var replacement = WithMirror(definition: Document(
             Row(
                 name: "clock",
                 seed: 1
             ),
-            Row(
-                name: "broken",
-                seed: -1
-            )
-        );
+            UnbindableRow(name: "broken")
+        ));
 
         Assert.False(condition: host.TryPrepare(
             candidate: replacement,
@@ -99,12 +108,14 @@ public sealed class NamedMachineLifetimeLawTests {
             before,
             host.InstanceState(name: "clock")
         );
+        // The live clock, then the staged replacement clock and the staged broken counter, both disposed.
         Assert.Equal(
-            2,
+            3,
             engine.Created.Count
         );
         Assert.False(condition: engine.Created[0].Disposed);
         Assert.True(condition: engine.Created[1].Disposed);
+        Assert.True(condition: engine.Created[2].Disposed);
         host.Advance(
             840,
             ReadOnlyMemory<ScreenPadSnapshot>.Empty
@@ -670,7 +681,7 @@ public sealed class NamedMachineLifetimeLawTests {
     public void OrdinaryMutationAndUndoPrepareDevicesAtTheAuthorityBoundary() {
         var engine = new CounterEngine();
         using var fixture = Fixtures.FreshServer(
-            Document(),
+            WithMirror(definition: Document()),
             engines: [engine]
         );
 
@@ -685,18 +696,16 @@ public sealed class NamedMachineLifetimeLawTests {
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertMachine(
             Principal.Console,
-            Row(
-                name: "clock",
-                seed: -1
-            )
+            UnbindableRow(name: "clock", seed: 1)
         ));
         fixture.Step();
-        Assert.Single(collection: engine.Created);
-        Assert.False(condition: original.Disposed);
         Assert.Equal(
-            0,
-            fixture.Server.Definition.Machines[0].Configuration.GetProperty(propertyName: "seed").GetInt32()
+            2,
+            engine.Created.Count
         );
+        Assert.True(condition: engine.Created[1].Disposed);
+        Assert.False(condition: original.Disposed);
+        Assert.Null(@object: fixture.Server.Definition.Machines[0].Memory);
 
         fixture.Server.EnqueueMutation(new WorldMutation.RemoveMachine(
             Principal.Console,
@@ -713,10 +722,10 @@ public sealed class NamedMachineLifetimeLawTests {
         fixture.Step();
         Assert.NotNull(value: fixture.Server.Machines.InstanceState(name: "clock"));
         Assert.Equal(
-            2,
+            3,
             engine.Created.Count
         );
-        Assert.False(condition: engine.Created[1].Disposed);
+        Assert.False(condition: engine.Created[2].Disposed);
     }
     [Fact]
     public void PassiveFirstDisplayDoesNotMaskAnEngagedSecondDisplay_AndRemovalReleasesInput() {
@@ -833,7 +842,7 @@ public sealed class NamedMachineLifetimeLawTests {
     [Fact]
     public void RefusedMachineBatchDoesNotPublishCandidateSolidField() {
         var engine = new CounterEngine();
-        var authored = Fixtures.BuildDocument();
+        var authored = WithMirror(definition: Fixtures.BuildDocument());
         using var fixture = Fixtures.FreshServer(
             definition: authored,
             engines: [engine]
@@ -860,10 +869,7 @@ public sealed class NamedMachineLifetimeLawTests {
                 ),
                 new WorldMutation.UpsertMachine(
                     Principal: Principal.Console,
-                    Machine: Row(
-                        name: "broken",
-                        seed: -1
-                    )
+                    Machine: UnbindableRow(name: "broken")
                 ),
             ]
         ));
