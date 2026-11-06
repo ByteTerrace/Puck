@@ -612,7 +612,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.residency",
-            description: $"Reads the world residency's mesh residency: {WorldResidencyForms.Spelling} (metres, default 8). Echoes the latest bake's groups and when they landed (finished) and became resident (their words in the mesh region), counted from the bake's start, both for every group and for the groups whose planned box lies within the radius of the primary seat's camera (the occupied area), with when half and nine tenths of those landed and which landed last; its store loads and their span; the time its plan and restart took; the resident meshes' region bytes by level of detail; the store's reads, bytes and read and decode thread-seconds; the mesh region's held, used, written and owed bytes and the frames and seconds it owed words; the latest program's instances, words, builds and its emission and build milliseconds; and the irradiance volume's probe cache bytes. 'pending' marks a time not reached yet. Presentation only; reads change nothing.",
+            description: $"Reads every residency held by the presentation's world package, including routed and session views: {WorldResidencyForms.Spelling} (metres, default 8). Each report names its diagnostic residency-id, independent of its display name. Echoes the latest bake's groups and when they landed (finished) and became resident (their words in the mesh region), counted from the bake's start, both for every group and for the groups whose planned box lies within the radius of the primary seat's camera (the occupied area), with when half and nine tenths of those landed and which landed last; its store loads and their span; the time its plan and restart took; the resident meshes' region bytes by level of detail; the store's reads, bytes and read and decode thread-seconds; the mesh region's held, used, written and owed bytes and the frames and seconds it owed words; the latest program's instances, words, builds and its emission and build milliseconds; and the irradiance volume's probe cache bytes. 'pending' marks a time not reached yet. Presentation only; reads change nothing.",
             forms: WorldResidencyForms,
             handler: (_, args) => {
                 var radius = 8f;
@@ -629,7 +629,9 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                     return new CommandResult(Output: "[world.residency: renderer not built yet]");
                 }
 
-                return new CommandResult(Output: $"[world.residency: {string.Join(separator: Environment.NewLine, values: node.DescribeResidency(composition: renderProbe.Composition, radius: radius))}]");
+                var reports = renderProbe.Views?.DescribeResidencies(radius, node, renderProbe.Composition)
+                    ?? node.DescribeResidency(composition: renderProbe.Composition, radius: radius);
+                return new CommandResult(Output: $"[world.residency: {string.Join(separator: Environment.NewLine, values: reports)}]");
             }
         );
         yield return CommandDefinition.WithWireArgs(

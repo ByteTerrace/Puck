@@ -749,7 +749,6 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         bool[]? chosen = null;
         var chosenSplit = 0;
         var chosenServed = -1;
-        var chosenSamples = 0;
         // The cells whose fine samples the count holds, the samples each added that no cell counted before it held, and
         // their sum: the distinct fine samples of the counted cells.
         var countedCells = new bool[essential.Length];
@@ -797,7 +796,6 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             }
             if (served > chosenServed) {
                 (chosen, chosenSplit, chosenServed) = (mask, split, served);
-                chosenSamples = ((int)counted);
             }
             if (served == order.Count) { break; }
         }
@@ -885,9 +883,6 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             refinedCount += (cell ? 1 : 0);
         }
 
-        // Admission already counted the distinct samples of these cells. Fill their final owned indexes directly:
-        // no growing worker lists, retained scratch or copies into the lattice's identical buffers.
-        m_fineKeys.Resize(length: chosenSamples, clear: false, preserve: false);
         FineKeys(split: factor);
 
         // Numbers the fine samples in the order the cells, then each cell's samples, first reach them, and indexes each
@@ -905,7 +900,6 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
             var cellSpan = m_cellBlocks.GetSpan();
             var slotSpan = m_blockSlots.GetSpan();
-            var keys = m_fineKeys.GetSpan();
             var samples = 0;
             var blocks = 0;
 
@@ -934,9 +928,28 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
                                     if (held < 0) {
                                         held = samples++;
-                                        keys[held] = (((x * split) + lx) + (fineX * (((y * split) + ly) + (fineY * ((z * split) + lz)))));
                                     }
                                     slotSpan[at] = held;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            m_fineKeys.Resize(length: samples, clear: false, preserve: false);
+            var keys = m_fineKeys.GetSpan();
+            for (var z = 0; z < cellsZ; z++) {
+                for (var y = 0; y < cellsY; y++) {
+                    for (var x = 0; x < cellsX; x++) {
+                        var cellBlock = cellSpan[CellIndex(x: x, y: y, z: z)];
+                        if (cellBlock < 0) { continue; }
+                        var at = cellBlock * block;
+                        for (var lz = 0; lz < side; lz++) {
+                            for (var ly = 0; ly < side; ly++) {
+                                for (var lx = 0; lx < side; lx++, at++) {
+                                    var slot = slotSpan[at];
+                                    if (slot < 0) { continue; }
+                                    keys[slot] = (((x * split) + lx) + (fineX * (((y * split) + ly) + (fineY * ((z * split) + lz)))));
                                 }
                             }
                         }
@@ -977,13 +990,14 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_refined.CopyFrom(source: refined);
         MeasuredCells = measuredCount;
         RefinedCells = refinedCount;
-        m_fineValues.Resize(chosenSamples);
-        m_fineMaterials.Resize(chosenSamples);
+        var fineSamples = m_fineKeys.Length;
+        m_fineValues.Resize(fineSamples);
+        m_fineMaterials.Resize(fineSamples);
 
-        var points = new Vector3[chosenSamples];
+        var points = new Vector3[fineSamples];
         var fine = ContourCell;
 
-        for (var slot = 0; (slot < chosenSamples); slot++) {
+        for (var slot = 0; (slot < fineSamples); slot++) {
             var (fx, fy, fz) = FineCoordinates(key: m_fineKeys[slot]);
 
             points[slot] = (m_origin + (new Vector3(x: fx, y: fy, z: fz) * fine));

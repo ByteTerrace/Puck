@@ -3157,10 +3157,16 @@ puck bench startup --bake --backend directx --samples 1 --timeout-seconds 600
 shows counted cold misses and subsequent warm hits, including firmware and addons.
 Without it, each sample gets a fresh cache below its output directory.
 `--backend` selects the windowed backend. `--bake` measures the interval from
-the first mesh-bake start until every started residency completes, with authority
-and display clocks pinned before the first frame. It requires a windowed sample
-and its fresh cache, records `/metrics/cold-bake/median` in milliseconds, and
-does not wait for frame capture or lighting convergence. Use it through
+the first mesh-bake start until every residency listed by `world.residency`
+after `world.wait bakes` completes its bake, matched by residency identity rather
+than display name. Late-starting residencies are included; a reported residency
+with no completion fails the sample with its reason. The report retains each
+residency's identity and observed endpoints. It uses `--paused --lockstep` to pin
+authority and display clocks before the first frame and isolate baking from
+lighting work. This measures the lockstep bake, not an ordinary windowed cold boot.
+It requires a windowed sample and its fresh cache and records
+`/metrics/cold-bake/median` in milliseconds. Boot, shutdown, the readiness barrier,
+frame capture and lighting convergence are outside that interval. Use it through
 `puck measure request` for a cold-bake wall-time comparison in the quiet window.
 The default windowed run uses 1280×720. Each sample receives a new persistence
 directory, requests `world.status`, waits one tick, requests a frame capture,
