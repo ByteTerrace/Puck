@@ -16,6 +16,63 @@ public sealed class OperatorMcpFrontLawTests {
     private static readonly JsonElement Input = JsonElement.Parse("""{"type":"object"}""");
 
     [Fact]
+    public async Task AFaultIsANamedErrorResultAndADeadCurrentWorkerIsReplaced() {
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
+        var input = new Pipe();
+        var output = new Pipe();
+        var backends = new List<Backend>();
+        var activation = 0;
+        var run = OperatorMcpFront.RunAsync(input.Reader.AsStream(), output.Writer.AsStream(),
+            _ => ((Interlocked.Increment(location: ref activation) == 1) ? Task.FromException<string>(exception: new IOException(message: "release pointer unreadable")) : Task.FromResult(result: "1")),
+            async token => {
+                var backend = new Backend();
+
+                backends.Add(item: backend);
+                return (await backend.ConnectAsync(token: token), backend.StopAsync, backend.Exited.Task);
+            }, lifetime.Token);
+        var front = await McpClient.CreateAsync(new StreamClientTransport(input.Writer.AsStream(), output.Reader.AsStream()),
+            new() { DiscoverProbeTimeout = Timeout.InfiniteTimeSpan, ProtocolVersion = "2025-11-25" }, cancellationToken: Token);
+
+        try {
+            Task<CallToolResult> Call() => front.CallToolAsync("puck_adapter", cancellationToken: Token).AsTask().WaitAsync(Guard, Token);
+            static string Text(CallToolResult result) => string.Concat(result.Content.OfType<TextContentBlock>().Select(selector: static block => block.Text));
+
+            // An activation that throws answers its call with a named error result, not a dropped or anonymous reply.
+            var refused = await Call();
+
+            Assert.True(condition: refused.IsError);
+            Assert.Contains(expectedSubstring: "release pointer unreadable", actualString: Text(result: refused));
+            Assert.Empty(collection: backends);
+            Assert.NotEqual(expected: true, actual: (await Call()).IsError);
+            var first = Assert.Single(collection: backends);
+
+            // The current version's worker dies under a call: that call is answered by name, not left waiting, and the
+            // worker is retired.
+            var held = front.CallToolAsync("puck_exec", cancellationToken: Token).AsTask().WaitAsync(Guard, Token);
+
+            await first.Entered.Task.WaitAsync(Guard, Token);
+            await first.CrashAsync();
+            var dead = await held;
+
+            Assert.True(condition: dead.IsError);
+            Assert.Contains(expectedSubstring: "exited and was retired", actualString: Text(result: dead));
+            await first.Disposed.Task.WaitAsync(Guard, Token);
+            // The next call reaches a fresh worker for the same version instead of the dead one.
+            Assert.NotEqual(expected: true, actual: (await Call()).IsError);
+            Assert.Equal(expected: 2, actual: backends.Count);
+
+            // A current worker found dead before any call reaches it is replaced at activation.
+            await backends[1].CrashAsync();
+            Assert.NotEqual(expected: true, actual: (await Call()).IsError);
+            await backends[1].Disposed.Task.WaitAsync(Guard, Token);
+            Assert.Equal(expected: 3, actual: backends.Count);
+        } finally {
+            await lifetime.CancelAsync();
+            await front.DisposeAsync();
+            await run.WaitAsync(Guard, Token);
+        }
+    }
+    [Fact]
     public Task AnIdleSupersededWorkerIsDisposedBeforeSessionEnds() => ASupersededWorkerDrainsOnlyAfterItsCallsWorldsAndPendingStartsEnd(scenario: "idle");
     [InlineData("pending")]
     [InlineData("failed-start")]
@@ -38,7 +95,7 @@ public sealed class OperatorMcpFrontLawTests {
                 backends.Add(item: backend);
                 var client = await backend.ConnectAsync(token: token);
 
-                return (client, backend.StopAsync);
+                return (client, backend.StopAsync, backend.Exited.Task);
             }, lifetime.Token, clock);
         var front = await McpClient.CreateAsync(new StreamClientTransport(input.Writer.AsStream(), output.Reader.AsStream()),
             new() { DiscoverProbeTimeout = Timeout.InfiniteTimeSpan, ProtocolVersion = "2025-11-25" }, cancellationToken: Token);
@@ -121,6 +178,7 @@ public sealed class OperatorMcpFrontLawTests {
         public readonly TaskCompletionSource Entered = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
         public readonly TaskCompletionSource Release = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
         public readonly TaskCompletionSource Disposed = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly TaskCompletionSource Exited = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async Task<McpClient> ConnectAsync(CancellationToken token) {
             m_server = McpServer.Create(new StreamServerTransport(m_input.Reader.AsStream(), m_output.Writer.AsStream(), "worker"), new() {
@@ -160,6 +218,14 @@ public sealed class OperatorMcpFrontLawTests {
         }
 
         private static CallToolResult Result(JsonElement data) => new() { Content = [new TextContentBlock { Text = "result" }], StructuredContent = data };
+
+        // The worker process dies: its server stops and its output reaches end of stream, as a crashed stub's would.
+        public async Task CrashAsync() {
+            await m_stop.CancelAsync();
+            try { await m_run!; } catch (OperationCanceledException) { }
+            await m_output.Writer.CompleteAsync();
+            Exited.TrySetResult();
+        }
 
         public async Task StopAsync() {
             await m_stop.CancelAsync();
