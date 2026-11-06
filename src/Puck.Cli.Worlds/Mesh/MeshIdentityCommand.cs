@@ -48,7 +48,7 @@ public static class MeshIdentityCommand {
 
         var buildDirectory = Path.GetFullPath(path: (build ?? AppContext.BaseDirectory));
 
-        if (!TryRead(directory: buildDirectory, extension: extension, identity: out var identity)) { return 1; }
+        if (!TryRead(directory: buildDirectory, extension: extension, identity: out var identity)) { return CliExit.Refused; }
 
         var output = new StringBuilder();
         var assemblies = identity.Members.Keys
@@ -76,7 +76,7 @@ public static class MeshIdentityCommand {
         if (against is not null) {
             var againstDirectory = Path.GetFullPath(path: against);
 
-            if (!TryRead(directory: againstDirectory, extension: extension, identity: out var other)) { return 1; }
+            if (!TryRead(directory: againstDirectory, extension: extension, identity: out var other)) { return CliExit.Refused; }
 
             var changed = SdfMeshBakeClosure.Changed(earlier: other.Members, members: identity.Members);
 

@@ -35,9 +35,8 @@ public static class WasmStdlibCommand {
 
     public static Command Create() => CliOptions.CheckVerb(
         checkDescription: "Regenerate every Rust source in memory and compare it, and its staged copy, against the file on disk; write nothing, and exit 1 naming the first differing line of each stale file.",
-        description: """
-        Regenerate the generated Rust sources of the WASM standard library, or check them.
-
+        description: "Regenerate the generated Rust sources of the WASM standard library, or check them.",
+        detail: """
         Writes every artifact registered in Puck.Scripting.WasmStdlibSources.All by calling its Emit delegate
         directly — the FixedQ4816 Rust port (interval tables, polynomial coefficients, and known-answer vectors
         read from the live FixedQ4816 type) and the addon-ABI Rust mirror (wire enums, capability mask, and

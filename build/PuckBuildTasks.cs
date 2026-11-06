@@ -198,7 +198,7 @@ public sealed class PuckArchitectureGate : Task {
     public string Layer { get; set; } = "";
     /// <summary>The layer taxonomy: <c>Include</c> is the row name, <c>Rank</c> its index from the top.</summary>
     public ITaskItem[] Layers { get; set; } = Array.Empty<ITaskItem>();
-    /// <summary>Exact-equality closures: <c>Include</c> is the project, <c>Closure</c> a semicolon list.</summary>
+    /// <summary>Lane profiles: <c>Include</c> is the project, <c>Forbid</c> a semicolon list of projects and layer rows its closure must not hold, and <c>Allow</c>, when present, the only projects it may hold.</summary>
     public ITaskItem[] Profiles { get; set; } = Array.Empty<ITaskItem>();
     /// <summary>This project's full path, used for provenance and for the diagnostic's file position.</summary>
     public string ProjectFile { get; set; } = "";
@@ -345,40 +345,26 @@ public sealed class PuckArchitectureGate : Task {
             return true;
         }
 
-        var expected = new SortedSet<string>(
-            collection: (profile.GetMetadata(metadataName: "Closure") ?? "").Split(options: StringSplitOptions.RemoveEmptyEntries, separator: new[] { ';' }).Select(selector: s => s.Trim()),
-            comparer: StringComparer.OrdinalIgnoreCase);
-        var actual = new SortedSet<string>(collection: closure.Select(selector: f => f.Name), comparer: StringComparer.OrdinalIgnoreCase);
-        var added = actual.Except(second: expected).ToArray();
-        var removed = expected.Except(second: actual).ToArray();
+        string[] Entries(string metadata) => (profile.GetMetadata(metadataName: metadata) ?? "").Split(options: StringSplitOptions.RemoveEmptyEntries, separator: new[] { ';' }).Select(selector: s => s.Trim()).ToArray();
+        var forbid = Entries(metadata: "Forbid");
+        var allow = Entries(metadata: "Allow");
+        // A forbid entry names a project or a layer row; an allow list, when present, is the whole permitted closure.
+        var violations = closure.Where(predicate: f => forbid.Any(predicate: entry => string.Equals(a: entry, b: f.Name, comparisonType: StringComparison.OrdinalIgnoreCase) || string.Equals(a: entry, b: f.Layer, comparisonType: StringComparison.OrdinalIgnoreCase))
+            || ((allow.Length > 0) && !allow.Contains(value: f.Name, comparer: StringComparer.OrdinalIgnoreCase))).Select(selector: f => f.Name).OrderBy(keySelector: n => n, comparer: StringComparer.OrdinalIgnoreCase).ToArray();
 
-        if ((added.Length == 0) && (removed.Length == 0)) {
+        if (violations.Length == 0) {
             return true;
-        }
-
-        var detail = new List<string>();
-
-        // Cast to the sequence overload explicitly: a string[] is convertible to object[] by array
-        // covariance, which leaves string.Join ambiguous between its two shapes.
-        if (added.Length != 0) {
-            detail.Add(item: $"gained {string.Join(separator: ", ", values: ((IEnumerable<string>)added))}");
-        }
-
-        if (removed.Length != 0) {
-            detail.Add(item: $"lost {string.Join(separator: ", ", values: ((IEnumerable<string>)removed))}");
         }
 
         LogViolation(
             code: "PUCKARCH004",
             message:
-                (((((string)$"{ProjectName} carries a lane profile, and its resolved closure no longer EQUALS it: {string.Join(separator: "; ", values: detail)}. Expected exactly [{string.Join(separator: ", ", values: expected)}]. ")
-                + "Equality is deliberate — a removed edge has to be as visible as an added one, or a boundary can be dismantled a reference at a time and every check still passes. ")
+                ((((string)$"{ProjectName} carries a lane profile, and its resolved closure holds what the profile excludes: {string.Join(separator: ", ", values: ((IEnumerable<string>)violations))} (arrives by: {string.Join(separator: "; ", values: violations.Select(selector: v => DescribePath(target: v)))}). ")
                 + "Every forbidden edge in this split is SAME-ROW, so the layer rule cannot see any of them; this profile is the only thing that can. ")
-                + "If the change is right, update the profile in build/Architecture.props in the same commit and say why."));
+                + "If the edge is right, change the profile's policy in build/Architecture.props in the same commit and say why."));
 
         return false;
-    }
-    private bool TryValidateOwnDeclaration(Dictionary<string, bool> kinds, Dictionary<string, int> ranks) {
+    }    private bool TryValidateOwnDeclaration(Dictionary<string, bool> kinds, Dictionary<string, int> ranks) {
         if (string.IsNullOrEmpty(value: Kind)) {
             LogViolation(
                 code: "PUCKARCH005",

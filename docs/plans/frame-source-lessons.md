@@ -7,7 +7,7 @@ dependency determines synchronization, scheduling and lifetime together. Adding
 another graph, a queue per feature or a water renderer would dilute that value.
 
 This is research for [Graphics architecture](graphics-architecture.md) and
-[Water rendering](water-rendering.md), not a replacement implementation queue.
+[the water feature](water.md), not a replacement implementation queue.
 The recommended additions are submission attribution before J6's parallel view
 recording, completion and memory admission refinements to B1/G1, and a lifetime
 account before any transient heap aliasing. W2 → W1 → W3 remains the water order.
@@ -53,7 +53,7 @@ These are source citations, with line numbers at the Puck revision above.
 | Shared submission batch and unavoidable boundaries | The requested private-CLI `declarations src --name Submission` found `src/Puck.Abstractions/Gpu/Device/GpuSubmissionBatch.cs:16` and `:37`. `TryDefer` at `:49` accumulates entries; `Split` at `:59` submits in order and aliases fences to the last fenced owner. The contract is explicitly single-threaded. Native queue access splits through the backend's queue door; a deferred fence wait splits at `GpuBatchedSubmissionFence.cs:43`. Direct3D's external wait also splits at `src/Puck.DirectX/DirectXGpuQueueSubmitter.cs:50`. These are candidate accounting categories, not a diagnosis of 6.3. |
 | B1's completion ownership and time admission | `src/Puck.SdfVm/SdfGpuWork.cs:139` has four slots, `:141` a 25% GPU-time share, `:143` a 20 ms maximum credit bank. `Pump` at `:220` polls then refills; `Poll` at `:292` requires fence completion; `Refill` at `:344` additionally requires readback release. `Settle` at `:316` corrects estimated charge with timestamps. These limits bound slots and average charged service, not an individual dispatch's latency or all client memory. |
 | B1 is still pumped by the recording thread | `src/Puck.SdfVm/SdfWorldResidency.cs:640` and `:650` call the service. `SdfGpuWork.cs:214` states the recording-thread window. `src/Puck.SdfVm/SdfWorldTables.Bindings.cs:61` permits background binding only after an upload whose bindings have not changed. Moving `Pump` to a waiter without immutable binding ownership would invalidate that condition. |
-| Glass is an existing resource boundary | `src/Puck.Shaders.Model/Graph/SdfWorldPackage.Glass.cs:117` declares glass shading's lit-image, visibility, front-face and optical-sum inputs, and a distinct output. `src/Puck.SdfVm/SdfGlassRecorder.cs:58` records it. `src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-glass.hlsli:78` accumulates integer optical depth across glass faces; `src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass.comp.hlsl` applies absorption and the medium, makes eight frost taps when needed (`GlassFrostTaps`), reflects the surroundings through the probe gather plus the lights' highlights (`sdfGlassReceived`), and raises reactivity. W1 extended this mechanism ([as built](water-rendering.md#w1-as-built)). |
+| Glass is an existing resource boundary | `src/Puck.Shaders.Model/Graph/SdfWorldPackage.Glass.cs:117` declares glass shading's lit-image, visibility, front-face and optical-sum inputs, and a distinct output. `src/Puck.SdfVm/SdfGlassRecorder.cs:58` records it. `src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-glass.hlsli:78` accumulates integer optical depth across glass faces; `src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass.comp.hlsl` applies absorption and the medium, makes eight frost taps when needed (`GlassFrostTaps`), reflects the surroundings through the probe gather plus the lights' highlights (`sdfGlassReceived`), and raises reactivity. W1 extended this mechanism ([as built](water.md#w1-as-built)). |
 | Volume integration is already separate from surface optics | `src/Puck.SdfVm/Assets/Shaders/Sdf/shade/shade-volumes.hlsli:144` marches an authored number of steps, integrates extinction/emission at `:178`, and `:207` composites intersected volumes. Its outer selection scans volumes by near distance (`:215` onward). A surface's medium response and mist's spatial integration have different inputs and costs; combining their implementations needs evidence, not a water label. |
 
 The [runtime contracts](../../.claude/skills/rendering/references/runtime-contracts.md)
@@ -437,4 +437,4 @@ different workload.
 
 ---
 
-[Plans](README.md) · [Graphics architecture](graphics-architecture.md) · [Water rendering](water-rendering.md) · [Visibility](visibility.md) · [The engine job system](engine-job-system.md)
+[Plans](README.md) · [Graphics architecture](graphics-architecture.md) · [The water feature](water.md) · [Visibility](visibility.md) · [The engine job system](engine-job-system.md)

@@ -412,7 +412,7 @@ public static class ReferencesCommand {
 
         return filter;
     }
-    // The mode flags are not mutually exclusive at the parser; the first set one in this order wins.
+    // The parser lets at most one mode flag through (CliOptions.Exclusive).
     private static ReferencesMode ParseMode(bool declarations, bool derived, bool implementers, bool overrides) {
         if (declarations) {
             return ReferencesMode.Declarations;
@@ -641,7 +641,7 @@ public static class ReferencesCommand {
         var jsonOption = CliOptions.Json();
         var kindOption = new Option<string?>(name: "--kind") { Description = "Comma-separated symbol kinds: type, member, namespace. Absent means type,member." };
         var metadataOption = new Option<bool>(name: "--metadata") { Description = "Also match declarations from referenced assemblies." };
-        var nameArgument = new Argument<string>(name: "name") { Description = "The simple symbol name to resolve." };
+        var nameArgument = CliOptions.NameArgument(description: "The simple symbol name to resolve.", name: "name");
         var noDocOption = new Option<bool>(name: "--no-doc") { Description = "Drop locations inside documentation trivia." };
         var overridesOption = new Option<bool>(name: "--overrides") { Description = "Overrides of a virtual or abstract member." };
         var projectOption = new Option<string?>(name: "--project") { Description = "Load one project instead of a solution, which narrows the closure." };
@@ -672,6 +672,9 @@ public static class ReferencesCommand {
             strictOption,
         };
 
+        CliOptions.Exclusive(command, declarationsOption, derivedOption, implementersOption, overridesOption);
+        CliOptions.Exclusive(command, projectOption, solutionOption);
+        CliOptions.Exclusive(command, jsonOption, quietOption);
         command.Detail(detail: """
             Output is `path:line:col decl|ref <symbol kind> <resolved definition>`, grouped by
             definition and sorted by position within a group. The symbol on a `ref` line is the

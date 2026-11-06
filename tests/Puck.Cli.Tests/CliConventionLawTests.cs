@@ -2,7 +2,6 @@ using System.CommandLine;
 using System.CommandLine.Help;
 using System.Reflection;
 using System.Runtime.Loader;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 
 using Xunit;
@@ -10,16 +9,10 @@ using Xunit;
 namespace Puck.Cli.Tests;
 
 /// <summary>
-/// The CLI conventions (docs/reference/cli.md), checked by walking the real command tree. Every violation is either
-/// fixed or recorded, by command path and rule, in <c>CliConventionExemptions.json</c> beside this file. That ledger
-/// only shrinks: a recorded row whose command no longer breaks its rule fails the law until the row is deleted, so the
-/// ledger can never describe a tree that no longer exists.
+/// The CLI conventions (docs/reference/cli.md), checked by walking the composed root command tree: every command, option
+/// and argument the root carries is held to every rule, with no exemptions.
 /// </summary>
 public sealed partial class CliConventionLawTests {
-    private const string LedgerPath = "tests/Puck.Cli.Tests/CliConventionExemptions.json";
-
-    // The packages whose verbs may still carry recorded violations. Everything else is held to every rule outright.
-    private static readonly HashSet<string> LedgerPackages = new(comparer: StringComparer.Ordinal) { "B", "C", "D", "E" };
     // Loaded by any verb's help, these mean a verb built something heavy while building its command: a compiler, a
     // build engine, a benchmark harness, or a GPU backend.
     private static readonly string[] HelpForbiddenAssemblies = [
@@ -27,57 +20,15 @@ public sealed partial class CliConventionLawTests {
         "Puck.Vulkan",
     ];
 
-    private static IReadOnlySet<CliViolation> Ledger() {
-        using var document = JsonDocument.Parse(json: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: LedgerPath)));
-        var rows = new HashSet<CliViolation>();
-
-        Assert.Equal(
-            actual: document.RootElement.GetProperty(propertyName: "format").GetInt32(),
-            expected: 1
-        );
-
-        foreach (var row in document.RootElement.GetProperty(propertyName: "exemptions").EnumerateArray()) {
-            var command = row.GetProperty(propertyName: "command").GetString()!;
-            var rule = row.GetProperty(propertyName: "rule").GetString()!;
-            var package = row.GetProperty(propertyName: "package").GetString()!;
-
-            Assert.True(
-                condition: LedgerPackages.Contains(item: package),
-                userMessage: $"{command} [{rule}] is recorded for package '{package}'; only B, C, D and E may carry exemptions."
-            );
-            Assert.True(
-                condition: CliConventions.Rules.Contains(value: rule),
-                userMessage: $"{command} [{rule}] names no rule this law checks."
-            );
-            Assert.True(
-                condition: rows.Add(item: new CliViolation(
-                    Command: command,
-                    Rule: rule
-                )),
-                userMessage: $"{command} [{rule}] is recorded twice."
-            );
-        }
-
-        return rows;
-    }
-
     [Fact]
-    public void EveryViolationIsRecordedAndEveryRecordStillViolates() {
-        var actual = CliConventions.Violations(root: PuckRootCommand.Create(clock: TimeProvider.System)).Select(selector: static violation => violation.Key).ToHashSet();
-        var recorded = Ledger();
-        var unrecorded = actual.Except(second: recorded).Order().ToList();
-        var stale = recorded.Except(second: actual).Order().ToList();
+    public void EveryCommandKeepsEveryConvention() {
+        var violations = CliConventions.Violations(root: PuckRootCommand.Create(clock: TimeProvider.System)).OrderBy(keySelector: static violation => violation.Key).Select(selector: static violation => $"{violation.Key}: {violation.Value}").ToList();
 
         Assert.True(
-            condition: (unrecorded.Count == 0),
-            userMessage: $"These commands break a CLI convention; fix them (docs/reference/cli.md):{Environment.NewLine}{string.Join(separator: Environment.NewLine, values: unrecorded)}"
+            condition: (violations.Count == 0),
+            userMessage: $"These commands break a CLI convention; fix them (docs/reference/cli.md):{Environment.NewLine}{string.Join(separator: Environment.NewLine, values: violations)}"
         );
-        Assert.True(
-            condition: (stale.Count == 0),
-            userMessage: $"These exemptions no longer apply; delete their rows from {LedgerPath}:{Environment.NewLine}{string.Join(separator: Environment.NewLine, values: stale)}"
-        );
-    }
-    // The reference's verb table names every root verb exactly once, in the root listing's ordinal order, and nothing
+    }    // The reference's verb table names every root verb exactly once, in the root listing's ordinal order, and nothing
     // the root does not carry.
     [Fact]
     public void TheReferenceVerbTableListsEveryRootVerbInListingOrder() {
@@ -219,6 +170,7 @@ public sealed partial class CliConventionLawTests {
             var check = Verb(name: "check-tree");
 
             check.Options.Add(item: CliOptions.Check(description: "Write nothing."));
+            check.Options.Add(item: CliOptions.Count(description: "Count.", minimum: 1, name: "--count"));
 
             var family = new Command(
                 description: "Group two operations.",
@@ -307,6 +259,13 @@ public sealed partial class CliConventionLawTests {
 
                         return Finish(root: Root(verb));
                     }
+                case CliConventions.ValidatedNumber: {
+                        var verb = Verb(name: "one");
+
+                        verb.Options.Add(item: new Option<int>(name: "--count") { Description = "Count." });
+
+                        return Finish(root: Root(verb));
+                    }
                 case CliConventions.ExitGuarded:
                     return Finish(
                         guard: false,
@@ -353,15 +312,22 @@ internal static partial class CliConventions {
     public const string OneLineDescription = "one-line-description";
     public const string PositionalOutput = "positional-output";
     public const string UsageName = "usage-name";
+    public const string ValidatedNumber = "validated-number";
 
     public static readonly string[] Rules = [
         Alphabetical, BalancedUsage, BannedName, CheckIsBool, Described, ExitGuarded, GnuLongName, KebabCase, NoAlias,
-        NoArgumentWithSubcommands, OneLineDescription, PositionalOutput, UsageName,
+        NoArgumentWithSubcommands, OneLineDescription, PositionalOutput, UsageName, ValidatedNumber,
+    ];
+    // The value types a number option carries: each is parsed and bounded by CliOptions.Count or CliOptions.Amount,
+    // so a token that is not a number is a usage error naming the option rather than a fault.
+    private static readonly HashSet<Type> NumberTypes = [
+        typeof(int), typeof(long), typeof(uint), typeof(ulong), typeof(short), typeof(double), typeof(float), typeof(decimal),
     ];
 
     // Option names, without their leading dashes, that a verb must not use: each has one replacement every verb
     // shares, or names a style knob canonical output does not have.
     private static readonly Dictionary<string, string> BannedOptions = new(comparer: StringComparer.Ordinal) {
+        ["concurrency"] = "--jobs",
         ["files"] = "--file-list",
         ["indent-size"] = "no style knob",
         ["out"] = "--output",
@@ -370,6 +336,7 @@ internal static partial class CliConventions {
         ["output-file"] = "--output",
         ["stdout"] = "--output",
         ["tabs"] = "no style knob",
+        ["timeout"] = "--timeout-seconds",
         ["verify"] = "--check",
         ["what-if"] = "--check",
     };
@@ -504,6 +471,13 @@ internal static partial class CliConventions {
                 (option.ValueType != typeof(bool))
             ) {
                 Report(rule: CheckIsBool, detail: option.ValueType.Name);
+            }
+
+            if (
+                NumberTypes.Contains(item: (Nullable.GetUnderlyingType(nullableType: option.ValueType) ?? option.ValueType)) &&
+                (option.GetType().GetProperty(name: "CustomParser")?.GetValue(obj: option) is null)
+            ) {
+                Report(rule: ValidatedNumber, detail: $"{option.Name} -> CliOptions.Count or CliOptions.Amount");
             }
 
             foreach (var spelling in option.Aliases.Prepend(element: option.Name).Where(predicate: static spelling => spelling.StartsWith(comparisonType: StringComparison.Ordinal, value: "--"))) {

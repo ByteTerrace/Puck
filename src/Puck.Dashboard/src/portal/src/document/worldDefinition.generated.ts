@@ -12001,7 +12001,7 @@ export type WorldScheduleRow = {
 
 export type WorldScheduleSection = {
   /**
-   * How many ticks the world keeps stepping past the last scheduled command's tick before the export is written: the settle margin a Simulation-routed command's apply, the mutation drain, and the rules reading its result need. At least 1 — a zero margin would export at the same tick the last command was submitted, before it could have applied — and at most MaxSettleTicks.
+   * How many ticks the world keeps stepping past the last scheduled command's tick before the export is written: the settle margin a Simulation-routed command's apply, the mutation drain, and the rules reading its result need. At least 1 — a zero margin would export at the same tick the last command was submitted, before it could have applied. There is no ceiling: a scenario over a long simulated arc (hours of a melt at the world's rate) runs its whole grid as this margin.
    */
   settleTicks: number;
   /**

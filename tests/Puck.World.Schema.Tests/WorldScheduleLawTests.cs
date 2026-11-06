@@ -131,7 +131,7 @@ public sealed class WorldScheduleLawTests {
         );
     }
     [Fact]
-    public void ASettleMarginBelowOneOrPastTheCeilingIsRefusedByName() {
+    public void ASettleMarginBelowOneIsRefusedByName() {
         Assert.Contains(
             actualString: Validate(definition: BuildDefinition(schedule: Schedule(
                 rows: [Row(tick: 2UL)],
@@ -139,14 +139,6 @@ public sealed class WorldScheduleLawTests {
             ))),
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "schedule.settleTicks 0 must be at least 1"
-        );
-        Assert.Contains(
-            actualString: Validate(definition: BuildDefinition(schedule: Schedule(
-                rows: [Row(tick: 2UL)],
-                settleTicks: (WorldScheduleCapacity.MaxSettleTicks + 1)
-            ))),
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: $"exceeds {WorldScheduleCapacity.MaxSettleTicks}"
         );
     }
     [Fact]

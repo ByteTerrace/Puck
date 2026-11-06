@@ -109,6 +109,35 @@ public static partial class CanaryCommand {
             : 2)) * manifest.TimeoutSeconds);
     // Prints the plan on stdout, one proof per line in authored order, then the totals. Every value is a count of the
     // manifests, so two runs over the same selection print the same text on any machine.
+    // Writes the plan as JSON lines: one record per proof in authored order, then one totals record.
+    private static void WritePlan(CanaryPlan plan, CliJsonLines output) {
+        foreach (var proof in plan.Proofs) {
+            output.Write(record: new System.Text.Json.Nodes.JsonObject {
+                ["proof"] = proof.Proof.Label,
+                ["legs"] = 2,
+                ["worldBoots"] = proof.WorldBoots,
+                ["spawns"] = (proof.WorldProcesses + proof.StubLaunches),
+                ["budgetSeconds"] = proof.BudgetSeconds,
+                ["placement"] = (proof.Exclusive ? "alone" : (proof.Gpu ? "gpu" : "parallel")),
+            });
+        }
+
+        output.Write(record: new System.Text.Json.Nodes.JsonObject {
+            ["proofs"] = plan.Proofs.Count,
+            ["legs"] = plan.Legs,
+            ["exclusiveLegs"] = plan.ExclusiveLegs,
+            ["gpuLegs"] = plan.GpuLegs,
+            ["worldBoots"] = plan.WorldBoots,
+            ["legSpawns"] = plan.LegSpawns,
+            ["worldProcesses"] = plan.WorldProcesses,
+            ["stubLaunches"] = plan.StubLaunches,
+            ["packageSpawns"] = plan.PackageSpawns,
+            ["warmBoots"] = plan.WarmBoots,
+            ["worldBuilds"] = plan.WorldBuilds,
+            ["stubBuilds"] = plan.StubBuilds,
+            ["budgetSeconds"] = plan.BudgetSeconds,
+        });
+    }
     private static void PrintPlan(CanaryPlan plan) {
         foreach (var proof in plan.Proofs) {
             Console.WriteLine(value: $"canary plan {proof.Proof.Label}: legs=2 world-boots={proof.WorldBoots} spawns={(proof.WorldProcesses + proof.StubLaunches)} budget={proof.BudgetSeconds}s {(proof.Exclusive ? "alone" : (proof.Gpu ? "gpu" : "parallel"))}");

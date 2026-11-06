@@ -113,7 +113,7 @@ public static class BenchRunner {
             name: "kernels"
         ) { benchmarkArguments };
         var worldArgument = new Argument<string?>(name: "world") { Arity = ArgumentArity.ZeroOrOne, Description = $"The world's asset package folder, .puck source or .world.json document. Default: the debug world, {WorldBenchmarks.DefaultWorldRelativePath}." };
-        var repeatsOption = new Option<int>(name: "--repeats") { DefaultValueFactory = static _ => 1, Description = "How many times the whole lane runs, 1 to 100; each metric's median, p10 and p90 are taken over them." };
+        var repeatsOption = CliOptions.Count(defaultValue: 1, description: "How many times the whole lane runs, 1 to 100; each metric's median, p10 and p90 are taken over them.", maximum: 100, minimum: 1, name: "--repeats");
         var artifactOption = new Option<string?>(name: "--world-artifact") { Description = "A World build's Puck.World.dll whose engine is measured in place of this CLI's own; the bench code stays this CLI's." };
         var outputOption = new Option<string?>(name: "--output") { Description = "Parent of a unique run directory that receives report.json (puck.bench.v1)." };
         var jsonOption = new Option<bool>(name: "--json") { Description = "Print the report (puck.bench.v1) on standard output, with the table on standard error." };

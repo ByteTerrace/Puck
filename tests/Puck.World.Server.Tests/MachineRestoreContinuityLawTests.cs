@@ -198,6 +198,10 @@ public sealed class MachineRestoreContinuityLawTests {
             }
             return bytes;
         }
+        public bool TryValidateCheckpoint(ReadOnlyMemory<byte> checkpoint, out string reason) {
+            reason = (((checkpoint.Length >= 4) && (((checkpoint.Length - 4) % 16) == 0)) ? string.Empty : "guest image length is not a write count and whole entries");
+            return (reason.Length == 0);
+        }
         public void RestoreCheckpoint(ReadOnlyMemory<byte> checkpoint) {
             var bytes = checkpoint.Span;
 

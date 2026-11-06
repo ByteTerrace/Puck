@@ -15,7 +15,7 @@ mechanism once rather than a fix per feature.
 It extends the [illumination plan](illumination.md) (whose step 3 it
 redesigns), the [visibility plan](visibility.md) and the bake and residency
 packets in the [open items](open-items.md). The
-[water rendering plan](water-rendering.md) applies its four mechanisms to
+[water feature plan](water.md) applies its four mechanisms to
 the surfaces, flow shading and particles the debug world's water showed
 missing. The
 [GI decision](../decisions/rendering.md#global-illumination) and the
@@ -709,4 +709,4 @@ native executes and signals without claiming a reduction in shader work.
 
 ---
 
-[Plans](README.md) · [Illumination](illumination.md) · [Far-field irradiance](far-field-irradiance.md) · [Visibility](visibility.md) · [Water rendering](water-rendering.md) · [The engine job system](engine-job-system.md) · [Decisions](../decisions/rendering.md)
+[Plans](README.md) · [Illumination](illumination.md) · [Far-field irradiance](far-field-irradiance.md) · [Visibility](visibility.md) · [The water feature](water.md) · [The engine job system](engine-job-system.md) · [Decisions](../decisions/rendering.md)

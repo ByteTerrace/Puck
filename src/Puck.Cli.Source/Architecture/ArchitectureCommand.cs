@@ -393,45 +393,31 @@ public static class ArchitectureCommand {
         _ = output.AppendLine(value: $"  Upward edges across the transitive closure: {upward}.").AppendLine();
     }
     private static void ReportProfiles(List<string> failures, ArchitectureModel model, StringBuilder output) {
-        _ = output.AppendLine(value: "## Lane profiles (exact equality)").AppendLine();
+        _ = output.AppendLine(value: "## Lane profiles (forbidden edges)").AppendLine();
 
-        foreach (var (name, expected) in model.Profiles) {
+        foreach (var (name, profile) in model.Profiles) {
             if (!model.Projects.ContainsKey(key: name)) {
                 failures.Add(item: $"profile names {name}, which is not a project in scope.");
 
                 continue;
             }
 
-            var actual = model.Closure(name: name);
-            var matches = actual.SequenceEqual(
-                second: expected.OrderBy(
-                    keySelector: e => e,
-                    comparer: StringComparer.OrdinalIgnoreCase
-                ),
-                comparer: StringComparer.OrdinalIgnoreCase
-            );
-
-            if (!matches) {
-                failures.Add(item: $"{name} closure [{string.Join(
-                    separator: ", ",
-                    values: actual
-                )}] does not equal its profile [{string.Join(
-                    separator: ", ",
-                    values: expected
-                )}].");
+            // An entry naming neither a project nor a layer row forbids nothing, so a misspelling cannot pass silently.
+            foreach (var entry in profile.Forbid.Concat(second: profile.Allow).Where(predicate: entry => !model.Projects.ContainsKey(key: entry) && !model.Layers.Contains(value: entry, comparer: StringComparer.OrdinalIgnoreCase))) {
+                failures.Add(item: $"{name}'s profile names {entry}, which is neither a project in scope nor a layer row.");
             }
 
-            _ = output.AppendLine(value: $"  {name,-30} {(matches
-                ? "equal"
-                : "DIFFERS")}: {string.Join(
-                separator: ", ",
-                values: actual
-            )}");
+            var excluded = profile.Excluded(closure: model.Closure(name: name), layerOf: member => (model.Projects.TryGetValue(key: member, value: out var project) ? project.Layer : string.Empty));
+
+            if (excluded.Count > 0) {
+                failures.Add(item: $"{name} closure holds what its profile excludes: {string.Join(separator: ", ", values: excluded)}.");
+            }
+
+            _ = output.AppendLine(value: $"  {name,-30} {((excluded.Count == 0) ? "holds" : "BROKEN")}: {((profile.Allow.Count > 0) ? $"only {string.Join(separator: ", ", values: profile.Allow)}" : $"no {string.Join(separator: ", ", values: profile.Forbid)}")}");
         }
 
         _ = output.AppendLine();
-    }
-    private static int Run(bool check, bool map) {
+    }    private static int Run(bool check, bool map) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
@@ -512,16 +498,17 @@ public static class ArchitectureCommand {
             Description = $"Compare the generated layering block with the one checked in under {ProjectMapRelativePath}; exit 1 on drift.",
         };
         var command = new Command(
-            description: $"""
-            Report on the repository's project-layering policy.
+            description: "Report on the repository's project-layering policy.",
+            name: "architecture"
+        ) { mapOption, checkOption };
 
+        CliOptions.Exclusive(command, mapOption, checkOption);
+        command.Detail(detail: $"""
             The build-time gate is the authority; this verb explains it. Policy lives in
             build/Architecture.props; every project declares its own <PuckKind> and <PuckLayer>.
             --map prints the layering block for {ProjectMapRelativePath}; --check fails when the
             checked-in block no longer matches the declarations.
-            """,
-            name: "architecture"
-        ) { mapOption, checkOption };
+            """);
 
         command.SetAction(action: parseResult => Run(
             check: parseResult.GetValue(option: checkOption),

@@ -6,7 +6,7 @@ namespace Puck.Cli.Motion;
 
 public static partial class MotionCommand {
     private static int RunRoute(string routePath, string? output, string? worldPath, string? worldArtifact,
-        string? againstArtifact, WorldBackendPreference? backend, string? cacheDirectory, int timeoutMinutes) {
+        string? againstArtifact, WorldBackendPreference? backend, string? cacheDirectory, int timeoutSeconds) {
         if (!CliPaths.TryGetRepositoryRoot(out var repository)) { return CliExit.Refused; }
         var directory = Path.GetFullPath(output ?? RunDirectory.CreatePath(prefix: "puck-motion-route-"));
         Directory.CreateDirectory(directory);
@@ -31,8 +31,7 @@ public static partial class MotionCommand {
             }
             using var retainedSecond = secondLease;
             var second = secondLease?.Path ?? artifact;
-            if (timeoutMinutes <= 0) { return CliExit.Refuse(Verb, "--timeout", "must be positive."); }
-            var deadline = TimeSpan.FromMinutes(timeoutMinutes);
+            var deadline = TimeSpan.FromSeconds(timeoutSeconds);
             var suite = System.Diagnostics.Stopwatch.StartNew();
             TimeSpan Remaining() => suite.Elapsed < deadline ? deadline - suite.Elapsed : throw new TimeoutException("The whole route run exhausted its deadline.");
             var cache = cacheDirectory is null ? null : Path.GetFullPath(cacheDirectory);

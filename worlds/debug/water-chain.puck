@@ -1,0 +1,24 @@
+// The debug world's water chain alone: one hydrology expansion at water.puck's numbers and no bodies, the world the
+// chain's arc is proved on in seconds (water-chain-tests.puck).
+schema: "puck.world.definition.v1"
+documentId: "water-chain"
+import "../standard/hydrology"
+
+hydrology(
+  origin: [0, -90, 0],
+  meltSeconds: 10800,
+  meltExponent: 3,
+  poolBase: 1.5,
+  poolLevelMax: 2.35,
+  waterPerCell: 10,
+  rate: 0.000625,
+  fullHead: 1.8
+)
+
+bodies {
+  capacity: 0
+  localSeats: 0
+  networkPlayers: 0
+  reconnectGraceSeconds: 0
+  sleepAfterSeconds: 0s
+}

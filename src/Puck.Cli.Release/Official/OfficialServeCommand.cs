@@ -232,7 +232,7 @@ internal static class OfficialServeCommand {
     }
 
     public static Command Create() {
-        var portOption = new Option<int>(name: "--port") { DefaultValueFactory = _ => DefaultPort, Description = "The port to listen on." };
+        var portOption = CliOptions.Count(defaultValue: DefaultPort, description: "The port to listen on, 1 to 65535.", maximum: 65535, minimum: 1, name: "--port");
         var treeOption = new Option<string>(name: "--tree") { Description = "The official tree's root.", Required = true };
         var command = new Command(
             description: "Serve a puck.official.manifest.v1 tree over local HTTP until Ctrl+C.",

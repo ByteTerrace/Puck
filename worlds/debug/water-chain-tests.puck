@@ -1,0 +1,113 @@
+schema: "puck.world.definition.v1"
+basis: "water-chain"
+documentId: "water-chain-tests"
+
+// Ticks of the melt, T, and the milestones probed: every eighth of the melt, then T + 15, 30 and 45 minutes.
+let arcMeltTicks = 324000
+let tail = 27000
+let milestones = concat(map(range(0, 9), i => i * arcMeltTicks / 8), map(range(1, 4), j => arcMeltTicks + j * tail))
+
+// The probe rows, one cell per milestone.
+state {
+  world {
+    row {
+      name: "glacierAt"
+      kind: "Fixed"
+      capacity: length(milestones)
+      min: "0"
+      max: "4"
+      cells: map(range(0, length(milestones)), i => { key: $"{i}", value: "0" })
+    }
+    row {
+      name: "lakeAt"
+      kind: "Fixed"
+      capacity: length(milestones)
+      min: "0"
+      max: "4"
+      cells: map(range(0, length(milestones)), i => { key: $"{i}", value: "0" })
+    }
+    row {
+      name: "fallsAt"
+      kind: "Fixed"
+      capacity: length(milestones)
+      min: "0"
+      max: "4"
+      cells: map(range(0, length(milestones)), i => { key: $"{i}", value: "0" })
+    }
+    row {
+      name: "riverAt"
+      kind: "Fixed"
+      capacity: length(milestones)
+      min: "0"
+      max: "4"
+      cells: map(range(0, length(milestones)), i => { key: $"{i}", value: "0" })
+    }
+    row {
+      name: "aquiferAt"
+      kind: "Fixed"
+      capacity: length(milestones)
+      min: "0"
+      max: "4"
+      cells: map(range(0, length(milestones)), i => { key: $"{i}", value: "0" })
+    }
+    row {
+      name: "poolAt"
+      kind: "Fixed"
+      capacity: length(milestones)
+      min: "0"
+      max: "4"
+      cells: map(range(0, length(milestones)), i => { key: $"{i}", value: "0" })
+    }
+  }
+}
+
+// Each probe fires once, on the first tick at or past its milestone (the first at tick 30, once the chain has stepped),
+// and copies that tick's gauges.
+for (m, i) in milestones {
+  rule $"hydrology-probe-{i}" {
+    when $tick >= maximum(30, m)
+    mode: Edge
+    glacierAt[i] = glacier
+    lakeAt[i] = lakeLevel
+    fallsAt[i] = fallsFlow
+    riverAt[i] = riverDepth
+    aquiferAt[i] = aquiferFill
+    poolAt[i] = poolLevel
+  }
+}
+
+test "the glacier melts as (1 - t/T)^3 over three hours, the falls run dry at T, and the river settles with the aquifer" {
+  when {
+    ticks 405040
+  }
+  expect {
+    // The glacier against (1 - t/T)^3 at each eighth: 1, 0.670, 0.422, 0.244, 0.125, 0.053, 0.016, 0.002, 0.
+    glacierAt[0] > 0.99
+    glacierAt[1] > 0.66 and glacierAt[1] < 0.68
+    glacierAt[2] > 0.41 and glacierAt[2] < 0.43
+    glacierAt[3] > 0.235 and glacierAt[3] < 0.255
+    glacierAt[4] > 0.12 and glacierAt[4] < 0.13
+    glacierAt[5] > 0.045 and glacierAt[5] < 0.06
+    glacierAt[6] > 0.01 and glacierAt[6] < 0.02
+    glacierAt[7] > 0.0 and glacierAt[7] < 0.005
+    glacierAt[8] == 0
+    // The falls carry the melt until T and run dry after it.
+    fallsAt[0] > 0
+    fallsAt[4] > 0
+    fallsAt[7] > 0
+    fallsAt[9] < 0.001
+    fallsAt[11] < 0.001
+    // The lake stands at its sill before and after the melt.
+    lakeAt[0] > 0
+    lakeAt[11] > 0
+    // The aquifer fills over the melt, before the falls dry, and holds full after it.
+    aquiferAt[0] < aquiferAt[4]
+    aquiferAt[4] < aquiferAt[7]
+    aquiferAt[7] > 0.9
+    aquiferAt[11] > 0.95
+    // The river settles: its drift over the last quarter hour is bounded, and it stands above where it started.
+    riverAt[11] > 0
+    (riverAt[11] - riverAt[10]) < 0.01 and (riverAt[10] - riverAt[11]) < 0.01
+    poolAt[11] > poolAt[0]
+  }
+}
