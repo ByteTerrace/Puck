@@ -72,6 +72,10 @@ Vulkan even when an earlier shader does not read that binding. Return the
 entry depth to its attachment layout before the graph's outgoing transition.
 Material row 25.w carries shadow density beside cel ink RGB; keep its C# pack
 and HLSL load together without changing the row stride.
+For a neutral-default comparison, omit density from both prototype palettes
+and field materials in `state.world`; changing only the prototypes leaves
+field water shadowing. Compare the original and new shadow selection/estimate
+in the same paused World to keep geometry and temporal capture state fixed.
 
 Draw selection reads the retained `SdfWorldTables` staged draw span, the same
 records whose boxes and GPU records were uploaded. Never borrow the frame source's
