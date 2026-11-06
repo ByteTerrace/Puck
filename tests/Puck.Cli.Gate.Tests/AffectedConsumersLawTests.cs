@@ -80,11 +80,9 @@ public sealed class AffectedConsumersLawTests {
             canariesReaching: static _ => new HashSet<string>(),
             changed: ["src/Engine/Assets/addons/guest.wasm"],
             consumersOf: static _ => [],
-            coverage: new Dictionary<string, IReadOnlySet<string>>(),
             declaresTests: static _ => false,
             linkedBy: linkedBy,
             projects: Projects,
-            standInsFor: static _ => [],
             worldClosure: new HashSet<string>(),
             worldInput: static _ => false
         );

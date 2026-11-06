@@ -428,11 +428,11 @@ it alone and releases before the next. A script of several runs wraps each run
 in its own `puck lease heavy` call.
 
 
-GPU work is `puck parity`, `puck counters`, a canary requiring `gpu`, a windowed
-or offscreen `Puck.World` run, and any test run that can select a device law.
-Device laws are test classes marked `[Trait("Category", "Gpu")]`, in
-`Puck.World.Tests`, `Puck.DirectX.Tests`, `Puck.Vulkan.Tests` and
-`Puck.Platform.Windows.Tests`; a full run of one of those suites is GPU work
+GPU work is a verb in `GateComposition.GpuVerbGrammars` (`puck host load --help`
+lists them), a canary requiring `gpu`, a windowed or offscreen `Puck.World` run,
+and any test run that can select a device law. Device laws are test classes
+marked `[Trait("Category", "Gpu")]`, in the assemblies of
+`HostProcesses.DeviceTestAssemblies`; a full run of one of those suites is GPU work
 even though most of it is CPU. Beside another GPU job, run suites with
 `--filter-not-trait Category=Gpu`. `puck docs citations` boots `Puck.World`
 (headless, then windowed) to read its help vocabulary, so it is GPU work unless
@@ -446,11 +446,11 @@ time. A World run with effective `host.presentation: none` uses no GPU.
   transition once. It never counts itself. A process search of your own
   (`Get-Process`, `pgrep`, `tasklist | findstr`) matches its own command line:
   exclude its PID before concluding another job is running, and never skip or
-  postpone a granted leg on that match alone. `puck host load` itself names any
-  running `Puck.World`, a headless one (`--headless true`) included, as holding
-  the GPU, though a headless World neither uses the GPU nor holds the lease: read
-  the process's command line, and let the lease (`puck_world_start` waits for
-  it) decide.
+  postpone a granted leg on that match alone. `puck host load` names a running
+  `Puck.World` as holding the GPU only when its arguments open a device
+  (`WorldDevices.OpensDevice`): a headless one (`--headless true`) is not counted,
+  and neither holds the lease. Read the process's command line, and let the lease
+  (`puck_world_start` waits for it) decide.
 - Stop only the processes you started, by the PIDs you recorded.
 - A sandboxed process inventory can omit machine-wide jobs, including a lease
   holder visible outside that sandbox. An empty `Get-Process` result there

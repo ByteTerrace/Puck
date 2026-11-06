@@ -55,16 +55,12 @@ public sealed class AffectedDeletedReachLawTests {
             canariesReaching: static _ => throw new InvalidOperationException(message: "A deleted file is reached through the base's documents, never the working tree's."),
             changed: [deleted],
             consumersOf: static _ => [],
-            coverage: new Dictionary<string, IReadOnlySet<string>>(),
             declaresTests: static _ => throw new InvalidOperationException(message: "A deleted file is never read."),
             deleted: new HashSet<string>(collection: [deleted], comparer: StringComparer.Ordinal),
             projects: [Shaders],
-            recorded: new Dictionary<string, IReadOnlySet<string>>(),
             recordedCanariesReaching: path => (reachedBy.TryGetValue(key: path, value: out var reaching)
                 ? reaching
                 : new HashSet<string>()),
-            recordedStandInsFor: static _ => [],
-            standInsFor: static _ => throw new InvalidOperationException(message: "A deleted file stands for what the base said, never the working tree."),
             worldClosure: new HashSet<string>(collection: ["Shaders"], comparer: StringComparer.OrdinalIgnoreCase),
             worldInput: static _ => false
         );
@@ -75,24 +71,19 @@ public sealed class AffectedDeletedReachLawTests {
         var plan = Select(deleted: Resample);
 
         Assert.Equal(actual: plan.Canaries, expected: ["resample"]);
-        Assert.Empty(collection: plan.Deleted);
-        Assert.Empty(collection: plan.Unmapped);
     }
     [Fact]
     public void ADeletedGraphDocumentABaseWorldNamedChoosesThatWorldsCanary() {
         var plan = Select(deleted: InkGraph);
 
         Assert.Equal(actual: plan.Canaries, expected: ["ink"]);
-        Assert.Empty(collection: plan.Deleted);
         Assert.Equal(actual: Select(deleted: InkSource).Canaries, expected: ["ink"]);
     }
     [Fact]
-    public void AFileNoBaseDocumentReachedStaysDeleted() {
+    public void AFileNoBaseDocumentReachedIsAnInputOfEveryCanaryWorld() {
         var plan = Select(deleted: Orphan);
 
-        Assert.Empty(collection: plan.Canaries);
-        Assert.Equal(actual: plan.Deleted, expected: [Orphan]);
-        Assert.Empty(collection: plan.Unmapped);
+        Assert.Equal(actual: plan.Canaries, expected: ["ink", "resample"]);
     }
     /// <summary>Reach in the base's tree reads nothing from disk: the tree is rooted where no file exists, so every
     /// document and source it reaches came from the tree.</summary>

@@ -37,6 +37,7 @@ public static class WorldPrepareCommand {
         var pending = new Queue<string>();
         var visited = new HashSet<string>(comparer: StringComparer.Ordinal);
         var names = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
+        var needs = new PlayerDerivedProducts.Needs();
 
         pending.Enqueue(item: Path.Combine(
             path1: root,
@@ -125,6 +126,7 @@ public static class WorldPrepareCommand {
             )) {
                 throw new InvalidDataException(message: $"Cannot validate {relative}: {reason}");
             }
+            needs.Note(definition: definition!, documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: path));
             File.WriteAllBytes(
                 Path.Combine(
                     path1: output,
@@ -133,7 +135,7 @@ public static class WorldPrepareCommand {
                 WorldDefinitionSerialization.Serialize(definition: definition)
             );
         }
-        PlayerDerivedProducts.Prepare(output);
+        PlayerDerivedProducts.Prepare(output: output, agbBios: needs.AgbBios, guests: [.. needs.Guests]);
         Console.WriteLine(value: $"Prepared {visited.Count} hosted world definitions, with {primaryName} as the primary world.");
         return 0;
     }
@@ -145,7 +147,7 @@ public static class WorldPrepareCommand {
             required: true
         );
         var command = new Command(
-            description: "Compose the primary world and its referenced neighbours with the engine's own composer.",
+            description: "Compose the primary world and its referenced neighbours with the engine's own composer, and prewarm the derived products they reference.",
             name: "prepare"
         ) { primaryArgument, outputOption };
 

@@ -188,8 +188,8 @@ the generated schema, name-registry, project-map layering, and branding
 distribution checks.
 `puck schema --check` also compares the dashboard portal's
 generated world types, which `puck schema` writes from the same schema, so that
-check needs no Node.js or npm step. `puck branding --check` verifies the canonical hashes,
-active asset copies, and source wiring recorded in the
+check needs no Node.js or npm step. `puck branding --check` verifies that
+active asset copies match their canonical files, and the source wiring recorded in the
 [branding manifest](../../branding/manifest.json). The WebAssembly producer's
 Node harness job fails if the payload it downloads has no entry module. The
 HGB battery step is
@@ -313,7 +313,7 @@ the step in the same change.
 | `dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release` | `artifacts.yml` | `bootstrap` |
 | `dotnet build Puck.slnx -c Release --no-restore` | `artifacts.yml`, `format.yml` | `build` |
 | `puck shaders generate --check` | `artifacts.yml`, `format.yml`, `verify.yml` | `shaders generate` |
-| `puck schema`, `registry`, `architecture` and `branding --check` | `verify.yml` | the step of the same name |
+| `puck schema`, `registry`, `wasm-stdlib`, `architecture` and `branding --check` | `verify.yml` | the step of the same name |
 | `puck pull-request format` | `format.yml` | `format` over the change's C# and `.puck` sources |
 | `puck docs links` | `verify.yml` (`documents`) | `affected`, when the change touches a corpus page, a C# source or deletes a file |
 | Every test assembly (`puck artifacts test-windows`, one shard per runner, with the pinned DXC so shader laws run, the CPU selection and no `BuildTree` laws), the Linux world tests (`puck artifacts test-world`) and the formatter laws | `build.yml`, `verify.yml`, `format.yml` | `affected`, for the suites the change reaches (a workflow or composite action reaches the suites whose laws read them by their `PuckAffectedInput` declaration), with the DXC on `PATH` and the same CPU selection; it also runs the `BuildTree` laws, in the tree it built, and `--gpu` adds the device laws |
@@ -497,8 +497,8 @@ the installed `puck --version` against the package version, and adds it to the
 job's PATH. An exclusive local feed and private package cache keep a published
 package of the same version from replacing those bytes. A failed restore fails
 the job; CI never replaces a missing or broken package with a source build, and
-no consumer recompiles the CLI. `.config/dotnet-tools.json` carries docfx and
-whatever `puck nuget pin` has adopted; no job installs the CLI from it.
+no consumer recompiles the CLI. `.config/dotnet-tools.json` carries docfx; no job
+installs the CLI from it.
 
 The one job without an installed CLI is the artifact producer, which invokes the
 assembly its solution build just compiled
@@ -515,13 +515,8 @@ container build, which would otherwise wait on the Windows producer.
 runners and exercises command dispatch, native-backed search, declarations,
 and a Roslyn workspace query through `puck nuget smoke`. Publishing waits for
 both installation gates. After a batch containing the CLI is uploaded,
-`publish.yml` verifies NuGet.org installation and emits a `puck-cli-pin` patch
-artifact holding the tool-manifest diff; apply it in the next source change to
-adopt the release. The same operation runs locally once the package is available:
-
-```sh
-puck nuget pin 0.1.0-alpha
-```
+`publish.yml` runs `puck nuget verify-published`, which waits for NuGet.org to
+serve the version, installs it in an empty tool path and runs it.
 
 It installs the published version in an empty tool path to prove it before
 editing the manifest, and uploads and commits nothing.
@@ -594,7 +589,7 @@ gh workflow run publish.yml --ref v1.2.0 -f packages=ByteTerrace.Puck.Assets -F 
 Only `main` or that version's tag can release, and its commit must belong to
 `main`'s history; `puck nuget gate` enforces that, `puck nuget tag` binds or
 verifies the tag, `puck nuget release` records the batch, and
-`puck nuget pin-published` waits for the published CLI before pinning it.
+`puck nuget verify-published` waits for the published CLI to install.
 Protect `v*` tags against
 modification and deletion. NuGet
 uploads are not transactional: successful uploads remain if a later upload

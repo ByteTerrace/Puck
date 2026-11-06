@@ -8,11 +8,9 @@ namespace Puck.Cli.Affected;
 
 /// <summary>
 /// <c>puck affected</c> — names the test suites and canaries a change needs, and with <c>--run</c> runs exactly those:
-/// the project graph chooses the suites, the recorded canary coverage and the manifests choose the canaries.
+/// the project graph chooses the suites, and the manifests, the documents they reach and the World's own sources choose the canaries.
 /// </summary>
 public static class AffectedCommand {
-    /// <summary>The coverage index, repository-relative: each World source file with the canaries that executed it.</summary>
-    public const string CoveragePath = "tests/Puck.Affected/canary-coverage.json";
     /// <summary>The tree of the repository's world asset packages, repository-relative.</summary>
     public const string ShippedTree = "worlds";
 
@@ -25,9 +23,6 @@ public static class AffectedCommand {
         newChar: '/',
         oldChar: '\\'
     );
-    private static IReadOnlyList<string> Lines(string text) => [.. text.Split(separator: '\n')
-        .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
-        .Where(predicate: static line => (line.Length > 0))];
 
     /// <summary>Reads the working tree's changes against <paramref name="since"/>: tracked files that differ from it,
     /// staged or not, plus untracked files git does not ignore; and of those, the ones deleted since it.</summary>
@@ -65,8 +60,8 @@ public static class AffectedCommand {
             return false;
         }
 
-        changed = [.. Lines(text: diff.Stdout).Concat(second: Lines(text: untracked.Stdout)).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal)];
-        deleted = Lines(text: removed.Stdout).ToHashSet(comparer: StringComparer.Ordinal);
+        changed = [.. CliText.Lines(text: diff.Stdout).Concat(second: CliText.Lines(text: untracked.Stdout)).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal)];
+        deleted = CliText.Lines(text: removed.Stdout).ToHashSet(comparer: StringComparer.Ordinal);
         error = string.Empty;
 
         return true;
@@ -148,9 +143,8 @@ public static class AffectedCommand {
     /// <param name="changed">The changed files the plan was made from.</param>
     /// <param name="plan">The plan.</param>
     /// <param name="error">The refusal, or empty.</param>
-    /// <param name="schemaSourceTypes">The types each file <c>puck schema</c> writes is generated from (<see cref="Gate.GateComposition.SchemaSourceTypes"/>).</param>
     /// <returns><see langword="true"/> when the plan was made.</returns>
-    public static bool TryPlan(string repositoryRoot, string since, Func<string, IReadOnlyList<Type>> schemaSourceTypes, out IReadOnlyList<string> changed, out AffectedPlan? plan, out string error) {
+    public static bool TryPlan(string repositoryRoot, string since, out IReadOnlyList<string> changed, out AffectedPlan? plan, out string error) {
         plan = null;
 
         if (!TryReadChanged(changed: out changed, deleted: out var deleted, error: out error, repositoryRoot: repositoryRoot, since: since)) {
@@ -166,15 +160,11 @@ public static class AffectedCommand {
 
         var closure = Closure(model: model, seeds: ["Puck.World"]);
 
-        var coverage = AffectedCoverage.Read(repositoryRoot: repositoryRoot);
-        var recorded = ((deleted.Count > 0)
-            ? AffectedCoverage.ReadAt(repositoryRoot: repositoryRoot, revision: since)
-            : null);
         // Reading every canary world is the cost of this map, so it is built only for a change a document can reach; the
         // base's map, over the tree the base recorded, only for a deleted file one can reach.
         var workingTree = new AffectedWorkingTree(root: repositoryRoot);
         using var baseTree = new AffectedRevisionTree(documentTrees: AffectedRevisionExport.DocumentTrees, revision: since, root: repositoryRoot);
-        // Each tree's kernels and post-process packages are read once, for both its documents' reach and its stand-ins.
+        // Each tree's kernels and post-process packages are read once, for its documents' reach.
         var workingShaders = new AffectedShaders(projects: projects, tree: workingTree);
         var baseShaders = new AffectedShaders(projects: projects, tree: baseTree);
         var reachedBy = new Lazy<IReadOnlyDictionary<string, IReadOnlySet<string>>>(valueFactory: () => AffectedDocuments.ReachedBy(
@@ -205,39 +195,17 @@ public static class AffectedCommand {
                 changed: changed,
                 consumersOf: AffectedConsumers.Search(projects: projects, repositoryRoot: repositoryRoot),
                 linkedBy: AffectedConsumers.Linking(projects: projects, repositoryRoot: repositoryRoot),
-                coverage: coverage,
                 declaresTests: path => File.ReadLines(path: Path.Combine(path1: repositoryRoot, path2: path)).Any(predicate: static line => line.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "test \"")),
                 projects: projects,
                 canariesReaching: path => ((Reachable(path: path) && reachedBy.Value.TryGetValue(key: path, value: out var reaching))
                     ? reaching
                     : none),
-                standInsFor: AffectedStandIns.Create(
-                    documented: source => reachedBy.Value.ContainsKey(key: source),
-                    indexed: [.. coverage.Keys],
-                    projects: projects,
-                    schemaSourceTypes: schemaSourceTypes,
-                    shaders: workingShaders,
-                    tree: workingTree
-                ),
                 worldClosure: closure,
                 worldInput: WorldInput,
                 compiledUnchanged: AffectedCompiledWorlds.Unchanged(changed: changed, repositoryRoot: repositoryRoot, since: since).Contains,
                 triviaOnly: path => AffectedCSharpTrivia.IsUnchanged(after: workingTree, before: baseTree, path: path),
                 proseOnly: path => AffectedManifestProse.IsUnchanged(after: workingTree, before: baseTree, path: path),
                 deleted: deleted,
-                // A file deleted since the base is placed through the index the base recorded, which is the only one that
-                // can still name it, or through the stand-ins the base's own tree gave it there.
-                recorded: recorded,
-                recordedStandInsFor: ((recorded is null)
-                    ? null
-                    : AffectedStandIns.Create(
-                        documented: source => recordedReachedBy.Value.ContainsKey(key: source),
-                        indexed: [.. recorded.Keys],
-                        projects: projects,
-                        schemaSourceTypes: schemaSourceTypes,
-                        shaders: baseShaders,
-                        tree: baseTree
-                    )),
                 // A deleted file is reached through the documents the base's tree held.
                 recordedCanariesReaching: path => ((Reachable(path: path) && recordedReachedBy.Value.TryGetValue(key: path, value: out var reaching))
                     ? reaching
@@ -371,8 +339,7 @@ public static class AffectedCommand {
     }
 
     /// <summary>Writes a plan as the verb prints it: one line per chosen suite (<c>suite</c>), world (<c>test</c>, run with
-    /// <c>puck test</c>) and canary (<c>canary</c>); parity; then
-    /// each unmapped and deleted source with the note that explains it.</summary>
+    /// <c>puck test</c>) and canary (<c>canary</c>), then the manifest and documentation checks, parity and baselines.</summary>
     /// <param name="plan">The plan.</param>
     /// <param name="into">The writer.</param>
     /// <exception cref="ArgumentNullException"><paramref name="plan"/> or <paramref name="into"/> is <see langword="null"/>.</exception>
@@ -413,24 +380,9 @@ public static class AffectedCommand {
             into.WriteLine(value: $"puck {string.Join(separator: ' ', value: baseline.CheckArguments())}");
         }
 
-        foreach (var path in plan.Unmapped) {
-            into.WriteLine(value: $"unmapped {path}");
-        }
-
-        if (plan.Unmapped.Count > 0) {
-            into.WriteLine(value: $"affected: {plan.Unmapped.Count} World source(s) are missing from {CoveragePath}, so no canary was chosen for them; record coverage with `puck affected --record` when the owner asks for a full run.");
-        }
-
-        foreach (var path in plan.Deleted) {
-            into.WriteLine(value: $"deleted {path}");
-        }
-
-        if (plan.Deleted.Count > 0) {
-            into.WriteLine(value: $"affected: {plan.Deleted.Count} deleted World source(s) are placed by neither {CoveragePath} nor the index the base recorded, directly or through the stand-ins the base's tree gave them, so no canary was chosen for them; a recording cannot place a file that no longer exists, and their projects' suites still run.");
-        }
     }
 
-    private static int Run(string? since, string? mergeBase, bool run, bool gpu, int gpuJobs, int suiteJobs, bool record, RootCommand root, GateComposition composition) {
+    private static int Run(string? since, string? mergeBase, bool run, bool gpu, int gpuJobs, int suiteJobs, RootCommand root, GateComposition composition) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refuse(verb: Verb, what: Environment.CurrentDirectory, why: "is not inside the Puck repository.");
         }
@@ -442,19 +394,12 @@ public static class AffectedCommand {
             return CliExit.Refuse(verb: Verb, what: "--gpu", why: "adds the canaries and parity to what --run runs, so it needs --run.");
         }
 
-        if (record) {
-            using var scratch = RunDirectory.Create(prefix: "puck-affected-");
-            var exit = Record(repositoryRoot, CliPaths.Tool, scratch.Path);
-            // A failed build or inner canary run keeps the recording World and transcript; coverage is unchanged.
-            scratch.Conclude(passed: (exit == CliExit.Success));
-            return exit;
-        }
 
         if (!TryResolveBase(error: out var baseError, mergeBase: mergeBase, repositoryRoot: repositoryRoot, resolved: out var resolved, since: since)) {
             return CliExit.Refuse(verb: Verb, what: (mergeBase ?? (since ?? "HEAD")), why: baseError);
         }
 
-        if (!TryPlan(changed: out var changed, error: out var error, plan: out var plan, repositoryRoot: repositoryRoot, schemaSourceTypes: composition.SchemaSourceTypes, since: resolved)) {
+        if (!TryPlan(changed: out var changed, error: out var error, plan: out var plan, repositoryRoot: repositoryRoot, since: resolved)) {
             return CliExit.Refuse(verb: Verb, what: resolved, why: error);
         }
 
@@ -477,12 +422,6 @@ public static class AffectedCommand {
         );
     }
 
-    /// <summary>Refreshes coverage only after the recording build and inner canary run succeed.</summary>
-    public static int Record(string repositoryRoot, string cli, string scratch, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? execute = null) =>
-        (AffectedCoverage.TryRecord(canaryExit: out _, cli: cli, error: out var error, execute: execute, repositoryRoot: repositoryRoot, scratch: scratch)
-            ? CliExit.Success
-            : CliExit.Refuse(verb: Verb, what: CoveragePath, why: error));
-
     /// <summary>Creates <c>--merge-base</c>, the revision whose merge base with <c>HEAD</c> a change is read against;
     /// <c>puck affected</c> and <c>puck gate</c> share it.</summary>
     /// <param name="description">What the verb compares against the merge base.</param>
@@ -503,11 +442,10 @@ public static class AffectedCommand {
         var gpuOption = Gpu();
         var gpuJobsOption = CanaryGpuJobs.Create();
         var suiteJobsOption = AffectedSuites.Jobs();
-        var recordOption = new Option<bool>(name: "--record") { Description = $"Record {CoveragePath}: build a World that records the methods it compiles, run the full canary set on it, and map each canary's methods to source files. A full run; do it when the owner asks for one." };
         var command = new Command(
             description: "Name the test suites and canaries a change needs, and with --run run exactly those.",
             name: Verb
-        ) { sinceOption, mergeBaseOption, runOption, gpuOption, gpuJobsOption, suiteJobsOption, recordOption };
+        ) { sinceOption, mergeBaseOption, runOption, gpuOption, gpuJobsOption, suiteJobsOption };
 
         command.Detail(detail: $"""
               Changed files are the working tree against --since (or against the merge base of HEAD
@@ -515,22 +453,13 @@ public static class AffectedCommand {
               A suite is chosen when its project, or any project it references (build-order-only
               references included), owns a changed file; a file in a directory no project owns chooses
               the projects whose sources name that directory. A canary is chosen when a changed file is
-              one its manifest names, lies in its directory, or is a source the canary executed when
-              coverage was last recorded ({CoveragePath}), or is a file the manifest's documents reach:
+              one its manifest names, lies in its directory, or is a file the manifest's documents reach:
               the layers, neighbour worlds and graph documents a world names, and the pass shaders a
-              graph document declares with their includes. Parity is chosen with any GPU canary. A file no
-              canary can execute is placed through the indexed sources it stands for: a project file or
-              NativeMethods list through its project's sources, a shader source or
-              include through the C# that names each kernel whose include closure reaches it, in the
-              kernel's project or one its build references, a post-process package's stage sources and
-              its frame interface through the canaries whose worlds name the package in views.post, or
-              the C# that draws post-process packages when none does, and a file puck schema writes through
-              the sources declaring the types it is generated from. A changed
-              World source neither the index nor a stand-in places is listed as unmapped rather than
-              widening the run. A file deleted since --since is placed by the index the base recorded,
-              directly or through the stand-ins the base's tree gave it, or by the canaries whose
-              documents reached it in the base's tree; one none of these places is listed as deleted,
-              never unmapped. A restore lock reaches its own project's suite alone, and every canary
+              graph document declares with their includes. A file deleted since --since is reached by
+              the canaries whose documents named it in the base's tree. Every canary is chosen when a
+              changed file belongs to a project the World executable is built from, since each canary
+              boots that build. Parity is chosen with any GPU canary.
+              A restore lock reaches its own project's suite alone, and every canary
               only when its project is one the World is built from. Build infrastructure (build/,
               Directory.Build.*, Directory.Packages.props, global.json, Puck.slnx, NuGet.config)
               reaches every suite, and every canary only when the file is an input of the World build.
@@ -538,7 +467,7 @@ public static class AffectedCommand {
               document compiles to the same value at the base and in the working tree: object member
               order and number spelling do not matter; array order does. Both paths of a JSON-to-source
               replacement are judged. Its owner's suites and changed test blocks still
-              run, and the path is neither unmapped nor unplaced deleted. Libraries, compositions,
+              run. Libraries, compositions,
               missing documents and failed compilations keep ordinary selection.
               A C# edit with equivalent syntax after stripping trivia reaches no suite or canary.
               Comments, XML documentation, whitespace and regions are ignored; other directive tokens
@@ -572,7 +501,6 @@ public static class AffectedCommand {
             gpu: parseResult.GetValue(option: gpuOption),
             gpuJobs: parseResult.GetValue(option: gpuJobsOption),
             mergeBase: parseResult.GetValue(option: mergeBaseOption),
-            record: parseResult.GetValue(option: recordOption),
             run: parseResult.GetValue(option: runOption),
             since: parseResult.GetValue(option: sinceOption),
             suiteJobs: parseResult.GetValue(option: suiteJobsOption),

@@ -1076,8 +1076,9 @@ the water strained, measured, and not yet fixed. The rendering capabilities
 the water lacks (presentation particles, near-geometry reflections on glass)
 are planned in [water rendering](water-rendering.md), whose W2 flow layer
 ([as built](water-rendering.md#w2-as-built)) and W1 glass medium
-([as built](water-rendering.md#w1-as-built), its GPU checks owed) are in, and
-whose W3 and W2's field source are the next lanes here; the items below are the
+([as built](water-rendering.md#w1-as-built), its timing and registers owed) are in, and
+whose W3, W2's field source and the two glass layers a pixel that W1's pavilion
+capture called for are the next lanes here; the items below are the
 system work beside them.
 
 - [medium] Cold mesh residency still misses the one-minute target. Attribute the
@@ -3519,8 +3520,7 @@ runs until the owner calls for qualification; then each is a packet.
   the behavioural proofs of the World's load-bearing seams on the real
   executable, the one gate for game behaviour. One live canary remains,
   `tests/Puck.World.Canaries/self-update` over the debug world (the launcher's
-  update and rollback); the rest wait under `experimental/`. The coverage map waits at `experimental/tests/Puck.Affected/canary-coverage.json`.
-  When they return, the runner's listener work finishes: a single companion
+  update and rollback); the rest wait under `experimental/`.  When they return, the runner's listener work finishes: a single companion
   authority still receives a pre-picked UDP port, because its document names its
   own endpoint as `host.authority` before it boots (the World would adopt its
   bound `--listen` endpoint when `host.authority` is absent), and the

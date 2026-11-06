@@ -327,9 +327,11 @@ the 2060.
    glass behind glass). The packet's open item; the sums already integrate
    absorption through every layer, and only the reflection and refraction
    use the nearest. A second front face per pixel in the glass target
-   doubles its words and the shade's reads. **Watched**: taken only when
-   the pavilion's pane shows the reservoir wrong in W1's capture, and then
-   as a second record in the same target, never a second pass.
+   doubles its words and the shade's reads. **Taken, not yet built**: W1's
+   capture through the pavilion's pane shows the reservoir as the pane's
+   tint alone, with no surface, waterline, medium or flow, since only the
+   pane is shaded. It is built as a second record in the same target, never
+   a second pass.
 4. **Caustics.** Every shipped system fakes them (UE's colour scale, HDRP's
    monochrome projection). The irradiance volume could carry a medium's
    refracted sun as its probes' light, which is correct and costs nothing
@@ -444,7 +446,7 @@ its own.
 | Rank | Step | Mechanism | Expected frame cost | Memory and bake | What it proves on the debug world |
 |---|---|---|---|---|---|
 | 1 | **W2** ([as built](#w2-as-built)). The flow layer, with the constant and lane sources, and the stream, falls and lake moved onto it as static geometry | W2; M1 (the eight stream legs share one geometry) | Two noise evaluations and a gradient per covered pixel, on water pixels only (Vlachos's 2 fetches and 21 ALU on 2010 hardware); the mesh pass loses 8 moving groups and their transform rows | The stream's bake groups go from eight to one shared; the falls' fourteen sheets and the foam paints stop being animated groups; `world.budget` and `[sdf.mesh-bake] done` read the cut | The stream flows and the falls fall in a presented burst with no draw record changing; a settled capture is still; lockstep stills repeat across two Worlds; the meadow's wind shimmer uses the same layer with a wind vector |
-| 2 | **W1** ([as built](#w1-as-built), its GPU checks owed). The medium response on the glass pass (in-scatter, contact ramp) and W4a (probes on glass), with every water surface on `glass` rows | W1, W4 | A probe gather and a few ALU per glass pixel; no new pass | None; the water's four field surfaces already bake as glass | The pool reads turquoise at depth and clear at the margin, with foam at the steps and the bridge piers; the falls sheet transmits the rock; the hall's windows and the lift's glass reflect their rooms; `world.counters gpu pass sdf.world$glass-shade` before and after |
+| 2 | **W1** ([as built](#w1-as-built), its GPU checks owed). The medium response on the glass pass (in-scatter, contact ramp) and W4a (probes on glass), with every water surface on `glass` rows | W1, W4 | A probe gather and a few ALU per glass pixel; no new pass | None; the water's four field surfaces already bake as glass | The pool reads turquoise at depth and clear at the margin, with foam at the steps and the bridge piers; the falls sheet transmits the rock; the lift's glass reflects its rooms; `world.counters gpu pass sdf.world$glass-shade` before and after |
 | 3 | **W3.** The particle pool with an authored emitter and generic motion, collided against a brick derived from the bake, drawn as quads split by the glass target | W3; M1 (the brick), M4 (capacity and the visibility box) | A fixed step over the pool's capacity and a fill-rate bounded by sprite size; the Deck decides the capacity the standard chooses | A pool's buffers at its capacity; a brick per region at the bake's cell | Splash at the plunge pool and droplets at the falls' foot, refracted where they fall behind the surface; leaves in the forest from the same pool; a presented burst at `debug.go pool` with `host.frames` before and after on both backends |
 | 4 | **W2's field source.** A flow row sampled through a sampled field, and the hydrology's derived transfer row, read from the frame's sampled table the [field surfaces](#field-surfaces-move-at-draw-time) introduced | W2 on M3 | One sampled-field read per covered pixel | A row per lattice | The stream bends around the bridge piers with no authored comb; `world.fields` shows the derived row |
 | 5 | **W4b.** The bounded screen-space march on glass | W4 | The authored tap count per glass pixel; measured first | None | The bridge reflects in the pool at the 4070's bar; the Deck's count decides whether the standard enables it |
@@ -512,18 +514,14 @@ revealed surface are functions of the thickness, `opaque - t` and the arriving
 light alone. `sdf-glass.comp.hlsl` is the one read site. Where it stops: glass
 behind glass reads the opaque image behind the nearer pane (option 3 above).
 
-**Owed.** The GPU checks have not run: settled captures at `debug.go pool`
-from the path's end and from the bridge on both backends (turquoise depth, a
-clear margin, foam at the steps and piers, the falls' rock through its sheet,
-the hall's windows reflecting their rooms, the reservoir through the
-pavilion's pane, which decides option 3), the flow moving on glass in a
-presented burst, `world.counters gpu pass sdf.world$glass-shade` and
-`world.gpu-timing` against the previous build, the glass kernel's registers
-beside the views kernel's, and the lockstep still. The standard's medium values
-are first choices that those captures tune. The stream sheet stands about
-10 cm over the lawn, with no bed cut beneath it, so it scatters strongly per
-metre and its contact reaches less than its depth. The falls, now glass, cast
-no shadow ([owned question](#owned-questions)).
+**Owed.** `world.gpu-timing` for the glass passes against the build before
+W1, in a quiet window, and the glass kernel's registers beside the views
+kernel's. The pool's medium reads turquoise at depth and clear at its margin
+only as far as its flat, featureless floor allows: the art's stones under the
+shallows are world authoring. The stream sheet stands about 10 cm over the
+lawn, with no bed cut beneath it, so it scatters strongly per metre and its
+contact reaches less than its depth. The falls, now glass, cast no shadow
+([owned question](#owned-questions)).
 
 ### W2 as built
 
