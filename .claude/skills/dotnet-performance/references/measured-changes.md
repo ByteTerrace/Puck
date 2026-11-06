@@ -28,6 +28,10 @@ techniques and the defects review found are what transfer. Each technique cites 
   Use its bounded duration, or stop the EventPipe session through DiagnosticsClient,
   and let the collector drain while the target remains alive. Killing a collector
   can leave a readable trace whose missing rundown makes managed stacks unusable.
+  Convert and analyze one trace sequentially: TraceEvent readers share its
+  `.etlx.new` intermediate, so concurrent readers can collide while creating it.
+  Inspect the output artifact too; a converter can print an exception and still
+  exit successfully.
 - **A lane proves a win on load-independent counters:** allocated bytes
   (`AllocationWindow`, `puck bench world`'s allocation rows), march and ray step
   counts, `world.budget` work counts, and `puck bench world`'s contact counts.

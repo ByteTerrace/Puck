@@ -322,10 +322,12 @@ landed geometry).
   dressed motion identities (`SdfMeshPathBake.cs:408, :425`; the `Dress` item
   under [other frame-time findings](#other-frame-time-findings)); scene
   emission's residue includes pick material labels (`WorldPickMap.cs:64`) and
-  shape-specific materials. A cold bake's remaining sites are readback-copy
-  byte arrays (`SdfMeshPathBake.cs:691`), fine-key dictionary entries
-  (`SdfSampledLattice.cs:861`) and contour merge doubles
-  (`SdfDualContouring.cs:702`). Continue with owned storage, through
+  shape-specific materials. A cold bake's remaining sites are the pooled
+  readback-copy byte arrays (`SdfMeshBakeGpuWork.Complete`), point rounds
+  (`SdfSampledLattice.CrossingPoints`, `SdfSampledLattice.GradientPoints`) and
+  contour merge doubles (`SdfDualContouring.Merge`). Refinement indexes already
+  fill owned storage directly; their managed growth/copy path is gone. Continue
+  with owned storage, through
   `IAllocator` and `MimallocAllocator` where it goes native; a shared
   cross-thread pool belongs to the memo.
 - Open from the allocation cuts:
