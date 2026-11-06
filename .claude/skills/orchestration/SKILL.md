@@ -24,6 +24,21 @@ to create work.
 
 ## Spend verification, not writing
 
+**Three phases, each with its own evidence (the owner's ruling: measurements
+on a noisy machine have no value, and measurement must never become the
+bottleneck).**
+
+| Phase | Who and when | Evidence | Never |
+|---|---|---|---|
+| Iterate | every lane, in parallel | load-independent only: counters, state hashes, bytes, executes, law results, captures; laws filtered to the step; a reproduce of only the scenarios the change reaches | a timing claim; a full suite per step; a second heavy job queued behind one's own |
+| Integrate | the lead, once per landing batch | full reproduce suites, the sweep against the tip report, windowed boots on both backends, over the merged batch | per-lane repetition of the same suites |
+| Measure | the lead, in a scheduled quiet window after each batch (about every two to three hours) | every queued timing question, run back to back on the idle machine: frozen before and after builds (`--world-artifact`) interleaved, repeated, reported as median and spread | a lane timing its own change; a window that waits for the machine to go quiet by itself |
+
+A lane with a timing question records a measurement request (the frozen
+builds, the command, what decides it) and hands back on its load-independent
+evidence; the lead's window answers it. Lanes keep coding and building through
+a window and defer only their next GPU or heavy job.
+
 Writing is cheap and verifying is expensive: builds, boots, suites and GPU
 windows on one shared machine set the pace, so the work in flight is bounded by
 what the machine can verify. How many lanes run at once has no fixed maximum
