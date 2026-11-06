@@ -50,16 +50,14 @@ namespace Puck.Cli;
 /// in-process self-invocations both go through <see cref="InvokeAsync(string[])"/>.
 /// </summary>
 public static class PuckRootCommand {
-    /// <summary>What the gate's verbs read from the verbs composed beside them: the source types behind each generated
-    /// schema (<c>puck schema</c>) and the grammar of each verb whose own arguments decide whether a run is GPU work
-    /// (<c>puck parity</c>, <c>puck counters</c>).</summary>
+    /// <summary>What the gate's verbs read from the verbs composed beside them: the grammar of each verb whose own
+    /// arguments decide whether a run is GPU work (<c>puck parity</c>, <c>puck counters</c>).</summary>
     public static GateComposition Gate { get; } = new(
         GpuVerbGrammars: new Dictionary<string, Func<Command>>(comparer: StringComparer.Ordinal) {
             ["counters"] = CountersCommand.Create,
             ["motion"] = MotionCommand.Create,
             ["parity"] = ParityCommand.Create,
-        },
-        SchemaSourceTypes: SchemaCommand.SourceTypesOf
+        }
     );
 
     /// <summary>Creates the root command. <paramref name="clock"/> is the CLI host's one clock: every deadline a verb

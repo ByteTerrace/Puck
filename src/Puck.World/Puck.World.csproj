@@ -19,10 +19,6 @@
         <PublishReadyToRun Condition="'$(PublishReadyToRun)' == '' and '$(PublishAot)' != 'true'">true</PublishReadyToRun>
         <TieredPGO>false</TieredPGO>
     </PropertyGroup>
-    <!-- A coverage-recording build (puck affected, record mode) stamps the metadata WorldMethodRecorder looks for. -->
-    <ItemGroup Condition="'$(PuckRecordMethods)' == 'true'">
-        <AssemblyMetadata Include="PuckRecordMethods" Value="true" />
-    </ItemGroup>
     <!-- Presentation builds and replaces large managed workspaces (irradiance hierarchies, probe caches and decoded
          mesh arrays). ConserveMemory reduces retention of freed LOH regions after these bursts. Published mesh
          payloads use the host allocator; host.memory reports those separately from managed commitment. -->

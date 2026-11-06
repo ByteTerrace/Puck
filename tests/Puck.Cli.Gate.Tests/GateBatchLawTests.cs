@@ -102,48 +102,6 @@ public sealed class GateBatchLawTests : GateRunLaws {
         }
     }
 }
-/// <summary><see cref="GateRun"/> records only with the GPU and only once every earlier qualification step passed.</summary>
-public sealed class GateRecordLawTests : GateRunLaws {
-    [InlineData(false, false)]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    [Theory]
-    public void RecordRequiresGpuAndEveryEarlierStepToPass(bool gpu, bool fails) {
-        using var branches = new Branches();
-        using var directory = new TemporaryDirectory(prefix: "puck-gate-record-law-");
-        var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: "")) { ExitCode = args => ((fails && (args[0] == "architecture")) ? 1 : 0) };
-        var result = Gate(branches, runner, directory, gpu: gpu, record: true);
-
-        Assert.Equal(actual: result.ExitCode, expected: (!gpu ? CliExit.Refused : (fails ? CliExit.Failed : CliExit.Success)));
-        if (!gpu) { Assert.Empty(collection: runner.Events); Assert.Contains(actualString: result.Error, expectedSubstring: "requires --gpu"); }
-        Assert.Equal(((gpu && !fails) ? 1 : 0), runner.Steps.Count(predicate: step => step.SequenceEqual(other: ["affected", "--record"])));
-        if (gpu && !fails) { Assert.Equal(["affected", "--record"], runner.Steps[^1]); }
-        var refused = ConsoleCapture.RunSplit(run: () => SuiteRoot.Invoke(args: ["gate", "--record"]));
-
-        Assert.Equal(actual: refused.ExitCode, expected: CliExit.Refused);
-        Assert.Contains(actualString: refused.Error, expectedSubstring: "requires --gpu");
-    }
-    [Fact]
-    public void RecordIsWithheldForEachPossibleFailedQualificationStep() {
-        using var branches = new Branches();
-
-        branches.Checkout.Write(name: "build/trigger.props", text: "<Project />");
-        branches.Checkout.Write(name: "tests/Puck.World.Canaries/example/positive.script.txt", text: "wire.errors\n\n");
-        // The change is the same for every failure, so it is read once; each failure executes it under its own runner.
-        var change = Plan(branches: branches);
-
-        foreach (var step in GatePlan.Steps.Where(predicate: step => ((step.Kind != GateStepKind.CopyCli) && !step.Record))) {
-            using var directory = new TemporaryDirectory(prefix: "puck-gate-record-failure-law-");
-            var runner = new FakeRunner(build: new GateStepResult(ExitCode: ((step.Kind == GateStepKind.Build) ? 1 : 0), Output: "")) {
-                ExitCode = args => ((args.TakeWhile(predicate: arg => !arg.StartsWith(comparisonType: StringComparison.Ordinal, value: "--")).First() == step.Arguments[0]) ? 1 : 0),
-            };
-
-            Assert.Equal(CliExit.Failed, Execute(branches, change, runner, directory, gpu: true, record: true).ExitCode);
-            Assert.DoesNotContain(collection: runner.Steps, filter: args => args.Contains(value: "--record"));
-        }
-    }
-}
 /// <summary><see cref="GateRun"/> consults admission immediately before each heavy step, waits for the GPU only on device steps, and refuses before starting a step whose admission timed out.</summary>
 public sealed class GateAdmissionLawTests : GateRunLaws {
     [Fact]
@@ -152,8 +110,8 @@ public sealed class GateAdmissionLawTests : GateRunLaws {
         using var directory = new TemporaryDirectory(prefix: "puck-gate-admission-law-");
         var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: ""));
 
-        Assert.Equal(CliExit.Success, Gate(branches, runner, directory, gpu: true, record: true).ExitCode);
-        string[] heavy = ["build", "affected", "Puck.DirectX.Tests", "Puck.Vulkan.Tests", "Puck.Platform.Windows.Tests", "docs citations", "affected record"];
+        Assert.Equal(CliExit.Success, Gate(branches, runner, directory, gpu: true).ExitCode);
+        string[] heavy = ["build", "affected", "Puck.DirectX.Tests", "Puck.Vulkan.Tests", "Puck.Platform.Windows.Tests", "docs citations"];
 
         Assert.Equal(heavy.Select(selector: name => ("admit " + name)), runner.Events.Where(predicate: entry => entry.StartsWith(comparisonType: StringComparison.Ordinal, value: "admit ")));
         foreach (var name in heavy) { Assert.Equal(("run " + name), runner.Events[(runner.Events.IndexOf(item: ("admit " + name)) + 1)]); }
@@ -164,9 +122,9 @@ public sealed class GateAdmissionLawTests : GateRunLaws {
         using var directory = new TemporaryDirectory(prefix: "puck-gate-admission-law-");
         var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: ""));
 
-        Assert.Equal(CliExit.Success, Gate(branches, runner, directory, gpu: true, record: true).ExitCode);
+        Assert.Equal(CliExit.Success, Gate(branches, runner, directory, gpu: true).ExitCode);
         // Heavy device-suite admission is inside the process runner's lease, not this preflight.
-        Assert.Equal(expected: [("build", false, false), ("affected", false, false), ("Puck.DirectX.Tests", true, false), ("Puck.Vulkan.Tests", true, false), ("Puck.Platform.Windows.Tests", true, false), ("docs citations", true, false), ("affected record", true, false)], actual: runner.Admissions);
+        Assert.Equal(expected: [("build", false, false), ("affected", false, false), ("Puck.DirectX.Tests", true, false), ("Puck.Vulkan.Tests", true, false), ("Puck.Platform.Windows.Tests", true, false), ("docs citations", true, false)], actual: runner.Admissions);
         // The baselines and affected's suites run CPU tests alone: none of their classes carries the Gpu trait.
         Assert.All(collection: GatePlan.Steps.Where(predicate: static step => ((step.Kind is GateStepKind.Build or GateStepKind.Baseline) || (step.Name == "affected"))), action: static step => Assert.False(condition: step.Gpu));
     }

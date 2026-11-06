@@ -3491,8 +3491,7 @@ runs until the owner calls for qualification; then each is a packet.
   the behavioural proofs of the World's load-bearing seams on the real
   executable, the one gate for game behaviour. One live canary remains,
   `tests/Puck.World.Canaries/self-update` over the debug world (the launcher's
-  update and rollback); the rest wait under `experimental/`. The coverage map waits at `experimental/tests/Puck.Affected/canary-coverage.json`.
-  When they return, the runner's listener work finishes: a single companion
+  update and rollback); the rest wait under `experimental/`.  When they return, the runner's listener work finishes: a single companion
   authority still receives a pre-picked UDP port, because its document names its
   own endpoint as `host.authority` before it boots (the World would adopt its
   bound `--listen` endpoint when `host.authority` is absent), and the

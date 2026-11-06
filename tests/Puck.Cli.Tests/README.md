@@ -37,8 +37,7 @@ The composition laws hold the contracts between verb assemblies: every command
 `puck affected` and `puck gate` print for another verb parses through the root
 (`AffectedSelectionLawTests`, `AffectedManifestCheckLawTests`);
 the composed grammars decide which running processes are GPU work
-(`HostGpuWorkLawTests`); generated schema files stand for the sources of
-their types (`AffectedStandInsLawTests`); and an ordinary verb refuses a
+(`HostGpuWorkLawTests`); and an ordinary verb refuses a
 misspelled option beside one that forwards its tokens (`MisspelledOptionLawTests`).
 `McpInteropTests` and `WorldReleaseRefusalLawTests` run the real `puck` process.
 

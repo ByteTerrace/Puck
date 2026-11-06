@@ -62,7 +62,7 @@ whose command no longer breaks its rule, until the row is deleted.
     assembly; the law counts the assemblies help loads.
 11. **A run directory outlives only a failure.** A verb that needs scratch space
     for one run (canary legs and packages, parity, counters, test, qualify,
-    docs citations, affected `--record`, firmware, `compile --check`, the
+    docs citations, firmware, `compile --check`, the
     formatter's closure evaluation, the NuGet smoke install) creates a uniquely
     named `puck-<verb>-…-<process id>-<token>` directory under the temporary
     directory through one policy, `RunDirectory` (`build/RunDirectory.cs`). A
@@ -82,7 +82,7 @@ whose command no longer breaks its rule, until the row is deleted.
 
 | Verb | What it is |
 |---|---|
-| [`puck affected`](#puck-affectedthe-checks-a-change-needs) | names the test suites, canaries and parity run a change needs, from the project graph and recorded canary coverage; `--run` runs the suites and worlds, and `--run --gpu` the canaries too. |
+| [`puck affected`](#puck-affectedthe-checks-a-change-needs) | names the test suites, canaries and parity run a change needs, from the project graph, the canary manifests and the documents they reach; `--run` runs the suites and worlds, and `--run --gpu` the canaries too. |
 | [`puck agents`](#puck-agents-linknative-skill-discovery) | creates or checks the checkout's native skills link, and compares the agent configuration of the working checkout, the project root and the main checkout. |
 | [`puck architecture`](../project-map.md) | the project-layering report: explains the build-time layering gate, `--map` prints the generated layering block of `docs/project-map.md`, and `--check` fails when the checked-in block drifts from the projects' declarations. |
 | [`puck artifacts`](#automation-commands) | capture, restore, and test the compiled-solution archive CI passes between jobs. |
@@ -94,7 +94,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
 | [`puck cartridge-cost`](#puck-cartridge-costcartridge-cost-measurement) | measures each cartridge primitive's sustained per-frame capacity on both real machines, the evidence the cartridge cost model's weights come from. |
 | [`puck cartridges`](#puck-cartridgestool-built-cartridges) | rebuilds or verifies the shipped cartridges built by repository tooling: `deck` writes the Humble Gaming Deck's test `.nes` images. |
-| [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`, with each world document's compiled world (`.puckb`) beside it; a `.world.json` path compiles to its compiled world alone. |
+| [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`, with each world document's compiled world (`.puckb`) beside it; all three are derived products that `.gitignore` excludes, never committed; a `.world.json` path compiles to its compiled world alone. |
 | [`puck counters`](#puck-counterswork-counter-collector) | the work-counter collector: boots the authored counters workload offscreen once per backend, writes a `puck.counters.report.v1` report with every count tagged by class, and checks the deterministic counts agree across backends; `counters compare` holds two reports to each other. |
 | [`puck creation`](#puck-creationcode-authored-sculpts) | the offline twin of `creation.sculpt(s)` and `creation.shape`: list registered sculpts, apply one to a world file, report a creation's shape budget/feature usage, or read each shape's law (exact, bound or uncertified distance, CPU and contact verdicts). |
 | [`puck declarations`](#puck-declarationsdeclaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
@@ -107,7 +107,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
-| [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: checks the lock files with a locked restore, builds the solution and the file app, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations; `--record` refreshes coverage after a green GPU qualification. |
+| [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: checks the lock files with a locked restore, builds the solution and the file app, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations. | |
 | [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due. |
 | [`puck landing`](#puck-landingthe-leads-landing-checks) | the lead's checks before landing a lane: `landing loss` refuses a commit that silently drops content its author never worked from, and `landing handback` checks a lane branch's commits against the hand-back contract (the `Brief:` line, subjects, trailers, plumbing and docs links). |
 | [`puck lanes`](#puck-lanesone-line-per-worktree) | prints one line per worktree: branch, commits ahead, changes, last commit, newest write, log, lease and stall state; `--watch` prints only the changes. |
@@ -809,9 +809,11 @@ base, so passing both is refused.
   prints a `docs-links` line and `puck docs links`, which `--run` runs over the
   whole corpus ([`docs links`](#docs-linksthe-documentation-rot-check)).
 - **Canaries** follow what they exercise. A canary is chosen when a changed
-  file lies in its directory, is a world, script or fixture its manifest
-  names, or is a source file the canary executed when coverage was last
-  recorded in [`tests/Puck.Affected`](../../tests/Puck.Affected/README.md).
+  file lies in its directory, or is a world, script or fixture its manifest
+  names. Every canary is chosen when a changed file belongs to a project the
+  `Puck.World` executable is built from (each canary boots that build), unless a
+  manifest names the file or the documents below reach it, which choose only
+  those canaries.
   A canary is also chosen for any file its manifest's documents reach, read
   with the documents' own readers: a world reaches the layers it composes,
   the neighbour worlds its adjacencies name, the `.graph.json` documents its
@@ -831,7 +833,7 @@ base, so passing both is refused.
   member order and number spelling do not matter (`1.0` equals `1`, `0.50` equals `0.5`);
   array order and every member's value do. A JSON-to-source replacement judges
   both paths. The owner's suites and changed test blocks still
-  run, and neither path is listed as `unmapped` or unplaced `deleted`.
+  run.
   Libraries and compositions keep ordinary selection, as do missing documents
   and failed compilations: none establishes that the compiled value is unchanged.
 - A C# edit whose syntax is equivalent after stripping trivia chooses no suite,
@@ -849,40 +851,20 @@ base, so passing both is refused.
   fails strict loading. An execution or verdict field change chooses the run.
   These rules leave the gate's repository checks intact: format
   for changed C# sources, and docs citations in the GPU gate. JSON manifests are not formatter inputs.
-- A file no canary can execute is placed through the indexed C# sources it
-  stands for. A project file or `NativeMethods.txt` stands for its project's
-  sources. A restore lock (`packages.lock.json`) reaches its own project's
+- A restore lock (`packages.lock.json`) reaches its own project's
   suite alone, never the projects that reference it, and every canary only when
   its project is one the World is built from. Build infrastructure reaches every
   suite, and every canary only when the file is an input of the World build: one
   of the paths the World build key hashes (`WorldArtifactClosure`), which
-  include every file at the repository root. A shader source or include stands for the C# that
-  names, by its file name, each kernel whose include closure reaches it: the
-  kernels are the stage sources the projects' shader items declare, the
-  Direct3D 11 kernels (`Direct3D11KernelSource`) among them, and the naming C#
-  may sit in the kernel's project or any project its build references, as a
-  conversion pass's name is a constant in `ImageSourceConversion`. A
-  post-process package's stage sources (the kernels at
-  `<Directory>/<stem>.hlsl` for the stages its catalog entry declares) with
-  their includes, and the frame interface generated for it, are placed through
-  the canaries whose worlds name the package in `views.post`, read as the rest
-  of a canary's documents are. A package no canary's world names falls back to
-  the C# declaring `PostProcessPackage`, which draws with every post-process
-  package's stages. A file
-  `puck schema` writes stands for the sources declaring the types it is
-  generated from. A shader that no kernel's loader, post-process package or
-  canary's documents reach has no stand-in.
-- A changed `Puck.World` source that neither the coverage index nor a stand-in
-  places is listed as `unmapped`. It chooses no canary; the list says coverage
-  is due for a fresh recording.
-- A file deleted since `--since` can never be recorded, so it is never
-  `unmapped`. The index as the base revision recorded it places it, choosing
-  the canaries that executed it, directly or through the stand-ins the base's
-  own tree gave it: a deleted shader stands for the loader of each base kernel
-  whose closure reached it, read through `git show <since>:<path>` and never
-  from the working tree. It is also placed by document reach in the base's
-  tree: each canary's worlds and graph documents are read as the base recorded
-  them, through the same readers, so a deleted pass source that a base graph
+  include every file at the repository root. A shader source or include of a
+  project the World is built from chooses the canaries whose documents reach it
+  (a post-process package's stage sources with their includes, and the frame
+  interface generated for it, are reached through the canaries whose worlds
+  name the package in `views.post`, read as the rest of a canary's documents
+  are), and every canary when none does.
+- A file deleted since `--since` is reached through the documents of the
+  base's tree: each canary's worlds and graph documents are read as the base
+  recorded them, through the same readers, so a deleted pass source that a base graph
   document declared, or an asset a base world named, chooses the canaries whose
   documents reached it there. A base `.puck` source composes through an export
   of the base revision's document trees (`src/Puck.World/Assets`,
@@ -891,9 +873,9 @@ base, so passing both is refused.
   deleted when the selection ends), because the composer reads files. A git run
   the export needs that fails, or does not finish within two minutes, refuses
   the selection by name. The canaries are today's, since only a canary
-  that exists now can run. One none of these places is listed as `deleted`, and
-  its project's suites still run. Nothing reads a deleted file from disk.
-
+  that exists now can run. A deleted source of a project the World is built from
+  chooses every canary, and its project's suites still run. Nothing reads a
+  deleted file from disk.
 - Build infrastructure (`build/`, `Directory.Build.*`, `global.json`,
   `Puck.slnx`) chooses every suite. Prose, `.claude/`, `editors/` and
   `experimental/` choose nothing.
@@ -933,25 +915,6 @@ not run, because `puck parity` takes the parity world it compares and no live
 world is one.
 [`puck gate`](#puck-gatethe-change-scoped-gate) runs this step on the
 candidate's own CLI.
-
-`--record` refreshes the coverage index. It builds a `Puck.World` that records
-every method the runtime compiles (`-p:PuckRecordMethods=true`; no other build
-carries the recorder), runs the full canary set on it, and maps each leg's
-methods to their source files through the build's portable PDBs. It is a full
-run, so it happens when the owner asks for one; between recordings a new or
-moved source shows up as `unmapped`.
-A nonzero inner canary exit refuses recording with exit 2, naming that exit and
-the kept transcript, and leaves the coverage file byte-identical. Only a successful
-inner run can replace coverage. Every named leg directory must be readable; a missing leg,
-unreadable method record or failed coverage write refuses with exit 2 and names the
-kept transcript. Coverage is replaced atomically after all legs are read, and leg
-evidence is removed only after that replacement succeeds.
-The recording runs in one run directory that holds the recording World and
-`canary.transcript.txt`, the inner canary run's exit code, standard output and
-standard error. The inner run keeps its legs (`--keep-transcripts`) until the
-recording has read them. When the recording and the inner run both pass, the
-legs and the run directory are deleted; when either fails, all of them are kept
-and named (see [Conventions](#conventions)).
 
 ## `puck gate`—the change-scoped gate
 
@@ -995,9 +958,6 @@ could know it. The plan runs serially in this order:
 18. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
 19. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
 20. `docs citations`: `puck docs citations`, only with `--gpu`.
-21. `affected record`: `puck affected --record`, only with `--gpu --record`
-    and only after every earlier step passes. It refreshes canary coverage.
-
 The device suites run `dotnet test --project <suite> -c Release --no-build` over the
 solution build's binaries, as affected's suites do, since Microsoft.Testing.Platform hands
 MSBuild switches to the test application, which refuses them. Each selects its device laws
@@ -1019,7 +979,7 @@ law requires every baseline check to have a baseline step.
 
 Before the solution build, affected run, each baseline check, selected canaries
 and parity, each device suite, each counters
-workload, citations and recording, admission uses
+workload and citations, admission uses
 [`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s default
 thresholds in-process. Memory and disk decide: every heavy step waits for free
 memory over the capacity threshold (5 GB) and free disk over the pressure
@@ -1027,8 +987,7 @@ threshold (10 GB), since running out of either is what fails a build or a heavy
 suite. CPU load only slows a step, so it is advisory: a step admitted while the
 CPU is over the capacity threshold (50%) runs, and the gate prints the load it
 ran under; the gate never waits or refuses for CPU alone. A step that opens a
-device (the canaries, parity, each device suite, counters, citations and
-recording, the steps that run only with `--gpu`) also waits for an idle GPU; the
+device (the canaries, parity, each device suite, counters and citations, the steps that run only with `--gpu`) also waits for an idle GPU; the
 build, affected run and baseline checks run no `Gpu`-trait test and never wait
 on a GPU holder. A heavy suite (`Puck.World.Tests` or `Puck.World.Presentation.Tests`, whatever its filter) also
 holds the same `heavy` lease as `puck lease heavy` through admission and execution.
@@ -1044,8 +1003,7 @@ half an hour and a gate can queue behind two; expiry refuses the remaining run. 
 reusable MSBuild nodes are not GPU holders.
 
 A failed build or CLI copy stops the gate. Other failed steps allow later checks
-to run, but prevent recording. Checks leave their ledgers untouched;
-`--record` requires `--gpu` and writes coverage only after successful qualification.
+to run. Checks write nothing.
 `gate.log` keeps every step's full output. Beside it, `gate.steps` flushes a line
 at each start and exit, naming the step, its exit code (`-` until it exits),
 elapsed whole seconds and an ISO-8601 UTC time from the CLI host's clock. The
@@ -1333,7 +1291,7 @@ keeps both and names each with a `run directory kept:` line, as does a run that
 stops before every proof reported (see [Conventions](#conventions)). The run's
 shader packages follow the run's verdict the same way. `--keep-transcripts`
 leaves every leg's directory in place for a caller that reads the transcripts
-afterwards and removes them itself, as `puck affected --record` does.
+afterwards and removes them itself.
 
 `puck canary --merge` is the merge gate. The automatic set alone skips every
 offscreen GPU proof, because each requires `gpu`; `--merge` runs the union of
@@ -1643,7 +1601,6 @@ travels and any boot can be asked to load one:
 ```text
 puck test <path>                       a .puck source, a *.world.json document, or a
                                        directory of either
-puck test <path> --host server         the real Puck.World executable, headless (the default)
 puck test <path> --world-artifact <p>  boot this already-built Puck.World.dll instead of
                                        the stored build of the checkout's sources
 puck test <path> --keep <dir>          run in <dir> and keep it: every generated test world
@@ -1814,10 +1771,8 @@ Exit codes: 0 every verdict passed and every row answered what it declared, 1 a
 verdict failed or a row's recorded outcome was not the one it declared, 2 usage —
 a world declaring no `schedule` section or no verdict row, a build or boot
 refusal, a leg that did not reach its authored export tick or account for every
-declared row, a row whose outcome the host rather than the world answered, a
-world whose `--reproduce` runs disagreed, or `--host browser`, which is refused by name
-because the browser engine host has no command ingress, principal or
-authoritative server to submit a scheduled command through.
+declared row, a row whose outcome the host rather than the world answered, or a
+world whose `--reproduce` runs disagreed.
 
 The worlds are under [`experimental/tests/Puck.World.Verdicts`](../../experimental/tests/Puck.World.Verdicts/README.md);
 the pairs reproducing each repaired hole are in

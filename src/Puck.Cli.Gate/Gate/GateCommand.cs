@@ -8,10 +8,7 @@ namespace Puck.Cli.Gate;
 public static class GateCommand {
     private const string Verb = "gate";
 
-    private static int Run(string target, bool gpu, bool record, int suiteJobs, int gpuJobs, TimeProvider clock, GateComposition composition, CancellationToken cancellationToken) {
-        if (record && !gpu) {
-            return CliExit.Refuse(verb: Verb, what: "--record", why: "requires --gpu and an all-green qualification.");
-        }
+    private static int Run(string target, bool gpu, int suiteJobs, int gpuJobs, TimeProvider clock, GateComposition composition, CancellationToken cancellationToken) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -31,11 +28,9 @@ public static class GateCommand {
             gpu: gpu,
             gpuJobs: gpuJobs,
             repositoryRoot: repositoryRoot,
-            record: record,
             suiteJobs: suiteJobs,
             clock: clock,
             runner: new ProcessGateRunner(cancellationToken: cancellationToken, clock: clock, gpuVerbGrammars: composition.GpuVerbGrammars),
-            schemaSourceTypes: composition.SchemaSourceTypes,
             target: target
         );
     }
@@ -49,13 +44,12 @@ public static class GateCommand {
         var gpuOption = AffectedCommand.Gpu();
 
         gpuOption.Description = "Add affected canaries (side by side, up to --gpu-jobs legs on the GPU) and parity, then device suites and docs citations, one step after another.";
-        var recordOption = new Option<bool>("--record") { Description = "Requires --gpu; refresh canary coverage only after every qualification step passes." };
         var gpuJobsOption = Canary.CanaryGpuJobs.Create();
         var suiteJobsOption = AffectedSuites.Jobs();
         var command = new Command(
             description: "Build the solution and run the checks a branch's change needs, against its merge base.",
             name: Verb
-        ) { mergeBaseOption, gpuOption, gpuJobsOption, recordOption, suiteJobsOption };
+        ) { mergeBaseOption, gpuOption, gpuJobsOption, suiteJobsOption };
 
         mergeBaseOption.Required = true;
         command.Detail(detail: (GatePlan.Detail() + $"""
@@ -63,7 +57,7 @@ public static class GateCommand {
             Baseline steps run only when affected reaches their owning project or declared data inputs.
             The affected step runs its suites side by side up to --suite-jobs. The chosen canaries, side by
             side up to --gpu-jobs legs on the GPU, and parity follow the baseline checks, only with --gpu.
-            Checks write nothing; --record writes coverage.
+            Checks write nothing.
             Before each heavy step, admission waits for memory and disk headroom by host load's default thresholds.
             CPU load is advisory: a step runs whatever the CPU, and the gate prints a load over the threshold.
             A step that opens a device (the --gpu steps) also waits for an idle GPU, and a heavy suite
@@ -73,18 +67,17 @@ public static class GateCommand {
             A step waits at most {HostAdmission.Timeout.TotalMinutes:0} minutes and a heavy suite {CliLease.DefaultWait.TotalHours:0} hours, reporting when waiting
             starts, each new holder, a still-waiting line every {HostAdmission.Heartbeat.TotalMinutes:0} minutes, and when capacity returns.
             The locks check runs first, from this CLI rather than the copy it builds, and the solution build restores nothing.
-            A failed locked restore, build or CLI copy stops the run. Other failures allow later checks, but skip recording.
+            A failed locked restore, build or CLI copy stops the run. Other failures allow later checks.
             gate.log holds full output; gate.steps records each start and exit with UTC time and whole seconds.
             Both files are kept and named in the summary. Run from a CLI copy outside the checkout.
 
-            Exit codes: 0 every step passed; 1 a step failed; 2 refused (invalid record, no merge base,
+            Exit codes: 0 every step passed; 1 a step failed; 2 refused (no merge base,
             admission timeout, or a CLI running from the checkout it would rebuild).
             """));
         command.SetAction(action: (parseResult, cancellationToken) => Task.FromResult(result: Run(
             gpu: parseResult.GetValue(option: gpuOption),
             gpuJobs: parseResult.GetValue(option: gpuJobsOption),
             suiteJobs: parseResult.GetValue(option: suiteJobsOption),
-            record: parseResult.GetValue(option: recordOption),
             clock: clock,
             composition: composition,
             cancellationToken: cancellationToken,

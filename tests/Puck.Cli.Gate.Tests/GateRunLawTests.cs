@@ -78,7 +78,6 @@ public abstract class GateRunLaws {
 
             if (arguments[0] == "canary") { name = "affected canaries"; }
 
-            if (arguments.Contains(value: "--record")) { name += " record"; }
             Execute(name: name);
             Steps.Add(item: [.. arguments]);
 
@@ -149,25 +148,22 @@ public abstract class GateRunLaws {
 
     // The change a run reads, planned once for laws that execute it under many runners.
     private protected static GateChange Plan(Branches branches, string target = "main") {
-        Assert.True(condition: GateRun.TryPlan(change: out var change, error: out var error, refused: out _, repositoryRoot: branches.Checkout.Root, schemaSourceTypes: SuiteRoot.Composition.SchemaSourceTypes, target: target), userMessage: error);
+        Assert.True(condition: GateRun.TryPlan(change: out var change, error: out var error, refused: out _, repositoryRoot: branches.Checkout.Root, target: target), userMessage: error);
         return change;
     }
-    private protected static (int ExitCode, string Output, string Error) Execute(Branches branches, GateChange change, FakeRunner runner, TemporaryDirectory directory, bool gpu = false, bool record = false) => ConsoleCapture.RunSplit(run: () => GateRun.Execute(
+    private protected static (int ExitCode, string Output, string Error) Execute(Branches branches, GateChange change, FakeRunner runner, TemporaryDirectory directory, bool gpu = false) => ConsoleCapture.RunSplit(run: () => GateRun.Execute(
         change: change,
         clock: runner.Clock,
         directory: directory.RootPath,
         gpu: gpu,
         gpuJobs: 3,
-        record: record,
         repositoryRoot: branches.Checkout.Root,
         runner: runner,
         suiteJobs: 2
     ));
-    private protected static (int ExitCode, string Output, string Error) Gate(Branches branches, FakeRunner runner, TemporaryDirectory directory, bool gpu = false, string target = "main", bool record = false) => ConsoleCapture.RunSplit(run: () => GateRun.Run(
+    private protected static (int ExitCode, string Output, string Error) Gate(Branches branches, FakeRunner runner, TemporaryDirectory directory, bool gpu = false, string target = "main") => ConsoleCapture.RunSplit(run: () => GateRun.Run(
         directory: directory.RootPath,
-        schemaSourceTypes: SuiteRoot.Composition.SchemaSourceTypes,
         gpu: gpu,
-        record: record,
         clock: runner.Clock,
         gpuJobs: 3,
         repositoryRoot: branches.Checkout.Root,
@@ -234,7 +230,6 @@ public sealed partial class GateRunLawTests : GateRunLaws {
             actual: runner.Steps.Skip(count: 1),
             expected: new[] {
                 new[] { "format", "--check", "--file-list", fileList },
-                ["docs", "links"],
                 ["schema", "--check"],
                 ["architecture", "--check"],
                 ["registry", "--check"],
@@ -255,7 +250,7 @@ public sealed partial class GateRunLawTests : GateRunLaws {
         var (exitCode, output, _) = Gate(branches: branches, directory: directory, runner: runner);
 
         Assert.Equal(actual: exitCode, expected: CliExit.Failed);
-        Assert.Equal(actual: runner.Steps.Count, expected: 9);
+        Assert.Equal(actual: runner.Steps.Count, expected: 8);
         Assert.Contains(actualString: output, expectedSubstring: "gate: schema FAILED (exit 1, ");
         Assert.Contains(actualString: output, expectedSubstring: "gate: FAILED: schema; full output in ");
         Assert.Contains(expectedSubstring: "===== schema (exit 1)\noutput of schema", actualString: File.ReadAllText(path: directory.PathOf(name: "gate.log")).ReplaceLineEndings(replacementText: "\n"));

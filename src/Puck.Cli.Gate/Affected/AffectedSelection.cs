@@ -23,21 +23,16 @@ public sealed record AffectedCanary(string Directory, IReadOnlyList<string> File
 /// <param name="Parity">Whether <c>puck parity</c> must run: a chosen canary renders on a GPU, so the change reaches
 /// the render path parity compares across backends.</param>
 /// <param name="Suites">The test suites, ordinal order.</param>
-/// <param name="Unmapped">Changed World sources the coverage index does not know, so no canary could be chosen for
-/// them; ordinal order.</param>
-/// <param name="Deleted">World sources deleted since the base that neither the current index nor the one the base
-/// recorded names, so no canary could be chosen for them and no recording ever can; ordinal order.</param>
 /// <param name="Worlds">Changed <c>.puck</c> sources that declare <c>test</c> blocks, for <c>puck test</c>; ordinal
 /// order.</param>
 /// <param name="DocsLinks">Whether <c>puck docs links</c> must run: a change touched a page of the documentation corpus
 /// (<see cref="DocsCorpus"/>), a C# source whose declarations a page may cite, or deleted a file a page may link.</param>
-public sealed record AffectedPlan(IReadOnlyList<BaselineArtifact> Baselines, IReadOnlyList<string> Canaries, IReadOnlyList<string> CanaryChecks, bool Everything, bool Parity, IReadOnlyList<string> Suites, IReadOnlyList<string> Unmapped, IReadOnlyList<string> Worlds, IReadOnlyList<string> Deleted, bool DocsLinks = false);
+public sealed record AffectedPlan(IReadOnlyList<BaselineArtifact> Baselines, IReadOnlyList<string> Canaries, IReadOnlyList<string> CanaryChecks, bool Everything, bool Parity, IReadOnlyList<string> Suites, IReadOnlyList<string> Worlds, bool DocsLinks = false);
 /// <summary>
 /// Chooses the suites and canaries a set of changed files needs, and nothing wider. Suites follow the project graph:
-/// a changed project and every project that references it, transitively. Canaries follow what they were recorded
-/// executing (the coverage index) plus the files their manifests name. A change the rules cannot place is reported,
-/// never silently widened into "run everything". A file the index cannot know, such as a project file or a shader, is
-/// placed through the indexed sources it stands for.
+/// a changed project and every project that references it, transitively. Canaries follow the files their manifests name
+/// and the documents those files reach, and every canary follows a change to a source of the projects the World is
+/// built from, since each canary boots that build.
 /// </summary>
 public static class AffectedSelection {
     // Changing any of these changes how every project builds, so it reaches every suite; it reaches the canaries only
@@ -78,8 +73,6 @@ public static class AffectedSelection {
     /// <param name="changed">The changed files, repository-relative with forward slashes.</param>
     /// <param name="projects">Every project in the graph.</param>
     /// <param name="canaries">Every canary.</param>
-    /// <param name="coverage">The coverage index: each source file the recording saw, with the canary ids that executed
-    /// it — an empty set for a file none executed. Empty when never recorded.</param>
     /// <param name="consumersOf">The projects whose sources name a file that belongs to no project, such as a test
     /// data directory; empty when none do.</param>
     /// <param name="worldClosure">The projects the World executable is built from, itself included.</param>
@@ -89,21 +82,13 @@ public static class AffectedSelection {
     /// <param name="declaresTests">Whether a changed <c>.puck</c> source declares <c>test</c> blocks.</param>
     /// <param name="canariesReaching">The canaries whose manifest worlds and fixtures reach a changed file through the
     /// documents they name (<see cref="AffectedDocuments"/>); none when none do.</param>
-    /// <param name="standInsFor">The indexed sources a changed file the index does not know stands for
-    /// (<see cref="AffectedStandIns"/>): their canaries are its canaries, and a file with an indexed stand-in is not
-    /// unmapped.</param>
     /// <param name="compiledUnchanged">Whether a changed shipped world file compiles to the same document value at the
     /// base and the head (<see cref="AffectedCompiledWorlds"/>): a canary boots the compiled world, so such a file reaches
-    /// its suites but no canary, and it is never unmapped.</param>
+    /// its suites but no canary.</param>
     /// <param name="triviaOnly">Whether a C# edit changes only trivia, so reaches no execution.</param>
     /// <param name="proseOnly">Whether a manifest edit changes only prose, so needs its strict load/list check.</param>
     /// <param name="deleted">The changed files deleted since the base, or <see langword="null"/> for none: nothing reads
-    /// them, and one no index places is listed in <see cref="AffectedPlan.Deleted"/>, never as unmapped.</param>
-    /// <param name="recorded">The index as the base recorded it, which places a deleted file the current index no longer
-    /// names, or <see langword="null"/> for none.</param>
-    /// <param name="recordedStandInsFor">The stand-ins a deleted file had in the tree the base recorded
-    /// (<see cref="AffectedStandIns"/> over <see cref="AffectedRevisionTree"/>), looked up in <paramref name="recorded"/>
-    /// and then the current index, or <see langword="null"/> for none.</param>
+    /// them.</param>
     /// <param name="recordedCanariesReaching">The canaries whose manifest worlds and fixtures reached a deleted file
     /// through the documents the base's tree held (<see cref="AffectedDocuments"/> over
     /// <see cref="AffectedRevisionTree"/>), or <see langword="null"/> for none; a deleted file is never reached in the
@@ -116,19 +101,15 @@ public static class AffectedSelection {
         IReadOnlyList<string> changed,
         IReadOnlyList<AffectedProject> projects,
         IReadOnlyList<AffectedCanary> canaries,
-        IReadOnlyDictionary<string, IReadOnlySet<string>> coverage,
         Func<string, IReadOnlyList<string>> consumersOf,
         IReadOnlySet<string> worldClosure,
         Func<string, bool> declaresTests,
-        Func<string, IReadOnlyList<string>> standInsFor,
         Func<string, IReadOnlySet<string>> canariesReaching,
         Func<string, bool> worldInput,
         Func<string, bool>? compiledUnchanged = null,
         Func<string, bool>? triviaOnly = null,
         Func<string, bool>? proseOnly = null,
         IReadOnlySet<string>? deleted = null,
-        IReadOnlyDictionary<string, IReadOnlySet<string>>? recorded = null,
-        Func<string, IReadOnlyList<string>>? recordedStandInsFor = null,
         Func<string, IReadOnlySet<string>>? recordedCanariesReaching = null,
         Func<string, IReadOnlyList<string>>? linkedBy = null
     ) {
@@ -141,8 +122,6 @@ public static class AffectedSelection {
         var selected = new SortedSet<string>(comparer: StringComparer.Ordinal);
         var checks = new SortedSet<string>(comparer: StringComparer.Ordinal);
         var effective = new List<string>();
-        var unmapped = new SortedSet<string>(comparer: StringComparer.Ordinal);
-        var gone = new SortedSet<string>(comparer: StringComparer.Ordinal);
         var worlds = new SortedSet<string>(comparer: StringComparer.Ordinal);
         // Deepest directory first, so a nested project owns its files rather than its parent.
         var owners = projects.OrderByDescending(keySelector: static project => project.Directory.Length).ToArray();
@@ -220,33 +199,6 @@ public static class AffectedSelection {
 
             selected.UnionWith(other: reaching);
 
-            var mapped = (
-                coverage.TryGetValue(key: path, value: out var executedBy) ||
-                (isDeleted && (recorded?.TryGetValue(key: path, value: out executedBy) ?? false)) ||
-                named ||
-                (reaching.Count > 0)
-            );
-
-            if (executedBy is not null) {
-                selected.UnionWith(other: executedBy);
-            } else {
-                // A deleted file stands for what the tree the base recorded said it stood for, in the index that base
-                // recorded; a file the working tree holds stands for what it says now, in the current index.
-                var standIns = (isDeleted
-                    ? (recordedStandInsFor?.Invoke(arg: path) ?? [])
-                    : standInsFor(arg: path));
-
-                foreach (var standIn in standIns) {
-                    if (
-                        (isDeleted && (recorded?.TryGetValue(key: standIn, value: out var standInExecutedBy) ?? false)) ||
-                        coverage.TryGetValue(key: standIn, value: out standInExecutedBy)
-                    ) {
-                        mapped = true;
-                        selected.UnionWith(other: standInExecutedBy);
-                    }
-                }
-            }
-
             var owner = owners.FirstOrDefault(predicate: project => IsUnder(path: path, directory: project.Directory));
 
             if (linkedBy is not null) {
@@ -263,14 +215,9 @@ public static class AffectedSelection {
 
             _ = seeds.Add(item: owner.Name);
 
-            if (
-                worldClosure.Contains(item: owner.Name) &&
-                !mapped
-            ) {
-                _ = (isDeleted
-                    ? gone.Add(item: path)
-                    : unmapped.Add(item: path));
-            }
+            // A file of a project the World is built from is an input of every canary's World, unless a manifest names it
+            // or documents reach it: those canaries are then the ones whose Worlds can execute it.
+            worldBuild |= (!named && (reaching.Count == 0) && worldClosure.Contains(item: owner.Name));
         }
 
         if (worldBuild) {
@@ -326,9 +273,7 @@ public static class AffectedSelection {
             Everything: everything,
             Parity: parity,
             Suites: [.. reached.Where(predicate: static project => project.IsSuite).Select(selector: static project => project.Name).Order(comparer: StringComparer.Ordinal)],
-            Unmapped: [.. unmapped],
             Worlds: [.. worlds],
-            Deleted: [.. gone],
             DocsLinks: docsLinks
         );
     }

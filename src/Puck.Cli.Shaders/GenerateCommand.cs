@@ -33,67 +33,22 @@ public static class GenerateCommand {
     /// <returns>0 when every include was written or matched and none is unowned or missing, otherwise 1.</returns>
     public static int Run(string repositoryRoot, IReadOnlyList<string> files, RenderGraphPackageCatalog packages, bool check) {
         var problems = new List<string>();
-        var matched = true;
-        var current = new List<string>();
+        var includes = Includes(files: files, packages: packages, problems: problems);
+        var matched = CliGeneratedFile.WriteOrCheckAll(
+            check: check,
+            detail: "",
+            eachFile: true,
+            files: [.. includes.Select(selector: static include => new GeneratedFile(RelativePath: include.Path, Text: include.Generate()))],
+            repositoryRoot: repositoryRoot,
+            source: "the model",
+            verb: Verb
+        );
 
-        foreach (var include in Includes(files: files, packages: packages, problems: problems)) {
-            if (CliGeneratedFile.WriteOrCheck(
-                check: check,
-                detail: "",
-                relativePath: include.Path,
-                repositoryRoot: repositoryRoot,
-                source: "the model",
-                text: include.Generate(),
-                verb: Verb
-            )) {
-                current.Add(item: include.Path);
-            } else {
-                matched = false;
-            }
-        }
-        // A kernel build writes every declaration the model has changed, so a tree a build has run over matches the model
-        // whatever the change committed. The check therefore also holds each file to what is staged: one that matches the
-        // model only in the working tree is drift the change has not committed.
-        if (check) {
-            foreach (var path in Unstaged(paths: current, repositoryRoot: repositoryRoot)) {
-                problems.Add(item: $"{path} matches the model only in the working tree, and its staged copy differs or is missing; a build or `puck {Verb}` wrote it, so stage and commit it");
-            }
-        }
         foreach (var problem in problems) {
             Console.Error.WriteLine(value: $"{Verb}: {problem}.");
         }
 
         return ((matched && (problems.Count == 0)) ? 0 : 1);
-    }
-
-    // The paths whose working-tree text differs from or is absent from the index, when the root is a git work tree's top.
-    private static IReadOnlyList<string> Unstaged(string repositoryRoot, IReadOnlyList<string> paths) {
-        if (paths.Count == 0) {
-            return [];
-        }
-
-        var top = CliGit.Run(repositoryRoot, "rev-parse", "--show-toplevel");
-
-        if ((top.ExitCode != 0) || !string.Equals(
-            a: Path.GetFullPath(path: top.Stdout.Trim()).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-            b: Path.GetFullPath(path: repositoryRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            return [];
-        }
-
-        var staged = CliGit.Run(repositoryRoot, ["ls-files", "--cached", "-z", "--", .. paths]);
-        var differing = CliGit.Run(repositoryRoot, ["diff", "--name-only", "-z", "--no-ext-diff", "--no-textconv", "--", .. paths]);
-
-        if ((staged.ExitCode != 0) || (differing.ExitCode != 0)) {
-            throw new InvalidOperationException(message: $"Cannot check generated shader declarations against the git index: {staged.Stderr}{differing.Stderr}");
-        }
-
-        var indexed = staged.Stdout.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\0').ToHashSet(comparer: StringComparer.Ordinal);
-
-        return [.. paths.Where(predicate: path => !indexed.Contains(item: path))
-            .Concat(second: differing.Stdout.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\0'))
-            .Distinct(comparer: StringComparer.Ordinal)];
     }
     private static int Run(bool check) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {

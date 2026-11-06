@@ -3,13 +3,6 @@ using Puck.World.Transpiler.Lowering;
 
 namespace Puck.Cli.Test;
 
-/// <summary>Which host a <c>puck test</c> leg boots a test world through.</summary>
-internal enum TestHost {
-    /// <summary>The real <c>Puck.World</c> executable, headless.</summary>
-    Server,
-    /// <summary>The browser-wasm engine host.</summary>
-    Browser,
-}
 /// <summary>One world a <c>puck test</c> run boots: the name it is reported under and the document the leg boots.</summary>
 /// <param name="Name">The world's name: the generated world's name, or a document's own file name.</param>
 /// <param name="Path">The full path of the document the leg boots.</param>
