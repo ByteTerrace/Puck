@@ -38,10 +38,9 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     // Every line written through the console from here on is also held in a bounded ring that host.log reads, so an
     // Operator attachment reads what only this process's launcher otherwise sees.
     var hostLog = HostLog.CaptureConsole();
-    // The run's state root, resolved from --state-dir once the command line parses; the method recorder reads it at exit.
+    // The run's state root, resolved from --state-dir once the command line parses.
     Puck.World.Server.WorldStateRoot? stateRoot = null;
 
-    WorldMethodRecorder.StartIfBuiltIn(stateRoot: () => stateRoot);
     // The host CLI flags are a DEPLOYMENT OVERRIDE laid over the world document's presentation intent, so each is NULLABLE
     // with no DefaultValueFactory: absent means "the document decides" (WorldHostSettings.Resolve coalesces to the authored
     // host defaults). A DefaultValueFactory here would silently defeat the document on every unflagged run.

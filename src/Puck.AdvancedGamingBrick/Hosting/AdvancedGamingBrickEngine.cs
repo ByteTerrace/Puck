@@ -9,8 +9,10 @@ namespace Puck.AdvancedGamingBrick;
 /// <c>stub</c> explicitly selects a zeroed image for diagnostics that never call BIOS services or dispatch IRQs.
 /// </summary>
 public sealed partial class AdvancedGamingBrickEngine : IMachineEngine, IMachineImageRecognizer, IMachineOperationProvider {
+    /// <summary>The engine's stable id, the name a world's machine row gives as its engine.</summary>
+    public const string EngineId = "advanced-gaming-brick";
     /// <inheritdoc/>
-    public string Id => "advanced-gaming-brick";
+    public string Id => EngineId;
     /// <inheritdoc/>
     public int ImageHeaderLength => AgbCartridgeHeader.Length;
 

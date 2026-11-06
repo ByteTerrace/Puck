@@ -11,16 +11,17 @@ namespace Puck.Cli.Host;
 /// <item>shells and builds are never GPU work: <c>powershell</c>, <c>pwsh</c>, <c>bash</c>, <c>sh</c>, <c>cmd</c>,
 /// <c>grep</c>, <c>conhost</c>, MSBuild and its nodes, the compiler and its server, and any <c>dotnet build</c>,
 /// <c>restore</c>, <c>msbuild</c>, <c>publish</c> or <c>pack</c>, whatever project they name;</item>
-/// <item>GPU work is a World that opens a device (<c>Puck.World</c> or <c>Puck.World.dll</c>), or a test host running the
-/// device-law assemblies (<c>Puck.DirectX.Tests</c>,
-/// <c>Puck.Vulkan.Tests</c>, <c>Puck.World.Tests</c>, <c>Puck.Platform.Windows.Tests</c>) whose arguments can select a
+/// <item>GPU work is a World that opens a device (<c>Puck.World</c> or <c>Puck.World.dll</c>), or a test host running a
+/// device-law assembly (<see cref="DeviceTestAssemblies"/>) whose arguments can select a
 /// <c>Gpu</c>-trait test: a run carrying the CPU selection (<see cref="CliTestRun.CpuSelection"/>) opens no
 /// device.</item>
 /// </list>
 /// </summary>
 public static class HostProcesses {
-    private static readonly string[] DeviceTestAssemblies = [.. GatePlan.Steps.Where(predicate: step => (step.Kind == GateStepKind.DeviceSuite)).Select(selector: step => step.Name)];
-    private static readonly string[] HeavyTestAssemblies = ["Puck.SdfVm.Tests", "Puck.World.Presentation.Tests", "Puck.World.Tests"];
+    /// <summary>The test assemblies whose device laws open a GPU device: the gate's device-suite steps.</summary>
+    public static readonly IReadOnlyList<string> DeviceTestAssemblies = [.. GatePlan.Steps.Where(predicate: step => (step.Kind == GateStepKind.DeviceSuite)).Select(selector: step => step.Name)];
+    /// <summary>The test assemblies whose full run is heavy: the machine takes one at a time, whoever starts it.</summary>
+    public static readonly IReadOnlyList<string> HeavyTestAssemblies = ["Puck.SdfVm.Tests", "Puck.World.Presentation.Tests", "Puck.World.Tests"];
     private static readonly string[] NeverWork = ["powershell", "pwsh", "bash", "sh", "cmd", "grep", "conhost", "MSBuild", "csc", "VBCSCompiler"];
     private static readonly string[] ExecValueOptions = ["--depsfile", "--runtimeconfig", "--additionalprobingpath", "--additional-deps", "--fx-version", "--roll-forward", "--roll-forward-on-no-candidate-fx"];
 
@@ -161,8 +162,7 @@ public static class HostProcesses {
     }
     /// <summary>Whether a test assembly's full run is heavy: the machine takes one at a time, whoever starts it.</summary>
     /// <param name="assembly">The test assembly's name, without extension.</param>
-    /// <returns><see langword="true"/> for <c>Puck.World.Tests</c> and <c>Puck.World.Presentation.Tests</c>, the suites that hold full
-    /// hosts and scene probes.</returns>
+    /// <returns><see langword="true"/> for an assembly in <see cref="HeavyTestAssemblies"/>.</returns>
     public static bool IsHeavyTestAssembly(string assembly) => HeavyTestAssemblies.Contains(value: assembly, comparer: StringComparer.OrdinalIgnoreCase);
     /// <summary>Whether a process runs a heavy test assembly (<see cref="IsHeavyTestAssembly"/>), whatever its filter:
     /// its apphost, <c>dotnet exec</c> of its assembly, or a test host running it. A build, a <c>dotnet test</c> driver

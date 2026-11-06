@@ -62,9 +62,6 @@ public static partial class LawProof {
 
     [GeneratedRegex(pattern: @"\A[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*\z")]
     private static partial Regex LawName();
-    private static IReadOnlyList<string> Lines(string text) => [.. text.Split(separator: '\n')
-        .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
-        .Where(predicate: static line => (line.Length > 0))];
     private static int Refuse(string what, string why) => CliExit.Refuse(
         verb: Verb,
         what: what,
@@ -95,7 +92,7 @@ public static partial class LawProof {
             return false;
         }
 
-        dirty = [.. Lines(text: changed).Concat(second: Lines(text: untracked)).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal)];
+        dirty = [.. CliText.Lines(text: changed).Concat(second: CliText.Lines(text: untracked)).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal)];
 
         return true;
     }
@@ -345,7 +342,7 @@ public static partial class LawProof {
             .Select(selector: result => new LawFailure(
                 // The failure's own message is ErrorInfo's: the result's output lines are Message elements too
                 // (Output/TextMessages), and they come first, so a law that writes output would otherwise report that.
-                Message: (Lines(text: (((string?)result.Descendants(name: (schema + "ErrorInfo")).Descendants(name: (schema + "Message")).FirstOrDefault()) ?? string.Empty)).FirstOrDefault()?.Trim() ?? "no message"),
+                Message: (CliText.Lines(text: (((string?)result.Descendants(name: (schema + "ErrorInfo")).Descendants(name: (schema + "Message")).FirstOrDefault()) ?? string.Empty)).FirstOrDefault()?.Trim() ?? "no message"),
                 Test: (((string?)result.Attribute(name: "testName")) ?? "?")
             ))
             .OrderBy(comparer: StringComparer.Ordinal, keySelector: static failure => failure.Test)
@@ -429,7 +426,7 @@ public static partial class LawProof {
                 return Refuse(what: revision, why: diffError);
             }
 
-            var changed = Lines(text: names);
+            var changed = CliText.Lines(text: names);
 
             if (fix.Paths.Count > 0) {
                 if (fix.Paths.FirstOrDefault(predicate: path => !changed.Contains(value: path, comparer: StringComparer.Ordinal)) is { } untouched) {
@@ -502,7 +499,7 @@ public static partial class LawProof {
                 return Refuse(what: linked, why: "is a link in the proven tree; copying or building through it would escape isolation.");
             }
             if (!ProofGit(tree, out var indexEntries, out var indexError, "ls-files", "--stage")) { return Refuse(what: tree, why: indexError); }
-            if (Lines(text: indexEntries).FirstOrDefault(predicate: static entry => entry.StartsWith(comparisonType: StringComparison.Ordinal, value: "120000 ")) is { } symbolic) {
+            if (CliText.Lines(text: indexEntries).FirstOrDefault(predicate: static entry => entry.StartsWith(comparisonType: StringComparison.Ordinal, value: "120000 ")) is { } symbolic) {
                 return Refuse(what: symbolic, why: "is a link in the proven tree; copying or building through it would escape isolation.");
             }
 
@@ -588,7 +585,7 @@ public static partial class LawProof {
                 return Refuse(what: withheldLink, why: "withholding created a link in the proven tree.");
             }
             if (!ProofGit(tree, out indexEntries, out indexError, "ls-files", "--stage")) { return Refuse(what: tree, why: indexError); }
-            if (Lines(text: indexEntries).FirstOrDefault(predicate: static entry => entry.StartsWith(comparisonType: StringComparison.Ordinal, value: "120000 ")) is { } withheldSymbolic) {
+            if (CliText.Lines(text: indexEntries).FirstOrDefault(predicate: static entry => entry.StartsWith(comparisonType: StringComparison.Ordinal, value: "120000 ")) is { } withheldSymbolic) {
                 return Refuse(what: withheldSymbolic, why: "withholding created a link in the proven tree.");
             }
             CliTreeFiles.Touch(tree: tree, paths: mirrored.Concat(second: withheld).Distinct(comparer: StringComparer.Ordinal));

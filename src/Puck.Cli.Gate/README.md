@@ -1,6 +1,6 @@
 # Puck.Cli.Gate
 
-Puck.Cli.Gate holds the verbs that choose and run verification: `affected`, `gate`, `host`, `baselines` and `locks`. What they read from verbs composed beside them (the source types behind each generated schema, and the grammar of each verb whose own arguments decide whether a run is GPU work) arrives as a `GateComposition` from the root, so this assembly references none of those verbs and no World runtime.
+Puck.Cli.Gate holds the verbs that choose and run verification: `affected`, `gate`, `host`, `baselines` and `locks`. They reference none of the verbs composed beside them and no World runtime.
 
 ## Documentation
 

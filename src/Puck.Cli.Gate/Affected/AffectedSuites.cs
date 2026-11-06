@@ -36,9 +36,6 @@ public static class AffectedSuites {
         val2: (Environment.ProcessorCount / 4)
     );
 
-    private static IReadOnlyList<string> Lines(string text) => [.. text.Split(separator: '\n')
-        .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
-        .Where(predicate: static line => (line.Length > 0))];
 
     /// <summary>Creates <c>--suite-jobs</c>; <c>puck affected</c> and <c>puck gate</c> share it.</summary>
     /// <returns>The option.</returns>
@@ -162,7 +159,7 @@ public static class AffectedSuites {
         if (build.ExitCode != 0) {
             Console.Out.WriteLine(value: $"affected: building the {suites.Count} suite(s) FAILED (exit {build.ExitCode}); none ran.");
 
-            foreach (var line in Lines(text: build.Stdout).Concat(second: Lines(text: build.Stderr))) {
+            foreach (var line in CliText.Lines(text: build.Stdout).Concat(second: CliText.Lines(text: build.Stderr))) {
                 Console.Out.WriteLine(value: $"  {line}");
             }
 
@@ -219,13 +216,13 @@ public static class AffectedSuites {
             timeout: Ceiling,
             workingDirectory: repositoryRoot
         );
-        var output = Lines(text: run.Stdout);
+        var output = CliText.Lines(text: run.Stdout);
 
         return new AffectedSuiteResult(
             ExitCode: run.ExitCode,
             Report: [CliTestRun.Summary(output: output), .. ((run.ExitCode == 0)
                 ? []
-                : output.Concat(second: Lines(text: run.Stderr)))]
+                : output.Concat(second: CliText.Lines(text: run.Stderr)))]
         );
     }
 }

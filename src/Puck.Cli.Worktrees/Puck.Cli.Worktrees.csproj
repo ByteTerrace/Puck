@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-    <!-- The lead's lane and worktree verbs (`puck lanes`, `puck worktree-base`, `puck worktree-report`, `puck evals`). -->
+    <!-- The lead's lane and worktree verbs (`puck lanes`, `puck worktree-report`, `puck evals`). -->
     <PropertyGroup>
         <AssemblyName>Puck.Cli.Worktrees</AssemblyName>
         <IsAotCompatible>false</IsAotCompatible>

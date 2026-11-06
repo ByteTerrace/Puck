@@ -4,7 +4,7 @@ using Puck.Cli.Baselines;
 namespace Puck.Cli.Gate;
 
 public enum GateStepKind { Locks, Build, FileApp, CopyCli, Puck, DeviceSuite, Baseline, Canaries, Parity }
-public sealed record GateStep(string Name, GateStepKind Kind, string[] Arguments, bool Heavy = false, bool Gpu = false, bool Record = false, bool Sources = false);
+public sealed record GateStep(string Name, GateStepKind Kind, string[] Arguments, bool Heavy = false, bool Gpu = false, bool Sources = false);
 /// <summary>The ordered batch qualification, shared by execution, help and the documentation laws.</summary>
 public static class GatePlan {
     // The test selection of every device suite: the test classes that carry the Gpu trait, which GPU001 holds every
@@ -38,6 +38,7 @@ public static class GatePlan {
         new("registry", GateStepKind.Puck, ["registry", "--check"]),
         new("vocabulary", GateStepKind.Puck, ["vocabulary", "--check"]),
         new("shaders generate", GateStepKind.Puck, ["shaders", "generate", "--check"]),
+        new("wasm-stdlib", GateStepKind.Puck, ["wasm-stdlib", "--check"]),
         new("branding", GateStepKind.Puck, ["branding", "--check"]),
         .. BaselinesCommand.Artifacts.OrderBy(keySelector: static artifact => artifact.Name, comparer: StringComparer.Ordinal)
             .Select(selector: static artifact => new GateStep(("baselines " + artifact.Name), GateStepKind.Baseline, artifact.CheckArguments(), Heavy: true)),
@@ -45,7 +46,6 @@ public static class GatePlan {
         new("parity", GateStepKind.Parity, ["parity"], Heavy: true, Gpu: true),
         .. DeviceSuites.Select(selector: static device => DeviceSuite(selection: device.Selection, suite: device.Suite)),
         new("docs citations", GateStepKind.Puck, ["docs", "citations"], Heavy: true, Gpu: true),
-        new("affected record", GateStepKind.Puck, ["affected", "--record"], Heavy: true, Gpu: true, Record: true),
     ];
     /// <summary>Every check omitted from the batch needs an explicit decision here.</summary>
     public static readonly IReadOnlyDictionary<string, string> CheckExclusions = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
@@ -53,7 +53,6 @@ public static class GatePlan {
         ["packages"] = "Its valued --check needs the document whose generated package section is checked.",
         ["embed"] = "Needs an authored embedding root; checked by its owning change.",
         ["migrate"] = "Needs a named migration and source path; no migration is implied by qualification.",
-        ["shaders interface"] = "Its --check needs the interface-echo canary directory, quarantined under experimental/ with its canary.",
     };
 
     private static GateStep DeviceSuite(string suite, string[] selection) => new(suite, GateStepKind.DeviceSuite,
@@ -64,22 +63,21 @@ public static class GatePlan {
         : argument);
 
     public static string Detail() => ("Steps, in order:\n" + string.Join(separator: "\n", values: Steps.Select(selector: (step, index) =>
-        $"  {(index + 1)}. {step.Name}: {((step.Kind == GateStepKind.CopyCli) ? "copy the freshly built CLI into the run directory" : (((step.Kind is GateStepKind.Build or GateStepKind.FileApp or GateStepKind.DeviceSuite) ? "dotnet " : "puck ") + string.Join(separator: ' ', values: step.Arguments.Select(selector: Quoted))))}{(step.Record ? " (only --gpu --record, after every prior step passes)" : ((step.Kind == GateStepKind.Baseline) ? " (only when affected reaches its inputs)" : (step.Gpu ? " (only --gpu)" : (step.Sources ? " (only when sources changed)" : ((step.Kind == GateStepKind.Locks) ? " (by the running gate, before anything builds)" : string.Empty)))))}.")));
+        $"  {(index + 1)}. {step.Name}: {((step.Kind == GateStepKind.CopyCli) ? "copy the freshly built CLI into the run directory" : (((step.Kind is GateStepKind.Build or GateStepKind.FileApp or GateStepKind.DeviceSuite) ? "dotnet " : "puck ") + string.Join(separator: ' ', values: step.Arguments.Select(selector: Quoted))))}{((step.Kind == GateStepKind.Baseline) ? " (only when affected reaches its inputs)" : (step.Gpu ? " (only --gpu)" : (step.Sources ? " (only when sources changed)" : ((step.Kind == GateStepKind.Locks) ? " (by the running gate, before anything builds)" : string.Empty))))}.")));
     /// <summary>Expands the plan into the steps one run takes, in order.</summary>
     /// <param name="repositoryRoot">The checkout the run gates.</param>
     /// <param name="mergeBase">The resolved merge base the affected step reads the change against.</param>
     /// <param name="fileList">The JSON list of changed sources the format step checks.</param>
     /// <param name="sources">Whether any C# or <c>.puck</c> source changed.</param>
     /// <param name="gpu">Whether the run takes the GPU steps.</param>
-    /// <param name="record">Whether the run ends by recording canary coverage.</param>
     /// <param name="affected">The affected plan, which chooses the baseline, canary and parity steps.</param>
     /// <param name="suiteJobs">The most suites the affected step runs at once.</param>
     /// <param name="gpuJobs">The most canary legs the affected step keeps on the GPU at once, with
     /// <paramref name="gpu"/>.</param>
     /// <returns>The steps.</returns>
-    public static IEnumerable<GateStep> Expand(string repositoryRoot, string mergeBase, string fileList, bool sources, bool gpu, bool record, AffectedPlan affected, int suiteJobs, int gpuJobs) {
+    public static IEnumerable<GateStep> Expand(string repositoryRoot, string mergeBase, string fileList, bool sources, bool gpu, AffectedPlan affected, int suiteJobs, int gpuJobs) {
         foreach (var step in Steps) {
-            if ((step.Gpu && !gpu) || (step.Record && !record) || (step.Sources && !sources)) { continue; }
+            if ((step.Gpu && !gpu) || (step.Sources && !sources)) { continue; }
             if ((step.Kind == GateStepKind.Baseline) && !affected.Baselines.Any(predicate: artifact => (artifact.Name == step.Arguments[1]))) { continue; }
             if ((step.Kind == GateStepKind.Parity) && !affected.Parity) { continue; }
             if (step.Kind == GateStepKind.Canaries) {

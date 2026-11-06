@@ -11,5 +11,5 @@ public static class WorldCommand {
         new(
             description: "Prepare hosted documents, manage releases, or probe a QUIC endpoint.",
             name: "world"
-        ) { WorldPrepareCommand.Create(), PlayerDerivedProducts.Create(), WorldReleaseCommand.Create(clock: clock), WorldProbeCommand.Create(clock: clock) };
+        ) { WorldPrepareCommand.Create(), WorldReleaseCommand.Create(clock: clock), WorldProbeCommand.Create(clock: clock) };
 }

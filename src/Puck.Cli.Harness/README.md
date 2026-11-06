@@ -5,6 +5,5 @@ Puck.Cli.Harness describes and stages a World run for the verbs that boot one: `
 ## Documentation
 
 - [`puck canary`](../../docs/reference/cli.md#puck-canaryreal-world-behavioral-proofs) — the manifests and the World artifact.
-- [`puck refusals`](../../docs/reference/cli.md#puck-refusalsrefusal-census) — the refusal census.
 - [Puck.Cli.Harness.Tests](../../tests/Puck.Cli.Harness.Tests/README.md) — the laws that hold this assembly's verbs.
 - [Puck.Cli](../Puck.Cli/README.md) — the `puck` root that composes every verb assembly.

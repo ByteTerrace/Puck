@@ -698,12 +698,11 @@ public sealed class WorldArtifactBuildLawTests {
         }
 
         Assert.False(condition: Directory.Exists(path: agedBuilding));
-        // A build lock is never deleted, however old: a builder may be opening it, and deleting it would let two
-        // builders lock different files at one path.
-        Assert.True(condition: File.Exists(path: agedLock));
+        // A build lock nobody holds is deleted whatever its age, with the hold itself; a held one stays.
+        Assert.False(condition: File.Exists(path: agedLock));
         Assert.False(condition: File.Exists(path: agedLease));
         Assert.True(condition: Directory.Exists(path: freshBuilding));
-        Assert.True(condition: File.Exists(path: freshLock));
+        Assert.False(condition: File.Exists(path: freshLock));
         Assert.True(condition: File.Exists(path: heldLock));
     }
     [Fact]

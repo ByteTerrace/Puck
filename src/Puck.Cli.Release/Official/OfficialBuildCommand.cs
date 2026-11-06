@@ -17,9 +17,33 @@ namespace Puck.Cli.Official;
 // composition or asset-hash mismatch) or an unreadable/unwritable path.
 public static class OfficialBuildCommand {
     // The porcelain-output interpretation alone, pulled out of TryReadTree so it is testable without shelling out to
-    // git: `git status --porcelain` prints one line per changed, untracked or ignored path and nothing at all for a
-    // clean tree.
-    public static bool IsDirtyPorcelainOutput(string porcelainStdout) => (porcelainStdout.Trim().Length > 0);
+    // git: `git status --porcelain -z --no-renames` prints one NUL-ended `XY path` entry (the path relative to the
+    // checkout root, an ignored directory as `dir/`) per changed, untracked or ignored path. The tree differs only when
+    // one of those paths is a file the build reads (or lies under such a directory): an ignored capture or compiled
+    // world the build never opens changes nothing it publishes.
+    public static bool ReadFilesDiffer(string checkoutRoot, string porcelainStdout, IReadOnlyCollection<string> readFiles) {
+        var read = readFiles.Select(selector: static file => PuckPaths.Normalize(path: file)).ToHashSet(comparer: PuckPaths.Comparer);
+
+        foreach (var entry in porcelainStdout.Split(separator: '\0', options: StringSplitOptions.RemoveEmptyEntries)) {
+            if (entry.Length < 4) {
+                continue;
+            }
+
+            var path = PuckPaths.Normalize(path: Path.Combine(
+                path1: checkoutRoot,
+                path2: entry[3..]
+            ));
+
+            if (
+                read.Contains(item: path) ||
+                (entry.EndsWith(value: '/') && read.Any(predicate: file => file.StartsWith(comparisonType: PuckPaths.Comparison, value: path)))
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static int Refuse(string why) => CliExit.Refuse(
         verb: "official build",
@@ -49,25 +73,6 @@ public static class OfficialBuildCommand {
 
         if (RegistryCommand.Create().Parse(args: ["--check"]).Invoke() != 0) {
             return Refuse(why: "'puck registry --check' found drift; regenerate with 'puck registry' first.");
-        }
-
-        if (!TryReadTree(
-            commit: out var commit,
-            dirty: out var dirty,
-            refusal: out var treeRefusal,
-            worldsDirectory: worldsDirectory
-        )) {
-            return Refuse(why: treeRefusal!);
-        }
-
-        if (
-            dirty &&
-            !allowDirty
-        ) {
-            return Refuse(why: ((commit == OfficialBuildInfo.NoCommit)
-                ? $"no commit holds the worlds directory {CliPaths.ToDisplay(fullPath: worldsDirectory)}; pass --allow-dirty for a local dry run"
-                : $"the worlds directory {CliPaths.ToDisplay(fullPath: worldsDirectory)} differs from commit {commit}; pass --allow-dirty for a local dry run"
-            ));
         }
 
         Directory.CreateDirectory(path: treeRoot);
@@ -107,6 +112,33 @@ public static class OfficialBuildCommand {
                 return Refuse(why: assetReason!);
             }
 
+            var readFiles = sources.Select(selector: source => Path.Combine(path1: worldsDirectory, path2: source.Name)).ToList();
+
+            foreach (var asset in assets) {
+                if (WorldDocumentPaths.TryResolve(documentDirectory: definition!.DocumentDirectory, path: asset.Source, reason: out _, resolved: out var assetPath)) {
+                    readFiles.Add(item: assetPath);
+                }
+            }
+
+            if (!TryReadTree(
+                commit: out var commit,
+                dirty: out var dirty,
+                readFiles: readFiles,
+                refusal: out var treeRefusal,
+                worldsDirectory: worldsDirectory
+            )) {
+                return Refuse(why: treeRefusal!);
+            }
+
+            if (
+                dirty &&
+                !allowDirty
+            ) {
+                return Refuse(why: ((commit == OfficialBuildInfo.NoCommit)
+                    ? $"no commit holds the worlds directory {CliPaths.ToDisplay(fullPath: worldsDirectory)}; pass --allow-dirty for a local dry run"
+                    : $"a file the build reads under {CliPaths.ToDisplay(fullPath: worldsDirectory)} differs from commit {commit}; pass --allow-dirty for a local dry run"
+                ));
+            }
             if (!OfficialEngineScanner.TryScan(
                 appBundleDirectory: engineDirectory,
                 engine: out var engine,
@@ -197,20 +229,18 @@ public static class OfficialBuildCommand {
         return true;
     }
 
-    // The tree the build names: the HEAD commit of the git checkout the worlds directory is read from, and whether the
-    // worlds directory differs from it. A checkout is marked by a `.git` entry (a directory, or the file a linked
-    // worktree carries) in the worlds directory or above it; with none, or with a HEAD that names no commit yet, the
-    // commit is OfficialBuildInfo.NoCommit and the tree counts as differing, since no commit holds what was read.
-    // Inside a checkout git must answer, and one that cannot is a refusal, never a guess. "Differs" covers everything
-    // git status reports under the worlds directory: a tracked file modified, staged or deleted, and an untracked or
-    // ignored file, since the scan publishes every file there whatever git ignores. Changes elsewhere in the checkout
-    // are not the worlds tree's.
-    public static bool TryReadTree(string worldsDirectory, out string commit, out bool dirty, out string? refusal) {
+    // The tree the build names: the HEAD commit of the git checkout the worlds directory is read from, and whether a
+    // file the build reads (readFiles) differs from it. A checkout is marked by a `.git` entry (a directory, or the file
+    // a linked worktree carries) in the worlds directory or above it; with none, or with a HEAD that names no commit
+    // yet, the commit is OfficialBuildInfo.NoCommit and the tree counts as differing, since no commit holds what was
+    // read. Inside a checkout git must answer, and one that cannot is a refusal, never a guess. "Differs" covers a read
+    // file git reports modified, staged, deleted, untracked or ignored; files the build never opens are not the tree's.
+    public static bool TryReadTree(string worldsDirectory, IReadOnlyCollection<string> readFiles, out string commit, out bool dirty, out string? refusal) {
         commit = OfficialBuildInfo.NoCommit;
         dirty = true;
         refusal = null;
 
-        if (RepositoryPaths.Ascend(
+        var checkoutRoot = RepositoryPaths.Ascend(
             probe: static directory => (Path.Exists(path: Path.Combine(
                 path1: directory.FullName,
                 path2: ".git"
@@ -219,7 +249,9 @@ public static class OfficialBuildCommand {
                 : null
             ),
             start: worldsDirectory
-        ) is null) {
+        );
+
+        if (checkoutRoot is null) {
             return true;
         }
 
@@ -245,7 +277,7 @@ public static class OfficialBuildCommand {
             return false;
         }
 
-        string[] statusArguments = ["status", "--porcelain", "--untracked-files=all", "--ignored", "--", "."];
+        string[] statusArguments = ["status", "--porcelain", "-z", "--no-renames", "--untracked-files=all", "--ignored", "--", "."];
 
         if (!TryRunGit(
             arguments: statusArguments,
@@ -263,12 +295,12 @@ public static class OfficialBuildCommand {
         }
 
         commit = head.Stdout.Trim();
-        dirty = IsDirtyPorcelainOutput(porcelainStdout: status.Stdout);
+        dirty = ReadFilesDiffer(checkoutRoot: checkoutRoot, porcelainStdout: status.Stdout, readFiles: readFiles);
 
         return true;
     }
     public static Command Create() {
-        var allowDirtyOption = new Option<bool>(name: "--allow-dirty") { Description = "Proceed even though the worlds directory differs from its commit, or no commit holds it." };
+        var allowDirtyOption = new Option<bool>(name: "--allow-dirty") { Description = "Proceed even though a file the build reads differs from its commit, or no commit holds the worlds directory." };
         var channelOption = new Option<string>(name: "--channel") { Description = "The channel this build belongs to (e.g. dev, stable, next).", Required = true };
         var engineOption = new Option<string>(name: "--engine") { Description = "A browser-wasm AppBundle directory (main.mjs + _framework/).", Required = true };
         var treeOption = new Option<string>(name: "--tree") { Description = "The official tree's root, created if missing.", Required = true };
@@ -285,8 +317,9 @@ public static class OfficialBuildCommand {
 
             build.commit names the tree the worlds were read from: the HEAD commit of the git checkout holding the
             worlds directory, or "none" when no checkout holds it or its HEAD names no commit. build.dirty is true when
-            git status reports anything under the worlds directory (a tracked file modified, staged or deleted, or an
-            untracked or ignored file), and always with "none". A dirty tree is refused unless --allow-dirty is given.
+            git status reports a change to a file the build reads (a source, lock or .world.json document, or an asset
+            file: modified, staged, deleted, untracked or ignored), and always with "none"; an ignored file the build
+            never opens, such as a compiled world or a capture, does not count. A dirty tree is refused unless --allow-dirty is given.
             The world schema bundle's own x-puck.commit keeps naming the build of the generator that wrote it.
 
             Writes <tree>/<channel>/manifest.json, <tree>/builds/<commit>/manifest.json (an immutable copy), and every

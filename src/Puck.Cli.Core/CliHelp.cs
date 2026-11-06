@@ -14,14 +14,20 @@ public static class CliHelp {
     /// <summary>The name usage and help print for the tool, whatever file the process was started from.</summary>
     public const string ToolName = "puck";
 
-    private static readonly ConditionalWeakTable<Command, string> Details = [];
+    private static readonly ConditionalWeakTable<Command, Func<string>> Details = [];
 
     /// <summary>Attaches the detail <paramref name="command"/>'s own help prints after its options, under
     /// <c>Details:</c>.</summary>
     /// <param name="command">The command the detail belongs to.</param>
     /// <param name="detail">The detail text; its lines print indented by two spaces.</param>
     /// <returns><paramref name="command"/>.</returns>
-    public static Command Detail(this Command command, string detail) {
+    public static Command Detail(this Command command, string detail) => Detail(command: command, detail: () => detail);
+    /// <summary>Attaches a detail <paramref name="command"/>'s own help computes when it prints, so a list the code
+    /// holds is read from the code and costs nothing on any other invocation.</summary>
+    /// <param name="command">The command the detail belongs to.</param>
+    /// <param name="detail">Produces the detail text; its lines print indented by two spaces.</param>
+    /// <returns><paramref name="command"/>.</returns>
+    public static Command Detail(this Command command, Func<string> detail) {
         Details.AddOrUpdate(
             key: command,
             value: detail
@@ -36,7 +42,7 @@ public static class CliHelp {
         key: command,
         value: out var detail
     )
-        ? detail
+        ? detail()
         : null
     );
     /// <summary>Replaces the help action of <paramref name="root"/>'s help option with one that names the tool

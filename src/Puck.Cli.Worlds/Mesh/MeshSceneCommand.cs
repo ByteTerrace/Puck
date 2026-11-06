@@ -5,9 +5,7 @@ using System.Numerics;
 
 using Puck.SdfVm;
 using Puck.SignedDistance;
-using Puck.World;
 using Puck.World.Client;
-using Puck.World.Transpiler.Composition;
 
 namespace Puck.Cli.Mesh;
 
@@ -53,24 +51,11 @@ public static class MeshSceneCommand {
     }
 
     private static int Run(string world, string? change, string? cacheRoot, string? build, string? identityText, string backend) {
-        var extension = backend switch {
-            "directx" => ".dxil",
-            "vulkan" => ".spv",
-            _ => null,
-        };
-
-        if (extension is null) {
-            Console.Error.WriteLine(value: $"{Verb}: unknown --backend '{backend}'; expected directx or vulkan.");
+        if (!CliWorldDocuments.TryExtension(backend: backend, extension: out var extension, verb: Verb)) {
             return 2;
         }
 
-        var fullPath = Path.GetFullPath(path: world);
-
-        // A world's document parses masks and bindings through the Schema hooks, which the CLI installs per invocation.
-        _ = CliWorldVocabulary.EnsureInstalled();
-
-        if (!WorldDefinitionLoader.TryLoadFileForAdmission(admission: out var admission, contentHash: out _, documents: PuckDocumentComposer.Instance, path: fullPath, proveNeighbours: false, reason: out var reason)) {
-            Console.Error.WriteLine(value: $"{Verb}: '{fullPath}' failed to load — {reason}");
+        if (!CliWorldDocuments.TryLoad(definition: out var definition, fullPath: out var fullPath, path: world, verb: Verb)) {
             return 1;
         }
 
@@ -78,8 +63,7 @@ public static class MeshSceneCommand {
 
         if (!MeshCommand.TryIdentity(build: build, buildDirectory: buildDirectory, extension: extension, identity: out var identity, named: identityText, verb: Verb)) { return 2; }
 
-        var definition = admission!.Definition;
-        var meshes = Path.GetFullPath(path: ((cacheRoot is null) ? Puck.Abstractions.PuckUserDirectory.Resolve(name: "meshes") : Path.Join(path1: cacheRoot, path2: "meshes")));
+        var meshes = CliWorldDocuments.MeshStore(cacheRoot: cacheRoot);
         var scene = RestScene.Compose(definition: definition, sourcePath: fullPath);
         var groups = SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: WorldRenderFarDistance.Resolve(defaults: definition.Render), program: scene.Program, transforms: scene.Transforms);
         var store = new SdfMeshStore(directory: meshes);

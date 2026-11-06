@@ -21,9 +21,8 @@ public sealed class AffectedManifestCheckLawTests {
             changed: changed,
             projects: [new(Directory: "src/World", IsSuite: false, Name: "World", References: []), new(Directory: "tests/World.Tests", IsSuite: true, Name: "World.Tests", References: ["World"])],
             canaries: [new(Directory: "tests/Puck.World.Canaries/example", Files: [], Id: "example", RequiresGpu: true)],
-            coverage: new Dictionary<string, IReadOnlySet<string>> { [Source] = new HashSet<string>(collection: ["example"]), [Manifest] = new HashSet<string>(collection: ["example"]) },
             consumersOf: _ => ["World"], worldClosure: new HashSet<string>(collection: ["World"]), declaresTests: _ => false,
-            standInsFor: _ => [], canariesReaching: _ => new HashSet<string>(collection: ["example"]), worldInput: _ => true,
+            canariesReaching: _ => new HashSet<string>(collection: ["example"]), worldInput: _ => true,
             triviaOnly: path => AffectedCSharpTrivia.IsUnchanged(after: after, before: before, path: path),
             proseOnly: path => AffectedManifestProse.IsUnchanged(after: after, before: before, path: path));
     }

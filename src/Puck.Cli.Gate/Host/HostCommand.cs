@@ -80,8 +80,7 @@ public static class HostCommand {
               installed memory or free disk below {HostLoadThresholds.DiskPressureGb}GB. Here: CPU below {HostLoadThresholds.ThisMachine.CapacityCpuPercent:0.#}%, free RAM above
               {HostLoadThresholds.ThisMachine.CapacityRamGb:0.##}GB, commit under {HostLoadThresholds.ThisMachine.CapacityCommitPercent:0.##}% of the commit limit (allocation fails at the limit with RAM still free); pressure below {HostLoadThresholds.ThisMachine.PressureRamGb:0.##}GB RAM. Options override these defaults; gate, lease and the MCP World start admit by them unchanged.
 
-              GPU work is the World (Puck.World or Puck.World.dll), a canary, parity or counters verb,
-              or a test host for Puck.DirectX.Tests, Puck.Vulkan.Tests, Puck.World.Tests or Puck.Platform.Windows.Tests
+              GPU work is a World that opens a device (Puck.World or Puck.World.dll), or a test host for {string.Join(separator: ", ", values: HostProcesses.DeviceTestAssemblies)}
               whose arguments can select a Gpu-trait test: a run carrying --filter-not-trait Category=Gpu is not. Builds,
               restores, MSBuild nodes, compilers and shells never are, and the verb never counts itself.
               Canary --list/--plan, parity/counters compare, and help run no GPU work.

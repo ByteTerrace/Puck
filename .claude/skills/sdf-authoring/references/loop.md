@@ -132,8 +132,6 @@ nonuniform `Scale`, likewise surface only there.
 ```bash
 puck creation stats --world <path> [--prototype <id>]
 puck creation shape --world <path> --prototype <id> [--shape <name>...]
-puck creation sculpts
-puck creation sculpt <name> --world <path>
 ```
 
 `creation stats` loads and validates the whole document, then prints
@@ -171,10 +169,8 @@ gauge. To see a field rather than read it,
 `world.slice <placement> <x|y|z> <path.png>` writes the distance bands and the
 `|grad d|` panel through the running World (see the `Puck.World` README).
 
-`creation sculpt` applies a registered sculpt's patch to a file, validating
-before writing and leaving the file untouched on refusal. The live twins are
-`creation.sculpts` and `creation.sculpt <name>`, which patch the live document
-all-or-nothing.
+The live `creation.sculpts` and `creation.sculpt <name>` console verbs patch the
+live document all-or-nothing.
 
 ## Authoring in C# instead of JSON — a live but unused path
 
@@ -182,12 +178,10 @@ all-or-nothing.
 sculpting. It is real infrastructure — `CreationBuilder`'s topological
 invariants (parents declared before children, ids unique, `Mirror` always
 emitting `Left` before `Right`) are enforced and covered by
-`tests/Puck.World.Schema.Tests/CreationBuilderLawTests.cs`, and `puck creation
-sculpts`/`sculpt <name>` and the live `creation.sculpts`/`creation.sculpt`
-console twins are wired and working. But **no shipped creation is authored
+`tests/Puck.World.Schema.Tests/CreationBuilderLawTests.cs`, and the live
+`creation.sculpts`/`creation.sculpt` console verbs are wired and working. But **no shipped creation is authored
 through it today**: `CreationSculptRegistry` ships with zero sculpts
-registered (a sculpt is registered by a composition root or a test, and
-`puck creation sculpts` prints `none registered` until one is), and nothing
+registered (a sculpt is registered by a composition root or a test), and nothing
 in the tree calls `new CreationBuilder(...)` outside that law-test suite.
 `moth.puck`'s hand-authored `shape` statements are `.puck` DSL source, not
 `CreationBuilder` output.
@@ -198,7 +192,7 @@ already covers it. Reach for `CreationBuilder` only for programmatic or
 parametric generation (mirrored rigs from one authoring expression, a
 patch applied by a tool or test) where the DSL's `for`/lambda builtins
 would not fit, and register the result through `ICreationSculpt` so
-`puck creation sculpt` can apply and validate it.
+`creation.sculpt` can apply and validate it.
 
 | Type | Use |
 |---|---|

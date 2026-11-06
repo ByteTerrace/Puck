@@ -33,67 +33,22 @@ public static class GenerateCommand {
     /// <returns>0 when every include was written or matched and none is unowned or missing, otherwise 1.</returns>
     public static int Run(string repositoryRoot, IReadOnlyList<string> files, RenderGraphPackageCatalog packages, bool check) {
         var problems = new List<string>();
-        var matched = true;
-        var current = new List<string>();
+        var includes = Includes(files: files, packages: packages, problems: problems);
+        var matched = CliGeneratedFile.WriteOrCheckAll(
+            check: check,
+            detail: "",
+            eachFile: true,
+            files: [.. includes.Select(selector: static include => new GeneratedFile(RelativePath: include.Path, Text: include.Generate()))],
+            repositoryRoot: repositoryRoot,
+            source: "the model",
+            verb: Verb
+        );
 
-        foreach (var include in Includes(files: files, packages: packages, problems: problems)) {
-            if (CliGeneratedFile.WriteOrCheck(
-                check: check,
-                detail: "",
-                relativePath: include.Path,
-                repositoryRoot: repositoryRoot,
-                source: "the model",
-                text: include.Generate(),
-                verb: Verb
-            )) {
-                current.Add(item: include.Path);
-            } else {
-                matched = false;
-            }
-        }
-        // A kernel build writes every declaration the model has changed, so a tree a build has run over matches the model
-        // whatever the change committed. The check therefore also holds each file to what is staged: one that matches the
-        // model only in the working tree is drift the change has not committed.
-        if (check) {
-            foreach (var path in Unstaged(paths: current, repositoryRoot: repositoryRoot)) {
-                problems.Add(item: $"{path} matches the model only in the working tree, and its staged copy differs or is missing; a build or `puck {Verb}` wrote it, so stage and commit it");
-            }
-        }
         foreach (var problem in problems) {
             Console.Error.WriteLine(value: $"{Verb}: {problem}.");
         }
 
         return ((matched && (problems.Count == 0)) ? 0 : 1);
-    }
-
-    // The paths whose working-tree text differs from or is absent from the index, when the root is a git work tree's top.
-    private static IReadOnlyList<string> Unstaged(string repositoryRoot, IReadOnlyList<string> paths) {
-        if (paths.Count == 0) {
-            return [];
-        }
-
-        var top = CliGit.Run(repositoryRoot, "rev-parse", "--show-toplevel");
-
-        if ((top.ExitCode != 0) || !string.Equals(
-            a: Path.GetFullPath(path: top.Stdout.Trim()).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-            b: Path.GetFullPath(path: repositoryRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            return [];
-        }
-
-        var staged = CliGit.Run(repositoryRoot, ["ls-files", "--cached", "-z", "--", .. paths]);
-        var differing = CliGit.Run(repositoryRoot, ["diff", "--name-only", "-z", "--no-ext-diff", "--no-textconv", "--", .. paths]);
-
-        if ((staged.ExitCode != 0) || (differing.ExitCode != 0)) {
-            throw new InvalidOperationException(message: $"Cannot check generated shader declarations against the git index: {staged.Stderr}{differing.Stderr}");
-        }
-
-        var indexed = staged.Stdout.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\0').ToHashSet(comparer: StringComparer.Ordinal);
-
-        return [.. paths.Where(predicate: path => !indexed.Contains(item: path))
-            .Concat(second: differing.Stdout.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\0'))
-            .Distinct(comparer: StringComparer.Ordinal)];
     }
     private static int Run(bool check) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
@@ -112,36 +67,47 @@ public static class GenerateCommand {
         );
     }
 
-    public static Command Create() => CliOptions.CheckVerb(
-        checkDescription: "Regenerate every include in memory and compare against the working file and, in a git work tree, its staged copy; write nothing, and exit 1 naming each missing or differing file and each interface include no generator owns.",
-        description: """
-        The files the C# model owns, generated and checked.
+    public static Command Create() {
+        var command = CliOptions.CheckVerb(
+            checkDescription: "Regenerate every include in memory and compare against the working file and, in a git work tree, its staged copy; write nothing, and exit 1 naming each missing or differing file and each interface include no generator owns.",
+            description: "The files the C# model owns, generated and checked.",
+            name: "generate",
+            run: Run
+        );
 
-        sdf-isa.hlsli (src/Puck.SdfVm/Assets/Shaders/Sdf/isa) is generated by Puck.SdfVm.SdfIsaHlsl
-        from the SDF instruction set in Puck.SignedDistance: every enum an instruction word
-        carries, and the packed-layout constants the interpreter decodes words with; it is all
-        the field interpreter and the mesh bake read. sdf-render.hlsli beside it
-        (Puck.SdfVm.SdfRenderHlsl) holds what the renderer alone reads: lights, exposure, the
-        visibility record, mesh records, the irradiance volume and the debug views. The
-        instruction set's fingerprint, over both files, the sky's kinds and the encoding
-        SdfEncodingProbe describes, and the field's fingerprint, over sdf-isa.hlsli and the
-        encoding alone, are recorded in src/Puck.SdfVm/SdfIsaFingerprint.cs for the host; the
-        first stamps the SDF kernels' interfaces and the second the mesh bake's, so a renderer
-        constant moves no stored mesh's key.
+        // The owner lists are read from the model when help prints, so they cannot fall behind it.
+        command.Detail(detail: () => {
+            var (packages, kernels) = ShaderDeclarations.OwnerNames(packages: RenderGraphPackageCatalog.Engine);
 
-        Every generated shader interface (<name>.interface.hlsli) the model declares is owned too,
-        in one list: an engine package's with pass-group members (such as overlay, place and
-        sdf.film-grain), found by its file name, and the SDF engine kernels' (sdf-world,
-        sdf-mesh-bake, sdf-mesh, sdf-resolve, sdf-sky, sdf-glass and sdf-sky-environment, declared by Puck.SdfVm.SdfKernelInterfaces) at
-        their fixed paths. A checked-in interface include no package or engine kernel owns, or a
-        declared interface whose include is missing, fails by name.
+            return $"""
+            sdf-isa.hlsli (src/Puck.SdfVm/Assets/Shaders/Sdf/isa) is generated by Puck.SdfVm.SdfIsaHlsl
+            from the SDF instruction set in Puck.SignedDistance: every enum an instruction word
+            carries, and the packed-layout constants the interpreter decodes words with; it is all
+            the field interpreter and the mesh bake read. sdf-render.hlsli beside it
+            (Puck.SdfVm.SdfRenderHlsl) holds what the renderer alone reads: lights, exposure, the
+            visibility record, mesh records, the irradiance volume and the debug views. The
+            instruction set's fingerprint, over both files, the sky's kinds and the encoding
+            SdfEncodingProbe describes, and the field's fingerprint, over sdf-isa.hlsli and the
+            encoding alone, are recorded in src/Puck.SdfVm/SdfIsaFingerprint.cs for the host; the
+            first stamps the SDF kernels' interfaces and the second the mesh bake's, so a renderer
+            constant moves no stored mesh's key.
 
-        The model lives in Puck.Shaders.Model and Puck.SdfVm.Model, which compile no shader. Every
-        project whose kernels include these files references Puck.Shaders.Generator, whose build
-        writes each one whose text the model has changed before any kernel compiles, so a kernel
-        reading a declaration the model has just gained builds in one pass.
-        """,
-        name: "generate",
-        run: Run
-    );
+            Every generated shader interface (<name>.interface.hlsli) the model declares is owned too,
+            in one list: an engine package's with pass-group members, found by its file name, and the SDF
+            engine kernels' (declared by Puck.SdfVm.SdfKernelInterfaces) at their fixed paths. A checked-in
+            interface include no package or engine kernel owns, or a declared interface whose include is
+            missing, fails by name.
+
+            Engine packages with an interface: {string.Join(separator: ", ", values: packages)}
+            SDF engine kernels with an interface: {string.Join(separator: ", ", values: kernels)}
+
+            The model lives in Puck.Shaders.Model and Puck.SdfVm.Model, which compile no shader. Every
+            project whose kernels include these files references Puck.Shaders.Generator, whose build
+            writes each one whose text the model has changed before any kernel compiles, so a kernel
+            reading a declaration the model has just gained builds in one pass.
+            """;
+        });
+
+        return command;
+    }
 }

@@ -33,14 +33,12 @@ using Puck.Cli.Parity;
 using Puck.Cli.PublishRelease;
 using Puck.Cli.PullRequest;
 using Puck.Cli.Qualification;
-using Puck.Cli.Refusals;
 using Puck.Cli.Scan;
 using Puck.Cli.Schema;
 using Puck.Cli.Search;
 using Puck.Cli.Shaders;
 using Puck.Cli.Sweep;
 using Puck.Cli.WasmStdlib;
-using Puck.Cli.WorktreeBase;
 using Puck.Cli.WorktreeReport;
 
 namespace Puck.Cli;
@@ -50,10 +48,6 @@ namespace Puck.Cli;
 /// in-process self-invocations both go through <see cref="InvokeAsync(string[])"/>.
 /// </summary>
 public static class PuckRootCommand {
-    /// <summary>What the gate's verbs read from the verbs composed beside them: the source types behind each generated
-    /// schema (<c>puck schema</c>).</summary>
-    public static GateComposition Gate { get; } = new(SchemaSourceTypes: SchemaCommand.SourceTypesOf);
-
     /// <summary>Creates the root command. <paramref name="clock"/> is the CLI host's one clock: every deadline a verb
     /// puts on a process, a connection, a lease, or a request runs on it.</summary>
     /// <param name="clock">The CLI host's clock; <see cref="TimeProvider.System"/> for a real invocation.</param>
@@ -66,7 +60,7 @@ public static class PuckRootCommand {
         WorldAdmission.Install(admit: HostAdmission.ForWorlds(clock: clock));
 
         Command[] verbs = (schemaBootstrap ? [SchemaCommand.Create(clock: clock)] : [
-            AffectedCommand.Create(composition: Gate),
+            AffectedCommand.Create(),
             AgentsCommand.Create(),
             ArchitectureCommand.Create(),
             ArtifactsCommand.Create(),
@@ -86,7 +80,7 @@ public static class PuckRootCommand {
             FirmwareCommand.Create(),
             FontAtlasCommand.Create(),
             FormatCommand.Create(),
-            GateCommand.Create(clock: clock, composition: Gate),
+            GateCommand.Create(clock: clock),
             HostCommand.Create(),
             LandingCommand.Create(),
             LanesCommand.Create(clock: clock),
@@ -104,7 +98,6 @@ public static class PuckRootCommand {
             PullRequestCommand.Create(),
             QualifyCommand.Create(),
             ReferencesCommand.Create(),
-            RefusalsCommand.Create(),
             ScanCommand.Create(),
             SchemaCommand.Create(clock: clock),
             SearchCommand.Create(),
@@ -112,7 +105,6 @@ public static class PuckRootCommand {
             SweepCommand.Create(),
             WasmBuildCommand.Create(),
             WasmStdlibCommand.Create(),
-            WorktreeBaseCommand.Create(),
             WorktreeReportCommand.Create(clock: clock),
             WorldCommand.Create(clock: clock),
             .. WorldsRoot.Verbs(),

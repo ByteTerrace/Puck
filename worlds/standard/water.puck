@@ -13,11 +13,11 @@
 // in its flow's pattern and colour, where the bed or a wall comes within `reach` of the surface along the view. The pool,
 // the basins and the lake hold metres of water; the stream and the falls are thin sheets and scatter more per metre.
 let waterGlass = {
-  depth: 2
+  depth: 4
   ior: 1.333
   scatter: "#1A8A94"
-  scattering: 0.8
-  contact { reach: 0.4, coverage: 0.8 }
+  scattering: 0.35
+  contact { reach: 0.4, coverage: 0.6 }
 }
 // The white the water's foam and streaks reveal.
 let waterFoam = { color: "#F4F8F6", roughness: 0.55, metal: 0 }
@@ -123,14 +123,14 @@ let fallsFlowLayer = {
   stretch: 6
   cycle: 1
   tilt: 0.3
-  coverage: 0.55
+  coverage: 0.35
   softness: 0.12
   surface { color: "#FFFFFF", roughness: 0.6, metal: 0 }
   seed: 11
 }
 // A falls sheet is thin and stands off its wall, so the rock shows through its turquoise core; foam gathers where it meets
 // the basin.
-let fallsGlass = waterGlass with { scattering: 1.2 }
+let fallsGlass = waterGlass with { scattering: 0.8 }
 // A lake's breeze: world-space ripples, a slow drift and no foam of its own; its contact's foam takes the breeze's
 // pattern along the bank.
 let lakeFlowLayer = {
@@ -179,8 +179,9 @@ template streamSegment(id, length, width = 4.5, overlap = 0.5, palette = waterPa
 // about its own flow axis as the discharge `state.<gauge>` falls from one to zero, edge-on to the valley at zero, so the
 // falls narrows as it ebbs; the flow's foam thins with it where the world binds the flow's coverage to a lane. The caller
 // supplies the endpoint visibility, which parks the edge-on ribbon when the falls runs dry. The sheets are glass (`glass`):
-// the rock shows through them, and as glass they cast no shadow.
-template fallsRibbon(id, profile, width = 8, standoff = 5, gauge = "meltStrength", visible = "meltVisible", palette = waterPalette, flow = fallsFlowLayer, glass = fallsGlass) {
+// the rock shows through them, and as glass they cast no shadow. A sheet's `thickness` is what a view along the wall
+// crosses many times over, so a thick sheet's medium covers the rock behind it.
+template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gauge = "meltStrength", visible = "meltVisible", palette = waterPalette, flow = fallsFlowLayer, glass = fallsGlass) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -195,7 +196,7 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, gauge = "meltStrength
         shape Box $"sheet-{j}" {
           material: 0
           position [0, (profile[j][1] + profile[j + 1][1]) / 2, (profile[j][0] + profile[j + 1][0]) / 2 - standoff]
-          scale [width / 2, 0.3, squareRoot(
+          scale [width / 2, thickness / 2, squareRoot(
             (profile[j + 1][1] - profile[j][1]) * (profile[j + 1][1] - profile[j][1]) +
             (profile[j + 1][0] - profile[j][0]) * (profile[j + 1][0] - profile[j][0])) / 2]
           rotation [0 - halfTurnSine(fallsSlope(profile, j)), 0, 0, halfTurnCosine(fallsSlope(profile, j))]
