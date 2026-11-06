@@ -29,9 +29,13 @@ techniques and the defects review found are what transfer. Each technique cites 
   ([the frame bar](../../../../docs/plans/engine-job-system.md#what-the-measurements-say)).
 - **Wall-clock claims are interleaved A/B rounds** against a base build the
   lane built: base, candidate, base, candidate, reversed once, three pairs or
-  more, every round reported. They run in the lead's quiet window or under
-  `puck lease heavy`, never beside other lanes' work
+  more, every round reported. They run in the lead's quiet window through
+  `puck measure run` or `puck lease quiet`, never beside other lanes' work
   ([orchestration](../../orchestration/SKILL.md#spend-verification-not-writing)).
+  Read `BenchReport.HostLoad` before interpreting the result: the reservation
+  coordinates leased work, and another test launched without a lease can still
+  contaminate it. A report that records another heavy test is not quiet-window
+  timing evidence; retain it and repeat only after that work has ended.
 - **Prove the steady state runs the changed branch,** not a warm cache or a
   default path: count the changed path's calls, or break the change and see
   the number move. Two of #70158's six benchmark headers took the known-header

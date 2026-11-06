@@ -157,6 +157,9 @@ public sealed class HostLoadMonitor(HostLoadThresholds thresholds, int cpuSample
     /// <summary>Whether the latest reading has capacity, whether or not this reading printed its CAPACITY line.</summary>
     public bool HasCapacity { get; private set; }
 
+    /// <summary>What capacity is waiting on, including an incomplete CPU window; null only with capacity.</summary>
+    public string? CapacityWait { get; private set; } = "collecting CPU samples";
+
     private static string Number(double value) => value.ToString(format: "0.0", provider: CultureInfo.InvariantCulture);
 
     /// <summary>Takes one reading and returns the lines it produces, in order: the GPU line, then PRESSURE or
@@ -194,10 +197,19 @@ public sealed class HostLoadMonitor(HostLoadThresholds thresholds, int cpuSample
             pressure.Add(item: $"freeDisk<{Number(value: disk)}GB");
         }
 
-        HasCapacity = ((pressure.Count == 0) &&
-            (thresholds.CapacityCpuPercent is { } cpu) &&
-            (thresholds.CapacityRamGb is { } free) &&
-            (m_cpu.Count == cpuSamples) && (mean < cpu) && (sample.FreeRamGb > free) && thresholds.CommitHasHeadroom(reading: sample));
+        // Capacity and its explanation come from the same decision, so quiet cannot call a cold window loaded
+        // or blame an instantaneous CPU reading when it is the rolling mean that fails.
+        var waits = new List<string>(pressure);
+        if (thresholds.CapacityCpuPercent is not { } cpu || thresholds.CapacityRamGb is not { } free) {
+            waits.Add("capacity thresholds unavailable");
+        } else {
+            if (m_cpu.Count < cpuSamples) { waits.Add($"collecting CPU samples: {m_cpu.Count} of {cpuSamples}"); }
+            else if (!(mean < cpu)) { waits.Add($"cpu mean={Number(mean)}% (needs under {Number(cpu)}%)"); }
+            if (!(sample.FreeRamGb > free)) { waits.Add($"freeRAM={Number(sample.FreeRamGb)}GB (needs over {Number(free)}GB)"); }
+            if (!thresholds.CommitHasHeadroom(sample)) { waits.Add($"commit={Number(sample.CommitPercent)}% (needs under {thresholds.CapacityCommitPercent}%)"); }
+        }
+        HasCapacity = waits.Count == 0;
+        CapacityWait = HasCapacity ? null : string.Join("; ", waits);
 
         // Capacity is judged only with both its thresholds and a full window; until then a reading without pressure has
         // no admission state, and the next one that does prints.
