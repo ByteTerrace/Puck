@@ -124,8 +124,9 @@ public sealed partial class SdfProgram {
         bool Owns(int instruction) => ((instruction >= instance.First) && (instruction < instance.End));
     }
 
-    // The first word of the per-instruction bound table, then of the segment directory that follows it.
-    private int BoundsWord() => ((((int)m_words[ProgramMaterialOffsetLane]) + (MaterialVectorsPerEntry * ((int)m_words[ProgramMaterialCountLane]))) * WordsPerVector);
+    // The first word of the per-instruction bound table, which follows the instruction data, then of the segment
+    // directory that follows it: as the field interpreter finds them (sdfLoadProgramLayout).
+    private int BoundsWord() => ((((int)m_words[ProgramDataOffsetLane]) + (InstructionDataVectors * m_instructions.Length)) * WordsPerVector);
     private int SegmentDirectoryWord() => (BoundsWord() + ((BoundRecordVectors * m_instructions.Length) * WordsPerVector));
     private SdfSkipSphere ReadSkipSphere(int word, uint modeMask) => new(
         Mode: m_words[(word + WordsPerVector)] & modeMask,

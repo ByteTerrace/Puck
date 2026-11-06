@@ -2,7 +2,7 @@ using System.Numerics;
 
 namespace Puck.SignedDistance;
 
-/// <summary>One entry of the scene's material palette. Packed as <see cref="SdfProgram.MaterialVectorsPerEntry"/> uint4
+/// <summary>One entry of the scene's material palette. Packed as <see cref="SdfAppearance.MaterialVectorsPerEntry"/> uint4
 /// words, its paints in the program's paint table (see <see cref="SdfProgram"/>).</summary>
 /// <param name="Albedo">The linear-RGB base color; every component must be finite and non-negative when admitted to
 /// a builder or program. Also the metallic reflectance tint — see <see cref="Metal"/>.</param>

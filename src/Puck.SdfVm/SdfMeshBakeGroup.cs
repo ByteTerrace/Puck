@@ -436,6 +436,8 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         if (Dynamic && (Geometry.Poses.Keys.Count(slot => (slot != Slot)) is var members) && (members > SdfMesh.MaxMembers)) {
             throw new InvalidOperationException($"Mesh group at instance {FirstInstance} needs {members} skin members; the representation holds {SdfMesh.MaxMembers}.");
         }
+        // A glass group lands whole and uncollapsed, so its mesh differs from the same shapes' opaque mesh.
+        if (Glass) { Geometry.AppendGlass(); }
         Geometry.Seal();
         PlannedLow = Low;
         PlannedHigh = High;

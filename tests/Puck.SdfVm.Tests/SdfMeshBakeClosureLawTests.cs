@@ -71,6 +71,22 @@ public sealed class SdfMeshBakeClosureLawTests {
             Assert.False(condition: closure.Reads(type: transport));
         }
     }
+
+    [Fact]
+    public void TheFieldDerivationReachesNoAppearance() {
+        var closure = SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory);
+        var program = typeof(Puck.SignedDistance.SdfProgram);
+
+        // The program's constructor is the field derivation and stays in the closure; the appearance it is joined to
+        // (SdfProgram.Of) and the palette values it packs never enter it, so an appearance edit keeps every stored mesh.
+        Assert.Contains(collection: closure.Members.Keys, filter: member => member.StartsWith(value: $"{program.Assembly.GetName().Name}!{program.FullName}..ctor`", comparisonType: StringComparison.Ordinal));
+        foreach (var appearance in new[] { typeof(Puck.SignedDistance.SdfAppearance), typeof(Puck.SignedDistance.SdfMaterial) }) {
+            var prefix = $"{appearance.Assembly.GetName().Name}!{appearance.FullName}";
+
+            Assert.DoesNotContain(collection: closure.Members.Keys, filter: member => (member.StartsWith(value: (prefix + "."), comparisonType: StringComparison.Ordinal) || member.StartsWith(value: (prefix + " "), comparisonType: StringComparison.Ordinal)));
+            Assert.False(condition: closure.Reads(type: appearance));
+        }
+    }
 }
 
 /// <summary>The fixture <see cref="SdfMeshBakeClosureLawTests"/> walks from: one method holding every shape of IL the

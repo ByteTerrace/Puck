@@ -69,10 +69,10 @@ public sealed class SdfMaterialLawTests {
             new SdfMaterial(Vector3.One, Receive: value),
         }) {
             Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().AddMaterial(material: material));
-            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram([Shape()], [material]));
+            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => TestPrograms.Of([Shape()], [material]));
         }
         _ = NewBuilder().AddMaterial(material: new SdfMaterial(Vector3.One, Bleed: Vector3.Zero, Receive: 0));
-        _ = new SdfProgram([Shape()], [new SdfMaterial(Vector3.One, Receive: 2)]);
+        _ = TestPrograms.Of([Shape()], [new SdfMaterial(Vector3.One, Receive: 2)]);
     }
     [InlineData(false)]
     [InlineData(true)]
@@ -82,7 +82,7 @@ public sealed class SdfMaterialLawTests {
             Bleed: new Vector3(x: 0.5f, y: 0.6f, z: 0.7f), Receive: 2f,
             Inset: (inset ? new SdfInset(Vector3.Zero, Quaternion.Identity, 0.1f, 1f,
                 new([new(0, Vector3.Zero), new(1, Vector3.One)])) : null));
-        var program = new SdfProgram([Shape()], [material]);
+        var program = TestPrograms.Of([Shape()], [material]);
         var offset = (((int)program.Words[SdfProgram.ProgramMaterialOffsetLane]) * 4);
 
         Assert.Equal(0.5f, BitConverter.UInt32BitsToSingle(value: program.Words[(offset + 11)]));
@@ -91,7 +91,7 @@ public sealed class SdfMaterialLawTests {
         Assert.Equal(0.7f, BitConverter.UInt32BitsToSingle(value: program.Words[(offset + 31)]));
         Assert.Equal(0.2f, BitConverter.UInt32BitsToSingle(value: program.Words[(offset + 12)]));
 
-        var defaults = new SdfProgram([Shape()], [new SdfMaterial(Vector3.One)]);
+        var defaults = TestPrograms.Of([Shape()], [new SdfMaterial(Vector3.One)]);
         var defaultOffset = (((int)defaults.Words[SdfProgram.ProgramMaterialOffsetLane]) * 4);
 
         foreach (var lane in new[] { 11, 15, 30, 31 }) {
@@ -282,7 +282,7 @@ public sealed class SdfMaterialLawTests {
     // pre-migration-shape contract Metal/Coat's XML docs promise.
     [Fact]
     public void AnUnauthoredMaterialPacksMetalAndCoatAsExactlyZero() {
-        var program = new SdfProgram(
+        var program = TestPrograms.Of(
             instructions: [Shape()],
             materials: [new SdfMaterial(Albedo: Vector3.One)]
         );
@@ -360,7 +360,7 @@ public sealed class SdfMaterialLawTests {
             );
 
             Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().AddMaterial(material: material));
-            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram(
+            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => TestPrograms.Of(
                 [Shape()],
                 [material]
             ));
@@ -375,17 +375,19 @@ public sealed class SdfMaterialLawTests {
     public void PaintsPackIntoThePaintTableAndAreRefusedOutOfRangeAtBothDoors() {
         var plane = new SdfPaint(Color: new Vector3(x: 0.5f, y: 0.25f, z: 0.125f), Origin: new Vector3(x: 0f, y: 2f, z: 0f), Rotation: new Quaternion(x: 0f, y: 0f, z: 0f, w: 2f), Shape: SdfPaintShape.Of(scale: Vector3.One, type: SdfSolidPrimitive.Plane), Stroke: 0.02f);
         var sweep = new SdfPaint(Color: Vector3.One, Origin: Vector3.Zero, Rotation: Quaternion.Identity, Shape: SdfPaintShape.Of(curve: new SdfSweepParameters(A: Vector3.Zero, B: new Vector3(x: 0.5f, y: 0.25f, z: 0f), Bulge: 0f, C: Vector3.UnitX, RadiusEnd: 0.01f, RadiusStart: 0.01f, StrandOffset: 0f, Strands: 1, Twist: 0f), scale: new Vector3(value: 2f), type: SdfSolidPrimitive.Sweep), Stroke: 0f, Slot: 5);
-        var program = new SdfProgram([Shape()], [new SdfMaterial(Vector3.One), new SdfMaterial(Vector3.One, Paints: [plane, sweep])]);
+        var program = TestPrograms.Of([Shape()], [new SdfMaterial(Vector3.One), new SdfMaterial(Vector3.One, Paints: [plane, sweep])]);
         float Lane(int word) => BitConverter.UInt32BitsToSingle(value: program.Words[word]);
-        var paintVector = (((int)program.Words[SdfProgram.ProgramDataOffsetLane]) + SdfProgram.InstructionDataVectors);
-        var secondMaterial = ((((int)program.Words[SdfProgram.ProgramMaterialOffsetLane]) + SdfProgram.MaterialVectorsPerEntry + 20) * 4);
+        var materialVector = (int)program.Words[SdfProgram.ProgramMaterialOffsetLane];
+        var paintVector = (materialVector + (2 * SdfAppearance.MaterialVectorsPerEntry));
+        var secondMaterial = ((materialVector + SdfAppearance.MaterialVectorsPerEntry + 20) * 4);
 
-        Assert.Equal(expected: 0u, actual: program.Words[(((((int)program.Words[SdfProgram.ProgramMaterialOffsetLane]) + 20) * 4) + 1)]);
+        Assert.Equal(expected: 0u, actual: program.Words[(((materialVector + 20) * 4) + 1)]);
         Assert.Equal(expected: (uint)paintVector, actual: program.Words[secondMaterial]);
         Assert.Equal(expected: 2u, actual: program.Words[(secondMaterial + 1)]);
-        Assert.Equal(expected: (paintVector + (2 * SdfProgram.PaintVectorsPerEntry)), actual: (int)program.Words[SdfProgram.ProgramMaterialOffsetLane]);
-        // The shading words, which a lighting-only upload rewrites, span the paints and the materials.
-        Assert.Equal(expected: new Range(start: (paintVector * 4), end: ((((int)program.Words[SdfProgram.ProgramMaterialOffsetLane]) + (2 * SdfProgram.MaterialVectorsPerEntry)) * 4)), actual: program.ShadingWords);
+        Assert.Equal(expected: ((paintVector + (2 * SdfAppearance.PaintVectorsPerEntry)) * 4), actual: program.Words.Length);
+        // The shading words, which a lighting-only upload rewrites, are the stream's tail: the materials, then the paints.
+        Assert.Equal(expected: new Range(start: (materialVector * 4), end: program.Words.Length), actual: program.ShadingWords);
+        Assert.Equal(expected: (materialVector * 4), actual: program.FieldWords.Length);
 
         var first = (paintVector * 4);
 
@@ -393,13 +395,13 @@ public sealed class SdfMaterialLawTests {
         Assert.Equal(expected: (uint)SdfShapeType.Plane, actual: program.Words[(first + 3)]);
         Assert.Equal(expected: [0f, 0f, 0f, 1f], actual: Enumerable.Range(start: (first + 4), count: 4).Select(selector: Lane));
         Assert.Equal(expected: [0.5f, 0.25f, 0.125f, 0.02f], actual: Enumerable.Range(start: (first + 20), count: 4).Select(selector: Lane));
-        Assert.Equal(expected: SdfProgram.PaintWinningFrame, actual: program.Words[(first + 24)]);
+        Assert.Equal(expected: SdfAppearance.PaintWinningFrame, actual: program.Words[(first + 24)]);
         Assert.Equal(expected: [float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity], actual: Enumerable.Range(start: (first + 28), count: 3).Select(selector: Lane));
 
-        var second = ((paintVector + SdfProgram.PaintVectorsPerEntry) * 4);
+        var second = ((paintVector + SdfAppearance.PaintVectorsPerEntry) * 4);
 
         Assert.Equal(expected: (uint)SdfShapeType.Sweep, actual: program.Words[(second + 3)]);
-        Assert.Equal(expected: (uint)((paintVector + SdfProgram.PaintVectorsPerEntry) + 8), actual: program.Words[(second + 12)]);
+        Assert.Equal(expected: (uint)((paintVector + SdfAppearance.PaintVectorsPerEntry) + 8), actual: program.Words[(second + 12)]);
         Assert.Equal(expected: 5u, actual: program.Words[(second + 24)]);
         Assert.Equal(expected: [0f, 0f, 0f, 0.02f, 1f, 0.5f, 0f, 0.02f, 2f, 0f, 0f, 0f], actual: Enumerable.Range(start: (second + 32), count: 12).Select(selector: Lane));
         foreach (var paint in new[] {
@@ -410,12 +412,12 @@ public sealed class SdfMaterialLawTests {
             var material = new SdfMaterial(Vector3.One, Paints: [plane, paint]);
 
             Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().AddMaterial(material: material));
-            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram([Shape()], [material]));
+            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => TestPrograms.Of([Shape()], [material]));
         }
-        var crowded = new SdfMaterial(Vector3.One, Paints: Enumerable.Repeat(element: plane, count: (SdfProgram.MaxPaintsPerMaterial + 1)).ToArray());
+        var crowded = new SdfMaterial(Vector3.One, Paints: Enumerable.Repeat(element: plane, count: (SdfAppearance.MaxPaintsPerMaterial + 1)).ToArray());
 
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().AddMaterial(material: crowded));
-        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram([Shape()], [crowded]));
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => TestPrograms.Of([Shape()], [crowded]));
     }
     /// <summary>A paint shape is the instruction the builder packs for a document primitive: a residual scale transform
     /// folds into its scale (a torus scaled differently in X and Z keeps one; scaled alike, it packs its native ellipse), a convex polygon carries its vertices and their count, and a primitive the views pass
@@ -461,8 +463,8 @@ public sealed class SdfMaterialLawTests {
             : new SdfPrismProfile(Kind: kind, CornerRadius: 0f, Vertices: vertices));
         var scale = new Vector3(x: 0.115f, y: 0.105f, z: 0.06f);
         var paint = new SdfPaint(Color: Vector3.One, Origin: Vector3.Zero, Rotation: Quaternion.Identity, Shape: SdfPaintShape.Of(profile: profile, scale: scale, type: SdfSolidPrimitive.Prism), Stroke: 0f);
-        var program = new SdfProgram([Shape()], [new SdfMaterial(Vector3.One, Paints: [paint])]);
-        var first = ((((int)program.Words[SdfProgram.ProgramDataOffsetLane]) + SdfProgram.InstructionDataVectors) * 4);
+        var program = TestPrograms.Of([Shape()], [new SdfMaterial(Vector3.One, Paints: [paint])]);
+        var first = ((((int)program.Words[SdfProgram.ProgramMaterialOffsetLane]) + SdfAppearance.MaterialVectorsPerEntry) * 4);
         var reference = program.Words[(first + 12)];
         var count = (int)((reference & ((1u << SdfPrismProfile.ConvexCountBits) - 1u)) + 1u);
         var tableWord = (int)((reference >> SdfPrismProfile.ConvexCountBits) * 4u);
@@ -550,7 +552,7 @@ public sealed class SdfMaterialLawTests {
                 Seed: uint.MaxValue
             )
         );
-        var program = new SdfProgram(
+        var program = TestPrograms.Of(
             [Shape()],
             [material]
         );
@@ -593,7 +595,7 @@ public sealed class SdfMaterialLawTests {
             Metal: 0.6f,
             Coat: 0.25f
         );
-        var program = new SdfProgram(
+        var program = TestPrograms.Of(
             instructions: [Shape()],
             materials: [material]
         );
@@ -646,14 +648,14 @@ public sealed class SdfMaterialLawTests {
     public void TheConstructorRefusesPackedMetalOrCoatOutsideTheUnitRange() {
         var instructions = new[] { Shape() };
 
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram(
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => TestPrograms.Of(
             instructions: instructions,
             materials: [new SdfMaterial(
                     Albedo: Vector3.One,
                     Metal: 1.5f
                 )]
         ));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram(
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => TestPrograms.Of(
             instructions: instructions,
             materials: [new SdfMaterial(
                     Albedo: Vector3.One,
@@ -662,7 +664,7 @@ public sealed class SdfMaterialLawTests {
         ));
 
         // Control.
-        _ = new SdfProgram(
+        _ = TestPrograms.Of(
             instructions: instructions,
             materials: [new SdfMaterial(
                     Albedo: Vector3.One,
@@ -675,14 +677,14 @@ public sealed class SdfMaterialLawTests {
     public void TheConstructorRefusesPackedRoughnessOrSheenOutsideTheUnitRange() {
         var instructions = new[] { Shape() };
 
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram(
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => TestPrograms.Of(
             instructions: instructions,
             materials: [new SdfMaterial(
                     Albedo: Vector3.One,
                     Roughness: 32f
                 )]
         ));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram(
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => TestPrograms.Of(
             instructions: instructions,
             materials: [new SdfMaterial(
                     Albedo: Vector3.One,
@@ -691,7 +693,7 @@ public sealed class SdfMaterialLawTests {
         ));
 
         // Control.
-        _ = new SdfProgram(
+        _ = TestPrograms.Of(
             instructions: instructions,
             materials: [new SdfMaterial(
                     Albedo: Vector3.One,
@@ -702,14 +704,14 @@ public sealed class SdfMaterialLawTests {
     }
     [Fact]
     public void UnauthoredLayersPackAsZero() {
-        var program = new SdfProgram(
+        var program = TestPrograms.Of(
             [Shape()],
             [new SdfMaterial(Vector3.One)]
         );
         var offset = (((int)program.Words[3]) * 4);
 
         // The inset's unused tail shares two lanes with the material's unit-default indirect bleed channels.
-        for (var i = (4 * 4); (i < (SdfProgram.MaterialVectorsPerEntry * 4)); i++) {
+        for (var i = (4 * 4); (i < (SdfAppearance.MaterialVectorsPerEntry * 4)); i++) {
             Assert.Equal(
                 ((i is 30 or 31) ? BitConverter.SingleToUInt32Bits(value: 1f) : 0u),
                 program.Words[(offset + i)]
@@ -718,25 +720,22 @@ public sealed class SdfMaterialLawTests {
     }
     [Fact]
     public void WeatheringRequiresItsAuthoredSurfacesAtBothAdmissionDoors() {
-        foreach (var weathering in new SdfWeathering[] { new(Edge: 1f), new(Lines: 1f), new(Noise: 1f), new(Settle: 1f), new(Lane: 4), new(Reach: 0f) }) {
+        foreach (var weathering in new SdfWeathering[] { new(Edge: 1f), new(Lines: 1f), new(Noise: 1f), new(Settle: 1f), new(Lane: SdfLanes.Count), new(Reach: 0f) }) {
             var material = new SdfMaterial(
                 Vector3.One,
                 Weathering: weathering
             );
 
             Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().AddMaterial(material: material));
-            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram(
-                [Shape()],
-                [material]
-            ));
+            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfAppearance(materials: [material]));
         }
     }
     [Fact]
     public void WeatheringPatternPacksItsCharacterIntoTheMaterial() {
         var weathering = new SdfWeathering(Noise: 0.8f, PatternScale: new Vector3(16f, 0.6f, 16f), Softness: 0.25f,
             Under: [new(0.5f, new(Vector3.One, 0.9f, 0f))]);
-        var program = new SdfProgram([Shape()], [new(Vector3.One, Weathering: weathering)]);
-        var plain = new SdfProgram([Shape()], [new(Vector3.One)]);
+        var program = TestPrograms.Of([Shape()], [new(Vector3.One, Weathering: weathering)]);
+        var plain = TestPrograms.Of([Shape()], [new(Vector3.One)]);
         Assert.Equal(plain.Words.Length, program.Words.Length);
         var offset = (int)program.Words[3] * 4;
         float At(int row, int component) => BitConverter.UInt32BitsToSingle(program.Words[offset + row * 4 + component]);
@@ -751,14 +750,14 @@ public sealed class SdfMaterialLawTests {
         Assert.Equal(new Vector4(0f, 0f, 0f, 1f), new Vector4(At(26, 0), At(26, 1), At(26, 2), At(26, 3)));
         Assert.True(SdfMaterialLayers.IsValid(null, weathering, null, null));
 
-        var character = new SdfProgram([Shape()], [new(Vector3.One, Weathering: weathering with {
+        var character = TestPrograms.Of([Shape()], [new(Vector3.One, Weathering: weathering with {
             Octaves = 2, OctaveRatio = 2.03f, OctaveGain = 0.534f, Turn = new Quaternion(0.2f, -0.4f, -0.4f, 0.8f),
         })]);
         float Character(int row, int component) => BitConverter.UInt32BitsToSingle(character.Words[offset + row * 4 + component]);
         Assert.Equal(2.03f, Character(15, 2));
         Assert.Equal(0.534f, Character(18, 3));
         Assert.Equal(new Vector4(0.2f, -0.4f, -0.4f, 0.8f), new Vector4(Character(26, 0), Character(26, 1), Character(26, 2), Character(26, 3)));
-        var unnormalised = new SdfProgram([Shape()], [new(Vector3.One, Weathering: weathering with {
+        var unnormalised = TestPrograms.Of([Shape()], [new(Vector3.One, Weathering: weathering with {
             Turn = new Quaternion(0f, 0f, 3f, 4f),
         })]);
         Assert.Equal(0.6f, BitConverter.UInt32BitsToSingle(unnormalised.Words[offset + 26 * 4 + 2]), precision: 6);
@@ -782,7 +781,7 @@ public sealed class SdfMaterialLawTests {
         var weathering = new SdfWeathering(Scale: float.MaxValue / 2f, PatternScale: Vector3.One, Octaves: 2, OctaveRatio: 4f);
         var material = new SdfMaterial(Vector3.One, Weathering: weathering);
         Assert.Throws<ArgumentOutOfRangeException>(() => NewBuilder().AddMaterial(material));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new SdfProgram([Shape()], [material]));
+        Assert.Throws<ArgumentOutOfRangeException>(() => TestPrograms.Of([Shape()], [material]));
         // An inactive second octave contributes no frequency or footprint to the shader.
         Assert.True(SdfMaterialLayers.IsValid(null, weathering with { Octaves = 1 }, null, null));
     }

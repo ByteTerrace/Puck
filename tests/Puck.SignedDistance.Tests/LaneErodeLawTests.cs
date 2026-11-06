@@ -233,17 +233,17 @@ public sealed class LaneErodeLawTests {
             Shape: ((uint)SdfShapeType.Sphere)
         );
 
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram(
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => TestPrograms.Of(
             instructions: [Erode(laneIndex: 0.5f), Shape()],
             materials: [new SdfMaterial(Albedo: Vector3.One)]
         ));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram(
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => TestPrograms.Of(
             instructions: [Erode(laneIndex: 4f), Shape()],
             materials: [new SdfMaterial(Albedo: Vector3.One)]
         ));
 
         // Control: every documented ordinal is admitted.
-        _ = new SdfProgram(
+        _ = TestPrograms.Of(
             instructions: [Erode(laneIndex: 3f), Shape()],
             materials: [new SdfMaterial(Albedo: Vector3.One)]
         );

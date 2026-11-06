@@ -5,11 +5,6 @@ using Puck.Maths;
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgram {
-    // The screen frame's admission tolerances. The skew bound is a cosine (~0.057 degrees); the unit bound admits the
-    // rounding a quaternion-derived or fixed-point-derived axis carries. KEEP IN SYNC with SdfProgramBuilder's
-    // BasisSkewTolerance — the builder refuses the same frame one layer earlier, naming the caller's argument.
-    private const float ScreenFrameSkewTolerance = 1.0e-3f;
-    private const float ScreenFrameUnitTolerance = 1.0e-3f;
     // The operand lanes a shape carries as reinterpreted integer BITS rather than a float value, as a bit per lane over
     // (Data0.xyzw, Data1.xyzw). A bit pattern there reads as NaN or an infinity as often as it reads as a number, so the
     // finiteness sweep must skip exactly these and no others. KEEP IN SYNC with the asuint() reads in
@@ -27,15 +22,6 @@ public sealed partial class SdfProgram {
 
     private static readonly string[] OperandLaneNames = ["Data0.x", "Data0.y", "Data0.z", "Data0.w", "Data1.x", "Data1.y", "Data1.z", "Data1.w"];
 
-    private bool DeclaresScreenIndex(int screenIndex) {
-        foreach (var surface in m_screenSurfaces) {
-            if (surface.ScreenIndex == screenIndex) {
-                return true;
-            }
-        }
-
-        return false;
-    }
     // Every lane a caller supplies reaches the GPU as a packed word bit-for-bit (WriteVector4 reinterprets, it never
     // arithmetically normalizes), so a NaN or an infinity is absorbed nowhere downstream: it survives into the
     // instruction stream, poisons the program-wide Lipschitz step scale (AnalyzeLipschitz folds every shape dimension
@@ -272,65 +258,6 @@ public sealed partial class SdfProgram {
             );
         }
     }
-    // The public constructor is an equal admission door to SdfProgramBuilder.Build: callers may assemble the packed
-    // tables directly, so material values need the same finite/non-negative domain AddMaterial enforces.
-    private static void RequirePackedMaterials(IReadOnlyList<SdfMaterial> materials, string paramName) {
-        for (var index = 0; (index < materials.Count); index++) {
-            var material = materials[index];
-            var bleed = (material.Bleed ?? Vector3.One);
-
-            if (
-                !VectorFunctions.IsFinite(vector: material.Albedo) ||
-                (material.Albedo.X < 0f) ||
-                (material.Albedo.Y < 0f) ||
-                (material.Albedo.Z < 0f) ||
-                !float.IsFinite(f: material.Emissive) ||
-                (material.Emissive < 0f) ||
-                !float.IsFinite(f: material.Specular) ||
-                (material.Specular < 0f) ||
-                !float.IsFinite(f: material.Roughness) ||
-                (material.Roughness < 0f) ||
-                (material.Roughness > 1f) ||
-                !float.IsFinite(f: material.Sheen) ||
-                (material.Sheen < 0f) ||
-                (material.Sheen > 1f) ||
-                !float.IsFinite(f: material.Metal) ||
-                (material.Metal < 0f) ||
-                (material.Metal > 1f) ||
-                !float.IsFinite(f: material.Coat) ||
-                (material.Coat < 0f) ||
-                (material.Coat > 1f) ||
-                !float.IsFinite(f: material.Wrap) ||
-                (material.Wrap < 0f) ||
-                (material.Wrap > 1f) ||
-                !float.IsFinite(f: material.Soften) ||
-                (material.Soften < 0f) ||
-                (material.Soften > 1f) ||
-                !VectorFunctions.IsFinite(vector: material.Fill) ||
-                (material.Fill.X < 0f) ||
-                (material.Fill.Y < 0f) ||
-                (material.Fill.Z < 0f) ||
-                !VectorFunctions.IsFinite(vector: bleed) ||
-                (bleed.X < 0f) || (bleed.Y < 0f) || (bleed.Z < 0f) ||
-                !float.IsFinite(f: material.Receive) || (material.Receive < 0f) ||
-                !SdfLanes.IsLane(lane: material.EmissiveLane) ||
-                (material.Paints is { Count: > MaxPaintsPerMaterial }) ||
-                !material.IsGlassValid ||
-                (material.Toon is { Enabled: true, IsValid: false }) ||
-                !SdfMaterialLayers.IsValid(
-                inset: material.Inset,
-                weathering: material.Weathering,
-                paints: material.Paints,
-                flow: material.Flow
-            )
-            ) {
-                throw new ArgumentOutOfRangeException(
-                    message: $"Material {index} must carry finite, non-negative albedo, emissive, specular, fill, bleed and receive, with roughness/sheen/metal/coat/wrap/soften finite in [0, 1], an emissive lane absent or in [0, {(SdfLanes.Count - 1)}], a glass with a positive depth, an index of refraction in [{SdfGlass.MinIor}, {SdfGlass.MaxIor}] and a tint in [0, 1], a cel style within its ranges, and valid material layers; got {material}.",
-                    paramName: paramName
-                );
-            }
-        }
-    }
     // Instance ranges must PARTITION the instructions they claim. The segment walk attributes each segment to ONE owner,
     // so a second instance naming an instruction the first already owns packs the empty segment range [0, 0) while still
     // carrying a real cull bound: its geometry then renders only where the winner's mask bit happens to be set, and
@@ -482,28 +409,6 @@ public sealed partial class SdfProgram {
             );
         }
     }
-    // The screen frame is packed as two independent axes the shader projects a hit point onto, while the slab's own
-    // geometry rides the rotation derived from that same pair — so a non-unit or skewed pair packs a UV that does not
-    // describe the surface it labels. KEEP IN SYNC with SdfProgramBuilder's RequireOrthogonalBasis tolerance.
-    private static void RequireOrthonormalScreenFrame(SdfScreenSurface surface, string paramName) {
-        var axisRight = surface.Right;
-        var axisUp = surface.Up;
-        var skew = Vector3.Dot(
-            vector1: axisRight,
-            vector2: axisUp
-        );
-
-        if (
-            !(MathF.Abs(x: (axisRight.Length() - 1f)) <= ScreenFrameUnitTolerance) ||
-            !(MathF.Abs(x: (axisUp.Length() - 1f)) <= ScreenFrameUnitTolerance) ||
-            !(MathF.Abs(x: skew) <= ScreenFrameSkewTolerance)
-        ) {
-            throw new ArgumentOutOfRangeException(
-                paramName: paramName,
-                message: $"A screen surface's right/up axes must be unit and orthogonal; got |right| {axisRight.Length()}, |up| {axisUp.Length()}, dot {skew}."
-            );
-        }
-    }
     // A wallpaper fold reads only its own cell's copy, which is the nearest copy everywhere exactly when the fold is
     // continuous: every cell wall and in-cell seam a mirror (SdfWallpaperFold.IsContinuous). A group whose fold jumps (a
     // translation wall, a rotation seam) would let a march step through a neighbour's copy, so it is refused here, before
@@ -566,22 +471,9 @@ public sealed partial class SdfProgram {
     // AnalyzeBounds instead of rebuilding it. It is derived here rather than before this call because the map indexes
     // by instruction: it is only well-defined once the instance-range sweep below has refused a range reaching past
     // the stream, and building it earlier would replace that named refusal with an IndexOutOfRangeException.
-    private int[] ValidatePackedContract(IReadOnlyList<SdfMaterial> materials, string instancesParamName, string instructionsParamName, string screenSurfacesParamName) {
-        var materialCount = materials.Count;
-
-        // Ids from SdfProgramBuilder.ScreenMaterialId up decode as screen shading, so a palette reaching that far
-        // carries rows no instruction can name (SdfProgramBuilder.AddMaterial refuses the same row at its own door).
-        if (materialCount > SdfProgramBuilder.ScreenMaterialId) {
-            throw new ArgumentException(
-                message: $"A program declares {materialCount} materials, but ids from {SdfProgramBuilder.ScreenMaterialId} up are the screen sentinels, so those rows can never be addressed.",
-                paramName: "materials"
-            );
-        }
-
-        RequirePackedMaterials(
-            materials: materials,
-            paramName: "materials"
-        );
+    // Material and screen references are checked against the appearance's outline; SdfAppearance validates the values.
+    private int[] ValidatePackedContract(string instancesParamName, string instructionsParamName) {
+        var materialCount = m_outline.Materials;
 
         for (var index = 0; (index < m_instructions.Length); index++) {
             var instruction = m_instructions[index];
@@ -716,7 +608,7 @@ public sealed partial class SdfProgram {
 
                 var screenIndex = ((int)((instruction.Material - SdfProgramBuilder.ScreenMaterialId) - 1u));
 
-                if (!DeclaresScreenIndex(screenIndex: screenIndex)) {
+                if (!m_outline.DeclaresScreen(screenIndex: screenIndex)) {
                     throw new ArgumentException(
                         message: $"Instruction {index} names screen material {instruction.Material}, which decodes to screen index {screenIndex}, but the program declares no screen surface at that index.",
                         paramName: instructionsParamName
@@ -732,57 +624,6 @@ public sealed partial class SdfProgram {
                     paramName: instructionsParamName
                 );
             }
-        }
-
-        Span<bool> seenScreenIndices = stackalloc bool[SdfProgramBuilder.MaxScreenSurfaces];
-
-        foreach (var surface in m_screenSurfaces) {
-            if (
-                (surface.ScreenIndex < 0) ||
-                (surface.ScreenIndex >= SdfProgramBuilder.MaxScreenSurfaces)
-            ) {
-                throw new ArgumentOutOfRangeException(
-                    paramName: screenSurfacesParamName,
-                    message: $"A screen index must be 0..{(SdfProgramBuilder.MaxScreenSurfaces - 1)}; got {surface.ScreenIndex}."
-                );
-            }
-
-            if (seenScreenIndices[surface.ScreenIndex]) {
-                throw new ArgumentException(
-                    message: $"Two screen surfaces declare index {surface.ScreenIndex}. The packed table is indexed BY screen index, so one would silently overwrite the other.",
-                    paramName: screenSurfacesParamName
-                );
-            }
-
-            seenScreenIndices[surface.ScreenIndex] = true;
-
-            if (!VectorFunctions.IsFinite(vector: surface.Origin)) {
-                throw new ArgumentOutOfRangeException(
-                    paramName: screenSurfacesParamName,
-                    message: $"A screen surface's origin must be finite; got {surface.Origin}."
-                );
-            }
-
-            // sampleScreenSurface resolves the UV as dot(local, right)/right.w and dot(local, up)/up.w, so a zero (or
-            // NaN) half-extent maps every hit on a reachable surface to a non-finite UV. KEEP IN SYNC with
-            // SdfProgramBuilder's indexed ScreenSlab overload, which refuses the same face naming halfExtents. The
-            // slab's DEPTH half-extent is unconstrained here: nothing divides by it.
-            if (
-                !float.IsFinite(f: surface.HalfWidth) ||
-                !float.IsFinite(f: surface.HalfHeight) ||
-                !(surface.HalfWidth > 0f) ||
-                !(surface.HalfHeight > 0f)
-            ) {
-                throw new ArgumentOutOfRangeException(
-                    paramName: screenSurfacesParamName,
-                    message: $"A screen surface's half-width and half-height must be positive; got {surface.HalfWidth} and {surface.HalfHeight}. The shader divides the hit's projection onto each axis by that axis's half-extent."
-                );
-            }
-
-            RequireOrthonormalScreenFrame(
-                paramName: screenSurfacesParamName,
-                surface: surface
-            );
         }
 
         foreach (var instance in m_instances) {

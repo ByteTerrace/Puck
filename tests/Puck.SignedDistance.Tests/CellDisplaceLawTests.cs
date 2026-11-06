@@ -90,7 +90,7 @@ public sealed class CellDisplaceLawTests {
                 ),
                 Vector4.Zero
             );
-            Assert.ThrowsAny<ArgumentException>(testCode: () => new SdfProgram(
+            Assert.ThrowsAny<ArgumentException>(testCode: () => TestPrograms.Of(
                 instructions,
                 [new(Vector3.One)]
             ));

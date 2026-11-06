@@ -46,6 +46,14 @@
 #define SDF_INDIRECT_SOURCES_SCREENS  16u
 #define SDF_INDIRECT_SOURCES_ALL      31u
 
+// The appearance section, after every table the field reads (SdfAppearance): the program header's material count and offset, the material and paint strides and the paint limits.
+#define SDF_PROGRAM_MATERIAL_COUNT(v)  ((v).y)
+#define SDF_PROGRAM_MATERIAL_OFFSET(v) ((v).w)
+#define SDF_MATERIAL_VECTORS_PER_ENTRY 32u
+#define SDF_PAINT_VECTORS_PER_ENTRY    12u
+#define SDF_MAX_PAINTS_PER_MATERIAL    8u
+#define SDF_PAINT_WINNING_FRAME        0xFFFFFFFFu
+
 // The renderer's capacities, the photometry and the exposure (SdfPhotometry, SdfExposure).
 #define SDF_MAX_SCREEN_SURFACES      32u
 #define SDF_MAX_LIGHTS               128u
@@ -173,7 +181,7 @@
 #define SDF_GLASS_DEPTH_DISTANCE_SCALE 32768.0
 #define SDF_GLASS_ABSORPTION_SCALE     65536.0
 
-// The flow layer's clock period in seconds (SdfFlow.ClockPeriodSeconds) and its control word (SdfProgram.FlowLaneMask, SdfProgram.FlowWorldFrame, SdfProgram.FlowCoverageLaneShift).
+// The flow layer's clock period in seconds (SdfFlow.ClockPeriodSeconds) and its control word (SdfAppearance.FlowLaneMask, SdfAppearance.FlowWorldFrame, SdfAppearance.FlowCoverageLaneShift).
 #define SDF_FLOW_CLOCK_PERIOD        4096.0
 #define SDF_FLOW_LANE_MASK           0x000000FFu
 #define SDF_FLOW_WORLD_FRAME         0x00000100u

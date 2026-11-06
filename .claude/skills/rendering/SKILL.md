@@ -505,7 +505,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   tangential part, revealing a surface and tilting the shading normal. Its
   phase enters only through the pass block's `flowClock`, which
   `SdfFrameBlock` integrates from `SdfFrame.Clock` and writes zero for a program
-  without flow (`SdfProgram.HasFlow`), so a still world's views keep standing;
+  without flow (`SdfAppearance.HasFlow`), so a still world's views keep standing;
   the clock is a lighting value of the cadence signature, so only the shading
   passes rerun as the flow moves. No `sdf-*` kernel reads the Frame group's
   `time` or `timeDelta`: `puck search -M 0 "frameGroup\.(time|timeDelta)"

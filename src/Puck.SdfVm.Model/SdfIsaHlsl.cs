@@ -62,13 +62,14 @@ public static class SdfIsaHlsl {
             include: (((GenerateLayout() + SdfRenderHlsl.GenerateLayout()) + SdfSkyKindsHlsl.Generate()) + SdfSkyKindsHlsl.GenerateTable())
         );
     /// <summary>Returns the fingerprint of the field's instruction set, which the mesh bake's interface carries as its
-    /// stamp: <see cref="FingerprintOf"/> of this include's layout alone and the model's described encoding. It moves
-    /// with what the field interpreter reads from the model and with the encoding, and with nothing the renderer alone
-    /// reads.</summary>
+    /// stamp: <see cref="FingerprintOf"/> of this include's layout alone and the encoding described over each probe
+    /// program's <see cref="SdfProgram.FieldWords"/>. It moves with what the field interpreter reads from the model and
+    /// with the field words' encoding, and with nothing the renderer alone reads: no material, paint or screen value,
+    /// stride or packing.</summary>
     /// <returns>The fingerprint.</returns>
     public static uint DescribeFieldFingerprint() =>
         FingerprintOf(
-            encoding: SdfEncodingProbe.Describe(),
+            encoding: SdfEncodingProbe.Describe(calls: SdfEncodingProbe.Calls(), wordsOf: static program => program.FieldWords.ToArray()),
             include: GenerateLayout()
         );
     /// <summary>Generates the source that records the fingerprints as <c>SdfIsaFingerprint.Value</c> and
@@ -147,9 +148,7 @@ public static class SdfIsaHlsl {
         declarations.Section(title: "The program header, the first vector of the word stream: the vectors before the instruction headers, and each lane's accessor.");
         declarations.Count(name: "SDF_PROGRAM_HEADER_VECTORS", value: SdfProgram.ProgramHeaderVectors);
         declarations.Lane(lane: SdfProgram.ProgramInstructionCountLane, name: "SDF_PROGRAM_INSTRUCTION_COUNT");
-        declarations.Lane(lane: SdfProgram.ProgramMaterialCountLane, name: "SDF_PROGRAM_MATERIAL_COUNT");
         declarations.Lane(lane: SdfProgram.ProgramDataOffsetLane, name: "SDF_PROGRAM_DATA_OFFSET");
-        declarations.Lane(lane: SdfProgram.ProgramMaterialOffsetLane, name: "SDF_PROGRAM_MATERIAL_OFFSET");
         declarations.Section(title: "An instruction: its header's lane accessors, and the data vectors each instruction holds in the data table.");
         declarations.Lane(lane: SdfProgram.InstructionOpLane, name: "SDF_INSTRUCTION_OP");
         declarations.Lane(lane: SdfProgram.InstructionShapeLane, name: "SDF_INSTRUCTION_SHAPE");
@@ -218,13 +217,6 @@ public static class SdfIsaHlsl {
             name: "SDF_MAX_INSTANCES",
             value: SdfProgramBuilder.MaxInstances
         );
-        declarations.Count(
-            name: "SDF_MATERIAL_VECTORS_PER_ENTRY",
-            value: SdfProgram.MaterialVectorsPerEntry
-        );
-        declarations.Count(name: "SDF_PAINT_VECTORS_PER_ENTRY", value: SdfProgram.PaintVectorsPerEntry);
-        declarations.Count(name: "SDF_MAX_PAINTS_PER_MATERIAL", value: SdfProgram.MaxPaintsPerMaterial);
-        declarations.Bits(name: "SDF_PAINT_WINNING_FRAME", value: SdfProgram.PaintWinningFrame);
         declarations.Count(
             name: "SDF_MAX_FIELD_SCOPE_DEPTH",
             value: SdfProgramBuilder.MaxFieldScopeDepth
@@ -317,6 +309,13 @@ public static class SdfIsaHlsl {
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_SHEET_THICKNESS", value: SdfMeshIrradianceProbe.DepthSheetThickness);
 
         declarations.Members<SdfIndirectSources>(prefix: "SDF_INDIRECT_SOURCES");
+        declarations.Section(title: "The appearance section, after every table the field reads (SdfAppearance): the program header's material count and offset, the material and paint strides and the paint limits.");
+        declarations.Lane(lane: SdfProgram.ProgramMaterialCountLane, name: "SDF_PROGRAM_MATERIAL_COUNT");
+        declarations.Lane(lane: SdfProgram.ProgramMaterialOffsetLane, name: "SDF_PROGRAM_MATERIAL_OFFSET");
+        declarations.Count(name: "SDF_MATERIAL_VECTORS_PER_ENTRY", value: SdfAppearance.MaterialVectorsPerEntry);
+        declarations.Count(name: "SDF_PAINT_VECTORS_PER_ENTRY", value: SdfAppearance.PaintVectorsPerEntry);
+        declarations.Count(name: "SDF_MAX_PAINTS_PER_MATERIAL", value: SdfAppearance.MaxPaintsPerMaterial);
+        declarations.Bits(name: "SDF_PAINT_WINNING_FRAME", value: SdfAppearance.PaintWinningFrame);
         declarations.Section(title: "The renderer's capacities, the photometry and the exposure (SdfPhotometry, SdfExposure).");
         declarations.Count(
             name: "SDF_MAX_SCREEN_SURFACES",
@@ -424,11 +423,11 @@ public static class SdfIsaHlsl {
         declarations.Real(name: "SDF_GLASS_SUM_SCALE", value: SdfWorldPackage.GlassSumScale);
         declarations.Real(name: "SDF_GLASS_DEPTH_DISTANCE_SCALE", value: SdfWorldPackage.GlassDepthDistanceScale);
         declarations.Real(name: "SDF_GLASS_ABSORPTION_SCALE", value: SdfWorldPackage.GlassAbsorptionScale);
-        declarations.Section(title: "The flow layer's clock period in seconds (SdfFlow.ClockPeriodSeconds) and its control word (SdfProgram.FlowLaneMask, SdfProgram.FlowWorldFrame, SdfProgram.FlowCoverageLaneShift).");
+        declarations.Section(title: "The flow layer's clock period in seconds (SdfFlow.ClockPeriodSeconds) and its control word (SdfAppearance.FlowLaneMask, SdfAppearance.FlowWorldFrame, SdfAppearance.FlowCoverageLaneShift).");
         declarations.Real(name: "SDF_FLOW_CLOCK_PERIOD", value: (float)SdfFlow.ClockPeriodSeconds);
-        declarations.Bits(name: "SDF_FLOW_LANE_MASK", value: SdfProgram.FlowLaneMask);
-        declarations.Bits(name: "SDF_FLOW_WORLD_FRAME", value: SdfProgram.FlowWorldFrame);
-        declarations.Count(name: "SDF_FLOW_COVERAGE_LANE_SHIFT", value: SdfProgram.FlowCoverageLaneShift);
+        declarations.Bits(name: "SDF_FLOW_LANE_MASK", value: SdfAppearance.FlowLaneMask);
+        declarations.Bits(name: "SDF_FLOW_WORLD_FRAME", value: SdfAppearance.FlowWorldFrame);
+        declarations.Count(name: "SDF_FLOW_COVERAGE_LANE_SHIFT", value: SdfAppearance.FlowCoverageLaneShift);
         declarations.Section(title: "The render lanes (SdfLanes): a frame slot's lanes, then the world's (SdfWorldPackage.WorldLanes).");
         declarations.Count(name: "SDF_FIRST_WORLD_LANE", value: SdfLanes.FirstWorld);
         declarations.Count(name: "SDF_LANE_COUNT", value: SdfLanes.Count);

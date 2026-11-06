@@ -52,7 +52,7 @@ public sealed partial class SdfWorldTables {
         // re-upload never resurrects the program's original frame over a live SetScreenSurface write made in between.
         // Only the words that differ are owed.
         _ = m_screenSurfaceRegion.Write(
-            bytes: MemoryMarshal.Cast<uint, byte>(span: program.ScreenSurfaceWords),
+            bytes: MemoryMarshal.Cast<uint, byte>(span: program.Appearance.ScreenSurfaceWords),
             offset: 0
         );
 
@@ -79,7 +79,7 @@ public sealed partial class SdfWorldTables {
     private static ulong WrapSignatureOf(SdfProgram program) {
         var hash = Fnv1aHash.Create();
 
-        foreach (var material in program.Materials) {
+        foreach (var material in program.Appearance.Materials) {
             hash.Add(value: BitConverter.SingleToUInt32Bits(value: material.Wrap));
         }
 
@@ -93,7 +93,7 @@ public sealed partial class SdfWorldTables {
 
         if ((before.Length != after.Length) || (previous.MaterialCount != current.MaterialCount) ||
             !previous.ShadingWords.Equals(other: current.ShadingWords) ||
-            !previous.ScreenSurfaceWords.SequenceEqual(other: current.ScreenSurfaceWords)) { return false; }
+            !previous.Appearance.ScreenSurfaceWords.SequenceEqual(other: current.Appearance.ScreenSurfaceWords)) { return false; }
         var (first, end) = (current.ShadingWords.Start.Value, current.ShadingWords.End.Value);
 
         return (before[..first].SequenceEqual(other: after[..first]) && before[end..].SequenceEqual(other: after[end..]));

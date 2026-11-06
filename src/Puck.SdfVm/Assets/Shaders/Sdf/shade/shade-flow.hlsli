@@ -69,7 +69,7 @@ float4 sdfFlowNoise(float3 q, uint seed) {
 // `contact` a coverage the caller adds to the flow's own (a glass's contact ramp, sdfGlassContact), revealed in the same
 // pattern. Returns the shading normal in the layer frame, `layerNormal` itself for a material with no flow or no tilt,
 // and in `revealed` the share of the surface the coverage revealed.
-// KEEP IN SYNC with SdfProgram.PackMaterials's flow rows.
+// KEEP IN SYNC with SdfAppearance.Pack's flow rows.
 float3 sdfApplyFlow(float3 layerPoint, float3 layerNormal, float3 layerFlow, float clock, float footprint, float4 lanes, float contact,
     inout SdfMaterialData material, out float revealed) {
     revealed = 0.0;

@@ -7,10 +7,7 @@ namespace Puck.SignedDistance;
 //   word[0]             = (instructionCount, materialCount, dataOffset, materialOffset) in uvec4 units
 //   [1 .. 1+N)          = instruction headers (op, shape, blend, material)
 //   [dataOffset ..)     = instruction data, 2 uvec4 per instruction (data0, data1 as float bits)
-//   [dataOffset + 2*instructionCount ..) = the paint table, PaintVectorsPerEntry uvec4 per paint, each material's
-//                         paints contiguous; see PackPaints and the views pass's sdfApplyPaints.
-//   [materialOffset ..) = material layers, MaterialVectorsPerEntry uint4 per entry; see PackMaterials and sdfMaterialLoad.
-//   [materialOffset + MaterialVectorsPerEntry*materialCount ..) = the per-SHAPE bounding-sphere table, 2 uvec4 per instruction:
+//   [dataOffset + 2*instructionCount ..) = the per-SHAPE bounding-sphere table, 2 uvec4 per instruction:
 //                         b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot, index, index+1).
 //   [.. + 2*instructionCount ..) = the SEGMENT directory: one (segmentCount, stepScale, rigidPlanOffset, 0) header uvec4, then 2
 //                         uvec4 per segment — s0 = center/offset.xyz + radius (float bits), s1 = (mode, dynamicSlot,
@@ -18,7 +15,7 @@ namespace Puck.SignedDistance;
 //                         bits) is the per-PROGRAM Lipschitz STEP SCALE (1/L, AnalyzeLipschitz): mapCore multiplies
 //                         its FINAL returned distance by it so sphere tracing cannot overstep a non-1-Lipschitz warp
 //                         (twist/bend) or an overestimating blend and hole — == 1.0 for an isometric program. Both
-//                         tables' offsets derive from word[0]'s lanes. See PackBounds.
+//                         tables' offsets derive from word[0]'s instruction count and data offset. See PackBounds.
 //   [.. + 1 + 2*segmentCount ..) = the INSTANCE directory: one (instanceCount, partProgramOffset, 0, 0) header uvec4,
 //                         then 2 uvec4 per instance — i0 = bound center/offset.xyz + radius (float bits), i1 = (mode,
 //                         dynamicSlot, segmentFirst, segmentEnd) — segmentFirst/segmentEnd index the SEGMENT directory
@@ -42,6 +39,10 @@ namespace Puck.SignedDistance;
 //                         full interpreter for that segment.
 //   [.. after rigid leaves ..) = the convex-polygon, sweep-curve and path side tables, then the part programs (each
 //                         located by an absolute offset its instruction or the instance header carries).
+//   [materialOffset ..) = the APPEARANCE section, after every table the field interpreter reads (FieldWords): the
+//                         material table, SdfAppearance.MaterialVectorsPerEntry uvec4 per material (sdfMaterialLoad), then
+//                         the paints, SdfAppearance.PaintVectorsPerEntry uvec4 each, every material's contiguous
+//                         (sdfApplyPaints). SdfAppearance.Pack writes it; the field constructor only sizes it.
 /// <summary>Contains the typed SDF instruction stream and its packed GPU representation, bounds, instances,
 /// materials, screen surfaces, and acceleration metadata.</summary>
 public sealed partial class SdfProgram {
@@ -71,9 +72,6 @@ public sealed partial class SdfProgram {
     /// <c>bound.w &lt; 0</c> branch while the slot still occupies its reserved capacity. Chosen well below any
     /// legitimate rounding of a real radius toward 0 so the branch never misfires on a genuine bound.</summary>
     private const float ParkedBoundRadius = -1f;
-    /// <summary>Each packed screen-surface entry's uvec4 (16-byte) stride: right.xyz+halfWidth, up.xyz+halfHeight,
-    /// origin.xyz+pad (KEEP IN SYNC with frame/sdf-environment.hlsli's ScreenSurfaceData).</summary>
-    private const int ScreenSurfaceVectorsPerEntry = 3;
     /// <summary>Each packed <see cref="SdfShapeType.Sweep"/> curve table entry's uvec4 stride: (A.xyz, radiusStart),
     /// (B.xyz, radiusEnd), (C.xyz, bulge).</summary>
     private const int SweepCurveVectorsPerEntry = 3;
@@ -108,39 +106,28 @@ public sealed partial class SdfProgram {
     private readonly ReadOnlyCollection<SdfInstanceRange> m_instancesView;
     private readonly SdfInstruction[] m_instructions;
     private readonly ReadOnlyCollection<SdfInstruction> m_instructionsView;
-    private readonly uint[] m_screenSurfaceWords;
-    private readonly SdfScreenSurface[] m_screenSurfaces;
-    private readonly ReadOnlyCollection<SdfScreenSurface> m_screenSurfacesView;
+    // What the field may know of its appearance: the material count, the glass materials, the declared screens and the
+    // appearance section's size. No material value: the field derivation never reads one.
+    private readonly SdfAppearanceOutline m_outline;
     private readonly uint[] m_words;
 
+    /// <summary>Initializes a new instance of the <see cref="SdfProgram"/> class: the field derivation, from the field's
+    /// own inputs and its appearance's <see cref="SdfAppearanceOutline"/> alone. It is the root of the mesh bake's
+    /// identity (<c>SdfMeshBakeClosure.BakeRoots</c>), so it takes no appearance value and the program's appearance is
+    /// unattached while it runs; <see cref="Of"/> packs the appearance into the stream's tail after it returns.</summary>
     /// <param name="instructions">The instructions to execute for each field evaluation.</param>
-    /// <param name="materials">The material table referenced by the instructions.</param>
+    /// <param name="appearance">What the field may know of its appearance: the material count it validates material
+    /// lanes against, the glass materials, the declared screens and the appearance section's size.</param>
     /// <param name="instances">Optional contiguous instruction ranges with world-space bounds for instance culling.</param>
-    /// <param name="screenSurfaces">Optional screen-surface frames referenced by screen materials.</param>
     /// <param name="convexPolygonProfiles">Every <see cref="SdfShapeType.ConvexPolygon"/> instruction's own vertex
-    /// list, keyed by that instruction's index in <paramref name="instructions"/> — exactly one entry per such
-    /// instruction, no two claiming the same index. <see langword="null"/> (the default) is empty, valid only when
-    /// <paramref name="instructions"/> carries no <see cref="SdfShapeType.ConvexPolygon"/> shape.</param>
+    /// list, keyed by that instruction's index.</param>
     /// <param name="sweepCurves">Every <see cref="SdfShapeType.Sweep"/> instruction's own control points and radius
-    /// endpoints, keyed by that instruction's <see cref="SdfSweepCurve.InstructionIndex"/> — exactly one entry per
-    /// such instruction, no two claiming the same index. <see langword="null"/> (the default) is empty, valid only
-    /// when <paramref name="instructions"/> carries no <see cref="SdfShapeType.Sweep"/> shape.</param>
+    /// endpoints.</param>
     /// <param name="paths">One bounded edge table per Path instruction; snapshotted before validation.</param>
     /// <param name="reservedPathWords">Extra uint words reserved by a capacity probe for future path tables; never executed.</param>
     /// <param name="sampledBindings">Each sampled instruction's field (<see cref="SampledFields"/>).</param>
-    /// <exception cref="ArgumentException">An instruction's opcode, shape, blend, or material lane is outside the domain
-    /// the packed format carries; an operand lane that is not a reinterpreted integer field is not finite; field scopes
-    /// are unbalanced, empty, nested beyond the supported depth, or cross an instance boundary; two screen surfaces claim one
-    /// index; an instance range does not lie within the instruction stream; or two instance ranges claim one
-    /// instruction.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A screen surface's index is outside
-    /// <c>0..<see cref="SdfProgramBuilder.MaxScreenSurfaces"/>-1</c>, its origin is not finite, its right/up axes are
-    /// not orthonormal, or its half-width or half-height is not finite and positive; a material component is not finite
-    /// and non-negative; an instance bound is not finite and non-negative; or a trapezoid's profile slant vanishes in
-    /// the deterministic field's representation.</exception>
-    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0, IReadOnlyList<SdfSampledBinding>? sampledBindings = null) {
+    private SdfProgram(IReadOnlyList<SdfInstruction> instructions, SdfAppearanceOutline appearance, IReadOnlyList<SdfInstanceRange>? instances, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles, IReadOnlyList<SdfSweepCurve>? sweepCurves, IReadOnlyList<SdfCompiledPath>? paths, int reservedPathWords, IReadOnlyList<SdfSampledBinding>? sampledBindings) {
         ArgumentNullException.ThrowIfNull(instructions);
-        ArgumentNullException.ThrowIfNull(materials);
         ArgumentOutOfRangeException.ThrowIfNegative(reservedPathWords);
 
         // EVERY input is snapshotted before anything reads it, and every later read goes through the snapshot. The
@@ -148,9 +135,9 @@ public sealed partial class SdfProgram {
         // a lazy projection): reading the parameter in one pass and the snapshot in another would let the typed stream
         // the CPU interpreter walks (Instructions) and the packed words the GPU executes describe different programs
         // from one call.
+        m_outline = appearance;
         m_instances = [.. (instances ?? [])];
         m_instructions = [.. instructions];
-        m_screenSurfaces = [.. (screenSurfaces ?? [])];
         m_sweepCurves = [.. (sweepCurves ?? [])];
         m_sampledBindings = [.. (sampledBindings ?? [])];
         m_paths = (paths ?? []).Select(selector: path => new SdfCompiledPath(path.InstructionIndex, path.Edges.ToArray())).ToArray();
@@ -164,13 +151,8 @@ public sealed partial class SdfProgram {
             m_convexPolygonProfiles[profileIndex] = (profile.InstructionIndex, ((Vector2[])[.. profile.Vertices]));
         }
 
-        var materialTable = SnapshotMaterials(materials: materials);
-
-        m_materialsView = Array.AsReadOnly(array: materialTable);
-
         m_instancesView = Array.AsReadOnly(array: m_instances);
         m_instructionsView = Array.AsReadOnly(array: m_instructions);
-        m_screenSurfacesView = Array.AsReadOnly(array: m_screenSurfaces);
 
         ValidateIsa();
 
@@ -181,23 +163,14 @@ public sealed partial class SdfProgram {
             );
         }
 
-        if (m_screenSurfaces.Length > SdfProgramBuilder.MaxScreenSurfaces) {
-            throw new ArgumentException(
-                message: $"A program may declare at most {SdfProgramBuilder.MaxScreenSurfaces} screen surfaces; got {m_screenSurfaces.Length}.",
-                paramName: nameof(screenSurfaces)
-            );
-        }
-
         ValidateConvexPolygonProfiles(paramName: nameof(convexPolygonProfiles));
         ValidateSweepCurves(paramName: nameof(sweepCurves));
         ValidatePaths();
         BindSampledFields();
 
         var instructionOwners = ValidatePackedContract(
-            materials: materialTable,
             instancesParamName: nameof(instances),
-            instructionsParamName: nameof(instructions),
-            screenSurfacesParamName: nameof(screenSurfaces)
+            instructionsParamName: nameof(instructions)
         );
 
         InstancesComposable = CanTracePartsIndependently();
@@ -220,52 +193,12 @@ public sealed partial class SdfProgram {
             instructions: m_instructions
         );
 
-        // ALWAYS the full MaxScreenSurfaces capacity, indexed by ScreenIndex (not declaration order): the shader
-        // resolves a hit's surface with a direct index, no search, so an undeclared slot's all-zero entry is simply
-        // never addressed (no material id in a consistent program points at it).
-        m_screenSurfaceWords = new uint[((SdfProgramBuilder.MaxScreenSurfaces * ScreenSurfaceVectorsPerEntry) * WordsPerVector)];
-
-        foreach (var surface in m_screenSurfaces) {
-            var entryBase = ((surface.ScreenIndex * ScreenSurfaceVectorsPerEntry) * WordsPerVector);
-
-            WriteVector4(
-                words: m_screenSurfaceWords,
-                baseIndex: entryBase,
-                x: surface.Right.X,
-                y: surface.Right.Y,
-                z: surface.Right.Z,
-                w: surface.HalfWidth
-            );
-            WriteVector4(
-                words: m_screenSurfaceWords,
-                baseIndex: (entryBase + WordsPerVector),
-                x: surface.Up.X,
-                y: surface.Up.Y,
-                z: surface.Up.Z,
-                w: surface.HalfHeight
-            );
-            WriteVector4(
-                words: m_screenSurfaceWords,
-                baseIndex: (entryBase + (2 * WordsPerVector)),
-                x: surface.Origin.X,
-                y: surface.Origin.Y,
-                z: surface.Origin.Z,
-                w: 0f
-            );
-        }
-
         // The bounds analysis runs FIRST: the segment directory's length is part of the packed layout below.
         var (shapeBounds, segments) = AnalyzeBounds(instructionOwners: instructionOwners);
         var rigidPlan = CompileRigidPlan(segments: segments);
         var partPrograms = CompilePartPrograms();
 
         var instructionCount = m_instructions.Length;
-        var materialCount = materialTable.Length;
-        var paintCount = 0;
-
-        foreach (var material in materialTable) {
-            paintCount += (material.Paints?.Count ?? 0);
-        }
         var worldSegmentCount = 0;
 
         foreach (var segment in segments) {
@@ -293,8 +226,6 @@ public sealed partial class SdfProgram {
             ConvexPolygonVectors: convexPolygonVectors,
             Instances: m_instances.Length,
             Instructions: instructionCount,
-            Materials: materialCount,
-            Paints: paintCount,
             PathEdges: pathEdges,
             RigidLeaves: rigidPlan.Leaves.Count,
             Segments: segments.Count,
@@ -302,7 +233,6 @@ public sealed partial class SdfProgram {
             WorldSegments: worldSegmentCount
         );
         var dataOffsetVectors = layout.DataOffset;
-        var materialOffsetVectors = layout.MaterialOffset;
         var boundsOffsetVectors = layout.BoundsOffset;
         var segmentOffsetVectors = layout.SegmentOffset;
         var instanceOffsetVectors = layout.InstanceOffset;
@@ -337,9 +267,11 @@ public sealed partial class SdfProgram {
             pathEnd = checked((pathEnd + (2 * path.Edges.Count)));
         }
         var partProgramOffset = layout.PartProgramOffset;
-        var totalVectors = (partProgramOffset + partPrograms.VectorCount);
+        // The appearance section follows every table the field interpreter reads, so its size moves no field offset.
+        var materialOffsetVectors = checked((partProgramOffset + partPrograms.VectorCount));
+        var totalVectors = checked((materialOffsetVectors + appearance.Vectors));
 
-        PartCompilationWordCapacity = layout.PartCompilationWordCapacity(reservedPathWords: reservedPathWords);
+        PartCompilationWordCapacity = layout.PartCompilationWordCapacity(appearanceVectors: appearance.Vectors, reservedPathWords: reservedPathWords);
 
         InstructionCount = instructionCount;
         m_words = new uint[(totalVectors * WordsPerVector)];
@@ -380,7 +312,7 @@ public sealed partial class SdfProgram {
         }
 
         m_words[ProgramInstructionCountLane] = ((uint)instructionCount);
-        m_words[ProgramMaterialCountLane] = ((uint)materialCount);
+        m_words[ProgramMaterialCountLane] = ((uint)appearance.Materials);
         m_words[ProgramDataOffsetLane] = ((uint)dataOffsetVectors);
         m_words[ProgramMaterialOffsetLane] = ((uint)materialOffsetVectors);
 
@@ -412,13 +344,6 @@ public sealed partial class SdfProgram {
                 z: instruction.Data1.Z
             );
         }
-
-        PackMaterials(
-            materialCount: materialCount,
-            materialOffsetVectors: materialOffsetVectors,
-            paintOffsetVectors: layout.PaintOffset,
-            materialTable: materialTable
-        );
 
         PackBounds(
             boundsOffsetVectors: boundsOffsetVectors,
@@ -490,16 +415,17 @@ public sealed partial class SdfProgram {
     /// live composition rebuild, say) can use the previous program's material count as a <see cref="SdfProgramBuilder"/>
     /// list-capacity hint without needing its own copy of the material table.</summary>
     public int MaterialCount => ((int)m_words[ProgramMaterialCountLane]);
-    /// <summary>Gets the range of <see cref="Words"/> the paint and material tables span: values that shade a surface
-    /// and never change the field, the instruction stream or any bound.</summary>
-    public Range ShadingWords {
-        get {
-            var paintWord = ((((int)m_words[ProgramDataOffsetLane]) + (InstructionDataVectors * InstructionCount)) * WordsPerVector);
-            var materialEnd = ((((int)m_words[ProgramMaterialOffsetLane]) + (MaterialVectorsPerEntry * MaterialCount)) * WordsPerVector);
-
-            return new Range(start: paintWord, end: materialEnd);
-        }
-    }
+    /// <summary>Gets the range of <see cref="Words"/> the appearance section spans, the material and paint tables: values
+    /// that shade a surface and never change the field, the instruction stream or any bound. It is the stream's tail,
+    /// after <see cref="FieldWords"/>.</summary>
+    public Range ShadingWords => new(start: FieldWordCount, end: m_words.Length);
+    /// <summary>Gets the stream's field prefix: every word the field interpreter reads (the header, the instruction
+    /// headers and data, the bound tables, the directories, the rigid plan, the side tables and the part programs), and no
+    /// appearance word. Its offsets and contents follow the field's inputs alone, so a palette or paint change leaves it
+    /// as it was; the bake's field fingerprint describes the encoding over it.</summary>
+    public ReadOnlySpan<uint> FieldWords => m_words.AsSpan(start: 0, length: FieldWordCount);
+    // The words before the appearance section: its first vector, the header's material offset, in words.
+    private int FieldWordCount => (((int)m_words[ProgramMaterialOffsetLane]) * WordsPerVector);
     /// <summary>Gets the minimum dynamic-transform slot capacity required to render this program without a shader reading
     /// past the supplied per-frame transform table. Equals one plus the highest <see cref="SdfOp.TransformDynamic"/>
     /// or dynamic-instance slot, or 0 for a static program.</summary>
@@ -511,14 +437,6 @@ public sealed partial class SdfProgram {
     /// <summary>Gets each non-unit clamp baked into a field scope, in instruction order. A shared scope applies
     /// its clamp to all its shapes. Empty means no scope clamps, not necessarily a unit global step scale.</summary>
     public IReadOnlyList<SdfFieldScopeClamp> FieldScopeClamps { get; }
-    /// <summary>Gets the packed screen-surface side table (see the type-level remarks): always
-    /// <see cref="SdfProgramBuilder.MaxScreenSurfaces"/> 3-uvec4 (48-byte) entries, each at its declared screen
-    /// index's slot; an undeclared slot is all-zero and never addressed by a program-consistent material id.</summary>
-    public ReadOnlySpan<uint> ScreenSurfaceWords => m_screenSurfaceWords;
-    /// <summary>Gets the screen surfaces this program declared, in declaration order — the source
-    /// <see cref="ScreenSurfaceWords"/> is packed from (at each surface's <see cref="SdfScreenSurface.ScreenIndex"/>
-    /// slot, not its position in this list). Empty for a program with none.</summary>
-    public IReadOnlyList<SdfScreenSurface> ScreenSurfaces => m_screenSurfacesView;
     /// <summary>Gets the per-program Lipschitz step scale (1/L, in (0, 1]) baked into the packed words — read back here
     /// from the segment-directory header's <c>.y</c> lane, which the packed stream makes the single source of truth.
     /// <c>mapCore</c> (field/sdf-map.hlsli) multiplies its final returned distance by it so sphere tracing takes
@@ -528,11 +446,7 @@ public sealed partial class SdfProgram {
     /// shader: an all-zero header lane reads as 1.0.</summary>
     public float StepScale {
         get {
-            // Mirror the shader's segment-directory offset chain (field/sdf-map.hlsli mapCore): materialOffset (m_words[3])
-            // + MaterialVectorsPerEntry*materialCount (m_words[1]) = boundsOffset; + 2*instructionCount =
-            // segmentOffset. The step scale is the header uvec4's .y lane.
-            var segmentOffsetVectors = ((((int)m_words[ProgramMaterialOffsetLane]) + (MaterialVectorsPerEntry * ((int)m_words[ProgramMaterialCountLane]))) + (BoundRecordVectors * InstructionCount));
-            var raw = BitConverter.UInt32BitsToSingle(value: m_words[((segmentOffsetVectors * WordsPerVector) + SegmentStepScaleLane)]);
+            var raw = BitConverter.UInt32BitsToSingle(value: m_words[(SegmentDirectoryWord() + SegmentStepScaleLane)]);
 
             return ((raw > 0f)
                 ? raw
@@ -1690,7 +1604,7 @@ public sealed partial class SdfProgram {
         m_words[((entryBase + WordsPerVector) + 2)] = ((uint)record.Instruction);
         m_words[((entryBase + WordsPerVector) + 3)] = ((uint)record.End);
     }
-    private static void WriteVector4(uint[] words, int baseIndex, float x, float y, float z, float w) {
+    internal static void WriteVector4(uint[] words, int baseIndex, float x, float y, float z, float w) {
         words[baseIndex] = BitConverter.SingleToUInt32Bits(value: x);
         words[(baseIndex + 1)] = BitConverter.SingleToUInt32Bits(value: y);
         words[(baseIndex + 2)] = BitConverter.SingleToUInt32Bits(value: z);
