@@ -512,16 +512,17 @@ public static class ArchitectureCommand {
             Description = $"Compare the generated layering block with the one checked in under {ProjectMapRelativePath}; exit 1 on drift.",
         };
         var command = new Command(
-            description: $"""
-            Report on the repository's project-layering policy.
+            description: "Report on the repository's project-layering policy.",
+            name: "architecture"
+        ) { mapOption, checkOption };
 
+        CliOptions.Exclusive(command, mapOption, checkOption);
+        command.Detail(detail: $"""
             The build-time gate is the authority; this verb explains it. Policy lives in
             build/Architecture.props; every project declares its own <PuckKind> and <PuckLayer>.
             --map prints the layering block for {ProjectMapRelativePath}; --check fails when the
             checked-in block no longer matches the declarations.
-            """,
-            name: "architecture"
-        ) { mapOption, checkOption };
+            """);
 
         command.SetAction(action: parseResult => Run(
             check: parseResult.GetValue(option: checkOption),

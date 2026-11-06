@@ -2531,7 +2531,7 @@ and pointer through it
 Compile a single source stage from the repository root:
 
 ```powershell
-dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll shaders compile <source>.hlsl --out artifacts/shaders/<name>
+dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll shaders compile <source>.hlsl --output artifacts/shaders/<name>
 ```
 
 `--stage compute|vertex|fragment` and `--entry` make the source contract

@@ -702,7 +702,7 @@ check the flag: the owner may be holding the pad.
   writable lane scratch cache; omitted, it uses the per-user cache. Cache work
   counts are recorded, while exact boot comparisons select cache-independent
   counters. Whatever it could not measure
-  (a closed attachment, a spent `--timeout`, a metric a rule reads that the
+  (a closed attachment, a spent `--timeout-seconds`, a metric a rule reads that the
   answer lacks) is reported unmeasured and fails the run like red
   ([CLI reference](../../../docs/reference/cli.md#puck-sweepthe-debug-worlds-sweep)).
 

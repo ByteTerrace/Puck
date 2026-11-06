@@ -130,6 +130,7 @@ public static class DeclarationsCommand {
             quietOption,
         };
 
+        CliOptions.Exclusive(command, jsonOption, quietOption);
         command.Detail(detail: $"""
             Output is `path:line:col decl <kind> <qualified name>[ : <base list>]`, sorted by
             path then position. Both record forms report the kind `record`. {FileWalk.WalkSummary}

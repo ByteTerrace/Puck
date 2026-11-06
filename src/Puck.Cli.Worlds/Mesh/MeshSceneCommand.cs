@@ -22,8 +22,6 @@ public static class MeshSceneCommand {
     private const int Rays = SdfMeshProbeDepth.HitCount;
     private const float Reach = 200f;
 
-    private static readonly SdfMeshIrradianceLevel Window = SdfMeshIrradiance.LevelsOf(SdfIndirectTier.High)[0];
-
     /// <summary>Creates the <c>scene</c> subverb.</summary>
     /// <returns>The subverb.</returns>
     public static Command Create() {
@@ -138,8 +136,10 @@ public static class MeshSceneCommand {
     // sphere, and from each front-facing hit a shadow ray toward a sun. It reports the rays, the hits, the mean hit
     // distance and the lit hits, which two scenes of the same geometry answer alike.
     private static void Trace(SdfMeshIrradianceScene scene, Vector3 center, string label, TextWriter output) {
-        var dims = Window.Dims;
-        var cell = center / Window.Spacing;
+        // Read here rather than in a static field, so creating the command for help initializes nothing from Puck.SdfVm.
+        var window = SdfMeshIrradiance.LevelsOf(SdfIndirectTier.High)[0];
+        var dims = window.Dims;
+        var cell = center / window.Spacing;
         var low = new Vector3(x: (MathF.Floor(x: cell.X) - (dims.X / 2)), y: (MathF.Floor(x: cell.Y) - (dims.Y / 2)), z: (MathF.Floor(x: cell.Z) - (dims.Z / 2)));
         var probes = new List<Vector3>();
         var sun = Vector3.Normalize(value: new Vector3(x: 0.4f, y: 0.8f, z: 0.3f));
@@ -147,7 +147,7 @@ public static class MeshSceneCommand {
         for (var z = 0; (z < dims.Z); z++) {
             for (var y = 0; (y < dims.Y); y++) {
                 for (var x = 0; (x < dims.X); x++) {
-                    probes.Add(item: ((low + new Vector3(x: (x + 0.5f), y: (y + 0.5f), z: (z + 0.5f))) * Window.Spacing));
+                    probes.Add(item: ((low + new Vector3(x: (x + 0.5f), y: (y + 0.5f), z: (z + 0.5f))) * window.Spacing));
                 }
             }
         }

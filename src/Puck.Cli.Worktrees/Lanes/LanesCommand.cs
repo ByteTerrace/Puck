@@ -490,11 +490,12 @@ public static partial class LanesCommand {
     public static Command Create(TimeProvider clock) {
         var baseOption = new Option<string?>(name: "--base") { Description = "The integration branch commits ahead are counted from; defaults to the branch the main checkout holds." };
         var jsonOption = new Option<bool>(name: "--json") { Description = "Print the rows as one JSON document." };
-        var stallOption = new Option<int>(name: "--stall") { DefaultValueFactory = static _ => 30, Description = "Minutes without progress (a writer's write, a findings-only lane's log output) after which an active lane that holds no lease and waits for none is marked STALL." };
-        var watchOption = new Option<int?>(name: "--watch") { Description = "Poll for this many minutes (0 until cancelled) and print only what changes: a lane finishing, stalling or resuming, a lease changing, a lane appearing or leaving." };
-        var intervalOption = new Option<int>(name: "--interval") { DefaultValueFactory = static _ => 30, Description = "Seconds between polls under --watch." };
+        var stallOption = CliOptions.Count(defaultValue: 30, description: "Minutes without progress (a writer's write, a findings-only lane's log output) after which an active lane that holds no lease and waits for none is marked STALL.", minimum: 1, name: "--stall");
+        var watchOption = CliOptions.OptionalCount(description: "Poll for this many minutes (0 until cancelled) and print only what changes: a lane finishing, stalling or resuming, a lease changing, a lane appearing or leaving.", minimum: 0, name: "--watch");
+        var intervalOption = CliOptions.Count(defaultValue: 30, description: "Seconds between polls under --watch.", minimum: 1, name: "--interval");
         var command = new Command(description: "Print one line per worktree: branch, commits ahead, changes, last commit, newest write, log, lease and stall state.", name: Verb) { baseOption, jsonOption, stallOption, watchOption, intervalOption };
 
+        CliOptions.Exclusive(command, jsonOption, watchOption);
         command.Detail(detail: """
             Use: puck lanes [--base <branch>] [--stall <minutes>] [--json] [--watch <minutes> [--interval <seconds>]]
             Report-only: reads git state through read-only git calls (no optional locks), the lane's
@@ -537,10 +538,7 @@ public static partial class LanesCommand {
             var interval = result.GetValue(option: intervalOption);
             var watch = result.GetValue(option: watchOption);
 
-            if (stall < 1) { return Task.FromResult(result: CliExit.Refuse(verb: Verb, what: "--stall", why: "must be at least one minute.")); }
-            if (interval < 1) { return Task.FromResult(result: CliExit.Refuse(verb: Verb, what: "--interval", why: "must be at least one second.")); }
-            if (watch < 0) { return Task.FromResult(result: CliExit.Refuse(verb: Verb, what: "--watch", why: "must be nonnegative.")); }
-            if ((watch is not null) && result.GetValue(option: jsonOption)) { return Task.FromResult(result: CliExit.Refuse(verb: Verb, what: "--json", why: "cannot combine with --watch.")); }
+
             string baseRef;
 
             if (result.GetValue(option: baseOption) is { Length: > 0 } given) {

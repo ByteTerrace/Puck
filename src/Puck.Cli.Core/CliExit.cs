@@ -33,6 +33,27 @@ public static class CliExit {
 
         return Refused;
     }
+    /// <summary>Reports a selection that leaves a verb nothing to do, the one way every verb says so, so that zero work
+    /// never reads as a pass. A selection the caller named (a path, a filter, a tag) is a refusal on standard error; a
+    /// verb's own default selection coming up empty is a notice there, and the verb succeeds.</summary>
+    /// <param name="verb">The command path, such as <c>lint</c> or <c>docs links</c>.</param>
+    /// <param name="selection">What selected nothing: the path, the filter or the option as the caller typed it.</param>
+    /// <param name="why">What the selection lacks, such as <c>holds no .puck source</c>.</param>
+    /// <param name="named">Whether the caller named the selection; <see langword="false"/> for the verb's default.</param>
+    /// <returns><see cref="Refused"/> for a named selection; otherwise <see cref="Success"/>.</returns>
+    public static int Empty(string verb, string selection, string why, bool named = true) {
+        if (named) {
+            return Refuse(
+                verb: verb,
+                what: selection,
+                why: $"{why}, so there is nothing to do."
+            );
+        }
+
+        Console.Error.WriteLine(value: $"puck {verb}: notice: {selection}: {why}, so there is nothing to do.");
+
+        return Success;
+    }
     /// <summary>Wraps the action of <paramref name="command"/> and of every command beneath it in the shared
     /// exception and cancellation mapping. A command with no action is left alone, and a command already guarded is
     /// not wrapped twice.</summary>

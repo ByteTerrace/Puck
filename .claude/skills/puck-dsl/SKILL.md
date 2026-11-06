@@ -228,7 +228,7 @@ puck test <path-or-dir>               # boots each test block headless, one verd
   (`RowRefNode.Operand`), including keys nested inside them. Compile the
   composed entry document after migrating modules: isolated module checks can
   miss a literal key accidentally resolving to another module's row.
-- `puck embed <path>` resolves authored `embed(...)` text into committed
+- `puck embed lock <path>` resolves authored `embed(...)` text into committed
   `.embeddings.json` lock files.
 - `puck vocabulary [--check]` regenerates the world vocabulary page.
 

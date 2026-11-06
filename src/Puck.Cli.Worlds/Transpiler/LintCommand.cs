@@ -24,9 +24,8 @@ public static class LintCommand {
 
         try {
             sourceText = File.ReadAllText(path: filePath);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(value: $"error: Could not read file '{filePath}': {ex.Message}");
-            return 2;
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            return CliExit.Refuse(verb: "lint", what: CliPaths.ToDisplay(fullPath: filePath), why: ex.Message);
         }
 
         var diagnostics = WorldSourceDiagnostics.Diagnose(
@@ -67,10 +66,7 @@ public static class LintCommand {
             Description = "The .puck file or directory to lint.",
         };
 
-        var strictOption = new Option<bool>(
-            name: "--strict",
-            aliases: ["-s"]
-        ) {
+        var strictOption = new Option<bool>(name: "--strict") {
             Description = "Treat warnings as errors (exit code 1).",
         };
 
@@ -104,6 +100,11 @@ public static class LintCommand {
                 searchOption: SearchOption.AllDirectories,
                 searchPattern: "*.puck"
             ).Order(comparer: StringComparer.Ordinal).ToArray();
+
+            if (files.Length == 0) {
+                return CliExit.Empty(verb: "lint", selection: CliPaths.ToDisplay(fullPath: fullPath), why: "holds no .puck source");
+            }
+
             var failureCount = 0;
             var reported = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -127,6 +128,10 @@ public static class LintCommand {
         }
 
         if (File.Exists(path: fullPath)) {
+            if (!string.Equals(a: Path.GetExtension(path: fullPath), b: ".puck", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                return CliExit.Refuse(verb: "lint", what: CliPaths.ToDisplay(fullPath: fullPath), why: "is not a .puck source.");
+            }
+
             return LintFile(
                 filePath: fullPath,
                 machines: machines,
@@ -134,7 +139,6 @@ public static class LintCommand {
             );
         }
 
-        Console.Error.WriteLine(value: $"error: Path '{path}' not found.");
-        return 2;
+        return CliExit.Refuse(verb: "lint", what: CliPaths.ToDisplay(fullPath: fullPath), why: "does not exist.");
     }
 }

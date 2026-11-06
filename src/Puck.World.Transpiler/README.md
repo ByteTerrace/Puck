@@ -521,8 +521,8 @@ the `world [ ]` array.
 |---|---|---|
 | PUCK077 | Error | Embedding space is malformed: unknown or missing property, dimensions outside `[8, 1024]`, duplicate space name, or more spaces than `StateCapacity.MaxVectorSpaces` (64). |
 | PUCK078 | Error | Vector row names no space and document has no default, names an undeclared space, or a non-Vector row declares a space. |
-| PUCK079 | Error | Authored text in a vector slot or `embed(...)` has no lock entry; run `puck embed`. |
-| PUCK080 | Error | Lock file's model, revision, or dimensions differ from the declared space; run `puck embed`. |
+| PUCK079 | Error | Authored text in a vector slot or `embed(...)` has no lock entry; run `puck embed lock`. |
+| PUCK080 | Error | Lock file's model, revision, or dimensions differ from the declared space; run `puck embed lock`. |
 | PUCK081 | Error | Vector literal is not valid base64url, has a component count other than its space's dimensions, contains prohibited -128, or fails unit sphere admission, wherever it is written. |
 | PUCK082 | Error | Vector literal or `embed(...)` appears where no vector value is admitted. |
 | PUCK083 | Error | Vector row capacity × dimensions exceeds per-row cell ceiling or section budget. |

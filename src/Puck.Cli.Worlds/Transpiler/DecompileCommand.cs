@@ -158,10 +158,7 @@ public static class DecompileCommand {
         var pathArgument = new Argument<string>(name: "path") {
             Description = "Path to the JSON world definition file to decompile.",
         };
-        var outputOption = new Option<string?>(
-            name: "--output",
-            aliases: ["-o"]
-        ) { Description = "Destination output .puck path (defaults to <path>.puck)." };
+        var outputOption = new Option<string?>(name: "--output") { Description = "Destination output .puck path (defaults to <path>.puck)." };
         var overwriteOption = new Option<bool>(name: "--overwrite") { Description = "Overwrite destination file if it already exists." };
         var embeddingsOption = new Option<string?>(name: "--embeddings") { Description = "Optional companion embedding lock file (.embeddings.json) for resolving vector literals." };
 

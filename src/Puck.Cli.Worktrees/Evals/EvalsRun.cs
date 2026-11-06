@@ -33,7 +33,7 @@ public static partial class EvalsRun {
     [GeneratedRegex(pattern: @"^[a-z0-9][a-z0-9-]*$")]
     private static partial Regex SkillName();
 
-    private sealed record Settings(string Skill, IReadOnlyList<string> Cases, IReadOnlyList<string> Tags, string Revision, string Model, string Judge, int? Runs, string Ablation, double MaxCostUsd, int Concurrency, bool Fixture, bool Preload, bool DryRun, bool KeepTree, bool KeepSandboxes);
+    private sealed record Settings(string Skill, IReadOnlyList<string> Cases, IReadOnlyList<string> Tags, string Revision, string Model, string Judge, int? Runs, string Ablation, double MaxCostUsd, int Jobs, bool Fixture, bool Preload, bool DryRun, bool KeepTree, bool KeepSandboxes);
 
     /// <summary>Creates the <c>evals run</c> command.</summary>
     /// <param name="clock">The CLI host's clock, which stamps the results directory.</param>
@@ -45,24 +45,24 @@ public static partial class EvalsRun {
         var revisionOption = new Option<string>(name: "--revision") { DefaultValueFactory = static _ => "HEAD", Description = "The revision whose skill runs; HEAD's evals/ replace that revision's, so both sides of an edit run identical cases." };
         var modelOption = new Option<string>(name: "--model") { DefaultValueFactory = static _ => DefaultModel, Description = "The full model ID under test, such as claude-sonnet-5-5; an alias is refused." };
         var judgeOption = new Option<string?>(name: "--judge") { Description = "The full judge model ID; defaults to the model under test, and a weaker tier is refused." };
-        var runsOption = new Option<int?>(name: "--runs") { Description = "Runs per case per arm; defaults to each case's own runs (a capability case sets 5, the runner's default is 3)." };
+        var runsOption = CliOptions.OptionalCount(description: "Runs per case per arm, 1 to 50; defaults to each case's own runs (a capability case sets 5, the runner's default is 3).", maximum: 50, minimum: 1, name: "--runs");
         var ablationOption = new Option<string>(name: "--ablation") { DefaultValueFactory = static _ => "with-without", Description = "with-without adds the no-skill arm; none runs the with-arm only." };
-        var costOption = new Option<double>(name: "--max-cost-usd") { DefaultValueFactory = static _ => 20, Description = "The list-price ceiling for the run, in US dollars." };
-        var concurrencyOption = new Option<int>(name: "--concurrency", aliases: ["-j"]) { DefaultValueFactory = static _ => 4, Description = "Agent runs at once, 1 to 8." };
+        var costOption = CliOptions.Amount(defaultValue: 20, description: "The list-price ceiling for the run, in US dollars.", minimum: double.Epsilon, name: "--max-cost-usd");
+        var jobsOption = CliOptions.Jobs(defaultValue: 4, description: "Agent runs at once, 1 to 8.", maximum: 8);
         var noFixtureOption = new Option<bool>(name: "--no-fixture") { Description = "Leave out the rules-file fixture, to repeat a run made without it." };
         var preloadOption = new Option<bool>(name: "--preload") { Description = "Put the skill's SKILL.md text at --revision into the fixture, as an agent that preloads the skill has it, instead of leaving the run to invoke it; needs --ablation none." };
         var dryRunOption = new Option<bool>(name: "--dry-run") { Description = "Print the plan and the claude command line; create and start nothing." };
         var keepTreeOption = new Option<bool>(name: "--keep-tree") { Description = "Keep the frozen worktree after the run." };
         var keepSandboxesOption = new Option<bool>(name: "--keep-sandboxes") { Description = "Keep each run's temporary sandbox after its trace is copied." };
         var command = new Command(description: "Run a skill's eval suite on a frozen tree, with the rules-file fixture and full model IDs.", name: "run") {
-            skillArgument, casesOption, tagOption, revisionOption, modelOption, judgeOption, runsOption, ablationOption, costOption, concurrencyOption, noFixtureOption, preloadOption, dryRunOption, keepTreeOption, keepSandboxesOption,
+            skillArgument, casesOption, tagOption, revisionOption, modelOption, judgeOption, runsOption, ablationOption, costOption, jobsOption, noFixtureOption, preloadOption, dryRunOption, keepTreeOption, keepSandboxesOption,
         };
 
         ablationOption.AcceptOnlyFromAmong("with-without", "none");
         command.Detail(detail: """
             Use: puck evals run <skill> [--cases <glob>...] [--tag <tag>...] [--revision <rev>]
                    [--model <full id>] [--judge <full id>] [--runs n] [--ablation with-without|none]
-                   [--max-cost-usd x] [-j n] [--no-fixture] [--preload] [--dry-run] [--keep-tree]
+                   [--max-cost-usd x] [--jobs n] [--no-fixture] [--preload] [--dry-run] [--keep-tree]
                    [--keep-sandboxes]
 
             1. Checks <rev> out as a detached worktree under .claude/worktrees/, never running the
@@ -98,14 +98,14 @@ public static partial class EvalsRun {
             settings: new Settings(
                 Ablation: parseResult.GetRequiredValue(option: ablationOption),
                 Cases: (parseResult.GetValue(option: casesOption) ?? []),
-                Concurrency: parseResult.GetValue(option: concurrencyOption),
+                Jobs: parseResult.GetValue(option: jobsOption),
                 DryRun: parseResult.GetValue(option: dryRunOption),
                 Fixture: !parseResult.GetValue(option: noFixtureOption),
                 Preload: parseResult.GetValue(option: preloadOption),
                 Judge: (parseResult.GetValue(option: judgeOption) ?? parseResult.GetRequiredValue(option: modelOption)),
                 KeepSandboxes: parseResult.GetValue(option: keepSandboxesOption),
                 KeepTree: parseResult.GetValue(option: keepTreeOption),
-                MaxCostUsd: parseResult.GetValue(option: costOption),
+                MaxCostUsd: parseResult.GetValue(option: costOption)!.Value,
                 Model: parseResult.GetRequiredValue(option: modelOption),
                 Revision: parseResult.GetRequiredValue(option: revisionOption),
                 Runs: parseResult.GetValue(option: runsOption),
@@ -155,9 +155,7 @@ public static partial class EvalsRun {
             if (Tier(model: model) < 0) { return CliExit.Refuse(verb: Verb, what: $"{role} {model}", why: $"is not a full model ID of a known tier ({string.Join(separator: ", ", values: Tiers)}), such as {DefaultModel}; a full ID keeps a model rollout from reading as a skill change."); }
         }
         if (Tier(model: settings.Judge) < Tier(model: settings.Model)) { return CliExit.Refuse(verb: Verb, what: $"--judge {settings.Judge}", why: $"is a weaker tier than the model under test ({settings.Model}); a weaker judge fails correct replies it cannot follow."); }
-        if (settings.Concurrency is < 1 or > 8) { return CliExit.Refuse(verb: Verb, what: $"-j {settings.Concurrency}", why: "must be 1 to 8."); }
-        if (settings.Runs is < 1 or > 50) { return CliExit.Refuse(verb: Verb, what: $"--runs {settings.Runs}", why: "must be 1 to 50."); }
-        if (settings.MaxCostUsd <= 0) { return CliExit.Refuse(verb: Verb, what: "--max-cost-usd", why: "must be positive."); }
+
         if (settings.Preload && !settings.Fixture) { return CliExit.Refuse(verb: Verb, what: "--preload", why: "puts the skill in the fixture, which --no-fixture leaves out."); }
         if (settings.Preload && (settings.Ablation != "none")) { return CliExit.Refuse(verb: Verb, what: "--preload", why: $"puts the skill ahead of both arms' prompts, so a {settings.Ablation} baseline arm would carry it too; pass --ablation none and compare against a with-without run's without arm."); }
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root)) { return CliExit.Refused; }
@@ -195,7 +193,7 @@ public static partial class EvalsRun {
             "--judge-model", settings.Judge,
             "--ablation", settings.Ablation,
             "--max-cost-usd", settings.MaxCostUsd.ToString(provider: CultureInfo.InvariantCulture),
-            "-j", settings.Concurrency.ToString(provider: CultureInfo.InvariantCulture),
+            "-j", settings.Jobs.ToString(provider: CultureInfo.InvariantCulture),
             "--output-dir", Display(path: results),
         ];
 

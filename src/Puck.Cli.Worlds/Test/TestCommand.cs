@@ -120,11 +120,7 @@ public static partial class TestCommand {
 
         using var held = lease;
 
-        var parallelism = Math.Clamp(
-            value: jobs,
-            min: 1,
-            max: Math.Max(val1: 1, val2: worlds.Count)
-        );
+        var parallelism = Math.Min(val1: jobs, val2: worlds.Count);
 
         var batches = Enumerable.Range(0, worlds.Count)
             .GroupBy(keySelector: index => (index % parallelism))
@@ -173,18 +169,20 @@ public static partial class TestCommand {
                 var compared = CompareAndRecord(compare: compare, error: Console.Error, legs: legs, output: Console.Out,
                     record: record, test: worlds[index], worldDirectory: worldDirectory);
 
-                diverged |= (compared != 0);
+                refused |= (compared == 2);
+                diverged |= (compared == 1);
             }
         }
-        refused |= diverged;
 
         Console.WriteLine(value: $"test: work processes={batches.Length} host-boots={boots} world-runs={worlds.Count} exported-authority-ticks={ticks}");
         if (refused) {
-            if (diverged) {
-                Console.Error.WriteLine(value: "FAIL: a world's authority hashes, snapshot entries, exports or crossing log differed between worker counts or from its recording, or had no recording to compare.");
-            }
-
             return 2;
+        }
+
+        if (diverged) {
+            Console.Error.WriteLine(value: "FAIL: a world's authority hashes, snapshot entries, exports or crossing log differed between worker counts or from its recording.");
+
+            return 1;
         }
 
         if (failed) {
@@ -243,10 +241,13 @@ public static partial class TestCommand {
             var proof = Path.Combine(path1: legDirectory, path2: AuthoritiesFile);
 
             if (!File.Exists(path: proof) || (JsonNode.Parse(File.ReadAllText(path: proof)) is not JsonArray { Count: > 0 } rows) ||
-                rows.Any(predicate: row => (row?["divergence"]?.GetValue<int>() != -1)) ||
                 reading.Worlds.Any(predicate: world => !rows.Any(predicate: row => (row?["world"]?.GetValue<string>() == world.World)))) {
-                error.WriteLine(value: "  REFUSED: missing or divergent checkpoint reproduction.");
+                error.WriteLine(value: "  REFUSED: missing checkpoint reproduction.");
                 return 2;
+            }
+            if (rows.Any(predicate: row => (row?["divergence"]?.GetValue<int>() != -1))) {
+                error.WriteLine(value: "  FAIL: recorded input did not reproduce the authority from its checkpoint.");
+                return 1;
             }
         }
         var reported = Report(name, reading, test.Expectations, output, error);

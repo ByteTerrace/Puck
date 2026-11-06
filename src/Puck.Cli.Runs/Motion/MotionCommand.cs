@@ -18,7 +18,7 @@ public static partial class MotionCommand {
 
     private const string Verb = "motion";
 
-    private static int Run(string? scenariosPath, string[] names, bool list, bool reproduce, string? output, string? worldPath, string? worldArtifact, WorldBackendPreference? backend, string? cacheDirectory, int columns, int cellWidth, int timeoutMinutes) {
+    private static int Run(string? scenariosPath, string[] names, bool list, bool reproduce, string? output, string? worldPath, string? worldArtifact, WorldBackendPreference? backend, string? cacheDirectory, int columns, int cellWidth, int timeoutSeconds) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -75,7 +75,7 @@ public static partial class MotionCommand {
             scenarioFile: scenarioFile,
             selected: selected,
             set: set,
-            timeoutMinutes: timeoutMinutes,
+            timeoutSeconds: timeoutSeconds,
             world: world,
             worldArtifact: worldArtifact
         );
@@ -95,9 +95,9 @@ public static partial class MotionCommand {
         var artifactOption = new Option<string>(name: "--world-artifact") { Description = "Run this Puck.World entry assembly instead of the build of the checkout's sources. Never builds." };
         var backendOption = WorldLaunch.BackendOption(description: "The graphics backend the World boots on: auto, directx or vulkan; the document's when omitted.");
         var cacheOption = new Option<string>(name: "--cache-dir") { Description = "The World's device-cache root, shared by both fresh Worlds; its per-user default when omitted. Use a writable lane directory in a sandbox." };
-        var columnsOption = new Option<int>(name: "--columns") { DefaultValueFactory = static _ => 6, Description = "The most frames in one row of a contact sheet before it wraps to a new band." };
-        var cellWidthOption = new Option<int>(name: "--cell-width") { DefaultValueFactory = static _ => 480, Description = "The width each frame of a contact sheet is scaled to, in pixels." };
-        var timeoutOption = new Option<int>(name: "--timeout") { DefaultValueFactory = static _ => 25, Description = "The most minutes the whole run may take, a build excepted." };
+        var columnsOption = CliOptions.Count(defaultValue: 6, description: "The most frames in one row of a contact sheet before it wraps to a new band.", minimum: 1, name: "--columns");
+        var cellWidthOption = CliOptions.Count(defaultValue: 480, description: "The width each frame of a contact sheet is scaled to, in pixels.", maximum: 16384, minimum: 1, name: "--cell-width");
+        var timeoutOption = CliOptions.Count(defaultValue: 1500, description: "The most seconds the whole run may take, a build excepted (default 1500).", minimum: 1, name: "--timeout-seconds");
         var command = new Command(
             description: "Judge how the Moth moves: run tick-pinned scenarios in the real debug World and write stills, contact sheets and a manifest.",
             name: Verb
@@ -155,7 +155,7 @@ public static partial class MotionCommand {
             output: parseResult.GetValue(option: outputOption),
             reproduce: parseResult.GetValue(option: reproduceOption),
             scenariosPath: parseResult.GetValue(option: scenariosOption),
-            timeoutMinutes: parseResult.GetValue(option: timeoutOption),
+            timeoutSeconds: parseResult.GetValue(option: timeoutOption),
             worldArtifact: parseResult.GetValue(option: artifactOption),
             worldPath: parseResult.GetValue(option: worldOption)
             );

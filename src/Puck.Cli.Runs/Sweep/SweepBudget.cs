@@ -30,7 +30,7 @@ public sealed class SweepBudget : IDisposable {
     public TimeSpan Remaining => TimeSpan.FromTicks(value: Math.Max(val1: 0L, val2: (m_total - m_clock.Elapsed).Ticks));
     /// <summary>Gets why the sweep must stop, or <see langword="null"/> while it may go on.</summary>
     public string? Reason => (Expired
-        ? (m_caller.IsCancellationRequested ? "the sweep was cancelled" : string.Create(provider: CultureInfo.InvariantCulture, handler: $"the sweep's --timeout of {m_total.TotalMinutes:0.##} minutes passed"))
+        ? (m_caller.IsCancellationRequested ? "the sweep was cancelled" : string.Create(provider: CultureInfo.InvariantCulture, handler: $"the sweep's --timeout-seconds of {m_total.TotalSeconds:0} passed"))
         : null);
 
     /// <summary>Returns the shorter of a wait and the time left.</summary>

@@ -1,125 +1,23 @@
 using System.CommandLine;
 using System.Text;
-using System.Xml.Linq;
 
 namespace Puck.Cli.Packaging;
 
-// The `puck packages` verb: enumerates every csproj under src/ that opts into packing
-// (<IsPackable>true</IsPackable>, see build/Packaging.targets) and reports the same declarations
-// `dotnet pack` reads — <PackageId>, <Description>, <PackageTags>. --check compares a page's GENERATED
-// package section against this list, and --write regenerates that section — the same drift-detection and
-// regeneration shape `puck schema --check`/`puck schema` establishes for the checked-in JSON Schema files.
-// docs/site/index.html carries the one checked-in GENERATED instance today; a hand-maintained list next to
-// a generated one is the same second source docs/project-map.md's layering block exists to avoid.
-// Exit 0 listed/wrote/matched, 1 check found drift, 2 missing repository root.
+// The `puck packages` verb: enumerates every csproj under src/ that opts into packing (<IsPackable>true</IsPackable>,
+// see build/Packaging.targets) by the <PackageId> `dotnet pack` reads, and writes the site page's GENERATED package
+// section from that list, or checks it, through CliGeneratedFile.
 public static class PackagesCommand {
     private const string GeneratedBegin = "<!-- GENERATED: puck packages -->";
     private const string GeneratedEnd = "<!-- /GENERATED -->";
+    private const string Page = "docs/site/index.html";
 
-    private readonly record struct PackageEntry(string Description, string File, string Id, IReadOnlyList<string> Tags);
+    private readonly record struct PackageEntry(string Id);
 
-    private static int Check(string repositoryRoot, string relativePath, IReadOnlyList<PackageEntry> packages) {
-        var fullPath = Path.Combine(
-            path1: repositoryRoot,
-            path2: relativePath
-        );
-
-        if (!File.Exists(path: fullPath)) {
-            Console.Error.WriteLine(value: $"packages: {relativePath} does not exist.");
-
-            return 1;
-        }
-
-        // CRLF is checkout noise, never content: a CRLF working copy of an LF-authored page must compare
-        // equal, the same normalization `puck schema --check` applies before comparing generated text.
-        var text = File.ReadAllText(path: fullPath).Replace(
-            newValue: "\n",
-            oldValue: "\r\n"
-        );
-
-        if (!TryLocateSection(
-            beginIndex: out var beginIndex,
-            endIndex: out var endIndex,
-            text: text
-        )) {
-            Console.Error.WriteLine(value: $"packages: {relativePath} carries no '{GeneratedBegin}' … '{GeneratedEnd}' section.");
-
-            return 1;
-        }
-
-        var indent = LeadingWhitespace(
-            index: beginIndex,
-            text: text
-        );
-        var expected = RenderSection(
-            indent: indent,
-            packages: packages
-        );
-        var actual = text[beginIndex..endIndex];
-
-        if (string.Equals(
-            a: actual,
-            b: expected,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            Console.Out.WriteLine(value: $"packages: {relativePath} matches the current {packages.Count} packable project(s).");
-
-            return 0;
-        }
-
-        Console.Error.WriteLine(value: $"packages: {relativePath} does not match the current list — regenerate with 'puck packages --write {relativePath}'.");
-        Console.Error.WriteLine(value: "  checked-in:");
-        Console.Error.WriteLine(value: Indent(text: actual));
-        Console.Error.WriteLine(value: "  generated:");
-        Console.Error.WriteLine(value: Indent(text: expected));
-
-        return 1;
-    }
-    private static IReadOnlyList<PackageEntry> Discover(string repositoryRoot) {
-        var packages = new List<PackageEntry>();
-
-        foreach (var (file, document) in PackableProjects.Discover(root: repositoryRoot)) {
-            var tags = (Element(
-                document: document,
-                name: "PackageTags"
-            ) ?? "")
-                .Split(
-                options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
-                separator: ';'
-            );
-
-            packages.Add(item: new PackageEntry(
-                Description: (Element(
-                    document: document,
-                    name: "Description"
-                ) ?? ""),
-                File: file,
-                Id: (Element(
-                    document: document,
-                    name: "PackageId"
-                ) ?? Path.GetFileNameWithoutExtension(path: file)),
-                Tags: tags
-            ));
-        }
-
-        packages.Sort(comparison: (a, b) => string.CompareOrdinal(
-            strA: a.Id,
-            strB: b.Id
-        ));
-
-        return packages;
-    }
-    private static string? Element(XDocument document, string name) =>
-        PackableProjects.Property(
-            document: document,
-            name: name
-        );
-    private static string Indent(string text) =>
-        string.Join(
-            separator: '\n',
-            values: text.Split(separator: '\n').Select(selector: l => $"    {l}")
-        );
-    private static string LeadingWhitespace(string text, int index) {
+    private static IReadOnlyList<PackageEntry> Discover(string repositoryRoot) => [
+        .. PackableProjects.Discover(root: repositoryRoot)
+            .Select(selector: static project => new PackageEntry(Id: (PackableProjects.Property(document: project.Document, name: "PackageId") ?? Path.GetFileNameWithoutExtension(path: project.File))))
+            .OrderBy(keySelector: static package => package.Id, comparer: StringComparer.Ordinal),
+    ];    private static string LeadingWhitespace(string text, int index) {
         var start = index;
 
         while (
@@ -152,43 +50,40 @@ public static class PackagesCommand {
 
         return builder.ToString();
     }
-    private static int Run(string? checkPath, string? writePath) {
+    private static int Run(bool check) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
-            return 2;
+            return CliExit.Refused;
+        }
+
+        var fullPath = Path.Combine(path1: repositoryRoot, path2: Page);
+
+        if (!File.Exists(path: fullPath)) {
+            return CliExit.Refuse(verb: "packages", what: Page, why: "does not exist.");
+        }
+
+        var text = File.ReadAllText(path: fullPath).ReplaceLineEndings(replacementText: "\n");
+
+        if (!TryLocateSection(beginIndex: out var beginIndex, endIndex: out var endIndex, text: text)) {
+            return CliExit.Refuse(verb: "packages", what: Page, why: $"carries no '{GeneratedBegin}' … '{GeneratedEnd}' section.");
         }
 
         var packages = Discover(repositoryRoot: repositoryRoot);
+        var generated = string.Concat(
+            str0: text[..beginIndex],
+            str1: RenderSection(indent: LeadingWhitespace(index: beginIndex, text: text), packages: packages),
+            str2: text[endIndex..]
+        );
 
-        if (checkPath is not null) {
-            return Check(
-                packages: packages,
-                relativePath: checkPath,
-                repositoryRoot: repositoryRoot
-            );
-        }
-
-        if (writePath is not null) {
-            return Write(
-                packages: packages,
-                relativePath: writePath,
-                repositoryRoot: repositoryRoot
-            );
-        }
-
-        foreach (var package in packages) {
-            Console.Out.WriteLine(value: package.Id);
-            Console.Out.WriteLine(value: $"  {package.Description}");
-            Console.Out.WriteLine(value: $"  tags: {string.Join(
-                separator: ", ",
-                values: package.Tags
-            )}");
-        }
-
-        Console.Out.WriteLine(value: $"packages: {packages.Count} packable project(s).");
-
-        return 0;
-    }
-    private static bool TryLocateSection(string text, out int beginIndex, out int endIndex) {
+        return (CliGeneratedFile.WriteOrCheck(
+            check: check,
+            detail: $" ({packages.Count} packable project(s))",
+            relativePath: Page,
+            repositoryRoot: repositoryRoot,
+            source: "the packable projects",
+            text: generated,
+            verb: "packages"
+        ) ? CliExit.Success : CliExit.Failed);
+    }    private static bool TryLocateSection(string text, out int beginIndex, out int endIndex) {
         var begin = text.IndexOf(
             comparisonType: StringComparison.Ordinal,
             value: GeneratedBegin
@@ -219,91 +114,17 @@ public static class PackagesCommand {
 
         return true;
     }
-    private static int Write(string repositoryRoot, string relativePath, IReadOnlyList<PackageEntry> packages) {
-        var fullPath = Path.Combine(
-            path1: repositoryRoot,
-            path2: relativePath
-        );
+    public static Command Create() => CliOptions.CheckVerb(
+        checkDescription: $"Regenerate the GENERATED package section of {Page} in memory and compare it; write nothing, and exit 1 naming the first differing line.",
+        description: $"Write the published ByteTerrace.Puck.* NuGet package list into {Page}, or check it.",
+        detail: $"""
+            Every project under src/ declaring <IsPackable>true</IsPackable> is listed by its package id, in ordinal
+            order, between the comment pair {GeneratedBegin} and {GeneratedEnd} in {Page}; the rest of the page is
+            untouched.
 
-        if (!File.Exists(path: fullPath)) {
-            Console.Error.WriteLine(value: $"packages: {relativePath} does not exist.");
-
-            return 1;
-        }
-
-        var original = File.ReadAllText(path: fullPath);
-        var normalized = original.Replace(
-            newValue: "\n",
-            oldValue: "\r\n"
-        );
-
-        if (!TryLocateSection(
-            beginIndex: out var beginIndex,
-            endIndex: out var endIndex,
-            text: normalized
-        )) {
-            Console.Error.WriteLine(value: $"packages: {relativePath} carries no '{GeneratedBegin}' … '{GeneratedEnd}' section.");
-
-            return 1;
-        }
-
-        var indent = LeadingWhitespace(
-            index: beginIndex,
-            text: normalized
-        );
-        var replaced = string.Concat(
-            str0: normalized[..beginIndex],
-            str1: RenderSection(
-                indent: indent,
-                packages: packages
-            ),
-            str2: normalized[endIndex..]
-        );
-        var lineEnding = (original.Contains(value: "\r\n")
-            ? "\r\n"
-            : "\n"
-        );
-
-        File.WriteAllText(
-            path: fullPath,
-            contents: replaced.Replace(
-                newValue: lineEnding,
-                oldValue: "\n"
-            ),
-            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-        );
-        Console.Out.WriteLine(value: $"packages: wrote {packages.Count} packable project(s) to {relativePath}.");
-
-        return 0;
-    }
-
-    public static Command Create() {
-        var checkOption = new Option<string?>(name: "--check") { Description = "Compare this path's GENERATED package section against the current packable-project list; write nothing, exit 1 with a drift report on disagreement." };
-        var writeOption = new Option<string?>(name: "--write") { Description = "Regenerate the GENERATED package section in this path from the current packable-project list." };
-        var command = new Command(
-            description: """
-            Report the published ByteTerrace.Puck.* NuGet packages.
-
-            With neither option, lists every project under src/ declaring <IsPackable>true</IsPackable> — package id,
-            description, and tags — sorted by package id.
-
-            The GENERATED section is delimited by a comment pair:
-              <!-- GENERATED: puck packages -->
-              ...
-              <!-- /GENERATED -->
-            --write replaces everything between and including that pair; the rest of the file is untouched.
-            docs/site/index.html carries the one checked-in instance today.
-
-            Exit codes: 0 listed/wrote/matched, 1 check found drift, 2 missing repository root.
+            Exit codes: 0 wrote or matched, 1 --check found drift, 2 refused (no repository root, no page or no section).
             """,
-            name: "packages"
-        ) { checkOption, writeOption };
-
-        command.SetAction(action: parseResult => Run(
-            checkPath: parseResult.GetValue(option: checkOption),
-            writePath: parseResult.GetValue(option: writeOption)
-        ));
-
-        return command;
-    }
+        name: "packages",
+        run: Run
+    );
 }

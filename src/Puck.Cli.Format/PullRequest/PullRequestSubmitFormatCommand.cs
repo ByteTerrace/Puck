@@ -33,10 +33,9 @@ internal static class PullRequestSubmitFormatCommand {
     }
 
     public static Command Create() {
-        var runIdOption = new Option<long>(name: "--run-id") {
-            Description = "The completed formatting workflow run whose artifact is applied.",
-            Required = true,
-        };
+        var runIdOption = CliOptions.Count(description: "The completed formatting workflow run whose artifact is applied.", minimum: 1L, name: "--run-id");
+
+        runIdOption.Required = true;
         var command = new Command(
             description: "Apply a completed pull-request formatting run's artifact to its pull request.",
             name: "submit-format"

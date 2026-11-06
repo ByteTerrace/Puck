@@ -28,10 +28,7 @@ public static partial class CanaryCommand {
         var idsArgument = new Argument<string[]>(name: "id") { Arity = ArgumentArity.ZeroOrMore, DefaultValueFactory = static _ => [], Description = "Run the named proofs explicitly, regardless of their declared requirements." };
         var listOption = new Option<bool>(name: "--list") { Description = "Strictly load and list the named manifests, or every manifest when no id is given, without building or running." };
         var mergeOption = new Option<bool>(name: "--merge") { Description = "Run what a merge needs: the automatic set plus every proof requiring gpu." };
-        var jobsOption = new Option<int>(name: "--jobs") {
-            DefaultValueFactory = static _ => DefaultJobs,
-            Description = "Maximum World processes to run at once (default: the logical processor count). A federated leg holds one per process. Proof reports remain in authored order.",
-        };
+        var jobsOption = CliOptions.Jobs(defaultValue: DefaultJobs, description: "Maximum World processes to run at once (default: the logical processor count). A federated leg holds one per process. Proof reports remain in authored order.");
         var gpuJobsOption = CanaryGpuJobs.Create();
         var planOption = new Option<bool>(name: "--plan") { Description = "Print what the selection would run — proofs, legs, World boots, process spawns, builds, and the summed leg budget — without building or running." };
         var worldArtifactOption = new Option<string?>(name: "--world-artifact") { Description = "Run every leg on this Puck.World entry assembly, such as a producer-built package's, instead of the build of the checkout's sources. Never builds." };
@@ -77,11 +74,6 @@ public static partial class CanaryCommand {
             backend, or an absent shader compiler).
             """);
 
-        jobsOption.Validators.Add(item: static result => {
-            if (result.GetValueOrDefault<int>() < 1) {
-                result.AddError(errorMessage: "--jobs must be at least 1.");
-            }
-        });
 
         command.Validators.Add(item: result => {
             var capability = result.GetValue(option: capabilityOption);

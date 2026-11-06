@@ -26,17 +26,23 @@ public static partial class TestCommand {
         var cacheOption = new Option<string?>(name: "--cache-dir") {
             Description = "Override the device-cache root the worker uses. Absent uses the ordinary per-user Puck caches.",
         };
-        var seedOption = new Option<ulong?>(name: "--seed") {
-            Description = "Draw the fuzzer's inputs from this seed instead of the fixture's.",
-        };
-        var linesOption = new Option<int?>(name: "--lines") {
-            Description = "Draw this many console lines for the observed seat instead of the fixture's count.",
-        };
-        var actionsOption = new Option<int?>(name: "--actions") {
-            Description = "Draw this many actions for each observed session instead of the fixture's count.",
-        };
+        var seedOption = CliOptions.OptionalCount(description: "Draw the fuzzer's inputs from this seed instead of the fixture's.", minimum: 0UL, name: "--seed");
+        var linesOption = CliOptions.OptionalCount(description: "Draw this many console lines for the observed seat instead of the fixture's count.", minimum: 1, name: "--lines");
+        var actionsOption = CliOptions.OptionalCount(description: "Draw this many actions for each observed session instead of the fixture's count.", minimum: 1, name: "--actions");
         var command = new Command(
-            description: """
+            description: "Prove that no principal can tell a disclosure fixture's hidden-state variants apart.",
+            name: "disclosure"
+        ) {
+            pathArgument,
+            keepOption,
+            worldArtifactOption,
+            cacheOption,
+            seedOption,
+            linesOption,
+            actionsOption,
+        };
+
+        command.Detail(detail: """
             Boots one headless world per variant of a disclosure fixture (and the first variant again, the control),
             identical but for the hidden state each variant's operator steps author, drives the same non-operator
             principals with the same inputs in each (the observed seat's console lines, the world's own schedule rows,
@@ -49,18 +55,7 @@ public static partial class TestCommand {
             fixture or world that does not load, a leg that did not finish, a run that is INVALID (a variant step
             refused, answered late or never, or a fixture session the world did not admit), or a control that differs
             from the first variant (the harness cannot judge).
-            """,
-            name: "disclosure"
-        ) {
-            pathArgument,
-            keepOption,
-            worldArtifactOption,
-            cacheOption,
-            seedOption,
-            linesOption,
-            actionsOption,
-        };
-
+            """);
         command.SetAction(action: parseResult => RunDisclosure(
             actions: parseResult.GetValue(option: actionsOption),
             cacheDirectory: parseResult.GetValue(option: cacheOption),

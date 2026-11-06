@@ -359,14 +359,8 @@ public static partial class CompileCommand {
 
     public static Command Create() {
         var pathArgument = new Argument<string[]>(name: "paths") { Arity = ArgumentArity.ZeroOrMore, Description = "Paths to .puck sources, or .world.json documents to write only the compiled world of, compiled in input order in one process. Stops on the first failure. Required unless --tree selects every .puck and .world.json under its directory in ordinal order." };
-        var outputOption = new Option<string?>(
-            name: "--output",
-            aliases: ["-o"]
-        ) { Description = "Destination JSON path, or destination directory for a source with world declarations; for a .world.json document, the path its compiled world sits beside (or the .puckb file itself)." };
-        var watchOption = new Option<bool>(
-            name: "--watch",
-            aliases: ["-w"]
-        ) { Description = "Recompile whenever a .puck file under the source's own directory changes; an import from outside that directory is not watched." };
+        var outputOption = new Option<string?>(name: "--output") { Description = "Destination JSON path, or destination directory for a source with world declarations; for a .world.json document, the path its compiled world sits beside (or the .puckb file itself)." };
+        var watchOption = new Option<bool>(name: "--watch") { Description = "Recompile whenever a .puck file under the source's own directory changes; an import from outside that directory is not watched." };
         var strictOption = new Option<bool>(name: "--strict") { Description = "Treat warnings as errors." };
         var validateOption = new Option<bool>(name: "--validate") { Description = "Validate semantic engine schema rules on the emitted document. A world source validated without --output writes nothing." };
         var measureOption = new Option<bool>(name: "--measure") { Description = "Report elapsed time, process peak working set and managed allocation for this invocation." };

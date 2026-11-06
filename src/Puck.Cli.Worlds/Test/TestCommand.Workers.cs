@@ -46,11 +46,12 @@ public static partial class TestCommand {
     }
 
     // Requires every leg after the first to have finished and to match the first, and the first to match the recording
-    // under `compare`; then records the first under `record`. Returns 0, or 2 for a leg that did not finish, a missing
-    // recording, or a difference, each named on `error`.
+    // under `compare`; then records the first under `record`. Returns 0, 1 for a difference (a judged divergence), or 2
+    // for a leg that did not finish or a missing recording, each named on `error`.
     private static int CompareAndRecord(TestWorld test, string worldDirectory, IReadOnlyList<TestLeg> legs, string? compare, string? record, TextWriter output, TextWriter error) {
         var first = Path.Combine(path1: worldDirectory, path2: legs[0].Name);
         var refused = false;
+        var diverged = false;
 
         foreach (var leg in legs.Skip(count: 1)) {
             var directory = Path.Combine(path1: worldDirectory, path2: leg.Name);
@@ -59,7 +60,7 @@ public static partial class TestCommand {
                 refused = true;
                 continue;
             }
-            refused |= Report(differences: CompareLegs(actual: directory, expected: first), error: error, output: output,
+            diverged |= Report(differences: CompareLegs(actual: directory, expected: first), error: error, output: output,
                 subject: $"{leg.Label} against {legs[0].Label}");
         }
         if (compare is { }) {
@@ -69,18 +70,18 @@ public static partial class TestCommand {
                 error.WriteLine(value: $"  REFUSED: no recording of {test.Name} under {recorded}; record one with --record.");
                 refused = true;
             } else {
-                refused |= Report(differences: CompareLegs(actual: first, expected: recorded), error: error, output: output,
+                diverged |= Report(differences: CompareLegs(actual: first, expected: recorded), error: error, output: output,
                     subject: $"{legs[0].Label} against the recording {recorded}");
             }
         }
-        if ((record is { }) && !refused) {
+        if ((record is { }) && !refused && !diverged) {
             var destination = Path.Combine(path1: Path.GetFullPath(path: record), path2: test.Name);
 
             ConfinedDirectory.RemoveTree(path: destination);
             CopyRecording(destination: destination, source: first);
             output.WriteLine(value: $"  recorded {legs[0].Label} -> {destination.Replace(newChar: '/', oldChar: '\\')}");
         }
-        return (refused ? 2 : 0);
+        return (refused ? 2 : (diverged ? 1 : 0));
     }
     private static bool Report(IReadOnlyList<string> differences, string subject, TextWriter output, TextWriter error) {
         if (differences.Count == 0) {

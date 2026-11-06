@@ -409,10 +409,7 @@ public static partial class TestCommand {
             DefaultValueFactory = static _ => false,
             Description = "Restore each scenario's starting checkpoint in place and replay its recorded input, requiring identical per-tick authority hashes, machine cores and final state exports without another boot.",
         };
-        var jobsOption = new Option<int>(name: "--jobs") {
-            DefaultValueFactory = static _ => Math.Clamp(value: (Environment.ProcessorCount / 2), min: 1, max: 2),
-            Description = "Maximum concurrent worker processes (default: at most 2). Each worker process stays alive across its scenarios and boots each one fresh. Output remains in authored order.",
-        };
+        var jobsOption = CliOptions.Jobs(defaultValue: Math.Clamp(value: (Environment.ProcessorCount / 2), min: 1, max: 2), description: "Maximum concurrent worker processes (default: at most 2). Each worker process stays alive across its scenarios and boots each one fresh. Output remains in authored order.");
         var workersOption = new Option<string?>(name: "--workers") {
             DefaultValueFactory = static _ => null,
             Description = "Run every scenario once per worker count in this comma-separated list (Puck.World --workers; 0 is the machine's logical processor count), each a full authored host run, and require every count's per-tick authority hashes, delivered snapshot entries, exports and crossing log to match. Example: --workers 1,2,0.",
@@ -426,17 +423,7 @@ public static partial class TestCommand {
             Description = "Require each world's per-tick authority hashes, delivered snapshot entries, exports and crossing log to match the recording --record wrote under <dir>/<world>.",
         };
         var command = new Command(
-            description: """
-            Boots each test world through the real Puck.World executable, headless and unpaced, to the tick its own
-            schedule section declares its state export at, then reads that export's verdict rows: one line per verdict
-            naming the gate and the values it saw. A `.puck` source is compiled first and the worlds its `test`
-            blocks generate are what run. --reproduce restores the starting checkpoint and replays recorded input.
-            --workers runs every scenario at each worker count and requires the counts to agree; --record and --compare
-            keep a run's hashes, snapshots, exports and crossing log and compare a later run against them. Exit codes are 0 for
-            every verdict passing, 1 for a failing verdict, and 2 for usage, a world declaring no schedule or no verdict
-            row, a source that does not compile, a build or boot refusal, a reproduction mismatch, or worker counts or a
-            recording that disagree.
-            """,
+            description: "Boot each test world through the real Puck.World executable and judge its verdict rows.",
             name: "test"
         ) {
             jobsOption,
@@ -450,6 +437,18 @@ public static partial class TestCommand {
             compareOption,
             filterOption,
         };
+
+        command.Detail(detail: """
+            Boots each test world through the real Puck.World executable, headless and unpaced, to the tick its own
+            schedule section declares its state export at, then reads that export's verdict rows: one line per verdict
+            naming the gate and the values it saw. A `.puck` source is compiled first and the worlds its `test`
+            blocks generate are what run. --reproduce restores the starting checkpoint and replays recorded input.
+            --workers runs every scenario at each worker count and requires the counts to agree; --record and --compare
+            keep a run's hashes, snapshots, exports and crossing log and compare a later run against them. Exit codes are 0 for
+            every verdict passing; 1 for a failing verdict, a reproduction that diverged, or worker counts or a recording
+            that disagree; and 2 for usage, a world declaring no schedule or no verdict row, a source that does not
+            compile, a build or boot refusal, a leg that did not finish, or a missing recording.
+            """);
 
         command.SetAction(action: parseResult => Run(
             filters: parseResult.GetValue(filterOption) ?? [],

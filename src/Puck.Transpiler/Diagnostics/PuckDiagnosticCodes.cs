@@ -211,9 +211,9 @@ public static class PuckDiagnosticCodes {
     public const string EmbeddingSpaceInvalid = "PUCK077";
     /// <summary>PUCK078: a Vector row names no space and there is no default, names an undeclared space, or a non-Vector row names a space.</summary>
     public const string EmbeddingSpaceUnknown = "PUCK078";
-    /// <summary>PUCK079: an embedded text has no lock entry; run puck embed.</summary>
+    /// <summary>PUCK079: an embedded text has no lock entry; run puck embed lock.</summary>
     public const string EmbeddingLockMissing = "PUCK079";
-    /// <summary>PUCK080: the lock's model, revision, or dimensions differ from the space; run puck embed.</summary>
+    /// <summary>PUCK080: the lock's model, revision, or dimensions differ from the space; run puck embed lock.</summary>
     public const string EmbeddingLockStale = "PUCK080";
     /// <summary>PUCK081: a vector literal is not base64url, has the wrong length, holds -128, or fails admission.</summary>
     public const string VectorLiteralInvalid = "PUCK081";

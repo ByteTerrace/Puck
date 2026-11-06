@@ -205,7 +205,7 @@ rule buyCard {
 Compile it to the canonical JSON document with the Puck CLI:
 
 ```bash
-puck compile shop.world.puck -o shop.world.json --validate
+puck compile shop.world.puck --output shop.world.json --validate
 ```
 
 The output holds the same rows (`coins`, and `cards` with `"max": 1`) and the
