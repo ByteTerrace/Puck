@@ -101,6 +101,20 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         return job.Answer.Task;
     }
 
+    // Takes a scene that exports the words the published scene holds (SdfMeshIrradianceScene.SameGpuContent) as the
+    // published one, releasing the claim on the scene it replaces: a scene trimmed of retained geometry needs no upload,
+    // and the untrimmed scene's geometry is freed.
+    internal void Adopt(SdfMeshIrradianceScene scene) {
+        lock (m_gate) { AdoptLocked(scene: scene); }
+    }
+    private void AdoptLocked(SdfMeshIrradianceScene scene) {
+        if (m_stopping || m_disposed || ReferenceEquals(m_scene, scene) || !SdfMeshIrradianceScene.SameGpuContent(m_scene, scene)) { return; }
+        m_scene!.Dispose();
+        m_scene = scene.Acquire();
+        m_sceneAdoptions++;
+    }
+    private long m_sceneAdoptions;
+
     public bool TryTake(SdfWorldTables tables, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? job, out double estimatedSeconds) {
         job = null;
         estimatedSeconds = 0;
@@ -149,6 +163,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 return false;
             }
             m_waiting = null;
+            AdoptLocked(scene: pending.Scene);
             // A changed mesh roster need not move any of this scene's addresses.
             if (ReferenceEquals(m_scene, pending.Scene) && m_placementVersion != version && pending.Scene.MatchesGpuPlacements(placements, m_scenePlacements)) {
                 m_placementVersion = version;
@@ -402,7 +417,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     internal string DescribeMemory() {
         var scene = m_sceneRegion?.OwnedBytes ?? default;
         var feedback = m_feedback?.OwnedBytes ?? default;
-        return FormattableString.Invariant($"trace-scene-device-bytes={scene.DeviceLocal} trace-scene-upload-bytes={scene.HostVisible} trace-scene-shadow-bytes={m_sceneRegion?.ShadowBytes ?? 0} trace-scene-changes={m_sceneUploads} trace-scene-written-bytes={m_sceneWrittenBytes} trace-scene-last-change-bytes={m_sceneLastBytes} trace-hits-device-bytes={m_hitCache?.SizeBytes ?? 0} trace-feedback-device-bytes={feedback.DeviceLocal} trace-feedback-upload-bytes={feedback.HostVisible} trace-feedback-shadow-bytes={m_feedback?.ShadowBytes ?? 0}");
+        return FormattableString.Invariant($"trace-scene-device-bytes={scene.DeviceLocal} trace-scene-upload-bytes={scene.HostVisible} trace-scene-shadow-bytes={m_sceneRegion?.ShadowBytes ?? 0} trace-scene-changes={m_sceneUploads} trace-scene-adoptions={m_sceneAdoptions} trace-scene-written-bytes={m_sceneWrittenBytes} trace-scene-last-change-bytes={m_sceneLastBytes} trace-hits-device-bytes={m_hitCache?.SizeBytes ?? 0} trace-feedback-device-bytes={feedback.DeviceLocal} trace-feedback-upload-bytes={feedback.HostVisible} trace-feedback-shadow-bytes={m_feedback?.ShadowBytes ?? 0}");
     }
     public void Stop() {
         lock (m_gate) {

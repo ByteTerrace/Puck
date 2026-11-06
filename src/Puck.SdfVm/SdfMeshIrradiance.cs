@@ -76,22 +76,37 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         get => m_gpuTrace;
         set { lock (m_gate) { m_nextGpuTrace = value; m_gpuReattach = true; } }
     }
+    // A query of a scene the volume has since trimmed (TrimRetained) still asks for the volume's scene: both export the
+    // same GPU words.
     internal bool KeepsGpuScene(SdfMeshIrradianceScene scene) {
-        lock (m_gate) { return !m_disposed && ReferenceEquals(m_scene, scene); }
+        lock (m_gate) { return !m_disposed && SdfMeshIrradianceScene.SameGpuContent(m_scene, scene); }
     }
     internal bool KeepsGpuPublication(SdfMeshIrradianceScene scene, int geometry, int window) {
-        lock (m_gate) { return !m_disposed && ReferenceEquals(m_scene, scene) && m_geometry == geometry && m_windowVersion == window; }
+        lock (m_gate) { return !m_disposed && SdfMeshIrradianceScene.SameGpuContent(m_scene, scene) && m_geometry == geometry && m_windowVersion == window; }
     }
     private bool m_disposed;
     private bool m_trimListening;
 
+    // Drops the geometry the scene retained for a later build. The GPU client still holds the untrimmed scene it uploaded,
+    // whose claim alone keeps that geometry alive, so it adopts the trimmed one, which exports the same words, without an
+    // upload. The client's gate is taken after this one is left: its admission reads this gate under its own.
     private void TrimRetained() {
+        SdfMeshIrradianceScene? trimmed;
+        SdfMeshProbeGpuWork? client;
+
         lock (m_gate) {
             if (m_disposed || (m_scene is null)) { return; }
             var previous = m_scene;
 
             m_scene = previous.WithoutRetained();
             previous.Dispose();
+            trimmed = m_scene.Acquire();
+            client = m_gpuTrace;
+        }
+        try {
+            client?.Adopt(scene: trimmed);
+        } finally {
+            trimmed.Dispose();
         }
     }
 

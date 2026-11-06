@@ -61,7 +61,7 @@ public sealed partial class SdfMeshIrradiance {
             positions = [.. distinct];
             var key = (m_geometry, m_windowVersion, m_lightingVersion, m_relit);
             var sameClient = ReferenceEquals(m_gpuMeterAskedOf, client);
-            var sameScene = ReferenceEquals(m_gpuMeterScene, m_scene);
+            var sameScene = SdfMeshIrradianceScene.SameGpuContent(m_gpuMeterScene, m_scene);
             var cut = !cuts.AsSpan().SequenceEqual(m_gpuMeterAskedCuts);
             var moved = !positions.AsSpan().SequenceEqual(m_gpuMeterAsked);
             if (sameClient && sameScene && m_gpuMeterKey == key && !moved && !cut) { return; }

@@ -643,7 +643,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
 
         // The held program's fields as they stand after every emitter's PrepareFrame published this frame's values: a field
         // that moved makes a new set, and the program stands.
-        m_sampled = SdfSampledSet.Capture(fields: m_program!.SampledFields, previous: (m_sampled ?? m_program.Sampled));
+        m_sampled = SdfSampledSet.Capture(program: m_program!, previous: (m_sampled ?? m_program!.Sampled));
         dressed.PickMap = ComposePickMap();
         dressed.SlotClips = ComposeSlotClips();
         dressed = dressed with { MeshAssetSlots = m_meshAssetSlots, MeshInstances = m_meshInstances, Sampled = m_sampled };

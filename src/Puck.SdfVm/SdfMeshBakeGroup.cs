@@ -124,6 +124,11 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     public Vector3 Low { get; set; }
     /// <summary>Gets or sets the high corner of the group's box.</summary>
     public Vector3 High { get; set; }
+    /// <summary>Gets the low corner of the box the group was planned with, before any lattice narrowed <see cref="Low"/>:
+    /// the box a plan of the same instances at another sampled set or pose covers (<see cref="Refresh{T}"/>).</summary>
+    public Vector3 PlannedLow { get; private set; }
+    /// <summary>Gets the high corner of the box the group was planned with.</summary>
+    public Vector3 PlannedHigh { get; private set; }
     /// <summary>Gets whether a member's bound passed the reach, so the group's box, and its geometry, hold the reach.</summary>
     public bool Clamped { get; internal set; }
 
@@ -224,8 +229,10 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         var replanned = create(arg1: group.Selector, arg2: false);
 
         replanned.Instances = group.Instances;
-        replanned.Low = group.Low;
-        replanned.High = group.High;
+        // The planned box: a group the bake has begun has narrowed Low and High to the surface it last sampled, which a
+        // moved field can leave.
+        replanned.Low = group.PlannedLow;
+        replanned.High = group.PlannedHigh;
         replanned.Glass = group.Glass;
         replanned.Displacement = group.Displacement;
         replanned.Clamped = group.Clamped;
@@ -430,6 +437,8 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             throw new InvalidOperationException($"Mesh group at instance {FirstInstance} needs {members} skin members; the representation holds {SdfMesh.MaxMembers}.");
         }
         Geometry.Seal();
+        PlannedLow = Low;
+        PlannedHigh = High;
         Sealed = Geometry.Geometry;
         Form = Geometry.Form;
         MaterialOrder = [.. Geometry.Materials];
@@ -492,9 +501,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         }
 
         world.Geometry.AppendReach(reach: reach);
-        world.Seal();
         world.High = new Vector3(value: reach);
         world.Low = new Vector3(value: -reach);
+        world.Seal();
 
         return world;
     }

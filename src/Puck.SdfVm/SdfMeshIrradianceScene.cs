@@ -42,7 +42,20 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
     internal SdfMeshIrradianceScene WithoutRetained() => ((m_retained.Count == 0) ? Acquire() : new(source: this));
 
+    // The identity of what a GPU export of the scene holds (its draws, hierarchy and geometries): a new object for each
+    // built scene, and shared by a scene trimmed of its retained geometry (WithoutRetained), which exports the same words.
+    private readonly object m_gpuContent = new();
+
+    /// <summary>Returns whether two scenes export the same GPU words: one is the other, or one is the other trimmed of the
+    /// geometry it retained for a later build, so a scene uploaded for one serves the other without another upload.</summary>
+    /// <param name="first">A scene, or <see langword="null"/>.</param>
+    /// <param name="second">Another scene, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when both are non-null and share their GPU content.</returns>
+    internal static bool SameGpuContent(SdfMeshIrradianceScene? first, SdfMeshIrradianceScene? second) =>
+        ((first is not null) && (second is not null) && ReferenceEquals(objA: first.m_gpuContent, objB: second.m_gpuContent));
+
     private SdfMeshIrradianceScene(SdfMeshIrradianceScene source) {
+        m_gpuContent = source.m_gpuContent;
         m_instances = source.m_instances;
         m_entries = source.m_entries;
         m_nodes = source.m_nodes;

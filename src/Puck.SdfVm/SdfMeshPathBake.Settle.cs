@@ -19,11 +19,13 @@ public sealed partial class SdfMeshPathBake {
     private readonly List<int> m_settleWatch = [];
     private readonly List<int> m_settleWatchScratch = [];
 
-    // Lists every group that can drift, after Restart planned the groups.
+    // Lists every group that can drift, and every group that reads a sampled field, after Restart planned the groups.
     private void WatchSettles() {
         m_settleWatch.Clear();
+        m_sampledReaders.Clear();
         for (var index = 0; (index < m_groups.Count); index++) {
             if (m_groups[index].ReadsOtherSlots) { m_settleWatch.Add(item: index); }
+            if (m_groups[index].Geometry.ReadsSampled) { m_sampledReaders.Add(item: index); }
         }
     }
     // Keeps the settle watch as Replace puts a group at an index.

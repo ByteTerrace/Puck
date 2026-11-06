@@ -341,10 +341,12 @@ public sealed partial class SdfMeshPathBake {
     private static void Work(WorkerSlot slot) {
         try {
             while (TakeWork() is { } work) {
-                // A stage that throws leaves its group unfinished; the line names the fault rather than a silent stall.
+                // A work item that throws has already settled what it owns (a group's stage fails its group; an answer
+                // returns its batch's unanswered lattices), so the line names the fault, out of memory included, and the
+                // worker carries on rather than ending silently.
                 try {
                     work(slot.Scratch);
-                } catch (Exception exception) when ((exception is not OutOfMemoryException)) {
+                } catch (Exception exception) {
                     Console.Error.WriteLine(value: $"[sdf.mesh-bake] work failed: {exception}");
                 } finally {
                     slot.Scratch.TrimForWorkers(workers: WorkerSlots.Length);
@@ -462,7 +464,9 @@ public sealed partial class SdfMeshPathBake {
     /// <summary>Describes the latest bake's residency: its groups, when they landed (finished) and became resident (their
     /// words in the mesh region) counted from its start, those near the first demand point (the primary seat's eye)
     /// apart, with when half and nine tenths of those had landed and which landed last, its store loads, the time its
-    /// plan and restart took, and the resident meshes' region bytes by level of detail.</summary>
+    /// plan and restart took, what moved programs and sampled fields cost the frame thread as counts (frames prepared,
+    /// restarts and the groups they planned, resamples and the readers they walked, coalesced and promoted successors), and
+    /// the resident meshes' region bytes by level of detail.</summary>
     /// <param name="radius">The distance, in metres, from the first demand point to a group's demand box within which
     /// the group counts as near.</param>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
@@ -536,6 +540,7 @@ public sealed partial class SdfMeshPathBake {
                 _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" near-last={lastNear.Selector}{(lastNear.Dynamic ? "/dynamic" : ((lastNear.Instances > 1) ? $"/union{lastNear.Instances}" : "/static"))}/{(lastNear.Mesh?.TriangleCount ?? 0)}tri");
             }
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" bake-age={((start == 0) ? 0d : Stopwatch.GetElapsedTime(startingTimestamp: start).TotalSeconds):0.000}s loads={m_loadsDone}/{m_loadsQueued} load-span={loadSpan:0.000}s plan-ms={m_planMilliseconds:0.0} restart-ms={m_restartMilliseconds:0.0}");
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" frames={m_preparedFrames} restarts={m_restarts} restart-groups={m_restartGroups} resamples={m_resamples} resample-groups={m_resampleGroups} sampled-readers={m_sampledReaders.Count} coalesced={m_coalesced} promoted={m_promoted} successors={m_successors}");
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" vertex-bytes={vertexBytes} level0={levelTriangles[0]}tri/{levelBytes[0]}B level1={levelTriangles[1]}tri/{levelBytes[1]}B level2={levelTriangles[2]}tri/{levelBytes[2]}B");
 
             return line.ToString();

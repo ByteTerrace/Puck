@@ -40,12 +40,12 @@ public sealed class SdfProgramSideTableLawTests {
 
         var words = original.Words.ToArray();
         var published = field.Publish(values: [5, 5, 5, 5, 5, 5, 5, 5]);
-        var captured = SdfSampledSet.Capture(fields: original.SampledFields, previous: original.Sampled);
+        var captured = SdfSampledSet.Capture(program: original, previous: original.Sampled);
 
         Assert.Equal(words, original.Words.ToArray());
         Assert.NotSame(original.Sampled, captured);
         Assert.Same(published, captured[0]);
-        Assert.Same(captured, SdfSampledSet.Capture(fields: original.SampledFields, previous: captured));
+        Assert.Same(captured, SdfSampledSet.Capture(program: original, previous: captured));
         _ = Assert.Throws<ArgumentException>(() => field.Publish(values: [1, 2, 3]));
     }
 
