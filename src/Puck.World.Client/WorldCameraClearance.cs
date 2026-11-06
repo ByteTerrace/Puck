@@ -53,6 +53,21 @@ public sealed class WorldCameraClearance {
     // The highest elevation, in radians, a rise lifts the boom to: short of straight up, where the boom has no heading
     // and the view's up flips.
     private const float MaximumElevation = 1.5f;
+    // The full-size margin, in metres, a clearance sweep is cast wider than the eye it was asked for, so its answer stands
+    // while the boom drifts by less (ClearanceQuery.Covers): the eye's effective radius moves by at most twice this.
+    private const float ReuseMargin = (1f / 256f);
+    // The clearance questions one frame asks, each with its own held answer: the rest probe, the goal's first fit, each
+    // rise step and its refinements, the held eye, the cutaway face, and the first-person room.
+    private const int RestQuestion = 0;
+    private const int GoalQuestion = 1;
+    private const int LiftQuestion = 2;
+    private const int RefineQuestion = (LiftQuestion + LiftSteps);
+    private const int HeldQuestion = (RefineQuestion + LiftRefinements);
+    private const int FaceQuestion = (HeldQuestion + 1);
+    private const int FirstPersonQuestion = (FaceQuestion + 1);
+    private const int Questions = (FirstPersonQuestion + 1);
+
+    private readonly WorldFieldAnswer<ClearanceQuery, float>[] m_answers = new WorldFieldAnswer<ClearanceQuery, float>[Questions];
 
     private SdfCameraDynamics m_cachedDynamics;
     private SecondOrderResponse m_cachedResponse;
@@ -85,7 +100,8 @@ public sealed class WorldCameraClearance {
     /// <summary>Gets the target the latest frame looked at, in world units.</summary>
     public Vector3 Target { get; private set; }
 
-    /// <summary>Measures room behind an authored eye independently of the currently placed camera.</summary>
+    /// <summary>Measures room behind an authored eye independently of the currently placed camera, through this arm's
+    /// own held answer for that question.</summary>
     /// <param name="field">The static geometry, or <see langword="null"/> for none, which leaves the whole length.</param>
     /// <param name="head">The eye the room is measured from, in world units.</param>
     /// <param name="backward">The unit direction the room is measured along.</param>
@@ -95,9 +111,9 @@ public sealed class WorldCameraClearance {
     /// <param name="eyeRadius">The full-size radius of the sphere swept, in metres.</param>
     /// <param name="retractionSkin">The full-size distance, in metres, short of a hit the room is reported.</param>
     /// <returns>The room, in world units, at most <paramref name="length"/>.</returns>
-    public static float AvailableRoom(SdfFieldEvaluator? field, Vector3 head, Vector3 backward, float length, float scale, float eyeRadius, float retractionSkin) =>
-        ((field is null) ? length : Clear(field: field, targetObstructed: false, target: head, direction: backward, length: length,
-            radius: FixedQ4816.FromDouble(value: (eyeRadius * scale)), scale: scale, retractionSkin: retractionSkin, obstructedSkin: 0f));
+    public float AvailableRoom(SdfFieldEvaluator? field, Vector3 head, Vector3 backward, float length, float scale, float eyeRadius, float retractionSkin) =>
+        Clear(answer: ref m_answers[FirstPersonQuestion], field: field, targetObstructed: false, target: head, direction: backward, length: length,
+            radius: FixedQ4816.FromDouble(value: (eyeRadius * scale)), scale: scale, retractionSkin: retractionSkin, obstructedSkin: 0f);
 
     /// <summary>Publishes the seat's first-person transition through the same view-local fade and read-back.</summary>
     public void ApplyView(WorldCameraViewTransition transition, Vector3 head, Vector3 forward, float hideRadius) {
@@ -114,55 +130,65 @@ public sealed class WorldCameraClearance {
     }
 
     // How far along the boom the eye can travel from the target before geometry, swept by a sphere of radius, stops it or
-    // its sightline, up to the boom's whole length.
-    private static float Clear(SdfFieldEvaluator field, bool targetObstructed, Vector3 target, Vector3 direction, float length, FixedQ4816 radius, float scale, float retractionSkin, float obstructedSkin) {
-        // A still camera asks the same questions every frame: an answer to bit-identical inputs over the same field is the
-        // one it had, so it is reused rather than marched again.
-        var query = new ClearanceQuery(Direction: direction, Field: field, Length: length, Radius: radius.Value, Scale: scale, Target: target, TargetObstructed: targetObstructed,
-            RetractionSkin: retractionSkin, ObstructedSkin: obstructedSkin);
-        var answers = (AnswerScratch ??= new ClearanceAnswer[ClearanceAnswers]);
+    // its sightline, up to the boom's whole length (all of it with no field): the held answer where it covers the question,
+    // otherwise a sweep.
+    private static float Clear(ref WorldFieldAnswer<ClearanceQuery, float> answer, SdfFieldEvaluator? field, bool targetObstructed, Vector3 target, Vector3 direction, float length, FixedQ4816 radius, float scale, float retractionSkin, float obstructedSkin) {
+        if (field is null) {
+            WorldFieldQueryWork.Clearance.Skip();
 
-        foreach (ref readonly var answer in answers.AsSpan()) {
-            if (answer.Query.Matches(other: in query)) {
-                return answer.Room;
-            }
+            return length;
         }
 
-        var room = March(field: field, targetObstructed: targetObstructed, target: target, direction: direction, length: length, radius: radius, scale: scale,
-            retractionSkin: retractionSkin, obstructedSkin: obstructedSkin);
-
-        answers[NextAnswer] = new ClearanceAnswer(Query: query, Room: room);
-        NextAnswer = ((NextAnswer + 1) % ClearanceAnswers);
-
-        return room;
+        return answer.Ask(asked: new ClearanceQuery(Direction: direction, Field: field, Length: length, Radius: radius.Value, Scale: scale, Target: target, TargetObstructed: targetObstructed,
+            RetractionSkin: retractionSkin, ObstructedSkin: obstructedSkin,
+            // A target inside geometry answers through an overlap test a wider sphere would change, so it keeps exact inputs.
+            Margin: ((targetObstructed || !float.IsFinite(f: scale) || (scale <= 0f)) ? 0f : (ReuseMargin * scale))));
     }
-    // The clearance questions a thread asked last, kept for Clear to answer again: enough for every probe one chase
-    // camera's frame asks (the rest, the lifts and their refinements).
-    private const int ClearanceAnswers = 32;
-    [ThreadStatic] private static ClearanceAnswer[]? AnswerScratch;
-    [ThreadStatic] private static int NextAnswer;
 
-    private readonly record struct ClearanceAnswer(ClearanceQuery Query, float Room);
-    private readonly record struct ClearanceQuery(SdfFieldEvaluator? Field, bool TargetObstructed, Vector3 Target, Vector3 Direction, float Length, long Radius, float Scale,
-        float RetractionSkin, float ObstructedSkin) {
-        // Compares the floats by their bits, so an answer is reused only for exactly the inputs it was marched for.
-        public bool Matches(in ClearanceQuery other) => (
-            (Field is not null) &&
-            ReferenceEquals(objA: Field, objB: other.Field) &&
-            (TargetObstructed == other.TargetObstructed) &&
-            (Radius == other.Radius) &&
-            Same(left: Target, right: other.Target) &&
-            Same(left: Direction, right: other.Direction) &&
-            (BitConverter.SingleToInt32Bits(value: Length) == BitConverter.SingleToInt32Bits(value: other.Length)) &&
-            (BitConverter.SingleToInt32Bits(value: Scale) == BitConverter.SingleToInt32Bits(value: other.Scale)) &&
-            (BitConverter.SingleToInt32Bits(value: RetractionSkin) == BitConverter.SingleToInt32Bits(value: other.RetractionSkin)) &&
-            (BitConverter.SingleToInt32Bits(value: ObstructedSkin) == BitConverter.SingleToInt32Bits(value: other.ObstructedSkin))
-        );
-        private static bool Same(Vector3 left, Vector3 right) => (
-            (BitConverter.SingleToInt32Bits(value: left.X) == BitConverter.SingleToInt32Bits(value: right.X)) &&
-            (BitConverter.SingleToInt32Bits(value: left.Y) == BitConverter.SingleToInt32Bits(value: right.Y)) &&
-            (BitConverter.SingleToInt32Bits(value: left.Z) == BitConverter.SingleToInt32Bits(value: right.Z))
-        );
+    // One clearance sweep: a sphere of Radius (raw Q48.16) cast Margin wider, from Target along Direction. Every point of the
+    // swept path moves by at most |dTarget| + Length * |dDirection| between two questions, and a signed distance changes no
+    // faster than the point it is read at, so a path clear of geometry by Radius + Margin stays clear by Radius after any
+    // drift within Margin, and one blocked within Radius + 2 * Margin stays blocked within Radius + Margin. The held room
+    // therefore lies between the rooms a sweep of the asked question finds at Radius and at Radius + 2 * Margin, as a fresh
+    // sweep's does: the eye never comes nearer geometry than its asked radius, and stands off at most 2 * Margin more.
+    private readonly record struct ClearanceQuery(SdfFieldEvaluator Field, bool TargetObstructed, Vector3 Target, Vector3 Direction, float Length, long Radius, float Scale,
+        float RetractionSkin, float ObstructedSkin, float Margin) : IWorldFieldQuery<ClearanceQuery, float> {
+        public static WorldFieldQueryFamily Family => WorldFieldQueryWork.Clearance;
+
+        public bool Covers(in ClearanceQuery asked) {
+            if (
+                (TargetObstructed != asked.TargetObstructed) ||
+                (Radius != asked.Radius) ||
+                !Same(left: Length, right: asked.Length) ||
+                !Same(left: Scale, right: asked.Scale) ||
+                !Same(left: RetractionSkin, right: asked.RetractionSkin) ||
+                !Same(left: ObstructedSkin, right: asked.ObstructedSkin) ||
+                !Same(left: Margin, right: asked.Margin)
+            ) {
+                return false;
+            }
+            if (Same(left: Target, right: asked.Target) && Same(left: Direction, right: asked.Direction)) {
+                return true;
+            }
+
+            var held = Direction.Length();
+            var now = asked.Direction.Length();
+
+            if (!(Margin > 0f) || !(held > 0f) || !(now > 0f)) {
+                return false;
+            }
+
+            var drift = (Vector3.Distance(value1: Target, value2: asked.Target) + (Length * Vector3.Distance(value1: (Direction / held), value2: (asked.Direction / now))));
+
+            // Both sweeps start from a target and direction rounded to the field's Q48.16 grid, which the float drift does not
+            // see: a few grid steps along the origin and along the boom's length are charged against the margin.
+            return ((drift + ((4f + (8f * Length)) / 65536f)) <= Margin);
+        }
+        public float March() => WorldCameraClearance.March(field: Field, targetObstructed: TargetObstructed, target: Target, direction: Direction, length: Length,
+            radius: (FixedQ4816.FromRawBits(value: Radius) + FixedQ4816.FromDouble(value: Margin)), scale: Scale, retractionSkin: RetractionSkin, obstructedSkin: ObstructedSkin);
+
+        private static bool Same(float left, float right) => (BitConverter.SingleToInt32Bits(value: left) == BitConverter.SingleToInt32Bits(value: right));
+        private static bool Same(Vector3 left, Vector3 right) => (Same(left: left.X, right: right.X) && Same(left: left.Y, right: right.Y) && Same(left: left.Z, right: right.Z));
     }
     // A target inside geometry is inside a shell around the pivot, such as a portal frame a body walks through; the sweep
     // then starts obstructedSkin out along the boom, past that shell.
@@ -213,6 +239,7 @@ public sealed class WorldCameraClearance {
     // One frame's clearance question, asked of the geometry and the body along any direction of the boom.
     private readonly ref struct Probe {
         private readonly bool m_cutaway;
+        private readonly Span<WorldFieldAnswer<ClearanceQuery, float>> m_answers;
         private readonly SdfFieldEvaluator? m_field;
         private readonly float m_minimumBoom;
         private readonly float m_obstructedSkin;
@@ -221,8 +248,9 @@ public sealed class WorldCameraClearance {
         private readonly Vector3 m_target;
         private readonly bool m_targetObstructed;
 
-        public Probe(SdfFieldEvaluator? field, bool targetObstructed, Vector3 target, in WorldChaseBody subject, float length, float scale, in SdfCameraClearance clearance) {
+        public Probe(Span<WorldFieldAnswer<ClearanceQuery, float>> answers, SdfFieldEvaluator? field, bool targetObstructed, Vector3 target, in WorldChaseBody subject, float length, float scale, in SdfCameraClearance clearance) {
             EyeRadius = (clearance.EyeRadius * scale);
+            m_answers = answers;
             m_cutaway = clearance.Cutaway;
             m_field = field;
             m_minimumBoom = (clearance.MinimumBoom * scale);
@@ -244,27 +272,26 @@ public sealed class WorldCameraClearance {
         public float KeepOut(Vector3 direction) => (m_cutaway
             ? MathF.Max(x: m_minimumBoom, y: m_subject.Exit(direction: direction, origin: m_target, radius: EyeRadius))
             : m_minimumBoom);
-        // How far out geometry lets an eye of the given radius stand.
-        public float Room(Vector3 direction, FixedQ4816 radius) => ((m_field is null)
-            ? Length
-            : Clear(
-                direction: direction,
-                field: m_field,
-                length: Length,
-                obstructedSkin: m_obstructedSkin,
-                radius: radius,
-                retractionSkin: m_retractionSkin,
-                target: m_target,
-                targetObstructed: m_targetObstructed,
-                scale: Scale
-            )
+        // How far out geometry lets an eye of the given radius stand, through the held answer of one of the frame's questions.
+        public float Room(Vector3 direction, FixedQ4816 radius, int question) => Clear(
+            answer: ref m_answers[question],
+            direction: direction,
+            field: m_field,
+            length: Length,
+            obstructedSkin: m_obstructedSkin,
+            radius: radius,
+            retractionSkin: m_retractionSkin,
+            target: m_target,
+            targetObstructed: m_targetObstructed,
+            scale: Scale
         );
     }
 
     // Whether the eye fits on one direction, past the body and short of geometry, and the room geometry leaves there.
-    private static bool Fits(in Probe probe, Vector3 direction, out float room) {
+    private static bool Fits(in Probe probe, Vector3 direction, int question, out float room) {
         room = probe.Room(
             direction: direction,
+            question: question,
             radius: FixedQ4816.FromDouble(value: probe.EyeRadius)
         );
 
@@ -275,6 +302,7 @@ public sealed class WorldCameraClearance {
         var fits = Fits(
             direction: direction,
             probe: in probe,
+            question: GoalQuestion,
             room: out var room
         );
 
@@ -299,6 +327,7 @@ public sealed class WorldCameraClearance {
                     up: up
                 ),
                 probe: in probe,
+                question: (LiftQuestion + (step - 1)),
                 room: out var lifted
             )) {
                 for (var refinement = 0; (refinement < LiftRefinements); refinement++) {
@@ -311,6 +340,7 @@ public sealed class WorldCameraClearance {
                             up: up
                         ),
                         probe: in probe,
+                        question: (RefineQuestion + refinement),
                         room: out var refined
                     )) {
                         candidate = middle;
@@ -397,9 +427,9 @@ public sealed class WorldCameraClearance {
         // target back into this measurement would pump the framing under lintels and overhead stair slabs.
         scale = ((float.IsFinite(f: scale) && (scale > 0f)) ? scale : 1f);
         var closeOffset = (clearance.CloseTarget * scale);
-        var restProbe = new Probe(clearance: in clearance, field: field, length: length, scale: scale, subject: in subject, target: target, targetObstructed: false);
+        var restProbe = new Probe(answers: m_answers, clearance: in clearance, field: field, length: length, scale: scale, subject: in subject, target: target, targetObstructed: false);
         var eyeRadius = restProbe.EyeRadius;
-        var fraction = ((closeOffset == Vector3.Zero) ? 1f : (restProbe.Room(direction: direction, radius: FixedQ4816.FromDouble(value: eyeRadius)) / length));
+        var fraction = ((closeOffset == Vector3.Zero) ? 1f : (restProbe.Room(direction: direction, question: RestQuestion, radius: FixedQ4816.FromDouble(value: eyeRadius)) / length));
         var (startFraction, fullFraction) = (clearance.CloseTargetStartFraction, clearance.CloseTargetFullFraction);
         var shiftWeight = ((startFraction > fullFraction)
             ? Math.Clamp(((startFraction - fraction) / (startFraction - fullFraction)), 0f, 1f)
@@ -445,6 +475,7 @@ public sealed class WorldCameraClearance {
         );
 
         var probe = new Probe(
+            answers: m_answers,
             scale: scale,
             field: field,
             length: length,
@@ -490,6 +521,7 @@ public sealed class WorldCameraClearance {
             ) * length),
             y: probe.Room(
                 direction: presented,
+                question: HeldQuestion,
                 radius: FixedQ4816.FromDouble(value: (clearance.SurfaceSkin * scale))
             )
         );
@@ -508,6 +540,7 @@ public sealed class WorldCameraClearance {
         // begins at the face nearest the target, and the near plane stops short of every part of the body in view.
         var face = ((!cutaway) ? length : probe.Room(
             direction: presented,
+            question: FaceQuestion,
             radius: FixedQ4816.Zero
         ));
 

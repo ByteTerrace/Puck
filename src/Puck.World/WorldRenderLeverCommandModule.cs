@@ -95,7 +95,11 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         _ = echo.Append(value: " longest-ms:");
         foreach (var lever in SdfUpdateRateIntervals.Levers) {
             foreach (var tier in SdfUpdateRateIntervals.Tiers) {
-                if ((lever == SdfUpdateRates.ShadowFar) && (tier != SdfUpdateRateTiers.ShadowFarHertz)) {
+                // Only bodies take the tiers below 15 Hz, and only the far cascade's own tier records.
+                if (
+                    ((lever == SdfUpdateRates.ShadowFar) && (tier != SdfUpdateRateTiers.ShadowFarHertz)) ||
+                    ((lever != SdfUpdateRates.Bodies) && (tier < 15))
+                ) {
                     continue;
                 }
 

@@ -1,7 +1,7 @@
 // The rate range: a lane of open ground on the debug world's west side for judging the world.rates levers (range.md).
-// Six Moths walk loops at marked distances down the lane, so a body's pose shows at every tier the bodies lever has;
+// Six Moths walk loops at marked distances down the lane, so a body's pose shows at each body tier above 5 Hz;
 // three televisions play a bouncing ball and three windows look into the garden, at distances that put each lever's
-// work in its 30 Hz and 15 Hz tiers at 1280x900 and at 3840x2160; signs stand on both sides of every body threshold,
+// work in its reduced tiers at 1280x900 and at 3840x2160; signs stand on both sides of every body threshold in the lane,
 // each saying how far it is and which tier a body standing there takes at each size. `debug.go range` stands her at
 // the lane's head, facing down it. `world.debug-view rates` (F8) tints each rated item by its tier and
 // `world.rates toggle` (F7, or the pad's View button on the Debug page) switches every lever, for an A/B of one scene.
@@ -13,11 +13,11 @@
 //   x = -108                 the televisions, on the lane's left
 //   x = -112                 the windows, further left
 //
-// The tiers switch by a body's pixels per metre (SdfUpdateRateTiers): 30 Hz at or below 30 and 15 Hz at or below 15.
+// The tiers switch by a body's pixels per metre (SdfUpdateRateTiers.BodyTiers): 30, 15, 10 or 5 Hz at or below that many.
 // The default chase camera (avatars/moth.puck: 4.2 m behind her at a 0.3 rad pitch, 0.96 rad high) sees a body at its
 // nearest point, so a body whose home is D down the lane stands about 0.9553 D + 2.39 m deep in the view, and its pixels
-// per metre are the display's height over 1.0432 times that depth. The thresholds fall at D = 27.6 and 57.7 m at
-// 1280x900, and at 69.7 and 142 m at 3840x2160.
+// per metre are the display's height over 1.0432 times that depth. The thresholds fall at D = 27.6, 57.7 and 87.8 m at
+// 1280x900 (5 Hz at 178 m, past the lane's end), and at 69.7 and 142 m at 3840x2160.
 
 import "../standard/kits"
 import "pad-kit"
@@ -44,8 +44,10 @@ let signs = [
   { d: 60, k: 1.5, low: "15 Hz", high: "60 Hz" }
   { d: 67, k: 1.675, low: "15 Hz", high: "60 Hz" }
   { d: 72, k: 1.8, low: "15 Hz", high: "30 Hz" }
-  { d: 138, k: 3.45, low: "15 Hz", high: "30 Hz" }
-  { d: 146, k: 3.65, low: "15 Hz", high: "15 Hz" }
+  { d: 85, k: 2.125, low: "15 Hz", high: "30 Hz" }
+  { d: 91, k: 2.275, low: "10 Hz", high: "30 Hz" }
+  { d: 138, k: 3.45, low: "10 Hz", high: "30 Hz" }
+  { d: 146, k: 3.65, low: "10 Hz", high: "15 Hz" }
 ]
 
 // The televisions: a deck each, playing the bouncing ball, 2 m of picture high. A screen's source uploads at 30 Hz once
@@ -95,7 +97,7 @@ spawnPoints [
 commands [
   {
     name: "range.tiers"
-    help: "Shows each rated item's update tier (rates: 30 Hz amber, 15 Hz magenta, every frame untinted), flashes the tint on the frames each updates (flash), or restores the final image (off)."
+    help: "Shows each rated item's update tier (rates: 30 Hz amber, 15 Hz or slower magenta, every frame untinted), flashes the tint on the frames each updates (flash), or restores the final image (off)."
     parameters [
       { name: "view", kind: Choice, values ["rates", "rate-flash", "off"], default: "rates" }
     ]
