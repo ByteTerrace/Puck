@@ -2501,16 +2501,6 @@ both runs.
   valid readings against a baseline whose only red reason was a prior baseline
   difference remain clean, rather than becoming red for `red -> clean`.
 
-- [high] The windowed leg never reaches its tour while the day cycle runs.
-  After settling, the sweep runs `world.rate resume`, `world.wait 300`,
-  `world.rate pause` in one 120 s call (`SweepCommand.cs:267`) with lockstep on,
-  and every lockstep frame relights every probe under the moving sun, so the
-  call times out and every windowed signal and still goes unmeasured. The cause
-  is the [lockstep relight](#lighting-and-gi); holding the sun in the plan's
-  prelude does not help, since the warm-up runs before the prelude. Until it is
-  fixed, a tour runs attached with the sun held before attaching
-  (`world.row.set state day advance
-  {"perSecondNumerator":0,"perSecondDenominator":1}`).
 - [medium] `world.debug-view report colliders --json` throws
   `DivideByZeroException` (`[world.debug-view: handler threw
   DivideByZeroException: Attempted to divide by zero.]`) on the debug world,
@@ -2533,10 +2523,9 @@ both runs.
   the repository like any derived product; each machine compares against its
   own. The tour splits into a main part and a `night-field` part per backend,
   as attached windowed legs with the sun held (`--no-headless --no-scenarios`),
-  and each part compares with its own counterpart. Known red signals are the
-  baseline's drift, the colliders refusal, frames read under lockstep (each tick
-  waiting for its frame, so not the frame bar), and the watchdog's
-  `companion-overlap` records.
+  and each part compares with its own counterpart. Warm-up and timing signals
+  use ordinary presentation (`SweepCommand.Run`); only the still tour converges
+  its clock and lighting.
 - [low] A sweep's `--baseline` names one report, but a split run (a headless
   report and a windowed one, or a tour in parts) marks every signal the other
   part read as `baseline: new signal`, red, and a report does not merge two runs
