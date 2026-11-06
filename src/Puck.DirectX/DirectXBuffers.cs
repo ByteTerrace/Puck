@@ -21,9 +21,9 @@ public static unsafe class DirectXBuffers {
     /// <param name="initialState">The state it is created in: <c>GENERIC_READ</c> on an upload heap, <c>COPY_DEST</c> on
     /// a readback heap, and otherwise <c>COMMON</c>.</param>
     /// <param name="flags">Its resource flags; <c>ALLOW_UNORDERED_ACCESS</c> for a buffer a shader writes.</param>
-    /// <param name="memory">The device-local counts a <c>DEFAULT</c>- or <c>GPU_UPLOAD</c>-heap buffer joins, or
-    /// <see langword="null"/>; the
-    /// owner counts its release through <see cref="DirectXDeviceMemory.CountReleased"/>.</param>
+    /// <param name="memory">The device's memory counts a committed buffer joins, in the row its heap's role names
+    /// (<see cref="GpuDeviceMemoryWork.IsDeviceLocal"/>), or <see langword="null"/>; a placed buffer is counted with its
+    /// heap. The owner reports its release through <see cref="DirectXDeviceMemory.CountReleased"/>.</param>
     /// <param name="calls">The answerer of the creation call, or <see langword="null"/> for the device's own
     /// (<see cref="DirectXDeviceCommandCalls"/>); a law gives it one that fails.</param>
     /// <param name="arena">The device's heaps to place it in (<see cref="DirectXHeapArena"/>), which count it, or

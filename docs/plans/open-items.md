@@ -2248,75 +2248,79 @@ and `world.residency [radius]` reads its measures.
 World holds well past that on a unified-memory device, a tour roughly doubles it
 ([sweep](#sweep-and-visual-checks)) and the cold bake passes it by a wide margin
 ([bake](#bake-proportional-to-change)); headless is a fraction of a gigabyte,
-so nearly all of it is presentation a player's build carries.
+so nearly all of it is presentation a player's build carries. The latest
+attribution's readings are in the commit that landed the host-visible ledger
+rows and the idle bake-slot release.
 
-How to read it: `host.memory collect`, then `host.memory owners 0` for the
-account and the backend ledger (`GpuDeviceMemoryWork`: device-local bytes with
-their aperture subset, and disjoint host-visible bytes), `world.residency` for
-the mesh region, the GI trace scene and the background GPU work's slots, the OS
-`GPU Process Memory(pid_*)` counters (dedicated and shared usage, the driver's
-residency, which agree with the ledger to within about 200 MiB of driver and
-swapchain memory), a page walk (`VirtualQueryEx` with `QueryWorkingSetEx`) for
+How to read it: `host.memory collect` first, then each owner by the reading the
+table names. The layers overlap and are never added: process private bytes
+include the device heaps' write-combined address space, which on a discrete
+adapter is mostly not resident, and the backend ledger (`GpuDeviceMemoryWork`,
+in `host.memory owners 0`: device-local bytes with their aperture subset, and
+disjoint host-visible bytes) agrees with the OS `GPU Process Memory(pid_*)`
+counters (dedicated and shared usage, the driver's residency) up to driver and
+swapchain memory. A page walk (`VirtualQueryEx` with `QueryWorkingSetEx`) splits
 process regions by type, write-combining and residency, and a suspended ClrMD
-walk of the live heap from its roots for managed owners. These layers overlap:
-process private bytes include the device heaps' write-combined address space,
-which on a discrete adapter is mostly not resident. A settled warm Direct3D 12
-World on the RTX 4070, after collection, held these owners; on the Deck every
-one of them is the same physical memory:
+walk of the live heap from its roots names managed owners. On the Deck every
+owner below is the same physical memory. Owners of a settled warm World, largest
+first:
 
-| Owner | Layer | MiB | Read by |
-|---|---|---|---|
-| Baked meshes, GPU copy | device-local | 1,840 | `world.residency` `region-held` |
-| Baked meshes, CPU payloads | native (mimalloc) | 1,668 | account `live` |
-| Device-local memory no residency line names (view targets, cascades, screens, program tables, ring apertures) | device-local | about 1,970 | ledger held less the named lines |
-| GI trace scene, GPU copy (hierarchy, hits, feedback) | device-local | 889 | `world.residency` `trace-*` |
-| GI trace scene, CPU hierarchy (`SdfMeshIrradianceScene+Node[]`, geometry indices) | managed | 595 | ClrMD |
-| Other managed (field evaluator about 110, irradiance arrays about 190, documents and strings, capture feed 42) | managed | about 1,010 | ClrMD live 1,606 less the scene |
-| Native allocator slack beyond the account | native (mimalloc) | 575 | `allocator-committed` less account `live` |
-| Pagefile-backed section of 1 GiB not created by Puck code | mapped | 684 resident | page walk |
-| CLR loader heaps, precode and JIT code | native | about 300 | ClrMD native heaps |
-| Upload and readback heaps | host-visible | 193 | ledger host-visible held |
+| Owner | Layer | Read by |
+|---|---|---|
+| Device-local memory no residency line names (view targets, cascades, screens, program tables, ring apertures) | device-local | ledger held less the named lines |
+| Baked meshes, GPU copy | device-local | `world.residency` `region-held` |
+| Baked meshes, CPU payloads | native (mimalloc) | account `live` in `host.memory` |
+| Managed objects beside the GI scene (field evaluator, irradiance arrays, documents and strings, capture feed) | managed | ClrMD live bytes less the scene |
+| GI trace scene, GPU copy (hierarchy, hits, feedback) | device-local | `world.residency` `trace-*` |
+| Pagefile-backed 1 GiB section not created by Puck code | mapped | page walk |
+| GI trace scene, CPU hierarchy (`SdfMeshIrradianceScene+Node[]`, geometry indices) | managed | ClrMD, `world.residency` `trace-scene-cpu-array-bytes` |
+| Native allocator slack beyond the account | native (mimalloc) | `allocator-committed` less account `live` |
+| CLR loader heaps, precode and JIT code | native | ClrMD native heaps |
+| Upload and readback heaps | host-visible | ledger host-visible held |
 
 Grounded causes and leads, largest first:
 
 - The baked meshes are held twice: the region's GPU copy and the CPU payloads
-  (positions and normals 763 MB, level-0 indices and materials 788 MB, levels 1
-  and 2 156 MB). Normals and levels 1 and 2 have no CPU reader after landing
-  except the store write, material variants and a region rebuild; releasing
-  them (and the chunked parent's second index copy) needs each of those readers
-  to read the store or the GPU copy instead. Owner: rendering/bake.
-- About 1.97 GB of device-local memory has no owner line. The render-graph
-  nodes' `owned-bytes` gauges (`world.counters gpu --json`) are past the 1 MiB
-  an MCP answer carries, so name it with a reading that fits (per-node owned
-  bytes summed by node family) before cutting; the debug world renders some
-  thirty session views.
+  (positions and normals, level-0 indices and materials, levels 1 and 2;
+  `world.residency`'s `vertex-bytes` and `level0`..`level2` read each). Normals
+  and levels 1 and 2 have no CPU reader after landing except the store write,
+  material variants and a region rebuild; releasing them (and the chunked
+  parent's second index copy) needs each of those readers to read the store or
+  the GPU copy instead. Owner: rendering/bake.
+- The device-local memory no residency line names needs an owner line. The
+  render-graph nodes' `owned-bytes` gauges (`world.counters gpu --json`) run
+  past the 1 MiB an MCP answer carries, so name it with a reading that fits
+  (per-node owned bytes summed by node family) before cutting; the debug world
+  renders some thirty session views.
 - GI holds its trace scene on both sides: the CPU hierarchy feeds probe
   placement and depth-sheet classification (`TryNearestSurface`,
   `SdfMeshIrradiance.Placement.cs`, `SdfMeshProbeDepth.cs`) and diagnostics,
   the GPU copy feeds the trace. Moving placement onto the GPU trace would free
-  the CPU side. The scene also retains up to 8 M triangles of cached claims
-  (`SdfMeshIrradianceScene.RetainedTriangles`), and a full scene build holds its
-  pieces beside the old scene. The probe cache's blocks stay alive while any
-  kept probe names them (after a tour, 70,158 probes in 329 MB of blocks); re-home
-  the kept probes of mostly forgotten blocks when `Retain` compacts, measured by
-  `world.residency`'s `probe-cache-blocks`. The cache's reader retries with
-  `Thread.SpinWait` while an entry is published; replace that with stable
-  publication or a host wait.
-- After a cold bake the process holds about 1.6 GB more non-write-combined
-  private memory than a warm boot that the managed heap, the allocator and the
-  ledger do not explain (page walk: 6,919 MiB private against 2,193 managed and
-  2,591 allocator committed). Name it (driver pipeline compilation, bake
-  workspaces outside `IAllocator`, `GpuRegion`'s `NativeMemory` growth) with a
-  native allocation trace before shrinking it.
-- After a cold bake the host-visible ledger holds about 600 MB against a warm
-  boot's 193: placed host-visible buffers released inside a shared 64 MiB
-  arena heap free their range but keep the heap while any other buffer sits in
-  it (`DirectXHeapArena`), and region staging buffers grow with landing.
-- The 1 GiB pagefile-backed section (684 MiB resident) is created by no Puck
-  code (`src/` has no `MemoryMappedFile` or `CreateFileMapping`); the .NET
-  executable allocator's double mapping and the driver are the candidates.
-  The World JIT-compiles over 210,000 methods (`host.memory` `jit methods`),
-  partly from `WorldCodeWarmer`; compare a ReadyToRun-published World.
+  the CPU side. The scene also retains up to `RetainedTriangles` of cached
+  claims (`SdfMeshIrradianceScene`), and a full scene build holds its pieces
+  beside the old scene. The probe cache's blocks stay alive while any kept
+  probe names them, so a tour leaves several times a probe's nominal bytes per
+  kept probe; re-home the kept probes of mostly forgotten blocks when `Retain`
+  compacts, measured by `world.residency`'s `probe-cache-blocks`. The cache's
+  reader retries with `Thread.SpinWait` while an entry is published; replace
+  that with stable publication or a host wait.
+- After a cold bake the process holds non-write-combined private memory that
+  the managed heap, the allocator and the ledger do not explain (page walk
+  private less managed and allocator committed, against a warm boot). Name it
+  (driver pipeline compilation, bake workspaces outside `IAllocator`,
+  `GpuRegion`'s `NativeMemory` growth) with a native allocation trace before
+  shrinking it.
+- After a cold bake the host-visible ledger stays above a warm boot's: placed
+  host-visible buffers released inside a shared arena heap free their range
+  but keep the heap while any other buffer sits in it (`DirectXHeapArena`), and
+  region staging buffers grow with landing.
+- The pagefile-backed 1 GiB section is created by no Puck code (`src/` has no
+  `MemoryMappedFile` or `CreateFileMapping`), and a headless World's whole
+  working set is smaller than its resident part; the
+  .NET executable allocator's double mapping and the driver are the candidates.
+  A windowed World JIT-compiles about three times the methods a headless one
+  does (`host.memory` `jit methods`), partly from `WorldCodeWarmer`; compare a
+  ReadyToRun-published World.
 - The mesh library budgets meshes residencies still hold and forgets them, so
   a re-plan reloads a second copy (`SdfMeshLibrary.cs:32`, `:285-304`). The fix
   is at its cause: a payload stays findable while any claim on it lives, and its
@@ -2337,9 +2341,9 @@ Grounded causes and leads, largest first:
   native copy (`SdfMeshStoreCodec.cs:177,214,321` then `SdfMesh.Storage.cs:77`).
   A player's build also keeps the composed-document store
   (`WorldDefinitionFileSource.cs`, `ForgetComposedDocuments` after boot; the
-  heap walk finds 20 MiB of composed bytes and 4 MiB of compiled source held)
-  and may keep the authoring document tree after compiling; confirm and release
-  what a booted compiled world no longer reads.
+  heap walk finds composed bytes and compiled source still held) and may keep
+  the authoring document tree after compiling; confirm and release what a
+  booted compiled world no longer reads.
 - A prewarmed mesh store may ship in a player's build (AGENTS.md), so a player
   need not bake cold.
 
@@ -2435,6 +2439,12 @@ failing case is argued from source, not run):
 
 ### Vulkan regressions and GPU robustness
 
+- [low · unchecked] `SdfWorldPickReadback.Dispose` returns its readback's
+  arena range (`DirectXGpuReadbackBuffer.Dispose` now reports the release), but
+  whether every retirement path of the pick readback runs after its fence
+  depends on graph teardown order and was not traced by the deck-memory review.
+  Trace each retirement path; if one can dispose before the fence, retire it
+  through the fence-ordered path the other readbacks use.
 - [medium, before V1] Draw identity is tracked twice and the occlusion visible
   bit uses neither: R2's per-mesh identity counter (`SdfMesh.cs:331-335`,
   `:612`, read at `sdf-mesh-selection.hlsli:79`) beside the residency's

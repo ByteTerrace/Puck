@@ -374,7 +374,7 @@ public sealed class SdfGpuWork : IDisposable {
     }
     // Gives back what each free slot holds beyond its recent jobs' needs: every client's own buffers for it, and its
     // readback once no copy in the last window needed its size. A free slot is the one Refill would reuse: no job in flight
-    // and its last readback released, so no job and no client reads what goes.
+    // and its last readback released (Slot.IsFree), so no job and no client reads what goes.
     private void ReleaseIdle() {
         var now = Stopwatch.GetTimestamp();
         var window = (long)(IdleSeconds * Stopwatch.Frequency);
@@ -382,7 +382,7 @@ public sealed class SdfGpuWork : IDisposable {
         for (var index = 0; (index < SlotCount); index++) {
             var slot = m_slots[index];
 
-            if ((slot.Job is not null) || (slot.Lease is { Released: false })) { continue; }
+            if (!slot.IsFree) { continue; }
             foreach (var client in m_clients) { client.ReleaseIdle(idleBefore: (now - window), slot: index); }
             if ((now - slot.WindowStart) < window) { continue; }
             if ((slot.Readback is { } readback) && ((slot.WindowBytes == 0UL) || (readback.SizeBytes > Granule(bytes: slot.WindowBytes)))) {
@@ -429,7 +429,7 @@ public sealed class SdfGpuWork : IDisposable {
             if (uploaded >= UploadBudgetBytes || Stopwatch.GetElapsedTime(began) >= HostBudget) { m_budgetHolds++; return; }
             var slot = m_slots[index];
 
-            if ((slot.Job is not null) || (slot.Lease is { Released: false })) { continue; }
+            if (!slot.IsFree) { continue; }
             if (m_credit <= 0.0) { m_budgetHolds++; return; }
             if (!TryTake(tables: tables, client: out var client, estimate: out var estimate, job: out var job)) { return; }
             uploaded += client.UploadBytes(job);
@@ -541,6 +541,9 @@ public sealed class SdfGpuWork : IDisposable {
         public IGpuReadbackBuffer? Readback { get; set; }
         public ulong ReadbackBytes { get; set; }
         public long WindowStart { get; set; }
+        // Whether no job is in flight in the slot and its last readback was released: the one condition under which
+        // Refill reuses the slot and ReleaseIdle releases its buffers.
+        public bool IsFree => ((Job is null) && (Lease is null or { Released: true }));
         public ulong WindowBytes { get; set; }
         public bool Copied { get; set; }
         public object? Job { get; set; }

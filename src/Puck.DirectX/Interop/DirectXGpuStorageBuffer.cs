@@ -20,9 +20,9 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
     /// <param name="bufferHandle">The native <c>ID3D12Resource</c>; ownership moves to the new instance.</param>
     /// <param name="sizeBytes">The buffer's size, in bytes.</param>
     /// <param name="mapped">The buffer's persistent mapping.</param>
-    /// <param name="memory">The device-local counts a GPU-upload-heap buffer was counted into, whose release this owner
-    /// counts, or <see langword="null"/>; an upload-heap buffer was counted into none, so its release counts
-    /// nothing.</param>
+    /// <param name="memory">The device's memory counts the buffer was counted into (a committed upload-heap buffer as
+    /// host-visible, a GPU-upload-heap one as device-local), whose release this owner reports, or
+    /// <see langword="null"/>; the release of a placed buffer returns its range to its heap.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bufferHandle"/> is zero.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="mapped"/> is <see langword="null"/>.</exception>
     public DirectXGpuStorageBuffer(nint bufferHandle, ulong sizeBytes, void* mapped, GpuDeviceMemoryWork? memory = null) {
