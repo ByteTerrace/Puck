@@ -103,6 +103,7 @@ public sealed partial class SdfWorldTables {
     // this pass. An upload owing nothing writes and records nothing.
     private void RecordRegionCopies() {
         StageShadowHandoffs();
+        CountFrameMeshStaging(bytes: m_meshRegion.OwedCopyBytes);
         for (var index = 0; (index < RegionCount); index++) {
             if (RegionAt(index: index) is { } region) {
                 m_regionCopies.Record(

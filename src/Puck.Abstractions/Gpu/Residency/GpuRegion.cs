@@ -606,6 +606,19 @@ public sealed unsafe class GpuRegion : IDisposable {
         !m_disposed &&
         (m_owed[0].Count > 0)
     );
+    /// <summary>Gets the bytes the next flush stages and <see cref="RecordCopy"/> copies: a staged region's owed words, and
+    /// zero under the other policies.</summary>
+    public long OwedCopyBytes {
+        get {
+            if ((Policy != GpuResidencyPolicy.Staged) || m_disposed) { return 0L; }
+
+            var owed = m_owed[0];
+            var words = 0L;
+
+            for (var run = 0; (run < owed.Count); run++) { words += owed.Length(index: run); }
+            return (words * sizeof(uint));
+        }
+    }
     /// <summary>Gets where the buffers the region's readers bind directly live: its ring's or in-place buffer's memory,
     /// and <see cref="GpuHostVisibleMemory.Host"/> for a staged region, whose staging buffers are host memory.</summary>
     public GpuHostVisibleMemory Memory { get; }

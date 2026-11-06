@@ -454,6 +454,25 @@ public sealed partial class SdfWorldTables {
     private long m_owedTicks;
     private long m_owedWords;
     private long m_owedSince;
+    // The uploads submitted when a staging last stopped owing words; zero while none has.
+    private long m_owedClearedUpload;
+
+    // The mesh region bytes the frame uploads staged: the latest upload's, the most one upload staged, and the sum.
+    private long m_frameStagedLast;
+    private long m_frameStagedMost;
+    private long m_frameStagedTotal;
+    // The one-based upload that staged the most.
+    private long m_frameStagedMostUpload;
+
+    // Counts the mesh region bytes one frame upload stages, before its flush.
+    private void CountFrameMeshStaging(long bytes) {
+        Volatile.Write(location: ref m_frameStagedLast, value: bytes);
+        Volatile.Write(location: ref m_frameStagedTotal, value: (m_frameStagedTotal + bytes));
+        if (bytes > m_frameStagedMost) {
+            Volatile.Write(location: ref m_frameStagedMost, value: bytes);
+            Volatile.Write(location: ref m_frameStagedMostUpload, value: (long)(m_uploads + 1UL));
+        }
+    }
 
     // Counts a staging that still owes meshes, and the time from the first such staging to the one that owes none.
     private void CountOwed(IReadOnlyList<SdfMeshDraw> draws) {
@@ -475,6 +494,7 @@ public sealed partial class SdfWorldTables {
         } else if (m_owedSince != 0) {
             m_owedTicks += (now - m_owedSince);
             m_owedSince = 0;
+            Volatile.Write(location: ref m_owedClearedUpload, value: (long)m_uploads);
         }
     }
 
@@ -493,7 +513,7 @@ public sealed partial class SdfWorldTables {
         var seconds = (((double)ticks) / System.Diagnostics.Stopwatch.Frequency);
         var written = (Volatile.Read(location: ref m_meshWordsWritten) * sizeof(uint));
 
-        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s landing-words-per-frame={MeshLandingWords}");
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s landing-words-per-frame={MeshLandingWords} frame-staged-last={Volatile.Read(location: ref m_frameStagedLast)}B frame-staged-most={Volatile.Read(location: ref m_frameStagedMost)}B@upload{Volatile.Read(location: ref m_frameStagedMostUpload)} frame-staged-total={Volatile.Read(location: ref m_frameStagedTotal)}B uploads={m_uploads} owed-cleared-upload={Volatile.Read(location: ref m_owedClearedUpload)}");
     }
 
     // One placed mesh's words, from its first vertex word, in the mesh scratch.
