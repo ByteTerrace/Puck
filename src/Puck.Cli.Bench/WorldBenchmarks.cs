@@ -513,23 +513,15 @@ internal static class WorldBenchmarks {
     // The deterministic work behind a tick, in report order: the bodies the population steps and the parked ones a field
     // change woke or left asleep, the analytic solver's work, the certified sweep's work and the immutable field's bounds
     // work it spends.
-    private static readonly (IWorkCounterSource Source, WorkKind Kind)[] TickWork = [
-        (Puck.World.Server.WorldBodyWork.Process, Puck.World.Server.WorldBodyWork.Advances),
-        (Puck.World.Server.WorldBodyWork.Process, Puck.World.Server.WorldBodyWork.FieldWakes),
-        (Puck.World.Server.WorldBodyWork.Process, Puck.World.Server.WorldBodyWork.FieldObserved),
-        (FixedStaticContactWork.Process, FixedStaticContactWork.Resolves),
-        (FixedStaticContactWork.Process, FixedStaticContactWork.SupportDistances),
-        (FixedStaticContactWork.Process, FixedStaticContactWork.Queries),
-        (FixedStaticContactWork.Process, FixedStaticContactWork.ConvexQueries),
-        (FixedStaticContactWork.Process, FixedStaticContactWork.Supports),
-        (FixedContactSweepWork.Process, FixedContactSweepWork.Sweeps),
-        (FixedContactSweepWork.Process, FixedContactSweepWork.BoundsQueries),
-        (SdfBoundsCache.ProcessWork, SdfBoundsCache.Evaluations),
-        (SdfBoundsCache.ProcessWork, SdfBoundsCache.Instructions),
-        (SdfBoundsCache.ProcessWork, SdfBoundsCache.Rotations),
-        (SdfFieldEvaluator.PointWork, SdfFieldEvaluator.PointEvaluations),
-        (SdfFieldEvaluator.PointWork, SdfFieldEvaluator.PointInstructions),
-    ];
+    // Kinds belong to the measured source, not to the CLI's build. A frozen build can declare a different set;
+    // enumerating it also includes newly added counters without maintaining a second list beside the sources.
+    private static readonly (IWorkCounterSource Source, WorkKind Kind)[] TickWork = new IWorkCounterSource[] {
+        Puck.World.Server.WorldBodyWork.Process,
+        FixedStaticContactWork.Process,
+        FixedContactSweepWork.Process,
+        SdfBoundsCache.ProcessWork,
+        SdfFieldEvaluator.PointWork,
+    }.SelectMany(source => source.WorkKinds.ToArray().Where(kind => kind.Class == WorkClass.Deterministic).Select(kind => (Source: source, Kind: kind))).ToArray();
 
     private static long[] ReadTickWork() => Array.ConvertAll(array: TickWork, converter: static entry =>
         (entry.Source.TryRead(kind: entry.Kind, value: out var value) ? value : throw new InvalidOperationException(message: $"{entry.Source.Name} does not count {entry.Kind.Name}.")));
@@ -561,7 +553,7 @@ internal static class WorldBenchmarks {
             try {
                 MeasureWorld(path: path, rows: rows);
             } catch (Exception exception) {
-                error = exception.Message;
+                error = exception.GetBaseException().Message;
                 break;
             }
             last = rows;

@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace Puck.Cli.Host;
 
 /// <summary>Waits for the machine to be idle and stay idle, by the same readings <c>puck host load</c> prints
@@ -12,18 +10,15 @@ public static class HostQuiet {
 
     /// <summary>Names what keeps a reading from being idle.</summary>
     /// <param name="sample">The reading.</param>
-    /// <param name="hasCapacity">Whether <see cref="HostLoadMonitor"/> found capacity at this reading.</param>
-    /// <param name="thresholds">The thresholds capacity was judged by.</param>
+    /// <param name="monitor">The monitor that observed this reading; its capacity explanation uses the CPU mean.</param>
     /// <returns><see langword="null"/> when the machine is idle: no GPU work, no heavy test run another process started, and capacity;
     /// otherwise the reason.</returns>
-    public static string? Busy(HostSample sample, bool hasCapacity, HostLoadThresholds thresholds) =>
+    public static string? Busy(HostSample sample, HostLoadMonitor monitor) =>
         ((sample.GpuHolder is not null)
             ? $"the GPU is held by {sample.GpuHolder}"
             : ((sample.HeavyTestHolder is not null)
                 ? $"a heavy test run is held by {sample.HeavyTestHolder}"
-                : (hasCapacity
-                    ? null
-                    : string.Create(provider: CultureInfo.InvariantCulture, handler: $"the machine is loaded: cpu={sample.CpuPercent:0}% (idle needs a mean under {thresholds.CapacityCpuPercent:0.#}%) freeRAM={sample.FreeRamGb:0.0}GB (needs over {thresholds.CapacityRamGb:0.0}GB) freeDisk={sample.FreeDiskGb:0.0}GB{(double.IsNaN(d: sample.CommitPercent) ? string.Empty : $" commit={sample.CommitPercent:0}% (needs under {thresholds.CapacityCommitPercent:0.#}%)")}"))));
+                : monitor.CapacityWait));
 
     /// <summary>Takes readings until the machine has stayed idle (<see cref="Busy"/>) for the settle period without a break.</summary>
     /// <param name="settle">How long the machine must stay idle.</param>
@@ -49,7 +44,7 @@ public static class HostQuiet {
 
             _ = monitor.Observe(sample: sample);
 
-            var why = Busy(hasCapacity: monitor.HasCapacity, sample: sample, thresholds: thresholds);
+            var why = Busy(monitor: monitor, sample: sample);
 
             if (why is null) {
                 idleSince ??= clock.GetTimestamp();
@@ -59,6 +54,8 @@ public static class HostQuiet {
 
                     return null;
                 }
+                progress.WriteLine(value: $"lease quiet: settling: {clock.GetElapsedTime(idleSince.Value).TotalSeconds:0} s of {settle.TotalSeconds:0} s idle.");
+                reported = null;
             } else {
                 idleSince = null;
 
