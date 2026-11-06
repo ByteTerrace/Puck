@@ -190,12 +190,12 @@ opposite the sun under a 1-nit sky and its stars, and the hall's exposure floor
 ## Water
 
 A glacier on the north-west wall melts into a lake on the rim over three hours, the
-lake's falls feed the stream that runs to the pool, and the river drains into an aquifer
+lake's falls feed the river that runs in its carved channel to the pool, and the river drains into an aquifer
 under the floor that fills, gives water back and settles with the river
 ([`water.puck`](water.puck) chooses the numbers of the standard's
 [hydrology](../standard/hydrology.puck); [`pool.puck`](pool.puck) is the basin and its
 medium; [`water-scenery.puck`](water-scenery.puck) places the falls, glacier, lake,
-stream, bridge and the gauge). The Moth swims where the pool has water, floating with her
+river channel, bridge and the gauge; [`water-site.puck`](water-site.puck) holds the river's course). The Moth swims where the pool or the river has water, floating with her
 shoulders at the surface. The cycle's levers:
 
 | Do | Command |
