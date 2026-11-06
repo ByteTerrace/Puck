@@ -313,6 +313,39 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             volumes: volumes
         );
     /// <inheritdoc/>
+    /// <remarks>The least of this world's own support distance and that of every projected neighbour's solid field the
+    /// foot point maps into, each asked through the projection's isometry, which keeps lengths. A neighbour's bodies are
+    /// not asked: the landing sweep, which runs through this field, meets them.</remarks>
+    public bool TrySupportDistance(in FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes,
+        in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) {
+        var met = m_inner.TrySupportDistance(descent: out descent, orientation: in orientation, position: in position, reach: reach, up: in up, volumes: volumes);
+
+        foreach (var projection in m_source.Visuals()) {
+            if (
+                !TryMapIntoNeighbour(mapped: out var neighbourPosition, position: position, projection: projection) ||
+                (projection.Neighbour is not IWorldAdjacencyNeighbourContact contactNeighbour) ||
+                !contactNeighbour.TryGetSolidField(field: out var neighbourField, reason: out _) ||
+                (neighbourField is null) ||
+                !neighbourField.TrySupportDistance(
+                    descent: out var neighbourDescent,
+                    orientation: WorldAdjacencyPath.MapOrientationIntoNeighbour(path: projection.Path, value: orientation),
+                    position: in neighbourPosition,
+                    reach: (met ? descent : reach),
+                    up: WorldAdjacencyPath.MapVectorIntoNeighbour(path: projection.Path, value: up),
+                    volumes: volumes
+                ) ||
+                (met && (neighbourDescent >= descent))
+            ) {
+                continue;
+            }
+
+            descent = neighbourDescent;
+            met = true;
+        }
+
+        return met;
+    }
+    /// <inheritdoc/>
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) => m_inner.TryUp(
         position: in position,
         up: out up

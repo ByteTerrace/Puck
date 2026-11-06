@@ -269,6 +269,9 @@ public sealed class CertifiedFieldContactLawTests {
 
     // One swept move a snap runs, through the static solver over fixed colliders.
     private readonly struct StaticStep(FixedStaticContactSolver solver, FixedStaticCollider[] colliders, FixedBodyColliderVolume[] volumes) : IFixedContactStep {
+        public bool TrySupportDistance(in FixedVector3 start, FixedQ4816 reach, out FixedQ4816 descent) =>
+            solver.TrySupportDistance(colliders: new(colliders: colliders), descent: out descent, dynamicColliders: FixedStaticColliderSet.Empty,
+                orientation: FixedQuaternion.Identity, position: in start, reach: reach, up: FixedVector3.UnitY, volumes: volumes);
         public ContactResolution Sweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
             solver.ResolveSweep(colliders: new(colliders: colliders), dynamicColliders: FixedStaticColliderSet.Empty, orientation: FixedQuaternion.Identity, position: ref position,
                 previousPosition: previousPosition, up: FixedVector3.UnitY, velocity: ref velocity, volumes: volumes);

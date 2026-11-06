@@ -325,6 +325,10 @@ public sealed class WorldSolidField : IContactField {
             velocity: ref velocity,
             volumes: volumes
         );
+    /// <inheritdoc/>
+    public bool TrySupportDistance(in FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes,
+        in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) =>
+        m_solver.TrySupportDistance(descent: out descent, orientation: in orientation, position: in position, reach: reach, up: in up, volumes: volumes);
     /// <summary>Builds the SDF contact field from a definition without installing it, or reports the offending op by name.</summary>
     /// <param name="definition">The world definition supplying the collision tuning and solid rows.</param>
     /// <param name="built">The built field on success; <see langword="null"/> on failure.</param>

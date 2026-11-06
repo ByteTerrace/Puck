@@ -44,7 +44,11 @@ Video, audio, normalized input ports, and removable content are optional capabil
 Outputs have provider-owned names and stable identities for the runtime's lifetime.
 World resolves video through `IMachineVideoOutputs`; a runtime without it can still
 advance headlessly. The brick adapters keep their synchronous hardware entry points
-and capture input when each queued tick segment is submitted.
+and capture input when each queued tick segment is submitted. The host's
+`AudioSampleRate` is the rate every machine it creates synthesizes audio at; the
+World's composition sets it only where an audio device exists, so the machines of a
+headless or offscreen host synthesize none. Audio is not machine state, so the rate
+changes no machine's state.
 
 The neutral hardware contract carries unsigned addresses and explicit availability.
 `Inspect`, `Patch`, and `Bus` have separate semantics. Both brick adapters implement

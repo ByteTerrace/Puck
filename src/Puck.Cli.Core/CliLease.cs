@@ -20,6 +20,7 @@ public sealed class CliLease : IDisposable {
 
     private readonly FileStream m_gate;
     private readonly string m_directory;
+    private readonly List<CliLease> m_children = [];
 
     private bool m_disposed;
 
@@ -42,8 +43,36 @@ public sealed class CliLease : IDisposable {
     /// <returns>The held lease.</returns>
     /// <exception cref="ArgumentException">The name, holder, lane, checkout or wait is invalid.</exception>
     /// <exception cref="TimeoutException">The lease remains held at the deadline.</exception>
-    public static async Task<CliLease> AcquireAsync(string root, string name, string holder, TimeSpan wait, TimeProvider clock, string checkout, CancellationToken cancellationToken = default, Func<int, long, bool>? ancestor = null, string? lane = null) {
-        if ((name is not ("build" or "gpu" or "heavy")) || string.IsNullOrWhiteSpace(value: holder) || holder.Contains(value: '\n') || holder.Contains(value: '\r') || (wait < TimeSpan.Zero)
+    public static Task<CliLease> AcquireAsync(string root, string name, string holder, TimeSpan wait, TimeProvider clock, string checkout, CancellationToken cancellationToken = default, Func<int, long, bool>? ancestor = null, string? lane = null) {
+        if (name is not ("build" or "gpu" or "heavy")) { throw new ArgumentException("Use AcquireQuietAsync for a measurement reservation.", nameof(name)); }
+        return AcquireCoreAsync(root, name, holder, wait, clock, checkout, cancellationToken, ancestor, lane, null);
+    }
+
+    /// <summary>Queues a priority measurement window, then drains and holds all three resources. One deadline bounds acquisition;
+    /// current work is never killed. The returned lease releases the resources before releasing the priority reservation.</summary>
+    /// <param name="root">The shared lease directory.</param>
+    /// <param name="holder">The measurement holder.</param>
+    /// <param name="wait">The total acquisition bound.</param>
+    /// <param name="clock">The deadline clock.</param>
+    /// <param name="checkout">The checkout the measurement runs in, recorded beside each lease it holds.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <param name="ancestor">Recognizes nested measurement processes.</param>
+    /// <param name="lane">The lane, or null for the holder's first word.</param>
+    /// <returns>The priority reservation holding heavy, build and gpu.</returns>
+    public static async Task<CliLease> AcquireQuietAsync(string root, string holder, TimeSpan wait, TimeProvider clock, string checkout, CancellationToken cancellationToken = default, Func<int, long, bool>? ancestor = null, string? lane = null) {
+        var started = clock.GetTimestamp();
+        var quiet = await AcquireCoreAsync(root, "quiet", holder, wait, clock, checkout, cancellationToken, ancestor, lane, null).ConfigureAwait(false);
+        try {
+            foreach (var name in LeaseCommand.QuietOrder) {
+                var remaining = wait - clock.GetElapsedTime(started);
+                quiet.m_children.Add(await AcquireCoreAsync(root, name, holder, (remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero), clock, checkout, cancellationToken, ancestor, lane, quiet).ConfigureAwait(false));
+            }
+            return quiet;
+        } catch { quiet.Dispose(); throw; }
+    }
+
+    private static async Task<CliLease> AcquireCoreAsync(string root, string name, string holder, TimeSpan wait, TimeProvider clock, string checkout, CancellationToken cancellationToken, Func<int, long, bool>? ancestor, string? lane, CliLease? quiet) {
+        if ((name is not ("build" or "gpu" or "heavy" or "quiet")) || string.IsNullOrWhiteSpace(value: holder) || holder.Contains(value: '\n') || holder.Contains(value: '\r') || (wait < TimeSpan.Zero)
             || ((lane is not null) && (string.IsNullOrWhiteSpace(value: lane) || lane.Contains(value: '\n') || lane.Contains(value: '\r')))
             || string.IsNullOrWhiteSpace(value: checkout) || checkout.Contains(value: '\n') || checkout.Contains(value: '\r')) {
             throw new ArgumentException(message: "A lease requires build, gpu or heavy, a single-line holder, lane and checkout, and a nonnegative wait.");
@@ -75,14 +104,20 @@ public sealed class CliLease : IDisposable {
                 var queue = (directory + ".queue");
 
                 if ((ticket is null) || !File.Exists(path: ticket)) {
-                    Stamp(lane: lane, rotation: (directory + ".rotation"));
-                    ticket = Enqueue(checkout: checkout, clock: clock, holder: holder, lane: lane, queue: queue);
+                    // Register priority tickets under the same short lock as grants. A grant cannot slip between
+                    // checking for a quiet ticket and publishing the holder. Never wait with this lock held.
+                    using var admission = FileLock.TryAcquire(Path.Combine(root, "admission.guard"));
+                    if (admission is not null) {
+                        Stamp(lane: lane, rotation: (directory + ".rotation"));
+                        ticket = Enqueue(checkout: checkout, clock: clock, holder: holder, lane: lane, queue: queue);
+                    }
                 }
-                var place = Admission(now: clock.GetUtcNow(), rotation: (directory + ".rotation"), ticket: ticket);
+                var place = (ticket is null ? new Place(0, 0, 0) : Admission(now: clock.GetUtcNow(), rotation: (directory + ".rotation"), ticket: ticket));
                 var ahead = place.Ahead;
+                var measurement = false;
 
-                if (ahead == 0) {
-                    var lease = TryAcquire(checkout: checkout, clock: clock, directory: directory, holder: holder, lane: lane);
+                if (ticket is not null) {
+                    var lease = TryAcquire(checkout: checkout, clock: clock, directory: directory, holder: holder, lane: lane, root: root, name: name, quiet: quiet, ancestor: ancestor, eligible: ((ahead == 0) || quiet is not null), measurement: out measurement);
 
                     if (lease is not null) { return lease; }
                 }
@@ -90,7 +125,7 @@ public sealed class CliLease : IDisposable {
 
                 if (remaining <= TimeSpan.Zero) { throw new TimeoutException(message: $"{name} lease is held or queued at {CliPaths.ToDisplay(fullPath: directory)}; use --wait <seconds> to wait."); }
                 var waitingOn = ((metadata is { Length: > 0 }) ? metadata[0] : null);
-                var report = $"lease: {holder} waiting for {name} lease{((waitingOn is null) ? ((ahead == 0) ? " held by another holder" : string.Empty) : $" held by {waitingOn}")}{((ahead == 0) ? string.Empty : $"; {ahead} queued ahead, lane {lane} is {place.Position} of {place.Lanes} in the round")}.";
+                var report = $"lease: {holder} waiting for {name} lease{(measurement ? " for the measurement window" : ((waitingOn is null) ? ((ahead == 0) ? " held by another holder" : string.Empty) : $" held by {waitingOn}"))}{((ahead == 0) ? string.Empty : $"; {ahead} queued ahead, lane {lane} is {place.Position} of {place.Lanes} in the round")}.";
 
                 if ((reported != report) || (clock.GetElapsedTime(startingTimestamp: reportedAt) >= Heartbeat)) {
                     var waited = clock.GetElapsedTime(startingTimestamp: started);
@@ -406,7 +441,22 @@ public sealed class CliLease : IDisposable {
         return Task.FromResult(result: Path.Combine(path1: mainCheckout, path2: ".claude/leases"));
     }
 
-    private static CliLease? TryAcquire(string directory, string holder, string lane, string checkout, TimeProvider clock) {
+    private static CliLease? TryAcquire(string directory, string holder, string lane, string checkout, TimeProvider clock, string root, string name, CliLease? quiet, Func<int, long, bool>? ancestor, bool eligible, out bool measurement) {
+        measurement = false;
+        using var admission = FileLock.TryAcquire(Path.Combine(root, "admission.guard"));
+        if (admission is null) { return null; }
+        // The single grant door: while a quiet ticket is queued or held, no resource grant is issued
+        // except to the quiet capability or a validated descendant of its holder.
+        var quietDirectory = Path.Combine(root, "quiet");
+        var owner = ReadHolder(quietDirectory);
+        var nested = owner is { Length: 4 or 5 } && int.TryParse(owner[2], out var pid) && long.TryParse(owner[3], out var ticks) && ancestor?.Invoke(pid, ticks) == true;
+        if (name != "quiet" && quiet is null && !nested) {
+            var queue = quietDirectory + ".queue";
+            var queued = Directory.Exists(queue) && Admission(Path.Combine(queue, "probe"), quietDirectory + ".rotation", clock.GetUtcNow()).Ahead > 0;
+            using var idle = FileLock.TryAcquire(quietDirectory + ".guard");
+            if (queued || idle is null) { measurement = true; return null; }
+        }
+        if (!eligible) { return null; }
         // Keep the guard inode: unlinking it lets two processes lock different files at the same path.
         if (FileLock.TryAcquire(path: (directory + ".guard")) is not { } gate) {
             return null;
@@ -457,6 +507,7 @@ public sealed class CliLease : IDisposable {
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
+        for (var index = m_children.Count - 1; index >= 0; index--) { m_children[index].Dispose(); }
         try { ConfinedDirectory.RemoveTree(path: m_directory); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) { } finally { m_gate.Dispose(); }
     }
 }
