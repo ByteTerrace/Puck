@@ -35,7 +35,7 @@ as off the board.
 
 The computer plays Black by default. It searches one ply, judging each candidate
 with the game's own rules and scoring material, central squares and pawn
-progress, then moves its piece itself and puts a piece it takes beside the board.
+progress, then moves its piece itself and stands a piece it takes on the table margin (White's along the -X edge, Black's along the +X edge).
 
 ## Playing at the table
 
@@ -59,7 +59,7 @@ h-file.
 | Keyboard | W A S D or the arrows, one square a press | Space or Enter | Escape or Backspace | E |
 | Pad | Left stick or d-pad, one square a push | South (A) | East (B) | RB |
 
-A put-down takes a captured piece beside the board, moves the rook of a castle,
+A put-down stands a captured piece on the table margin, moves the rook of a castle,
 lifts the pawn an en-passant capture takes and queens a pawn that reaches the
 last rank, then the board rests and is judged as ever. An arrangement judged
 illegal is put back as it stood before the put-down (`illegalCount` still
