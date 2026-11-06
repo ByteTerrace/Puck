@@ -123,7 +123,7 @@ public static class CliProcess {
     }
     private static async Task<CliProcessResult> RunCapturedAsync(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout,
         Func<CliProcessOutputLine, bool>? continueWhen, string continuationInput, Task? continuationGate, TimeProvider clock, CancellationToken cancellationToken, string? workingDirectory,
-        IReadOnlyDictionary<string, string?>? environment, Action<CliProcessOutputLine>? onOutput, bool retainOutput) {
+        IReadOnlyDictionary<string, string?>? environment, Action<CliProcessOutputLine>? onOutput, bool retainOutput, Action<Process>? started) {
         cancellationToken.ThrowIfCancellationRequested();
 
         var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
@@ -154,6 +154,14 @@ public static class CliProcess {
         var startedAt = Stopwatch.GetTimestamp();
         using var process = (Process.Start(startInfo: startInfo)
             ?? throw new InvalidOperationException(message: $"Failed to start {fileName}."));
+
+        try {
+            started?.Invoke(obj: process);
+        } catch {
+            try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+            throw;
+        }
+
         using var inputStream = process.StandardInput.BaseStream;
         // A World treats a pipe still empty at its first read as idle and starts stepping, so the input's first bytes are
         // written here, before any await can yield to a busy thread pool.
@@ -322,11 +330,12 @@ public static class CliProcess {
     // already cancelled starts nothing. The child starts in workingDirectory, or the caller's own when it is null, and
     // inherits this process's environment with each environment entry applied: a value sets the variable, null removes it.
     // With retainOutput false, observations still drive callbacks and continuation, but no transcript or event history
-    // is retained; the caller can stream each line to disk without a second copy growing with the child's output.
+    // is retained; the caller can stream each line to disk without a second copy growing with the child's output. started
+    // sees the process the moment it starts, before any input; if it throws, the child's tree is killed and the run throws.
     public static CliProcessResult RunCaptured(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout,
         Func<CliProcessOutputLine, bool>? continueWhen = null, string continuationInput = "", TimeProvider? clock = null, Task? continuationGate = null,
         CancellationToken cancellationToken = default, string? workingDirectory = null, IReadOnlyDictionary<string, string?>? environment = null,
-        Action<CliProcessOutputLine>? onOutput = null, bool retainOutput = true) =>
+        Action<CliProcessOutputLine>? onOutput = null, bool retainOutput = true, Action<Process>? started = null) =>
         RunCapturedAsync(
             arguments: arguments,
             cancellationToken: cancellationToken,
@@ -339,6 +348,7 @@ public static class CliProcess {
             input: input,
             onOutput: onOutput,
             retainOutput: retainOutput,
+            started: started,
             timeout: timeout,
             workingDirectory: workingDirectory
         ).GetAwaiter().GetResult();

@@ -1026,11 +1026,12 @@ CAPACITY cpu=<percent> freeRAM=<GB> freeDisk=<GB> reuseNodes=<count>
 
 - `GPU busy` or `GPU idle` appears at the first reading and on every change
   after. GPU work is the World (`Puck.World` or `Puck.World.dll`) when its
-  arguments open a device, the `canary` verb or a verb in
-  `GateComposition.GpuVerbGrammars`, or a test host for an assembly in
+  arguments open a device, or a test host for an assembly in
   `HostProcesses.DeviceTestAssemblies`, whose
   device laws open the GPU, when its arguments can select a `Gpu`-trait test.
-  `puck host load --help` prints both lists as the code holds them.
+  A CLI verb is never GPU work itself: the World it starts holds the device,
+  under the GPU lease its World launch takes. `puck host load --help` prints the
+  device-law list as the code holds it.
   A run carrying affected's CPU selection, `--filter-not-trait Category=Gpu`,
   opens no device whatever else it filters, so it counts no GPU work; a run
   with no such exclusion, or one reading a response file (`@file`), counts.
@@ -1334,8 +1335,8 @@ suite.
 Waiting and building have separate limits. A run waits for other runs'
 builds of its source state and for the `build` lease for at most two hours
 (`CliLease.DefaultWait`, the one wait every machine-wide lease takes unless its
-caller names another: the heavy lease, the build lease, a sweep's GPU lease and
-the MCP adapter's GPU lease). While it waits, the lease prints
+caller names another: the heavy lease, the build lease and the GPU lease a World
+launch takes). While it waits, the lease prints
 `lease: <holder> waiting for build lease held by <holder>; N queued ahead, ...` to standard
 error when its place changes, and again every five minutes. The build itself
 then gets its own thirty minutes (`WorldArtifactBuild.BuildTimeout`), counted from
@@ -4401,7 +4402,7 @@ can be found. The authoritative asset map and variant rationale live in
 
 Run `puck lease gpu --holder <lane> [--lane <lane>] [--wait <seconds>] -- <executable> <arguments...>`, or replace `gpu` with `heavy` for a heavy suite or `build` for a World build (the one the World build store takes itself). Options precede `--`; the executable receives the remaining argument vector without shell expansion. The child keeps the caller's output streams and exit code. A refused acquisition exits 2; cancellation exits 130 and kills the child tree before releasing the lease.
 
-The GPU lease defaults to the `HostStartKind.WindowedWorld` peak. For a bounded small device check that boots no World, add `--kind Step`; other declared `HostStartKind` values select their own expected peak. This changes the child command's memory estimate, while retaining GPU exclusion and the same RAM, commit, disk and idle-device admission. Full CPU/memory-heavy suites still take the heavy lease too. World-launching verbs and MCP starts retain their own World admission.
+The GPU lease defaults to the `HostStartKind.WindowedWorld` peak. For a bounded small device check that boots no World, add `--kind Step`; other declared `HostStartKind` values select their own expected peak. This changes the child command's memory estimate, while retaining GPU exclusion and the same RAM, commit, disk and idle-device admission. Full CPU/memory-heavy suites still take the heavy lease too. A verb that starts a device World takes this same lease through its World launch, nesting under a `puck lease gpu` it runs beneath.
 
 The main checkout, found through Git's common directory, owns `.claude/leases/<name>/holder` for all its worktrees. The holder records the holder name, UTC acquisition time, process ID and process start ticks on four lines, and the lane on a fifth only when it is not the holder's first word; it is replaced whole, so a reader never sees it half written. The checkout the holder works in is recorded beside it, in `<name>/checkout`, and a ticket's in `<name>.checkouts/<ticket>` with the ticket's process ID and start ticks, rather than as a sixth line, because CLIs built before it count those lines. A persistent sibling `<name>.guard` file is held exclusively for the command's lifetime; it is not removed, because replacing the locked file would let competing processes lock different files. The holder directory is removed on exit, including child failure and Ctrl+C. A taken lease refuses immediately unless `--wait` supplies a nonnegative number of seconds. Waiting uses the CLI clock.
 
@@ -4434,7 +4435,7 @@ headroom: commit headroom 16.0GB (admission needs at least 18.0GB (18.0GB expect
 while it lasts. `lease build` and `lease quiet` take no admission of their own: a World build
 holds its own limits, and a quiet window settles on the same readings.
 
-Every verb that starts a `Puck.World` process passes the same admission itself, immediately before each process it starts, through `WorldAdmission` (installed once by the root): `puck test` before each worker process (so each replica of `--reproduce` and each `--workers` leg is admitted on its own reading, with the heavy-suite wait when it holds the heavy lease), `canary`, `sweep` (its budget stands still while it waits), `motion`, `counters`, `parity`, `qualify`, `docs citations`, `verbs`, `bench startup`, and the in-process World boots of `bench` and `determinism`. A World that opens a device (no `--headless`, not a `--test-batch` worker) also waits for an idle GPU. Each start names its kind (`WorldDevices.StartKind` of the World's arguments: a windowed World, a headless World, or a `--test-batch` replica), which sets the commit the admission expects it to reach. The wait is the same bounded, heartbeat-printing one, and a start the bound refuses fails with `HostAdmissionRefusedException`, which a verb reports as it reports any process that would not start.
+Every `Puck.World` process the CLI starts goes through one launch, `WorldLaunch` (`Puck.Cli.Harness`): `puck test` for each worker process (so each replica of `--reproduce` and each `--workers` leg is admitted on its own reading, with the heavy-suite wait when it holds the heavy lease), `canary`, `sweep` (its budget stands still while it waits), `motion`, `counters`, `parity`, `qualify`, `docs citations`, `verbs`, `bench startup` and the MCP adapter's `puck_world_start`. It resolves the build (with Vulkan SPIR-V when a World that opens a device boots on Vulkan or on a backend its document picks), parses `--backend` through the World's own spelling (`WorldBackendTokens`), builds the shared arguments (`--devices none`, the backend, state directory and exit backstop), and admits the start. A headless World takes no GPU lease and passes the host admission installed once by the root. A World that opens a device (windowed, or offscreen through its document) first waits for that admission's headroom without reserving it, then takes the `gpu` lease (nested under an ancestor that holds it and shared by the process's other device Worlds of the same holder and lane, so two GPU verbs queue on the lease instead of polling for an idle GPU), then is judged and reserved again with the lease held, since the lease is what keeps two device starts from reading the same headroom; a leased judgement that does not pass within `WorldLaunch.LeasedAdmissionBound` gives the lease back and waits for headroom again, so the GPU never idles under a lease waiting for memory. A device World's admission also waits for an idle GPU apart from the waiting process's own Worlds. The admission reserves the growth to its expected peak only for a World that has not reported ready: the launch reads the World's output and marks it ready (`WorldReadiness`, a mark beside the leases) once a headless World answers on its console or publishes its attachment, or a device World's renderer is ready or its bakes settle, and from then on its actual usage is what counts. Each start names its kind (a windowed World, a headless World, or a `--test-batch` replica), which sets the commit the admission expects it to reach. The wait is the same bounded, heartbeat-printing one, and a start the bound refuses fails with `HostAdmissionRefusedException`, which a verb reports as it reports any process that would not start. Every World joins a job the operating system ends with the CLI on Windows, so a killed verb leaves no World running. The in-process World boots of `bench` and `determinism` pass the admission through `WorldAdmission.WaitInProcess`.
 
 ### `puck lease list`—who holds what and who waits
 

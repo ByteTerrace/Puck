@@ -1,4 +1,3 @@
-using System.CommandLine;
 
 using Puck.Cli.Host;
 
@@ -6,7 +5,7 @@ namespace Puck.Cli.Gate;
 
 /// <summary>Runs the gate's steps as child processes: <c>dotnet build</c> over the solution, and each verb as
 /// <c>dotnet &lt;copy&gt;/Puck.Cli.dll</c> in the checkout.</summary>
-internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken cancellationToken, IReadOnlyDictionary<string, Func<Command>> gpuVerbGrammars) : IGateRunner {
+internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken cancellationToken) : IGateRunner {
     private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(minutes: 60);
     private static readonly TimeSpan StepTimeout = TimeSpan.FromHours(hours: 3);
 
@@ -38,7 +37,7 @@ internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken ca
     }
     /// <inheritdoc/>
     public bool WaitForCapacity(string repositoryRoot, string step, bool device, bool heavySuite) {
-        return HostAdmission.Wait(step, device, heavySuite, new HostProbe(checkoutRoot: repositoryRoot, gpuVerbGrammars: gpuVerbGrammars), clock, Console.Error, cancellationToken);
+        return HostAdmission.Wait(step, device, heavySuite, new HostProbe(checkoutRoot: repositoryRoot), clock, Console.Error, cancellationToken);
     }
     public string CopyCli(string repositoryRoot, string directory) {
         var output = Path.Combine(

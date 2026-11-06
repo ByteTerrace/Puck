@@ -39,8 +39,8 @@ public static partial class WorldDefinitionValidator {
         }
 
         foreach (var emission in emissions) {
-            if (WorldHostTokens.ParseBackend(token: emission) is null) {
-                errors.Add(item: $"host.backendRow names state row '{rowName}', whose source can emit '{emission}', which names no backend ('{WorldHostTokens.BackendAuto}', '{WorldHostTokens.BackendDirectX}', or '{WorldHostTokens.BackendVulkan}').");
+            if (WorldBackendTokens.Parse(token: emission) is null) {
+                errors.Add(item: $"host.backendRow names state row '{rowName}', whose source can emit '{emission}', which names no backend ('{WorldBackendTokens.Auto}', '{WorldBackendTokens.DirectX}', or '{WorldBackendTokens.Vulkan}').");
             }
         }
     }

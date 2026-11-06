@@ -1,6 +1,6 @@
 # Puck.Cli.Harness
 
-Puck.Cli.Harness describes and stages a World run for the verbs that boot one: the stored World artifact and its key and closure, the offscreen leg, debug-layer output, the canary manifests, their model and assertions, the refusal census the canary manifests read, the counters batch manifest and the shared `--gpu-jobs` option. It references no World runtime, so `puck affected` and `puck gate` read canary manifests without reaching the engine.
+Puck.Cli.Harness describes and stages a World run for the verbs that boot one: `WorldLaunch`, the one door every `Puck.World` process the CLI starts goes through (build resolution, the shared arguments, the GPU lease for a device World, the host admission, and the job that ends the World with the CLI), the stored World artifact and its key and closure, the offscreen leg, debug-layer output, the canary manifests, their model and assertions, the refusal census (`puck refusals`), the counters batch manifest and the shared `--gpu-jobs` option. It references no World runtime, so `puck affected` and `puck gate` read canary manifests without reaching the engine.
 
 ## Documentation
 

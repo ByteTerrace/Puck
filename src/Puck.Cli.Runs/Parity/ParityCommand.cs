@@ -73,7 +73,7 @@ public static class ParityCommand {
         var suiteClock = Stopwatch.StartNew();
 
         if (!WorldOffscreenLeg.TryResolveWorld(
-            artifact: out var world,
+            build: out var world,
             repositoryRoot: repositoryRoot,
             runDirectory: runDirectory,
             verb: "parity"

@@ -41,24 +41,29 @@ public static partial class TestCommand {
     // the host before it starts, so the replicas of a --workers or --reproduce run never start into another lane's peak.
     private static bool RunWorker(string artifact, string batch, bool heavy, IReadOnlyList<object> legs) {
         File.WriteAllText(path: batch, contents: JsonSerializer.Serialize(value: legs));
-        string[] arguments = [artifact, .. WorldDevices.NoneArguments, "--test-batch", batch];
+        WorldLaunch launch;
 
         // The wait comes before the watchdog starts: the watchdog bounds a started worker's progress, never the host's headroom.
         try {
-            WorldAdmission.Wait(step: "test worker", worldArguments: arguments, heavySuite: heavy);
+            launch = WorldLaunch.Admit(request: new WorldLaunchRequest(Artifact: artifact, Step: "test worker") {
+                Arguments = ["--test-batch", batch],
+                HeavySuite = heavy,
+                Shape = WorldShape.TestBatch,
+            });
         } catch (HostAdmissionRefusedException exception) {
             Console.Error.WriteLine(value: $"ERROR: {exception.Message}");
 
             return false;
         }
 
+        using var admitted = launch;
+
         using var watchdog = new CancellationTokenSource(delay: StartupBudget);
         using var output = new StreamWriter(path: (batch + ".stdout.log"));
         using var error = new StreamWriter(path: (batch + ".stderr.log"));
 
         try {
-            var process = CliProcess.RunCaptured(fileName: "dotnet",
-                arguments: arguments,
+            var process = admitted.Run(
                 input: string.Empty, cancellationToken: watchdog.Token, timeout: Timeout.InfiniteTimeSpan,
                 retainOutput: false,
                 onOutput: line => {

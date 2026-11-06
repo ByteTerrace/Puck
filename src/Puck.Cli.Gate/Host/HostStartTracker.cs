@@ -17,7 +17,9 @@ public readonly record struct HostStartDemand(bool Covered, double HeadroomGb, d
 /// into each other. A start is covered when the commit headroom (limit less charge) holds its own expected peak
 /// (<see cref="HostLoadThresholds.DefaultPeakGb"/>, raised by the measured peak of a finished start of the same kind
 /// this process saw, to at most <see cref="HostLoadThresholds.MeasuredPeakCeilingFactor"/> times the default) plus what
-/// every admitted start still has to grow.
+/// every admitted start still has to grow. A start that has reported ready (<see cref="HostRunningStart.Ready"/>, read
+/// from <see cref="WorldReadiness"/>) has nothing left to grow: this is the one place growth is summed, and it reserves
+/// growth only for the starts that have not.
 /// <para>Admitted starts come from the live processes each reading lists (<see cref="HostSample.Starts"/>, classified by
 /// <see cref="HostProcesses.RunningStart"/>) with their current private bytes, so a process that exits stops counting at
 /// once and nothing is read from a record that can go stale. The one thing a reading cannot show is a start admitted a
@@ -106,8 +108,10 @@ public sealed class HostStartTracker {
             var growth = 0.0;
             var growing = 0;
 
+            // Reserved growth covers only the starts that have not reported ready: a World at steady state counts its
+            // actual usage, which the commit charge already holds.
             foreach (var start in live) {
-                var left = (Expected(kind: start.Kind) - start.PrivateGb);
+                var left = (start.Ready ? 0 : (Expected(kind: start.Kind) - start.PrivateGb));
 
                 if (left > 0) {
                     growth += left;

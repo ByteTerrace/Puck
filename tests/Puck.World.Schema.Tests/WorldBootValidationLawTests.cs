@@ -59,7 +59,7 @@ public sealed class WorldBootValidationLawTests {
         }
         Assert.NotNull(@object: admission);
         Assert.Null(@object: admission.Definition.Host.BackendRow);
-        Assert.Equal(WorldHostTokens.ParseBackend(token: "auto"), admission.Definition.Host.Backend);
+        Assert.Equal(WorldBackendTokens.Parse(token: "auto"), admission.Definition.Host.Backend);
         Assert.Equal("auto", admission.Definition.AuthoredState[0].Cells![0].Value.AsText);
         Assert.True(condition: WorldDefinitionLoader.TryLoadForAdmission(WorldDefinitionSerialization.Serialize(definition: admission.Definition),
             "backend-reloaded", out var reloaded, out reason), userMessage: reason);

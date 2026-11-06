@@ -992,12 +992,12 @@ internal abstract class TokenEnumJsonConverter<T>(string fieldName, IReadOnlyLis
 /// </summary>
 internal sealed class WorldBackendPreferenceJsonConverter() : TokenEnumJsonConverter<WorldBackendPreference>(
     "backend",
-    [WorldHostTokens.BackendAuto, WorldHostTokens.BackendDirectX, WorldHostTokens.BackendVulkan]
+    [WorldBackendTokens.Auto, WorldBackendTokens.DirectX, WorldBackendTokens.Vulkan]
 ) {
     /// <inheritdoc/>
-    protected override WorldBackendPreference? Parse(string? token) => WorldHostTokens.ParseBackend(token: token);
+    protected override WorldBackendPreference? Parse(string? token) => WorldBackendTokens.Parse(token: token);
     /// <inheritdoc/>
-    protected override string ToToken(WorldBackendPreference value) => WorldHostTokens.BackendToken(backend: value);
+    protected override string ToToken(WorldBackendPreference value) => WorldBackendTokens.Token(backend: value);
 }
 /// <summary>
 /// Reads and writes the two authorable surface formats, <see cref="GpuPixelFormat.R8G8B8A8Unorm"/> and

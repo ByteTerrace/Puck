@@ -236,20 +236,30 @@ public static class ChildProcess {
     /// <param name="fileName">The executable to start.</param>
     /// <param name="arguments">The argument vector, passed through <see cref="ProcessStartInfo.ArgumentList"/>.</param>
     /// <param name="workingDirectory">The child's working directory, or the caller's own when it is <see langword="null"/>.</param>
+    /// <param name="environment">The environment entries the child gets over this process's: a value sets a variable,
+    /// <see langword="null"/> removes it; <see langword="null"/> for none.</param>
+    /// <param name="encoding">The encoding of all three standard streams, or <see langword="null"/> for the platform's
+    /// default.</param>
     /// <returns>The started process. Standard input, output and error are all redirected and the child inherits no
     /// console; the caller must drain each output stream, or the child blocks once a pipe buffer fills.</returns>
     /// <exception cref="InvalidOperationException">The child could not be started.</exception>
-    public static Process StartRedirected(string fileName, IEnumerable<string> arguments, string? workingDirectory = null) {
+    public static Process StartRedirected(string fileName, IEnumerable<string> arguments, string? workingDirectory = null, IReadOnlyDictionary<string, string?>? environment = null, Encoding? encoding = null) {
         var info = new ProcessStartInfo(fileName: fileName) {
             CreateNoWindow = true,
             RedirectStandardError = true,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
+            StandardErrorEncoding = encoding,
+            StandardInputEncoding = encoding,
+            StandardOutputEncoding = encoding,
             UseShellExecute = false,
             WorkingDirectory = (workingDirectory ?? string.Empty),
         };
 
         foreach (var argument in arguments) { info.ArgumentList.Add(item: argument); }
+        foreach (var (name, value) in (environment ?? new Dictionary<string, string?>())) {
+            if (value is null) { _ = info.Environment.Remove(key: name); } else { info.Environment[name] = value; }
+        }
 
         return (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: $"Cannot start {fileName}."));
     }

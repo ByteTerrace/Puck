@@ -8,7 +8,7 @@ namespace Puck.Cli.Gate;
 public static class GateCommand {
     private const string Verb = "gate";
 
-    private static int Run(string target, bool gpu, int suiteJobs, int gpuJobs, TimeProvider clock, GateComposition composition, CancellationToken cancellationToken) {
+    private static int Run(string target, bool gpu, int suiteJobs, int gpuJobs, TimeProvider clock, CancellationToken cancellationToken) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -30,16 +30,15 @@ public static class GateCommand {
             repositoryRoot: repositoryRoot,
             suiteJobs: suiteJobs,
             clock: clock,
-            runner: new ProcessGateRunner(cancellationToken: cancellationToken, clock: clock, gpuVerbGrammars: composition.GpuVerbGrammars),
+            runner: new ProcessGateRunner(cancellationToken: cancellationToken, clock: clock),
             target: target
         );
     }
 
     /// <summary>Creates <c>puck gate</c>.</summary>
     /// <param name="clock">The CLI host's clock.</param>
-    /// <param name="composition">What the gate reads from the verbs composed beside it.</param>
     /// <returns>The command.</returns>
-    public static Command Create(TimeProvider clock, GateComposition composition) {
+    public static Command Create(TimeProvider clock) {
         var mergeBaseOption = AffectedCommand.MergeBase(description: "Required. The branch the change lands on, such as origin/main or the integration branch your brief names; the change is read against its merge base with HEAD.");
         var gpuOption = AffectedCommand.Gpu();
 
@@ -79,7 +78,6 @@ public static class GateCommand {
             gpuJobs: parseResult.GetValue(option: gpuJobsOption),
             suiteJobs: parseResult.GetValue(option: suiteJobsOption),
             clock: clock,
-            composition: composition,
             cancellationToken: cancellationToken,
             target: parseResult.GetRequiredValue(option: mergeBaseOption)
         )));
