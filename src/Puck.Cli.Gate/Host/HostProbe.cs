@@ -83,15 +83,19 @@ public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<s
         return ((ulong)new DriveInfo(driveName: directory).AvailableFreeSpace);
     }
 
-    // The GPU lease's holder process and its descendants: empty while nothing holds the lease, null where the checkout
-    // names no shared lease directory.
-    private HashSet<int>? GpuLeaseTree(IReadOnlyDictionary<int, (int Parent, DateTime Started)> tree) {
-        if (!CliGit.TryResolveMainCheckout(repository: checkoutRoot, mainCheckout: out var main)) { return null; }
+    // The processes waiting in the GPU lease's queue that do not also hold it; empty where the checkout names no shared
+    // lease directory.
+    private HashSet<int> QueuedForGpu() {
+        var queued = new HashSet<int>();
+
+        if (!CliGit.TryResolveMainCheckout(repository: checkoutRoot, mainCheckout: out var main)) { return queued; }
 
         var state = CliLease.Inspect(name: "gpu", now: DateTimeOffset.UtcNow, root: Path.Combine(path1: main, path2: ".claude/leases"));
 
-        if ((state.HolderProcessId is not { } holding) || !state.HolderAlive) { return []; }
-        return [holding, .. HostProcesses.Descendants(processes: tree, root: holding)];
+        foreach (var ticket in state.Queue) {
+            if ((ticket.ProcessId is { } waiting) && (waiting != state.HolderProcessId)) { _ = queued.Add(item: waiting); }
+        }
+        return queued;
     }
     /// <summary>Takes one reading. The CPU figure covers the time since the previous reading; the first reading waits
     /// <paramref name="firstInterval"/> to have an interval at all.</summary>
@@ -136,11 +140,9 @@ public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<s
 
         // A heavy test run this process started is its own work, never another's hold on the machine.
         var own = HostProcesses.Descendants(processes: tree, root: self);
-        // A Puck CLI GPU verb opens no device itself; its device work runs in the Worlds and test hosts it starts under the
-        // GPU lease, which are counted on their own. Outside the lease holder's tree (queued, refused, or between leases)
-        // it holds no GPU: counting it would keep the lease's own holder waiting for an idle GPU behind a process waiting
-        // on that holder, and neither would ever start.
-        var leased = GpuLeaseTree(tree: tree);
+        // A GPU verb still queued for the GPU lease has used no GPU: counting it as the holder would keep the lease's own
+        // holder waiting for an idle GPU behind the waiter it is ahead of, and neither would ever start.
+        var queued = QueuedForGpu();
 
         List<HostRunningStart> starts = [];
 
@@ -151,8 +153,7 @@ public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<s
                 starts.Add(item: new HostRunningStart(Id: id, Kind: kind, PrivateGb: privateGb));
             }
 
-            if ((holder is null) && HostProcesses.IsGpuWork(commandLine: commandLine, grammars: gpuVerbGrammars, name: name) &&
-                ((leased is null) || leased.Contains(item: id) || !HostProcesses.IsPuckCli(commandLine: commandLine, name: name))) {
+            if ((holder is null) && !queued.Contains(item: id) && HostProcesses.IsGpuWork(commandLine: commandLine, grammars: gpuVerbGrammars, name: name)) {
                 holder = label;
             }
             if ((heavy is null) && !own.Contains(item: id) && HostProcesses.IsHeavyTest(commandLine: commandLine, name: name)) {
