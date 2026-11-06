@@ -259,10 +259,9 @@ the returned mesh owns its decoded arrays. Do not put large, burst-only payloads
 in `ArrayPool.Shared`: parallel loading can leave one large buffer per bucket
 on each worker after the load ends. Attribute the pool's retained arrays before
 and after collection, rather than treating every returned buffer as freed.
-Reference-bearing contour roots and the bounded worker-slot refinement
-collections stay managed under their existing ownership; the slots report their
-retained bytes (`mesh-bake-worker-scratch`) and release them once a bake settles
-or the account asks for a trim.
+Reference-bearing contour roots stay managed under their existing ownership.
+`SdfSampledLattice.Refine` fills the group's owned fine-sample indexes directly,
+using admission's exact distinct-sample count; no worker retains a second copy.
 
 `SdfMesh.Storage` owns each published mesh's blocks. Cache, residency, dressed
 frame, upload arena and GI scene claims are specific to that resource; the last
@@ -296,8 +295,8 @@ writes per-worker state and merges once.
 
 - **Explicit owners.** `MeshCpuBake` gives each worker its own evaluator through
   `localInit` ([`MeshCpuBake.Answer`](../../../../src/Puck.Cli.Worlds/Mesh/MeshCpuBake.cs));
-  the bake's worker slots retain their own refinement indexes
-  ([`SdfMeshPathBake.Residency.cs`](../../../../src/Puck.SdfVm/SdfMeshPathBake.Residency.cs)).
+  the bake's groups own their refinement indexes, borrowed exclusively by their
+  running stage ([`SdfSampledLattice.Refine`](../../../../src/Puck.SignedDistance/Baking/SdfSampledLattice.cs)).
   The field evaluator's existing `[ThreadStatic]` walk scratch
   ([`SdfFieldEvaluator.PointReachScratch`](../../../../src/Puck.SignedDistance/Queries/SdfFieldEvaluator.PointWalk.cs))
   is a migration in the job-system memo, not a model for new scratch.

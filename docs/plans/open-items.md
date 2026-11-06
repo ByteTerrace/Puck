@@ -312,10 +312,12 @@ landed geometry).
   dressed motion identities (`SdfMeshPathBake.cs:408, :425`; the `Dress` item
   under [other frame-time findings](#other-frame-time-findings)); scene
   emission's residue includes pick material labels (`WorldPickMap.cs:64`) and
-  shape-specific materials. A cold bake's remaining sites are readback-copy
-  byte arrays (`SdfMeshPathBake.cs:691`), fine-key dictionary entries
-  (`SdfSampledLattice.cs:861`) and contour merge doubles
-  (`SdfDualContouring.cs:702`). Continue with owned storage, through
+  shape-specific materials. A cold bake's remaining sites are the pooled
+  readback-copy byte arrays (`SdfMeshBakeGpuWork.Complete`), point rounds
+  (`SdfSampledLattice.CrossingPoints`, `SdfSampledLattice.GradientPoints`) and
+  contour merge doubles (`SdfDualContouring.Merge`). Refinement indexes already
+  fill owned storage directly; their managed growth/copy path is gone. Continue
+  with owned storage, through
   `IAllocator` and `MimallocAllocator` where it goes native; a shared
   cross-thread pool belongs to the memo.
 - Open from the allocation cuts:
@@ -582,15 +584,16 @@ The custom no-GC runtime port stays later work, on the
 Owner: specialist (rendering) · high · Next: the bake samples through the
 residency's background GPU work
 ([B1](graphics-architecture.md#b1-the-completion-driven-bake-service)), so
-the frame-pacing floor is gone and the cold bake is CPU-bound (102 to 125 s on
-Direct3D 12 and 129 s on Vulkan on a busy machine); narrow `SdfMeshBakeClosure` to the code that decides mesh contents and key one
+the frame-pacing floor is gone and the cold bake is CPU-bound; narrow
+`SdfMeshBakeClosure` to the code that decides mesh contents and key one
 store for both backends from the HLSL source closure of `MeshBake` and
 `MeshBakeMask`; then cut the collapse (`SdfMeshCollapse`), now the bake's
 largest CPU stage, toward the owner's bar: one minute at most per backend from
-an empty store (AGENTS.md), and work proportional to change. Two bakes of one
-build are not byte-identical (1 to 4 of about 1,306 payloads differ), so a
-product keyed across processes keys on the payload it was built from, never on
-the geometry key alone.
+an empty store (AGENTS.md), and work proportional to change. Cold-bake
+reproduction pins both authority and display time before the first frame
+(`paused` and `lockstep` at launch), then compares key sets and every decompressed
+payload. Pausing after attachment does not reproduce the initial poses; see
+[the bake procedure](../../.claude/skills/rendering/references/mesh-bake.md#reproducing-a-cold-bake).
 
 - [high] Each backend still keeps its own store because `SdfMeshBakeIdentity`
   hashes the actual mask/bake kernel bytes. The bake/dresser, view/bake parameter
@@ -601,14 +604,16 @@ the geometry key alone.
   equivalence, including compiler changes and skin/material/refinement behavior.
   The latest native forest legs have different aggregate triangle counts, so
   source equality alone is not proof of identical products or a halved cold cost.
-- The cold bake fails the one-minute bar on both backends. Its GPU half no
-  longer bounds it: the background GPU work dispatches batches as its slots
-  complete, the whole bake is 6 to 7 s of measured GPU time, and 39 to 47% of
-  the bake's takes find no group owing a lattice. The contour work saturates
-  every processor: its stages log 1,100 to 1,500 thread seconds, the collapse
-  (`SdfMeshCollapse.Levels`, the `land` stage) about 40% of the workers' CPU,
-  the crossing and prepare stages about 15 to 20% each and the contour
-  (`ExtractRefined`) about 10%. Roughly half the contour CPU has to fall.
+- The cold bake has not met the one-minute bar on either backend. The CPU
+  stages remain the target after removing the repeated refinement-index walk,
+  fine-cell sign scan and collapse fan preparation. `SdfMeshCollapse.Levels`
+  still dominates `land`; its `Measure` and `MeasureReverse` checks are the
+  next profile-led cuts. Preserve their sample order, exact distances and
+  acceptance bounds. The overall CPU-halving target remains open. Queue
+  `bench startup worlds/debug --bake --backend <backend>` through `puck measure`
+  for the quiet wall-time comparison. The stage log's `cpu` fields sum worker
+  elapsed intervals, including descheduling and GC/profiler suspension; they
+  are diagnostics, not measured processor time or a quiet-wall-time result.
 - [medium] Every view still renders every frame while a bake is pending
   (`SdfWorldResidency.IsUnchanged` returns false on `MeshPathBake.Pending`),
   which the frame-paced bake needed to dispatch and the background GPU work
@@ -642,14 +647,12 @@ the geometry key alone.
   `--profile gc-verbose` in the same leg as the memory split above, then write
   each into storage its worker owns: one `float` buffer filled once, appends
   without the wrapper, and a projection workspace per worker.
-- Next cuts, largest first: `SdfMeshCollapse` (4.8 M tried collapses for a
-  valley sector's 0.89 M triangles, about 3.5 µs each; skipping places whose
-  neighbourhood no collapse changed saves only a quarter of the tries and no
-  time, so the cost is in the tries that run); the contour's `ExtractRefined`
-  measures every fine cell's corner signs a third time, where `CrossingEdges`
-  already lists the crossed fine cells (`m_crossedFineCells`); the frame thread's
-  `SdfWorldResidency.Capture` and the render graph's per-view recording while
-  hundreds of views stand.
+- Next cuts: the exact forward/reverse sample checks in `SdfMeshCollapse`
+  (skipping unchanged neighbourhoods previously cut tries without a measured
+  CPU gain); the frame thread's `SdfWorldResidency.Capture` and the render
+  graph's per-view recording while hundreds of views stand. The crossed-cell
+  masks already flow from `CrossingEdges` to `ExtractRefined`; do not introduce
+  a second topology scan there.
 - [low] The audit counts a chunked mesh's seam edges as open edges: weld the
   joined query view's coincident seam vertices, or skip edges two chunks share,
   so a chunked group's open edges mean holes.
@@ -2234,75 +2237,79 @@ and `world.residency [radius]` reads its measures.
 World holds well past that on a unified-memory device, a tour roughly doubles it
 ([sweep](#sweep-and-visual-checks)) and the cold bake passes it by a wide margin
 ([bake](#bake-proportional-to-change)); headless is a fraction of a gigabyte,
-so nearly all of it is presentation a player's build carries.
+so nearly all of it is presentation a player's build carries. The latest
+attribution's readings are in the commit that landed the host-visible ledger
+rows and the idle bake-slot release.
 
-How to read it: `host.memory collect`, then `host.memory owners 0` for the
-account and the backend ledger (`GpuDeviceMemoryWork`: device-local bytes with
-their aperture subset, and disjoint host-visible bytes), `world.residency` for
-the mesh region, the GI trace scene and the background GPU work's slots, the OS
-`GPU Process Memory(pid_*)` counters (dedicated and shared usage, the driver's
-residency, which agree with the ledger to within about 200 MiB of driver and
-swapchain memory), a page walk (`VirtualQueryEx` with `QueryWorkingSetEx`) for
+How to read it: `host.memory collect` first, then each owner by the reading the
+table names. The layers overlap and are never added: process private bytes
+include the device heaps' write-combined address space, which on a discrete
+adapter is mostly not resident, and the backend ledger (`GpuDeviceMemoryWork`,
+in `host.memory owners 0`: device-local bytes with their aperture subset, and
+disjoint host-visible bytes) agrees with the OS `GPU Process Memory(pid_*)`
+counters (dedicated and shared usage, the driver's residency) up to driver and
+swapchain memory. A page walk (`VirtualQueryEx` with `QueryWorkingSetEx`) splits
 process regions by type, write-combining and residency, and a suspended ClrMD
-walk of the live heap from its roots for managed owners. These layers overlap:
-process private bytes include the device heaps' write-combined address space,
-which on a discrete adapter is mostly not resident. A settled warm Direct3D 12
-World on the RTX 4070, after collection, held these owners; on the Deck every
-one of them is the same physical memory:
+walk of the live heap from its roots names managed owners. On the Deck every
+owner below is the same physical memory. Owners of a settled warm World, largest
+first:
 
-| Owner | Layer | MiB | Read by |
-|---|---|---|---|
-| Baked meshes, GPU copy | device-local | 1,840 | `world.residency` `region-held` |
-| Baked meshes, CPU payloads | native (mimalloc) | 1,668 | account `live` |
-| Device-local memory no residency line names (view targets, cascades, screens, program tables, ring apertures) | device-local | about 1,970 | ledger held less the named lines |
-| GI trace scene, GPU copy (hierarchy, hits, feedback) | device-local | 889 | `world.residency` `trace-*` |
-| GI trace scene, CPU hierarchy (`SdfMeshIrradianceScene+Node[]`, geometry indices) | managed | 595 | ClrMD |
-| Other managed (field evaluator about 110, irradiance arrays about 190, documents and strings, capture feed 42) | managed | about 1,010 | ClrMD live 1,606 less the scene |
-| Native allocator slack beyond the account | native (mimalloc) | 575 | `allocator-committed` less account `live` |
-| Pagefile-backed section of 1 GiB not created by Puck code | mapped | 684 resident | page walk |
-| CLR loader heaps, precode and JIT code | native | about 300 | ClrMD native heaps |
-| Upload and readback heaps | host-visible | 193 | ledger host-visible held |
+| Owner | Layer | Read by |
+|---|---|---|
+| Device-local memory no residency line names (view targets, cascades, screens, program tables, ring apertures) | device-local | ledger held less the named lines |
+| Baked meshes, GPU copy | device-local | `world.residency` `region-held` |
+| Baked meshes, CPU payloads | native (mimalloc) | account `live` in `host.memory` |
+| Managed objects beside the GI scene (field evaluator, irradiance arrays, documents and strings, capture feed) | managed | ClrMD live bytes less the scene |
+| GI trace scene, GPU copy (hierarchy, hits, feedback) | device-local | `world.residency` `trace-*` |
+| Pagefile-backed 1 GiB section not created by Puck code | mapped | page walk |
+| GI trace scene, CPU hierarchy (`SdfMeshIrradianceScene+Node[]`, geometry indices) | managed | ClrMD, `world.residency` `trace-scene-cpu-array-bytes` |
+| Native allocator slack beyond the account | native (mimalloc) | `allocator-committed` less account `live` |
+| CLR loader heaps, precode and JIT code | native | ClrMD native heaps |
+| Upload and readback heaps | host-visible | ledger host-visible held |
 
 Grounded causes and leads, largest first:
 
 - The baked meshes are held twice: the region's GPU copy and the CPU payloads
-  (positions and normals 763 MB, level-0 indices and materials 788 MB, levels 1
-  and 2 156 MB). Normals and levels 1 and 2 have no CPU reader after landing
-  except the store write, material variants and a region rebuild; releasing
-  them (and the chunked parent's second index copy) needs each of those readers
-  to read the store or the GPU copy instead. Owner: rendering/bake.
-- About 1.97 GB of device-local memory has no owner line. The render-graph
-  nodes' `owned-bytes` gauges (`world.counters gpu --json`) are past the 1 MiB
-  an MCP answer carries, so name it with a reading that fits (per-node owned
-  bytes summed by node family) before cutting; the debug world renders some
-  thirty session views.
+  (positions and normals, level-0 indices and materials, levels 1 and 2;
+  `world.residency`'s `vertex-bytes` and `level0`..`level2` read each). Normals
+  and levels 1 and 2 have no CPU reader after landing except the store write,
+  material variants and a region rebuild; releasing them (and the chunked
+  parent's second index copy) needs each of those readers to read the store or
+  the GPU copy instead. Owner: rendering/bake.
+- The device-local memory no residency line names needs an owner line. The
+  render-graph nodes' `owned-bytes` gauges (`world.counters gpu --json`) run
+  past the 1 MiB an MCP answer carries, so name it with a reading that fits
+  (per-node owned bytes summed by node family) before cutting; the debug world
+  renders some thirty session views.
 - GI holds its trace scene on both sides: the CPU hierarchy feeds probe
   placement and depth-sheet classification (`TryNearestSurface`,
   `SdfMeshIrradiance.Placement.cs`, `SdfMeshProbeDepth.cs`) and diagnostics,
   the GPU copy feeds the trace. Moving placement onto the GPU trace would free
-  the CPU side. The scene also retains up to 8 M triangles of cached claims
-  (`SdfMeshIrradianceScene.RetainedTriangles`), and a full scene build holds its
-  pieces beside the old scene. The probe cache's blocks stay alive while any
-  kept probe names them (after a tour, 70,158 probes in 329 MB of blocks); re-home
-  the kept probes of mostly forgotten blocks when `Retain` compacts, measured by
-  `world.residency`'s `probe-cache-blocks`. The cache's reader retries with
-  `Thread.SpinWait` while an entry is published; replace that with stable
-  publication or a host wait.
-- After a cold bake the process holds about 1.6 GB more non-write-combined
-  private memory than a warm boot that the managed heap, the allocator and the
-  ledger do not explain (page walk: 6,919 MiB private against 2,193 managed and
-  2,591 allocator committed). Name it (driver pipeline compilation, bake
-  workspaces outside `IAllocator`, `GpuRegion`'s `NativeMemory` growth) with a
-  native allocation trace before shrinking it.
-- After a cold bake the host-visible ledger holds about 600 MB against a warm
-  boot's 193: placed host-visible buffers released inside a shared 64 MiB
-  arena heap free their range but keep the heap while any other buffer sits in
-  it (`DirectXHeapArena`), and region staging buffers grow with landing.
-- The 1 GiB pagefile-backed section (684 MiB resident) is created by no Puck
-  code (`src/` has no `MemoryMappedFile` or `CreateFileMapping`); the .NET
-  executable allocator's double mapping and the driver are the candidates.
-  The World JIT-compiles over 210,000 methods (`host.memory` `jit methods`),
-  partly from `WorldCodeWarmer`; compare a ReadyToRun-published World.
+  the CPU side. The scene also retains up to `RetainedTriangles` of cached
+  claims (`SdfMeshIrradianceScene`), and a full scene build holds its pieces
+  beside the old scene. The probe cache's blocks stay alive while any kept
+  probe names them, so a tour leaves several times a probe's nominal bytes per
+  kept probe; re-home the kept probes of mostly forgotten blocks when `Retain`
+  compacts, measured by `world.residency`'s `probe-cache-blocks`. The cache's
+  reader retries with `Thread.SpinWait` while an entry is published; replace
+  that with stable publication or a host wait.
+- After a cold bake the process holds non-write-combined private memory that
+  the managed heap, the allocator and the ledger do not explain (page walk
+  private less managed and allocator committed, against a warm boot). Name it
+  (driver pipeline compilation, bake workspaces outside `IAllocator`,
+  `GpuRegion`'s `NativeMemory` growth) with a native allocation trace before
+  shrinking it.
+- After a cold bake the host-visible ledger stays above a warm boot's: placed
+  host-visible buffers released inside a shared arena heap free their range
+  but keep the heap while any other buffer sits in it (`DirectXHeapArena`), and
+  region staging buffers grow with landing.
+- The pagefile-backed 1 GiB section is created by no Puck code (`src/` has no
+  `MemoryMappedFile` or `CreateFileMapping`), and a headless World's whole
+  working set is smaller than its resident part; the
+  .NET executable allocator's double mapping and the driver are the candidates.
+  A windowed World JIT-compiles about three times the methods a headless one
+  does (`host.memory` `jit methods`), partly from `WorldCodeWarmer`; compare a
+  ReadyToRun-published World.
 - The mesh library budgets meshes residencies still hold and forgets them, so
   a re-plan reloads a second copy (`SdfMeshLibrary.cs:32`, `:285-304`). The fix
   is at its cause: a payload stays findable while any claim on it lives, and its
@@ -2316,16 +2323,16 @@ Grounded causes and leads, largest first:
   `host.memory`, and let `MemoryAccount` be the one budget authority with
   `ShaderPipelineMemoryBudget` as a reservation from it, not a second budget.
   The account's budget is three quarters of installed RAM and sees only mesh
-  payloads, bake group workspaces and worker scratch, never the managed heap,
+  payloads and bake group workspaces, never the managed heap,
   `GpuRegion` host copies, device or staging heaps, so on a unified-memory Deck
   it pays no regard to the GPU's share of the same memory.
 - A warm load decodes the whole loaded set into managed arrays once before the
   native copy (`SdfMeshStoreCodec.cs:177,214,321` then `SdfMesh.Storage.cs:77`).
   A player's build also keeps the composed-document store
   (`WorldDefinitionFileSource.cs`, `ForgetComposedDocuments` after boot; the
-  heap walk finds 20 MiB of composed bytes and 4 MiB of compiled source held)
-  and may keep the authoring document tree after compiling; confirm and release
-  what a booted compiled world no longer reads.
+  heap walk finds composed bytes and compiled source still held) and may keep
+  the authoring document tree after compiling; confirm and release what a
+  booted compiled world no longer reads.
 - A prewarmed mesh store may ship in a player's build (AGENTS.md), so a player
   need not bake cold.
 
@@ -2421,6 +2428,12 @@ failing case is argued from source, not run):
 
 ### Vulkan regressions and GPU robustness
 
+- [low · unchecked] `SdfWorldPickReadback.Dispose` returns its readback's
+  arena range (`DirectXGpuReadbackBuffer.Dispose` now reports the release), but
+  whether every retirement path of the pick readback runs after its fence
+  depends on graph teardown order and was not traced by the deck-memory review.
+  Trace each retirement path; if one can dispose before the fence, retire it
+  through the fence-ordered path the other readbacks use.
 - [medium, before V1] Draw identity is tracked twice and the occlusion visible
   bit uses neither: R2's per-mesh identity counter (`SdfMesh.cs:331-335`,
   `:612`, read at `sdf-mesh-selection.hlsli:79`) beside the residency's

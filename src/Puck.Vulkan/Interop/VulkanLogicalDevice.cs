@@ -93,8 +93,8 @@ public sealed class VulkanLogicalDevice : IDisposable {
         device.Checkpoints.Watch(queue: graphicsQueue.Handle);
     }
 
-    /// <summary>Destroys the owned device, then ends its entries in the device-local memory counts. Safe to call more
-    /// than once.</summary>
+    /// <summary>Destroys the owned device, then ends its entries in the device's memory counts. Safe to call more than
+    /// once.</summary>
     /// <exception cref="InvalidOperationException">An allocation the device's memory counts still hold was never
     /// released by its owner; the device is destroyed first, and the message names each leaked allocation.</exception>
     public void Dispose() {

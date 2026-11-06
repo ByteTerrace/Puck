@@ -64,6 +64,9 @@ internal interface ISdfContourLattice {
 /// cells, <see cref="Refinement"/> to a coarse cell along each axis, and a coarse cell that is not
 /// <see cref="Refined"/> contours whole, from its eight coarse corners.</summary>
 internal interface ISdfRefinedContourLattice : ISdfContourLattice {
+    // Crossed fine cells, ordered by coarse z/y/x then fine z/y/x. Corner is the low sample's linear index,
+    // with CellsX + 1 and CellsY + 1 sample strides; Mask holds the eight signs after sheet closure.
+    ReadOnlySpan<SdfCrossedCell> CrossedFineCells { get; }
     // Fine cells along each axis of a coarse cell, at least two; the lattice's cells along each axis are a multiple of it.
     int Refinement { get; }
     // Whether the coarse cell at coarse coordinates (x, y, z) contours its fine cells. Every fine sample on the faces of
@@ -77,6 +80,7 @@ internal interface ISdfRefinedContourLattice : ISdfContourLattice {
     // fine corner's coordinates.
     bool CoarseInside(int x, int y, int z);
 }
+internal readonly record struct SdfCrossedCell(int Corner, byte Mask);
 /// <summary>
 /// Extracts a <see cref="SdfSurface"/> by manifold dual contouring: a vertex per surface patch of a cell, and one quad
 /// per sign-changing lattice edge joining the patch vertices of the four cells around it. A cell's patches are the
@@ -269,21 +273,11 @@ internal static class SdfDualContouring {
 
         long FineKey(int x, int y, int z) => (x + (((long)cells[0]) * (y + (((long)cells[1]) * z))));
         int CoarseIndex(int x, int y, int z) => (x + (coarse[0] * (y + (coarse[1] * z))));
-        int MaskAt(int x, int y, int z, int stride) {
+        int CoarseMask(int x, int y, int z) {
             var mask = 0;
 
-            if (stride == factor) {
-                for (var offset = 0; (offset < 8); offset++) {
-                    if (grid.CoarseInside(x: ((x / factor) + (offset & 1)), y: ((y / factor) + ((offset >> 1) & 1)), z: ((z / factor) + ((offset >> 2) & 1)))) {
-                        mask |= (1 << offset);
-                    }
-                }
-
-                return mask;
-            }
-
             for (var offset = 0; (offset < 8); offset++) {
-                if (grid.Inside(corner: grid.Corner(x: (x + ((offset & 1) * stride)), y: (y + (((offset >> 1) & 1) * stride)), z: (z + (((offset >> 2) & 1) * stride))))) {
+                if (grid.CoarseInside(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))) {
                     mask |= (1 << offset);
                 }
             }
@@ -328,6 +322,8 @@ internal static class SdfDualContouring {
             }
         }
 
+        var crossed = grid.CrossedFineCells;
+        var nextCrossed = 0;
         for (var cz = 0; (cz < coarse[2]); cz++) {
             for (var cy = 0; (cy < coarse[1]); cy++) {
                 for (var cx = 0; (cx < coarse[0]); cx++) {
@@ -336,7 +332,7 @@ internal static class SdfDualContouring {
                     refined[index] = grid.Refined(x: cx, y: cy, z: cz);
 
                     if (!refined[index]) {
-                        var mask = MaskAt(stride: factor, x: (cx * factor), y: (cy * factor), z: (cz * factor));
+                        var mask = CoarseMask(x: cx, y: cy, z: cz);
 
                         if ((mask != 0) && (mask != 0xFF)) {
                             coarseMasks[index] = ((byte)mask);
@@ -347,22 +343,20 @@ internal static class SdfDualContouring {
                         continue;
                     }
 
-                    for (var fz = (cz * factor); (fz < ((cz + 1) * factor)); fz++) {
-                        for (var fy = (cy * factor); (fy < ((cy + 1) * factor)); fy++) {
-                            for (var fx = (cx * factor); (fx < ((cx + 1) * factor)); fx++) {
-                                var mask = MaskAt(stride: 1, x: fx, y: fy, z: fz);
+                    // The crossing stage already read every fine cell's signs. Reuse its sparse topology in exactly
+                    // the vertex order the dense scan used, including coarse cells interleaved with refined ones.
+                    for (; (nextCrossed < crossed.Length); nextCrossed++) {
+                        var crossedCell = crossed[nextCrossed];
+                        var fx = (crossedCell.Corner % (cells[0] + 1));
+                        var fy = ((crossedCell.Corner / (cells[0] + 1)) % (cells[1] + 1));
+                        var fz = (crossedCell.Corner / ((cells[0] + 1) * (cells[1] + 1)));
 
-                                if ((mask == 0) || (mask == 0xFF)) {
-                                    continue;
-                                }
+                        if (((fx / factor) != cx) || ((fy / factor) != cy) || ((fz / factor) != cz)) { break; }
+                        var key = FineKey(x: fx, y: fy, z: fz);
 
-                                var key = FineKey(x: fx, y: fy, z: fz);
-
-                                fineMasks.Add(key: key, value: ((byte)mask));
-                                fineVertices.Add(key: key, value: (positions.Count / 3));
-                                AddVertices(mask: mask, owner: (grid.Measured(x: cx, y: cy, z: cz) ? -1 : index), stride: 1, x: fx, y: fy, z: fz);
-                            }
-                        }
+                        fineMasks.Add(key: key, value: crossedCell.Mask);
+                        fineVertices.Add(key: key, value: (positions.Count / 3));
+                        AddVertices(mask: crossedCell.Mask, owner: (grid.Measured(x: cx, y: cy, z: cz) ? -1 : index), stride: 1, x: fx, y: fy, z: fz);
                     }
                 }
             }

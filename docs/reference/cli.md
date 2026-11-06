@@ -3150,10 +3150,18 @@ puck bench startup --samples 3
 puck bench startup worlds/debug --samples 3 --width 640 --height 360
 puck bench startup --headless --world-artifact src/Puck.World/bin/Release/net11.0/Puck.World.dll
 puck bench startup --headless --samples 2 --cache-dir artifacts/startup-cold-cache
+puck bench startup --bake --backend directx --samples 1 --timeout-seconds 600
 ```
 
 `--cache-dir` forwards the World's cache root to every sample: an empty root
 shows counted cold misses and subsequent warm hits, including firmware and addons.
+Without it, each sample gets a fresh cache below its output directory.
+`--backend` selects the windowed backend. `--bake` measures the interval from
+the first mesh-bake start until every started residency completes, with authority
+and display clocks pinned before the first frame. It requires a windowed sample
+and its fresh cache, records `/metrics/cold-bake/median` in milliseconds, and
+does not wait for frame capture or lighting convergence. Use it through
+`puck measure request` for a cold-bake wall-time comparison in the quiet window.
 The default windowed run uses 1280×720. Each sample receives a new persistence
 directory, requests `world.status`, waits one tick, requests a frame capture,
 and checks `wire.errors`. Console readiness is the observed status response;
