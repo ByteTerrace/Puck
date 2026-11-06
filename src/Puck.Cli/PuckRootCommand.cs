@@ -68,6 +68,21 @@ public static class PuckRootCommand {
     /// <returns>The root command: its verbs in ordinal name order, its help naming the tool <see cref="CliHelp.ToolName"/>,
     /// and every action guarded by <see cref="CliExit.Guard"/>.</returns>
     public static RootCommand Create(TimeProvider clock) => Create(clock: clock, schemaBootstrap: SchemaBootstrap.IsBootstrap);
+    // The bench lanes read the host through the probe `puck host load`, the gate and the leases use, made on first use so
+    // a verb that measures nothing never pays its process walk.
+    private static BenchHostSample BenchHost(GateComposition composition) {
+        Puck.Cli.Host.HostProbe? probe = null;
+        var gate = new Lock();
+
+        return () => {
+            lock (gate) {
+                probe ??= new Puck.Cli.Host.HostProbe(checkoutRoot: Environment.CurrentDirectory, gpuVerbGrammars: composition.GpuVerbGrammars);
+                var sample = probe.Sample(firstInterval: TimeSpan.FromMilliseconds(milliseconds: 250));
+
+                return new BenchHostReading(CpuPercent: sample.CpuPercent, FreeRamGb: sample.FreeRamGb, GpuHolder: sample.GpuHolder, HeavyTestHolder: sample.HeavyTestHolder);
+            }
+        };
+    }
     // A bootstrap binary cannot start a consumer of the deliberately absent model table.
     public static RootCommand Create(TimeProvider clock, bool schemaBootstrap) {
         // Every verb below the gate that starts a World or a heavy test host waits on the admission the gate itself uses.
@@ -80,7 +95,7 @@ public static class PuckRootCommand {
             ArtifactsCommand.Create(),
             AzureCommand.Create(clock: clock),
             BaselinesCommand.Create(),
-            BenchRunner.Create(clock: clock),
+            BenchRunner.Create(clock: clock, sampleHost: BenchHost(composition: Gate)),
             BrandingCommand.Create(),
             BundleCommand.Create(),
             CanaryCommand.Create(),

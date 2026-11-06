@@ -100,8 +100,10 @@ public static class BenchRunner {
 
     /// <summary>Creates the <c>bench</c> verb; <paramref name="clock"/> bounds its tool runs.</summary>
     /// <param name="clock">The CLI host's clock.</param>
+    /// <param name="sampleHost">The host sampler the <c>world</c> and <c>startup</c> lanes record their load with, or
+    /// <see langword="null"/> to record none.</param>
     /// <returns>The verb.</returns>
-    public static Command Create(TimeProvider clock) {
+    public static Command Create(TimeProvider clock, BenchHostSample? sampleHost = null) {
         var benchmarkArguments = CliOptions.Forwarded(
             description: "Forwarded to BenchmarkDotNet's switcher verbatim: --filter, --job, --list, --runtimes, --hide, and the rest of its grammar.",
             name: "benchmark-arguments"
@@ -111,14 +113,18 @@ public static class BenchRunner {
             name: "kernels"
         ) { benchmarkArguments };
         var worldArgument = new Argument<string?>(name: "world") { Arity = ArgumentArity.ZeroOrOne, Description = $"The world's asset package folder, .puck source or .world.json document. Default: the debug world, {WorldBenchmarks.DefaultWorldRelativePath}." };
+        var repeatsOption = new Option<int>(name: "--repeats") { DefaultValueFactory = static _ => 1, Description = "How many times the whole lane runs, 1 to 100; each metric's median, p10 and p90 are taken over them." };
+        var artifactOption = new Option<string?>(name: "--world-artifact") { Description = "A World build's Puck.World.dll whose engine is measured in place of this CLI's own; the bench code stays this CLI's." };
+        var outputOption = new Option<string?>(name: "--output") { Description = "Parent of a unique run directory that receives report.json (puck.bench.v1)." };
+        var jsonOption = new Option<bool>(name: "--json") { Description = "Print the report (puck.bench.v1) on standard output, with the table on standard error." };
         var worldCommand = new Command(
             description: "Time the Puck.World.Server tick path with a plain stopwatch harness.",
             name: "world"
-        ) { worldArgument };
+        ) { worldArgument, repeatsOption, artifactOption, outputOption, jsonOption };
         var command = new Command(
             description: "Measure kernels, the server tick path, World startup, and the cost schedule's evidence.",
             name: "bench"
-        ) { kernelsCommand, StartupBenchmarks.Create(), StateEvidenceCommand.Create(clock: clock), worldCommand };
+        ) { kernelsCommand, StartupBenchmarks.Create(sampleHost: sampleHost), StateEvidenceCommand.Create(clock: clock), worldCommand };
 
         kernelsCommand.Detail(detail: """
             Every argument reaches BenchmarkDotNet's switcher unchanged. Job rigor is chosen there and layered over the
@@ -152,9 +158,24 @@ public static class BenchRunner {
             submissions that waited on a screen machine's worker, and each screen machine's own tick of emulation
             timed alone. A server construction can cost hundreds of milliseconds, past what an iteration-based job
             can amortize honestly, which is why this lane sits beside BenchmarkDotNet rather than inside it.
+
+            The run is also a puck.bench.v1 report (--json prints it, --output writes report.json): the measured
+            build's identity (version with its commit, SHA-256 of its engine assemblies), the host load sampled
+            during the run, and each metric (idle-tick, quiet-tick-allocation, server-construction, paced-tick,
+            the work counts and the rest) as median, p10 and p90 over --repeats runs. `puck measure` reads the idle
+            tick as /metrics/idle-tick/median. With --world-artifact the engine assemblies come from that World
+            build, loaded in their own context beside this CLI's bench code, so a before/after pair measures two
+            builds; a build whose engine this bench code cannot call is refused by name.
             """);
         kernelsCommand.SetAction(action: parseResult => Run(benchmarkArguments: (parseResult.GetValue(argument: benchmarkArguments) ?? [])));
-        worldCommand.SetAction(action: parseResult => WorldBenchmarks.Run(world: parseResult.GetValue(argument: worldArgument)));
+        worldCommand.SetAction(action: parseResult => WorldBenchmarks.Run(
+            artifact: parseResult.GetValue(option: artifactOption),
+            json: parseResult.GetValue(option: jsonOption),
+            output: parseResult.GetValue(option: outputOption),
+            repeats: parseResult.GetValue(option: repeatsOption),
+            sampleHost: sampleHost,
+            world: parseResult.GetValue(argument: worldArgument)
+        ));
 
         return command;
     }

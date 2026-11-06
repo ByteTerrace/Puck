@@ -19,6 +19,20 @@ public sealed class MeasureLawTests {
     }
 
     [Fact]
+    public void ABenchReportsMetricIsReadThroughOnePointer() {
+        var report = Puck.Cli.Bench.BenchReport.Start(build: new Puck.Cli.Bench.BenchBuild(Path: "Puck.World.dll", Sha256: "00", Version: "1.0.0+abc"), repeats: 5, settings: new Dictionary<string, string>(), verb: "bench world") with {
+            Complete = true,
+            Metrics = new Dictionary<string, Puck.Cli.Bench.BenchMetric> { ["idle-tick"] = Puck.Cli.Bench.BenchMetric.Of(samples: [5, 1, 4, 2, 3], unit: "ms") },
+        };
+        using var json = JsonDocument.Parse(report.ToJson());
+
+        Assert.Equal(3, MeasureCommand.ReadMetric(json.RootElement, "/metrics/idle-tick/median"));
+        Assert.Equal(1.4, MeasureCommand.ReadMetric(json.RootElement, "/metrics/idle-tick/p10"), precision: 9);
+        Assert.Equal(4.6, MeasureCommand.ReadMetric(json.RootElement, "/metrics/idle-tick/p90"), precision: 9);
+        Assert.Equal("1.0.0+abc", json.RootElement.GetProperty("build").GetProperty("version").GetString());
+    }
+
+    [Fact]
     public void MetricsReadExistingStartupAndSweepReportsIncludingEscapedKeys() {
         using var json = JsonDocument.Parse("""{"Summary":{"MedianMilliseconds":2.5},"signals":[{"metrics":{"a/b~c":"3.25"}}]}""");
         Assert.Equal(2.5, MeasureCommand.ReadMetric(json.RootElement, "/Summary/MedianMilliseconds"));

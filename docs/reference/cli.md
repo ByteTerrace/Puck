@@ -2837,14 +2837,14 @@ Lanes record timing questions; the lead answers them on a quiet machine. `reques
 puck measure request --name 'startup comparison' \
   --before-world-artifact /frozen/before/Puck.World.dll \
   --after-world-artifact /frozen/after/Puck.World.dll \
-  --metric /Summary/MedianMilliseconds \
+  --metric /metrics/startup/median \
   --decides 'lower startup median, with paired difference larger than the IQR' \
   -- bench startup worlds/debug --headless --samples 1
 puck measure list
 puck measure run --holder lead --repeats 5 --wait 600 --settle 30
 ```
 
-`--before-commit <revision>` and `--after-commit <revision>` replace the artifact option for their side. Forward the command after `--`, without the leading `puck`. Supported forms are `bench startup` and `sweep`; the runner supplies `--world-artifact` and `--output`, which the request must omit. A headless `host.frames` run or an individual sweep signal uses an ordinary sweep plan (`sweep --plan <plan.json> --no-scenarios`). The command runs from the requesting checkout, so retain its world and plan inputs until answered. `--metric` is a repeatable JSON pointer into the existing command's `report.json`, such as `/Summary/MedianMilliseconds` for startup or `/signals/0/metrics/<key>` for a sweep. Numeric JSON strings from sweep metrics are accepted; absent or nonfinite values refuse. Use `~1` for `/` and `~0` for `~` within a key.
+`--before-commit <revision>` and `--after-commit <revision>` replace the artifact option for their side. Forward the command after `--`, without the leading `puck`. Supported forms are `bench world`, `bench startup` and `sweep`; the runner supplies `--world-artifact` and `--output`, which the request must omit. A headless `host.frames` run or an individual sweep signal uses an ordinary sweep plan (`sweep --plan <plan.json> --no-scenarios`). The command runs from the requesting checkout, so retain its world and plan inputs until answered. `--metric` is a repeatable JSON pointer into the existing command's `report.json`, such as `/metrics/idle-tick/median` for `bench world`, `/metrics/startup/median` for startup or `/signals/0/metrics/<key>` for a sweep; both bench lanes write the one `puck.bench.v1` report described under [`puck bench world`](#puck-bench-world). Numeric JSON strings from sweep metrics are accepted; absent or nonfinite values refuse. Use `~1` for `/` and `~0` for `~` within a key.
 
 `run [request-ids...]` takes one [`quiet` lease](#puck-lease-quieta-settle-window) for the pending snapshot, then runs before, after, before, after for `--repeats` paired rounds per request (1–100, default 5). New requests wait for the next window. `--wait` bounds lease acquisition; `--settle` defaults to 30 idle seconds; `--timeout-seconds` bounds each command including shutdown (default 600). The existing bench and sweep harnesses own every measurement; this verb does not time child-process wall clocks. Reports retain raw samples and source reports, plus median and interquartile range (linearly interpolated quartiles) for before, after and the paired **after minus before** difference. The paired median is computed from each pair's difference, not by subtracting the two independent medians.
 
@@ -3152,7 +3152,27 @@ switcher as its own sub-verb rather than inside it:
 ```sh
 puck bench world
 puck bench world path/to/world.puck
+puck bench world --repeats 5 --json
+puck bench world --world-artifact /frozen/after/Puck.World.dll --output /tmp/bench
 ```
+
+Every run is also one `puck.bench.v1` report (`BenchReport`), the record
+`puck bench startup` writes too: the measured build's identity (its version with
+the commit its runtime configuration records, and the SHA-256 of its engine
+assemblies), the host load read before, every five seconds during and after the
+run (CPU mean and peak, lowest free memory, any GPU holder or other heavy test
+run), and each metric as `median`, `p10` and `p90` over `--repeats` runs with
+every sample kept. `--json` prints it on standard output (the table moves to
+standard error); `--output <dir>` writes `report.json` in a unique run directory
+under it. The metrics are the timing rows (`idle-tick`, `paced-tick`,
+`server-construction`, the value-write, cell-burst, response-change and
+scene-emission ticks, each screen machine's tick, in ms), `quiet-tick-allocation`
+in bytes and the deterministic work counts (`work.<counter>` per tick). `puck
+measure` reads the idle tick as `/metrics/idle-tick/median`. With
+`--world-artifact`, the engine assemblies (and the packages the build carries)
+load from that World build in a load context of their own beside this CLI's bench
+code, so a frozen before/after pair measures two builds rather than one CLI
+twice; a build whose engine the bench code cannot call fails by name.
 
 ### `puck bench startup`
 
@@ -3186,10 +3206,13 @@ bounds failed runs. Shutdown time is excluded from both readiness intervals.
 `--samples` defaults to 3 and `--timeout-seconds` to 120 per process. `--output`
 selects the parent of a unique run directory (default `artifacts/startup`).
 The directory holds logs, captures, and `report.json`, updated after each child.
-The report records every sample, runtime, OS, artifact, dimensions, and the
-expected sample count. Any failed or missing sample suppresses the corpus
-summary; a completed failing run exits 1. A complete successful run reports
-mean, median, nearest-rank p95, and maximum. This is process-cold startup:
+The report is the `puck.bench.v1` record [`puck bench world`](#puck-bench-world)
+describes: every sample under `startup`, the runtime and OS, the World build's
+identity, the settings, and the host load. Any failed or missing sample leaves
+`metrics` empty and `complete` false; a completed failing run exits 1. A
+complete successful run reports the metric `startup` (console readiness
+headless, the completed capture windowed, in ms) as median, p10 and p90 over
+every sample of every world; `--json` prints the report. This is process-cold startup:
 disk, driver, and shader caches are retained. Measure cold-cache behavior
 separately and label it explicitly. Use a quiet machine and repeat discrepant
 measurements before treating a difference as an improvement.
