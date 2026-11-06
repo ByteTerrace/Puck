@@ -125,7 +125,7 @@ public static class LeaseCommand {
             var holder = new Option<string>(name: "--holder") { Description = "Holder name recorded with the holder process and acquisition time; its first word is the lane unless --lane names one.", Required = true };
             var lane = new Option<string?>(name: "--lane") { Description = "The lane admission rotates between; defaults to the first word of --holder." };
             var wait = new Option<int>(name: "--wait") { Description = "Seconds to wait for the lease; zero refuses immediately (default)." };
-            var kind = ((name == "gpu") ? new Option<HostStartKind?>(name: "--kind") { Description = "Expected peak class of the child command (default WindowedWorld); Step for a bounded small device check that boots no World. Changes the memory estimate, not lease ownership or admission thresholds." } : null);
+            var kind = ((name is "gpu" or "heavy") ? new Option<HostStartKind?>(name: "--kind") { Description = "Expected peak class of the child command (default WindowedWorld for gpu, HeavySuite for heavy); Step for a bounded focused check. Changes the memory estimate, not lease ownership or admission thresholds." } : null);
             var arguments = CliOptions.Forwarded(description: "Executable and arguments after --; no shell expansion is performed.", name: "command");
 
             arguments.Arity = ArgumentArity.OneOrMore;

@@ -292,6 +292,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_IDENTITY_WORD", value: SdfMeshProbeTrace.IdentityWord);
         declarations.Count(name: "SDF_PROBE_INSTANCE_INDEX_WORD", value: SdfMeshProbeTrace.InstanceIndexWord);
         declarations.Count(name: "SDF_PROBE_STACK_DEPTH", value: SdfMeshProbeTrace.StackDepth);
+        declarations.Count(name: "SDF_PROBE_MAX_WALK_STEPS", value: SdfMeshProbeTrace.MaxWalkSteps);
         declarations.Count(name: "SDF_PROBE_GROUP_SIZE", value: SdfMeshProbeTrace.GroupSize);
         declarations.Count(name: "SDF_PROBE_RELIGHT_OUTPUT_WORDS", value: SdfMeshProbeRelight.OutputWords);
         declarations.Count(name: "SDF_PROBE_RELIGHT_INPUT_WORDS", value: SdfMeshProbeRelight.InputWords);
