@@ -20,7 +20,10 @@ public static partial class CanaryCommand {
 
     public static Command Create() {
         var allOption = new Option<bool>(name: "--all") { Description = "Explicitly run every proof, including any declared environmental requirements; it does not promote any proof into the automatic set." };
-        var backendOption = new Option<string?>(name: "--backend") { Description = "Run every backend-declaring proof on this backend only: vulkan or directx. Both run when omitted, and the verdict names the backends that ran." };
+        var backendOption = WorldLaunch.BackendOption(
+            accepted: [Puck.World.WorldBackendPreference.Vulkan, Puck.World.WorldBackendPreference.DirectX],
+            description: "Run every backend-declaring proof on this backend only: vulkan or directx. Both run when omitted, and the verdict names the backends that ran."
+        );
         var capabilityOption = new Option<string>(name: "--capability") { Description = "Filter by automatic, headless, windowed, offscreen, gpu, audio-output, or input:<hardware-name>." };
         var idsArgument = new Argument<string[]>(name: "id") { Arity = ArgumentArity.ZeroOrMore, DefaultValueFactory = static _ => [], Description = "Run the named proofs explicitly, regardless of their declared requirements." };
         var listOption = new Option<bool>(name: "--list") { Description = "Strictly load and list the named manifests, or every manifest when no id is given, without building or running." };
@@ -38,8 +41,6 @@ public static partial class CanaryCommand {
             description: "Run bounded, two-leg behavioral proofs against the real Puck.World executable.",
             name: "canary"
         ) { idsArgument, allOption, backendOption, capabilityOption, debugLayersOption, gpuJobsOption, jobsOption, keepTranscriptsOption, listOption, mergeOption, planOption, worldArtifactOption };
-
-        backendOption.AcceptOnlyFromAmong(values: [.. WorldOffscreenLeg.Backends]);
 
         command.Detail(detail: $"""
               no selection           run the automatic set: headless shape and no environmental requirements
@@ -110,16 +111,14 @@ public static partial class CanaryCommand {
 
                 return;
             }
-            // The token, never GetValue: a value AcceptOnlyFromAmong refused throws when read. An unknown value is left to
-            // that refusal, which names it; this check speaks only for a backend that exists.
+            // The parsed value: an unknown backend is left to the option's own refusal, which names it; this check speaks
+            // only for a backend that exists.
             if (
                 (result.GetValue(option: mergeOption) || result.GetValue(option: listOption)) &&
                 (result.GetResult(option: backendOption) is { Tokens.Count: > 0 } backendResult) &&
-                (backendResult.Tokens[0].Value is var backend) &&
-                WorldOffscreenLeg.Backends.Contains(
-                    comparer: StringComparer.Ordinal,
-                    value: backend
-                )
+                !backendResult.Errors.Any() &&
+                (result.GetValue(option: backendOption) is { } parsed) &&
+                (Puck.World.WorldBackendTokens.Token(backend: parsed) is var backend)
             ) {
 
                 result.AddError(errorMessage: (result.GetValue(option: mergeOption)
@@ -149,7 +148,7 @@ public static partial class CanaryCommand {
         });
         command.SetAction(action: parseResult => Run(
             all: parseResult.GetValue(option: allOption),
-            backends: SelectBackends(backend: parseResult.GetValue(option: backendOption)),
+            backends: SelectBackends(backend: ((parseResult.GetValue(option: backendOption) is { } backend) ? Puck.World.WorldBackendTokens.Token(backend: backend) : null)),
             capability: parseResult.GetValue(option: capabilityOption),
             debugLayers: (parseResult.GetValue(option: debugLayersOption)
                 ? WorldOffscreenLeg.Backends
@@ -342,15 +341,14 @@ public static partial class CanaryCommand {
         string? stubBuildDirectory = null;
 
         // Every leg launches one World: the --world-artifact named, or the build keyed by this checkout's sources, reused
-        // when an earlier run built it and leased until the last leg has exited (see WorldArtifactBuild).
-        if (!WorldArtifactBuild.TryResolveNamed(
+        // when an earlier run built it and leased until the last leg has exited (see WorldLaunch.TryResolve).
+        if (!WorldLaunch.TryResolve(
+            build: out var world,
             error: out var buildError,
-            lease: out var world,
             logDirectory: worldBuildDirectory,
             named: worldArtifact,
-            path: out var artifact,
             repositoryRoot: repositoryRoot,
-            timeout: WorldArtifactBuild.BuildTimeout,
+            spirv: NeedsSpirv(proofs: proofs),
             verb: "canary"
         )) {
             Console.Error.WriteLine(value: $"ERROR: {buildError}");
@@ -359,6 +357,7 @@ public static partial class CanaryCommand {
         }
 
         using var lease = world;
+        var artifact = world.Path;
 
         Console.Error.WriteLine(value: $"canary: World artifact {artifact}");
 
@@ -1033,20 +1032,15 @@ public static partial class CanaryCommand {
 
         try {
             if (authorityExecutionWorld is { } authorityWorld) {
-                WorldAdmission.Wait(cancellationToken: budget.Cancellation, device: false, step: "canary");
+                using var companion = WorldLaunch.Admit(cancellationToken: budget.Cancellation, request: new WorldLaunchRequest(Artifact: artifact, Step: "canary") {
+                    Arguments = ["--federation-key-file", authorityFederationKeyPath!],
+                    ExitAfterSeconds = ((manifest.TimeoutSeconds + AuthorityCompanion.ListenSeconds) + AuthorityCompanion.QuitGraceSeconds),
+                    StateDirectory = Path.Combine(path1: runDirectory, path2: "authority-state"),
+                    World = authorityWorld,
+                });
+
                 budget.Tally.WorldStarted();
-                authority = AuthorityCompanion.Start(
-                    quitInput: RunnerQuit,
-                    artifact: artifact,
-                    cancellationToken: budget.Cancellation,
-                    exitAfterSeconds: ((manifest.TimeoutSeconds + AuthorityCompanion.ListenSeconds) + AuthorityCompanion.QuitGraceSeconds),
-                    world: authorityWorld,
-                    stateDirectory: Path.Combine(
-                        path1: runDirectory,
-                        path2: "authority-state"
-                    ),
-                    federationKeyPath: authorityFederationKeyPath!
-                );
+                authority = AuthorityCompanion.Start(cancellationToken: budget.Cancellation, launch: companion, quitInput: RunnerQuit);
                 if (!authority.WaitUntilListening(timeout: TimeSpan.FromSeconds(seconds: AuthorityCompanion.ListenSeconds))) {
                     budget.Cancellation.ThrowIfCancellationRequested();
 
@@ -1060,43 +1054,24 @@ public static partial class CanaryCommand {
                 }
             }
 
-            AdmitWorld(backend: backend, budget: budget, debugLayers: debugLayers, manifest: manifest);
-            budget.Tally.WorldStarted();
-            process = CliProcess.RunCaptured(
-                fileName: "dotnet",
-                arguments: [
-                    artifact,
-                    "--world", executionWorld,
-                    .. ((leg.Entry is null)
-                ? []
-                : new[] { "--entry", leg.Entry }),
-                            .. (leg.Connect
-                ? new[] { "--connect", federationEndpoint }
-                : []),
-                    .. ((clientFederationKeyPath is null)
-                ? []
-                : new[] { "--federation-key-file", clientFederationKeyPath }),
-                    "--state-dir", stateDirectory,
+            var request = LegRequest(artifact: artifact, backend: backend, debugLayers: debugLayers, manifest: manifest);
+            using var launch = WorldLaunch.Admit(cancellationToken: budget.Cancellation, request: request with {
+                Arguments = [
+                    .. ((leg.Entry is null) ? [] : new[] { "--entry", leg.Entry }),
+                    .. (leg.Connect ? new[] { "--connect", federationEndpoint } : []),
+                    .. ((clientFederationKeyPath is null) ? [] : new[] { "--federation-key-file", clientFederationKeyPath }),
                     .. (leg.RunSchedule ? new[] { "--schedule-dir", Path.Combine(path1: runDirectory, path2: "schedule") } : []),
-                    "--exit-after-seconds", manifest.TimeoutSeconds.ToString(provider: CultureInfo.InvariantCulture),
-                    .. BootShapeArguments(
-                    backend: backend,
-                    debugLayers: debugLayers,
-                    manifest: manifest
-                ),
+                    .. request.Arguments,
                 ],
-                cancellationToken: budget.Cancellation,
-                environment: (leg.HideShaderCompiler
-                    ? Qualification.QualificationPackage.LegEnvironment(
-                        compiler: Qualification.ReleaseCompilerDiscovery.None,
-                        holdsCompiler: Qualification.QualificationPackage.HoldsCompiler,
-                        searchPath: Environment.GetEnvironmentVariable(variable: "PATH")
-                    )
-                    : null),
-                input: input,
-                timeout: timeout
-            );
-        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
+                Environment = LegEnvironment(leg: leg),
+                ExitAfterSeconds = manifest.TimeoutSeconds,
+                StateDirectory = stateDirectory,
+                World = executionWorld,
+            });
+
+            budget.Tally.WorldStarted();
+            process = launch.Run(cancellationToken: budget.Cancellation, input: input, timeout: timeout);
+        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception or TimeoutException)) {
             return CanaryLegRun.InfrastructureFailure(
                 leg: leg,
                 runDirectory: runDirectory,
@@ -1216,34 +1191,21 @@ public static partial class CanaryCommand {
             CliProcessResult second;
 
             try {
-                AdmitWorld(backend: backend, budget: budget, debugLayers: debugLayers, manifest: manifest);
-                budget.Tally.WorldStarted();
-                second = CliProcess.RunCaptured(
-                    fileName: "dotnet",
-                    arguments: [
-                        artifact,
-                        "--world", relaunchWorld,
-                        "--state-dir", stateDirectory,
+                var request = LegRequest(artifact: artifact, backend: backend, debugLayers: debugLayers, manifest: manifest);
+                using var relaunched = WorldLaunch.Admit(cancellationToken: budget.Cancellation, request: request with {
+                    Arguments = [
                         .. (leg.RunSchedule ? new[] { "--schedule-dir", Path.Combine(path1: runDirectory, path2: "schedule-relaunch") } : []),
-                        "--exit-after-seconds", manifest.TimeoutSeconds.ToString(provider: CultureInfo.InvariantCulture),
-                        .. BootShapeArguments(
-                        backend: backend,
-                        debugLayers: debugLayers,
-                        manifest: manifest
-                    ),
+                        .. request.Arguments,
                     ],
-                    cancellationToken: budget.Cancellation,
-                    environment: (leg.HideShaderCompiler
-                        ? Qualification.QualificationPackage.LegEnvironment(
-                            compiler: Qualification.ReleaseCompilerDiscovery.None,
-                            holdsCompiler: Qualification.QualificationPackage.HoldsCompiler,
-                            searchPath: Environment.GetEnvironmentVariable(variable: "PATH")
-                        )
-                        : null),
-                    input: relaunchInput,
-                    timeout: timeout
-                );
-            } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
+                    Environment = LegEnvironment(leg: leg),
+                    ExitAfterSeconds = manifest.TimeoutSeconds,
+                    StateDirectory = stateDirectory,
+                    World = relaunchWorld,
+                });
+
+                budget.Tally.WorldStarted();
+                second = relaunched.Run(cancellationToken: budget.Cancellation, input: relaunchInput, timeout: timeout);
+            } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception or TimeoutException)) {
                 return CanaryLegRun.InfrastructureFailure(
                     leg: leg,
                     runDirectory: runDirectory,

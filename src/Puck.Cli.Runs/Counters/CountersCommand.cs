@@ -173,7 +173,7 @@ public static partial class CountersCommand {
         Console.Error.WriteLine(value: $"{Verb}: artifacts {CliPaths.ToDisplay(fullPath: runDirectory)}");
 
         if (!WorldOffscreenLeg.TryResolveWorld(
-            artifact: out var artifact,
+            build: out var artifact,
             repositoryRoot: repositoryRoot,
             runDirectory: runDirectory,
             verb: Verb
@@ -230,7 +230,7 @@ public static partial class CountersCommand {
         var report = new WorldCountersReport(
             Revision: new WorldCountersRevision(
                 Commit: commit,
-                SourceState: artifact.Key
+                SourceState: artifact.Key!
             ),
             Runs: runs,
             Script: CliPaths.ToDisplay(fullPath: workloadScriptPath, relativeTo: repositoryRoot),

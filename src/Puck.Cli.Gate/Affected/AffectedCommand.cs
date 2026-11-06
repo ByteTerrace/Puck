@@ -1,7 +1,6 @@
 using System.CommandLine;
 using Puck.Cli.Architecture;
 using Puck.Cli.Canary;
-using Puck.Cli.Gate;
 using Puck.Cli.Host;
 
 namespace Puck.Cli.Affected;
@@ -263,13 +262,13 @@ public static class AffectedCommand {
 
     // A plan line is repository-relative and runs from the root, so --run runs its in-process commands from the root
     // whatever directory the verb starts in.
-    private static int Execute(string repositoryRoot, AffectedPlan plan, bool gpu, int gpuJobs, int suiteJobs, RootCommand root, GateComposition composition) {
+    private static int Execute(string repositoryRoot, AffectedPlan plan, bool gpu, int gpuJobs, int suiteJobs, RootCommand root) {
         var caller = Environment.CurrentDirectory;
 
         Environment.CurrentDirectory = repositoryRoot;
 
         try {
-            return ExecuteAtRoot(composition: composition, gpu: gpu, gpuJobs: gpuJobs, plan: plan, repositoryRoot: repositoryRoot, root: root, suiteJobs: suiteJobs);
+            return ExecuteAtRoot(gpu: gpu, gpuJobs: gpuJobs, plan: plan, repositoryRoot: repositoryRoot, root: root, suiteJobs: suiteJobs);
         } finally {
             Environment.CurrentDirectory = caller;
         }
@@ -284,12 +283,12 @@ public static class AffectedCommand {
 
     // The caller holds CliLease for the heavy suite throughout this admission and execution. Sampling also
     // accounts for unleased heavy processes and memory/disk headroom; it is not mutual exclusion itself.
-    internal static bool AdmitHeavySuite(string repositoryRoot, string suite, IReadOnlyDictionary<string, Func<Command>> gpuVerbGrammars) {
-        return HostAdmission.Wait(cancellationToken: CancellationToken.None, clock: TimeProvider.System, device: false, error: Console.Error, heavySuite: true, probe: new HostProbe(checkoutRoot: repositoryRoot, gpuVerbGrammars: gpuVerbGrammars), step: suite);
+    internal static bool AdmitHeavySuite(string repositoryRoot, string suite) {
+        return HostAdmission.Wait(cancellationToken: CancellationToken.None, clock: TimeProvider.System, device: false, error: Console.Error, heavySuite: true, probe: new HostProbe(checkoutRoot: repositoryRoot), step: suite);
     }
 
     // Every other verb a run takes runs through the root that invoked this one.
-    private static int ExecuteAtRoot(string repositoryRoot, AffectedPlan plan, bool gpu, int gpuJobs, int suiteJobs, RootCommand root, GateComposition composition) {
+    private static int ExecuteAtRoot(string repositoryRoot, AffectedPlan plan, bool gpu, int gpuJobs, int suiteJobs, RootCommand root) {
         var failed = new List<string>();
 
         if (CheckCanaries(ids: plan.CanaryChecks, root: root) != 0) {
@@ -302,7 +301,6 @@ public static class AffectedCommand {
 
         // The suites build once and run their CPU tests side by side (AffectedSuites).
         failed.AddRange(collection: AffectedSuites.Run(
-            gpuVerbGrammars: composition.GpuVerbGrammars,
             jobs: suiteJobs,
             repositoryRoot: repositoryRoot,
             suites: plan.Suites
@@ -382,7 +380,7 @@ public static class AffectedCommand {
 
     }
 
-    private static int Run(string? since, string? mergeBase, bool run, bool gpu, int gpuJobs, int suiteJobs, RootCommand root, GateComposition composition) {
+    private static int Run(string? since, string? mergeBase, bool run, bool gpu, int gpuJobs, int suiteJobs, RootCommand root) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refuse(verb: Verb, what: Environment.CurrentDirectory, why: "is not inside the Puck repository.");
         }
@@ -417,7 +415,7 @@ public static class AffectedCommand {
         );
 
         return (run
-            ? Execute(composition: composition, gpu: gpu, gpuJobs: gpuJobs, plan: plan, repositoryRoot: repositoryRoot, root: root, suiteJobs: suiteJobs)
+            ? Execute(gpu: gpu, gpuJobs: gpuJobs, plan: plan, repositoryRoot: repositoryRoot, root: root, suiteJobs: suiteJobs)
             : CliExit.Success
         );
     }
@@ -433,9 +431,8 @@ public static class AffectedCommand {
     internal static Option<bool> Gpu() => new(name: "--gpu") { Description = "Also run the chosen canaries, up to --gpu-jobs legs on the GPU at once, after the CPU checks: real-World and GPU work, so run it on a machine with no competing build or GPU load." };
 
     /// <summary>Creates <c>puck affected</c>.</summary>
-    /// <param name="composition">What the verb reads from the verbs composed beside it.</param>
     /// <returns>The command.</returns>
-    public static Command Create(GateComposition composition) {
+    public static Command Create() {
         var sinceOption = new Option<string>(name: "--since") { Description = "The base revision the working tree is compared against (default: HEAD, so only uncommitted changes)." };
         var mergeBaseOption = MergeBase(description: "Compare the working tree against the merge base of HEAD and this revision, so what the target gained after the branch left it is not the branch's change. Excludes --since.");
         var runOption = new Option<bool>(name: "--run") { Description = "Build the chosen suites once and run their CPU tests side by side, then puck test on the chosen worlds." };
@@ -504,8 +501,7 @@ public static class AffectedCommand {
             run: parseResult.GetValue(option: runOption),
             since: parseResult.GetValue(option: sinceOption),
             suiteJobs: parseResult.GetValue(option: suiteJobsOption),
-            root: ((RootCommand)parseResult.RootCommandResult.Command),
-            composition: composition
+            root: ((RootCommand)parseResult.RootCommandResult.Command)
         ));
 
         return command;

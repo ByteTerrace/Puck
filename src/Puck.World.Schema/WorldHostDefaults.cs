@@ -140,20 +140,6 @@ public sealed record WorldPlacementPolicyDefaults(
         );
     }
 }
-/// <summary>Which graphics backend a world prefers. <see cref="Auto"/> — the default — picks the OS-appropriate backend,
-/// so a shared world document is portable across an OS boundary; an explicit preference the running OS cannot satisfy
-/// degrades loudly (a document author preference) or hard-exits (a CLI operator assertion) rather than silently
-/// mispresenting.</summary>
-public enum WorldBackendPreference : byte {
-    /// <summary>Pick the OS-appropriate backend at boot — Direct3D 12 on Windows 10+, Vulkan elsewhere.</summary>
-    Auto,
-
-    /// <summary>Prefer Direct3D 12.</summary>
-    DirectX,
-
-    /// <summary>Prefer Vulkan.</summary>
-    Vulkan,
-}
 /// <summary>
 /// The world's simulation rate — how many fixed steps the authoritative server advances per second. It is simulation
 /// state, unlike <see cref="WorldHostDefaults"/> (presentation-only, never simulation state): the rate is
@@ -240,7 +226,7 @@ public enum WorldHostPresentation : byte {
 /// this facet, and narrates the settlement on stderr. The source row retains its value and draw bookkeeping.
 /// <para>Its natural spelling is a weighted text source over the backend tokens (<c>auto</c>/<c>directx</c>/
 /// <c>vulkan</c> — a one-context Markov table with <c>bound</c> 1, the degenerate flat weighted draw), parsed through
-/// <see cref="WorldHostTokens.ParseBackend"/> at settle. A token naming no backend refuses by name. Drawing the name
+/// <see cref="WorldBackendTokens.Parse"/> at settle. A token naming no backend refuses by name. Drawing the name
 /// rather than an ordinal is deliberate: an ordinal draw over an enum silently re-points itself the day a member is
 /// inserted, and reads at the authoring site as a number nothing explains.</para>
 /// <para>Declared together with <paramref name="Backend"/> it is refused by name — this record is a class, so

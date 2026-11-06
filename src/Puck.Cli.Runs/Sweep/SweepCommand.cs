@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 
 using Puck.Abstractions;
+using Puck.World;
 
 namespace Puck.Cli.Sweep;
 
@@ -34,7 +35,7 @@ public static partial class SweepCommand {
         var noScenariosOption = new Option<bool>(name: "--no-scenarios") { Description = "Skip the plan's scenario set for a focused tools or tour run." };
         var worldOption = new Option<string>(name: "--world") { Description = $"The world to boot; {DefaultWorld} when omitted." };
         var artifactOption = new Option<string>(name: "--world-artifact") { Description = "Run this Puck.World entry assembly instead of the build of the checkout's sources. Never builds." };
-        var backendOption = new Option<string>(name: "--backend") { Description = "The graphics backend for a new windowed World; its default when omitted. Requires --tour and cannot change an attached World." };
+        var backendOption = WorldLaunch.BackendOption(description: "The graphics backend for a new windowed World: auto, directx or vulkan; the document's when omitted. Requires --tour and cannot change an attached World.");
         var captureToolOption = new Option<string>(name: "--capture-tool") { Description = "Load the World's existing GPU capture tool before device creation (pix or renderdoc), so a plan can invoke gpu.capture. Requires a new windowed World." };
         var cacheOption = new Option<string>(name: "--cache-dir") { Description = "The World's device-cache root, shared by fresh Worlds; its per-user default when omitted. Use a writable lane directory in a sandbox." };
         var timeoutOption = new Option<int>(name: "--timeout") { DefaultValueFactory = static _ => 40, Description = "The most minutes the whole run may take, a build excepted: every World call, boot, lease wait and scenario process is bounded by what remains." };
@@ -97,7 +98,7 @@ public static partial class SweepCommand {
         return command;
     }
 
-    private static int Run(string? planPath, string? output, string? baselinePath, bool tour, string? attach, bool noHeadless, bool noScenarios, string[] stops, string[] scenarios, string? worldPath, string? artifact, string? cacheDirectory, string? backend, string? captureTool, int timeoutMinutes, CancellationToken cancellation) {
+    private static int Run(string? planPath, string? output, string? baselinePath, bool tour, string? attach, bool noHeadless, bool noScenarios, string[] stops, string[] scenarios, string? worldPath, string? artifact, string? cacheDirectory, WorldBackendPreference? backend, string? captureTool, int timeoutMinutes, CancellationToken cancellation) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -159,12 +160,12 @@ public static partial class SweepCommand {
         IDisposable? build = null;
 
         if (!noHeadless || (windowed && (attach is null))) {
-            if (!WorldArtifactBuild.TryResolveNamed(error: out var buildError, lease: out var lease, logDirectory: directory, named: artifact, path: out var resolved, repositoryRoot: repositoryRoot, timeout: WorldArtifactBuild.BuildTimeout, verb: Verb)) {
+            if (!WorldLaunch.TryResolve(build: out var resolved, error: out var buildError, logDirectory: directory, named: artifact, repositoryRoot: repositoryRoot, spirv: (windowed && (attach is null) && WorldLaunch.NeedsSpirv(backend: backend, shape: WorldShape.Windowed)), verb: Verb)) {
                 return CliExit.Refuse(verb: Verb, what: "the World build", why: buildError.ReplaceLineEndings(replacementText: " "));
             }
 
-            entry = resolved;
-            build = lease;
+            entry = resolved.Path;
+            build = resolved;
         }
 
         // The whole sweep, a build and its lease waits excepted, is bounded by one budget, and an interrupt ends it the same way: every
@@ -178,15 +179,12 @@ public static partial class SweepCommand {
                 var logs = Path.Combine(path1: directory, path2: SweepLegs.Headless);
 
                 if (!SweepWorld.TryBoot(
-                    arguments: Arguments(cacheDirectory: cacheDirectory, deadline: deadline, extra: ["--headless", "true", "--unpaced", "true", "--paused"], state: Path.Combine(path1: logs, path2: "state"), world: world),
-                    artifact: entry!,
                     bootTimeout: TimeSpan.FromMinutes(value: 5),
                     budget: budget,
                     error: out var bootError,
-                    lease: null,
                     logDirectory: logs,
-                    session: out var booted,
-                    workingDirectory: repositoryRoot
+                    request: Request(artifact: entry!, cacheDirectory: cacheDirectory, deadline: deadline, extra: ["--unpaced", "true", "--paused"], repositoryRoot: repositoryRoot, shape: WorldShape.Headless, state: Path.Combine(path1: logs, path2: "state"), world: world),
+                    session: out var booted
                 )) {
                     return (cancellation.IsCancellationRequested ? CliExit.Cancelled : CliExit.Refuse(verb: Verb, what: "the headless World", why: bootError));
                 }
@@ -214,41 +212,16 @@ public static partial class SweepCommand {
                 } else {
                     logs = Path.Combine(path1: directory, path2: SweepLegs.Windowed);
 
-                    var arguments = Arguments(cacheDirectory: cacheDirectory, deadline: deadline, extra: ["--headless", "false", "--paused"], state: Path.Combine(path1: logs, path2: "state"), world: world);
-                    if (backend is not null) { arguments.AddRange(collection: ["--backend", backend]); }
-                    if (captureTool is not null) { arguments.AddRange(collection: ["--capture-tool", captureTool]); }
-                    CliLease? gpu = null;
+                    var request = Request(artifact: entry!, cacheDirectory: cacheDirectory, deadline: deadline, extra: ["--paused", .. ((captureTool is null) ? [] : new[] { "--capture-tool", captureTool })], repositoryRoot: repositoryRoot, shape: WorldShape.Windowed, state: Path.Combine(path1: logs, path2: "state"), world: world) with { Backend = backend };
 
-                    try {
-                        // Waiting in the GPU queue is other runs' time, so the sweep's own budget stands still for it.
-                        using (budget.Pause()) {
-                            gpu = CliLease.AcquireAsync(
-                                ancestor: ProcessInspection.IsAncestor,
-                                checkout: repositoryRoot,
-                                cancellationToken: cancellation,
-                                clock: TimeProvider.System,
-                                holder: Verb,
-                                lane: CliLease.LaneOf(checkout: repositoryRoot),
-                                name: "gpu",
-                                root: CliLease.RootAsync(cancellationToken: cancellation, checkout: repositoryRoot).GetAwaiter().GetResult(),
-                                wait: CliLease.DefaultWait
-                            ).GetAwaiter().GetResult();
-                        }
-                    } catch (Exception exception) when ((exception is TimeoutException or OperationCanceledException)) {
-                        signals.Add(item: WindowedNotRun(reason: $"the GPU lease was not acquired: {exception.Message}"));
-                    }
-
-                    // The boot owns the lease from here: it releases it on every path that returns no World or throws.
-                    if ((gpu is not null) && !SweepWorld.TryBoot(
-                        arguments: arguments,
-                        artifact: entry!,
+                    // The launch takes the GPU lease, nested under an outer holder, and the World releases it when it stops.
+                    if (!SweepWorld.TryBoot(
                         bootTimeout: TimeSpan.FromMinutes(value: 5),
                         budget: budget,
                         error: out var bootError,
-                        lease: gpu,
                         logDirectory: logs,
-                        session: out rendered,
-                        workingDirectory: repositoryRoot
+                        request: request,
+                        session: out rendered
                     )) {
                         return (cancellation.IsCancellationRequested ? CliExit.Cancelled : CliExit.Refuse(verb: Verb, what: "the windowed World", why: bootError));
                     }
@@ -318,14 +291,15 @@ public static partial class SweepCommand {
         return (report.Failed ? CliExit.Failed : CliExit.Success);
     }
     private static SweepSignalResult WindowedNotRun(string reason) => new(Changes: [], File: string.Empty, Leg: SweepLegs.Windowed, Line: string.Empty, Metrics: new Dictionary<string, string>(), Name: "windowed-leg", Reasons: [$"not run: {reason}"], Status: SweepStatus.Unknown);
-    private static List<string> Arguments(string world, string state, string? cacheDirectory, TimeSpan deadline, IReadOnlyList<string> extra) => [
-        "--world", world,
-        .. WorldDevices.NoneArguments,
-        "--state-dir", state,
-        .. ((cacheDirectory is null) ? Array.Empty<string>() : ["--cache-dir", PuckPaths.Normalize(path: cacheDirectory)]),
-        "--exit-after-seconds", (((int)deadline.TotalSeconds) + 120).ToString(provider: CultureInfo.InvariantCulture),
-        .. extra,
-    ];
+    private static bool SamePath(string left, string right) => string.Equals(a: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: left)), b: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: right)), comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+    private static WorldLaunchRequest Request(string artifact, string world, string state, string? cacheDirectory, TimeSpan deadline, WorldShape shape, string repositoryRoot, IReadOnlyList<string> extra) => new(Artifact: artifact, Step: Verb) {
+        Arguments = [.. ((cacheDirectory is null) ? Array.Empty<string>() : ["--cache-dir", PuckPaths.Normalize(path: cacheDirectory)]), .. extra],
+        ExitAfterSeconds = WorldLaunch.Backstop(deadline: deadline),
+        Shape = shape,
+        StateDirectory = state,
+        WorkingDirectory = repositoryRoot,
+        World = world,
+    };
     // Each file through this CLI's own puck test, one worker at a time, read from its "test <name>:" and
     // "<passed>/<total> verdict(s) passed" lines and its exit code.
     private static SweepScenarioResult Scenarios(string? artifact, SweepBudget budget, string? cacheDirectory, string directory, string[] files, string repositoryRoot) {
@@ -375,49 +349,41 @@ public static partial class SweepCommand {
             return new SweepScenarioResult(Command: command, Reasons: [$"not run: {over}"], Status: SweepStatus.Unknown, Worlds: new Dictionary<string, string>());
         }
 
-        var startInfo = new ProcessStartInfo {
-            FileName = "dotnet",
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            WorkingDirectory = repositoryRoot,
-        };
-
-        startInfo.ArgumentList.Add(item: PuckPaths.Normalize(path: typeof(SweepCommand).Assembly.Location.Replace(newValue: "Puck.Cli.dll", oldValue: "Puck.Cli.Runs.dll")));
-        startInfo.ArgumentList.Add(item: "test");
-
-        startInfo.ArgumentList.Add(item: file);
-
-        startInfo.ArgumentList.Add(item: "--jobs");
-        startInfo.ArgumentList.Add(item: "1");
-        startInfo.ArgumentList.Add(item: "--keep");
-        startInfo.ArgumentList.Add(item: Path.Combine(path1: directory, path2: "run"));
-        if (artifact is not null) {
-            startInfo.ArgumentList.Add(item: "--world-artifact");
-            startInfo.ArgumentList.Add(item: PuckPaths.Normalize(path: artifact));
-        }
-        if (cacheDirectory is not null) {
-            startInfo.ArgumentList.Add(item: "--cache-dir");
-            startInfo.ArgumentList.Add(item: PuckPaths.Normalize(path: cacheDirectory));
-        }
-
-        using var process = (Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException(message: "Failed to start dotnet."));
-        Console.Error.WriteLine(value: $"sweep: scenario process {process.Id.ToString(provider: CultureInfo.InvariantCulture)}");
-        var error = process.StandardError.ReadToEndAsync();
-        var output = process.StandardOutput.ReadToEndAsync();
+        string[] arguments = [
+            PuckPaths.Normalize(path: typeof(SweepCommand).Assembly.Location.Replace(newValue: "Puck.Cli.dll", oldValue: "Puck.Cli.Runs.dll")),
+            "test", file, "--jobs", "1", "--keep", Path.Combine(path1: directory, path2: "run"),
+            .. ((artifact is null) ? [] : new[] { "--world-artifact", PuckPaths.Normalize(path: artifact) }),
+            .. ((cacheDirectory is null) ? [] : new[] { "--cache-dir", PuckPaths.Normalize(path: cacheDirectory) }),
+        ];
         string? unfinished = null;
+        var stdout = string.Empty;
+        var stderr = string.Empty;
+        var exitCode = 0;
 
-        // The run ends with the sweep's time, and takes its process tree with it.
+        // The run ends with the sweep's time, and takes its process tree with it; it joins the job that ends it with this
+        // process, so the Worlds it starts never outlive the sweep.
         try {
-            process.WaitForExitAsync(cancellationToken: budget.Token).GetAwaiter().GetResult();
+            var run = CliProcess.RunCaptured(
+                arguments: arguments,
+                cancellationToken: budget.Token,
+                fileName: "dotnet",
+                input: string.Empty,
+                started: process => {
+                    ChildProcessJob.Assign(process: process);
+                    Console.Error.WriteLine(value: $"sweep: scenario process {process.Id.ToString(provider: CultureInfo.InvariantCulture)}");
+                },
+                timeout: Timeout.InfiniteTimeSpan,
+                workingDirectory: repositoryRoot
+            );
+
+            stdout = run.Stdout;
+            stderr = run.Stderr;
+            exitCode = run.ExitCode;
         } catch (OperationCanceledException) {
             unfinished = $"puck test did not finish: {budget.Reason}";
-            process.Kill(entireProcessTree: true);
-            process.WaitForExit();
+        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
+            unfinished = $"puck test did not start: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
         }
-
-        var stdout = output.GetAwaiter().GetResult();
-        var stderr = error.GetAwaiter().GetResult();
 
         File.WriteAllText(contents: (stdout + stderr), path: Path.Combine(path1: directory, path2: "scenarios.txt"));
 
@@ -450,11 +416,11 @@ public static partial class SweepCommand {
         if (unfinished is not null) {
             reasons.Add(item: unfinished);
             status = SweepStatus.Unknown;
-        } else if (process.ExitCode != 0) {
+        } else if (exitCode != 0) {
             status = SweepStatus.Red;
 
             if (reasons.Count == 0) {
-                reasons.Add(item: $"puck test exited {process.ExitCode.ToString(provider: CultureInfo.InvariantCulture)}; see scenarios.txt");
+                reasons.Add(item: $"puck test exited {exitCode.ToString(provider: CultureInfo.InvariantCulture)}; see scenarios.txt");
             }
         } else if (worlds.Count == 0) {
             reasons.Add(item: "puck test exited 0 but printed no verdict; see scenarios.txt");

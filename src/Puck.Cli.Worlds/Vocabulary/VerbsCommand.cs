@@ -40,25 +40,16 @@ public static class VerbsCommand {
     // One boot leg: the affordance manifest of a headless or a windowed World, or null with the reason printed.
     private static List<CommandMetadata>? Boot(string artifact, string repositoryRoot, string runDirectory, bool headless, string? cacheDirectory) {
         var shape = (headless ? "headless" : "windowed");
-        string[] arguments = [
-            artifact,
-            "--world", Path.Combine(paths: [repositoryRoot, "worlds", "debug"]),
-            .. WorldDevices.NoneArguments,
-            "--headless", (headless ? "true" : "false"),
-            "--exit-after-seconds", "60",
-            "--state-dir", Path.Combine(path1: runDirectory, path2: $"state-{shape}"),
-            .. ((cacheDirectory is null) ? Array.Empty<string>() : ["--cache-dir", cacheDirectory]),
-        ];
+        using var launch = WorldLaunch.Admit(request: new WorldLaunchRequest(Artifact: artifact, Step: Verb) {
+            Arguments = ((cacheDirectory is null) ? [] : ["--cache-dir", cacheDirectory]),
+            ExitAfterSeconds = 60,
+            Shape = (headless ? WorldShape.Headless : WorldShape.Windowed),
+            StateDirectory = Path.Combine(path1: runDirectory, path2: $"state-{shape}"),
+            WorkingDirectory = runDirectory,
+            World = Path.Combine(paths: [repositoryRoot, "worlds", "debug"]),
+        });
 
-        WorldAdmission.Wait(step: Verb, worldArguments: arguments);
-
-        var process = CliProcess.RunCaptured(
-            arguments: arguments,
-            fileName: "dotnet",
-            input: $"world.affordances{Environment.NewLine}quit{Environment.NewLine}",
-            timeout: TimeSpan.FromSeconds(value: 120),
-            workingDirectory: runDirectory
-        );
+        var process = launch.Run(input: $"world.affordances{Environment.NewLine}quit{Environment.NewLine}", timeout: TimeSpan.FromSeconds(value: 120));
 
         if (process.TimedOut || (process.ExitCode != 0) || (ReadAffordances(stdout: process.Stdout) is not { Count: > 0 } verbs)) {
             Console.Error.WriteLine(value: $"{Verb}: the {shape} Puck.World boot {(process.TimedOut ? "timed out" : $"exited {process.ExitCode}")} without a world.affordances manifest; its stderr ends: {string.Join(separator: " | ", values: process.Stderr.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n').Where(predicate: static line => (line.Trim().Length != 0)).TakeLast(count: 4))}");
@@ -76,14 +67,13 @@ public static class VerbsCommand {
         var runDirectory = Directory.CreateTempSubdirectory(prefix: "puck-verbs-").FullName;
 
         try {
-            if (!WorldArtifactBuild.TryResolveNamed(
+            if (!WorldLaunch.TryResolve(
                 named: worldArtifact,
-                path: out var artifact,
-                lease: out var world,
+                build: out var world,
                 error: out var error,
                 logDirectory: runDirectory,
                 repositoryRoot: repositoryRoot,
-                timeout: WorldArtifactBuild.BuildTimeout,
+                spirv: (!headlessOnly && WorldLaunch.NeedsSpirv(backend: null, shape: WorldShape.Windowed)),
                 verb: Verb
             )) {
                 Console.Error.WriteLine(value: $"{Verb}: {error}");
@@ -95,7 +85,7 @@ public static class VerbsCommand {
 
             using (world) {
                 foreach (var headless in (headlessOnly ? new[] { true } : new[] { true, false })) {
-                    if (Boot(artifact: artifact, cacheDirectory: cacheDirectory, headless: headless, repositoryRoot: repositoryRoot, runDirectory: runDirectory) is not { } shape) {
+                    if (Boot(artifact: world.Path, cacheDirectory: cacheDirectory, headless: headless, repositoryRoot: repositoryRoot, runDirectory: runDirectory) is not { } shape) {
                         return 1;
                     }
 

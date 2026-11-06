@@ -1,6 +1,5 @@
 using System.Globalization;
 
-using Puck.Cli.Motion;
 using Puck.Hosting;
 using Puck.Networking;
 
@@ -21,18 +20,16 @@ public sealed class SweepWorld : IDisposable {
 
     private readonly SweepBudget m_budget;
     private readonly string m_attachment;
-    private readonly IDisposable? m_lease;
-    private readonly MotionWorldProcess? m_process;
+    private readonly WorldProcess? m_process;
 
     // A call that passes its deadline closes the session it ran on, since its answer's place in the ordered stream
     // is unknown; the World lives on, so the next call attaches a session of its own (see Reattach).
     private LocalControlClient m_client;
 
-    private SweepWorld(string attachment, LocalControlClient client, MotionWorldProcess? process, IDisposable? lease, string leg, SweepBudget budget) {
+    private SweepWorld(string attachment, LocalControlClient client, WorldProcess? process, string leg, SweepBudget budget) {
         m_attachment = attachment;
         m_budget = budget;
         m_client = client;
-        m_lease = lease;
         m_process = process;
         Leg = leg;
     }
@@ -67,60 +64,51 @@ public sealed class SweepWorld : IDisposable {
             return false;
         }
 
-        return TryConnect(budget: budget, error: out error, lease: null, path: path, process: null, session: out session);
+        return TryConnect(budget: budget, error: out error, path: path, process: null, session: out session);
     }
-    /// <summary>Boots a World and attaches to it.</summary>
-    /// <param name="artifact">The World build's entry assembly.</param>
-    /// <param name="arguments">The World's arguments, <c>--control</c> excluded.</param>
-    /// <param name="workingDirectory">The directory the World runs in.</param>
+    /// <summary>Boots a World and attaches to it. A windowed World runs under the GPU lease its launch takes, which the
+    /// returned World releases when it stops.</summary>
+    /// <param name="request">The World to boot, <c>--control</c> excluded.</param>
     /// <param name="logDirectory">The directory that receives the World's <c>stdout.log</c> and <c>stderr.log</c>.</param>
-    /// <param name="lease">The GPU lease a windowed World holds until it stops, or <see langword="null"/>; this
-    /// method owns it from the call on: the returned World releases it, and so does every path that returns no World
-    /// or throws.</param>
     /// <param name="bootTimeout">How long the World may take to publish its attachment.</param>
     /// <param name="budget">The budget every call of the booted World honours, and the boot with it.</param>
     /// <param name="session">The booted World.</param>
     /// <param name="error">Why no World was booted.</param>
     /// <returns><see langword="true"/> when the World booted and attached.</returns>
-    public static bool TryBoot(string artifact, IReadOnlyList<string> arguments, string workingDirectory, string logDirectory, IDisposable? lease, TimeSpan bootTimeout, SweepBudget budget, out SweepWorld? session, out string error) {
-        MotionWorldProcess? process = null;
+    public static bool TryBoot(WorldLaunchRequest request, string logDirectory, TimeSpan bootTimeout, SweepBudget budget, out SweepWorld? session, out string error) {
+        WorldProcess? process = null;
         var attached = false;
 
         session = null;
 
         try {
-            // Waiting for the host's headroom is other runs' time, so the sweep's own budget stands still for it.
-            using (budget.Pause()) {
-                WorldAdmission.Wait(step: "sweep", worldArguments: arguments, cancellationToken: budget.Token);
+            // Waiting for the GPU lease and the host's headroom is other runs' time, so the sweep's own budget stands still for it.
+            using (var launch = WorldLaunch.Admit(cancellationToken: budget.Token, queue: budget.Pause, request: request with { Arguments = [.. request.Arguments, "--control"] })) {
+                process = launch.Start(logDirectory: logDirectory);
             }
 
-            process = MotionWorldProcess.Start(
-                arguments: [.. arguments, "--control"],
-                artifact: artifact,
-                logDirectory: logDirectory,
-                workingDirectory: workingDirectory
-            );
-
-            attached = TryAttachPublished(process: process, ownedProcess: process, lease: lease,
+            attached = TryAttachPublished(process: process, ownedProcess: process,
                 bootTimeout: bootTimeout, budget: budget, session: out session, error: out error);
 
             return attached;
         } catch (OperationCanceledException) {
             error = (budget.Reason ?? "the start was cancelled");
             return false;
+        } catch (Exception exception) when ((exception is InvalidOperationException or TimeoutException or System.ComponentModel.Win32Exception)) {
+            error = exception.Message.ReplaceLineEndings(replacementText: " ");
+            return false;
         } finally {
             if (!attached) {
                 process?.Dispose();
-                lease?.Dispose();
             }
         }
     }
     /// <summary>Waits for and attaches to an already-started process. The caller keeps ownership of the process;
     /// disposing this attachment closes only its control session, on success or failure.</summary>
-    public static bool TryAttach(MotionWorldProcess process, TimeSpan bootTimeout, SweepBudget budget, out SweepWorld? session, out string error) {
+    public static bool TryAttach(WorldProcess process, TimeSpan bootTimeout, SweepBudget budget, out SweepWorld? session, out string error) {
         ArgumentNullException.ThrowIfNull(process);
         try {
-            return TryAttachPublished(process: process, ownedProcess: null, lease: null, bootTimeout: bootTimeout,
+            return TryAttachPublished(process: process, ownedProcess: null, bootTimeout: bootTimeout,
                 budget: budget, session: out session, error: out error);
         } catch (OperationCanceledException) {
             session = null;
@@ -128,7 +116,7 @@ public sealed class SweepWorld : IDisposable {
             return false;
         }
     }
-    private static bool TryAttachPublished(MotionWorldProcess process, MotionWorldProcess? ownedProcess, IDisposable? lease,
+    private static bool TryAttachPublished(WorldProcess process, WorldProcess? ownedProcess,
         TimeSpan bootTimeout, SweepBudget budget, out SweepWorld? session, out string error) {
         session = null;
         var line = process.WaitFor(
@@ -138,7 +126,7 @@ public sealed class SweepWorld : IDisposable {
             error = budget.Reason ?? $"World pid {process.ProcessId} never published its Operator attachment; inspect its stdout.log.";
             return false;
         }
-        return TryConnect(budget: budget, error: out error, lease: lease,
+        return TryConnect(budget: budget, error: out error,
             path: line.Text[AttachmentLine.Length..].TrimEnd(']'), process: ownedProcess, session: out session);
     }
 
@@ -224,12 +212,11 @@ public sealed class SweepWorld : IDisposable {
                 m_process?.Dispose();
             } finally {
                 m_client.Dispose();
-                m_lease?.Dispose();
             }
         }
     }
 
-    private static bool TryConnect(string path, MotionWorldProcess? process, IDisposable? lease, SweepBudget budget, out SweepWorld? session, out string error) {
+    private static bool TryConnect(string path, WorldProcess? process, SweepBudget budget, out SweepWorld? session, out string error) {
         LocalControlClient client;
 
         session = null;
@@ -257,7 +244,7 @@ public sealed class SweepWorld : IDisposable {
         // A World that composes no renderer refuses the readiness wait by saying so.
         var leg = ((probe.IsError && probe.Output.Contains(comparisonType: StringComparison.Ordinal, value: "composes no renderer")) ? SweepLegs.Headless : SweepLegs.Windowed);
 
-        session = new SweepWorld(attachment: path, budget: budget, client: client, lease: lease, leg: leg, process: process);
+        session = new SweepWorld(attachment: path, budget: budget, client: client, leg: leg, process: process);
         error = string.Empty;
 
         return true;

@@ -307,10 +307,10 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     WorldBackendPreference? backendOverride = null;
 
     if (parseResult.GetValue(option: backendOption) is { } backendName) {
-        backendOverride = WorldHostTokens.ParseBackend(token: backendName);
+        backendOverride = WorldBackendTokens.Parse(token: backendName);
 
         if (backendOverride is null) {
-            Console.Error.WriteLine(value: $"Unknown --backend '{backendName}'; expected auto, directx, or vulkan.");
+            Console.Error.WriteLine(value: $"--backend {WorldBackendTokens.Refusal(token: backendName)}.");
 
             return 1;
         }
@@ -509,7 +509,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         return 1;
     }
     if (hostSettings.BackendDowngraded) {
-        Console.Error.WriteLine(value: $"[world.host] backend \"{WorldHostTokens.BackendToken(backend: hostSettings.RequestedBackend)}\" is unavailable on this OS; hosting on Vulkan instead.");
+        Console.Error.WriteLine(value: $"[world.host] backend \"{WorldBackendTokens.Token(backend: hostSettings.RequestedBackend)}\" is unavailable on this OS; hosting on Vulkan instead.");
     }
     // The capture tool loads here, after the backend is settled and before anything below can create a device.
     IGpuCaptureTool? captureTool = null;

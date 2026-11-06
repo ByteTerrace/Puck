@@ -1562,7 +1562,7 @@ refuses a keyed site. `bodies.capacityRow`/
 `host.backendRow` are boot-time READS layered over this, resolved AFTER every
 row's first fill so a boot-drawn row is readable the same boot it draws:
 `capacityRow` names a scalar `int` row, `backendRow` a scalar `text` row
-(parsed through `WorldHostTokens.ParseBackend`, refusing a token naming no
+(parsed through `WorldBackendTokens.Parse`, refusing a token naming no
 backend—never an unnamed ordinal, which would silently re-point itself the
 day an enum member is inserted). Each reads the row's slot into the ordinary
 literal field (`bodies.capacity`/`host.backend`) and narrates the read on
