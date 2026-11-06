@@ -692,7 +692,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// recovery waits and calls again within its budget. Any other failure ends the recovery.</para></summary>
     /// <param name="reinitialize">Rebinds the host's own device objects once the device exists, or
     /// <see langword="null"/> when the host has none.</param>
-    /// <exception cref="InvalidOperationException">A device-local allocation counted in <see cref="Memory"/> was still held on
+    /// <exception cref="InvalidOperationException">An allocation counted in <see cref="Memory"/>, device-local or host-visible, was still held on
     /// the old device; the message names each one, the old device is released, and no new device is created.</exception>
     /// <exception cref="DeviceLostException">No device could be created yet, or <paramref name="reinitialize"/> failed in
     /// Direct3D 12; the next call tries again.</exception>
@@ -727,7 +727,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// releases the command queue and the owned device. With the debug layer on, every object the device still
     /// holds once the context has released its own is written as a <c>[d3d12-debug] live</c> line before the device is
     /// released. Safe to call more than once.</summary>
-    /// <exception cref="InvalidOperationException">A device-local allocation counted in <see cref="Memory"/> was still held on
+    /// <exception cref="InvalidOperationException">An allocation counted in <see cref="Memory"/>, device-local or host-visible, was still held on
     /// the device; the message names each one, and the device is released regardless.</exception>
     public void Dispose() {
         if (m_disposed) {

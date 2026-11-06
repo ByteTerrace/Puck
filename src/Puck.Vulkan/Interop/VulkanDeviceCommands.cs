@@ -213,8 +213,8 @@ public sealed unsafe class VulkanDeviceCommands {
     /// standing in for the driver.</param>
     /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> is zero.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="procedures"/> is <see langword="null"/>.</exception>
-    /// <param name="memory">The device-local memory counts every allocation made through this table joins, or
-    /// <see langword="null"/> to count none.</param>
+    /// <param name="memory">The device's memory counts every allocation made through this table joins, device-local
+    /// and host-visible alike, or <see langword="null"/> to count none.</param>
     /// <exception cref="InvalidOperationException">The device does not expose a required core entry point.</exception>
     /// <param name="deviceFaultEnabled">Whether the device was created with deviceFault enabled.</param>
     /// <param name="checkpointsEnabled">Whether the device was created with <see cref="VulkanDeviceCheckpoints.ExtensionName"/>.</param>
@@ -610,8 +610,8 @@ public sealed unsafe class VulkanDeviceCommands {
     public VulkanDeviceFault Fault { get; }
     /// <summary>Gets the device's per-pass breadcrumbs, which its device-loss report reads.</summary>
     public VulkanDeviceCheckpoints Checkpoints { get; }
-    /// <summary>Gets the device-local memory counts this table's allocations and frees join, or <see langword="null"/>
-    /// when it counts none.</summary>
+    /// <summary>Gets the device's memory counts this table's allocations and frees join, device-local and host-visible
+    /// alike, or <see langword="null"/> when it counts none.</summary>
     public GpuDeviceMemoryWork? Memory { get; }
     /// <summary>Gets whether the device has been destroyed (<see cref="MarkDestroyed"/>), after which a destroy through
     /// this table calls nothing: a resource its owner releases late, after a device loss tore the device down, no longer
