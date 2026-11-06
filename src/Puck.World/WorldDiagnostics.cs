@@ -10,13 +10,22 @@ namespace Puck.World;
 
 // Presentation-only analysis. The authoritative provider inputs are copied on the host thread; no result feeds a solve.
 internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? render = null, WorldDefinitionSource? sourceDocument = null) {
-    private const string UncorrespondedReason = "mesh correspondence uncertified: no nearest triangle within precision search radius or no matching scene";
+    private const string UncorrespondedReason = "mesh correspondence uncertified: no nearest triangle within precision search radius";
+    private const string MeshUnsettledReason = "field-versus-baked-mesh requires a settled matching rendered mesh revision and its trace scene";
+    private const string AttachedMeshReason = "attached solid draws are dynamic, outside the retained static trace scene";
+    private const string HeadlessMeshReason = "rendered-mesh comparisons: this host composes no renderer, so it draws no mesh to compare; a windowed or offscreen World makes them";
 
     private readonly WorldDiagnosticTracker m_tracker = new();
     private readonly Dictionary<string, WorldDiagnosticReport> m_reports = new(comparer: StringComparer.Ordinal);
 
     private WorldDefinition? m_definition;
     private WorldSolidField? m_field;
+    // The attached solid rows at the pose the authored field and m_rows were built for.
+    private IReadOnlyList<WorldAttachedDiagnostic> m_attached = [];
+    // The solver's static colliders m_rows was built from, and m_rows itself: those colliders followed by every attached
+    // row's at its sampled pose, one stable list per collider set and pose so a resumed report reuses its readings.
+    private IReadOnlyList<WorldDiagnosticCollider>? m_staticRows;
+    private IReadOnlyList<WorldDiagnosticCollider> m_rows = [];
     private WitnessCache? m_witnesses;
 
     private string m_fieldRefusal = "not evaluated";
@@ -85,8 +94,16 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
         var bakeError = ((scene is null) ? 0 : frame!.MeshDraws.Where(predicate: d => SdfMeshIrradianceScene.IsStatic(draw: d))
             .Select(selector: d => (Vector3.TransformNormal(d.Mesh.BakeCell, d.ObjectToWorld).Length() * 0.5)).DefaultIfEmpty(defaultValue: 0).Max());
 
+        // What this host cannot compare by construction (a headless host draws no mesh), by reason and how many witnesses
+        // or bodies it would have covered: reported apart from skipped inputs and never an unknown.
+        var excluded = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+        var excludedMesh = 0;
+
         PrepareField();
         void Skip(string reason) => skipped[reason] = (skipped.GetValueOrDefault(key: reason) + 1);
+        void Exclude(string reason, int count) {
+            if (count > 0) { excluded[reason] = (excluded.GetValueOrDefault(key: reason) + count); }
+        }
         WorldDiagnosticIdentity Identity(string subject, string stamp, string creation, string node, string operation) =>
             new(snapshot, tick, null, Instance, subject, server.SolidRevision, stamp, creation, node, operation) {
                 SourceFile = sourceDocument?.SourcePath.Replace(newChar: '/', oldChar: '\\'),
@@ -100,7 +117,8 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
             } else if (m_field is null) {
                 Skip(reason: $"authored field unavailable: {m_fieldRefusal}");
             } else {
-                var rows = server.Population.DiagnosticColliders;
+                var rows = m_rows;
+                var staticCount = (m_staticRows?.Count ?? 0);
                 // Each collider's bounding radius, once: a witness beyond a neighbour's is neither inside it nor on its face.
                 var bounds = rows.Select(selector: static row => WorldDiagnosticGeometry.Bound(collider: row.Collider)).ToArray();
 
@@ -145,7 +163,13 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                         var observed = ((double)reading.Distance);
 
                         Count(comparison: "collision-versus-authored-field", red: (WorldDiagnosticGeometry.ClassifyBoundary(budget: budget, separation: observed) is not (null or "known-approximation")));
-                        if (row.Opaque) {
+                        if (row.Opaque && (render is null)) {
+                            excludedMesh++;
+                        } else if (row.Opaque && (rowIndex >= staticCount)) {
+                            Count(comparison: "collision-versus-baked-mesh", red: null);
+                            Count(comparison: "field-versus-baked-mesh", red: null);
+                            Skip(reason: AttachedMeshReason);
+                        } else if (row.Opaque) {
                             meshEvaluated.Add(item: scope);
                             var normal = gradient.ToVector3();
 
@@ -153,7 +177,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                                 var drawn = sample.Surface;
                                 var drawnNormal = sample.Normal;
                                 var hitError = sample.Budget.BakeHalfDiagonal;
-                                var enclosed = !WorldDiagnosticGeometry.OpensOnto(server.Population.DiagnosticColliders.Select(selector: static c => c.Collider),
+                                var enclosed = !WorldDiagnosticGeometry.OpensOnto(rows.Select(selector: static c => c.Collider),
                                     point, normal, hitError);
 
                                 if (enclosed) {
@@ -188,6 +212,11 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                                         MeshRevision = frame!.MeshDrawsRevision,
                                     });
                                 }
+                            } else if (scene is null) {
+                                Count(comparison: "collision-versus-baked-mesh", red: null);
+                                Count(comparison: "field-versus-baked-mesh", red: null);
+                                Skip(reason: MeshUnsettledReason);
+                                meshFailed.Add(item: scope);
                             } else {
                                 Count(comparison: "collision-versus-baked-mesh", red: null);
                                 Count(comparison: "field-versus-baked-mesh", red: null);
@@ -216,13 +245,16 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                     }
                 }
             }
-            if (scene is null) { Skip(reason: "field-versus-baked-mesh requires a settled matching rendered mesh revision and its trace scene"); }
-            foreach (var placement in server.Definition.Placements.Where(predicate: p => ((p.Solid is not null) && (p.Attach is not null)))) {
-                Skip(reason: $"attached pose not retained: {placement.Id}");
+            if (render is null) {
+                Exclude(reason: HeadlessMeshReason, count: excludedMesh);
+            } else if ((scene is null) && !skipped.ContainsKey(key: MeshUnsettledReason)) {
+                Skip(reason: MeshUnsettledReason);
             }
         } else if (view == "contacts") {
             for (var index = 0; (index < server.Population.Capacity); index++) {
-                if (!server.Population.IsActive(index: index) || (server.Population.EntryBody(index: index) is not { Grounded: true } body)) {
+                // A body without a collider (a cursor the rules pose) runs no contact solve and touches nothing: its
+                // grounded flag is the motion state's default, not a support claim, so there is nothing to audit.
+                if (!server.Population.IsActive(index: index) || (server.Population.EntryBody(index: index) is not { Grounded: true, Collider: not null } body)) {
                     continue;
                 }
                 eligible++;
@@ -315,9 +347,17 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                         Skip(reason: $"body:{index}: mesh support correspondence or walkability uncertified");
                         meshFailed.Add(item: $"body:{index}|analytic/{support.Source}/{support.ColliderIndex}");
                     }
-                } else if (scene is not null) { Skip(reason: $"body:{index}: interpolated presentation has no exact solver pose witness"); }
+                } else if (scene is not null) {
+                    Skip(reason: $"body:{index}: interpolated presentation has no exact solver pose witness");
+                } else if ((render is null) && (row?.Opaque == true)) {
+                    excludedMesh++;
+                }
             }
-            if (scene is null) { Skip(reason: "drawn walkable surface requires a settled matching rendered mesh revision and its trace scene"); }
+            if (render is null) {
+                Exclude(reason: HeadlessMeshReason, count: excludedMesh);
+            } else if (scene is null) {
+                Skip(reason: "drawn walkable surface requires a settled matching rendered mesh revision and its trace scene");
+            }
         } else {
             Skip(reason: "view analysis is not implemented");
         }
@@ -329,7 +369,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                     : null),
             });
         }
-        var coverage = new WorldDiagnosticCoverage(tested, eligible, skipped, (skipped.Count == 0)) { Comparisons = comparisons };
+        var coverage = new WorldDiagnosticCoverage(tested, eligible, skipped, (skipped.Count == 0)) { Comparisons = comparisons, Excluded = excluded };
         var report = new WorldDiagnosticReport(snapshot, view, tick, m_tracker.Update(view, tick, findings.Select(selector: f => f with { Coverage = coverage }), complete: (skipped.Count == 0),
             evaluated: f => (evaluated.Contains(item: $"{f.Identity.Subject}|{f.Source}") && !failed.Contains(item: $"{f.Identity.Subject}|{f.Source}") &&
                 ((f.MeshRevision is null) || (meshEvaluated.Contains(item: $"{f.Identity.Subject}|{f.Source}") && !meshFailed.Contains(item: $"{f.Identity.Subject}|{f.Source}"))))),
@@ -351,20 +391,34 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
 
         Console.Error.WriteLine(value: $"[world.debug-view.{report.View}] {System.Text.Json.JsonSerializer.Serialize(parsed.RootElement)}");
     }
+    // Builds the authored field for the current definition with every attached solid row at the pose the solver last
+    // sampled it, and the colliders compared against it: the solver's static colliders, then each attached row's at that
+    // same pose. Both are rebuilt only when the definition, the collider set or an attached pose changes.
     private void PrepareField() {
-        if (ReferenceEquals(objA: m_definition, objB: server.Definition)) {
+        var attached = server.Population.DiagnosticAttached();
+        var staticRows = server.Population.DiagnosticColliders;
+        var samePoses = ((attached.Count == m_attached.Count) && attached.Zip(second: m_attached).All(predicate: static pair => (pair.First.Pose == pair.Second.Pose)));
+
+        if (!ReferenceEquals(objA: m_staticRows, objB: staticRows) || !samePoses) {
+            m_staticRows = staticRows;
+            m_rows = [.. staticRows, .. attached.SelectMany(selector: static row => row.Colliders)];
+        }
+        if (ReferenceEquals(objA: m_definition, objB: server.Definition) && samePoses) {
+            m_attached = attached;
             return;
         }
         m_definition = server.Definition;
+        m_attached = attached;
         // Remove contact expansion: this independent field represents authored geometry, never the analytic fallback.
+        static WorldPlacement Unexpanded(WorldPlacement placement) => ((placement.Solid is { } solid) ? placement with { Solid = solid with { Margin = 0 } } : placement);
         var definition = m_definition with {
-            PlacementRowsRaw = m_definition.Placements.Where(predicate: p => (p.Attach is null)).Select(selector: p =>
-                ((p.Solid is { } solid) ? p with { Solid = solid with { Margin = 0 } } : p)).ToArray(),
+            PlacementRowsRaw = m_definition.Placements.Where(predicate: p => (p.Attach is null)).Select(selector: Unexpanded).ToArray(),
             ScreensRaw = m_definition.Screens.Select(selector: s => ((s.Solid is { } solid) ? s with { Solid = solid with { Margin = 0 } } : s)).ToArray(),
             CollisionRaw = m_definition.Collision with { GridCellSize = 0 },
         };
 
-        _ = WorldSolidField.TryBuild(definition, out m_field, out m_fieldRefusal);
+        _ = WorldSolidField.TryBuild(definition, out m_field, out m_fieldRefusal,
+            posed: attached.Select(selector: static row => row.Pose with { Placement = Unexpanded(placement: row.Pose.Placement) }).ToArray());
     }
     // One boundary witness and what the authored field says there: buried in another collider (no reading taken), or the
     // field's signed reading (exact in sign, a lower bound on the distance to the authored surface) and outward normal,

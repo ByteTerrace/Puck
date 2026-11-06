@@ -28,7 +28,9 @@ The CPU twin is `Unblocked` through `Walk` and `ILeaves` any-hit leaves.
 `Hierarchy.BuildNode` bounds both hierarchies to `StackDepth - 2` edges from
 the root, switching to median splits when only a balanced subtree fits and
 refusing a named hierarchy that cannot fit. Walks check before pushing and
-count `sdf.mesh-gi.stack-overflow`; CPU overflow also throws. GPU jobs reset
+count `sdf.mesh-gi.traversal-faults`; CPU overflow also throws. GPU walks also
+stop at `SdfMeshProbeTrace.MaxWalkSteps` node visits across both levels and
+count the same assertion, so a single-child cycle cannot hang a dispatch. GPU jobs reset
 and read the assertion word after the job's logical output under its fence.
 The entry point supplies its generated result stride; retained slot capacity
 can grow without moving that word or causing a readback of unused capacity.
@@ -76,9 +78,31 @@ elsewhere cameras are excluded because their coordinates belong to another
 world. The diagnostic additionally reports the first view's counts, median
 and oldest ages against those outside that frustum at each level.
 
-The runtime streams the existing scene's nodes and leaf indices through a
-`GpuRegion` source, without a second packed hierarchy on the CPU. One admitted
-query owns the shared scene and feedback regions until its fence completes;
+The runtime retains geometry addresses in `SdfMeshIrradianceScene.GpuArena`,
+using the shared `GpuMemoryRanges` allocator. A replacement allocates its own
+top hierarchy, braid entries and instance records, and only new geometry gets
+uploaded. A worker packs these changed ranges into a bounded queue of
+`SdfGpuWork.UploadChunkBytes` blocks. B1 admits their copies under its GPU,
+host-time and byte budgets; `GpuRegion` remains the only uploader, with a
+one-word CPU shadow and one staging slot per service slot. Chunk arrays are pooled
+and returned only after their copy fence, or after cancellation drains the writer.
+No hierarchy serialization runs on the frame thread.
+`SdfMeshProbeGpuWork.TakeSceneUpload` excludes queries during replacement;
+the old root and allocations stay intact until the new root's last upload
+fence, then `CompleteSceneUpload` publishes and frees retired ranges. The root
+is admitted only after the channel reports completion (all chunks read) and
+every chunk fence retires. A stale scene cancels its writer; its obsolete prefix
+is reclaimed after both writer and fences retire. Immutable geometry retains
+fence-proven chunk progress in `GpuArena.Complete`, and the next export resumes
+its remaining words, so repeated roster changes cannot restart a large geometry. Query
+admission rechecks mesh residency and placement version after publication:
+an intervening mesh relocation repacks instance addresses before any trace.
+A changed mesh roster whose referenced vertex, index and material addresses
+did not move owes no scene upload. The retained placement snapshot contains
+only meshes that scene names.
+`world.residency` reports completed scene changes, total payload bytes and the
+last change's payload bytes, separately from staging allocation sizes.
+One admitted query owns the shared scene and feedback regions until its fence completes;
 they therefore have one staging slot. Service slots independently retain their
 outputs through readback release. GPU hit-cache allocations carry nonrepeating
 tokens, checked by selection before reuse. The cache is sized to the published
@@ -221,10 +245,17 @@ after the main residency's done line; a nested residency's done line is insuffic
   cube and the traced-light bits, shaded under the current lighting. The
   lighting version advances on a change of the directional or traced lights,
   the gains, the sources, the bounce switch, the scene's materials or the sky
-  (the packed sky's key, then its projected irradiance against `SkyTolerance`
-  in each colour channel apart, relative to that channel's own largest
-  coefficient, so a twinkle relights nothing and a dim channel's change still
-  counts). A relight's bounce reads the volume about each hit as it stands, so
+  (the packed sky's key, then its projected irradiance). `render.indirect.lightingGrid`
+  authors direction steps in degrees and fractional radiance steps; zero is the
+  neutral engine default. `SdfIndirectLightingGrid` snaps the directional records
+  once for both the key and capture. Sky coefficients share a quantum per colour
+  channel, anchored to the current channel peak's power-of-two range; tiny
+  coefficients do not each trigger a new capture. These are functions of the
+  current frame, never the last capture. Gridded lighting uses this policy in
+  asynchronous and converged modes without the wall-clock capture throttle.
+  Converged sky comparison is exact, with or without a grid. Only continuous
+  asynchronous skies retain `SkyTolerance` against the preceding capture.
+  A relight's bounce reads the volume about each hit as it stands, so
   the bounce is one iteration over the whole window: a sweep relights every
   probe once, and another follows while any probe of the last moved past
   `ConvergedShare` (plus `ConvergedFloor` nits) in any colour channel of any

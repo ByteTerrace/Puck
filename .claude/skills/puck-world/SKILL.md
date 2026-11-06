@@ -141,8 +141,10 @@ held input binding with no text answer; it is not an operator reset.
 --json` are core commands: they run with the view off and in a headless host.
 Coverage is serialized once at the report root; a picked finding carries its own coverage. Unknown coverage is a result, never a clean bill of health. Headless checks
 compare the effective analytic colliders and retained support solves with the
-authored solid field; rendered checks additionally require matching retained
-opaque meshes. Dynamic supports and interpolated body poses without an exact
+authored solid field (attached solids at the carrier pose the solver sampled);
+rendered checks additionally require matching retained opaque meshes, and a
+headless report lists them under `coverage.excluded`, which leaves coverage
+complete, rather than as unknowns. Colliderless bodies are no contacts subject. Dynamic supports and interpolated body poses without an exact
 solver witness remain unknown. Rigid contacts retain a loaded manifold point;
 snap reach is informational and never a hover tolerance.
 

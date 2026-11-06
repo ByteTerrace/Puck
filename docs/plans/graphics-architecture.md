@@ -564,9 +564,12 @@ shader reads is `Tuning`. The relight's local part, sweep convergence and
 `ConvergedShare` rule are unchanged; the relight kernel reads the published
 volume for bounce exactly as the CPU read does.
 
-The implementation streams the existing hierarchy through `GpuRegion` rather
-than packing a second full host array. One query at a time owns the scene and
-feedback staging; the service slots retain their own outputs until release.
+The implementation retains geometry addresses and streams only a replacement's
+top hierarchy, instances and new geometry through `GpuRegion`. Worker-packed
+bounded blocks run as B1 jobs under its host-time, byte and GPU budgets; the
+root publishes last, under its fence, before queries can read the replacement.
+There is no second full host array. One query at a time owns scene and feedback
+staging; the service slots retain their own outputs until release.
 Selection checks allocation tokens before reusing device hit words, and its
 compacted list feeds indirect relights. Scene/window-checked completed records
 copy to feedback, then to the published table; the camera meter returns only

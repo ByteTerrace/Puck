@@ -190,8 +190,10 @@ public static partial class SweepSignals {
                         }
                     }
                 }
-                if (coverage.TryGetProperty(propertyName: "skipped", value: out var skipped) && (skipped.ValueKind == JsonValueKind.Object)) {
-                    metrics["coverage.skipped"] = skipped.EnumerateObject().Sum(selector: static entry => (entry.Value.TryGetInt64(value: out var count) ? count : 0L)).ToString(provider: CultureInfo.InvariantCulture);
+                foreach (var name in new[] { "skipped", "excluded" }) {
+                    if (coverage.TryGetProperty(propertyName: name, value: out var reasons) && (reasons.ValueKind == JsonValueKind.Object)) {
+                        metrics[$"coverage.{name}"] = reasons.EnumerateObject().Sum(selector: static entry => (entry.Value.TryGetInt64(value: out var count) ? count : 0L)).ToString(provider: CultureInfo.InvariantCulture);
+                    }
                 }
             }
         } catch (Exception exception) when ((exception is JsonException or InvalidOperationException)) {
