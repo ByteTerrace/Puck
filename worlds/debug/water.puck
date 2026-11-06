@@ -6,7 +6,8 @@
 // The chain lives in a lattice hidden 90 m under the floor: its cells are the stores and the links between them, not
 // places, so the lake, the falls, the stream and the glacier are drawn where the valley wants them and read the gauges
 // (`lakeLevel`, `fallsFlow`, `riverDepth`, `aquiferFill`, `glacier`). The pool is the one place the river is a medium a
-// body swims in.
+// body swims in. The arc is pinned by `water-arc-tests.puck` (on this world) and `water-chain-tests.puck` (on the chain
+// alone, `water-chain.puck`).
 //
 // Levers: `water.speed <k>` runs the whole cycle k times faster (the melt clock and the flow together; 60 is the three hours
 // in three minutes), `world.state glacier` reads the glacier (1 full, 0 gone). `world.fields` prints each lattice row's
@@ -15,13 +16,15 @@
 import "../standard/hydrology"
 // The gauges the pool reads and the scenery binds.
 exports {
-  bindings [glacier, glacierLength, meltStrength, meltVisible, lakeLevel, fallsFlow, riverDepth, aquiferFill]
+  bindings [glacier, glacierLength, meltStrength, lakeLevel, fallsFlow, fallsVisible, riverDepth, aquiferFill]
   reads [poolLevel, aquiferFill]
 }
 
-// The chain's numbers. A cell is a metre; the glacier holds 20 units of water, the aquifer ten cells at bed 0 under a river
-// of four cells at bed 1 whose water above that is the pool's depth above its 1.5 m base (pool.puck).
-hydrology(origin: [-60, -90, 30], meltSeconds: 10800, meltExponent: 3, poolBase: 1.5, poolLevelMax: 2.35, waterPerCell: 10, rate: 0.000625, fullHead: 1.8)
+// The chain's numbers. A cell is a metre; the glacier holds 20 m of water, the aquifer ten cells at bed 0 confined at
+// `fullHead` under a river of four cells at bed 1 whose water above that is the pool's depth above its 1.5 m base
+// (pool.puck). A cell passes `rate` of its water over its neighbour a tick, fast enough that the lake rests within a
+// handful of centimetres of its sill and the falls carry what the glacier melts as it melts.
+hydrology(origin: [-60, -90, 30], meltSeconds: 10800, meltExponent: 3, poolBase: 1.5, poolLevelMax: 2.35, waterPerCell: 10, rate: 0.01, fullHead: 1.6)
 
 commands [
   {

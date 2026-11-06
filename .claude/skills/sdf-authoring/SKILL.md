@@ -243,7 +243,7 @@ static, animated, and attached placements read them as zero. Use bare `hp` or
 `airPose[$body]` in a lane, and `bodyState($body, flightFuel)` for one of the
 body's own action-state slots; `state.hp` is driver/binding spelling and reads
 the wrong row here. Lanes 4 to 7 are world lanes: `render.lanes`, up to four
-bindable scalars (`"state.meltStrength"`), which every surface reads alike,
+bindable scalars (`"state.fallsFlow"`), which every surface reads alike,
 static copies included. Shapes and materials read a lane by index:
 
 | Consumer | Reads the lane |

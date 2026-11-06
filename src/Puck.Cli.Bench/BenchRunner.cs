@@ -12,7 +12,7 @@ using BenchmarkDotNet.Toolchains.InProcess.Emit;
 namespace Puck.Cli.Bench;
 
 // The `puck bench` verb: `kernels`, the BenchmarkDotNet microscope over the Maths, SDF and state kernels, beside the
-// `world`, `startup` and `state-evidence` lanes, which run outside BenchmarkDotNet entirely.
+// `world`, `startup`, `frames` and `state-evidence` lanes, which run outside BenchmarkDotNet entirely.
 //
 // BenchmarkDotNet owns the whole option grammar of `kernels`, so it arrives as one unparsed string[] the switcher reads
 // itself: puck rewrites no token of it, and reads BenchmarkDotNet's own parse only to judge the run's outcome.
@@ -100,7 +100,7 @@ public static class BenchRunner {
 
     /// <summary>Creates the <c>bench</c> verb; <paramref name="clock"/> bounds its tool runs.</summary>
     /// <param name="clock">The CLI host's clock.</param>
-    /// <param name="sampleHost">The host sampler the <c>world</c> and <c>startup</c> lanes record their load with, or
+    /// <param name="sampleHost">The host sampler the <c>world</c>, <c>startup</c> and <c>frames</c> lanes record their load with, or
     /// <see langword="null"/> to record none.</param>
     /// <returns>The verb.</returns>
     public static Command Create(TimeProvider clock, BenchHostSample? sampleHost = null) {
@@ -122,9 +122,9 @@ public static class BenchRunner {
             name: "world"
         ) { worldArgument, repeatsOption, artifactOption, outputOption, jsonOption };
         var command = new Command(
-            description: "Measure kernels, the server tick path, World startup, and the cost schedule's evidence.",
+            description: "Measure kernels, the server tick path, World startup, windowed frames, and the cost schedule's evidence.",
             name: "bench"
-        ) { kernelsCommand, StartupBenchmarks.Create(sampleHost: sampleHost), StateEvidenceCommand.Create(clock: clock), worldCommand };
+        ) { kernelsCommand, StartupBenchmarks.Create(sampleHost: sampleHost), FrameBenchmarks.Create(sampleHost), StateEvidenceCommand.Create(clock: clock), worldCommand };
 
         kernelsCommand.Detail(detail: """
             Every argument reaches BenchmarkDotNet's switcher unchanged. Job rigor is chosen there and layered over the

@@ -11,8 +11,8 @@ hydrology(
   poolBase: 1.5,
   poolLevelMax: 2.35,
   waterPerCell: 10,
-  rate: 0.000625,
-  fullHead: 1.8
+  rate: 0.01,
+  fullHead: 1.6
 )
 
 bodies {

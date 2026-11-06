@@ -251,15 +251,17 @@ local or global is the design's meaning, not its syntax.
 A cache keyed on inputs that move every frame never hits, and costs its lookups
 and its memory; or a ring is flushed by entries that can never match.
 
-- `WorldCameraClearance.ClearanceQuery` and `WorldEffectorSolver.SurfaceQuery`
-  compare floats by their bits, so a moving camera or
-  a walking foot asks a new question every frame and the 32- and 64-entry rings
-  are flushed by answers that never match again. The two rings are also one
-  mechanism written twice.
+- The chase camera's clearance sweeps and the effectors' surface probes each
+  kept a thread-static ring keyed on float bits, so a boom drifting a tenth of
+  a millimetre missed every frame and a ring was flushed by answers that never
+  matched again. The fix holds each answer on its owner (`WorldFieldAnswer`), and a
+  clearance sweep is cast a margin wider so its answer stands for any drift
+  within that margin.
 
-**Closed by** quantizing the key to the resolution the answer is good for, or
-deleting a cache whose hit rate does not pay; a counter of hits and misses shows
-which.
+**Closed by** keying on the resolution the answer is good for (a bound the
+answer was computed under, or a quantized key), holding the answer beside its
+owner rather than in a shared ring, or deleting a cache whose hit rate does
+not pay; a counter of reused and marched answers shows which.
 
 **Detected by** `puck scan --only exact-keys`: a cache-key type comparing float,
 vector or fixed-point members exactly, an equality of float bit patterns, and a

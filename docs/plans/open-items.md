@@ -75,9 +75,10 @@ milestone. The owner requested its baseline and implementation plan, which
 9. [Engine job system](#engine-job-system) [high]: scheduling, the
    garbage-collection cuts, then J1; the replay burst's tick budget and F17 as
    ordinary work.
-10. [Water feature build](#water) ([plan](water.md#the-lanes)) [ordinary]: H1,
-    the chain as the arc, first, then A1 to A5 and R1 in parallel, R3, P1 last.
-    The owner accepted the plan's three taste calls as H1 and A1 state them.
+10. [Water feature build](#water) ([plan](water.md#the-lanes)) [ordinary]: the
+    chain as the arc has landed (the hidden chain still draws, see the packet);
+    A1 to A5 and R1 in parallel next, then R3, P1 last. The owner accepted the
+    plan's three taste calls; A1 builds the carved channel.
 11. [Certified field contact](#certified-field-contact): box and ellipsoid
     bodies, then clearance on slopes within a third of a metre.
 12. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
@@ -413,42 +414,22 @@ The custom no-GC runtime port stays later work, on the
 
 - [high] The frame thread's CPU field queries (Next item 0;
   [where the frame thread goes](engine-job-system.md#where-the-frame-thread-goes)).
-  `WorldEffectorSolver.TryProbeSurface` writes a probe with no field (a body in
-  a routed scene, whose client publishes no static field, sourced at
-  `WorldSessionStampSource.cs:33`) into its 64-entry ring though
-  `SurfaceQuery.Matches` can never match it (`WorldEffectorSolver.cs:239-280`):
-  about 56 such probes a frame evict the field-backed answers every frame.
-  Probes also run for planted feet and failed conditions and are discarded
-  (`WorldCreationInstances.Effectors.cs:82-98`, `:419-424`). The rate-range
-  Moths, more than 220 m from the meadow, are posed and probed every frame,
-  three quarters of each probe the hit's six-evaluation gradient; distance
-  rating exists, but its 15 Hz floor never holds a pose at the meadow's frame
-  times (`PresentationRate.cs:60-72`). The camera's clearance ring matches
-  bit-identical inputs (`WorldCameraClearance.cs:118-166`), and a boom target
-  that moves 0.1 mm a frame misses it every frame at the meadow. Skip a
-  fieldless probe before the ring, key answers by what changed rather than by
-  bits, and rate the posing and probing of bodies far from every view the way
-  presentation work is already rated; the two answer rings are one copied
-  pattern to replace once ([refactoring](#refactoring-campaign)). The
-  gradient's six taps are not the marched point and are shared with physics
-  (bit-identical per point), so batching them is a design step.
-  The fix keeps an answer on its owner (the registration's per-effector arrays
-  beside `EffectorPlantTarget`, passed by `ref` through the one door) rather
-  than in a thread-static ring, which loses its hits once packing moves to
-  worker threads. The camera's cached answer records the radius it was cast at
-  (`r + m`) and is reused while `|Δtarget| + L·|Δdirection| ≤ m`, a
-  sphere-containment bound under which a reused room never exceeds the room at
-  the current inputs. First find whether the 0.1 mm target drift is the boom
-  follower's tail (`WorldFramePresenter.cs:776-805`) or a body that does not
-  settle at rest, and fix a settling defect at its cause; likewise the Moths
-  that probe every frame are not bit-still (`WorldTransformOwners.cs:55-74`
-  repacks only on change), so exact reuse may not hit until that is read.
-  `SdfFieldEvaluator.PointWork` (`sdf.point.evaluations`) is counted on every
-  walk but never registered for `world.counters` (`WorldBootComposition.cs:164-173`);
-  register it beside `SdfBoundsCache.ProcessWork` so the proof reads probes
-  asked, skipped, reused and marched. Count under `world.lockstep` at the meadow
-  with a fixed camera, where the rate tiers hold by ticks, so the counts do not
-  depend on load.
+  Answers live on their owners through one door (`WorldFieldAnswer`), a closed
+  effector whose weight has eased to zero asks nothing, and the bodies lever's
+  tiers reach 10 and 5 Hz; what remains needs a rendered World, since a
+  headless one poses no creation and places no camera. First, count
+  `world.counters world.field-queries` (requests, skipped, reused, marched,
+  per family) and `sdf.point.evaluations` under `world.lockstep` at the meadow
+  with a fixed camera and on the forest road, on a windowed World before and
+  after this change, and confirm the clearance family reuses at rest. Second,
+  read the chase target at full precision there to find whether its 0.1 mm a
+  frame drift is the boom follower's tail (`WorldSeatViewState.Follow`, the
+  clearance arm's own followers easing toward zero through denormals) or a
+  body that does not settle at rest, and fix a settling defect at its cause;
+  the clearance margin absorbs a drift under about 3 mm, a surface probe only
+  a bit-still one. The gradient's six taps are not the marched point and are
+  shared with physics (bit-identical per point), so batching them is a design
+  step.
 - [high] The meadow (`debug.go meadow`) is a forcing workload in the real debug
   world: its two-part blades add thousands of dynamic slots and retained mesh
   draws, and its frame and cold bake are far past both bars. Animated
@@ -1107,10 +1088,20 @@ worlds in place is rewritten.
 
 Owner: the water feature lane (rendering, puck-world, sdf-authoring) · ordinary ·
 Next: [the water feature plan](water.md) owns the feature end to end: the arc as a
-specification, the audit, the definition of done and the lanes (H1 the chain as the
-arc, A1 to A5 the world authoring, R1 glass shadows, R3 the particle pool, P1 the
-tour). The items below are what the plan defers or the water strained in a system
-beside it.
+specification, the audit, the definition of done and the lanes (A1 to A5 the world
+authoring, R1 glass shadows, R3 the particle pool, P1 the tour). The items below
+are what the plan defers or the water strained in a system beside it.
+
+- [medium] A lattice row that is simulation only. The water chain
+  (`worlds/standard/hydrology.puck`) levels water against a bed with
+  `FieldLattice.StepFlow`, which reads a row's height only when its `heightScale`
+  is above zero (own row, and every `over` row), while `WorldFieldEmitter.Shape`
+  draws and bakes every row with a `heightScale` above zero and the body
+  coupling stands on it. The chain 90 m under the floor therefore bakes two
+  height fields nobody sees. Separate flow height from geometry (a row or lattice
+  flag, or a flow height row the emitter and the contact provider skip), then
+  confirm with a windowed World that `[sdf.mesh-bake] done` and `world.budget`
+  show no `hydro` groups.
 
 - [medium] Cold mesh residency still misses the one-minute target. Attribute the
   remaining large water meshes with `puck mesh audit --prototype` (now selects
@@ -1159,8 +1150,7 @@ beside it.
 
 ### Measurement window
 
-Owner: the measure-harness lane, then the lead (one quiet window) · ordinary ·
-Next: the harness the unread questions need, then a window that answers them.
+Owner: the lead (one quiet window) · ordinary · Next: drain the queued windowed controls.
 
 Evidence here is timing, so it waits for a window with no other lane building or
 running a World ([orchestration](../../.claude/skills/orchestration/SKILL.md)).
@@ -1169,25 +1159,32 @@ machine-local. The same-build `bench world` and `bench startup` controls are
 answered and sit well inside their 10 % criteria; a `bench world` or
 `bench startup` answer is read against them.
 
-Questions no harness reads yet (lanes asked for each; none has a number):
+[`puck bench frames`](../reference/cli.md#puck-bench-frames) now writes windowed
+`host.frames` and selected `world.gpu-timing` readings in `puck.bench.v1`, through
+the shared World launch and sweep control session. Boot history uses
+`bench frames worlds/debug`, with `/metrics/boot.frames.p50/median` and
+`/metrics/boot.frames.p99/median`. A tour uses `--plan <sweep-plan>` and optional
+`--stop <names>`; each stop contributes the same frame statistics under its name.
+GPU passes use repeated `--gpu-pass <node/pass>` and pointers such as
+`/metrics/pool.gpu.world~1sdf.world$glass-shade/median`. Missing passes fail;
+filing refuses unsupported pointers before it copies builds.
 
-- Windowed boot frames: the frame times of a windowed debug-world boot, for the
-  boot-spike lane.
-- The glass passes' GPU time at the pool, the falls and the lake, for the two
-  glass interfaces a pixel ([water](#water)).
-- The sweep tour's frame time at the 50th and 99th percentiles, for the sky
-  staging change ([sweep](#sweep-and-visual-checks)).
-- `host.frames` at the water views, for [the water plan's P1](water.md#p1-the-tour-and-the-budget).
+The remaining questions are machine-local `puck measure` requests, each with the
+integration-tip build frozen on both sides as a control. Drain by name/ID from
+`puck measure list`, with `puck measure run <id> --repeats 5 --timeout-seconds 7200`:
 
-The gap: `puck measure` runs `bench world`, `bench startup` or `sweep` (its
-headless frame-signal plans) and reads a JSON pointer from the report
-(`MeasureCommand.ValidateCommand` and `SampleAsync`), so none of those reports
-carries a windowed frame time or a per-pass GPU time. Both are read today from a
-live World by hand (`host.frames`, `world.gpu-timing`) under the GPU lease, and
-no verb emits them as report metrics. Build the harness: a windowed World leg, launched through
-`WorldLaunch` inside `puck lease quiet`, that arms the boot or the tour and
-writes a `puck.bench.v1` report of frame-time percentiles and per-pass GPU
-times, so `puck measure request` can pair two builds on them.
+- **Glass passes at the water views** ([water](#water)):
+  `bench frames --plan worlds/debug/measure-water.json --gpu-pass 'world/sdf.world$glass' --gpu-pass 'world/sdf.world$glass-shade'`;
+  the three stops' `.gpu.` medians compare each pass in ms, with paired IQR
+  establishing the noise before judging two glass interfaces per pixel.
+- **Sweep tour frame percentiles** ([sweep](#sweep-and-visual-checks)):
+  `bench frames --plan worlds/debug/sweep.json`; select every stop's
+  `.frames.p50/median` and `.frames.p99/median`, in ms, to judge the sky staging
+  change against the control's paired differences and IQR.
+- **Water-view host frames**, for [P1](water.md#p1-the-tour-and-the-budget):
+  `bench frames --plan worlds/debug/measure-water.json`; select the pool,
+  falls and lake's `.frames.p50/median` and `.frames.p99/median` and read them
+  against the frame bar and the control's IQR.
 
 ### Author shaders
 
@@ -1552,12 +1549,6 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
     `Space` seventeen times (first `tests/Puck.Maths.Tests/Subjects.FixedVectors.cs:13`),
     and a `FaultingDevice` five times (first
     `tests/Puck.SdfVm.Tests/SdfWorldResidencyBuildRefusalLawTests.cs:339`).
-  - [low] The camera clearance's and the effector solver's answer rings are one
-    mechanism written twice (`Puck.World.Client/WorldCameraClearance.cs:128-165`,
-    `Puck.World.Client/WorldEffectorSolver.cs:242-280`), and both key on exact
-    float bits, so a moving query never hits
-    ([hazards](../development/hazards.md#a-cache-that-cannot-help)); quantize the
-    key or delete the rings once one counter shows their hit rate.
 - Make `GpuRegion.Grow` the only way to grow a GPU region, and enforce the uniform
   view limit there (one lane):
   - [low] Growing the program region on `world.reload` waits for the device to go
@@ -3557,6 +3548,12 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [low · unconfirmed] `puck measure request --after-commit` built the World
+  but Windows refused `WorldArtifactStore.Publish`'s directory rename after its
+  retries (`src/Puck.Cli.Harness/WorldArtifactStore.cs:183`, `Directory.Move`),
+  so the request failed until refiled from the built artifact. What held the
+  directory is not named: find the holder (a scanner, a lingering build node,
+  the store's own handle) and fix it there, never with more retries.
 - [medium] `puck integrate`: the lead's integration steps as one verb, in
   place of the hand-run sequence. It composes the existing pieces under one
   report: the build, each generator's `--check`, `puck docs links`, a headless
