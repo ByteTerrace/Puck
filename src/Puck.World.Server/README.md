@@ -1194,7 +1194,10 @@ the substep count derives from, so a long piece turning slowly about its
 centre does not latch while its ends still move. Before contact, every awake
 non-spherical rigid body takes one implicit gyroscopic step a tick
 (`Puck.Physics.FixedGyroscopicStep`), so its angular momentum is not held
-fixed in world axes while it turns.
+fixed in world axes while it turns; the step then rescales the spin its
+implicit Newton solve dissipated, as far as neither the momentum magnitude nor
+the energy before the step is exceeded (`physics.bodies.gyroscopic-rescale-skips`
+counts the steps that could not).
 
 Dynamic-vs-dynamic rigid contact rides the SAME broadphase/narrowphase
 `ResolveDynamicContacts` already runs for two `solid` kits
