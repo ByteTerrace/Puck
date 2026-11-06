@@ -18,7 +18,7 @@ public static class StateEvidenceCommand {
     public sealed record SourceInventory(string Path, string? Sha256);
     public sealed record KernelInventory(string Id, string EntryPoint, string Symbol, IReadOnlyList<SourceInventory> Sources, IReadOnlyDictionary<string, IReadOnlyList<string>> UnresolvedTargets);
     public sealed record CoverageInventory(string Vocabulary, int Registered, int Priced, IReadOnlyList<string> Unmodeled);
-    public sealed record EvidenceInventory(string Schema, string ManifestDigest, string Sdk, string RollForward, IReadOnlyList<KernelInventory> Kernels, IReadOnlyList<CoverageInventory> Coverage, IReadOnlyDictionary<string, IReadOnlyList<string>> MemoryGaps);
+    public sealed record EvidenceInventory(string Schema, string ManifestDigest, IReadOnlyList<KernelInventory> Kernels, IReadOnlyList<CoverageInventory> Coverage, IReadOnlyDictionary<string, IReadOnlyList<string>> MemoryGaps);
 
     /// <summary>Creates the <c>state-evidence</c> verb, whose tool runs are bounded on <paramref name="clock"/>.</summary>
     /// <param name="clock">The CLI host's clock.</param>
@@ -111,7 +111,6 @@ public static class StateEvidenceCommand {
             static entry => entry.Class.ToString(),
             static entry => MemoryGaps(entry: entry)
         );
-        var target = ReferenceScheduleManifest.Targets[0];
         var coverage = ReferenceSchedule.Coverage.Select(selector: static entry => new CoverageInventory(
             entry.Vocabulary,
             entry.Registered,
@@ -122,8 +121,6 @@ public static class StateEvidenceCommand {
         return new EvidenceInventory(
             ReferenceScheduleManifest.Schema,
             ReferenceScheduleManifest.Digest,
-            target.Build.Sdk,
-            target.Build.GlobalJsonRollForward,
             kernels,
             coverage,
             memory

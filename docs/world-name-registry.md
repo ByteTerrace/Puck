@@ -271,6 +271,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.exposure.maximum` | State | Binding | Binding | `WorldRenderExposure.Maximum` |
 | `render.exposure.compensation` | State | Binding | Binding | `WorldRenderExposure.Compensation` |
 | `render.exposure.hold` | State | Binding | Binding | `WorldRenderExposure.Hold` |
+| `render.lanes` | State | Binding | Binding | `WorldRenderDefaults.Lanes` |
 | `screens[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].magazine.entries[][machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].material` | ScreenMaterial | Names | Binding | `WorldScreen.Material` |
@@ -1478,6 +1479,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `hud.panels[].elements[].sources[].when[near].subject[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
 | `hud.panels[].elements[].sources[].when[near].of[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
 | `hud.panels[].elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `state.world[].field.material.toonSelect.state` | State | Binding | Read | `PaletteToonSelectDocument.State` |
 | `state.world[].field.paint[][draw].source` | Generator | Names | Read | `WorldLatticeFill.Draw.Source` |
 | `state.world[].witness` | State | Names | Read | `WorldStateRow.Witness` |
 | `state.world[].name` | State | Declares |  | `StateRow.Name` |
@@ -1509,6 +1511,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.lattices[][field].reactions[][transform].when[].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `state.lattices[][field].reactions[][transform].then[].field` | Field | Names | Action | `WorldFieldWrite.Field` |
 | `state.lattices[][field].reactions[][transform].then[].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `state.lattices[][field].reactions[][transform].then[].takeFrom` | Field | Names | Action | `WorldFieldWrite.TakeFrom` |
+| `state.lattices[][field].reactions[][transform].then[].retain{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `state.lattices[][field].reactions[][emit].field` | Field | Names | Action | `WorldReaction.Emit.Field` |
 | `state.lattices[][field].reactions[][emit].amount{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `state.lattices[][field].reactions[][expose].field` | Field | Names | Action | `WorldReaction.Expose.Field` |
@@ -3185,6 +3189,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `icons.rows[].name` | `WorldIconRow.Name` | an icon name |
 | `icons.badges[].source` | `WorldIconBadgeRow.Source` | an input source id |
 | `icons.badges[].overrides[].family` | `WorldIconBadgeOverride.Family` | a badge override family is a controller family name, not a state row |
+| `state.world[].field.material.paints[].parent` | `PalettePaintDocument.Parent` | a shape of the creation the paint's palette slot belongs to, local to that creation |
 | `state.world[].field.paint[].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
 | `state.world[].field.paint[][rect].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
 | `state.world[].field.paint[][noise].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
