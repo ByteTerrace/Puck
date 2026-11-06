@@ -1652,8 +1652,8 @@ confirmed the AV1 item in the code; the rest are unconfirmed):
    (`Puck.World.Transpiler/Composition/WorldCompileCache.cs:186`, `494`) repeat
    `AssemblyReach.Of` (`Puck.Assets/AssemblyReach.cs:18`),
    and `CacheRetention.EnforceOnWrite`,
-   skipping `CacheRetention.Due`'s one-minute scan throttle on every cache
-   write (S) `[low]`.
+   skipping its per-process write tally (it lists only once its own writes pass
+   the bound, or a minute on) on every cache write (S) `[low]`.
 3. Camera plane validation and L8/BGRA packing:
    `Win32FaceAuthenticationPixelGraph`
    (`Puck.Platform.Windows/Win32FaceAuthenticationCameraGraph.cs:204`) beside
