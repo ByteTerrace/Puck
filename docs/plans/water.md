@@ -66,15 +66,16 @@ run's own probes.
 
 ## The audit
 
-Two legs, both reproducible in minutes: the simulated arc run headless in fast
-time through `puck test`, and the stage captures in a windowed World driven
-to each stage by `water.speed`. Neither watches the three hours.
+Two legs, neither of which watches the three hours: the simulated arc run
+headless in fast time through `puck test` (seconds over the chain alone, half
+an hour on the debug basis), and the stage captures in a windowed World
+driven to each stage by `water.speed` (four minutes of simulation a backend).
 
 ### The arc, run
 
 `worlds/debug/water-arc-tests.puck` is the arc's proof and the audit's
 simulation leg: one scenario on the debug basis (machines stopped) that runs
-the 3 h of simulated time and 45 min of settling (378 040 ticks), with an
+the 3 h of simulated time and 45 min of settling (405 040 ticks), with an
 Edge rule per milestone that latches the six gauges into keyed probe rows
 (`glacierAt`, `lakeAt`, `fallsAt`, `riverAt`, `aquiferAt`, `poolAt`, one cell
 per milestone: every eighth of T, then T + 15, 30 and 45 min), and `expect`
@@ -97,10 +98,11 @@ probe a fixed-point reading of that tick:
 | T | 0 | | | | 0.655 | |
 | T + 15 min | | | 0.398 | | | |
 | T + 30 min | | 0.449 | 0.227 | 0.834 | 0.751 | 2.334 |
+| T + 45 min | | 0.449 | 0.124 | 0.834 | 0.787 | 2.334 |
 
 (The scenario latches every gauge at every milestone; the table shows the
-cells its claims read. The `--keep` export under `.claude/scratch/water-audit/`
-holds the rest for the lane that retunes the chain.)
+cells its claims read, and a run under `puck test --keep <dir>` exports the
+rest for the lane that retunes the chain.)
 
 What it settles:
 
@@ -123,12 +125,13 @@ What it settles:
 - **Conservation holds**: `world.fields` reads `hydroIce` + `hydroWater` as the
   start's 22.9 units at every reading.
 
-So 18 of the scenario's 22 claims pass, and the four that fail are the chain's
+So 19 of the scenario's 23 claims pass, and the four that fail are the chain's
 four gaps (S1 to S4 in [the gap list](#the-gap-list)). The scenario is
 committed red as the specification H1 meets; it is not a stop (the campaign's
 test ruling), and its expectations are the numbers H1 tunes the chain to.
 
-**Its cost, and the twin.** On the debug basis 378 041 ticks took 32.6 min of
+**Its cost, and the twin.** On the debug basis 378 041 ticks (the audit's run,
+before the scenario gained its T + 45 min milestone) took 32.6 min of
 authored time with the machines stopped, beside other lanes' builds (5.2 ms a
 tick), and the run ticked 1 134 123 authority ticks: the debug world's
 paintings boot the garden and the night field beside it, so the proof ticks
@@ -149,10 +152,10 @@ garden's. Neither shortens the arc.
 A windowed Direct3D 12 World of this branch (RTX 4070, 1280 × 900), bakes
 settled, exposure pinned at EV100 13.83 from the river view, driven through
 the arc by `water.speed 60` with each stage landed by `world.wait until`. The
-stills are under `.claude/scratch/water-audit/captures/` as
-`d3d12-s<stage>-<view>.png`, with a contact sheet beside them; the
-gauges of each stage's tick are in the table. Every view is an operator
-camera pose (`view.override camera look <eye> <target>` in metres, or `pose`):
+stills and their contact sheet are the audit's hand-back (the commit that
+lands this plan names where they were written); the gauges of each stage's
+tick are in the table. Every view is an operator camera pose
+(`view.override camera look <eye> <target>` in metres, or `pose`):
 
 | View | Pose | Stage 1 (glacier 1.00, falls 0.20) | Stage 2 (glacier 0.22, falls 0.79) | Stage 3 (aquifer 0.36, river 0.53) | Stage 4 (glacier 0, falls 0.47, `meltVisible` 0) | Stage 5 (falls 0.13, river 0.84, aquifer 0.81, pool 2.34) |
 |---|---|---|---|---|---|---|
@@ -167,7 +170,7 @@ camera pose (`view.override camera look <eye> <target>` in metres, or `pose`):
 | Aquifer passage | `look -50 -2.1 -18 -44 -1.3 -18` | from inside the pool's medium the frame is a dim brown-green wash (the camera is inside a glass body); the passage a dark rectangular tunnel with the lawn and the gauge's teal post showing through its far end; the passage's own water view empty | | | | |
 
 **Vulkan.** A second hold took the rim, falls and pool at stages 1 and 5
-(`vulkan-s<stage>-<view>.png`): the same composition and look to the eye,
+(the same views, named for the backend): the same composition and look to the eye,
 and by changed-pixel count against the Direct3D 12 stills, with neither
 tick nor day clock pinned, 10 % (rim) and 13 % (falls) of pixels differ by
 over 8 levels at stage 1 and the pool's half (its flow phase and level at
@@ -258,9 +261,9 @@ head. Its claims, each read from a probe at a simulated milestone:
 | t = 0 (tick 30) | glacier = 1 within 0.01; falls on; lake at or over its sill | `glacierAt[0]`, `fallsAt[0]`, `lakeAt[0]` |
 | t = T/8 … 7T/8 | glacier = (1 − t/T)³ within 0.01 (0.670, 0.422, 0.244, 0.125, 0.053, 0.016, 0.002); falls on at every one | `glacierAt[1..7]`, `fallsAt[1..7]` |
 | t = T | glacier exactly 0; `meltVisible` 0 | `glacierAt[8]` |
-| t = T + 15 min and after | falls dry (`fallsFlow` < 0.001) and stay dry | `fallsAt[9..10]` |
-| over the melt | aquifer rises monotonically at the eighths and reaches its full head (`aquiferFill` ≥ 0.95) by T + 45 min | `aquiferAt[0..10]` |
-| T + 30 min to T + 45 min | river drift under 0.01 m over the last quarter hour (homeostasis); river and pool above their start | `riverAt[9..10]`, `poolAt[0..10]` |
+| t = T + 15 min and after | falls dry (`fallsFlow` < 0.001) and stay dry | `fallsAt[9..11]` |
+| over the melt | aquifer rises monotonically at the eighths and reaches its full head (`aquiferFill` ≥ 0.95) by T + 45 min | `aquiferAt[0..11]` |
+| T + 30 min to T + 45 min | river drift under 0.01 m over the last quarter hour (homeostasis); river and pool above their start | `riverAt[10..11]`, `poolAt[0..11]` |
 | order | the aquifer reaches 0.9 of its head before T (the aquifer fills before the falls dry) | `aquiferAt[7]` |
 
 A scenario that cannot express this cheaply is a gap fixed at its cause (the
@@ -288,7 +291,7 @@ at speed 60 (T = 5 400 ticks after the speed is set):
 | 2 mid-melt, falls running | +1 350 (T/4) | `glacier` 0.42 ± 0.02, `fallsFlow` > 0 |
 | 3 aquifer filling | the tick at which `aquiferFill` first passes 0.5 (from the arc's probes) | 0.4 < `aquiferFill` < 0.6 |
 | 4 falls dry, river rising | +5 460 | `glacier` = 0, `fallsFlow` < 0.001 (today 0.47: H1's target), `riverDepth` below its settled value |
-| 5 homeostasis | +6 300 | `riverDepth` within 0.01 of `riverAt[10]` |
+| 5 homeostasis | +6 750 | `riverDepth` within 0.01 of `riverAt[11]` |
 
 The views, each an operator camera pose (`view.override camera look …`,
 [the audit's table](#the-captures)), and what each must show at each stage,
