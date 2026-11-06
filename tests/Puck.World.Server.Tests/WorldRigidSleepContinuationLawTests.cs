@@ -375,11 +375,14 @@ public sealed class WorldRigidSleepContinuationLawTests {
 
         population.SetSimulatedCount(2);
         var ball = population.EntryBody(index: 1)!;
-        var gap = FixedQ4816.FromDouble(value: .1);
         var touching = FixedQ4816.FromDouble(value: .8);
+        // Just past the two broadphase radii, so only the ball's travel brings the sleeper into its reach, and fast
+        // enough (one step is a thirtieth of a second) that unopposed it would end the step a fifth of a metre deep.
+        var start = ((ball.BroadphaseRadius + sleeper.BroadphaseRadius) + FixedQ4816.FromDouble(value: .05));
+        var speed = (((start - touching) + FixedQ4816.FromDouble(value: .2)) * FixedQ4816.FromInteger(value: 30));
 
-        ball.Pose(position: (sleeper.FixedPosition - (FixedVector3.UnitX * (touching + gap))), yawRadians: FixedQ4816.Zero, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
-        Assert.True(condition: ball.TryApplyRigidImpulse(impulse: (FixedVector3.UnitX * FixedQ4816.FromInteger(value: 10)), velocityCeiling: FixedQ4816.FromInteger(value: 1000)));
+        ball.Pose(position: (sleeper.FixedPosition - (FixedVector3.UnitX * start)), yawRadians: FixedQ4816.Zero, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
+        Assert.True(condition: ball.TryApplyRigidImpulse(impulse: (FixedVector3.UnitX * speed), velocityCeiling: FixedQ4816.FromInteger(value: 1000)));
         Assert.Equal(1, population.SleepingRigidBodies);
         Step(population: population, tick: 1200);
         var separation = (sleeper.FixedPosition - ball.FixedPosition).Length;
