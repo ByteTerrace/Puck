@@ -6,7 +6,7 @@ performance. This memo is the research round's answer. It reads Puck's live
 physics paths, names what the debug world measured, sets each lesson against
 the opened sources (several independent ones per topic, with their
 disagreements), ranks the lessons, and gives a brief for each of the top
-three. Every page cited under [Sources](#sources) was opened for this memo;
+two still open (the gyroscopic term and the rest latch have landed). Every page cited under [Sources](#sources) was opened for this memo;
 a claim that rests on a page that could not be opened is marked so.
 
 Nothing here ran a World or changed engine code. The counts quoted are the
@@ -95,10 +95,11 @@ analytic static sweep (`FixedStaticContactSolver.Sweep` into
 `FixedConvexContact`), about 73 ms over 41,341 queries, or about 1.8 µs a
 query including the sweep's own overhead. The same unit cost over today's
 4,030 queries would be about 7 ms, more than the whole 5.9 ms tick, so a
-walker's query costs less than a rigid piece's GJK query did. The static sweep
-is still the likeliest largest physics share of the idle tick, and no profile
-of the idle tick has been recorded; [brief A](#brief-a-kit-body-contact-work-certify-cheaply-query-exactly-only-what-a-certificate-cannot-settle)
-takes it first.
+walker's query costs less than a rigid piece's GJK query did. Brief A's profile
+of the idle tick (on a loaded machine) put all contact work at 0.31 ms a tick,
+17 % of the tick's managed CPU, with walker queries near 0.08 µs each; the
+[brief](#brief-a-kit-body-contact-work-certify-cheaply-query-exactly-only-what-a-certificate-cannot-settle)
+records what it found and what remains.
 
 Two order-dependent accumulations were fixed just before this round: glass
 optical depth now sums integer-quantized terms with integer atomics
@@ -307,25 +308,20 @@ it gains energy"). Box3D's solver carries the same Newton step, and the
 announcement names the missing term in Unreal's Chaos as one reason Box3D
 exists.
 
-**What Puck does.** `AdvanceRigid` holds the world-frame angular velocity
-constant through free flight, changing it only by damping and contact
-(`WorldBody.Rigid.cs:682-689`, `:751`). For a body whose inertia is not
-spherical, a constant world ω while the body turns does not conserve angular
-momentum. The debug world's rigid pieces are mostly oblate (361 Go stones, 64
-reversi discs) or slender (32 chess pieces).
-
-**Expected gain.** Accuracy: a flicked or tossed disc wobbles and settles as
-it should, and the dissipation the implicit step adds (Catto: "the kinetic
-energy dissipates over time") helps pieces come to rest. Cost per awake rigid
-body is one 3×3 solve a step.
-
-**Determinism.** Exact. The body-local inverse inertia is already stored at
-its own 40-bit placement (`FixedRigidBody.InverseInertia*`,
-`FixedRigidTypes.cs`). The Jacobian is not symmetric, so
-`FixedSymmetricSolve` does not apply; the solve is Cramer's rule with
-`Int128` cofactors rounded once (a new `Puck.Maths` member with its law case).
-
-**Cost.** Small.
+**What Puck does.** Landed: `FixedGyroscopicStep.Advance` (Puck.Physics) is
+this Newton step, solved by `FixedLinearSolve.TrySolve3`, called once per
+rigid step from `WorldBody.AdvanceRigid` before contact; brief B's integrate
+stage calls the same member. Its law
+(`tests/Puck.Physics.Tests/GyroscopicStepLawTests.cs`) measured what the
+memo had expected to be conservation "within the fixed-point budget": at
+60 Hz implicit Euler's own truncation is first order and dissipative, so a
+disc spun at about 4 rad/s drifts about 2 % in world momentum over 300 steps
+(a slender triaxial block about 14 %), against 44 % and 88 % with world ω
+held constant, and the fixed-point run tracks the exact-arithmetic scheme to
+rounding. Momentum magnitude and energy fall on every step. A
+linearized-midpoint Jacobian (`h/2`) cut the block's drift to about 3 % in a
+double-precision probe, at the cost of the scheme's guaranteed dissipation;
+it is not adopted.
 
 ### 4. Wake and islands proportional to change
 
@@ -461,12 +457,11 @@ and edge rules, so it is not proposed there.
 
 Box2D's sleep test uses "the velocity of the farthest point on the body to
 account for rotation" and folds in position correction ("Sleep needs to
-observe position correction as well as true velocity", `solver.c`). Puck's
-rest latch compares linear and angular speed against two separate thresholds
-(`WorldBody.Rigid.cs:611-612`, `:884-893`), so a long piece turning slowly about its centre
-can latch while its ends still move. The substep bound already uses linear
-speed plus angular speed times the bounding radius (`:701-705`); the rest
-latch can read the same quantity. Small; it rides brief C.
+observe position correction as well as true velocity", `solver.c`). Landed:
+Puck's rest latch and its substep bound both read `WorldBody.RigidSurfaceSpeed`
+(linear speed plus angular speed times the bounding radius) against one
+authored threshold, `collision.bodyContacts.rigidRestSpeed`. Folding in
+position correction is not done.
 
 ## What does not transfer
 
@@ -498,56 +493,33 @@ tested first, so the exact work runs only where the certificate cannot rule a
 push out. It is the same mechanism as the field sweep's bounds queries, Box3D's
 inscribed spheres and Box2D's fat-box margin.
 
-**Invariant.** A collider the certificate skips would have returned no push:
-the certificate's region contains the collider grown by the contact skin, and
-a carried separation (step 3) is a lower bound the body has not yet travelled.
-**Enforcement:** one door. The certificate is compiled with the collider (one
-`FixedStaticCollider` member, or the compiled bounds record `WorldColliderSet`
-already builds) and the solver reads only that member; no caller supplies its
-own. **Where it stops:** the certificate says nothing about colliders it keeps,
-which still take the exact query, and step 4's snap change is outside the
-invariant, a deliberate correction.
+**Invariant.** A collider the certificate skips would have returned no push.
+**Enforcement:** one door, `FixedStaticColliderSet`: the solver takes colliders
+only as sets, static and per-tick alike, and a set compiles each collider's
+`FixedColliderBox` and `FixedColliderFrame` from the collider itself. **Where it
+stops:** the certificates say nothing about the colliders they keep, which take
+the exact query, and the snap change below is outside the invariant, a
+deliberate correction.
 
-**Steps, each with its check.**
+**Where it stands.** Steps 0 to 3 closed (their evidence is in the commits). The
+idle queries' cause was not walkers against the static field: every per-tick
+(attached) collider, the gallery lift's car, was queried by every sweep in the
+world, unculled. With it culled, `physics.contact.queries` fell from 4,030 to
+766 a tick, every state hash unchanged. Carrying separation from pass to pass
+(step 3) skipped 16 queries a tick and was not landed. 160 of the 170 resolves a
+tick are still ground-snap sweeps: `FixedStepUp.TrySnap` runs twice per walking
+body per tick (the support search in `IntegratePlanarAndVerticalVelocity` and
+the crest snap in `ResolveProgramContacts`), ten sweeps each.
 
-0. Attribute the idle physics work. Run `puck bench world` and a sampled
-   thread-time trace of it on the lead machine; record per tick
-   `physics.contact.resolves`, `.queries`, `.convex-queries`, `.supports` and
-   `physics.sweep.*`, and the trace's share for `FixedStaticContactSolver`,
-   `FixedStepUp` and `FixedConvexContact`. Add temporary counts (not
-   committed) splitting queries into main sweep, snap and step-up. **Check:**
-   the shares and counts in the commit body, and a decision recorded there on
-   which of steps 1 to 4 pays.
-1. Pack the bounds pass: one contiguous array of collider centres and padded
-   half-extents (six longs a collider) read by `Misses`, in place of reading
-   the collider record and a nullable extent. **Check:** queries a tick and
-   every state hash identical on `puck bench world` and on
-   `puck test --reproduce` for the water, chess and hall worlds; the trace's
-   bounds share falls.
-2. A tighter certificate per kind: an oriented-box test for box kinds (from
-   `FixedOrientedBox`, which already owns the SAT verdict) and a bounding
-   sphere for the rounded, superellipsoid and cylinder kinds, before
-   `TryGetPush`. **Check:** `physics.contact.queries` falls; every state hash
-   identical, as in step 1. A hash that moves means the certificate is not
-   conservative and is a defect, not a re-record.
-3. Carry each kept collider's proven separation from pass to pass. Within one
-   endpoint resolve the body only translates, so a collider an exact query
-   proved separated by `d` cannot push until the body has moved by more than
-   `d` minus the skin since that query; later passes skip it until the
-   accumulated push reaches that. The exact query reports a lower bound on the
-   separation it proved (the convex query's early-out plane already holds one).
-   **Check:** as step 2.
-4. Replace the snap's bisection with one support-distance query (the convex
-   nearest-point query or the analytic distance) followed by the landing
-   sweep, keeping `TrySnap`'s acceptance rules. **Check:** `physics.sweep.sweeps`
-   a tick falls; the range walkers still follow the ground on the range's
-   slopes (a headless `body.where` trace over their loop); hashes move once and
-   the persisted replays it invalidates are re-recorded in the same change.
-
-Done when the idle queries a tick and the static sweep's trace share have
-fallen by the amount step 0 predicted, with hashes unchanged through step 3.
-A Codex lane can take steps 1 to 3; step 4 and the profile want a lane that
-loads `sdf-authoring` for contact admission.
+**The remaining step.** Replace the snap's bisection with one support-distance
+query (the convex nearest-point query or the analytic distance) followed by the
+landing sweep, keeping `TrySnap`'s acceptance rules, and let the two snaps of one
+tick share it where the body has not moved between them. **Check:**
+`physics.contact.resolves` a tick falls toward the moves' own count; the range
+walkers still follow the ground on the range's slopes (a headless `body.where`
+trace over their loop); hashes move once and the persisted replays it
+invalidates are re-recorded in the same change. It wants a lane that loads
+`sdf-authoring` for contact admission.
 
 ## Brief B: one rigid solver: Soft Step
 
@@ -600,42 +572,11 @@ pushed by a rigid one, expressed as a static body in the pair.
 This is a specialist lane (physics, with `maths-usage` loaded), several
 commits, re-recording the rigid scenarios once.
 
-## Brief C: the gyroscopic term and the rest latch
-
-**Mechanism.** Integrate a stiff or quadratic term implicitly in the frame
-where its operator is constant (here the body frame, where inertia is fixed),
-one Newton step.
-
-**Invariant.** The gyroscopic correction is applied exactly once per rigid
-step, in the integrate-velocities stage, to free angular velocity before
-contact. **Enforcement:** one method on the rigid integration path called from
-one site (`AdvanceRigid` today; `FixedRigidWorld`'s integrate stage after brief
-B, the same member moved, not copied). **Where it stops:** a singular Jacobian
-(a degenerate inertia) skips the correction, counted, never wrapped.
-
-**Steps.**
-
-1. Add a general 3×3 solve to `Puck.Maths` (Cramer's rule, `Int128`
-   cofactors, one rounding, refusing a zero determinant) with its law case.
-   **Check:** the Maths build and the law against an exact rational oracle.
-2. Apply `ω_b ← ω_b − J⁻¹ (h ω_b × I_b ω_b)` in body coordinates once per step,
-   with `I_b` from the authored mass properties (the inverse inertia is
-   already stored). **Check:** a free-flight disc spun about a tilted axis:
-   world angular momentum `I_world ω` holds within the fixed-point budget and
-   kinetic energy never rises over 300 steps; today's code fails the momentum
-   check. A Physics law, since a running World cannot show an exact
-   conservation result.
-3. Make the rest latch read linear speed plus angular speed times the bounding
-   radius against one threshold, as the substep bound does (lesson 9).
-   **Check:** `puck test --reproduce` on chess, Go and reversi; the chess idle
-   demo still starts; hashes move once and are re-recorded.
-
-A Codex lane can take all three steps.
-
 ## Open questions and who settles them
 
-- **The idle tick's physics share.** Brief A's step 0 settles it, on the lead
-  machine in a quiet window, and decides whether lesson 6 is scheduled.
+- **Whether lesson 6 pays.** After brief A the contact work of the idle tick is
+  about 0.2 ms; lesson 6 is not scheduled until a quiet-window profile shows a
+  bounds pass worth vectorising.
 - **Whether contact recycling pays in fixed point.** Settled inside brief B's
   solver by measurement on the step 0 scene, after brief B lands; until then
   lesson 8 is not scheduled.

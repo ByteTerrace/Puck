@@ -8,12 +8,10 @@ namespace Puck.World.Server;
 /// converted to fixed point/engine ticks once per document (re)compile — see
 /// <see cref="Puck.World.Server.WorldPopulation"/>'s own compiled tables — instead of every
 /// <see cref="WorldBody.AdvanceRigid"/> call.</summary>
-/// <param name="RestLinearThreshold">Below this linear speed a grounded rigid body counts toward the resting hold
-/// window.</param>
-/// <param name="RestAngularThreshold">Below this angular speed a grounded rigid body counts toward the resting hold
-/// window.</param>
-/// <param name="RestHoldTicks">How long, in exact engine ticks, a rigid body must stay under both rest thresholds
-/// while grounded before the resting latch actually closes.</param>
+/// <param name="RestSpeedThreshold">Below this speed of its fastest point (the centre's linear speed plus its angular
+/// speed times its bounding radius), at scale one, a grounded rigid body counts toward the resting hold window.</param>
+/// <param name="RestHoldTicks">How long, in exact engine ticks, a rigid body must stay under the rest speed while
+/// grounded before the resting latch actually closes.</param>
 /// <param name="SubstepTravelFraction">The fraction of a rigid body's own bounding radius one continuous-collision
 /// substep may travel.</param>
 /// <param name="SubstepMinimumTravel">The floor under one substep's travel bound, independent of
@@ -25,8 +23,7 @@ namespace Puck.World.Server;
 /// <param name="ManifoldIterations">The sequential-impulse pass count a body's own ground support
 /// manifold resolves over — see <see cref="WorldBodyContactPolicy.RigidManifoldIterations"/>.</param>
 public readonly record struct RigidContactPolicy(
-    FixedQ4816 RestLinearThreshold,
-    FixedQ4816 RestAngularThreshold,
+    FixedQ4816 RestSpeedThreshold,
     ulong RestHoldTicks,
     FixedQ4816 SubstepTravelFraction,
     FixedQ4816 SubstepMinimumTravel,
@@ -36,8 +33,7 @@ public readonly record struct RigidContactPolicy(
 ) {
     /// <summary>Compiles an authored <see cref="WorldBodyContactPolicy"/>'s rigid fields to this fixed-point form.</summary>
     public static RigidContactPolicy FromAuthored(WorldBodyContactPolicy policy) => new(
-        RestLinearThreshold: FixedQ4816.FromDouble(value: policy.RigidRestLinearSpeed),
-        RestAngularThreshold: FixedQ4816.FromDouble(value: policy.RigidRestAngularSpeed),
+        RestSpeedThreshold: FixedQ4816.FromDouble(value: policy.RigidRestSpeed),
         RestHoldTicks: FixedTickConversion.DurationEngineTicks(seconds: ((decimal)policy.RigidRestHoldSeconds)),
         SubstepTravelFraction: FixedQ4816.FromDouble(value: policy.RigidSubstepTravelFraction),
         SubstepMinimumTravel: FixedQ4816.FromDouble(value: policy.RigidSubstepMinimumTravel),
@@ -593,6 +589,19 @@ public sealed partial class WorldBody {
         }
     }
 
+    // The fastest any point of the body moves: the centre's linear speed plus the rotational speed of a point at the
+    // bounding radius. The continuous-collision substep bound and the rest latch both read this one quantity, so a
+    // long piece turning slowly about its centre neither tunnels nor latches while its ends still move.
+    private FixedQ4816 RigidSurfaceSpeed(FixedQ4816 boundingRadius) =>
+        (m_rigidVelocity.Length + SaturatingNonnegativeProduct(
+            left: m_angularVelocity.Length,
+            right: boundingRadius
+        ));
+    // A spatial rate, so the threshold scales with the body like a hold's own travel speed does: a shrunk body
+    // settles at a proportionally smaller absolute wobble.
+    private bool RigidUnderRestSpeed(FixedQ4816 boundingRadius, RigidContactPolicy policy) =>
+        (RigidSurfaceSpeed(boundingRadius: boundingRadius) <= (policy.RestSpeedThreshold * m_scale));
+
     // Pair impulses and depenetration run after AdvanceRigid. Count the hold window once, from the final solved
     // velocity, including support supplied by another body. A resting body still awaiting the rest of its island
     // rechecks dynamic support; a fully resting island is parked by the population outside this solve.
@@ -608,8 +617,7 @@ public sealed partial class WorldBody {
         var closing = FixedVector3.Dot(left: m_rigidVelocity, right: m_rigidSupportNormal);
 
         if (m_grounded && (closing < FixedQ4816.Zero)) { m_rigidVelocity -= (m_rigidSupportNormal * closing); }
-        if (m_grounded && (m_rigidVelocity.Length <= (policy.RestLinearThreshold * m_scale)) &&
-            (m_angularVelocity.Length <= policy.RestAngularThreshold)) {
+        if (m_grounded && RigidUnderRestSpeed(boundingRadius: RigidBoundingRadius, policy: policy)) {
             m_restingHoldTicks = (m_rigidHoldBeforeStep + m_rigidStepTicks);
             m_resting = (m_restingHoldTicks >= policy.RestHoldTicks);
             if (m_resting) {
@@ -692,17 +700,34 @@ public sealed partial class WorldBody {
             m_rigidVelocity += (gravity * tickSeconds);
         }
 
+        // The gyroscopic term ω × I·ω, once per rigid step, on the free angular velocity before any contact solve:
+        // without it a non-spherical body's world angular velocity would stay fixed while the body turns, and its
+        // angular momentum would precess about the spin axis.
+        switch (FixedGyroscopicStep.Advance(
+            advanced: out var gyroscopicVelocity,
+            angularVelocity: m_angularVelocity,
+            inverseInertiaXX: rigid.InverseInertiaXX,
+            inverseInertiaYY: rigid.InverseInertiaYY,
+            inverseInertiaZZ: rigid.InverseInertiaZZ,
+            orientation: m_orientation,
+            stepSeconds: tickSeconds
+        )) {
+            case GyroscopicStepOutcome.Applied:
+                m_angularVelocity = gyroscopicVelocity;
+                WorldBodyWork.Process.Add(amount: 1, kind: WorldBodyWork.GyroscopicSteps);
+                break;
+            case GyroscopicStepOutcome.Refused:
+                WorldBodyWork.Process.Add(amount: 1, kind: WorldBodyWork.GyroscopicRefusals);
+                break;
+        }
+
         // Continuous collision, by derived substep count: a fast ball must not tunnel through a thin wall at the
         // authority rate, so the travel this tick is bounded against an authored fraction of the collider's own
-        // bounding radius rather than a fixed knob. "Travel" is the fastest a point on the collider's own SURFACE
-        // moves, not just the centre: angularVelocity·BoundingRadius is a spinning body's own surface speed from
-        // rotation alone, added to the centre's own linear speed — a light, thin body pivoting in place can carry
-        // tens of radians/second from a single ground-manifold impulse while its centre barely translates, and
-        // without this term its ground contact would re-resolve only once a whole tick's rotation late.
-        var travel = ((m_rigidVelocity.Length + SaturatingNonnegativeProduct(
-            left: m_angularVelocity.Length,
-            right: rigid.BoundingRadius
-        )) * tickSeconds);
+        // bounding radius rather than a fixed knob. "Travel" is the fastest a point on the collider's own surface
+        // moves (RigidSurfaceSpeed), not just the centre: a light, thin body pivoting in place can carry tens of
+        // radians/second from a single ground-manifold impulse while its centre barely translates, and without the
+        // rotational term its ground contact would re-resolve only once a whole tick's rotation late.
+        var travel = (RigidSurfaceSpeed(boundingRadius: rigid.BoundingRadius) * tickSeconds);
         var perSubstepBound = FixedQ4816.Max(
             x: (rigid.BoundingRadius * policy.SubstepTravelFraction),
             y: policy.SubstepMinimumTravel
@@ -880,18 +905,7 @@ public sealed partial class WorldBody {
         m_rigidStaticSupported = grounded;
         m_lastContactCount = (grounded ? 1 : 0);
 
-        var linearSpeed = m_rigidVelocity.Length;
-        var angularSpeed = m_angularVelocity.Length;
-        // Linear speed is a spatial rate (u/s), so its rest threshold scales with the body exactly like a hold's own
-        // travel speed does (Server.WorldBody.Scale's remarks) — a shrunk body settles at a proportionally smaller
-        // absolute wobble. Angular speed (rad/s) carries no length dimension, so its threshold is unaffected by Scale.
-        var restLinearThreshold = (policy.RestLinearThreshold * m_scale);
-
-        if (
-            grounded &&
-            (linearSpeed <= restLinearThreshold) &&
-            (angularSpeed <= policy.RestAngularThreshold)
-        ) {
+        if (grounded && RigidUnderRestSpeed(boundingRadius: rigid.BoundingRadius, policy: policy)) {
             m_restingHoldTicks += stepTicks;
 
             if (m_restingHoldTicks >= policy.RestHoldTicks) {
