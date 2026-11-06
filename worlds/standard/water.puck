@@ -7,13 +7,41 @@
 // terrain library's sectors do. A stream segment's +Z is its flow, and a falls or glacier shares its wall's sector frame,
 // where +Z points out from the ring's centre and a wall faces -Z.
 
+// The standard's water is glass with a medium: its colour is the tint the light behind takes on through `depth`, its
+// `scatter` the turquoise a deep body shows under the light arriving at its surface, filling 1 - exp(-scattering * d) of
+// what a depth d shows, so a shallow margin stays clear and the deep water turns turquoise; its `contact` gathers foam,
+// in its flow's pattern and colour, where the bed or a wall comes within `reach` of the surface along the view. The pool,
+// the basins and the lake hold metres of water; the stream and the falls are thin sheets and scatter more per metre.
+let waterGlass = {
+  depth: 2
+  ior: 1.333
+  scatter: "#1A8A94"
+  scattering: 0.8
+  contact { reach: 0.4, coverage: 0.8 }
+}
+// The white the water's foam and streaks reveal.
+let waterFoam = { color: "#F4F8F6", roughness: 0.55, metal: 0 }
+// Still water's flow: a slow world-space drift that ripples the surface faintly and carries the contact's foam; it adds no
+// foam of its own.
+let stillFlowLayer = {
+  frame: World
+  velocity [0.15, 0, 0.1]
+  scale: 1.2
+  stretch: 1.5
+  cycle: 3
+  tilt: 0.06
+  softness: 0.1
+  surface: waterFoam
+  seed: 9
+}
 // The standard's surface material, shared with field rows through the ordinary palette vocabulary.
 let waterMaterial = {
   color: "#3FB8C4"
   roughness: 0.16
   specular: 0.5
   coat: 0.3
-  glass { depth: 2, ior: 1.333 }
+  glass: waterGlass
+  flow: stillFlowLayer
 }
 
 // A spatial view of a scalar store. The authoritative store remains the caller's row; these cells supply the
@@ -61,8 +89,9 @@ function fallsSlope(profile, j) = (profile[j][0] - profile[j + 1][0]) / squareRo
 )
 
 // The standard turquoise and white of a stream, a lake and a falls, as palette rows: the water, its brush edge and its foam.
+// The water is glass, its medium the template's (`glass`).
 let waterPalette = [
-  { color: "#2FB5C0", roughness: 0.18, specular: 0.55, wrap: 0.2 }
+  { color: "#2FB5C0", roughness: 0.18, specular: 0.55, glass: waterGlass }
   { color: "#F4F8F6", roughness: 0.55, specular: 0.1, wrap: 0.45 }
   { color: "#FFFFFF", roughness: 0.6, specular: 0.05, wrap: 0.5 }
 ]
@@ -77,9 +106,12 @@ let streamFlowLayer = {
   tilt: 0.25
   coverage: 0.2
   softness: 0.08
-  surface { color: "#F4F8F6", roughness: 0.55, metal: 0 }
+  surface: waterFoam
   seed: 7
 }
+// A stream sheet stands a hand's depth over its bed, so it scatters more per metre to show colour, and its contact reaches
+// less than its depth: foam gathers along the banks, not over the whole bed.
+let streamGlass = waterGlass with { scattering: 4, contact { reach: 0.06, coverage: 0.7 } }
 // A falls runs down every sheet at the sheet's own slope: only the velocity's part along a surface moves it. Its velocity
 // and pattern are in world space, so the flow runs down a sheet however the sheet turns. A world that binds a render lane
 // to its discharge thins the foam with it (`coverageLane`, a world lane from 4 to 7: `fallsFlowLayer with { coverageLane:
@@ -96,7 +128,11 @@ let fallsFlowLayer = {
   surface { color: "#FFFFFF", roughness: 0.6, metal: 0 }
   seed: 11
 }
-// A lake's breeze: world-space ripples, a slow drift and no foam.
+// A falls sheet is thin and stands off its wall, so the rock shows through its turquoise core; foam gathers where it meets
+// the basin.
+let fallsGlass = waterGlass with { scattering: 1.2 }
+// A lake's breeze: world-space ripples, a slow drift and no foam of its own; its contact's foam takes the breeze's
+// pattern along the bank.
 let lakeFlowLayer = {
   velocity [0.3, 0, 0.2]
   scale: 0.8
@@ -104,8 +140,11 @@ let lakeFlowLayer = {
   cycle: 3
   tilt: 0.12
   frame: World
+  surface: waterFoam
   seed: 5
 }
+// A lake disc is a slab over its bowl, so it scatters more per metre, and its contact reaches less than its thickness.
+let lakeGlass = waterGlass with { scattering: 3, contact { reach: 0.2, coverage: 0.7 } }
 // Glacier ice: a pale blue body and a whiter weathered face.
 let icePalette = [
   { color: "#CFE8F2", roughness: 0.3, specular: 0.4, wrap: 0.3 }
@@ -120,13 +159,14 @@ let stonePalette = [
 // A stream segment is one still sheet `length` long whose shading flows along its author +Z (`flow`, a palette flow
 // layer): the geometry never moves, so every segment of a stream is a placement of one prototype sharing one baked
 // mesh. `overlap` extends each end past the segment's length so adjacent segments meet at a bend; a stream raises
-// alternate segments by two centimetres so overlapping ends never share a plane.
-template streamSegment(id, length, width = 4.5, overlap = 0.5, palette = waterPalette, flow = streamFlowLayer, top = 0.1) {
+// alternate segments by two centimetres so overlapping ends never share a plane. The sheet is glass (`glass`, its medium):
+// the bed shows through it.
+template streamSegment(id, length, width = 4.5, overlap = 0.5, palette = waterPalette, flow = streamFlowLayer, glass = streamGlass, top = 0.1) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
-      palette [palette[0] with { flow: flow }]
+      palette [palette[0] with { flow: flow, glass: glass }]
       shape Box "sheet" {
         material: 0
         position [0, top - 0.3, 0]
@@ -138,13 +178,14 @@ template streamSegment(id, length, width = 4.5, overlap = 0.5, palette = waterPa
 // A falls is a ribbon of sheets down the wall's profile, its shading falling down each sheet (`flow`). Each sheet turns
 // about its own flow axis as the discharge `state.<gauge>` falls from one to zero, edge-on to the valley at zero, so the
 // falls narrows as it ebbs; the flow's foam thins with it where the world binds the flow's coverage to a lane. The caller
-// supplies the endpoint visibility, which parks the edge-on ribbon when the falls runs dry.
-template fallsRibbon(id, profile, width = 8, standoff = 5, gauge = "meltStrength", visible = "meltVisible", palette = waterPalette, flow = fallsFlowLayer) {
+// supplies the endpoint visibility, which parks the edge-on ribbon when the falls runs dry. The sheets are glass (`glass`):
+// the rock shows through them, and as glass they cast no shadow.
+template fallsRibbon(id, profile, width = 8, standoff = 5, gauge = "meltStrength", visible = "meltVisible", palette = waterPalette, flow = fallsFlowLayer, glass = fallsGlass) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
-      palette [palette[0] with { flow: flow }]
+      palette [palette[0] with { flow: flow, glass: glass }]
       sizeBy: "visible"
       drivers [
         { name: "fold", signal: $"state.{gauge}", cadence: -1, blendInSeconds: 0, blendOutSeconds: 0 }
@@ -200,12 +241,12 @@ template glacierMass(id, lumps, gauge = "glacierLength", origin = [0, 0, 0], pal
 
 // A lake's surface: a flat turquoise disc of `radius` that rises and falls with the gauge `state.<gauge>` by `rise` metres
 // a unit above `rest`, the gauge's value at the lake's outlet, its shading rippled by `flow`.
-template lakeSurface(id, radius, gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette, flow = lakeFlowLayer) {
+template lakeSurface(id, radius, gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette, flow = lakeFlowLayer, glass = lakeGlass) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
-      palette [palette[0] with { flow: flow }]
+      palette [palette[0] with { flow: flow, glass: glass }]
       drivers [
         { name: "level", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0 }
       ]

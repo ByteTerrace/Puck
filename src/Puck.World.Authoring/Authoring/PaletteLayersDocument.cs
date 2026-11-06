@@ -22,26 +22,52 @@ public sealed record PaletteRadialStopDocument(float Radius, string Color);
 public sealed record PaletteRadialPaintDocument(IReadOnlyList<PaletteRadialStopDocument> Stops, float Softness = 0f,
     float ModulationAmplitude = 0f, float ModulationFrequency = 0f, uint Seed = 0);
 /// <summary>A palette slot's glass: the slot's shapes transmit what lies behind them, refracted and absorbed over the
-/// distance the view ray travels through the shape, and reflect the sky by Fresnel. The slot's <c>color</c> is the
-/// tint, the colour light takes on through <paramref name="Depth"/> of the glass, and its <c>roughness</c> the frost.
-/// A glass slot's shapes bake and draw apart from the creation's opaque shapes: they never blend with them, a cut or
-/// engraving never carves them, and a pooled creation keeps them out of any <c>group</c>.</summary>
+/// distance the view ray travels through the shape, and reflect their surroundings by Fresnel. The slot's <c>color</c>
+/// is the tint, the colour light takes on through <paramref name="Depth"/> of the glass, and its <c>roughness</c> the
+/// frost. A glass slot's shapes bake and draw apart from the creation's opaque shapes: they never blend with them, a cut
+/// or engraving never carves them, and a pooled creation keeps them out of any <c>group</c>.</summary>
 /// <param name="Depth">The thickness, in creation units, over which light takes on the tint; finite and positive. A
 /// part twice this thick reads twice as deep.</param>
 /// <param name="Ior">The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49
 /// acrylic (null = 1.5).</param>
-public sealed record PaletteGlassDocument(float Depth, float? Ior = null) {
+/// <param name="Scatter">The colour the glass scatters as a medium, the colour a deep body of it reads as under the
+/// light arriving at its surface (null = none).</param>
+/// <param name="Scattering">How much the medium scatters, per creation unit, finite and non-negative; it also dims what
+/// lies behind (null = 0, no scattering).</param>
+/// <param name="Contact">Foam or a wet margin where an opaque surface behind the glass comes within reach of its
+/// surface, revealed through the slot's flow coverage (null = none).</param>
+public sealed record PaletteGlassDocument(
+    float Depth,
+    float? Ior = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Scatter = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Scattering = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteGlassContactDocument? Contact = null
+) {
     /// <summary>The index of refraction an entry that names none takes: window glass.</summary>
     public const float DefaultIor = 1.5f;
 
     /// <summary>Resolves the engine glass at a placement scale.</summary>
-    /// <param name="scale">The placement scale the depth, a length, multiplies by; positive.</param>
+    /// <param name="resolve">The color resolver.</param>
+    /// <param name="scale">The placement scale: the depth and the contact's reach, lengths, multiply by it, and the
+    /// scattering, a coefficient per unit, divides by it; positive.</param>
     /// <returns>The glass.</returns>
-    public SdfGlass ToGlass(float scale = 1f) => new(
+    public SdfGlass ToGlass(Func<string, Vector3> resolve, float scale = 1f) => new(
         Depth: (Depth * scale),
-        Ior: (Ior ?? DefaultIor)
+        Ior: (Ior ?? DefaultIor),
+        Scatter: ((Scatter is { } scatter) ? resolve(scatter) : Vector3.Zero),
+        Scattering: ((Scattering ?? 0f) / scale),
+        ContactReach: ((Contact?.Reach ?? 0f) * scale),
+        ContactCoverage: (Contact?.Coverage ?? 0f)
     );
 }
+/// <summary>A glass slot's contact: the slot's flow coverage rises toward <paramref name="Coverage"/> where the opaque
+/// surface behind the glass lies within <paramref name="Reach"/> of the glass's surface along the view, so foam
+/// gathers at a step, a pier or a bank in the flow's own pattern. The slot's flow must name the surface its coverage
+/// reveals.</summary>
+/// <param name="Reach">The distance, in creation units along the view from the glass surface to the opaque surface
+/// behind it, over which the added coverage falls to zero; positive.</param>
+/// <param name="Coverage">The coverage added where the opaque surface touches the glass's, in [0, 1].</param>
+public sealed record PaletteGlassContactDocument(float Reach, float Coverage);
 /// <summary>A palette slot's flow layer: the slot's shading moves along <paramref name="Velocity"/> while its geometry
 /// stays still. A seeded noise pattern advects with the flow in two layers half a cycle apart, so neither restart shows,
 /// tilting the shading normal by <paramref name="Tilt"/> times its slope and revealing <paramref name="Surface"/> over

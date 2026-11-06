@@ -37,6 +37,12 @@ struct SdfMaterialData {
     uint emissiveLane; // the render lane scaling emissive, plus one; 0 keeps the static emissive
     float3 absorption; // a glass's absorption per world unit (SdfGlass.Absorption); exp(-absorption * distance) transmits
     float ior; // a glass's index of refraction; zero for an opaque material
+    // A glass's medium (row 31): its scatter colour and scattering per world unit (SdfGlass.Scatter, Scattering); and its
+    // contact (20.w, two half floats): the reach and the coverage, both zero for no contact.
+    float3 scatter;
+    float scattering;
+    float contactReach;
+    float contactCoverage;
     // The material's own cel style (SdfToon, rows 22 to 25), laid out as the pass block's toon members: bands (mode,
     // threshold, softness, specular size), shadow (tint, exposure gain), outline (width, distance, normal, shoulder),
     // ink (tint). A zero mode inherits the world's default style (sdfToonStyle).
@@ -134,6 +140,10 @@ SdfMaterialData sdfMaterialLoad(int material) {
     data.emissiveLane = sdfWords[materialBase + 20u].z;
     data.absorption = asfloat(sdfWords[materialBase + 21u]).rgb;
     data.ior = asfloat(sdfWords[materialBase + 21u]).w;
+    data.scatter = asfloat(sdfWords[materialBase + 31u]).rgb;
+    data.scattering = asfloat(sdfWords[materialBase + 31u]).w;
+    data.contactReach = f16tof32(sdfWords[materialBase + 20u].w & 0xFFFFu);
+    data.contactCoverage = f16tof32(sdfWords[materialBase + 20u].w >> 16u);
     data.toonBands = asfloat(sdfWords[materialBase + 22u]);
     data.toonShadow = asfloat(sdfWords[materialBase + 23u]);
     data.toonOutline = asfloat(sdfWords[materialBase + 24u]);
