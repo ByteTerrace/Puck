@@ -1077,7 +1077,7 @@ public sealed partial class SdfMeshPathBake {
             m_resampleGroups++;
             if (group.Geometry.SampledMatches(sampled: sampled)) {
                 // The set moved back to the snapshot the group bakes: a newer plan waiting on it is no longer newer.
-                if (group.Successor is not null) { group.Successor = null; m_successors--; }
+                DropSuccessor(group: group);
                 continue;
             }
             stale.Add(item: group);
@@ -1111,8 +1111,7 @@ public sealed partial class SdfMeshPathBake {
                 old.Successor = plan;
                 continue;
             }
-            replaced |= Place(group: plan, identity: identity, index: indices[at], leaders: leaders, old: old, started: ref started);
-            if (!ReferenceEquals(objA: m_groups[indices[at]], objB: old)) { m_retiredGroups.Add(item: old); old.Retired = true; }
+            replaced |= Succeed(identity: identity, index: indices[at], leaders: leaders, old: old, plan: plan, started: ref started);
         }
         BeginOrphans(indices: m_sampledReaders, started: ref started);
         BeginAccounts(fresh: false, instances: frame.Program.Instances.Count, restarted: restarted, started: started);
@@ -1131,16 +1130,29 @@ public sealed partial class SdfMeshPathBake {
             var old = m_groups[index];
 
             if (!old.Done || (old.Successor is not { } plan)) { continue; }
-            old.Successor = null;
-            m_successors--;
             m_promoted++;
-            replaced |= Place(group: plan, identity: identity, index: index, leaders: (leaders ??= Leaders()), old: old, started: ref started);
-            if (!ReferenceEquals(objA: m_groups[index], objB: old)) { m_retiredGroups.Add(item: old); old.Retired = true; }
+            replaced |= Succeed(identity: identity, index: index, leaders: (leaders ??= Leaders()), old: old, plan: plan, started: ref started);
         }
         if (leaders is null) { return; }
         BeginOrphans(indices: m_sampledReaders, started: ref started);
         BeginAccounts(fresh: false, instances: frame.Program.Instances.Count, restarted: restarted, started: started);
         if (replaced) { m_productRevision++; }
+    }
+    // Puts a reader's newer plan in the place of the reader, which has landed (Place), dropping any successor the reader
+    // held, which the plan replaces, and retiring the reader once its place holds another group. The one door a resampled
+    // plan reaches the group list by, so the successor count stays the readers' successors.
+    private bool Succeed(Group old, Group plan, int index, UInt128 identity, Dictionary<SdfMeshGeometry, Group> leaders, ref PlaceCounts started) {
+        DropSuccessor(group: old);
+
+        var replaced = Place(group: plan, identity: identity, index: index, leaders: leaders, old: old, started: ref started);
+
+        if (!ReferenceEquals(objA: m_groups[index], objB: old)) { m_retiredGroups.Add(item: old); old.Retired = true; }
+        return replaced;
+    }
+    private void DropSuccessor(Group group) {
+        if (group.Successor is null) { return; }
+        group.Successor = null;
+        m_successors--;
     }
     // The readers baking a geometry no other reader waits on. A group sharing geometry with a reader hashed the same
     // snapshot, so it is a reader too: the readers alone hold every leader a resampled group can follow.
