@@ -449,6 +449,9 @@ public static partial class SdfWorldPackage {
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowFarExit, type: ShaderValueType.Float4),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowSecondExit, type: ShaderValueType.Float4),
         ShaderWorkCounters.BufferMember,
+        Read(element: ShaderValueType.Uint, name: MeshShadowNearOptical),
+        Read(element: ShaderValueType.Uint, name: MeshShadowFarOptical),
+        Read(element: ShaderValueType.Uint, name: MeshShadowSecondOptical),
         Read(element: ShaderValueType.Uint, name: MeshPyramid),
         Written(element: ShaderValueType.Uint, name: MeshPyramidWritten),
         .. Tables,
@@ -464,15 +467,16 @@ public static partial class SdfWorldPackage {
         InputVersions: [],
         OutputVersions: [Color],
         Passes: [
-            ShadowRaster(depth: Parts.ShadowNearDepth, exit: Parts.ShadowNearExit, name: Parts.ShadowNear),
-            ShadowRaster(depth: Parts.ShadowFarDepth, exit: Parts.ShadowFarExit, name: Parts.ShadowFar),
-            ShadowRaster(depth: Parts.ShadowSecondDepth, exit: Parts.ShadowSecondExit, name: Parts.ShadowSecond),
+            ShadowRaster(depth: Parts.ShadowNearDepth, exit: Parts.ShadowNearExit, optical: Parts.ShadowNearOptical, name: Parts.ShadowNear),
+            ShadowRaster(depth: Parts.ShadowFarDepth, exit: Parts.ShadowFarExit, optical: Parts.ShadowFarOptical, name: Parts.ShadowFar),
+            ShadowRaster(depth: Parts.ShadowSecondDepth, exit: Parts.ShadowSecondExit, optical: Parts.ShadowSecondOptical, name: Parts.ShadowSecond),
             Raster(depth: Parts.MeshDepth, name: Parts.Mesh, target: Parts.MeshTarget),
             Pass(inputs: [Parts.MeshTarget], name: Parts.Pyramid, outputs: [Parts.MeshPyramid]),
             Pass(
                 inputs: [
                     Parts.MeshTarget, Parts.MeshPyramid, Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth,
                     Parts.ShadowNearExit, Parts.ShadowFarExit, Parts.ShadowSecondExit,
+                    Parts.ShadowNearOptical, Parts.ShadowFarOptical, Parts.ShadowSecondOptical,
                 ],
                 name: Parts.Surface,
                 outputs: [Parts.Visibility]
@@ -489,8 +493,11 @@ public static partial class SdfWorldPackage {
             ShadowDepth(name: Parts.ShadowFarDepth, texels: MeshShadowResolution),
             ShadowDepth(name: Parts.ShadowSecondDepth, texels: MeshShadowResolution),
             ShadowDepth(name: Parts.ShadowNearExit, texels: MeshShadowResolution),
+            ShadowOptical(Parts.ShadowNearOptical, MeshShadowResolution),
             ShadowDepth(name: Parts.ShadowFarExit, texels: MeshShadowResolution),
+            ShadowOptical(Parts.ShadowFarOptical, MeshShadowResolution),
             ShadowDepth(name: Parts.ShadowSecondExit, texels: MeshShadowResolution),
+            ShadowOptical(Parts.ShadowSecondOptical, MeshShadowResolution),
             Image(format: MeshTargetFormat, from: null, name: Parts.MeshTarget, retained: true),
             // Two words a pyramid texel; the levels one up hold under a third of the extent's texels, with their tiles'
             // padding, and the kernels bound every level by the buffer's length.
@@ -585,14 +592,17 @@ public static partial class SdfWorldPackage {
     // A shadow cascade's raster pass, drawing the frame's mesh draws from the cascade's light camera into its two layers:
     // the depth, the nearest face of any facing (where the light enters the first solid it crosses), and the exit layer,
     // the nearest face turned from the light (where it leaves the first solid it crosses).
-    private static RenderGraphFragmentPass ShadowRaster(string name, string depth, string exit) => new(
+    private static RenderGraphFragmentPass ShadowRaster(string name, string depth, string exit, string optical) => new(
         CountsKernelWork: true,
         InputAccesses: [],
         Inputs: [],
         Name: name,
-        OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
-        Outputs: [new ResourceReference(Name: depth), new ResourceReference(Name: exit)]
+        OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.FragmentWrite],
+        Outputs: [new ResourceReference(Name: depth), new ResourceReference(Name: exit), new ResourceReference(Name: optical)]
     );
+    // Four words per cascade texel: signed 64-bit optical depth, complemented nearest entry distance, reserved.
+    private static ShaderPipelineResource ShadowOptical(string name, int texels) =>
+        Buffer(count: null, name: name, sizeBytes: checked((ulong)texels * (ulong)texels * 4u * sizeof(uint)), strideBytes: sizeof(uint)) with { Retained = true };
     // A cascade's depth, texels a side, which its raster pass writes and the surface pass samples.
     private static ShaderPipelineResource ShadowDepth(string name, int texels) => new(
         ClearDepth: MeshClearDepth,
@@ -605,6 +615,12 @@ public static partial class SdfWorldPackage {
 
     /// <summary>The names of the fragment's passes and versions.</summary>
     public static partial class Parts {
+        /// <summary>The near cascade's optical-depth term.</summary>
+        public const string ShadowNearOptical = "shadowNearOptical";
+        /// <summary>The far cascade's optical-depth term.</summary>
+        public const string ShadowFarOptical = "shadowFarOptical";
+        /// <summary>The second light's cascade optical-depth term.</summary>
+        public const string ShadowSecondOptical = "shadowSecondOptical";
         /// <summary>The near shadow cascade's raster pass.</summary>
         public const string ShadowNear = "shadow-near";
         /// <summary>The far shadow cascade's raster pass.</summary>

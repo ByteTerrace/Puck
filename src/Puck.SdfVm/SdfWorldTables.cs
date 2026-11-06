@@ -199,7 +199,8 @@ public sealed partial class SdfWorldTables : IDisposable {
     /// <exception cref="ObjectDisposedException"><paramref name="pipelines"/> has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The device's descriptor heap cannot admit the tables' pools
     /// (<see cref="CheckAdmission"/>, checked before anything is allocated).</exception>
-    public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, GpuPassPipeline shadowRaster, GpuPassPipeline shadowExitRaster, GpuPassPipeline glassRaster, GpuPassPipeline occlusion, SdfWorldTablesOptions options) {
+    /// <param name="shadowGlassRaster">The cascade glass extinction pipeline.</param>
+    public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, GpuPassPipeline shadowRaster, GpuPassPipeline shadowExitRaster, GpuPassPipeline shadowGlassRaster, GpuPassPipeline glassRaster, GpuPassPipeline occlusion, SdfWorldTablesOptions options) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(regionCopy);
@@ -258,6 +259,7 @@ public sealed partial class SdfWorldTables : IDisposable {
         m_shadowPipeline = (shadowRaster.Graphics ?? throw new ArgumentException(message: "The shadow pass pipeline is not a graphics pipeline.", paramName: nameof(shadowRaster)));
         m_shadowRenderPass = (shadowRaster.RenderPass ?? throw new ArgumentException(message: "The shadow pass pipeline names no render pass.", paramName: nameof(shadowRaster)));
         m_shadowExitPipeline = (shadowExitRaster.Graphics ?? throw new ArgumentException(message: "The shadow exit pipeline is not a graphics pipeline.", paramName: nameof(shadowExitRaster)));
+        m_shadowGlassPipeline = shadowGlassRaster.Graphics ?? throw new ArgumentException("The shadow glass pipeline is not a graphics pipeline.", nameof(shadowGlassRaster));
         m_glassPipeline = (glassRaster.Graphics ?? throw new ArgumentException(message: "The glass pass pipeline is not a graphics pipeline.", paramName: nameof(glassRaster)));
         m_occlusionPipeline = (occlusion.Compute ?? throw new ArgumentException(message: "The mesh pass occlusion kernel is not a compute pipeline.", paramName: nameof(occlusion)));
         m_regionCopyPipeline = regionCopy;

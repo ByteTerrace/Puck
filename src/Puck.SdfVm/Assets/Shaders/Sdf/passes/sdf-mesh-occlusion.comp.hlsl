@@ -27,7 +27,7 @@ static const uint SdfOcclusionDepth = 1u;
 static const uint SdfOcclusionLate = 2u;
 static const uint SdfOcclusionUncovered = 0x7F800000u;
 static const uint SdfOcclusionCommandWords = 5u;
-static const uint SdfOcclusionPhases = 3u;
+static const uint SdfOcclusionPhases = 4u;
 static const uint SdfOcclusionDrawnWords = 4u;
 static const uint SdfOcclusionUnboxed = 1u;
 
@@ -207,6 +207,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     bool splitExit = (header.z & 2u) != 0u;
     uint draws = 0u;
     uint vertices = 0u;
+    uint exitDraws = 0u;
+    uint exitVertices = 0u;
 
     // Each phase draws one command a candidate, empty or not.
     if (id.x == 0u) {
@@ -214,6 +216,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         if (splitExit && step == SdfOcclusionEarly) {
             sdfMeshOcclusionCountsRW[1] = header.x;
             sdfMeshOcclusionCountsRW[2] = header.x;
+            sdfMeshOcclusionCountsRW[3] = header.x;
         }
     }
     if (id.x < header.x) {
@@ -232,7 +235,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         // A culled draw can retain another mesh's level in history; its current table may have fewer levels.
         uint level = min(state.y, d.w);
         if (step == SdfOcclusionEarly) {
-            kept = (((a.w >> 1u) & 1u) == header.w) && (unboxed || sdfSelectionKeeps(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz)));
+            kept = (splitExit || (((a.w >> 1u) & 1u) == header.w)) && (unboxed || sdfSelectionKeeps(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz)));
             if (kept) {
                 level = sdfSelectionLevel(record, state, unboxed);
                 state.y = level;
@@ -248,12 +251,17 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
         sdfMeshOcclusionVisibleRW[draw] = state;
         uint count = sdfSelectionVertices(record, level);
-        sdfOcclusionEmit(((step == SdfOcclusionLate) ? 1u : 0u), id.x, (draw | (level << SDF_MESH_LEVEL_SHIFT)), count, emit);
+        bool glass = (a.w & 2u) != 0u;
+        bool opaqueEmit = emit && !(splitExit && glass);
+        sdfOcclusionEmit(((step == SdfOcclusionLate) ? 1u : 0u), id.x, (draw | (level << SDF_MESH_LEVEL_SHIFT)), count, opaqueEmit);
         if (splitExit && step == SdfOcclusionEarly) {
             bool encloses = (a.w & 4u) != 0u;
             uint identity = draw | (level << SDF_MESH_LEVEL_SHIFT);
-            sdfOcclusionEmit(1u, id.x, identity, count, emit && encloses);
-            sdfOcclusionEmit(2u, id.x, identity, count, emit && !encloses);
+            sdfOcclusionEmit(1u, id.x, identity, count, opaqueEmit && encloses);
+            sdfOcclusionEmit(2u, id.x, identity, count, opaqueEmit && !encloses);
+            sdfOcclusionEmit(3u, id.x, identity, count, emit && glass);
+            exitDraws = opaqueEmit ? 1u : 0u;
+            exitVertices = opaqueEmit ? count : 0u;
         }
         draws = emit ? 1u : 0u;
         vertices = emit ? count : 0u;
@@ -262,7 +270,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     sdfOcclusionCount(draws, vertices);
     if (splitExit && step == SdfOcclusionEarly) {
         // Count entry and exit separately: 64 * (3 * MaxTriangles) fits a uint wave sum, twice that does not.
-        // Each kept draw emits exactly one exit command; puckAddWork carries into the 64-bit accumulator.
-        sdfOcclusionCount(draws, vertices);
+        // Each kept opaque draw emits exactly one exit command; glass emits once. puckAddWork carries into 64 bits.
+        sdfOcclusionCount(exitDraws, exitVertices);
     }
 }

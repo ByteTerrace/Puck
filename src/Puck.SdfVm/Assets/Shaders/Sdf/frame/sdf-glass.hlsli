@@ -15,7 +15,7 @@
 // pass reads sdfGlassSums.
 #ifndef FRAME_SDF_GLASS_HLSLI
 #define FRAME_SDF_GLASS_HLSLI
-#include "../isa/sdf-render.hlsli"
+#include "sdf-optical-depth.hlsli"
 
 #if defined(SDF_GLASS_ACCUMULATES)
 #define SDF_GLASS_SUMS_READ sdfGlassSumsRW
@@ -23,10 +23,6 @@
 #define SDF_GLASS_SUMS_READ sdfGlassSums
 #endif
 
-// The distances and absorptions the optical depth sums quantize are clamped below 2^31 steps
-// (SdfWorldPackage.GlassDepthDistanceScale, GlassAbsorptionScale), so one face's product stays below 2^62.
-static const float SdfGlassDepthDistanceLimit = 65535.0;
-static const float SdfGlassAbsorptionLimit = 32767.0;
 // The second record's words within a pixel's SDF_GLASS_SUM_WORDS, after the sums.
 static const uint SdfGlassFrontCountWord = 8u;
 static const uint SdfGlassFrontEntryWord = 9u;
@@ -52,9 +48,7 @@ float sdfGlassThicknessAt(uint word, float front, float opaque) {
 }
 // One 64-bit optical depth sum, its low word at `word` and its high word after it, in optical depth.
 float sdfGlassDepthOf(uint word) {
-    float steps = ((float(asint(SDF_GLASS_SUMS_READ[(word + 1u)])) * 4294967296.0) + float(SDF_GLASS_SUMS_READ[word]));
-
-    return (steps / (SDF_GLASS_ABSORPTION_SCALE * SDF_GLASS_DEPTH_DISTANCE_SCALE));
+    return sdfOpticalDepthOf(SDF_GLASS_SUMS_READ[word], SDF_GLASS_SUMS_READ[word + 1u]);
 }
 // The RGB optical depth through every glass material before the opaque hit, of the pixel whose sums start at `word`.
 // It is negative only where the eye is inside a glass solid.
@@ -80,24 +74,6 @@ float sdfGlassNearestBackAt(uint word) {
 }
 
 #if defined(SDF_GLASS_ACCUMULATES)
-// The 64-bit product of two words, low word first, from their 16-bit halves.
-uint2 sdfGlassProduct(uint left, uint right) {
-    uint low = ((left & 0xFFFFu) * (right & 0xFFFFu));
-    uint lowHigh = ((left & 0xFFFFu) * (right >> 16u));
-    uint highLow = ((left >> 16u) * (right & 0xFFFFu));
-    uint middle = ((low >> 16u) + (lowHigh & 0xFFFFu) + (highLow & 0xFFFFu));
-
-    return uint2(((low & 0xFFFFu) | (middle << 16u)), (((left >> 16u) * (right >> 16u)) + (lowHigh >> 16u) + (highLow >> 16u) + (middle >> 16u)));
-}
-// Adds a 64-bit value, low word first, to the sum at `word`: the low word atomically, then the high word with the
-// carry that addition produced. Every carry is counted once, so the sum is exact in any order.
-void sdfGlassAddWide(uint word, uint2 value) {
-    uint before;
-    uint ignored;
-
-    InterlockedAdd(sdfGlassSumsRW[word], value.x, before);
-    InterlockedAdd(sdfGlassSumsRW[(word + 1u)], (value.y + ((before > (0xFFFFFFFFu - value.x)) ? 1u : 0u)), ignored);
-}
 // Adds one glass face at ray distance `t`, before the opaque hit at `opaque`, to the pixel whose sums start at `word`:
 // its signed distance and face count, its material's absorption over the distance from the face to the opaque hit,
 // and to the second record a front face's draw and triangle or a back face's distance. Paired faces subtract out the
@@ -123,16 +99,8 @@ void sdfGlassAccumulate(uint word, float t, float opaque, bool front, float3 abs
         InterlockedMax(sdfGlassSumsRW[(word + SdfGlassNearestBackWord)], ~asuint(max(t, 0.0)), before);
     }
 
-    uint opaqueSteps = (uint)round(min(opaque, SdfGlassDepthDistanceLimit) * SDF_GLASS_DEPTH_DISTANCE_SCALE);
-    uint faceSteps = (uint)round(min(max(t, 0.0), SdfGlassDepthDistanceLimit) * SDF_GLASS_DEPTH_DISTANCE_SCALE);
-    uint steps = ((opaqueSteps > faceSteps) ? (opaqueSteps - faceSteps) : 0u);
-    uint3 absorptionSteps = (uint3)round(clamp(absorption, 0.0, SdfGlassAbsorptionLimit) * SDF_GLASS_ABSORPTION_SCALE);
-
-    [unroll] for (uint channel = 0u; (channel < 3u); channel++) {
-        uint2 depth = sdfGlassProduct(absorptionSteps[channel], steps);
-
-        if (!front) { depth = uint2((0u - depth.x), ((~depth.y) + ((depth.x == 0u) ? 1u : 0u))); }
-        sdfGlassAddWide((word + 2u + (2u * channel)), depth);
+    [unroll] for (uint channel = 0u; channel < 3u; channel++) {
+        sdfOpticalDepthAccumulate(sdfGlassSumsRW, word + 2u + 2u * channel, t, opaque, front, absorption[channel]);
     }
 }
 #endif

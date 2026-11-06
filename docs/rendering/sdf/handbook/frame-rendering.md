@@ -673,9 +673,25 @@ a `depth` over which light through it takes on that colour, an index of
 refraction `ior`, and the slot's `roughness` as its frost) makes every shape in
 it glass. Glass shapes bake into groups of their own
 ([the bake](#the-bake): `SdfMeshBakeGroup.Glass`, never merged with an opaque
-instance), so a glass draw is glass whole, and the mesh pass, the shadow
-cascades and the irradiance volume's trace leave it out: glass casts no shadow
-and neither blocks nor bounces the probes' rays.
+instance), so a glass draw is glass whole. The opaque mesh pass and the
+irradiance volume's trace leave it out: even shadowing glass neither blocks
+nor bounces the probes' rays.
+
+`glass.shadowDensity` authors shadow extinction per creation unit. Its engine
+default is zero; a path of thickness `d` transmits `exp(-shadowDensity * d)`.
+Placement scaling divides this coefficient as it does `scattering`.
+The standard water package chooses its own density. Cascade selection routes
+glass draws to the extinction pipeline once, while opaque draws retain their
+entry and exit pipelines. Each existing cascade holds an optical-depth term
+beside its opaque depths, with no separate glass shadow map or lighting pass.
+The glass faces integrate signed density-weighted distances to that texel's
+first opaque receiver, using the same integer optical-depth accumulator as
+camera glass. Overlapping solids add extinction, air gaps cancel, and an
+opaque receiver inside glass clips the path. The surface pass reads this term
+where it reads cascade depths; the nearest glass entry sizes its penumbra.
+This is a filtered cascade estimate: neighbouring texels describe their own
+first opaque receivers, as the opaque depth filter does. It does not trace
+glass for irradiance, reflections, or lights without cascades.
 
 A view of a program with a glass shape runs the glass fragment
 (`SdfWorldPackage.WithGlass`), three passes between views and the sky, and

@@ -14,6 +14,7 @@ public sealed partial class SdfWorldTables {
     private readonly IGpuRenderPass m_shadowRenderPass;
     // The cascades' exit-layer pipeline, drawing the faces turned from the light in the same render pass.
     private readonly IGpuPipeline m_shadowExitPipeline;
+    private readonly IGpuPipeline m_shadowGlassPipeline;
     // The glass pass's pipeline, drawing in the mesh render pass.
     private readonly IGpuPipeline m_glassPipeline;
     // The mesh pass's occlusion kernel, which binds the mesh pass's set.
@@ -34,6 +35,7 @@ public sealed partial class SdfWorldTables {
     internal IGpuPipeline ShadowPipeline => m_shadowPipeline;
     // The shadow cascades' exit-layer pipeline: the shadow pipeline with the faces toward the light culled.
     internal IGpuPipeline ShadowExitPipeline => m_shadowExitPipeline;
+    internal IGpuPipeline ShadowGlassPipeline => m_shadowGlassPipeline;
     // The depth-only render pass a view's cascades draw in, which its cascade framebuffers are created for.
     internal IGpuRenderPass ShadowRenderPass => m_shadowRenderPass;
     // A frame waits for the views kernel, the one pipeline the tables are built without (SdfWorldPipelines.PollRequired):
@@ -64,6 +66,7 @@ public sealed partial class SdfWorldTables {
                 m_meshPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_meshPipeline.GroupLayoutHandles) &&
                 m_shadowPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_shadowPipeline.GroupLayoutHandles) &&
                 m_shadowExitPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_shadowExitPipeline.GroupLayoutHandles) &&
+                m_shadowGlassPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_shadowGlassPipeline.GroupLayoutHandles) &&
                 m_glassPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_glassPipeline.GroupLayoutHandles) &&
                 ((m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is not { } resolve) ||
                     ((other.m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is { } otherResolve) &&
