@@ -76,11 +76,9 @@ milestone. The owner requested its baseline and implementation plan, which
 9. [Engine job system](#engine-job-system) [high]: scheduling, the
    garbage-collection cuts, then J1; the replay burst's tick budget and F17 as
    ordinary work.
-10. [Water feature build](#water) ([plan](water.md#the-lanes)) [ordinary, gated on
-    the owner]: H1, the chain as the arc, first, then A1 to A5 and R1 in
-    parallel, R3, P1 last. Its three taste calls are under
-    [owner decisions](#owner-decisions); H1 and A1 wait on them, and the lanes
-    that need none of them (R1, the mechanisms the plan lists) can start.
+10. [Water feature build](#water) ([plan](water.md#the-lanes)) [ordinary]: H1,
+    the chain as the arc, first, then A1 to A5 and R1 in parallel, R3, P1 last.
+    The owner accepted the plan's three taste calls as H1 and A1 state them.
 11. [Certified field contact](#certified-field-contact): box and ellipsoid
     bodies, then clearance on slopes within a third of a metre.
 12. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
@@ -141,28 +139,6 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   pass and their invariant checks have run (AGENTS.md); the red tests listed
   under [Tests](#tests-suspended) hold nothing back while test requirements are
   suspended.
-- The water plan's three taste calls ([the water plan](water.md#the-lanes)),
-  each with the plan's own choice as the recommendation. H1 and A1 build
-  against them, so each waits on the owner's answer:
-  - The lake stands near its sill. After the melt the lake rests at its outlet
-    sill, and the falls are dry (`fallsFlow` below 0.01) within 15 minutes of
-    simulated time after T, instead of the lake storing the melt (today its
-    level rises to 1.30 at T/2 and drains over the hour after T,
-    [gap S2](water.md#the-gap-list)). Recommended: yes, as the plan's H1
-    states it, since the owner's arc has the falls dry when the melt ends.
-  - A confined aquifer that fills by 3T/4, with the river then held at a level
-    it settles to. The aquifer's head is capped at `fullHead`, so the reservoir
-    fills and then backs the river up, and the river reaches homeostasis (drift
-    under 0.005 m over any quarter hour) within 30 minutes after T
-    ([gaps S3 and S4](water.md#the-gap-list), H1). Recommended: yes, as the
-    plan's H1 states it, which is the owner's "fills up and then allows the
-    river level to rise ... homeostasis".
-  - A carved river channel. The lawn and terrain are cut along the river's legs
-    from the plunge basin to the pool's north bank, with banks, a bed and
-    riffle stones, and the water a body filling the channel to the level the
-    chain sets, instead of a slab standing over the turf
-    ([gap G1](water.md#the-gap-list), A1). Recommended: yes, as A1 states it;
-    the current slab reads as a film over grass.
 - What the chase camera does with its back to the stair wall: swing the boom,
   rise over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).

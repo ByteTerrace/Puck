@@ -364,6 +364,12 @@ floor's stones and the readable aquifer are lanes, not follow-ups. Two glass
 layers a pixel have landed ([option 3 as built](#option-3-as-built)); the
 reservoir's pane reads them.
 
+The owner's rulings on the three taste calls: the lake rests at its outlet
+sill and the falls run dry within 15 simulated minutes after T; the aquifer is
+confined, fills by 3T/4 and then backs the river up to a held level; and the
+river runs in a carved channel, not a slab over the turf. H1 and A1 build them
+as stated below.
+
 ### H1. The chain is the arc
 
 **Outcome.** The hydrology produces the owner's arc as specified, and every look binds to a gauge the chain writes, never to the clock. In `worlds/standard/hydrology.puck` and `worlds/debug/water.puck`: a confined aquifer (its head capped at `fullHead`, so the reservoir fills and then backs the river up) sized to fill by 3T/4; a sill and falls that pass the melt so the lake stands near its sill and the falls are dry (`fallsFlow` < 0.01) within 15 min of simulated time after T; a river that reaches homeostasis (drift under 0.005 m over any quarter hour) within 30 min after T. The falls' fold and visibility, the spray and the lake's level bind to `fallsFlow` and `lakeLevel`; `meltStrength` and `glacier` drive the glacier alone. The hidden chain's rows lose their height scale and colour, so nothing bakes under the floor. The scenarios `worlds/debug/water-arc-tests.puck` and a chain-only twin are the specification's pins: their `expect` lines carry the numbers above.
