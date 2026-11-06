@@ -370,7 +370,7 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
                 };
             }
             var (position, orientation, scale) = PoseOf(frame);
-            if (m_posed && (m_position == position) && (m_orientation == orientation) && (m_scale == scale) && (m_draw.FrameSlot == (group!.Dynamic ? group.Slot : null)) && (m_draw.Glass == group.Glass)) { return m_draw; }
+            if (m_posed && (m_position == position) && (m_orientation == orientation) && (m_scale == scale) && (m_draw.FrameSlot == (group!.Dynamic ? group.Slot : null)) && (m_draw.Glass == group.Glass) && (m_draw.Displacement == group.Displacement)) { return m_draw; }
             m_position = position;
             m_orientation = orientation;
             m_scale = scale;
@@ -380,7 +380,11 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
                 ? ((Matrix4x4.CreateScale(scale) * Matrix4x4.CreateFromQuaternion(orientation)) * Matrix4x4.CreateTranslation(position))
                 : Matrix4x4.Identity);
             return m_draw = new SdfMeshDraw(Identity: (chunked ? mesh : group), Material: 0, Mesh: mesh,
-                ObjectToWorld: matrix) { FrameSlot = (group.Dynamic ? group.Slot : null), Glass = group.Glass, IsDynamic = group.Dynamic };
+                ObjectToWorld: matrix) {
+                FrameSlot = (group.Dynamic ? group.Slot : null), Glass = group.Glass, Displacement = group.Displacement,
+                // A displaced surface moves as it is drawn, so it stays out of the irradiance volume's static scene.
+                IsDynamic = (group.Dynamic || (group.Displacement is not null)),
+            };
         }
     }
 

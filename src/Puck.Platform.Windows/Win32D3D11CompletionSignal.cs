@@ -111,8 +111,11 @@ public sealed unsafe class Win32D3D11CompletionSignal : IDisposable {
             instance: this
         );
 
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Transfer);
+
         if (Order.SharedFence) {
             m_lastValue = value;
+            GpuQueueWork.Process.Signal();
             m_context4->Signal(
                 Value: value,
                 pFence: m_fence
@@ -145,6 +148,7 @@ public sealed unsafe class Win32D3D11CompletionSignal : IDisposable {
         var completed = m_completed!;
 
         _ = completed.Reset();
+        GpuQueueWork.Process.Signal();
         m_context4->Signal(
             Value: value,
             pFence: m_fence

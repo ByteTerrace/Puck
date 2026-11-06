@@ -20,7 +20,15 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.Confinement/Puck.Confinement.csproj" />
         <!-- Qr/QrReedSolomon builds its generator polynomials over Puck.Maths.ReedSolomon/BinaryField<T>. -->
         <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../../build/RunDirectory.cs" Link="Properties/RunDirectory.cs" />
+        <EmbeddedResource Include="../../wasm/**/*.rs;../../wasm/**/Cargo.toml"
+                          Exclude="../../wasm/target/**" LogicalName="Puck.WasmSources/%(RecursiveDir)%(Filename)%(Extension)" />
+        <EmbeddedResource Include="../../wasm/Cargo.lock;../../wasm/builds.json" LogicalName="Puck.WasmSources/%(Filename)%(Extension)" />
+        <EmbeddedResource Include="../../wasm/.cargo/config.toml" LogicalName="Puck.WasmSources/.cargo/config.toml" />
     </ItemGroup>
 </Project>

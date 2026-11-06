@@ -28,6 +28,14 @@
 //! with no pose the ghost simply does not move, which is the honest behaviour and not a fallback
 //! path.
 
+#![cfg_attr(not(test), no_std)]
+
+#[cfg(all(target_arch = "wasm32", not(test)))]
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    core::arch::wasm32::unreachable()
+}
+
 use puck_stdlib::{
     abi, fixed, Handle, InCellKind, Inputs, Outputs, CAP_DRIVE, CAP_OBSERVE,
     OBSERVATION_VERB_GRANTED_BODY, REQUEST_VERB_BODY_POSE_ANSWER_PARTS,

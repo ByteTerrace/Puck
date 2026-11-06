@@ -133,7 +133,7 @@ public sealed class LawProofTreeLeaseLawTests : LawProofLaws {
                 cloned = (arguments[0] == "clone");
                 Assert.False(condition: File.Exists(path: lease.Tree));
 
-                return new Puck.Hosting.ChildProcessResult(ExitCode: 1, Stderr: "stop here", Stdout: string.Empty);
+                return new Puck.Abstractions.ChildProcessResult(ExitCode: 1, Stderr: "stop here", Stdout: string.Empty);
             },
             head: "HEAD",
             reason: out _
@@ -290,7 +290,7 @@ public sealed class LawProofTreeReuseLawTests : LawProofLaws {
         Assert.True(condition: (second is not null), userMessage: secondReason);
         Assert.True(condition: second.TryPrepare(
             git: (repository, arguments) => (arguments.SequenceEqual(second: ["rev-parse", "--show-toplevel"])
-                ? new Puck.Hosting.ChildProcessResult(ExitCode: 0, Stderr: string.Empty, Stdout: "Z:/Packages/Host/LocalCache/Local/Puck/law-trees/tree\n")
+                ? new Puck.Abstractions.ChildProcessResult(ExitCode: 0, Stderr: string.Empty, Stdout: "Z:/Packages/Host/LocalCache/Local/Puck/law-trees/tree\n")
                 : CliGit.Run(arguments: arguments, repository: repository)),
             head: head,
             reason: out secondReason

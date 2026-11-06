@@ -1,4 +1,4 @@
-using Puck.Networking;
+using Puck.Abstractions;
 namespace Puck.World.Server;
 
 public sealed partial class WorldExtensionHost {

@@ -4,6 +4,9 @@ Puck.Abstractions is the engine's neutral contract layer: backend- and
 platform-agnostic interfaces and small value types that every subsystem
 implements and depends on.
 
+`ChildProcess` and `OperationDeadline` provide the shared bounded host-process
+boundary used by native compilers, shader tools, CLI commands and hosted services.
+
 The optional `IGpuTimestampFactory` creates named observational query pools.
 `GpuDeviceServices` carries it through the ordinary counting and creation-fault
 wrappers; unsupported queues return no pool. Consumers fence readback and never

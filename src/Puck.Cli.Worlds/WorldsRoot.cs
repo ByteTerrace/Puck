@@ -35,6 +35,7 @@ public static class WorldsRoot {
         TestCommand.Create(),
         VerbsCommand.Create(),
         VocabularyCommand.Create(),
+        PlayerDerivedProducts.Create(),
     ];
     /// <summary>Prepares the process before any verb runs.</summary>
     public static void Start() {

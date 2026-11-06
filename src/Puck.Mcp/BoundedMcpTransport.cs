@@ -1,6 +1,6 @@
+using Puck.Abstractions;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
-using Puck.Networking;
 
 namespace Puck.Mcp;
 

@@ -27,9 +27,10 @@ The assignment supplies these observations: about **6.3 native executes and
 signals per rendered frame process-wide**, versus **3.0 in A2's measured scope**;
 about **2 ms of native command-list recording**; serial view recording; and a
 windowed debug World's **13–18 GB private bytes**. They were not remeasured here.
-The two submission figures are not interchangeable scopes, and their difference
-has no established cause. Private bytes are a process measure, not GPU-local
-residency. Neither figure justifies attributing the problem to one subsystem.
+The two submission figures are not interchangeable scopes; section 1 records
+the attribution that later explained their difference. Private bytes are a
+process measure, not GPU-local residency, and do not by themselves attribute
+the problem to one subsystem.
 
 The design invariant is that a GPU consumer reads a declared resource generation
 only after its producer, and that generation's storage survives every consumer's
@@ -247,49 +248,44 @@ a measurement that decides the next action.
 
 ### 1. Complete A2's accounting and give J6 immutable recording jobs
 
-**Outcome and scope.** Add process-wide native submit/signal attribution, then
-make independent view recordings jobs under the existing engine scheduler.
-Reuse `GpuSubmissionBatch`, the current shader plans and per-slot pools. Do not
-parallelize graph installation, source uploads, `RenderFrame` publication or
-the shared queue batch by calling them from arbitrary workers.
+**Landed.** Attribution and the serial record job are in place. `world.counters
+gpu.queue` (`GpuQueueWork`) counts every native execute, list, signal and present
+by category and split cause on both backends, and named the 6.3-versus-3.0 gap:
+each node that sampled a desktop or camera feed split the Direct3D 12 frame batch
+for an external wait the producer had already satisfied. Submitters now drop a
+reached wait (`GpuExternalWait.IsReached`), which brought the debug world's spawn
+from about 8 to 3.4 executes a frame (one batch end, one present, the background
+service's jobs and an export's completion signal). A node's frame is one record
+job (`ShaderPipelineRenderNode.RenderFrame`: prepare, record, commit), whose lists
+one recording owns until it submits or abandons them; a failed recording is
+abandoned and its instance refused, never published
+([runtime contracts](../../.claude/skills/rendering/references/runtime-contracts.md#1-image-lifetime-is-leased-per-image-and-per-reader)).
+`world.counters render.record` (`RenderRecordWork`) measures the jobs.
 
-**Invariant and enforcement.** One coordinator owns source mutation, plan
-installation, queue order, history commit and output publication. A prepared
-record job exclusively owns its command pool, descriptors, timing ranges,
-scratch and retained input generations. Workers return recorded lists and
-outcomes; only the coordinator submits and commits them in the dependency
-order. A prepared-job type with moved/leased inputs is the proposed boundary;
-the current single-threaded objects do not enforce it yet. A consumer of a
-current-frame producer may record against a reserved output only when that
-binding is fixed; otherwise its preparation waits for that producer. Previous
-frame edges remain explicitly previous-frame edges.
+**Remaining: concurrent recording (step 3), held until it pays.** The
+measurements say it does not pay yet on the lead machine. At the spawn the
+serial record sum was 10 to 14 ms a frame over 15 to 17 jobs, and the longest
+single recording, the critical path concurrency could not shorten, was 7 to 11
+ms of it; at the forest pose the sum was 1.4 to 5 ms with a 0.6 to 4 ms critical
+path. One node's recording dominates, with periodic produce spikes of 300 to 450
+ms inside it. So the next lever is that node's own host work, moved into the
+coordinator's preparation and measured, not workers. Which node it is has not
+been read: `render.record` is process-wide, and each node's
+`ShaderPipelineRenderNode.LastRecordTicks` is not yet reported per instance. The
+candidate is a world node's SDF pass, whose first recording runs the residency's
+frame staging, upload and background pump.
+Concurrency also needs, before it is safe: package recorders that keep no host
+state shared across nodes (the residency's once-a-frame `Submit`), a
+thread-safe pipeline cache lookup and counting recorder, and per-worker command
+pools under the existing scheduler, with queue operations still serialized and
+the join before commit.
 
-**Steps and mechanical checks.**
-
-1. At native execute/submit and native signal calls, record frame interval,
-   queue, callsite/category, command-list count and split reason. Cover graph,
-   background, upload, external wait/export, readback, present and idle/drain.
-   Reconcile their sum to process counters in identical intervals, with cold
-   bake/GI, warm idle, portals and capture separately. The A2 owner resolves
-   6.3 versus 3.0 here; fence-sharing and intervals can change counts without
-   missing work. No category is declared guilty before the trace.
-2. Separate preparation, record and submit/commit in the node. First execute
-   the prepared jobs serially. Compare list order, resource generations,
-   publication/capture behavior and CPU allocation against the old path.
-3. Run only independent sufficiently large jobs concurrently using existing
-   scheduler priorities and worker-owned pools on both backends. Join before
-   commit; keep backend queue operations serialized. Measure record sum,
-   critical path, worker waits, native executes, private/scratch bytes and
-   whole-frame p50/p99. Small graphs use the same jobs serially, not a second
-   recording implementation.
-
-**Showing it worked.** The implementation lane builds its touched projects,
-then the lead runs the debug world's spawn, forest/hall portal view, resize,
-capture and reload paths under Direct3D 12 and Vulkan. API validation and
-inspection establish correct resource/lease ordering; frames and counters
-establish benefit. Exercise paused/slow consumers and failed record jobs so a
-worker exception cannot publish an unsubmitted image or strand leases. These
-are implementation acceptance observations, not new mandatory suite gates.
+**Mechanical check for step 3.** With the residency's host work in preparation,
+`render.record` shows the per-frame critical path (`longest-microseconds` over
+`frames`) well below the serial sum on the spawn and forest poses; only then run
+independent jobs concurrently and compare record sum, critical path, worker
+waits, `gpu.queue` executes, private bytes and whole-frame p50/p99 against the
+serial path on both backends.
 
 ### 2. Let G1 strengthen B1 without creating another GPU scheduler
 
@@ -381,9 +377,8 @@ instead; the lifetime report still gives the next step a useful account.
 
 ## What remains to be established
 
-- **A2/J6 owner:** native-call attribution resolves the scope discrepancy and
-  identifies actual recording parallelism. The source establishes candidate
-  boundaries, not the missing 3.3 executes' cause.
+- **J6 owner:** whether concurrent recording pays once the dominant node's host
+  work leaves its recording (section 1's step 3 check).
 - **G1/B1 owner:** timestamp/age/byte observations decide chunk sizes and whether
   a between-frame waiter or async queue pays. Existing budget constants are
   implementation facts, not validated settings for the Deck.

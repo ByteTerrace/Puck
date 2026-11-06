@@ -9,7 +9,9 @@ namespace Puck.Vulkan;
 public sealed unsafe class VulkanQueueSubmitter {
     private const uint StructureTypeSubmitInfo = 4;
 
-    private static void SubmitCore(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint fenceHandle, ReadOnlySpan<nint> waitSemaphores, ReadOnlySpan<ulong> waitValues, ReadOnlySpan<nint> signalSemaphores = default, ReadOnlySpan<ulong> signalValues = default) {
+    // Counts its vkQueueSubmit in GpuQueueWork: an execute when it carries command buffers, a signal when it carries a
+    // fence or semaphore, under the calling thread's category.
+    private static void SubmitCore(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint fenceHandle, ReadOnlySpan<nint> waitSemaphores, ReadOnlySpan<ulong> waitValues, ReadOnlySpan<nint> signalSemaphores = default, ReadOnlySpan<ulong> signalValues = default, GpuQueueCause cause = GpuQueueCause.Unbatched) {
         if (waitSemaphores.Length != waitValues.Length) {
             throw new ArgumentException(
                 message: $"{waitSemaphores.Length} wait semaphores need as many values, not {waitValues.Length}.",
@@ -22,6 +24,9 @@ public sealed unsafe class VulkanQueueSubmitter {
                 paramName: nameof(signalValues)
             );
         }
+
+        if (!commandBufferHandles.IsEmpty) { GpuQueueWork.Process.Execute(cause: cause, lists: commandBufferHandles.Length); }
+        if ((fenceHandle != 0) || !signalSemaphores.IsEmpty) { GpuQueueWork.Process.Signal(); }
 
         var waitStages = stackalloc uint[waitSemaphores.Length];
 
@@ -74,6 +79,8 @@ public sealed unsafe class VulkanQueueSubmitter {
             commandBuffers += entry.CommandBuffers.Length;
             waits += entry.WaitSemaphores.Length;
         }
+
+        if (fenceHandle != 0) { GpuQueueWork.Process.Signal(); }
 
         var allCommandBuffers = new nint[commandBuffers];
         var allWaits = new nint[waits];
@@ -200,13 +207,17 @@ public sealed unsafe class VulkanQueueSubmitter {
     /// <exception cref="ArgumentException"><paramref name="waitSemaphores"/> and <paramref name="waitValues"/> differ in
     /// length.</exception>
     public void SubmitAndWait(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, ReadOnlySpan<nint> waitSemaphores = default, ReadOnlySpan<ulong> waitValues = default) {
-        Submit(
-            commandBufferHandles: commandBufferHandles,
-            device: device,
-            graphicsQueue: graphicsQueue,
-            waitSemaphores: waitSemaphores,
-            waitValues: waitValues
-        );
+        if (!commandBufferHandles.IsEmpty) {
+            SubmitCore(
+                cause: GpuQueueCause.Drain,
+                commandBufferHandles: commandBufferHandles,
+                device: device,
+                fenceHandle: 0,
+                graphicsQueue: graphicsQueue,
+                waitSemaphores: waitSemaphores,
+                waitValues: waitValues
+            );
+        }
         device.QueueWaitIdle(graphicsQueue.Handle).ThrowIfFailed(device: device, operation: "vkQueueWaitIdle");
     }
 }

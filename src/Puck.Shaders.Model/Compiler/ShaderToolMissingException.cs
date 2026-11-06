@@ -4,7 +4,7 @@ namespace Puck.Shaders;
 public sealed class ShaderToolMissingException : Exception {
     public ShaderToolMissingException(string tool, string? directory)
         : base($"Shader toolchain tool '{tool}' was not found in {((directory is null)
-        ? "the search path"
+        ? "the selected toolchain, PATH or standard install locations"
         : $"'{directory}'")}.") {
         Tool = tool;
         Directory = directory;

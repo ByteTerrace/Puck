@@ -1,0 +1,46 @@
+name: Install native product toolchains
+description: Install version-pinned LLVM and Rust for source-backed firmware and addon caches.
+runs:
+  using: composite
+  steps:
+    - id: llvm
+      name: Restore pinned LLVM
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        key: llvm-19.1.6-${{ runner.os }}-${{ runner.arch }}
+        path: .tmp/llvm
+    - if: runner.os == 'Windows' && steps.llvm.outputs.cache-hit != 'true'
+      name: Install LLVM 19.1.6
+      shell: pwsh
+      run: |
+        $destination = Join-Path $env:GITHUB_WORKSPACE '.tmp/llvm'
+        $installer = Join-Path $env:RUNNER_TEMP 'LLVM-19.1.6-win64.exe'
+        Invoke-WebRequest 'https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.6/LLVM-19.1.6-win64.exe' -OutFile $installer
+        if ((Get-FileHash $installer -Algorithm SHA256).Hash -ne 'CCB7140DD9EB2C0E8AB1FEED2D38C6FD22A161C1843B48B444C500F2F60E4F1C') { throw 'LLVM checksum mismatch' }
+        $installation = Start-Process -FilePath $installer -ArgumentList "/S /D=$destination" -Wait -PassThru -WindowStyle Hidden
+        if ($installation.ExitCode -ne 0) { throw "LLVM installer exited $($installation.ExitCode)" }
+    - if: runner.os == 'Linux' && steps.llvm.outputs.cache-hit != 'true'
+      name: Install LLVM 19.1.6
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p .tmp/llvm
+        curl --fail --silent --show-error --location https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.6/LLVM-19.1.6-Linux-X64.tar.xz -o .tmp/llvm.tar.xz
+        echo 'd55dcbb309de7ade4e3073ec3ac3fac4d3ff236d54df3c4de04464fe68bec531  .tmp/llvm.tar.xz' | sha256sum --check --quiet
+        tar -xJf .tmp/llvm.tar.xz -C .tmp/llvm --strip-components=1
+    - name: Export LLVM executables
+      shell: bash
+      run: echo "$GITHUB_WORKSPACE/.tmp/llvm/bin" >> "$GITHUB_PATH"
+    - name: Install Rust 1.96.0 and the addon target
+      shell: bash
+      run: |
+        set -euo pipefail
+        rustup toolchain install 1.96.0 --profile minimal --target wasm32-unknown-unknown
+        rustup default 1.96.0
+    - name: Report the installed product toolchains
+      shell: bash
+      run: |
+        clang --version
+        ld.lld --version
+        cargo --version
+        rustc -vV

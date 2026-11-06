@@ -54,9 +54,11 @@ public sealed class RenderGraphWorkDetailLawTests {
         var replacement = GpuKernelCounters.SlotBytesOf(rows: 8);
 
         node.BudgetCapBytes = ((bytes + replacement) - 1);
-        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => node.ProduceFrame(context: default));
+        var frame = node.FrameCounter;
 
-        Assert.Contains(expectedSubstring: "kernel work details", actualString: refusal.Message);
+        node.ProduceFrame(context: default);
+        Assert.Equal(expected: frame, actual: node.FrameCounter);
+        Assert.Contains(expectedSubstring: "kernel work details", actualString: node.LastRecordError);
         Assert.Equal(expected: creations, actual: gpu.CreationCount);
         Assert.Equal(expected: bytes, actual: node.OwnedBytes);
         node.BudgetCapBytes = (bytes + replacement);

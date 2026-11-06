@@ -10,7 +10,7 @@ namespace Puck.World.Server;
 /// <param name="Status">The provider's current hardware status.</param>
 /// <param name="FramesStepped">Completed advance segments in this incarnation.</param>
 /// <param name="PendingSteps">Queued advance segments still outstanding.</param>
-/// <param name="Fault">The queued worker's fault, if present.</param>
+/// <param name="Fault">The preparation refusal or queued worker's fault, if present.</param>
 /// <param name="Content">The content path the incarnation mounted, as its configuration names it, or
 /// <see langword="null"/> when it runs with no cartridge.</param>
 public readonly record struct WorldMachineInstanceState(string Name, ulong Generation, string Engine, bool Running,

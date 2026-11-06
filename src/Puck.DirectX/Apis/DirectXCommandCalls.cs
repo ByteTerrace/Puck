@@ -340,7 +340,7 @@ public static unsafe partial class DirectXCommandCalls {
             calls: calls,
             operation: "ID3D12GraphicsCommandList::Close"
         );
-    /// <summary>Queues a fence signal.</summary>
+    /// <summary>Queues a fence signal, counted in <see cref="GpuQueueWork"/> under the calling thread's category.</summary>
     /// <typeparam name="TCalls">The calls' answerer.</typeparam>
     /// <param name="calls">The calls.</param>
     /// <param name="queue">The queue that signals.</param>
@@ -348,7 +348,8 @@ public static unsafe partial class DirectXCommandCalls {
     /// <param name="value">The value the fence is set to.</param>
     /// <exception cref="DeviceLostException">The device was removed.</exception>
     /// <exception cref="DirectXException">The signal failed for another reason.</exception>
-    public static void Signal<TCalls>(TCalls calls, ID3D12CommandQueue* queue, ID3D12Fence* fence, ulong value) where TCalls : IDirectXCommandCalls =>
+    public static void Signal<TCalls>(TCalls calls, ID3D12CommandQueue* queue, ID3D12Fence* fence, ulong value) where TCalls : IDirectXCommandCalls {
+        GpuQueueWork.Process.Signal();
         calls.Signal(
             fence: fence,
             queue: queue,
@@ -357,6 +358,7 @@ public static unsafe partial class DirectXCommandCalls {
             calls: calls,
             operation: "ID3D12CommandQueue::Signal"
         );
+    }
     /// <summary>Queues a GPU-side wait: work the queue executes after the call starts only once the fence reaches the
     /// value, which another device may signal. Nothing blocks on the CPU.</summary>
     /// <typeparam name="TCalls">The calls' answerer.</typeparam>
@@ -449,6 +451,8 @@ public static unsafe partial class DirectXCommandCalls {
     /// <exception cref="DirectXException">A call failed for a reason other than a removal.</exception>
     public static bool Drain<TCalls>(TCalls calls, ID3D12CommandQueue* queue, ID3D12Fence* fence, HANDLE fenceEvent, ref ulong fenceValue) where TCalls : IDirectXCommandCalls {
         var value = fenceValue;
+
+        GpuQueueWork.Process.Signal();
         var signalled = calls.Signal(
             fence: fence,
             queue: queue,

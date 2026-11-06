@@ -328,7 +328,8 @@ public sealed partial class RenderGraphCadenceLawTests {
         var model = new Model { RefuseComposite = true };
         using var node = Node(new FakePipelineGpu(), model);
 
-        Assert.Throws<InvalidOperationException>(testCode: () => node.ProduceUntilInstalled());
+        node.ProduceUntilInstalled();
+        Assert.NotNull(node.LastRecordError);
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (1, 1));
         model.RefuseComposite = false;
         node.ProduceFrame(context: default);
@@ -346,7 +347,8 @@ public sealed partial class RenderGraphCadenceLawTests {
 
         if (previouslySubmitted) { node.ProduceUntilInstalled(); }
         model.RefuseComposite = true;
-        Assert.Throws<InvalidOperationException>(testCode: () => node.ProduceUntilInstalled());
+        node.ProduceUntilInstalled();
+        Assert.NotNull(node.LastRecordError);
         gpu.Events.Clear();
         model.RefuseComposite = false;
         node.ProduceFrame(context: default);

@@ -13234,10 +13234,6 @@ export type WorldStateRow = {
      */
     material?: PaletteEntryDocument | null;
     /**
-     * The height, in world units, the drawn surface of a row carrying a HeightScale moves by (SurfaceStep); 0 draws it at the baked mesh's own resolution. Presentation only: bodies and media read the full value.
-     */
-    surfaceStep?: number;
-    /**
      * The initial fills, applied in order over Initial.
      */
     paint?: WorldLatticeFill[] | null;

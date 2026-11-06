@@ -229,6 +229,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
             condition: m_disposed,
             instance: this
         );
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Readback);
 
         if (0 == sourceImageHandle) {
             throw new ArgumentException(

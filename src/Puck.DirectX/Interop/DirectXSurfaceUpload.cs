@@ -148,6 +148,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             condition: m_disposed,
             instance: this
         );
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Upload);
         DirectXDeviceOwnership.ThrowIfOtherDevice(
             held: m_heldDevice,
             holder: nameof(DirectXSurfaceUpload),
@@ -241,8 +242,10 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
 
         var executable = ((ID3D12CommandList*)commandList);
+        var queue = ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle);
 
-        ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)->ExecuteCommandLists(
+        GpuQueueWork.Process.Execute(cause: GpuQueueCause.Unbatched, lists: 1);
+        queue->ExecuteCommandLists(
             NumCommandLists: 1,
             ppCommandLists: &executable
         );

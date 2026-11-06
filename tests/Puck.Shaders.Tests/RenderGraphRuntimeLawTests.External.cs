@@ -509,9 +509,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
             over.Outcome = RenderGraphPackageOutcome.DrewNothing;
 
-            Assert.Equal(
-                actual: Assert.Throws<InvalidOperationException>(testCode: () => frames.Next()).Message,
-                expected: "Package pass 'over' drew nothing, but its input 'world' is a host's image in General layout and the instance publishes in ShaderReadOnly, so its output cannot stand for it."
+            _ = frames.Next();
+            Assert.EndsWith(
+                actualString: main.LastRecordError,
+                expectedEndString: "Package pass 'over' drew nothing, but its input 'world' is a host's image in General layout and the instance publishes in ShaderReadOnly, so its output cannot stand for it."
             );
         }
     }

@@ -17,13 +17,16 @@ bitmap; branding is presentation, not cartridge admission or copy protection.
 
 ## Rebuilding
 
-The repository command is `puck firmware agb`. The packaged image avoids requiring a native toolchain on hosts that only run
-cartridges. The measured keep decision and native/missing-toolchain evidence are
-in the derived-products change; see the [decision](../../../docs/decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth).
+The repository command is `puck firmware agb`. Runtime loads use the same counted
+`DerivedBytes` cache through `AgbFirmwareCompiler`, keyed by sources, deriving code
+and LLVM identity. A miss compiles the sources; missing `clang` or `ld.lld` is
+refused by name with the [machine setup](../../../docs/development/contributing.md#setting-up-a-machine) link.
+Player publishing and `world prepare` prewarm the cache for toolchain-free players.
+The repository contains only the sources and notices.
 From the repository root with LLVM installed:
 
 ```powershell
-dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll firmware agb --source src/Puck.AdvancedGamingBrick/Firmware --output src/Puck.AdvancedGamingBrick/Firmware/puck-agb.bin --clang "C:/Program Files/LLVM/bin/clang.exe" --linker "C:/Program Files/LLVM/bin/ld.lld.exe"
+dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll firmware agb --source src/Puck.AdvancedGamingBrick/Firmware --output artifacts/firmware/puck-agb.bin --clang "C:/Program Files/LLVM/bin/clang.exe" --linker "C:/Program Files/LLVM/bin/ld.lld.exe"
 ```
 
 The command exports a fresh image; it never compares an image with committed bytes.

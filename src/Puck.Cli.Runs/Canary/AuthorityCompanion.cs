@@ -1,7 +1,7 @@
+using Puck.Abstractions;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
-using Puck.Hosting;
 
 namespace Puck.Cli.Canary;
 

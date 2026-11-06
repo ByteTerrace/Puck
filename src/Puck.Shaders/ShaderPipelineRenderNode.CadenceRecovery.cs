@@ -4,7 +4,9 @@ using Puck.Abstractions.Gpu;
 namespace Puck.Shaders;
 
 public sealed partial class ShaderPipelineRenderNode {
-    // Retained and history graphs checkpoint the existing tracker rather than planning a second set of states.
+    // Every graph checkpoints the existing tracker at the start of a frame's recording rather than planning a second set of
+    // states, so an abandoned recording, whose barriers never reach the GPU, leaves every instance in the state the GPU
+    // still has. Retained and history storage also checkpoint their content versions.
     private readonly record struct CadenceResourceCheckpoint(RuntimeResource Resource, int Instance,
         bool Initialized, bool HasOverride, bool OverridePlanned, ShaderPipelineAccessState Override, PackageAlias Alias, bool ExportWritten);
     private readonly record struct CadenceVersionCheckpoint(CadenceVersion Version, long Generation, bool Valid);
@@ -15,9 +17,9 @@ public sealed partial class ShaderPipelineRenderNode {
     private bool m_cadenceInitialization;
     private int m_cadenceSlot;
 
-    /// <summary>Gets installed cadence state and array payload bytes, including failure-recovery checkpoints.
-    /// Struct arrays use their runtime element size. Excludes managed headers and borrowed resource/name objects;
-    /// includes history cursors and is zero for a graph without retained or history storage.</summary>
+    /// <summary>Gets installed cadence state and array payload bytes, including failure-recovery checkpoints, which
+    /// every installed graph holds, one per storage instance. Struct arrays use their runtime element size. Excludes
+    /// managed headers and borrowed resource/name objects; includes history cursors.</summary>
     public ulong CadenceCpuBytes {
         get {
             var bytes = checked(((((ulong)m_cadenceResources.Length) * ((ulong)Unsafe.SizeOf<CadenceResourceCheckpoint>())) +
@@ -39,9 +41,6 @@ public sealed partial class ShaderPipelineRenderNode {
 
     private void ConfigureCadenceRecovery() {
         m_cadenceRecording = false;
-        if (!m_resources.Any(predicate: static resource => (resource.Cadence.Length > 0))) {
-            m_cadenceResources = []; m_cadenceVersions = []; return;
-        }
         m_cadenceResources = [.. m_resources.SelectMany(selector: static resource => Enumerable.Range(count: resource.Count, start: 0)
             .Select(selector: instance => new CadenceResourceCheckpoint(Alias: default, ExportWritten: false, HasOverride: false, Initialized: false, Instance: instance, Override: default, OverridePlanned: false, Resource: resource)))];
         m_cadenceVersions = [.. m_resources.SelectMany(selector: static resource => resource.Cadence)
