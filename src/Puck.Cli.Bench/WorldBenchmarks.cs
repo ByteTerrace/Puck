@@ -506,6 +506,7 @@ internal static class WorldBenchmarks {
         (Puck.World.Server.WorldBodyWork.Process, Puck.World.Server.WorldBodyWork.FieldWakes),
         (Puck.World.Server.WorldBodyWork.Process, Puck.World.Server.WorldBodyWork.FieldObserved),
         (FixedStaticContactWork.Process, FixedStaticContactWork.Resolves),
+        (FixedStaticContactWork.Process, FixedStaticContactWork.SupportDistances),
         (FixedStaticContactWork.Process, FixedStaticContactWork.Queries),
         (FixedStaticContactWork.Process, FixedStaticContactWork.ConvexQueries),
         (FixedStaticContactWork.Process, FixedStaticContactWork.Supports),
