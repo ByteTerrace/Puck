@@ -144,17 +144,14 @@ public sealed class CliLease : IDisposable {
     /// <param name="Position">The ticket's lane's turn among the queued lanes in the current round.</param>
     /// <param name="Lanes">How many lanes are queued.</param>
     /// <param name="Since">When the waiter took the ticket, or null when its time is unreadable.</param>
-    /// <param name="ProcessId">The waiting process's id, or null when its ticket does not name a readable one.</param>
-    public sealed record LeaseTicket(string Id, string Holder, string Lane, int Ahead, int Position, int Lanes, DateTimeOffset? Since = null, int? ProcessId = null);
+    public sealed record LeaseTicket(string Id, string Holder, string Lane, int Ahead, int Position, int Lanes, DateTimeOffset? Since = null);
     /// <summary>What a lease directory shows at one moment.</summary>
     /// <param name="Holder">The holder name, or null when nothing holds the lease.</param>
     /// <param name="Lane">The holder's lane, or null when nothing holds the lease.</param>
     /// <param name="HolderAlive">Whether the holder's process still runs; false for a holder file left by an exited process.</param>
     /// <param name="Queue">The live waiters in queue order.</param>
     /// <param name="Since">When the holder acquired the lease, or null when nothing holds it or its time is unreadable.</param>
-    /// <param name="HolderProcessId">The holder's process id, or null when nothing holds the lease or its file names no
-    /// readable one.</param>
-    public sealed record LeaseState(string? Holder, string? Lane, bool HolderAlive, IReadOnlyList<LeaseTicket> Queue, DateTimeOffset? Since = null, int? HolderProcessId = null);
+    public sealed record LeaseState(string? Holder, string? Lane, bool HolderAlive, IReadOnlyList<LeaseTicket> Queue, DateTimeOffset? Since = null);
 
     /// <summary>Reads a lease without changing it: no ticket is taken, no dead ticket or stale holder is removed, no rotation serial is written.</summary>
     /// <param name="root">The shared lease directory.</param>
@@ -195,13 +192,11 @@ public sealed class CliLease : IDisposable {
                     Lane: ((lines.Length == 5) ? lines[4] : DefaultLane(holder: lines[0])),
                     Lanes: place.Lanes,
                     Position: place.Position,
-                    ProcessId: (int.TryParse(s: lines[2], provider: CultureInfo.InvariantCulture, result: out var waiting) ? waiting : null),
                     Since: Stamped(lines: lines)
                 ));
             }
         }
-        return new LeaseState(Holder: holderName, HolderAlive: alive, Lane: holderLane, Queue: tickets, Since: ((holder is { Length: > 0 }) ? Stamped(lines: holder) : null),
-            HolderProcessId: (((holder is { Length: > 2 }) && int.TryParse(s: holder[2], provider: CultureInfo.InvariantCulture, result: out var holding)) ? holding : null));
+        return new LeaseState(Holder: holderName, HolderAlive: alive, Lane: holderLane, Queue: tickets, Since: ((holder is { Length: > 0 }) ? Stamped(lines: holder) : null));
     }
 
     /// <summary>The acquisition or ticket time a holder file or ticket records on its second line.</summary>
