@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Puck.World;
@@ -41,7 +40,7 @@ public static class MotionRouteRun {
     }
 
     public static MotionRouteLeg Execute(MotionRoutePlan plan, string artifact, string world, string repository,
-        string directory, string? backend, string? cache, TimeSpan deadline, string? tape, string? buildSourceKey) {
+        string directory, WorldBackendPreference? backend, string? cache, TimeSpan deadline, string? tape, string? buildSourceKey) {
         artifact = artifact.Replace('\\', '/');
         directory = directory.Replace('\\', '/');
         Directory.CreateDirectory(directory);
@@ -73,14 +72,19 @@ public static class MotionRouteRun {
             files[Path.GetRelativePath(artifactRoot, file).Replace('\\', '/')] = Convert.ToHexStringLower(SHA256.HashData(stream));
         }
         var hash = files[Path.GetFileName(artifact)];
-        List<string> arguments = ["--world", world, .. WorldDevices.NoneArguments, "--paused", "--lockstep", "--budgeted-lighting", "--control",
-            "--state-dir", state, "--exit-after-seconds", ((int)deadline.TotalSeconds + 120).ToString(CultureInfo.InvariantCulture)];
-        if (backend is not null) { arguments.AddRange(["--backend", backend]); }
-        if (cache is not null) { arguments.AddRange(["--cache-dir", cache]); }
-
-        WorldAdmission.Wait(step: "motion route", worldArguments: arguments);
-
-        using var process = MotionWorldProcess.Start(artifact, arguments, repository, directory);
+        WorldProcess started;
+        using (var launch = WorldLaunch.Admit(request: new WorldLaunchRequest(Artifact: artifact, Step: "motion route") {
+            Arguments = ["--paused", "--lockstep", "--budgeted-lighting", "--control", .. ((cache is null) ? Array.Empty<string>() : ["--cache-dir", cache])],
+            Backend = backend,
+            ExitAfterSeconds = WorldLaunch.Backstop(deadline: deadline),
+            Shape = WorldShape.Document,
+            StateDirectory = state,
+            WorkingDirectory = repository,
+            World = world,
+        })) {
+            started = launch.Start(logDirectory: directory);
+        }
+        using var process = started;
         using var controlBudget = new SweepBudget(TimeSpan.FromTicks(Math.Max(1, (deadline - timer.Elapsed).Ticks)), CancellationToken.None);
         MotionScriptResult Run(params string[] lines) {
             var remaining = deadline - timer.Elapsed;
@@ -91,7 +95,7 @@ public static class MotionRouteRun {
             if (!SweepWorld.TryAttach(process, TimeSpan.FromSeconds(120), controlBudget, out var attached, out var attachmentError)) {
                 throw new InvalidDataException(attachmentError);
             }
-            using var control = attached!; // Non-owning: MotionWorldProcess remains the only process lifetime owner.
+            using var control = attached!; // Non-owning: WorldProcess remains the only process lifetime owner.
             SweepAnswer Direct(string stage, string script, int timeoutSeconds = 120) {
                 var answer = control.Run(script, timeoutSeconds);
                 directReceipts.Add(new(stage, script, answer));

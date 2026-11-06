@@ -1,6 +1,5 @@
 using Puck.Abstractions;
 using System.Diagnostics;
-using System.Globalization;
 using System.Text;
 
 namespace Puck.Cli.Canary;
@@ -90,12 +89,10 @@ public sealed class AuthorityCompanion : IDisposable {
         }
     }
 
-    internal static AuthorityCompanion Start(string artifact, string world, string stateDirectory, string federationKeyPath, int exitAfterSeconds, string quitInput, CancellationToken cancellationToken) {
+    // A headless authority opens no device, so its launch carries no GPU lease to hand over.
+    internal static AuthorityCompanion Start(WorldLaunch launch, string quitInput, CancellationToken cancellationToken) {
         cancellationToken.ThrowIfCancellationRequested();
-        var process = ChildProcess.StartRedirected(
-            arguments: [artifact, "--world", world, "--state-dir", stateDirectory, "--exit-after-seconds", exitAfterSeconds.ToString(provider: CultureInfo.InvariantCulture), "--headless", "true", "--federation-key-file", federationKeyPath],
-            fileName: "dotnet"
-        );
+        var process = launch.StartRedirected(gpu: out _);
         var companion = new AuthorityCompanion(process: process, quitInput: quitInput);
 
         companion.m_cancellation = cancellationToken.Register(callback: companion.Kill);

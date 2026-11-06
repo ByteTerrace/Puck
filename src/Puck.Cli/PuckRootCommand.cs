@@ -51,16 +51,8 @@ namespace Puck.Cli;
 /// </summary>
 public static class PuckRootCommand {
     /// <summary>What the gate's verbs read from the verbs composed beside them: the source types behind each generated
-    /// schema (<c>puck schema</c>) and the grammar of each verb whose own arguments decide whether a run is GPU work
-    /// (<c>puck parity</c>, <c>puck counters</c>).</summary>
-    public static GateComposition Gate { get; } = new(
-        GpuVerbGrammars: new Dictionary<string, Func<Command>>(comparer: StringComparer.Ordinal) {
-            ["counters"] = CountersCommand.Create,
-            ["motion"] = MotionCommand.Create,
-            ["parity"] = ParityCommand.Create,
-        },
-        SchemaSourceTypes: SchemaCommand.SourceTypesOf
-    );
+    /// schema (<c>puck schema</c>).</summary>
+    public static GateComposition Gate { get; } = new(SchemaSourceTypes: SchemaCommand.SourceTypesOf);
 
     /// <summary>Creates the root command. <paramref name="clock"/> is the CLI host's one clock: every deadline a verb
     /// puts on a process, a connection, a lease, or a request runs on it.</summary>
@@ -71,7 +63,7 @@ public static class PuckRootCommand {
     // A bootstrap binary cannot start a consumer of the deliberately absent model table.
     public static RootCommand Create(TimeProvider clock, bool schemaBootstrap) {
         // Every verb below the gate that starts a World or a heavy test host waits on the admission the gate itself uses.
-        WorldAdmission.Install(admit: HostAdmission.For(clock: clock, composition: Gate));
+        WorldAdmission.Install(admit: HostAdmission.For(clock: clock));
 
         Command[] verbs = (schemaBootstrap ? [SchemaCommand.Create(clock: clock)] : [
             AffectedCommand.Create(composition: Gate),
@@ -95,13 +87,13 @@ public static class PuckRootCommand {
             FontAtlasCommand.Create(),
             FormatCommand.Create(),
             GateCommand.Create(clock: clock, composition: Gate),
-            HostCommand.Create(composition: Gate),
+            HostCommand.Create(),
             LandingCommand.Create(),
             LanesCommand.Create(clock: clock),
             LawsCommand.Create(),
-            LeaseCommand.Create(admit: HostAdmission.For(clock: clock, composition: Gate), clock: clock, settleWait: (settle, timeout, progress, cancellationToken) => HostQuiet.SettleAsync(cancellationToken: cancellationToken, clock: clock, composition: Gate, progress: progress, settle: settle, timeout: timeout)),
+            LeaseCommand.Create(admit: HostAdmission.For(clock: clock), clock: clock, settleWait: (settle, timeout, progress, cancellationToken) => HostQuiet.SettleAsync(cancellationToken: cancellationToken, clock: clock, progress: progress, settle: settle, timeout: timeout)),
             LocksCommand.Create(),
-            McpCommand.Create(admit: HostAdmission.For(clock: clock, composition: Gate), ancestor: ProcessInspection.IsAncestor),
+            McpCommand.Create(),
             MotionCommand.Create(),
             NuGetCommand.Create(),
             OfficialCommand.Create(),

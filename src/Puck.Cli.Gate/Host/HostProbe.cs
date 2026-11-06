@@ -1,4 +1,3 @@
-using System.CommandLine;
 using System.Diagnostics;
 using System.ComponentModel;
 using System.Globalization;
@@ -14,8 +13,7 @@ namespace Puck.Cli.Host;
 /// ntdll; Linux through <c>/proc</c>.
 /// </summary>
 /// <param name="checkoutRoot">The checkout whose drive's free disk is read.</param>
-/// <param name="gpuVerbGrammars">By verb name, the grammar of each CLI verb whose own arguments decide whether its run is GPU work.</param>
-public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<string, Func<Command>> gpuVerbGrammars) {
+public sealed partial class HostProbe(string checkoutRoot) {
     private (ulong Idle, ulong Total)? m_previous;
 
     [LibraryImport(libraryName: "kernel32.dll", SetLastError = true)]
@@ -124,7 +122,8 @@ public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<s
             }
         }
 
-        // A heavy test run this process started is its own work, never another's hold on the machine.
+        // A heavy test run or a device World this process started is its own work, never another's hold on the machine:
+        // a process that starts several device Worlds holds the GPU lease for all of them.
         var own = HostProcesses.Descendants(processes: tree, root: self);
 
         List<HostRunningStart> starts = [];
@@ -136,7 +135,7 @@ public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<s
                 starts.Add(item: new HostRunningStart(Id: id, Kind: kind, PrivateGb: privateGb));
             }
 
-            if ((holder is null) && HostProcesses.IsGpuWork(commandLine: commandLine, grammars: gpuVerbGrammars, name: name)) {
+            if ((holder is null) && !own.Contains(item: id) && HostProcesses.IsGpuWork(commandLine: commandLine, name: name)) {
                 holder = label;
             }
             if ((heavy is null) && !own.Contains(item: id) && HostProcesses.IsHeavyTest(commandLine: commandLine, name: name)) {

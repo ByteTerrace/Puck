@@ -8,39 +8,36 @@ namespace Puck.Cli.Mcp;
 // OAuth-protected HTTP extension composed over an owned World silo. The command validator is what guarantees a
 // complete pair reaches RunAsync, so the branch there reads a non-null path without re-checking its partner.
 public static class McpCommand {
-    // The World build of a checkout's current sources, from the same content-keyed store `puck test` and `puck canary`
-    // use: an unchanged source state reuses its build, a changed one is built once (into the store, never over the
-    // checkout's bin/Release, which a running World may hold open), and a concurrent build of one state is shared. The
-    // build blocks, so it runs on its own thread; a cancelled start abandons it and releases whatever it finishes with.
-    // A build that is needed takes the machine's build lease first, so lanes with different source states build one at
-    // a time; a Vulkan start builds with SPIR-V, which keys it apart from the Direct3D 12 build.
-    private static async Task<OperatorWorldBuild> ResolveBuildAsync(string checkout, bool spirv, CancellationToken cancellationToken) {
+    // Starts one World through the CLI's one World launch (WorldLaunch). The build comes from the same content-keyed
+    // store `puck test` and `puck canary` use: an unchanged source state reuses its build, a changed one is built once (into
+    // the store, never over the checkout's bin/Release, which a running World may hold open), and a concurrent build of one
+    // state is shared; a World that opens a device on Vulkan or a backend its document picks builds with SPIR-V. The build
+    // blocks, so it runs on its own thread; a cancelled start abandons it and releases whatever it finishes with. The build
+    // comes before the GPU lease, so a long build never holds the machine's GPU.
+    private static async Task<OperatorWorldStart> StartWorldAsync(OperatorWorldRequest world, Action<string> stage, CancellationToken cancellationToken) {
+        var shape = (world.Windowed ? WorldShape.Windowed : WorldShape.Headless);
         var logs = RunDirectory.CreatePath(prefix: "puck-mcp-build-");
-        var build = Task.Run(function: () => {
-            var resolved = WorldArtifactBuild.TryResolve(
-                artifact: out var artifact,
-                error: out var error,
-                logDirectory: logs,
-                repositoryRoot: checkout,
-                spirv: spirv,
-                timeout: WorldArtifactBuild.BuildTimeout,
-                verb: "mcp"
-            );
+
+        stage(obj: "building");
+
+        var resolving = Task.Run(function: () => {
+            var resolved = WorldLaunch.TryResolve(build: out var build, error: out var error, logDirectory: logs, named: null, repositoryRoot: world.Checkout,
+                spirv: WorldLaunch.NeedsSpirv(backend: world.Backend, shape: shape), verb: "mcp");
 
             if (resolved) {
                 RunDirectory.TryDelete(path: logs);
             }
 
-            return (resolved
-                ? new OperatorWorldBuild(Error: null, Lease: artifact, Path: artifact!.Path)
-                : new OperatorWorldBuild(Error: error, Lease: null, Path: null));
+            return (Build: build, Error: error);
         }, cancellationToken: CancellationToken.None);
+        WorldBuild? build;
+        string error;
 
         try {
-            return await build.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            (build, error) = await resolving.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
         } catch (OperationCanceledException) {
-            _ = build.ContinueWith(
-                continuationAction: static (Task<OperatorWorldBuild> finished) => finished.Result.Lease?.Dispose(),
+            _ = resolving.ContinueWith(
+                continuationAction: static finished => finished.Result.Build?.Dispose(),
                 cancellationToken: CancellationToken.None,
                 continuationOptions: TaskContinuationOptions.OnlyOnRanToCompletion,
                 scheduler: TaskScheduler.Default
@@ -48,8 +45,71 @@ public static class McpCommand {
 
             throw;
         }
+
+        if (build is null) {
+            return new OperatorWorldStart(Build: null, Lease: null, Process: null, Refusal: $"Refused: no Release build of {world.Checkout}'s current sources could be made, so no World was started: {error}");
+        }
+
+        WorldLaunch launch;
+
+        try {
+            launch = await WorldLaunch.AdmitAsync(cancellationToken: cancellationToken, request: new WorldLaunchRequest(Artifact: build.Path, Step: "puck_world_start") {
+                Arguments = [
+                    "--control",
+                    .. (world.Paused ? ["--paused"] : Array.Empty<string>()),
+                    .. (world.Lockstep ? ["--lockstep"] : Array.Empty<string>()),
+                    .. ((world.CacheDirectory is { } cache) ? ["--cache-dir", cache] : Array.Empty<string>()),
+                    .. ((world.CaptureTool is { } tool) ? ["--capture-tool", tool] : Array.Empty<string>()),
+                ],
+                Backend = world.Backend,
+                Checkout = world.Checkout,
+                // The World publishes its attachment file in its temporary directory, which must be the one the adapter follows.
+                Environment = new Dictionary<string, string?>(comparer: StringComparer.Ordinal) { ["TEMP"] = world.TemporaryDirectory, ["TMP"] = world.TemporaryDirectory, ["TMPDIR"] = world.TemporaryDirectory },
+                Holder = world.Holder,
+                Lane = world.Lane,
+                OwnerDevices = world.OwnerPlay,
+                Shape = shape,
+                StateDirectory = world.StateDirectory,
+                WorkingDirectory = world.Checkout,
+                World = world.Document,
+            }, stage: stage).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (TimeoutException exception) {
+            build.Dispose();
+
+            return new OperatorWorldStart(Build: null, Lease: null, Process: null, Refusal: $"Refused: the GPU lease was not granted, so no windowed World was started ({exception.Message}). Retry the start, or start headless.");
+        } catch (HostAdmissionRefusedException) {
+            build.Dispose();
+
+            return new OperatorWorldStart(Build: null, Lease: null, Process: null, Refusal: $"Refused: the host had no memory, commit or disk headroom{(world.Windowed ? " (or its GPU stayed busy)" : string.Empty)} within the admission's bound, so no World was started. Retry the start when `puck host load` reports CAPACITY.");
+        } catch {
+            build.Dispose();
+
+            throw;
+        }
+
+        try {
+            var process = launch.StartRedirected(gpu: out var gpu);
+
+            return new OperatorWorldStart(Build: build.Path, Lease: new Leases(build: build, gpu: gpu), Process: process, Refusal: null);
+        } catch (Exception exception) when ((exception is InvalidOperationException or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)) {
+            build.Dispose();
+
+            return new OperatorWorldStart(Build: null, Lease: null, Process: null, Refusal: $"Refused: the World could not be launched ({exception.Message}).");
+        } finally {
+            launch.Dispose();
+        }
     }
-    private static async Task<int> RunAsync(string? attachmentPath, string? configurationPath, string? siloPath, string? installRoot, string? buildSource, string? checkoutPath, bool worker, bool prepareInstall, Func<int, long, bool>? ancestor, HostAdmit? admit, CancellationToken cancellationToken) {
+    // The build and GPU leases a started World runs under, released together once it has exited.
+    private sealed class Leases(WorldBuild build, IDisposable? gpu) : IDisposable {
+        public void Dispose() {
+            try {
+                gpu?.Dispose();
+            } finally {
+                build.Dispose();
+            }
+        }
+    }
+    private static async Task<int> RunAsync(string? attachmentPath, string? configurationPath, string? siloPath, string? installRoot, string? buildSource, string? checkoutPath, bool worker, bool prepareInstall, CancellationToken cancellationToken) {
         // The root already turns Ctrl+C and SIGTERM into this token with no deadline; this handler adds Ctrl+Break,
         // so every console interrupt is a graceful drain rather than a tear-down mid-session.
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
@@ -98,29 +158,11 @@ public static class McpCommand {
                 Console.Error.WriteLine(value: warning);
             }
 
-            // A World the adapter starts boots from this checkout or one of its worktrees, and a windowed one holds the
-            // machine's shared GPU lease, the one `puck lease gpu` takes. Every start also waits for the host admission
-            // `puck lease` and the gate wait on: a windowed World as a device step, a headless one as an ordinary step.
+            // A World the adapter starts boots from this checkout or one of its worktrees through the CLI's one World
+            // launch: a windowed one holds the machine's shared GPU lease, the one `puck lease gpu` takes, and every start
+            // waits for the host admission `puck lease` and the gate wait on.
             var checkout = (checkoutPath ?? RepositoryPaths.FindRoot());
-            var launch = ((checkout is null)
-                ? null
-                : new OperatorWorldLaunch(
-                    Admit: ((admit is null)
-                        ? static (_, _, _, _) => Task.FromResult(result: true)
-                        : (worldCheckout, windowed, stage, token) => admit(bound: null, cancellationToken: token, checkout: worldCheckout, device: windowed, heavySuite: false, kind: (windowed ? HostStartKind.WindowedWorld : HostStartKind.HeadlessWorld), progress: Console.Error, stage: stage, step: "puck_world_start")),
-                    AcquireGpuLease: async (holder, lane, token) => await CliLease.AcquireAsync(
-                        ancestor: ancestor,
-                        cancellationToken: token,
-                        clock: TimeProvider.System,
-                        holder: holder,
-                        lane: lane,
-                        name: "gpu",
-                        root: await CliLease.RootAsync(cancellationToken: token, checkout: checkout).ConfigureAwait(continueOnCapturedContext: false),
-                        wait: CliLease.DefaultWait
-                    ).ConfigureAwait(continueOnCapturedContext: false),
-                    Checkout: checkout,
-                    ResolveBuild: ResolveBuildAsync
-                ));
+            var launch = ((checkout is null) ? null : new OperatorWorldLaunch(Checkout: checkout, Start: StartWorldAsync));
 
             // Worlds publish their capability files in the user's temporary directory, so following the newest World
             // is following that directory.
@@ -146,7 +188,7 @@ public static class McpCommand {
         }
     }
 
-    public static Command Create(Func<int, long, bool>? ancestor = null, HostAdmit? admit = null) {
+    public static Command Create() {
         var attachOption = new Option<string?>(name: "--attach") {
             Description = "The attachment file printed by `world.control start` in a running World's console, or `latest` to follow the newest running World across restarts. When omitted with --profile operator, defaults to `latest`. Each tool call attaches on demand, so the adapter may start before any World.",
         };
@@ -219,8 +261,6 @@ public static class McpCommand {
             }
         });
         command.SetAction(action: (parseResult, cancellationToken) => RunAsync(
-            admit: admit,
-            ancestor: ancestor,
             attachmentPath: parseResult.GetValue(option: attachOption),
             cancellationToken: cancellationToken,
             configurationPath: parseResult.GetValue(option: httpOption),

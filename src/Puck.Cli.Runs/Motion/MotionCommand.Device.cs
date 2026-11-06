@@ -1,3 +1,4 @@
+using Puck.World;
 using System.Globalization;
 using System.Text;
 using Puck.Confinement;
@@ -8,26 +9,26 @@ public static partial class MotionCommand {
     private const string ManifestFileName = "manifest.json";
 
     // Everything that boots a World: the build, the run or the two runs of --reproduce, and the report of each.
-    private static int RunWorld(string repositoryRoot, string scenarioFile, string world, string directory, MotionScenarioSet set, IReadOnlyList<MotionScenario> selected, bool reproduce, string? worldArtifact, string? backend, string? cacheDirectory, int columns, int cellWidth, int timeoutMinutes) {
+    private static int RunWorld(string repositoryRoot, string scenarioFile, string world, string directory, MotionScenarioSet set, IReadOnlyList<MotionScenario> selected, bool reproduce, string? worldArtifact, WorldBackendPreference? backend, string? cacheDirectory, int columns, int cellWidth, int timeoutMinutes) {
         _ = Directory.CreateDirectory(path: directory);
 
         var deadline = TimeSpan.FromMinutes(value: timeoutMinutes);
         var suite = System.Diagnostics.Stopwatch.StartNew();
 
-        if (!WorldArtifactBuild.TryResolveNamed(
+        if (!WorldLaunch.TryResolve(
+            build: out var leased,
             error: out var buildError,
-            lease: out var lease,
             logDirectory: directory,
             named: worldArtifact,
-            path: out var artifact,
             repositoryRoot: repositoryRoot,
-            timeout: WorldArtifactBuild.BuildTimeout,
+            spirv: WorldLaunch.NeedsSpirv(backend: backend, shape: WorldShape.Document),
             verb: Verb
         )) {
             return CliExit.Refuse(verb: Verb, what: "the World build", why: buildError.ReplaceLineEndings(replacementText: " "));
         }
 
-        using var leased = lease;
+        using var lease = leased;
+        var artifact = leased.Path;
 
         var commit = (CliGit.TryResolveCommit(repository: repositoryRoot, resolved: out var resolved, revision: "HEAD") ? resolved : "unknown");
 

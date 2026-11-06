@@ -1,4 +1,3 @@
-using System.CommandLine;
 using System.CommandLine.Parsing;
 
 using Puck.Cli.Gate;
@@ -12,9 +11,8 @@ namespace Puck.Cli.Host;
 /// <item>shells and builds are never GPU work: <c>powershell</c>, <c>pwsh</c>, <c>bash</c>, <c>sh</c>, <c>cmd</c>,
 /// <c>grep</c>, <c>conhost</c>, MSBuild and its nodes, the compiler and its server, and any <c>dotnet build</c>,
 /// <c>restore</c>, <c>msbuild</c>, <c>publish</c> or <c>pack</c>, whatever project they name;</item>
-/// <item>GPU work is the World (<c>Puck.World</c> or <c>Puck.World.dll</c>), a <c>canary</c> verb of the CLI, a CLI verb
-/// whose grammar the composing root names (<see cref="GateComposition.GpuVerbGrammars"/>: <c>parity</c> and
-/// <c>counters</c>) parsed as its root action, or a test host running the device-law assemblies (<c>Puck.DirectX.Tests</c>,
+/// <item>GPU work is a World that opens a device (<c>Puck.World</c> or <c>Puck.World.dll</c>), or a test host running the
+/// device-law assemblies (<c>Puck.DirectX.Tests</c>,
 /// <c>Puck.Vulkan.Tests</c>, <c>Puck.World.Tests</c>, <c>Puck.Platform.Windows.Tests</c>) whose arguments can select a
 /// <c>Gpu</c>-trait test: a run carrying the CPU selection (<see cref="CliTestRun.CpuSelection"/>) opens no
 /// device.</item>
@@ -98,30 +96,13 @@ public static class HostProcesses {
 
         return !excluded;
     }
-    private static bool RunningGpuVerb(string[] arguments, int start, IReadOnlyDictionary<string, Func<Command>> grammars) {
-        if (start == arguments.Length) { return false; }
-        if (arguments.Skip(count: start).Any(predicate: static token => (token is "--help" or "-h" or "-?"))) { return false; }
-        if (arguments[start] == "canary") {
-            return (!Enabled(arguments: arguments, flag: "--list", start: (start + 1)) && !Enabled(arguments: arguments, flag: "--plan", start: (start + 1)));
-        }
-
-        // The verb's own grammar distinguishes each root action from compare, including option values named compare.
-        if (!grammars.TryGetValue(key: arguments[start], value: out var grammar)) { return false; }
-
-        var command = grammar();
-
-        var result = command.Parse(args: arguments[(start + 1)..]);
-
-        return ((result.Errors.Count == 0) && (result.CommandResult.Command == command));
-    }
-
     /// <summary>Whether a process is GPU work.</summary>
     /// <param name="name">The process name, without extension.</param>
     /// <param name="commandLine">Its Windows command line or Linux NUL-delimited argv; empty when unreadable.</param>
-    /// <param name="grammars">The grammar of each verb whose own arguments decide whether its run is GPU work, by name.</param>
-    /// <returns><see langword="true"/> for the World, a GPU verb, or a device-law test host whose arguments can select a
-    /// device law.</returns>
-    public static bool IsGpuWork(string name, string commandLine, IReadOnlyDictionary<string, Func<Command>> grammars) {
+    /// <returns><see langword="true"/> for a World that opens a device, or a device-law test host whose arguments can select
+    /// a device law. A CLI verb is never GPU work itself: the World it starts holds the device, under the GPU lease the
+    /// verb's launch takes.</returns>
+    public static bool IsGpuWork(string name, string commandLine) {
         var program = ProgramName(path: name);
 
         if (NeverWork.Contains(value: program, comparer: StringComparer.OrdinalIgnoreCase)) { return false; }
@@ -142,7 +123,7 @@ public static class HostProcesses {
             return (((hostAssembly is not null) && IsDeviceTest(program: hostAssembly)) || arguments.Skip(count: next).Any(predicate: static argument => IsDeviceTest(program: ProgramName(path: argument))));
         }
 
-        return ((entry.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "puck") || entry.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.Cli")) && RunningGpuVerb(arguments: arguments, grammars: grammars, start: next));
+        return false;
     }
     /// <summary>What an admitted start a process is, for the commit the admission still expects it to grow by: the World
     /// (<see cref="WorldDevices.StartKind"/> of its own arguments) or a heavy test run

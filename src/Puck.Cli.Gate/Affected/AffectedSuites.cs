@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using Puck.Cli.Gate;
 using Puck.Cli.Host;
 
 namespace Puck.Cli.Affected;
@@ -116,9 +115,8 @@ public static class AffectedSuites {
     /// <param name="repositoryRoot">The repository root.</param>
     /// <param name="suites">The chosen suites, in the plan's order.</param>
     /// <param name="jobs">The most suites run at once.</param>
-    /// <param name="gpuVerbGrammars">The grammars a heavy suite's admission reads GPU work by (<see cref="GateComposition.GpuVerbGrammars"/>).</param>
     /// <returns>The failed suites, in the plan's order.</returns>
-    public static IReadOnlyList<string> Run(string repositoryRoot, IReadOnlyList<string> suites, int jobs, IReadOnlyDictionary<string, Func<Command>> gpuVerbGrammars) {
+    public static IReadOnlyList<string> Run(string repositoryRoot, IReadOnlyList<string> suites, int jobs) {
         if (suites.Count == 0) {
             return [];
         }
@@ -193,7 +191,7 @@ public static class AffectedSuites {
                 }
             },
             jobs: jobs,
-            run: suite => RunSuite(gpuVerbGrammars: gpuVerbGrammars, repositoryRoot: repositoryRoot, suite: suite),
+            run: suite => RunSuite(repositoryRoot: repositoryRoot, suite: suite),
             suites: [.. suites.Select(selector: static suite => new AffectedSuite(Heavy: HostProcesses.IsHeavyTestAssembly(assembly: suite), Name: suite))]
         );
 
@@ -204,10 +202,10 @@ public static class AffectedSuites {
     // switches, so the run builds nothing and takes none (AffectedCommand.TestArguments). A plain run selects exactly
     // what CI's does, so an explicit tier such as Maths' Deep and Exhaustive stays out, and the Gpu trait keeps device
     // laws out (CliTestRun.CpuSelection). The platform prints each failure with its message and stack.
-    private static AffectedSuiteResult RunSuite(string repositoryRoot, AffectedSuite suite, IReadOnlyDictionary<string, Func<Command>> gpuVerbGrammars) {
+    private static AffectedSuiteResult RunSuite(string repositoryRoot, AffectedSuite suite) {
         using var lease = (suite.Heavy ? HeavyLease.Acquire(repositoryRoot: repositoryRoot, holder: suite.Name, clock: TimeProvider.System) : null);
 
-        if (suite.Heavy && !AffectedCommand.AdmitHeavySuite(gpuVerbGrammars: gpuVerbGrammars, repositoryRoot: repositoryRoot, suite: suite.Name)) {
+        if (suite.Heavy && !AffectedCommand.AdmitHeavySuite(repositoryRoot: repositoryRoot, suite: suite.Name)) {
             return new AffectedSuiteResult(
                 ExitCode: CliExit.Refused,
                 Report: [$"REFUSED — host admission did not return within {CliLease.DefaultWait.TotalHours.ToString(format: "0", provider: CultureInfo.InvariantCulture)} hours"]

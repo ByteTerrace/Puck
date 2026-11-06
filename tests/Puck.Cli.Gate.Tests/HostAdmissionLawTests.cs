@@ -18,7 +18,7 @@ public sealed class HostAdmissionLawTests {
 
     [Fact]
     public void HostOptionsDefaultToTheAdmissionThresholdsAndStillAllowOverrides() {
-        var load = HostCommand.Create(composition: SuiteRoot.Composition).Subcommands.Single(predicate: command => (command.Name == "load"));
+        var load = HostCommand.Create().Subcommands.Single(predicate: command => (command.Name == "load"));
         var defaults = HostLoadThresholds.ThisMachine;
         (string Name, double? Value)[] thresholds = [("--capacity-cpu", defaults.CapacityCpuPercent), ("--capacity-ram", defaults.CapacityRamGb), ("--capacity-commit", defaults.CapacityCommitPercent),("--pressure-ram", defaults.PressureRamGb), ("--pressure-disk", defaults.PressureDiskGb)];
 
@@ -232,7 +232,7 @@ public sealed class HostAdmissionLawTests {
         Assert.Equal(expected: ["CAPACITY cpu=0% freeRAM=8.0GB freeDisk=100.0GB commit=60% reuseNodes=42"], actual: monitor.Observe(sample: Sample(commit: 60)));
         Assert.True(condition: monitor.HasCapacity);
     }
-    // A verb below the gate passes WorldAdmission before each World start, and the installed admission is HostAdmission: the
+    // A verb below the gate admits each World start through WorldLaunch, and the installed admission is HostAdmission: the
     // start waits at a 90% commit charge and goes ahead at 60%, each replica admitted on its own reading, and a bound that
     // passes first refuses the start by exception.
     [Fact]
@@ -249,31 +249,45 @@ public sealed class HostAdmissionLawTests {
 
         WorldAdmission.Install(admit: admit);
         try {
-            string[] worker = ["Puck.World.dll", "--devices", "none", "--test-batch", "batch.json"];
+            var worker = new WorldLaunchRequest(Artifact: "Puck.World.dll", Step: "test worker") { Arguments = ["--test-batch", "batch.json"], HeavySuite = true, Shape = WorldShape.TestBatch };
 
             // The first replica waits two samples at 90% and starts on the third.
-            WorldAdmission.Wait(step: "test worker", worldArguments: worker, heavySuite: true, cancellationToken: TestContext.Current.CancellationToken);
+            WorldLaunch.Admit(cancellationToken: TestContext.Current.CancellationToken, request: worker).Dispose();
             Assert.Equal(expected: 3, actual: readings);
             Assert.Equal(expected: TimeSpan.FromSeconds(seconds: 20), actual: clock.GetElapsedTime(startingTimestamp: 0));
             Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit 90% of limit (admission needs under 75%); commit headroom 6.4GB (admission needs at least 9.0GB");
             Assert.Contains(actualString: error.ToString(), expectedSubstring: "capacity returned for test worker");
 
-            // The next replica is admitted on its own reading: 60% starts at once, a windowed boot asks for the GPU.
-            WorldAdmission.Wait(step: "test worker", worldArguments: worker, heavySuite: true, cancellationToken: TestContext.Current.CancellationToken);
-            WorldAdmission.Wait(step: "sweep", worldArguments: ["Puck.World.dll", "--world", "worlds/debug", "--headless", "false"], cancellationToken: TestContext.Current.CancellationToken);
+            // The next replica is admitted on its own reading: 60% starts at once, as does a World booted in process.
+            WorldLaunch.Admit(cancellationToken: TestContext.Current.CancellationToken, request: worker).Dispose();
+            WorldAdmission.WaitInProcess(cancellationToken: TestContext.Current.CancellationToken, step: "bench");
             Assert.Equal(expected: 5, actual: readings);
             Assert.Equal(expected: TimeSpan.FromSeconds(seconds: 20), actual: clock.GetElapsedTime(startingTimestamp: 0));
-            Assert.Equal(expected: [("test worker", false, true, HostStartKind.ReproduceReplica), ("test worker", false, true, HostStartKind.ReproduceReplica), ("sweep", true, false, HostStartKind.WindowedWorld)], actual: asked);
+            Assert.Equal(expected: [("test worker", false, true, HostStartKind.ReproduceReplica), ("test worker", false, true, HostStartKind.ReproduceReplica), ("bench", false, false, HostStartKind.HeadlessWorld)], actual: asked);
 
             // A machine that never recovers refuses the start at the admission's bound, and the verb's start never happens.
             readings = int.MinValue;
-            Assert.Throws<HostAdmissionRefusedException>(testCode: () => WorldAdmission.Wait(step: "canary", device: false, cancellationToken: TestContext.Current.CancellationToken));
+            Assert.Throws<HostAdmissionRefusedException>(testCode: () => WorldAdmission.WaitInProcess(cancellationToken: TestContext.Current.CancellationToken, step: "canary"));
         } finally {
             WorldAdmission.Install(admit: null);
         }
 
         // Without an installed admission a start is admitted at once.
-        WorldAdmission.Wait(step: "canary", device: true, cancellationToken: TestContext.Current.CancellationToken);
+        WorldAdmission.WaitInProcess(cancellationToken: TestContext.Current.CancellationToken, step: "canary");
+    }
+    // The launch's own view of a World (whether it opens a device, so takes the GPU lease) and the host's reading of the
+    // command line it builds agree for every shape, so a running World is classified as the launch admitted it.
+    [InlineData(WorldShape.Headless)]
+    [InlineData(WorldShape.Windowed)]
+    [InlineData(WorldShape.Document)]
+    [InlineData(WorldShape.TestBatch)]
+    [Theory]
+    public void TheLaunchAndTheHostReadAWorldsDeviceAlike(WorldShape shape) {
+        var request = new WorldLaunchRequest(Artifact: "Puck.World.dll", Step: "law") { Arguments = ((shape == WorldShape.TestBatch) ? ["--test-batch", "batch.json"] : []), Shape = shape, World = "worlds/debug" };
+
+        Assert.Equal(expected: request.OpensDevice, actual: WorldDevices.OpensDevice(arguments: request.CommandLine(), start: 1));
+        Assert.Equal(expected: request.Kind, actual: WorldDevices.StartKind(arguments: request.CommandLine(), start: 1));
+        Assert.Contains(collection: request.CommandLine(), expected: "none");
     }
     [InlineData(new string[0], true)]
     [InlineData(new[] { "--headless" }, false)]

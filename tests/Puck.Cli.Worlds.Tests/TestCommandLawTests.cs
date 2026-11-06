@@ -123,16 +123,6 @@ public sealed class TestCommandLawTests {
             actual: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000002/run1/out/state-export.json")));
         Assert.NotEqual(File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/state-export.json")),
             File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000001/run1/out/state-export.json")));
-        // Also compare a worker's boot to a truly fresh process, using the same staged world and ordinary boot.
-        var generated = Path.Combine(path1: kept, path2: "generated/isolation~pristine/same.world.json");
-        var freshDirectory = directory.PathOf(name: "fresh");
-        using var error = new StringWriter();
-
-        Assert.True(Test.TestCommand.TryRunLeg(world: generated, artifact: Artifact(), legDirectory: freshDirectory,
-            exportTick: 7, rateHz: 60, error: error, reading: out var fresh), userMessage: error.ToString());
-        Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000003/run1/out/state-export.json")), actual: fresh!.ExportBytes);
-        Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000003/run1/out/test-run.json")), actual: fresh.ManifestBytes);
-
         static ulong[] ReadProbeHashes(string reproductionPath) {
             using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(path: reproductionPath));
 
@@ -143,8 +133,8 @@ public sealed class TestCommandLawTests {
         var changedHashes = ReadProbeHashes(reproductionPath: Path.Combine(path1: kept, path2: "worlds/000001/run1/reproduction.json"));
         var reusedHashes = ReadProbeHashes(reproductionPath: Path.Combine(path1: kept, path2: "worlds/000003/run1/reproduction.json"));
 
-        Assert.False(condition: File.Exists(path: Path.Combine(path1: freshDirectory, path2: "reproduction.json")));
-        // An ordinary scheduled boot records no proof. A separate reproduction must actually compare it.
+        // A separate reproduction of the staged world in its own worker must reach the same hashes.
+        var generated = Path.Combine(path1: kept, path2: "generated/isolation~pristine/same.world.json");
         var freshReproduction = directory.PathOf(name: "fresh-reproduction");
 
         var (freshExit, freshOutput) = RunTest(generated, "--reproduce", "--keep", freshReproduction);

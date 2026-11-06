@@ -1581,21 +1581,19 @@ file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
      workspace name lands on a client's disk, so the official one is the
      weaker where it matters. Survivor: the release rules, with a parent-segment
      switch for documents.
-5. Child processes and the World boot line (M, implementer).
-   `MotionWorldProcess.Start` (`Puck.Cli.Runs/Motion/MotionWorldProcess.Device.cs:54`),
-   `SweepCommand.ScenarioFile` (`Puck.Cli.Runs/Sweep/SweepCommand.cs:361`) and
-   `OperatorWorlds.Launch` (`Puck.Mcp/OperatorWorlds.cs:463`) build
-   `ProcessStartInfo` by hand beside `ChildProcess` (`Puck.Abstractions/ChildProcess.cs`)
-   and `CliProcess` (`Puck.Cli.Core/CliProcess.cs:135`). `[low]` The sweep
-   reads both streams to end with no exit drain grace, the hang
-   `ChildProcess.ExitDrainGrace` exists for (a build server holding the pipe).
-   The World's argument vector (`--world`, `--devices`, `--headless`,
-   `--state-dir`) is spelled in six places (`Puck.Cli.Bench/StartupBenchmarks.cs:64`,
-   `Puck.Cli.Runs/Canary/CanaryCommand.Federation.cs:464`,
-   `CanaryCommand.Stub.cs:93`, `OperatorWorlds.cs:485`,
-   `Puck.World/WorldTestBatch.cs:92`, the motion run);
-   `Puck.Cli.Harness/WorldDevices.cs` starts the one builder they share;
-   `WorldTestBatch` and `OperatorWorlds` cannot reference `Puck.Cli.Harness`.
+5. The World boot line inside the World and on Linux (S, implementer).
+   Every World process the CLI starts goes through `WorldLaunch`
+   (`Puck.Cli.Harness/WorldLaunch.cs`), whose `WorldLaunchRequest.CommandLine` spells
+   the shared arguments once. The test-batch worker's in-process boot still spells
+   its own vector (`Puck.World/WorldTestBatch.cs`, `--devices`, `--world`,
+   `--headless`, `--state-dir`), since `Puck.World` cannot reference the CLI; a
+   shared request type would live below both. On Linux nothing ends a World when
+   the CLI that started it is killed: `ChildProcessJob`
+   (`Puck.Cli.Harness/ChildProcessJob.cs`) is a Windows job object, and
+   `PR_SET_PDEATHSIG` fires on the death of the forking thread, so a Linux
+   equivalent needs the starts on one long-lived thread (or the World watching its
+   parent). Until then a World's `--exit-after-seconds` backstop bounds it there,
+   and an MCP World, which has none, outlives a killed adapter.
 6. Small merges (S each; one implementer lane can take them together).
    - Fixed-point boxes (specialist):
      `FixedSpatialAabb` (`Puck.World.Schema/WorldPlacementSpatial.cs:81`,

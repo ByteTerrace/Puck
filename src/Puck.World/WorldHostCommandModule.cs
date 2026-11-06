@@ -32,7 +32,7 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
             : "display"
         );
 
-        return ((((((((string)$"[world.host: document {{{{{DescribeRow(host: document)}}}}} resolved {{{{presentation={PresentationToken(presentation: hostSettings.Presentation)} backend={WorldHostTokens.BackendToken(backend: (hostSettings.HostsOnDirectX
+        return ((((((((string)$"[world.host: document {{{{{DescribeRow(host: document)}}}}} resolved {{{{presentation={PresentationToken(presentation: hostSettings.Presentation)} backend={WorldBackendTokens.Token(backend: (hostSettings.HostsOnDirectX
             ? WorldBackendPreference.DirectX
             : WorldBackendPreference.Vulkan))} ") +
             $"width={hostSettings.Width} height={hostSettings.Height} surfaceFormat={WorldHostTokens.SurfaceFormatToken(format: hostSettings.SurfaceFormat)} ") +
@@ -45,7 +45,7 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
     private static string DescribeRow(WorldHostDefaults host) =>
         (((((string)$"presentation={PresentationToken(presentation: host.Presentation)} backend={((host.BackendRow is not null)
             ? $"<row:{host.BackendRow}>"
-            : WorldHostTokens.BackendToken(backend: (host.Backend ?? WorldBackendPreference.Auto)))} width={host.Width} height={host.Height} surfaceFormat={WorldHostTokens.SurfaceFormatToken(format: host.SurfaceFormat)} fullscreen={Bool(value: host.Fullscreen)} ") +
+            : WorldBackendTokens.Token(backend: (host.Backend ?? WorldBackendPreference.Auto)))} width={host.Width} height={host.Height} surfaceFormat={WorldHostTokens.SurfaceFormatToken(format: host.SurfaceFormat)} fullscreen={Bool(value: host.Fullscreen)} ") +
         $"presentMode={PresentModeToken(mode: host.PresentMode)} targetHertz={HertzToken(hertz: host.TargetHertz)} ") +
         $"exitAfterSeconds={host.ExitAfterSeconds} genlock={Genlock(value: host.Genlock)} listen={Endpoint(value: host.Listen)} authority={Endpoint(value: host.Authority)} ") +
         $"colorSpace={host.ColorSpace} paperWhiteNits={((host.PaperWhiteNits is { } paperWhite) ? HertzToken(hertz: paperWhite) : "(sdr white)")}");

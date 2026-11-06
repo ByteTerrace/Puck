@@ -413,26 +413,16 @@ public static class DocsCitationsCommand {
         CliProcessResult process;
 
         try {
-            string[] arguments = [
-                artifact,
-                "--world", world,
-                .. WorldDevices.NoneArguments,
-                "--exit-after-seconds", "20",
-                "--state-dir", stateDirectory,
-                "--headless", (headless
-                    ? "true"
-                    : "false"),
-            ];
+            using var launch = WorldLaunch.Admit(request: new WorldLaunchRequest(Artifact: artifact, Step: "docs citations") {
+                ExitAfterSeconds = 20,
+                Shape = (headless ? WorldShape.Headless : WorldShape.Windowed),
+                StateDirectory = stateDirectory,
+                WorkingDirectory = runDirectory,
+                World = world,
+            });
 
-            WorldAdmission.Wait(step: "docs citations", worldArguments: arguments);
-            process = CliProcess.RunCaptured(
-                fileName: "dotnet",
-                arguments: arguments,
-                input: input,
-                timeout: TimeSpan.FromSeconds(value: 60),
-                workingDirectory: runDirectory
-            );
-        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
+            process = launch.Run(input: input, timeout: TimeSpan.FromSeconds(value: 60));
+        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception or TimeoutException)) {
             error = $"could not start the {shape} Puck.World boot: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
@@ -495,12 +485,13 @@ public static class DocsCitationsCommand {
         using var run = RunDirectory.Create(prefix: ScratchPrefix);
         var runDirectory = run.Path;
 
-        if (!WorldArtifactBuild.TryResolve(
-            artifact: out var world,
+        if (!WorldLaunch.TryResolve(
+            build: out var world,
             error: out error,
             logDirectory: runDirectory,
+            named: null,
             repositoryRoot: root,
-            timeout: WorldArtifactBuild.BuildTimeout,
+            spirv: WorldLaunch.NeedsSpirv(backend: null, shape: WorldShape.Windowed),
             verb: Verb
         )) {
             return false;

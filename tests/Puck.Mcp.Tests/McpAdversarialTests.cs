@@ -412,26 +412,24 @@ public sealed class McpAdversarialTests {
         Assert.Equal(expected: ControlCapture.Settled, actual: seen[2]!.Mode);
         await adapter.StopAsync();
     }
-    // Law: a start boots only the build the launch resolves for the checkout; when no build of the current sources can be
-    // made, the start refuses with the build's reason and takes no GPU lease and launches nothing.
+    // Law: a start asks the CLI's launch for the World it names; when the launch starts none (no build of the current
+    // sources could be made, say), the start refuses with the launch's reason and records no World.
     [Fact]
     public async Task AStartWhoseSourcesCannotBeBuiltIsRefusedWithTheBuildsReason() {
         if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
         using var scratch = new TemporaryDirectory(prefix: "puck-start-");
-        var asked = new List<(string Checkout, bool Spirv)>();
+        var asked = new List<OperatorWorldRequest>();
 
         _ = Directory.CreateDirectory(path: Path.Combine(path1: scratch.RootPath, path2: "worlds", path3: "debug"));
         await using var adapter = new InProcessAdapter(
             createSession: () => new ScriptedSession(entered: null),
             directory: scratch.RootPath,
             launch: new OperatorWorldLaunch(
-                AcquireGpuLease: static (_, _, _) => throw new InvalidOperationException(message: "a refused build takes no lease"),
-                Admit: static (_, _, _, _) => throw new InvalidOperationException(message: "a refused build is never admitted"),
                 Checkout: scratch.RootPath,
-                ResolveBuild: (checkout, spirv, _) => {
-                    asked.Add(item: (checkout, spirv));
+                Start: (world, _, _) => {
+                    asked.Add(item: world);
 
-                    return Task.FromResult(result: new OperatorWorldBuild(Error: "the Puck.World build exited 1.", Lease: null, Path: null));
+                    return Task.FromResult(result: new OperatorWorldStart(Build: null, Lease: null, Process: null, Refusal: "Refused: no Release build could be made: the Puck.World build exited 1."));
                 }
             )
         );
@@ -452,35 +450,33 @@ public sealed class McpAdversarialTests {
         Assert.Equal(expected: "refused", actual: structured.GetProperty(propertyName: "status").GetString());
         Assert.Contains(expectedSubstring: "the Puck.World build exited 1.", actualString: structured.GetProperty(propertyName: "output").GetString());
         Assert.False(condition: structured.TryGetProperty(propertyName: "processId", value: out _));
-        // A Vulkan start asks for the SPIR-V build.
-        Assert.Equal(expected: [(Path.TrimEndingDirectorySeparator(path: scratch.RootPath), true)], actual: asked);
+        // The launch is asked for a windowed Vulkan World of the checkout, booting no physical device.
+        var request = Assert.Single(collection: asked);
+        Assert.Equal(expected: (Path.TrimEndingDirectorySeparator(path: scratch.RootPath), Puck.World.WorldBackendPreference.Vulkan, true, false), actual: (request.Checkout, request.Backend, request.Windowed, request.OwnerPlay));
     }
-    // Law: a start that the host admission refuses launches nothing and releases what it held (the GPU lease of a windowed
-    // start and the build lease), and judges a windowed World as a device step and a headless one as an ordinary step.
+    // Law: a start the launch refuses after holding a lease (the host admission had no headroom, say) records no World,
+    // releases what the launch handed back, and reports the launch's wait as the pending start's stage.
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
     public async Task AStartTheHostAdmissionRefusesLaunchesNothingAndReleasesWhatItHeld(bool windowed) {
         if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
         using var scratch = new TemporaryDirectory(prefix: "puck-admit-");
-        var gpuReleased = false;
-        var buildReleased = false;
-        var asked = new List<(string Checkout, bool Device)>();
+        var released = false;
+        var asked = new List<OperatorWorldRequest>();
 
         _ = Directory.CreateDirectory(path: Path.Combine(path1: scratch.RootPath, path2: "worlds", path3: "debug"));
         await using var adapter = new InProcessAdapter(
             createSession: () => new ScriptedSession(entered: null),
             directory: scratch.RootPath,
             launch: new OperatorWorldLaunch(
-                AcquireGpuLease: (_, _, _) => Task.FromResult<IDisposable>(result: new Release(release: () => gpuReleased = true)),
-                Admit: (checkout, device, stage, _) => {
-                    asked.Add(item: (checkout, device));
+                Checkout: scratch.RootPath,
+                Start: (world, stage, _) => {
+                    asked.Add(item: world);
                     stage(obj: "waiting for memory headroom: commit 90% of limit");
 
-                    return Task.FromResult(result: false);
-                },
-                Checkout: scratch.RootPath,
-                ResolveBuild: (_, _, _) => Task.FromResult(result: new OperatorWorldBuild(Error: null, Lease: new Release(release: () => buildReleased = true), Path: Path.Combine(path1: scratch.RootPath, path2: "Puck.World.dll")))
+                    return Task.FromResult(result: new OperatorWorldStart(Build: null, Lease: new Release(release: () => released = true), Process: null, Refusal: "Refused: the host had no memory, commit or disk headroom within the admission's bound, so no World was started."));
+                }
             )
         );
         using var answer = await adapter.RequestAsync(
@@ -496,9 +492,8 @@ public sealed class McpAdversarialTests {
         Assert.Equal(expected: "refused", actual: structured.GetProperty(propertyName: "status").GetString());
         Assert.Contains(expectedSubstring: "no memory, commit or disk headroom", actualString: structured.GetProperty(propertyName: "output").GetString());
         Assert.False(condition: structured.TryGetProperty(propertyName: "processId", value: out _));
-        Assert.Equal(expected: [(Path.TrimEndingDirectorySeparator(path: scratch.RootPath), windowed)], actual: asked);
-        Assert.Equal(expected: windowed, actual: gpuReleased);
-        Assert.True(condition: buildReleased);
+        Assert.Equal(expected: windowed, actual: Assert.Single(collection: asked).Windowed);
+        Assert.True(condition: released);
     }
     // Law: an adapter following a directory attaches to the newest World there that answers, skipping a capability
     // file whose World is gone, and after its attachment closes follows to whichever World now answers, with no

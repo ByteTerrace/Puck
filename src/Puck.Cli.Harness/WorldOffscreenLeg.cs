@@ -17,23 +17,24 @@ public static class WorldOffscreenLeg {
     private static readonly string UnsupportedPrefix = Puck.Launcher.LauncherHostRun.UnsupportedLinePrefix(label: "world");
 
     /// <summary>The graphics backends a leg runs on, in the order a verb runs them.</summary>
-    public static IReadOnlyList<string> Backends { get; } = ["vulkan", "directx"];
+    public static IReadOnlyList<string> Backends { get; } = [Puck.World.WorldBackendTokens.Vulkan, Puck.World.WorldBackendTokens.DirectX];
 
-    /// <summary>Resolves the World build for the checkout's current sources; a run that built keeps the build's
-    /// standard output and error beside its transcripts.</summary>
+    /// <summary>Resolves the World build for the checkout's current sources, with the Vulkan SPIR-V its Vulkan legs
+    /// need; a run that built keeps the build's standard output and error beside its transcripts.</summary>
     /// <param name="verb">The calling verb, which prefixes progress and refusal lines.</param>
     /// <param name="repositoryRoot">The checkout whose sources are built.</param>
     /// <param name="runDirectory">The run's scratch directory.</param>
-    /// <param name="artifact">The leased build, which the caller disposes after its last leg.</param>
+    /// <param name="build">The resolved build, which the caller disposes after its last leg.</param>
     /// <returns><see langword="true"/> when a build is available; otherwise the refusal is already on standard
     /// error.</returns>
-    public static bool TryResolveWorld(string verb, string repositoryRoot, string runDirectory, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact) {
-        var built = WorldArtifactBuild.TryResolve(
-            artifact: out artifact,
+    public static bool TryResolveWorld(string verb, string repositoryRoot, string runDirectory, [NotNullWhen(returnValue: true)] out WorldBuild? build) {
+        var built = WorldLaunch.TryResolve(
+            build: out build,
             error: out var buildError,
             logDirectory: runDirectory,
+            named: null,
             repositoryRoot: repositoryRoot,
-            timeout: WorldArtifactBuild.BuildTimeout,
+            spirv: Backends.Any(predicate: static backend => WorldLaunch.NeedsSpirv(backend: WorldLaunch.ParseBackend(token: backend), shape: WorldShape.Document)),
             verb: verb
         );
 
@@ -131,37 +132,26 @@ public static class WorldOffscreenLeg {
         CliProcessResult process;
 
         try {
-            string[] worldArguments = [
-                artifact,
-                "--world", world,
-                .. WorldDevices.NoneArguments,
-                "--backend", backend,
-                "--exit-after-seconds", exitAfterSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
-                "--state-dir", StateDirectoryOf(backend: backend, runDirectory: runDirectory),
-                .. arguments,
-            ];
+            // The GPU lease and the host's headroom are other runs' time, so the suite's clock stands still for them.
+            using var launch = WorldLaunch.Admit(
+                queue: () => Pause(clock: suiteClock),
+                request: new WorldLaunchRequest(Artifact: artifact, Step: verb) {
+                    Arguments = arguments,
+                    Backend = WorldLaunch.ParseBackend(token: backend),
+                    Environment = environment,
+                    ExitAfterSeconds = exitAfterSeconds,
+                    Shape = WorldShape.Document,
+                    StateDirectory = StateDirectoryOf(backend: backend, runDirectory: runDirectory),
+                    World = world,
+                }
+            );
 
-            // The wait for the host's headroom spends the suite's budget like any other time, so the leg's ceiling is what it leaves.
-            WorldAdmission.Wait(step: verb, worldArguments: worldArguments);
-            remaining = CliProcess.RemainingBudget(budget: budget, clock: suiteClock);
-
-            if (remaining <= TimeSpan.FromSeconds(value: 1)) {
-                return new WorldOffscreenLegResult(
-                    Detail: $"the {budget.TotalSeconds:0}-second whole-suite budget was exhausted while the {backend} leg waited for the host's headroom.",
-                    Process: null,
-                    Status: WorldOffscreenLegStatus.NotRun
-                );
-            }
-
-            process = CliProcess.RunCaptured(
-                arguments: worldArguments,
-                environment: environment,
-                fileName: "dotnet",
+            process = launch.Run(
                 // quit ends the leg the moment the script has run instead of idling out the exit backstop.
                 input: $"{script}wire.errors\nquit\n",
                 timeout: remaining
             );
-        } catch (Exception exception) when ((exception is InvalidOperationException or Win32Exception)) {
+        } catch (Exception exception) when ((exception is InvalidOperationException or Win32Exception or TimeoutException or ArgumentException)) {
             return new WorldOffscreenLegResult(
                 Detail: $"could not start the {backend} leg: {exception.Message.ReplaceLineEndings(replacementText: " ")}",
                 Process: null,
@@ -235,6 +225,19 @@ public static class WorldOffscreenLeg {
         );
     }
 
+    // Stops a running clock until the scope ends; a clock already stopped stays stopped.
+    private static IDisposable Pause(Stopwatch clock) {
+        var running = clock.IsRunning;
+
+        clock.Stop();
+
+        return new Resume(clock: clock, running: running);
+    }
+    private sealed class Resume(Stopwatch clock, bool running) : IDisposable {
+        public void Dispose() {
+            if (running) { clock.Start(); }
+        }
+    }
     private static void WriteLog(string runDirectory, string name, string text) =>
         File.WriteAllText(
             contents: text,

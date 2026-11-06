@@ -1,16 +1,11 @@
 namespace Puck.Cli;
 
 /// <summary>
-/// How a verb keeps a World it boots off the machine's physical input devices. The owner's pads, keyboard and mouse
-/// drive the owner's own World only: a World a verb starts for an agent, a gate or a benchmark opens none of them, so a
-/// press on the owner's pad never moves a test run. Scripted input (stdin, <c>player.signal</c>, schedule rows) is
-/// unaffected.
+/// Reads what a running World's command line says about its devices, for the host's view of the processes already
+/// running. A World this CLI starts passes <c>--devices none</c> unless the owner asked to play in it
+/// (<see cref="WorldLaunchRequest.CommandLine"/>), so a press on the owner's pad never moves a test run.
 /// </summary>
 public static class WorldDevices {
-    /// <summary>The World arguments (<c>--devices none</c>) that open no gamepad and drop every OS key, text and pointer
-    /// event before a seat sees it.</summary>
-    public static string[] NoneArguments { get; } = ["--devices", "none"];
-
     /// <summary>Whether a World started with these arguments opens a GPU device: it does unless it boots headless
     /// (<c>--headless</c> alone or followed by a value other than <c>false</c>) or runs a test batch
     /// (<c>--test-batch</c>), which boots every scenario headless.</summary>

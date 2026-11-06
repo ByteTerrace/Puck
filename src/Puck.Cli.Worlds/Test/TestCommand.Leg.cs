@@ -1,6 +1,4 @@
 using System.CommandLine;
-using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.World;
@@ -25,21 +23,6 @@ public static partial class TestCommand {
         val2: rateHz
     ));
 
-    // The script one leg sends: steps of one simulated second up to two ticks past the export tick, then the wire's
-    // refusals, then quit.
-    internal static string LegScript(ulong exportTick, int rateHz) {
-        var script = new StringBuilder();
-        var step = StepTicks(rateHz: rateHz);
-
-        for (var remaining = (exportTick + 2UL); (remaining > 0UL); remaining -= Math.Min(val1: remaining, val2: step)) {
-            _ = script.Append(value: "world.wait ").Append(value: Math.Min(val1: remaining, val2: step).ToString(provider: CultureInfo.InvariantCulture)).Append(value: Environment.NewLine);
-        }
-
-        _ = script.Append(value: "wire.errors").Append(value: Environment.NewLine);
-        _ = script.Append(value: "quit").Append(value: Environment.NewLine);
-
-        return script.ToString();
-    }
     // The longest a leg's watchdog lets it run: its start-up, then every step and the quit at the progress bound. The
     // World is handed it as its own exit, so a host whose runner has gone stops, and never sooner than the runner would
     // have stopped it.
@@ -65,126 +48,26 @@ public static partial class TestCommand {
     }
     // The World every leg boots: the --world-artifact the caller named, or the build of this checkout's sources, reused
     // when an earlier run built it and leased until every leg has exited.
-    private static bool TryResolveArtifact(string? worldArtifact, string repositoryRoot, string runDirectory, out string? artifact, out WorldArtifact? lease) {
-        if (WorldArtifactBuild.TryResolveNamed(
+    private static bool TryResolveArtifact(string? worldArtifact, string repositoryRoot, string runDirectory, out string? artifact, out WorldBuild? lease) {
+        if (WorldLaunch.TryResolve(
+            build: out lease,
             error: out var error,
-            lease: out lease,
             logDirectory: runDirectory,
             named: worldArtifact,
-            path: out artifact,
             repositoryRoot: repositoryRoot,
-            timeout: WorldArtifactBuild.BuildTimeout,
+            spirv: false,
             verb: "test"
         )) {
+            artifact = lease.Path;
+
             return true;
         }
+
+        artifact = null;
 
         Console.Error.WriteLine(value: $"ERROR: {error}");
 
         return false;
-    }
-
-    // One leg: boot the executable headless against its own state and schedule directories, step past the export tick
-    // one simulated second at a time, quit, then read what the world wrote. The watchdog, not the World's own exit,
-    // decides when a leg has stalled.
-    public static bool TryRunLeg(string world, string artifact, string legDirectory, ulong exportTick, int rateHz, TextWriter error, out TestReading? reading) {
-        reading = null;
-
-        var scheduleDirectory = Path.Combine(
-            path1: legDirectory,
-            path2: "out"
-        );
-        var lastAnswer = "nothing";
-
-        _ = Directory.CreateDirectory(path: legDirectory);
-
-        string[] arguments = [
-            artifact,
-            .. WorldDevices.NoneArguments,
-            "--world", world,
-            "--headless", "true",
-            "--unpaced", "true",
-            "--exit-after-seconds", ((int)Math.Ceiling(a: LegCeiling(
-                exportTick: exportTick,
-                rateHz: rateHz
-            ).TotalSeconds)).ToString(provider: CultureInfo.InvariantCulture),
-            "--state-dir", Path.Combine(
-                path1: legDirectory,
-                path2: "state"
-            ),
-            "--schedule-dir", scheduleDirectory,
-        ];
-
-        try {
-            WorldAdmission.Wait(step: "puck test", worldArguments: arguments);
-        } catch (HostAdmissionRefusedException exception) {
-            error.WriteLine(value: $"ERROR: {exception.Message}");
-
-            return false;
-        }
-
-        using var watchdog = new CancellationTokenSource(delay: StartupBudget);
-        CliProcessResult process;
-
-        try {
-            process = CliProcess.RunCaptured(
-                fileName: "dotnet",
-                arguments: arguments,
-                cancellationToken: watchdog.Token,
-                input: LegScript(
-                    exportTick: exportTick,
-                    rateHz: rateHz
-                ),
-                onOutput: line => {
-                    if (line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: WaitAnswer)) {
-                        lastAnswer = line.Line;
-                        watchdog.CancelAfter(delay: ProgressBudget);
-                    }
-                },
-                timeout: Timeout.InfiniteTimeSpan
-            );
-        } catch (OperationCanceledException) when (watchdog.IsCancellationRequested) {
-            error.WriteLine(value: $"ERROR: the leg for {world} stopped advancing: its last answer was {lastAnswer}, and none followed within {((lastAnswer == "nothing") ? StartupBudget : ProgressBudget).TotalSeconds.ToString(provider: CultureInfo.InvariantCulture)} seconds; transcripts under {legDirectory}.");
-
-            return false;
-        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
-            error.WriteLine(value: $"ERROR: could not start the leg for {world}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
-
-            return false;
-        }
-
-        File.WriteAllText(
-            contents: process.Stdout,
-            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-            path: Path.Combine(
-                path1: legDirectory,
-                path2: "stdout.log"
-            )
-        );
-        File.WriteAllText(
-            contents: process.Stderr,
-            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-            path: Path.Combine(
-                path1: legDirectory,
-                path2: "stderr.log"
-            )
-        );
-
-        if (process.ExitCode != 0) {
-            error.WriteLine(value: $"ERROR: the leg for {world} exited {process.ExitCode.ToString(provider: CultureInfo.InvariantCulture)}; transcripts under {legDirectory}.");
-            // The transcripts are removed with the run directory unless --keep, so the one line that says WHY has to
-            // travel now rather than living in a directory the finally block is about to delete.
-            error.WriteLine(value: Tail(text: process.Stderr));
-
-            return false;
-        }
-
-        return TryRead(
-            error: error,
-            reading: out reading,
-            scheduleDirectory: scheduleDirectory,
-            world: world
-        );
     }
 
     private static bool TryRead(string world, string scheduleDirectory, TextWriter error, out TestReading? reading) {

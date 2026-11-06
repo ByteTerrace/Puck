@@ -1,3 +1,4 @@
+using Puck.World;
 using System.CommandLine;
 using System.Globalization;
 
@@ -17,7 +18,7 @@ public static partial class MotionCommand {
 
     private const string Verb = "motion";
 
-    private static int Run(string? scenariosPath, string[] names, bool list, bool reproduce, string? output, string? worldPath, string? worldArtifact, string? backend, string? cacheDirectory, int columns, int cellWidth, int timeoutMinutes) {
+    private static int Run(string? scenariosPath, string[] names, bool list, bool reproduce, string? output, string? worldPath, string? worldArtifact, WorldBackendPreference? backend, string? cacheDirectory, int columns, int cellWidth, int timeoutMinutes) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -92,7 +93,7 @@ public static partial class MotionCommand {
         var outputOption = CliOptions.Output(description: "The directory the stills, sheets, logs and manifest are written to; a kept run directory under the temporary root when omitted.");
         var worldOption = new Option<string>(name: "--world") { Description = $"The world to boot; {DefaultWorld} when omitted." };
         var artifactOption = new Option<string>(name: "--world-artifact") { Description = "Run this Puck.World entry assembly instead of the build of the checkout's sources. Never builds." };
-        var backendOption = new Option<string>(name: "--backend") { Description = "The graphics backend the World boots on; its default when omitted." };
+        var backendOption = WorldLaunch.BackendOption(description: "The graphics backend the World boots on: auto, directx or vulkan; the document's when omitted.");
         var cacheOption = new Option<string>(name: "--cache-dir") { Description = "The World's device-cache root, shared by both fresh Worlds; its per-user default when omitted. Use a writable lane directory in a sandbox." };
         var columnsOption = new Option<int>(name: "--columns") { DefaultValueFactory = static _ => 6, Description = "The most frames in one row of a contact sheet before it wraps to a new band." };
         var cellWidthOption = new Option<int>(name: "--cell-width") { DefaultValueFactory = static _ => 480, Description = "The width each frame of a contact sheet is scaled to, in pixels." };

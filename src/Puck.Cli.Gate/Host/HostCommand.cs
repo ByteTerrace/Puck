@@ -1,7 +1,5 @@
 using System.CommandLine;
 
-using Puck.Cli.Gate;
-
 namespace Puck.Cli.Host;
 
 /// <summary><c>puck host</c> — the verbs about the machine an agent runs on: <c>load</c> reports CPU, memory, disk and
@@ -16,12 +14,12 @@ public static class HostCommand {
             }
         });
     }
-    private static int Load(bool watch, int interval, int window, HostLoadThresholds thresholds, GateComposition composition, CancellationToken cancellationToken) {
+    private static int Load(bool watch, int interval, int window, HostLoadThresholds thresholds, CancellationToken cancellationToken) {
         if ((interval < 1) || (window < 1)) {
             return CliExit.Refuse(verb: LoadVerb, what: "--interval and --window", why: "must each be at least 1.");
         }
 
-        var probe = new HostProbe(checkoutRoot: Environment.CurrentDirectory, gpuVerbGrammars: composition.GpuVerbGrammars);
+        var probe = new HostProbe(checkoutRoot: Environment.CurrentDirectory);
         var spacing = TimeSpan.FromSeconds(seconds: interval);
 
         // One reading judges its own CPU figure; a watch judges the mean over the last --window readings.
@@ -45,7 +43,7 @@ public static class HostCommand {
             ? CliExit.Cancelled
             : CliExit.Success);
     }
-    private static Command CreateLoad(GateComposition composition) {
+    private static Command CreateLoad() {
         var watchOption = new Option<bool>(name: "--watch") { Description = "Keep reading every --interval seconds and print a line on each transition, until cancelled." };
         var intervalOption = new Option<int>(name: "--interval") { DefaultValueFactory = _ => 10, Description = "Seconds between readings with --watch." };
         var windowOption = new Option<int>(name: "--window") { DefaultValueFactory = _ => 6, Description = "Readings the CPU mean covers with --watch; CAPACITY waits until that many exist." };
@@ -98,7 +96,6 @@ public static class HostCommand {
             """);
         command.SetAction(action: (parseResult, cancellationToken) => Task.Run(function: () => Load(
             cancellationToken: cancellationToken,
-            composition: composition,
             interval: parseResult.GetValue(option: intervalOption),
             thresholds: new HostLoadThresholds(
                 CapacityCpuPercent: parseResult.GetValue(option: capacityCpuOption),
@@ -115,11 +112,10 @@ public static class HostCommand {
     }
 
     /// <summary>Creates <c>puck host</c>.</summary>
-    /// <param name="composition">The verbs composed beside this one whose own arguments decide whether a run is GPU work.</param>
     /// <returns>The command.</returns>
-    public static Command Create(GateComposition composition) =>
+    public static Command Create() =>
         new(
             description: "Verbs about the machine an agent runs on.",
             name: "host"
-        ) { CreateLoad(composition: composition) };
+        ) { CreateLoad() };
 }

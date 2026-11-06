@@ -46,28 +46,25 @@ public static class MotionRun {
             return Fail(clock: clock, error: $"the camera clearance check could not be built: {clearanceError}", notes: notes, request: request);
         }
 
-        List<string> arguments = [
-            "--world", request.World,
-            .. WorldDevices.NoneArguments,
-            "--exit-after-seconds", (((int)request.Deadline.TotalSeconds) + 120).ToString(provider: CultureInfo.InvariantCulture),
-            "--state-dir", request.StateDirectory,
-        ];
+        WorldProcess process;
 
-        if (request.Backend is { } backend) {
-            arguments.AddRange(collection: ["--backend", backend]);
+        try {
+            using var launch = WorldLaunch.Admit(request: new WorldLaunchRequest(Artifact: request.Artifact, Step: "motion") {
+                Arguments = ((request.CacheDirectory is { } cacheDirectory) ? ["--cache-dir", cacheDirectory] : []),
+                Backend = request.Backend,
+                ExitAfterSeconds = WorldLaunch.Backstop(deadline: request.Deadline),
+                Shape = WorldShape.Document,
+                StateDirectory = request.StateDirectory,
+                WorkingDirectory = request.WorkingDirectory,
+                World = request.World,
+            });
+
+            process = launch.Start(logDirectory: request.Directory);
+        } catch (Exception exception) when ((exception is InvalidOperationException or TimeoutException or System.ComponentModel.Win32Exception)) {
+            return Fail(clock: clock, error: $"the World did not start: {exception.Message.ReplaceLineEndings(replacementText: " ")}", notes: notes, request: request);
         }
-        if (request.CacheDirectory is { } cacheDirectory) {
-            arguments.AddRange(collection: ["--cache-dir", cacheDirectory]);
-        }
 
-        WorldAdmission.Wait(step: "motion", worldArguments: arguments);
-
-        using var process = MotionWorldProcess.Start(
-            arguments: arguments,
-            artifact: request.Artifact,
-            logDirectory: request.Directory,
-            workingDirectory: request.WorkingDirectory
-        );
+        using var started = process;
 
         progress.WriteLine(value: $"motion: World pid {process.ProcessId.ToString(provider: CultureInfo.InvariantCulture)} booting {request.World}");
 
@@ -170,12 +167,12 @@ public static class MotionRun {
         StartTick: 0UL,
         TooLateStart: null
     );
-    private static MotionRunResult Abort(MotionRunRequest request, Stopwatch clock, string error, List<string> notes, MotionWorldProcess process) {
+    private static MotionRunResult Abort(MotionRunRequest request, Stopwatch clock, string error, List<string> notes, WorldProcess process) {
         process.Kill();
 
         return Fail(clock: clock, error: error, notes: notes, request: request);
     }
-    private static string Tail(MotionWorldProcess process) {
+    private static string Tail(WorldProcess process) {
         var lines = process.LinesFrom(from: 0);
 
         return ((lines.Count == 0)

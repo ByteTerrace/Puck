@@ -34,7 +34,7 @@ public static class GateCommand {
             record: record,
             suiteJobs: suiteJobs,
             clock: clock,
-            runner: new ProcessGateRunner(cancellationToken: cancellationToken, clock: clock, gpuVerbGrammars: composition.GpuVerbGrammars),
+            runner: new ProcessGateRunner(cancellationToken: cancellationToken, clock: clock),
             schemaSourceTypes: composition.SchemaSourceTypes,
             target: target
         );

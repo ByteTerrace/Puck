@@ -1,5 +1,4 @@
 using Puck.Cli.Sweep;
-using Puck.Cli.Motion;
 using Puck.Confinement;
 using System.Text.Json;
 
@@ -52,23 +51,15 @@ public sealed class SweepWorldLawTests : IDisposable {
         ConfinedDirectory.RemoveTree(path: m_directory);
     }
 
-    private sealed class Lease : IDisposable {
-        public bool Released { get; private set; }
-
-        public void Dispose() => Released = true;
-    }
-
-    private string[] Arguments(string state) => [
-        "--world", Path.Combine(path1: m_root, path2: SweepCommand.DefaultWorld),
-        .. WorldDevices.NoneArguments,
-        "--state-dir", Path.Combine(path1: m_directory, path2: state),
-        "--exit-after-seconds", "300",
-        "--headless", "true",
-        "--unpaced", "true",
-        "--paused",
-    ];
+    private WorldLaunchRequest Request(string state) => new(Artifact: m_entry, Step: "sweep-test") {
+        Arguments = ["--unpaced", "true", "--paused"],
+        ExitAfterSeconds = 300,
+        StateDirectory = Path.Combine(path1: m_directory, path2: state),
+        WorkingDirectory = m_root,
+        World = Path.Combine(path1: m_root, path2: SweepCommand.DefaultWorld),
+    };
     private SweepWorld Boot(string name, SweepBudget budget) {
-        Assert.True(condition: SweepWorld.TryBoot(arguments: Arguments(state: name), artifact: m_entry, bootTimeout: TimeSpan.FromMinutes(value: 5), budget: budget, error: out var error, lease: null, logDirectory: Path.Combine(path1: m_directory, path2: name), session: out var world, workingDirectory: m_root), userMessage: error);
+        Assert.True(condition: SweepWorld.TryBoot(bootTimeout: TimeSpan.FromMinutes(value: 5), budget: budget, error: out var error, logDirectory: Path.Combine(path1: m_directory, path2: name), request: Request(state: name), session: out var world), userMessage: error);
 
         return world!;
     }
@@ -149,14 +140,12 @@ public sealed class SweepWorldLawTests : IDisposable {
         _ = Assert.Throws<ArgumentException>(testCode: () => System.Diagnostics.Process.GetProcessById(processId: processId));
     }
     [Fact]
-    public void AWorldThatNeverAttachesReleasesItsLease() {
+    public void AWorldThatNeverAttachesIsRefused() {
         using var budget = new SweepBudget(caller: CancellationToken.None, total: TimeSpan.FromMinutes(value: 10));
-        var lease = new Lease();
 
-        Assert.False(condition: SweepWorld.TryBoot(arguments: Arguments(state: "never"), artifact: m_entry, bootTimeout: TimeSpan.Zero, budget: budget, error: out var error, lease: lease, logDirectory: Path.Combine(path1: m_directory, path2: "never"), session: out var world, workingDirectory: m_root));
+        Assert.False(condition: SweepWorld.TryBoot(bootTimeout: TimeSpan.Zero, budget: budget, error: out var error, logDirectory: Path.Combine(path1: m_directory, path2: "never"), request: Request(state: "never"), session: out var world));
         Assert.Null(@object: world);
         Assert.Contains(actualString: error, expectedSubstring: "never published");
-        Assert.True(condition: lease.Released);
     }
     [Fact]
     public void AWorldStartsPausedAndScheduledRefusalsAreObservedAfterArmingSucceeded() {
@@ -192,23 +181,21 @@ public sealed class SweepWorldLawTests : IDisposable {
         }
     }
     [Fact]
-    public void ALogOpenFailureStartsNoChildAndReleasesTheLease() {
+    public void ALogOpenFailureStartsNoChild() {
         var folder = Path.Combine(path1: m_directory, path2: "bad-log");
 
         _ = Directory.CreateDirectory(path: Path.Combine(path1: folder, path2: "stderr.log"));
         using var budget = new SweepBudget(TimeSpan.FromMinutes(minutes: 2), CancellationToken.None);
-        var lease = new Lease();
         // stdout is opened first; failure opening stderr must also close stdout.
-        Assert.Throws<UnauthorizedAccessException>(testCode: () => SweepWorld.TryBoot(m_entry, Arguments(state: "bad-log"), m_root, folder, lease,
+        Assert.Throws<UnauthorizedAccessException>(testCode: () => SweepWorld.TryBoot(Request(state: "bad-log"), folder,
             TimeSpan.FromMinutes(minutes: 1), budget, out _, out _));
-        Assert.True(condition: lease.Released);
         using var reopened = new FileStream(Path.Combine(path1: folder, path2: "stdout.log"), FileMode.Open, FileAccess.Write, FileShare.None);
     }
     [Fact]
     public void ThePublicationWaitCancelsAndItsOwnedProcessStops() {
         int pid;
 
-        using (var process = MotionWorldProcess.Start(m_entry, Arguments(state: "cancel-wait"), m_root, Path.Combine(path1: m_directory, path2: "cancel-wait"))) {
+        using (var process = WorldLaunch.Admit(cancellationToken: TestContext.Current.CancellationToken, request: Request(state: "cancel-wait")).Start(logDirectory: Path.Combine(path1: m_directory, path2: "cancel-wait"))) {
             pid = process.ProcessId;
             using var cancel = new CancellationTokenSource(delay: TimeSpan.FromMilliseconds(milliseconds: 100));
             var clock = System.Diagnostics.Stopwatch.StartNew();

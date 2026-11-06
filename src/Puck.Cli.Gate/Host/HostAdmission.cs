@@ -1,7 +1,5 @@
 using System.Globalization;
 
-using Puck.Cli.Gate;
-
 namespace Puck.Cli.Host;
 
 /// <summary>Bounded admission by the machine's host-load thresholds (<see cref="HostLoadThresholds.For"/>), the one
@@ -163,12 +161,11 @@ public static class HostAdmission {
         Wait(step, device, heavySuite, () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), clock, delay => Task.Delay(cancellationToken: cancellationToken, delay: delay, timeProvider: clock).GetAwaiter().GetResult(), error, cancellationToken, HostLoadThresholds.ThisMachine, bound, stage, kind, HostStartTracker.Session);
     /// <summary>Gets the admission the root hands to the verbs that cannot reference this assembly: each call samples with a
     /// <see cref="HostProbe"/> over the caller's checkout and waits on a thread-pool thread.</summary>
-    /// <param name="composition">The verbs composed beside this one whose own arguments decide whether a run is GPU work.</param>
     /// <param name="clock">The clock the bound and the sleeps are measured on.</param>
     /// <returns>The admission.</returns>
-    public static HostAdmit For(GateComposition composition, TimeProvider clock) =>
+    public static HostAdmit For(TimeProvider clock) =>
         (checkout, step, device, heavySuite, kind, bound, progress, stage, cancellationToken) => Task.Run(
-            function: () => Wait(step, device, heavySuite, new HostProbe(checkoutRoot: checkout, gpuVerbGrammars: composition.GpuVerbGrammars), clock, progress, cancellationToken, bound, stage, kind),
+            function: () => Wait(step, device, heavySuite, new HostProbe(checkoutRoot: checkout), clock, progress, cancellationToken, bound, stage, kind),
             cancellationToken: cancellationToken
         );
 }

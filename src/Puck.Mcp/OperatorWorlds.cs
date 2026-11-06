@@ -13,32 +13,43 @@ using Puck.Hosting;
 
 namespace Puck.Mcp;
 
-/// <summary>What the Operator adapter needs to start Worlds: the checkout it serves and the machine's GPU lease.</summary>
+/// <summary>What the Operator adapter needs to start Worlds: the checkout it serves and the CLI's World launch.</summary>
 /// <param name="Checkout">The adapter's own Puck checkout, the default checkout a start boots from; its repository's
 /// worktrees are the only other checkouts a start accepts.</param>
-/// <param name="AcquireGpuLease">Takes the machine's exclusive GPU lease for a holder and the lane it works for (null
-/// takes the holder's first word), waiting in the machine's queue for as long as the CLI's lease policy allows, which is
-/// never the start's own timeout, and returns the held lease, which releases on disposal; throws
-/// <see cref="TimeoutException"/> when it stays held.</param>
-/// <param name="Admit">Waits until the host has headroom for a World of a checkout (memory, commit charge, disk and, for a
-/// windowed World, an idle GPU) and reports what it is waiting on through its action, as the stage of a pending start;
-/// returns <see langword="false"/> when headroom did not return in the admission's bound. It runs after the GPU lease is
-/// held, so one admitted start at a time judges the machine, and before the World is launched.</param>
-/// <param name="ResolveBuild">Resolves the World build of a checkout's current sources, given the checkout, building it
-/// only when no earlier run built those sources; the CLI answers it with its content-keyed
-/// World build store, so the build a start boots can never be older than the sources it boots. Its boolean asks for a
-/// build that carries Vulkan SPIR-V, which a Vulkan start needs.</param>
+/// <param name="Start">Starts one World through the CLI's one World launch: it resolves the World build of the checkout's
+/// current sources (built only when no earlier run built them, with Vulkan SPIR-V when the World needs it), takes the
+/// machine's GPU lease for a windowed World, waits for the host admission, and launches the World with its standard streams
+/// redirected and unread, in the job that ends it with the adapter. It reports each stage it waits in through its action
+/// (<c>building</c>, <c>gpu-lease</c>, <c>host-admission</c>, then the admission's own wait text) and answers the started
+/// process, or a refusal naming why none started; a cancelled start launches nothing it does not stop.</param>
 public sealed record OperatorWorldLaunch(
     string Checkout,
-    Func<string, string?, CancellationToken, Task<IDisposable>> AcquireGpuLease,
-    Func<string, bool, Action<string>, CancellationToken, Task<bool>> Admit,
-    Func<string, bool, CancellationToken, Task<OperatorWorldBuild>> ResolveBuild
+    Func<OperatorWorldRequest, Action<string>, CancellationToken, Task<OperatorWorldStart>> Start
 );
-/// <summary>The World build a start boots, or why none could be made.</summary>
-/// <param name="Path">The full path of <c>Puck.World.dll</c>, or <see langword="null"/> when no build is available.</param>
-/// <param name="Lease">Holds the build in its store while a World runs from it; released when that World exits.</param>
-/// <param name="Error">Why no build is available (a failed build quotes its first errors), or <see langword="null"/>.</param>
-public sealed record OperatorWorldBuild(string? Path, IDisposable? Lease, string? Error);
+/// <summary>One World a <c>puck_world_start</c> asks for.</summary>
+/// <param name="Checkout">The checkout the World boots from.</param>
+/// <param name="Document">The world document or package to boot.</param>
+/// <param name="Backend">The backend to boot on, or <see langword="null"/> to let the document decide.</param>
+/// <param name="CacheDirectory">The World's device-cache root, or <see langword="null"/> for its per-user default.</param>
+/// <param name="CaptureTool">The GPU capture tool to load before device creation, or <see langword="null"/>.</param>
+/// <param name="Holder">The GPU lease holder's name.</param>
+/// <param name="Lane">The lane the GPU lease is held for, or <see langword="null"/> for the holder's first word.</param>
+/// <param name="Windowed">Whether the World opens a window and a device.</param>
+/// <param name="OwnerPlay">Whether the World opens the machine's physical input devices, for the owner to play in.</param>
+/// <param name="Paused">Whether the World boots paused.</param>
+/// <param name="Lockstep">Whether the World boots in lockstep.</param>
+/// <param name="StateDirectory">The World's own state directory.</param>
+/// <param name="TemporaryDirectory">The temporary directory the World publishes its attachment in, the one the adapter
+/// follows.</param>
+public sealed record OperatorWorldRequest(string Checkout, string Document, Puck.World.WorldBackendPreference? Backend, string? CacheDirectory, string? CaptureTool, string Holder, string? Lane,
+    bool Windowed, bool OwnerPlay, bool Paused, bool Lockstep, string StateDirectory, string TemporaryDirectory);
+/// <summary>A started World, or why none started.</summary>
+/// <param name="Process">The started World, its streams redirected and unread, or <see langword="null"/> when none started.</param>
+/// <param name="Build">The full path of the <c>Puck.World.dll</c> it runs, or <see langword="null"/>.</param>
+/// <param name="Lease">Holds the World's build in its store and, for a windowed World, the GPU lease; released once the World
+/// has exited.</param>
+/// <param name="Refusal">Why no World started, or <see langword="null"/>.</param>
+public sealed record OperatorWorldStart(Process? Process, string? Build, IDisposable? Lease, string? Refusal);
 
 /// <summary>
 /// The Worlds the Operator adapter started: <c>puck_world_start</c> boots one from the build of a checkout's current
@@ -70,7 +81,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         public volatile string? StderrLog;
     }
 
-    private sealed class Started(Process process, string document, string checkout, string build, string runDirectory, IDisposable? lease, IDisposable? buildLease) {
+    private sealed class Started(Process process, string document, string checkout, string build, string runDirectory, IDisposable? lease, bool leased) {
         public string? AttachmentId;
 
         public readonly Process Process = process;
@@ -81,9 +92,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         public readonly string StderrLog = Path.Combine(path1: runDirectory, path2: "stderr.log");
         public readonly string StdoutLog = Path.Combine(path1: runDirectory, path2: "stdout.log");
         public readonly string StateDirectory = Path.Combine(path1: runDirectory, path2: "state");
-        public IDisposable? BuildLease = buildLease;
         public IDisposable? Lease = lease;
-        public readonly bool Leased = (lease is not null);
+        public readonly bool Leased = leased;
         public Task Exited = Task.CompletedTask;
     }
 
@@ -124,7 +134,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
     /// <param name="cancellationToken">Cancels admission; an admitted job belongs to the session.</param>
     /// <returns>A pending start id, or a refusal.</returns>
     public async Task<CallToolResult> StartAsync(IDictionary<string, JsonElement>? arguments, OperatorAttachment attachment, CancellationToken cancellationToken) {
-        string? backend = null;
+        Puck.World.WorldBackendPreference? backend = null;
         string? cacheDirectory = null;
         string? captureTool = null;
         string? checkoutArgument = null;
@@ -140,8 +150,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         foreach (var (key, value) in (arguments ?? new Dictionary<string, JsonElement>())) {
             if ((key == "document") && (value.ValueKind == JsonValueKind.String) && !string.IsNullOrWhiteSpace(value: value.GetString())) {
                 document = value.GetString()!;
-            } else if ((key == "backend") && (value.ValueKind == JsonValueKind.String) && (value.GetString() is "directx" or "vulkan")) {
-                backend = value.GetString();
+            } else if ((key == "backend") && (value.ValueKind == JsonValueKind.String) && (Puck.World.WorldBackendTokens.Parse(token: value.GetString()) is { } parsedBackend)) {
+                backend = parsedBackend;
             } else if ((key == "cacheDir") && (value.ValueKind == JsonValueKind.String) && Path.IsPathFullyQualified(path: (value.GetString() ?? string.Empty)) && (value.GetString()!.IndexOfAny(anyOf: ['\r', '\n', '\0']) < 0)) {
                 cacheDirectory = Path.GetFullPath(path: value.GetString()!);
             } else if ((key == "captureTool") && (value.ValueKind == JsonValueKind.String) && (value.GetString() is "pix" or "renderdoc")) {
@@ -170,7 +180,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         if ((captureTool is not null) && !windowed) {
             return Refuse(output: "A captureTool requires windowed: true.");
         }
-        if ((captureTool == "pix") && (backend == "vulkan")) {
+        if ((captureTool == "pix") && (backend == Puck.World.WorldBackendPreference.Vulkan)) {
             return Refuse(output: "PIX captures Direct3D 12; use backend: directx or captureTool: renderdoc.");
         }
 
@@ -254,64 +264,47 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
 
         return Result(metadata: metadata);
     }
-    private async Task<CallToolResult> StartWorldAsync(string checkout, string path, string? backend, string? cacheDirectory, string? captureTool, string holder, string? lane,
+    private async Task<CallToolResult> StartWorldAsync(string checkout, string path, Puck.World.WorldBackendPreference? backend, string? cacheDirectory, string? captureTool, string holder, string? lane,
         bool windowed, bool ownerPlay, bool paused, bool lockstep, int seconds, OperatorAttachment attachment, StartProgress progress, CancellationToken cancellationToken) {
         var budget = TimeSpan.FromSeconds(seconds: seconds);
-        // The build comes before the GPU lease, so a long build never holds the machine's GPU.
-        var resolved = await launch!.ResolveBuild(checkout, (backend == "vulkan"), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+        var runDirectory = Path.Combine(
+            path1: attachment.Target,
+            path2: "puck-mcp-worlds",
+            path3: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Environment.ProcessId}-{Interlocked.Increment(location: ref m_runs)}-{Guid.NewGuid():N}")
+        );
+        var state = Path.Combine(path1: runDirectory, path2: "state");
 
-        if (resolved.Path is not { } build) {
-            resolved.Lease?.Dispose();
+        _ = Directory.CreateDirectory(path: state);
 
-            return Refuse(output: $"Refused: no Release build of {checkout}'s current sources could be made, so no World was started: {resolved.Error}");
-        }
-
-        var begun = clock.GetTimestamp();
-        IDisposable? lease = null;
-
-        if (windowed) {
-            progress.Stage = "gpu-lease";
-
-            try {
-                lease = await launch!.AcquireGpuLease(holder, lane, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-            } catch (TimeoutException error) {
-                resolved.Lease?.Dispose();
-
-                return Refuse(output: $"Refused: the GPU lease was not granted, so no windowed World was started ({error.Message}). Retry the start, or start headless.");
-            } catch (OperationCanceledException) {
-                resolved.Lease?.Dispose();
-                throw;
-            }
-        }
-
-        // Headroom is judged with the lease held, so the one start that holds it reads the machine before it takes any of
-        // it. The wait reports itself as the start's stage ("waiting for memory headroom: commit 82% of limit").
-        progress.Stage = "host-admission";
+        // The launch builds before it takes the GPU lease, so a long build never holds the machine's GPU, and judges the
+        // host's headroom with the lease held, so the one start that holds it reads the machine before it takes any.
+        OperatorWorldStart start;
 
         try {
-            if (!await launch!.Admit(checkout, windowed, text => progress.Stage = text, cancellationToken).ConfigureAwait(continueOnCapturedContext: false)) {
-                lease?.Dispose();
-                resolved.Lease?.Dispose();
-
-                return Refuse(output: $"Refused: the host had no memory, commit or disk headroom{(windowed ? " (or its GPU stayed busy)" : string.Empty)} within the admission's bound, so no World was started. Retry the start when `puck host load` reports CAPACITY.");
-            }
+            start = await launch!.Start(
+                new OperatorWorldRequest(Backend: backend, CacheDirectory: cacheDirectory, CaptureTool: captureTool, Checkout: checkout, Document: path, Holder: holder, Lane: lane,
+                    Lockstep: lockstep, OwnerPlay: ownerPlay, Paused: paused, StateDirectory: state, TemporaryDirectory: attachment.Target, Windowed: windowed),
+                text => progress.Stage = text,
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
         } catch {
-            lease?.Dispose();
-            resolved.Lease?.Dispose();
+            RemoveRun(runDirectory: runDirectory);
 
             throw;
         }
 
-        Started started;
+        if (start.Process is not { } process) {
+            start.Lease?.Dispose();
+            RemoveRun(runDirectory: runDirectory);
 
-        try {
-            started = Launch(backend: backend, cacheDirectory: cacheDirectory, captureTool: captureTool, build: build, buildLease: resolved.Lease, checkout: checkout, document: path, lease: lease, ownerPlay: ownerPlay, paused: paused, lockstep: lockstep, target: attachment.Target, windowed: windowed);
-        } catch (Exception error) when ((error is InvalidOperationException or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)) {
-            lease?.Dispose();
-            resolved.Lease?.Dispose();
-
-            return Refuse(output: $"Refused: the World could not be launched ({error.Message}).");
+            return Refuse(output: (start.Refusal ?? "Refused: no World was started."));
         }
+
+        var begun = clock.GetTimestamp();
+        var started = new Started(build: start.Build!, checkout: checkout, document: path, lease: start.Lease, leased: windowed, process: process, runDirectory: runDirectory);
+
+        started.Exited = WatchAsync(started: started);
+        m_started[process.Id] = started;
 
         progress.StderrLog = started.StderrLog;
         progress.Stage = "booting";
@@ -503,63 +496,11 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             ? (wanted, null)
             : (null, $"Refused: {wanted} is not a checkout of this repository ({own} or one of its worktrees); a start boots only those."));
     }
-    private Started Launch(string? backend, string? cacheDirectory, string? captureTool, string build, IDisposable? buildLease, string checkout, string document, IDisposable? lease, bool ownerPlay, bool paused, bool lockstep, string target, bool windowed) {
-        var runDirectory = Path.Combine(
-            path1: target,
-            path2: "puck-mcp-worlds",
-            path3: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Environment.ProcessId}-{Interlocked.Increment(location: ref m_runs)}-{Guid.NewGuid():N}")
-        );
-
-        _ = Directory.CreateDirectory(path: Path.Combine(path1: runDirectory, path2: "state"));
-
-        var info = new ProcessStartInfo(fileName: "dotnet") {
-            CreateNoWindow = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            WorkingDirectory = checkout,
-        };
-
-        foreach (var argument in new[] {
-            build,
-            "--world", document,
-            "--headless", (windowed ? "false" : "true"),
-            "--devices", (ownerPlay ? "all" : "none"),
-            "--state-dir", Path.Combine(path1: runDirectory, path2: "state"),
-            "--control",
-        }) {
-            info.ArgumentList.Add(item: argument);
-        }
-        if (backend is not null) {
-            info.ArgumentList.Add(item: "--backend");
-            info.ArgumentList.Add(item: backend);
-        }
-        if (paused) { info.ArgumentList.Add(item: "--paused"); }
-        if (lockstep) { info.ArgumentList.Add(item: "--lockstep"); }
-
-        if (cacheDirectory is not null) {
-            info.ArgumentList.Add(item: "--cache-dir");
-            info.ArgumentList.Add(item: cacheDirectory);
-        }
-
-        if (captureTool is not null) {
-            info.ArgumentList.Add(item: "--capture-tool");
-            info.ArgumentList.Add(item: captureTool);
-        }
-
-        // The World publishes its attachment file in its temporary directory, which must be the one this adapter follows.
-        info.Environment["TEMP"] = target;
-        info.Environment["TMP"] = target;
-        info.Environment["TMPDIR"] = target;
-
-        var process = (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: "dotnet did not start."));
-        var started = new Started(build: build, buildLease: buildLease, checkout: checkout, document: document, lease: lease, process: process, runDirectory: runDirectory);
-
-        started.Exited = WatchAsync(started: started);
-        m_started[process.Id] = started;
-
-        return started;
+    // Removes the run directory of a start that launched no World.
+    private static void RemoveRun(string runDirectory) {
+        try {
+            ConfinedDirectory.RemoveTree(path: runDirectory);
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) { }
     }
     // Copies both streams to the run's log files, and releases the lease once the World has exited.
     private static async Task WatchAsync(Started started) {
@@ -581,7 +522,6 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             _ = await Task.WhenAny(task1: pumps, task2: Task.Delay(delay: ChildProcess.ExitDrainGrace)).ConfigureAwait(continueOnCapturedContext: false);
         } finally {
             Interlocked.Exchange(location1: ref started.Lease, value: null)?.Dispose();
-            Interlocked.Exchange(location1: ref started.BuildLease, value: null)?.Dispose();
         }
     }
     // Asks the World to quit, kills its tree once the grace passes, and waits for its lease to release.

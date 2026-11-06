@@ -23,7 +23,7 @@ public sealed class WorldBenchServer : IDisposable {
 
     public static WorldBenchServer Boot(WorldDefinition definition, WorldMachineCatalog? catalog = null) {
         // An in-process boot holds a World's memory like a process does, and opens no device.
-        WorldAdmission.Wait(step: "in-process World", device: false);
+        WorldAdmission.WaitInProcess(step: "in-process World");
 
         var population = new WorldPopulation(definition: definition);
         var machines = ((catalog is not null)

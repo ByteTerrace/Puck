@@ -551,10 +551,10 @@ owner's Control+Alt+Escape never reaches the World. stdin, the console,
 `player.signal`, `body.*`, schedule rows and MCP still drive the World. The
 boot says `[world.host] physical input devices are off` on stderr; a stderr with
 a `[gamepad]` or `[gameinput]` line means the flag was missed. A headless or
-offscreen boot opens no device either way, and the flag is harmless there. The
-verbs that boot a windowed or offscreen World for you (`puck canary`, `puck
-parity`, `puck counters`, `puck verbs`, `puck docs citations`, `puck bench
-startup`) pass it themselves (`WorldDevices.NoneArguments`). The owner's own World
+offscreen boot opens no device either way, and the flag is harmless there. Every
+World a verb or `puck_world_start` boots for you passes it through the one launch
+(`WorldLaunchRequest.CommandLine`), which also takes the GPU lease for a windowed
+or offscreen World; only an owner-play start opens the devices. The owner's own World
 (`.claude/launch.json`'s `debug-world`) explicitly passes `--devices all`. Never inject real input to
 check the flag: the owner may be holding the pad.
 

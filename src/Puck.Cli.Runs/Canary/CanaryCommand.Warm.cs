@@ -68,22 +68,15 @@ public static partial class CanaryCommand {
 
         foreach (var backend in warm.Backends) {
             budget.Cancellation.ThrowIfCancellationRequested();
-            AdmitWorld(backend: backend, budget: budget, debugLayers: false, manifest: warm.Manifest);
+            using var launch = WorldLaunch.Admit(cancellationToken: budget.Cancellation, request: LegRequest(artifact: artifact, backend: backend, debugLayers: false, manifest: warm.Manifest) with {
+                ExitAfterSeconds = WarmSeconds,
+                StateDirectory = stateDirectory,
+                World = warm.Manifest.Positive.WorldPath,
+            });
+
             budget.Tally.WarmStarted();
 
-            var process = CliProcess.RunCaptured(
-                fileName: "dotnet",
-                arguments: [
-                    artifact,
-                    "--world", warm.Manifest.Positive.WorldPath,
-                    "--state-dir", stateDirectory,
-                    "--exit-after-seconds", WarmSeconds.ToString(provider: CultureInfo.InvariantCulture),
-                    .. BootShapeArguments(
-                    backend: backend,
-                    debugLayers: false,
-                    manifest: warm.Manifest
-                ),
-                ],
+            var process = launch.Run(
                 cancellationToken: budget.Cancellation,
                 input: string.Join(
                     separator: Environment.NewLine,
