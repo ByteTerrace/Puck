@@ -9,7 +9,7 @@ by what they would move in Puck's measurements. It extends the
 [graphics architecture plan](graphics-architecture.md) (G1 the GPU trace and
 relight on the B1 service, G2 hardware ray query, G3 coarse visibility), the
 [far-field memo](far-field-irradiance.md) and the
-[water plan](water-rendering.md)'s W1, which reads the same probe gather for
+[water plan](water.md)'s W1, which reads the same probe gather for
 glass reflections. Nothing here changes the gather, the visibility rule or the
 probe record, which the [GI decision](../decisions/rendering.md#global-illumination)
 and the [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
@@ -286,4 +286,4 @@ reflections on glass) read the same volume and are unaffected by any of these.
 
 ---
 
-[Plans](README.md) · [Graphics architecture](graphics-architecture.md) · [Far-field irradiance](far-field-irradiance.md) · [Illumination](illumination.md) · [Water rendering](water-rendering.md) · [Decisions](../decisions/rendering.md#global-illumination)
+[Plans](README.md) · [Graphics architecture](graphics-architecture.md) · [Far-field irradiance](far-field-irradiance.md) · [Illumination](illumination.md) · [The water feature](water.md) · [Decisions](../decisions/rendering.md#global-illumination)

@@ -212,8 +212,8 @@ public static class WorldScheduleCommands {
 /// <param name="SettleTicks">How many ticks the world keeps stepping past the last scheduled command's tick before
 /// the export is written: the settle margin a <c>Simulation</c>-routed command's apply, the mutation drain, and
 /// the rules reading its result need. At least <c>1</c> — a zero margin would export at the same tick the last
-/// command was submitted, before it could have applied — and at most
-/// <see cref="WorldScheduleCapacity.MaxSettleTicks"/>.</param>
+/// command was submitted, before it could have applied. There is no ceiling: a scenario over a long simulated
+/// arc (hours of a melt at the world's rate) runs its whole grid as this margin.</param>
 /// <param name="Rows">The scheduled commands, ascending by tick. Rows may share a tick; they are then submitted in
 /// declaration order, which is the whole ordering contract. Capacity
 /// <see cref="WorldScheduleCapacity.MaxRows"/>. May be empty: a world whose expectations are decided by its rules
@@ -296,8 +296,6 @@ public static class WorldScheduleCapacity {
     public const int MaxInstances = 16;
     /// <summary>The largest admitted scheduled-command row count.</summary>
     public const int MaxRows = 256;
-    /// <summary>The largest admitted settle margin, in ticks.</summary>
-    public const int MaxSettleTicks = 4096;
     /// <summary>The <c>addon:</c> principal label's prefix, refused by this section.</summary>
     public const string PrincipalAddonPrefix = "addon:";
     /// <summary>The console principal's label, refused by this section.</summary>

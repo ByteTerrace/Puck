@@ -1069,42 +1069,39 @@ worlds in place is rewritten.
 
 ### Water
 
-Owner: debug-world content lane (rendering, puck-world, sdf-authoring) · ordinary ·
-Next: what the water as a forcing workload showed
-([C3 as built](debug-world-composition.md#c3-as-built)); each item is a system
-the water strained, measured, and not yet fixed. The rendering capabilities
-the water lacks (presentation particles, near-geometry reflections on glass)
-are planned in [water rendering](water-rendering.md), whose W2 flow layer
-([as built](water-rendering.md#w2-as-built)) and W1 glass medium
-([as built](water-rendering.md#w1-as-built), its timing and registers owed) are in, and
-whose W3, W2's field source and the two glass layers a pixel that W1's pavilion
-capture called for are the next lanes here; the items below are the
-system work beside them.
+Owner: the water feature lane (rendering, puck-world, sdf-authoring) · ordinary ·
+Next: [the water feature plan](water.md) owns the feature end to end: the arc as a
+specification, the audit, the definition of done and the lanes (H1 the chain as the
+arc, A1 to A5 the world authoring, R1 glass shadows, R3 the particle pool, P1 the
+tour). The items below are what the plan defers or the water strained in a system
+beside it.
 
 - [medium] Cold mesh residency still misses the one-minute target. Attribute the
   remaining large water meshes with `puck mesh audit --prototype` (now selects
   static and animated placements), and profile bake admission, landing and
-  illumination together. The stream is eight placements of one still segment
-  and the falls still sheets, their motion the flow layer's shading.
-  Drawn heights move at draw time over a reference mesh keyed by the raised
-  columns alone ([field surfaces](water-rendering.md#field-surfaces-move-at-draw-time)),
-  so a moving level rebakes nothing.
-  The prototype audits also flag normal/topology defects in the glacier, lake and falls
-  despite finding no uncovered surface. Inspect those witnesses through the
-  existing mesh-audit image output before attributing them to authored style.
+  illumination together. Drawn heights move at draw time over a reference mesh
+  keyed by the raised columns alone
+  ([field surfaces](water.md#field-surfaces-move-at-draw-time)), so a moving
+  level rebakes nothing. The prototype audits also flag normal/topology defects in
+  the glacier, lake and falls despite finding no uncovered surface; inspect those
+  witnesses through the mesh-audit image output before attributing them to
+  authored style.
+- [low] A stage checkpoint ([the plan's D1](water.md#d1-a-stage-checkpoint)): a
+  verb that saves and restores a live arena with its lattices and bodies (what
+  `replay.record` snapshots at its arm, `WorldPersistence`), so a stage of a long
+  simulated arc is a file a windowed World loads. The water's tour reaches its
+  stages by `water.speed 60` within the sweep's budget; build the verb when a
+  second long-arc feature wants it.
 - [low] Investigate the reported operator attachment loss on `world.reset`.
   `WorldGrants.EndSessionsForRebuild` ends observation sessions, while
   `WorldControlCommandModule` owns a separate local console endpoint; do not
   conflate those lifetimes when reproducing the report. Reset and reload now
   reseed lattice stores alongside scalar state.
-- [low] Continue the art pack's surface treatment: glacier crevasses and melt
-  channels, wet rock, the reservoir's descending inlet, and the stream's bank
-  contacts. The tapered glacier, impact spray and plunge basin, modelled outlet,
-  connected reservoir pavilion and motion-driven swim are authored already.
-- [medium] Glass transmission now integrates each intervening material, but
-  reflection and refraction still use only the nearest interface
-  (`sdf-glass.comp.hlsl`). Extend that shared path when deeper reflected interfaces
-  must read through an inspection pane; do not add a water-specific shader.
+- [medium] Glass transmission integrates each intervening material, but
+  reflection and refraction use only the nearest interface
+  (`sdf-glass.comp.hlsl`); the two-glass-layers lane extends that shared path so
+  the reservoir reads through the pavilion's pane. Do not add a water-specific
+  shader.
 
 ### Author shaders
 

@@ -11,8 +11,6 @@ public static partial class WorldDefinitionValidator {
 
         if (schedule.SettleTicks < 1) {
             errors.Add(item: $"schedule.settleTicks {schedule.SettleTicks} must be at least 1 — a zero margin exports at the same tick the last command was submitted, before it could have applied.");
-        } else if (schedule.SettleTicks > WorldScheduleCapacity.MaxSettleTicks) {
-            errors.Add(item: $"schedule.settleTicks {schedule.SettleTicks} exceeds {WorldScheduleCapacity.MaxSettleTicks}.");
         }
 
         var rows = (schedule.Rows ?? []);
