@@ -54,7 +54,14 @@ public sealed partial class ShaderPipelineRenderNode {
 
         var jobs = Math.Max(val1: RecordJobs, val2: 1L);
 
-        into.Append(handler: $" record-jobs={RecordJobs} last-prepare-us={Microseconds(ticks: m_lastPrepareTicks)} last-record-us={Microseconds(ticks: LastRecordTicks)} last-commit-us={Microseconds(ticks: m_lastCommitTicks)} mean-prepare-us={Microseconds(ticks: (m_totalPrepareTicks / jobs))} mean-record-us={Microseconds(ticks: (m_totalRecordTicks / jobs))} mean-commit-us={Microseconds(ticks: (m_totalCommitTicks / jobs))} longest-record-us={Microseconds(ticks: m_longestRecordTicks)}");
+        _ = into.Append(value: " record-jobs=").Append(value: RecordJobs)
+            .Append(value: " last-prepare-us=").Append(value: Microseconds(ticks: m_lastPrepareTicks))
+            .Append(value: " last-record-us=").Append(value: Microseconds(ticks: LastRecordTicks))
+            .Append(value: " last-commit-us=").Append(value: Microseconds(ticks: m_lastCommitTicks))
+            .Append(value: " mean-prepare-us=").Append(value: Microseconds(ticks: (m_totalPrepareTicks / jobs)))
+            .Append(value: " mean-record-us=").Append(value: Microseconds(ticks: (m_totalRecordTicks / jobs)))
+            .Append(value: " mean-commit-us=").Append(value: Microseconds(ticks: (m_totalCommitTicks / jobs)))
+            .Append(value: " longest-record-us=").Append(value: Microseconds(ticks: m_longestRecordTicks));
     }
     private static long Microseconds(long ticks) => ((ticks * 1_000_000L) / Stopwatch.Frequency);
 
