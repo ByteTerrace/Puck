@@ -22,6 +22,16 @@ on it and put the best-fit partner there. Busy is not progress: never queue
 filler to make a partner look busy. Idleness is a prompt to re-read the path, not
 to create work.
 
+**A feature the owner asks for has one owner and a definition of done before
+any mechanism lane starts** (the owner's ruling, after water shipped as a string
+of mechanisms nobody held to the feature). The plan states the feature as the
+owner described it, its acceptance criteria per stage and view (each checkable
+by a capture, counter or state reading), and its world authoring as
+first-class lanes. A gap inside the feature's scope is the feature's work,
+never an open item or "authoring gap". The feature is accepted only by an
+end-to-end capture series against the owner's words and the art direction,
+not by its lanes' separate evidence.
+
 ## Spend verification, not writing
 
 **Three phases, each with its own evidence (the owner's ruling: measurements
