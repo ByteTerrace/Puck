@@ -413,9 +413,11 @@ public sealed class CreationEffectorLawTests {
     [Fact]
     public void ASurfaceProbeLandsAtStandoffOffTheHitNormal() {
         var field = new SdfFieldEvaluator(program: BoxProgram());
+        var answer = new WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer>();
 
         Assert.True(
             condition: WorldEffectorSolver.TryProbeSurface(
+                answer: ref answer,
                 field: field,
                 origin: new Vector3(
                     x: 0f,
@@ -450,6 +452,7 @@ public sealed class CreationEffectorLawTests {
         // and there is no geometry above the box.
         Assert.False(
             condition: WorldEffectorSolver.TryProbeSurface(
+                answer: ref answer,
                 field: field,
                 origin: new Vector3(
                     x: 0f,
@@ -471,6 +474,7 @@ public sealed class CreationEffectorLawTests {
         // The reach bounds the march: 0.1 metres does not span the 0.4-metre gap.
         Assert.False(
             condition: WorldEffectorSolver.TryProbeSurface(
+                answer: ref answer,
                 field: field,
                 origin: new Vector3(
                     x: 0f,

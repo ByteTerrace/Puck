@@ -15,9 +15,9 @@ namespace Puck.SdfVm;
 public enum SdfUpdateRates : byte {
     /// <summary>Every lever off: everything updates every frame.</summary>
     None = 0,
-    /// <summary>A body's pose evaluation and skinned pose (its drivers, effectors and part slots) at least 30 or 15 times
-    /// a second as its pixels per metre fall, and held while nothing may show or read its pose, its root still followed
-    /// every frame.</summary>
+    /// <summary>A body's pose evaluation and skinned pose (its drivers, effectors and part slots) at least 30, 15, 10 or 5
+    /// times a second as its pixels per metre fall (<see cref="SdfUpdateRateTiers.BodyTiers"/>), and held while nothing may
+    /// show or read its pose, its root still followed every frame.</summary>
     Bodies = 1,
     /// <summary>A nested portal or session view at least 30 or 15 times a second as the share of the display it covers
     /// shrinks.</summary>
@@ -44,11 +44,9 @@ public static class SdfUpdateRateTiers {
     /// <summary>The fastest a body's parts move relative to its root, in metres a second, that the body tiers are sized
     /// for: a stride's swing.</summary>
     public const float BodyPartSpeed = 2f;
-    /// <summary>The pixels per metre at and below which a body updates at 30 Hz: a part moving
-    /// <see cref="BodyPartSpeed"/> steps <see cref="PerceptibleStepPixels"/> in a 30th of a second.</summary>
-    public const float BodyHalfRatePixelsPerMetre = ((PerceptibleStepPixels * 30f) / BodyPartSpeed);
-    /// <summary>The pixels per metre at and below which a body updates at 15 Hz.</summary>
-    public const float BodyQuarterRatePixelsPerMetre = ((PerceptibleStepPixels * 15f) / BodyPartSpeed);
+    /// <summary>Gets the rates a body's pose takes, in hertz, fastest first: every frame, then each reduced tier. Each
+    /// divides 30 and 60, so its floor lands on an even cadence on either grid.</summary>
+    public static ReadOnlySpan<int> BodyTiers => [EveryFrameHertz, 30, 15, 10, 5];
     /// <summary>The share of its own height a nested view's content moves in a second at most, which the view tiers are
     /// sized for: a viewer walking past a window, not a snap turn.</summary>
     public const float ViewParallaxPerSecond = 0.5f;
@@ -83,6 +81,11 @@ public static class SdfUpdateRateTiers {
     /// <summary>The camera move, in metres, past which a held far cascade refreshes at once.</summary>
     public const float ShadowFarMoveMetres = 0.5f;
 
+    /// <summary>Returns the pixels per metre at and below which a body may update at a tier: a part moving
+    /// <see cref="BodyPartSpeed"/> steps <see cref="PerceptibleStepPixels"/> in one period of the tier.</summary>
+    /// <param name="hertz">The tier, in hertz.</param>
+    /// <returns>The threshold, in pixels per metre.</returns>
+    public static float BodyTierPixelsPerMetre(int hertz) => ((PerceptibleStepPixels * hertz) / BodyPartSpeed);
     /// <summary>Returns the rate a body updates at for its largest pixels per metre over the views that may see it.</summary>
     /// <param name="pixelsPerMetre">The body's pixels per metre in the view that shows it largest, or zero when no view
     /// may see it.</param>
@@ -90,13 +93,26 @@ public static class SdfUpdateRateTiers {
     /// shadow a cascade may draw, a camera whose view the display showed none of yet, or a consumer of its parts (a light,
     /// a camera anchor, an audio emitter). A body no displayed view may see but that is shown elsewhere takes the
     /// slowest tier, its pose still moving.</param>
-    /// <returns>60, 30 or 15: the hertz the body's pose updates at, where 60 means every frame; or
-    /// <see cref="HeldHertz"/> when nothing may show or read its pose.</returns>
-    public static int BodyHertz(float pixelsPerMetre, bool shownElsewhere) => ((pixelsPerMetre > BodyHalfRatePixelsPerMetre)
-        ? 60
-        : ((pixelsPerMetre > BodyQuarterRatePixelsPerMetre)
-            ? 30
-            : (((pixelsPerMetre > 0f) || shownElsewhere) ? 15 : HeldHertz)));
+    /// <returns>The slowest of <see cref="BodyTiers"/> whose threshold (<see cref="BodyTierPixelsPerMetre"/>) the body is
+    /// at or below, where 60 means every frame; 15 for a body only shown elsewhere, whose size in what shows it is not
+    /// measured; or <see cref="HeldHertz"/> when nothing may show or read its pose.</returns>
+    public static int BodyHertz(float pixelsPerMetre, bool shownElsewhere) {
+        if (!(pixelsPerMetre > 0f)) {
+            return (shownElsewhere ? 15 : HeldHertz);
+        }
+
+        var hertz = EveryFrameHertz;
+
+        foreach (var tier in BodyTiers[1..]) {
+            if (pixelsPerMetre > BodyTierPixelsPerMetre(hertz: tier)) {
+                break;
+            }
+
+            hertz = tier;
+        }
+
+        return hertz;
+    }
     /// <summary>Returns the rate a nested view renders at for the pixels of display height it covers.</summary>
     /// <param name="pixels">The view's height on the display, in pixels.</param>
     /// <returns>60, 30 or 15, where 60 means every frame its consumer renders.</returns>
@@ -116,7 +132,7 @@ public static class SdfUpdateRateTiers {
     public const int HeldHertz = 0;
 
     /// <summary>Returns the code a tier view shows a rated item by (<see cref="SdfUpdateRateCode"/>).</summary>
-    /// <param name="hertz">The item's tier: 60 or more for every frame, 30 or 15.</param>
+    /// <param name="hertz">The item's tier: 60 or more for every frame, 30, or below 30.</param>
     /// <param name="updated">Whether the item updated on the frame the code is for.</param>
     /// <returns>The tier's code, plus <see cref="SdfUpdateRateCode.Updated"/> when <paramref name="updated"/>.</returns>
     public static SdfUpdateRateCode CodeOf(int hertz, bool updated) {
@@ -153,7 +169,7 @@ public sealed class SdfUpdateRateIntervals {
     /// them.</summary>
     public const double HalfWindowSeconds = 1d;
     /// <summary>The reduced tiers an interval is recorded under, in hertz.</summary>
-    public static readonly int[] Tiers = [30, 15];
+    public static readonly int[] Tiers = [30, 15, 10, 5];
     /// <summary>The levers an interval is recorded for, in report order.</summary>
     public static readonly SdfUpdateRates[] Levers = [SdfUpdateRates.Bodies, SdfUpdateRates.Views, SdfUpdateRates.Screens, SdfUpdateRates.ShadowFar];
 

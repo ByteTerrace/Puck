@@ -3,10 +3,10 @@
 The rate range is a lane of open ground on the debug world's west side for
 judging the `world.rates` levers. [range.puck](range.puck) holds it, and
 `debug.puck` imports it last. Six Moths walk loops at marked distances down the
-lane, so a body's pose shows at every tier the bodies lever has. Three screens
-play a bouncing ball, and three windows look into the garden. Each one stands at
-a distance that puts its lever in the 30 Hz or the 15 Hz tier. Signs stand on
-both sides of every body threshold. Each sign gives its distance and the tier a
+lane, so a body's pose shows at each body tier above 5 Hz. Three screens play a
+bouncing ball, and three windows look into the garden. Each one stands at a
+distance that puts its lever in the 30 Hz or the 15 Hz tier. Signs stand on
+both sides of every body threshold in the lane. Each sign gives its distance and the tier a
 body standing there takes at 1280x900 and at 3840x2160.
 
 ## Get there and compare
@@ -30,8 +30,8 @@ world.rates                  # each lever's longest interval, and each rated ite
 `range.tiers rates|rate-flash|off` runs the same `world.debug-view` lines.
 
 In the tier view, an item held to 30 Hz is tinted amber and one held to 15 Hz
-magenta. An item updating every frame is drawn untinted, and so is every item
-while its lever is off. The view covers bodies (their pose), screens (their
+or slower magenta. An item updating every frame is drawn untinted, and so is
+every item while its lever is off. The view covers bodies (their pose), screens (their
 source's upload) and windows (their nested view, through the glass that shows
 it).
 
@@ -55,10 +55,11 @@ times a second whenever its lever is on.
 size on screen and its tier. A body is listed as `body:<n>=<px/m>@<hz>`, a
 window as `session$<screen>=<display px>@<hz>`, and a screen as
 `source$machine$…=<share of its own height>@<hz>`. At 1280x900, from the spawn
-with the camera at rest, it read:
+with the camera at rest, it reads like this, each body taking the slowest tier
+whose threshold its size is at or below:
 
 ```text
-bodies: body:2=5.5px/m@15hz body:3=7.9px/m@15hz body:4=10.0px/m@15hz body:5=14.1px/m@15hz body:6=21.4px/m@30hz body:7=101.6px/m@60hz
+bodies: body:2=5.5px/m@10hz body:3=7.9px/m@10hz body:4=10.0px/m@10hz body:5=14.1px/m@15hz body:6=21.4px/m@30hz body:7=101.6px/m@60hz
 views: session$28=85px@30hz session$29=36px@15hz session$30=21px@15hz
 screens: …=0.59x@30hz …=0.28x@15hz …=0.15x@15hz
 ```
@@ -74,16 +75,16 @@ D is the distance down the lane from the spawn, at x = -100, z = 118 - D.
 | Walker, body 7 | D 10 | every frame | every frame |
 | Walker, body 6 | D 42 | 30 Hz | every frame |
 | Walker, body 5 | D 64 | 15 Hz | every frame |
-| Walker, body 4 | D 90 | 15 Hz | 30 Hz |
-| Walker, body 3 | D 115 | 15 Hz | 30 Hz |
-| Walker, body 2 | D 165 | 15 Hz | 15 Hz |
+| Walker, body 4 | D 90 | 10 Hz | 30 Hz |
+| Walker, body 3 | D 115 | 10 Hz | 30 Hz |
+| Walker, body 2 | D 165 | 10 Hz | 15 Hz |
 | Screen `range-deck-9` | D 9, 8 m left | 30 Hz | every frame |
 | Screen `range-deck-24` | D 24, 8 m left | 15 Hz | 30 Hz |
 | Screen `range-deck-50` | D 50, 8 m left | 15 Hz | 15 Hz |
 | Window `range-window-27` | D 27, 12 m left | 30 Hz | every frame |
 | Window `range-window-69` | D 69, 12 m left | 15 Hz | 30 Hz |
 | Window `range-window-121` | D 121, 12 m left | 15 Hz | 15 Hz |
-| Signs | D 25, 30, 55, 60, 67, 72, 138 and 146, on the right | on each sign | on each sign |
+| Signs | D 25, 30, 55, 60, 67, 72, 85, 91, 138 and 146, on the right | on each sign | on each sign |
 
 Each walker loops within about 3 m of its home at 1.5 m/s, a walk, so its
 limbs swing the whole time. The tiers hold with the chase camera at rest at the
@@ -94,14 +95,18 @@ clamped to it: asked for 3840x2160 on a 2560x1440 monitor, the World presents
 
 ## How the distances follow
 
-A body switches to 30 Hz at or below 30 pixels per metre, and to 15 Hz at or
-below 15 (`SdfUpdateRateTiers`). Pixels per metre are the display's height over
-`2 tan(0.48)` = 1.0432 times the body's depth. The depth is measured to the
-nearest point of the sphere the body's look reaches. The chase camera stands
+A body switches to 30 Hz at or below 30 pixels per metre, and to 15, 10 and
+5 Hz at or below 15, 10 and 5 (`SdfUpdateRateTiers.BodyTiers`): a limb moving
+2 m/s then steps at most two pixels between packs. Pixels per metre are the
+display's height over `2 tan(0.48)` = 1.0432 times the body's depth. The
+depth is measured to the nearest point of the sphere the body's look reaches. The chase camera stands
 4.2 m behind her at a 0.3 rad pitch with a 0.96 rad field of view
 (`avatars/moth.puck`), so a body D down the lane stands about 0.9553 D + 2.39 m
-deep. The thresholds fall at D = 27.6 and 57.7 m at 1280x900, and at 69.7 and
-142 m at 3840x2160. The readings above match that model.
+deep. The thresholds fall at D = 27.6, 57.7 and 87.8 m at 1280x900, and at
+69.7 and 142 m at 3840x2160. The 5 Hz threshold (D = 178 m at 1280x900) and
+the 4K 10 Hz one lie past the lane's end, so the lane shows each body tier
+above 5 Hz; a body seen from across the valley, such as these walkers from the
+meadow, takes 5 Hz. The readings above match that model.
 
 A screen's source uploads at 30 Hz once its picture shows at or below its own
 240 rows on the display, and at 15 Hz at or below 120. Each screen's picture is

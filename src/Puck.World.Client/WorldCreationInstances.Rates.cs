@@ -9,7 +9,7 @@ namespace Puck.World.Client;
 
 // The world.rates bodies lever (SdfUpdateRates.Bodies): a body-rooted registration whose pixels per metre in every view
 // that may see it fall to a tier (SdfUpdateRateTiers.BodyHertz) evaluates its pose, drivers, effectors and part followers
-// at 30 or 15 Hz. Between those packs its root still follows the body every frame and its other slots ride the root
+// at that tier's rate (SdfUpdateRateTiers.BodyTiers). Between those packs its root still follows the body every frame and its other slots ride the root
 // rigidly, so the body moves smoothly while its limbs hold; the next full pack advances by every second the holds
 // carried past. A body nothing may show or read (no camera, no shadow cascade, no consumer of its parts) holds until
 // something may (HeldHertz), and its next full pack is a continuity cut, as a teleport's is, rather than an advance over
