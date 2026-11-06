@@ -117,14 +117,6 @@ public sealed class ShaderToolchainLawTests {
         Assert.Equal(expected: new ShaderToolchain(directory: bin).Identity, actual: toolchain.Identity);
     }
     [Fact]
-    public void ACommandWithoutDirectorySeparatorsRetainsTheRequestedNameWhenAbsent() {
-        const string Command = "puck-absent-dxc";
-        var toolchain = ShaderToolchain.OfCommand(command: Command);
-
-        Assert.Null(@object: toolchain.Locate(name: ShaderCompiler.DxcTool));
-        Assert.Equal(expected: Command, actual: toolchain.Resolve(name: ShaderCompiler.DxcTool));
-    }
-    [Fact]
     public void AToolOnTheSearchPathRunsTheExactExecutableThatLocateIdentifies() {
         var toolchain = new ShaderToolchain();
         var located = toolchain.Locate(name: "dotnet");

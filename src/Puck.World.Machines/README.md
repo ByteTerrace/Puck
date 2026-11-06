@@ -31,6 +31,14 @@ ordinary values, document references, content paths, and auxiliary asset paths;
 the same field walker reaches nested objects and array elements. Missing prepared
 assets, unknown fields, and invalid schema tags refuse before construction.
 
+Resource or provider failures during instance preparation produce a named
+`MachineRuntimeStatus.Refused` instance in the same inventory. Other instances
+still prepare and the World boots. `CommitInstances` logs each new refusal once;
+the lease's fault is shared by `machine.state`, `screen.state`, `world.status`
+and the screen's ordinary text decal. Document admission and live-link ownership
+conflicts still refuse the transaction. A refused instance schedules no work and
+keeps its refusal in checkpoints rather than pretending it has provider state.
+
 `IMachineRuntime` requires execution status, exact-tick advancement, and disposal.
 Video, audio, normalized input ports, and removable content are optional capabilities.
 Outputs have provider-owned names and stable identities for the runtime's lifetime.

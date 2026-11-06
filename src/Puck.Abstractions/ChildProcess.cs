@@ -17,22 +17,65 @@ namespace Puck.Abstractions;
 /// then owns every redirected stream and must drain each one it does not close.</para>
 /// </summary>
 public static class ChildProcess {
-    /// <summary>Resolves an executable using the host's search path, without invoking a shell.</summary>
+    /// <summary>Resolves an executable through an explicit location, PATH, then installed toolchain locations.</summary>
     /// <param name="name">Executable name or explicit path.</param>
+    /// <param name="directory">An exclusive tool directory, or null for normal discovery.</param>
     /// <returns>The absolute executable path.</returns>
     /// <exception cref="FileNotFoundException">The executable is absent.</exception>
-    public static string FindExecutable(string name) {
+    public static string FindExecutable(string name, string? directory = null) {
         if (Path.IsPathRooted(name) || name.Contains('/') || name.Contains('\\')) {
             if (File.Exists(name)) { return Path.GetFullPath(name); }
         } else {
             var file = OperatingSystem.IsWindows() && Path.GetExtension(name).ToLowerInvariant() is not (".exe" or ".cmd" or ".bat" or ".com") ? name + ".exe" : name;
-            foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator)) {
-                var path = Path.Combine(directory.Trim('"'), file);
+            foreach (var candidate in ExecutableDirectories(name, directory)) {
+                var path = Path.Combine(candidate.Trim('"'), file);
                 if (File.Exists(path)) { return Path.GetFullPath(path); }
             }
         }
-        throw new FileNotFoundException($"Cannot find {name} on PATH.");
+        throw new FileNotFoundException($"Cannot find {name} in the selected toolchain, PATH or standard install locations.");
     }
+
+    private static IEnumerable<string> ExecutableDirectories(string name, string? directory) {
+        var tool = name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
+        var llvm = tool is "clang" or "ld.lld";
+        var rust = tool is "cargo" or "rustc";
+        var dxc = tool == "dxc";
+        var selected = directory ?? (llvm ? Environment.GetEnvironmentVariable("PUCK_LLVM_BIN")
+            : rust ? Environment.GetEnvironmentVariable("CARGO_HOME")
+            : dxc ? Environment.GetEnvironmentVariable("PUCK_DXC_BIN") : null);
+        if (!string.IsNullOrWhiteSpace(selected)) {
+            yield return rust && directory is null ? Path.Combine(selected, "bin") : selected;
+            yield break;
+        }
+        foreach (var entry in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)) {
+            yield return entry;
+        }
+        if (rust) {
+            yield return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cargo", "bin");
+        }
+        if (dxc && Environment.GetEnvironmentVariable("VULKAN_SDK") is { Length: > 0 } sdk) {
+            yield return Path.Combine(sdk, OperatingSystem.IsWindows() ? "Bin" : "bin");
+        }
+        if (OperatingSystem.IsWindows()) {
+            if (llvm) { yield return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LLVM", "bin"); }
+            if (dxc) {
+                var root = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory)!, "VulkanSDK");
+                foreach (var installed in InstalledDirectories(root, "*")) { yield return Path.Combine(installed, "Bin"); }
+            }
+        } else if (llvm || dxc || rust) {
+            yield return "/usr/local/bin";
+            yield return "/usr/bin";
+            if (llvm) {
+                yield return "/opt/llvm/bin";
+                foreach (var installed in InstalledDirectories("/usr/lib", "llvm-*")) { yield return Path.Combine(installed, "bin"); }
+                foreach (var installed in InstalledDirectories("/opt", "llvm-*")) { yield return Path.Combine(installed, "bin"); }
+            }
+        }
+    }
+
+    private static IEnumerable<string> InstalledDirectories(string root, string pattern) => Directory.Exists(root)
+        ? Directory.EnumerateDirectories(root, pattern).OrderDescending(StringComparer.Ordinal)
+        : [];
     /// <summary>How long to wait for EOF after exit. At expiry, readers consume the bytes still buffered in the pipe
     /// before ending, so scheduling delays cannot truncate the child's output.</summary>
     public static readonly TimeSpan ExitDrainGrace = TimeSpan.FromSeconds(seconds: 5);

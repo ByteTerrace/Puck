@@ -2,7 +2,7 @@ namespace Puck.Analyzers;
 
 /// <summary>
 /// The one list of environment variables Puck may read (<see cref="EnvironmentReadAnalyzer"/>, ENV001): each a value
-/// the operating system, the .NET SDK or a CI host defines, never one Puck invents to switch itself. An entry names
+/// the operating system, a toolchain or a CI host defines, plus explicit tool install locations, never a behavior switch. An entry names
 /// the assemblies that may read it, so a CI-provided value stays inside the CI-facing verbs, and states why the read
 /// cannot be a flag, a document, or a profile row instead.
 /// </summary>
@@ -19,6 +19,22 @@ public static class EnvironmentReadAllowlist {
 
     /// <summary>Gets every allowlisted variable, keyed by its exact (case-sensitive) name.</summary>
     public static IReadOnlyDictionary<string, EnvironmentReadEntry> Entries { get; } = new Dictionary<string, EnvironmentReadEntry>(comparer: StringComparer.Ordinal) {
+        ["CARGO_HOME"] = new(
+            Assemblies: ["Puck.Abstractions"],
+            Reason: "Cargo's installation root; executable discovery uses its bin directory when tools are absent from PATH."
+        ),
+        ["PUCK_LLVM_BIN"] = new(
+            Assemblies: ["Puck.Abstractions"],
+            Reason: "Explicit LLVM executable directory for shared tool discovery in builds and embedded hosts; selects tools, never engine behavior."
+        ),
+        ["PUCK_DXC_BIN"] = new(
+            Assemblies: ["Puck.Abstractions"],
+            Reason: "Explicit DXC executable directory for shared discovery in builds and embedded hosts; selects tools, never engine behavior."
+        ),
+        ["VULKAN_SDK"] = new(
+            Assemblies: ["Puck.Abstractions"],
+            Reason: "The Vulkan SDK's installation root, whose bin directory supplies shader tools."
+        ),
         ["CI"] = new(
             Assemblies: ["Puck.Cli.Harness", "bootstrap"],
             Reason: "Set by every CI host; the World artifact key keys a CI build apart, and the bootstrap app refuses to run under CI."

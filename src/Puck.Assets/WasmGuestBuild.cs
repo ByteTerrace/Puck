@@ -50,6 +50,7 @@ public sealed record WasmGuestBuild(string Crate, IReadOnlyList<string>? Feature
 
     private byte[] Build(string directory) {
         ToolchainBuild.Run("cargo", CargoArguments, directory, new Dictionary<string, string?> {
+            ["RUSTC"] = Puck.Abstractions.ChildProcess.FindExecutable("rustc"),
             ["CARGO_ENCODED_RUSTFLAGS"] = $"--remap-path-prefix={directory}=.",
             ["CARGO_HOME"] = Path.Combine(directory, ".cargo-home"),
         });
