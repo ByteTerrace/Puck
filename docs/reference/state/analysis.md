@@ -260,9 +260,8 @@ also doesn't count the units a tick actually spends.
 A separate model prices operations in reference cycles. `CostModel` is a
 portable abstract service policy whose coefficients come from one evidence
 manifest, `src/Puck.State/ReferenceSchedule.json`. The manifest pins the
-evidence targets, the per-target instruction service, the reference kernels
-with the source digests their evidence was read against, and a memory-service
-profile.
+evidence targets, the per-target instruction service, the reference kernels,
+and a memory-service profile.
 
 - `ReferenceSchedule.OperationCostBound(op, kind)` answers a reference-cycle
   price only for an operation the manifest prices, and returns

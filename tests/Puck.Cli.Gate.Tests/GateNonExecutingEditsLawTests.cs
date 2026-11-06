@@ -25,11 +25,10 @@ public sealed class GateNonExecutingEditsLawTests : GateRunLaws {
             ? branches.Checkout.Read(name: path).Replace(comparisonType: StringComparison.Ordinal, newValue: "\"binding\": \"clearer binding\"", oldValue: "\"binding\": \"gate selection\"")
             : "// clearer comment\nclass Shared {}\n"));
 
-        Assert.True(condition: AffectedCommand.TryPlan(repositoryRoot: branches.Checkout.Root, schemaSourceTypes: SuiteRoot.Composition.SchemaSourceTypes, since: baseline, plan: out var plan, changed: out var changed, error: out var error), userMessage: error);
+        Assert.True(condition: AffectedCommand.TryPlan(repositoryRoot: branches.Checkout.Root, since: baseline, plan: out var plan, changed: out var changed, error: out var error), userMessage: error);
         Assert.Equal(actual: changed, expected: [path]);
         Assert.Empty(collection: plan!.Canaries);
         Assert.Empty(collection: plan.Suites);
-        Assert.Empty(collection: plan.Unmapped);
         Assert.Equal(expected: (prose ? ["example"] : Array.Empty<string>()), actual: plan.CanaryChecks);
 
         using var directory = new TemporaryDirectory(prefix: "puck-gate-law-");
@@ -39,7 +38,6 @@ public sealed class GateNonExecutingEditsLawTests : GateRunLaws {
 
         Assert.Equal(actual: exitCode, expected: CliExit.Success);
         Assert.Contains(collection: runner.Steps, filter: step => step.SequenceEqual(other: ["affected", "--merge-base", baseline, "--run", "--suite-jobs", "2"]));
-        Assert.Contains(collection: runner.Steps, filter: step => step.SequenceEqual(other: ["docs", "links"]));
         Assert.Equal(expected: gpu, actual: runner.Steps.Any(predicate: step => step.SequenceEqual(other: ["docs", "citations"])));
         Assert.Equal(expected: !prose, actual: runner.Steps.Any(predicate: step => ((step[0] == "format") && (step[1] == "--check"))));
         if (!prose) { Assert.Equal(expected: [Source], actual: runner.FormatSources); }

@@ -1,5 +1,6 @@
-using System.Globalization;
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 
 using Microsoft.CodeAnalysis;
 
@@ -108,44 +109,10 @@ internal static class ScanJsonl {
 
         return builder.Append(value: ']').ToString();
     }
-    // Minimal JSON string escaper. The scan output is only ever read back through JsonDocument, so this
-    // needs to round-trip, not to be a general serializer.
-    public static string JsonString(string value) {
-        var builder = new StringBuilder(value: "\"");
+    private static readonly JsonSerializerOptions StringOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
-        foreach (var character in value) {
-            switch (character) {
-                case '"':
-                    builder.Append(value: "\\\"");
-                    break;
-                case '\\':
-                    builder.Append(value: "\\\\");
-                    break;
-                case '\n':
-                    builder.Append(value: "\\n");
-                    break;
-                case '\r':
-                    builder.Append(value: "\\r");
-                    break;
-                case '\t':
-                    builder.Append(value: "\\t");
-                    break;
-                default:
-                    if (character < 0x20) {
-                        builder.Append(value: "\\u").Append(value: ((int)character).ToString(
-                            format: "x4",
-                            provider: CultureInfo.InvariantCulture
-                        ));
-                    } else {
-                        builder.Append(value: character);
-                    }
-
-                    break;
-            }
-        }
-
-        return builder.Append(value: '"').ToString();
-    }
+    // The scan output is UTF-8 text read back through JsonDocument, so markup characters and non-ASCII text stay literal.
+    public static string JsonString(string value) => JsonSerializer.Serialize(options: StringOptions, value: value);
     // A location's 1-based start and end line — the pair every analyzer record reports.
     public static (int Start, int End) LineRange(Location location) {
         var span = location.GetLineSpan();

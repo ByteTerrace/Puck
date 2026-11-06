@@ -15,7 +15,7 @@ public static class StateEvidenceCommand {
     public static string? RepositoryRoot => Puck.RepositoryPaths.FindRoot();
 
     public sealed record McaRow(long Latency, decimal ReciprocalThroughput);
-    public sealed record SourceInventory(string Path, string ExpectedSha256, string? ActualSha256, bool Matches);
+    public sealed record SourceInventory(string Path, string? Sha256);
     public sealed record KernelInventory(string Id, string EntryPoint, string Symbol, IReadOnlyList<SourceInventory> Sources, IReadOnlyDictionary<string, IReadOnlyList<string>> UnresolvedTargets);
     public sealed record CoverageInventory(string Vocabulary, int Registered, int Priced, IReadOnlyList<string> Unmodeled);
     public sealed record EvidenceInventory(string Schema, string ManifestDigest, string Sdk, string RollForward, IReadOnlyList<KernelInventory> Kernels, IReadOnlyList<CoverageInventory> Coverage, IReadOnlyDictionary<string, IReadOnlyList<string>> MemoryGaps);
@@ -43,7 +43,7 @@ public static class StateEvidenceCommand {
             Description = "Walk an object already present in the capture directory instead of recompiling it. The capture names every object it reuses.",
         };
         var inventory = new Option<bool>("--inventory") {
-            Description = "Emit a machine-readable inventory of kernel source integrity and unresolved target/memory evidence instead of running llvm-mca.",
+            Description = "Emit a machine-readable inventory of each kernel source's current SHA-256 and the unresolved target/memory evidence instead of running llvm-mca; exit 1 when a kernel source is missing.",
         };
         var output = new Option<string?>("--output") {
             Description = "Write --inventory JSON to this path instead of standard output.",
@@ -95,7 +95,7 @@ public static class StateEvidenceCommand {
         } else {
             await File.WriteAllTextAsync(Path.GetFullPath(path: output), (json + Environment.NewLine), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
         }
-        return (report.Kernels.All(predicate: static kernel => kernel.Sources.All(predicate: static source => source.Matches)) ? 0 : 1);
+        return (report.Kernels.All(predicate: static kernel => kernel.Sources.All(predicate: static source => (source.Sha256 is not null))) ? 0 : 1);
     }
 
     public static EvidenceInventory BuildInventory(string repositoryRoot) {
@@ -140,12 +140,8 @@ public static class StateEvidenceCommand {
     }
     private static SourceInventory InspectSource(string repositoryRoot, KernelSource source) {
         var path = Path.Combine(path1: repositoryRoot, path2: source.Path.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/'));
-        string? actual = null;
 
-        if (File.Exists(path: path)) {
-            actual = ContentPin.OfFile(path: path).Hex;
-        }
-        return new SourceInventory(source.Path, source.Sha256, actual, string.Equals(a: source.Sha256, b: actual, comparisonType: StringComparison.Ordinal));
+        return new SourceInventory(source.Path, (File.Exists(path: path) ? ContentPin.OfFile(path: path).Hex : null));
     }
     private static long Ceiling(decimal value) => decimal.ToInt64(d: decimal.Ceiling(d: value));
     private static async Task<int> RunAsync(string? llvmMca, TimeProvider clock, CancellationToken cancellationToken) {

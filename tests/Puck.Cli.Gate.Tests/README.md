@@ -10,7 +10,7 @@ canary transcript when that run fails, and that a law's `TemporaryDirectory`
 outlives its disposal until the law's verdict.
 
 The suite composes its verbs over a `GateComposition` that names no other verb (`SuiteRoot`). The laws that need
-the verbs composed beside the gate (the commands it prints for other verbs, the GPU-work grammars, the schema stand-ins)
+the verbs composed beside the gate (the commands it prints for other verbs, the GPU-work grammars)
 live in [`Puck.Cli.Tests`](../Puck.Cli.Tests/README.md).
 
 Shared fixtures (`ConsoleCapture`, `GitScratchCheckout`, the thread-pool floor and kin) live in [`tests/Shared/Cli`](../Shared/Cli/README.md) and are linked into each suite that uses them.

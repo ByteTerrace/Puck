@@ -511,10 +511,6 @@ public static partial class TestCommand {
         var pathArgument = new Argument<string>(name: "path") {
             Description = "A .puck source whose `test` blocks generate test worlds, a test-world document, or a directory of either.",
         };
-        var hostOption = new Option<TestHost>(name: "--host") {
-            DefaultValueFactory = static _ => TestHost.Server,
-            Description = "Which host boots the worlds. Only `server` — the real Puck.World executable, headless — is implemented; `browser` is refused by name.",
-        };
         var worldArtifactOption = new Option<string?>(name: "--world-artifact") {
             DefaultValueFactory = static _ => null,
             Description = "Boot this already-built Puck.World.dll instead of the build of src/Puck.World kept for this checkout's sources. A test/ops override: a caller that already built the executable neither builds nor keys one.",
@@ -560,7 +556,6 @@ public static partial class TestCommand {
             """,
             name: "test"
         ) {
-            hostOption,
             jobsOption,
             keepOption,
             cacheOption,
@@ -579,7 +574,6 @@ public static partial class TestCommand {
             compare: parseResult.GetValue(option: compareOption),
             record: parseResult.GetValue(option: recordOption),
             workers: parseResult.GetValue(option: workersOption),
-            host: parseResult.GetValue(option: hostOption),
             jobs: parseResult.GetValue(option: jobsOption),
             keep: parseResult.GetValue(option: keepOption),
             path: (parseResult.GetValue(argument: pathArgument) ?? string.Empty),

@@ -22,22 +22,19 @@ public sealed class AffectedSelectionLawTests {
     ];
     private static readonly HashSet<string> WorldClosure = new(collection: ["World", "Core"], comparer: StringComparer.OrdinalIgnoreCase);
 
-    private static AffectedPlan Select(string[] changed, Dictionary<string, IReadOnlySet<string>>? coverage = null, Func<string, IReadOnlyList<string>>? consumersOf = null, Func<string, IReadOnlyList<string>>? standInsFor = null, Func<string, IReadOnlySet<string>>? canariesReaching = null, IReadOnlySet<string>? deleted = null, Dictionary<string, IReadOnlySet<string>>? recorded = null, Func<string, bool>? worldInput = null, Func<string, bool>? compiledUnchanged = null) => AffectedSelection.Select(
+    private static AffectedPlan Select(string[] changed, Func<string, IReadOnlyList<string>>? consumersOf = null, Func<string, IReadOnlySet<string>>? canariesReaching = null, IReadOnlySet<string>? deleted = null, Func<string, bool>? worldInput = null, Func<string, bool>? compiledUnchanged = null) => AffectedSelection.Select(
         canaries: Canaries,
         changed: changed,
         compiledUnchanged: compiledUnchanged,
         consumersOf: (consumersOf ?? (static _ => [])),
-        coverage: (coverage ?? []),
         declaresTests: static path => path.Contains(comparisonType: StringComparison.Ordinal, value: "tested"),
         projects: Projects,
         canariesReaching: (canariesReaching ?? (static _ => new HashSet<string>())),
-        standInsFor: (standInsFor ?? (static _ => [])),
         worldClosure: WorldClosure,
         // As WorldArtifactClosure walks it: every repository-root file is an input of the World build, and build/ is
         // one only where the World imports it.
         worldInput: (worldInput ?? (static path => !path.Contains(value: '/'))),
-        deleted: deleted,
-        recorded: recorded
+        deleted: deleted
     );
 
     [Fact]
@@ -47,17 +44,15 @@ public sealed class AffectedSelectionLawTests {
         Assert.Equal(actual: Select(changed: ["tests/World.Tests/Law.cs"]).Suites, expected: ["World.Tests"]);
     }
     [Fact]
-    public void ACanaryIsChosenByItsDirectoryItsNamedFilesAndWhatItExecuted() {
+    public void ACanaryIsChosenByItsDirectoryItsNamedFilesAndTheWorldBuild() {
         Assert.Equal(actual: Select(changed: ["tests/Canaries/doors/positive.script.txt"]).Canaries, expected: ["doors"]);
         Assert.Equal(actual: Select(changed: ["src/World/Assets/ink.hlsl"]).Canaries, expected: ["ink"]);
-        Assert.Equal(
-            actual: Select(
-                changed: ["src/World/Door.cs"],
-                coverage: new() { ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]) }
-            ),
-            expected: new AffectedPlan(Baselines: [], Canaries: ["doors"], CanaryChecks: [], Deleted: [], Everything: false, Parity: false, Suites: ["Cli.Tests", "World.Tests"], Unmapped: [], Worlds: []),
-            comparer: new PlanComparer()
-        );
+
+        var plan = Select(changed: ["src/World/Door.cs"]);
+
+        Assert.Equal(actual: plan.Canaries, expected: ["doors", "ink"]);
+        Assert.Equal(actual: plan.Suites, expected: ["Cli.Tests", "World.Tests"]);
+        Assert.True(condition: plan.Parity);
     }
     [Fact]
     public void AChangedPuckSourceWithTestBlocksIsRunByPuckTest() {
@@ -71,12 +66,11 @@ public sealed class AffectedSelectionLawTests {
     [InlineData(true, false)]
     [InlineData(true, true)]
     [Theory]
-    public void AnUnchangedCompiledValueKeepsSuitesButNoCanaryOrUnplacedPath(bool mapped, bool isDeleted) {
+    public void AnUnchangedCompiledValueKeepsSuitesButNoCanary(bool mapped, bool isDeleted) {
         const string Path = "src/World/Assets/worlds/sample.world.json";
         var plan = Select(
             changed: [Path],
             compiledUnchanged: static path => (path == Path),
-            coverage: (mapped ? new() { [Path] = new HashSet<string>(collection: ["ink"]) } : null),
             canariesReaching: _ => new HashSet<string>(collection: (mapped ? ["doors"] : [])),
             deleted: (isDeleted ? new HashSet<string>(collection: [Path]) : null)
         );
@@ -84,8 +78,6 @@ public sealed class AffectedSelectionLawTests {
         Assert.Equal(expected: ["Cli.Tests", "World.Tests"], actual: plan.Suites);
         Assert.Empty(collection: plan.Canaries);
         Assert.False(condition: plan.Parity);
-        Assert.Empty(collection: plan.Unmapped);
-        Assert.Empty(collection: plan.Deleted);
     }
     [Fact]
     public void AnUnchangedCompiledValueStillRunsChangedTestBlocks() {
@@ -99,74 +91,14 @@ public sealed class AffectedSelectionLawTests {
         Assert.True(condition: Select(changed: ["src/World/Assets/ink.hlsl"]).Parity);
         Assert.False(condition: Select(changed: ["tests/Canaries/doors/positive.script.txt"]).Parity);
     }
-    /// <summary>A file the index cannot know is placed through its indexed stand-ins: their canaries are its canaries and
-    /// it is not unmapped; a stand-in the index does not know places nothing.</summary>
     [Fact]
-    public void AFileTheIndexCannotKnowIsPlacedThroughItsIndexedStandIns() {
-        var coverage = new Dictionary<string, IReadOnlySet<string>> { ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]) };
-        var placed = Select(
-            changed: ["src/World/World.csproj"],
-            coverage: coverage,
-            standInsFor: static path => ((path == "src/World/World.csproj") ? ["src/World/Door.cs"] : [])
-        );
-        var unplaced = Select(
-            changed: ["src/World/World.csproj"],
-            coverage: coverage,
-            standInsFor: static _ => ["src/World/Unrecorded.cs"]
-        );
-
-        Assert.Equal(actual: placed.Canaries, expected: ["doors"]);
-        Assert.Empty(collection: placed.Unmapped);
-        Assert.Empty(collection: unplaced.Canaries);
-        Assert.Equal(actual: unplaced.Unmapped, expected: ["src/World/World.csproj"]);
-    }
-    [Fact]
-    public void AWorldSourceTheIndexDoesNotKnowIsReportedAndChoosesNoCanary() {
-        var plan = Select(changed: ["src/World/New.cs", "src/Maths/Field.cs"]);
-
-        Assert.Empty(collection: plan.Canaries);
-        Assert.Equal(actual: plan.Unmapped, expected: ["src/World/New.cs"]);
-    }
-    [Fact]
-    public void ASourceTheIndexRecordsAsExecutedByNothingChoosesNoCanaryAndIsNotUnmapped() {
-        var plan = Select(
-            changed: ["src/World/Quiet.cs"],
-            coverage: new() { ["src/World/Quiet.cs"] = new HashSet<string>() }
-        );
-
-        Assert.Empty(collection: plan.Canaries);
-        Assert.Empty(collection: plan.Unmapped);
-    }
-    /// <summary>A file deleted since the base can never be recorded, so it is never unmapped: the index the base
-    /// recorded places it, choosing the canaries that executed it; one that index does not name either is listed as
-    /// deleted; and nothing reads a deleted file, so a deleted <c>.puck</c> source is not run by <c>puck test</c>.
-    /// Its project's suites still run.</summary>
-    [Fact]
-    public void ADeletedSourceIsPlacedByTheIndexTheBaseRecordedOrListedAsDeletedNeverUnmapped() {
-        var plan = Select(
-            changed: ["src/World/Door.cs", "src/World/Gone.cs", "src/World/Unrecorded.cs", "src/World/tested.puck", "src/World/New.cs"],
-            deleted: new HashSet<string>(collection: ["src/World/Door.cs", "src/World/Gone.cs", "src/World/Unrecorded.cs", "src/World/tested.puck"]),
-            recorded: new() {
-                ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]),
-                ["src/World/Gone.cs"] = new HashSet<string>(collection: ["ink"]),
-            }
-        );
-
-        Assert.Equal(actual: plan.Canaries, expected: ["doors", "ink"]);
-        Assert.Equal(actual: plan.Deleted, expected: ["src/World/Unrecorded.cs", "src/World/tested.puck"]);
-        Assert.Equal(actual: plan.Unmapped, expected: ["src/World/New.cs"]);
-        Assert.Empty(collection: plan.Worlds);
-        Assert.Equal(actual: plan.Suites, expected: ["Cli.Tests", "World.Tests"]);
-
-        // Without the base's index, a deleted file the current index names is still placed by it.
-        Assert.Equal(
-            actual: Select(
-                changed: ["src/World/Door.cs"],
-                coverage: new() { ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]) },
-                deleted: new HashSet<string>(collection: ["src/World/Door.cs"])
-            ).Canaries,
-            expected: ["doors"]
-        );
+    public void AWorldBuildSourceChoosesEveryCanaryUnlessDocumentsReachIt() {
+        Assert.Equal(actual: Select(changed: ["src/World/New.cs"]).Canaries, expected: ["doors", "ink"]);
+        Assert.Empty(collection: Select(changed: ["src/Maths/Field.cs"]).Canaries);
+        // A deleted source of the World build is an input of every canary too, and nothing reads it.
+        Assert.Equal(actual: Select(changed: ["src/World/Gone.cs"], deleted: new HashSet<string>(collection: ["src/World/Gone.cs"])).Canaries, expected: ["doors", "ink"]);
+        // A file documents reach is executed only by the canaries whose documents name it.
+        Assert.Equal(actual: Select(changed: ["src/World/Assets/other.hlsl"], canariesReaching: static _ => new HashSet<string>(collection: ["doors"])).Canaries, expected: ["doors"]);
     }
     [Fact]
     public void BuildInfrastructureReachesEverySuiteAndProseReachesNothing() {
@@ -179,7 +111,6 @@ public sealed class AffectedSelectionLawTests {
 
         Assert.Empty(collection: prose.Suites);
         Assert.Empty(collection: prose.Canaries);
-        Assert.Empty(collection: prose.Unmapped);
     }
     [Fact]
     public void ARestoreLockReachesItsOwnSuiteAloneAndNoCanaryUnlessItsProjectBuildsTheWorld() {
@@ -266,18 +197,4 @@ public sealed class AffectedSelectionLawTests {
             : null);
     }
 
-    private sealed class PlanComparer : IEqualityComparer<AffectedPlan> {
-        public bool Equals(AffectedPlan? x, AffectedPlan? y) =>
-            ((x is not null) && (y is not null) &&
-            x.Baselines.SequenceEqual(second: y.Baselines) &&
-            x.Canaries.SequenceEqual(second: y.Canaries) &&
-            x.CanaryChecks.SequenceEqual(second: y.CanaryChecks) &&
-            (x.Everything == y.Everything) &&
-            (x.Parity == y.Parity) &&
-            x.Suites.SequenceEqual(second: y.Suites) &&
-            x.Unmapped.SequenceEqual(second: y.Unmapped) &&
-            x.Worlds.SequenceEqual(second: y.Worlds) &&
-            x.Deleted.SequenceEqual(second: y.Deleted));
-        public int GetHashCode(AffectedPlan obj) => obj.Suites.Count;
-    }
 }

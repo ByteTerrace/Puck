@@ -7,13 +7,13 @@ namespace Puck.Cli.Branding;
 
 // `puck branding` is the report-and-sync surface for branding/manifest.json. The default writes every
 // non-deferred copy from its canonical source; --check is read-only and reports source, copy, and wiring drift.
-// All sources, hashes, destinations, and wiring are preflighted before the default mode writes anything.
+// All sources, destinations, and wiring are preflighted before the default mode writes anything.
 // Exit 0 wrote/matched, 1 found a branding problem, 2 could not locate the repository root.
 public static class BrandingCommand {
     private const string ManifestRelativePath = "branding/manifest.json";
     private const string ManifestSchema = "puck.branding.v1";
 
-    private sealed record Asset(string Id, string Source, string Hash);
+    private sealed record Asset(string Id, string Source);
     private sealed record Copy(string AssetId, string Path, bool Deferred);
     private sealed record Wiring(string Path, string Contains, string Description);
     private sealed record CopyPlan(Asset Asset, Copy Copy, string SourcePath, string DestinationPath, bool NeedsSync);
@@ -92,6 +92,8 @@ public static class BrandingCommand {
             );
             var canonicalPaths = new HashSet<string>(comparer: PuckPaths.Comparer);
             var canonicalFiles = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+            // A distributed copy is held to the canonical file's bytes as they are now, never to a recorded hash.
+            var canonicalHashes = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
             foreach (var asset in assets) {
                 if (!TryResolveRepositoryPath(
@@ -123,13 +125,8 @@ public static class BrandingCommand {
                     problems.Add(item: hashProblem!);
                     continue;
                 }
-                if (!string.Equals(
-                    a: actualHash,
-                    b: asset.Hash,
-                    comparisonType: StringComparison.OrdinalIgnoreCase
-                )) {
-                    problems.Add(item: $"canonical hash drift: {asset.Source} (expected {asset.Hash}, found {actualHash})");
-                }
+
+                canonicalHashes[asset.Id] = actualHash!;
             }
 
             foreach (var wiring in wirings) {
@@ -178,10 +175,14 @@ public static class BrandingCommand {
                     continue;
                 }
 
-                if (!canonicalFiles.TryGetValue(
+                if (
+                    !canonicalFiles.TryGetValue(
                     key: copy.AssetId,
                     value: out var sourcePath
-                )) {
+                ) ||
+                    !canonicalHashes.ContainsKey(key: copy.AssetId)
+                ) {
+                    // A canonical file that is missing or unreadable already reported its own problem.
                     continue;
                 }
 
@@ -265,7 +266,7 @@ public static class BrandingCommand {
 
                 needsSync = (needsSync || !string.Equals(
                     a: destinationHash,
-                    b: asset.Hash,
+                    b: canonicalHashes[asset.Id],
                     comparisonType: StringComparison.OrdinalIgnoreCase
                 ));
                 plans.Add(item: new CopyPlan(
@@ -318,7 +319,7 @@ public static class BrandingCommand {
 
                 if (!string.Equals(
                     a: actualHash,
-                    b: plan.Asset.Hash,
+                    b: canonicalHashes[plan.Asset.Id],
                     comparisonType: StringComparison.OrdinalIgnoreCase
                 )) {
                     problems.Add(item: $"distributed copy drift: {plan.Copy.Path} (source {plan.Asset.Id}, found {actualHash})");
@@ -337,7 +338,7 @@ public static class BrandingCommand {
                 : "synchronized"
             );
 
-            Console.Out.WriteLine(value: $"branding: {mode} {assets.Count} canonical assets and {checkedCopies} distributed copies; deferred copies: {deferredCopies}; all hashes match.");
+            Console.Out.WriteLine(value: $"branding: {mode} {assets.Count} canonical assets and {checkedCopies} distributed copies; deferred copies: {deferredCopies}; every copy matches its canonical asset.");
             return 0;
         }
     }
@@ -416,17 +417,12 @@ public static class BrandingCommand {
                 element: item,
                 property: "source"
             );
-            var hash = GetString(
-                element: item,
-                property: "sha256"
-            );
 
             if (
                 (id is null) ||
-                (source is null) ||
-                (hash is null)
+                (source is null)
             ) {
-                problems.Add(item: "every branding asset requires id, source, and sha256");
+                problems.Add(item: "every branding asset requires id and source");
                 continue;
             }
 
@@ -435,16 +431,7 @@ public static class BrandingCommand {
                 continue;
             }
 
-            if (!ContentPin.TryParseHex(
-                hex: hash,
-                pin: out _
-            )) {
-                problems.Add(item: $"branding asset {id} has an invalid SHA-256 hash");
-                continue;
-            }
-
             assets.Add(item: new Asset(
-                Hash: hash,
                 Id: id,
                 Source: source
             ));
@@ -646,7 +633,7 @@ public static class BrandingCommand {
     }
 
     public static Command Create() => CliOptions.CheckVerb(
-        checkDescription: "Check canonical hashes, distributed copies, and required wiring without writing; exit 1 on drift.",
+        checkDescription: "Check that every distributed copy is byte-identical to its canonical asset, and the required wiring, without writing; exit 1 on drift.",
         description: "Synchronize and check the maintained branding assets.",
         name: "branding",
         run: Run

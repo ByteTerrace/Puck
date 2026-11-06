@@ -197,7 +197,7 @@ commands [
 ```text
 puck format <file> --check
 puck lint <file> --strict
-puck compile <file>                   # writes <source>.world.json (and its .puckb) or <source>.cartridge.json beside the source
+puck compile <file>                   # writes <source>.world.json (and its .puckb) or <source>.cartridge.json beside the source; all derived, never committed
 puck compile <file> --validate        # checks only: writes nothing without --output
 puck test <path-or-dir>               # boots each test block headless, one verdict a line
 ```

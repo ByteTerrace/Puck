@@ -378,22 +378,6 @@ public static partial class AzureCommand {
             );
         }
     }
-    private static async Task StageWorldImageAsync(string commit) {
-        await PublishContainerAsync(
-            archive: "",
-            commit: commit,
-            output: "artifacts/world-silo.digest",
-            registry: ResourceName(
-                "containerRegistry",
-                "name"
-            ),
-            repository: "world-silo"
-        );
-        CliFiles.CopyDirectory(
-            destination: "artifacts/azure/silo-worlds",
-            source: "artifacts/silo-smoke/worlds"
-        );
-    }
     private static async Task BuildActorsAsync(string? containerApp, string group, bool noRestart, string? registry) {
         if ((await RunAsync(
             arguments: ["status", "--porcelain", "--untracked-files=normal"],

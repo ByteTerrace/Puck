@@ -8,7 +8,7 @@ run-name: Runtime verification — ${{ github.ref_name }}
 # `Puck.HumbleGamingBrick.Tests`. AGB runs the Advanced GamingBrick battery against its own corpora and fails the job
 # on any failing check; its BIOS-dependent stages skip here. Both batteries
 # are pure-CPU console applications; neither needs a GPU or a display. `ledgers` runs `puck schema --check`,
-# `puck registry --check`, `puck shaders generate --check`, `puck architecture --check` and `puck branding --check`
+# `puck registry --check`, `puck shaders generate --check`, `puck wasm-stdlib --check`, `puck architecture --check` and `puck branding --check`
 # from the installed producer CLI artifact on every change, so a document field added without regenerating the
 # checked-in schema, the dashboard portal's generated world types (which `puck schema` writes and checks with the
 # schema), or the name registry, an SDF instruction-set change without regenerating the kernels' sdf-isa.hlsli, or a
@@ -185,6 +185,8 @@ jobs:
         run: puck registry --check
       - name: puck shaders generate --check
         run: puck shaders generate --check
+      - name: puck wasm-stdlib --check
+        run: puck wasm-stdlib --check
       - name: puck architecture --check
         run: puck architecture --check
       - name: puck branding --check

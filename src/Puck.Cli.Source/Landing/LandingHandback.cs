@@ -89,7 +89,6 @@ public static partial class LandingHandback {
 
         return ((run.ExitCode == 0) ? run.Stdout : throw new InvalidOperationException(message: $"git {string.Join(separator: ' ', values: arguments)} exited {run.ExitCode}: {run.Stderr.Trim()}"));
     }
-    private static IEnumerable<string> Lines(string text) => text.Split(separator: '\n').Select(selector: static line => line.TrimEnd(trimChar: '\r')).Where(predicate: static line => (line.Length != 0));
 
     /// <summary>Checks the lane branch checked out in <paramref name="checkout"/> against the hand-back contract and
     /// prints one verdict line per leg.</summary>
@@ -113,7 +112,7 @@ public static partial class LandingHandback {
         // Newest first: each entry's hash is the value the branch moved to, the next entry's the value it moved from.
         var reflog = ((branch.Length == 0)
             ? []
-            : Lines(text: CliGit.Run(arguments: ["log", "-g", "--format=%H%x09%gs", $"refs/heads/{branch}", "--"], repository: root).Stdout)
+            : CliText.Lines(text: CliGit.Run(arguments: ["log", "-g", "--format=%H%x09%gs", $"refs/heads/{branch}", "--"], repository: root).Stdout)
                 .Select(selector: static line => line.Split(separator: '\t', count: 2))
                 .Where(predicate: static parts => (parts.Length == 2))
                 .Select(selector: static parts => (Hash: parts[0], Subject: parts[1]))
@@ -136,7 +135,7 @@ public static partial class LandingHandback {
             if (AuthoredEntry().IsMatch(input: subject)) {
                 authored.Add(item: hash);
             } else if (ForeignEntry().IsMatch(input: subject) && ((index + 1) < reflog.Count)) {
-                foreign.UnionWith(other: Lines(text: Git(root, "rev-list", hash, $"^{reflog[(index + 1)].Hash}")));
+                foreign.UnionWith(other: CliText.Lines(text: Git(root, "rev-list", hash, $"^{reflog[(index + 1)].Hash}")));
             }
         }
 
@@ -202,7 +201,7 @@ public static partial class LandingHandback {
 
         var status = CliGit.Run(arguments: ["status", "--porcelain", "--untracked-files=normal"], repository: root).Stdout;
 
-        if (Lines(text: status).Any()) {
+        if (CliText.Lines(text: status).Any()) {
             Leg(findings: ["the checkout has uncommitted or untracked changes, so its files are not HEAD's; commit or set them aside, then re-run."], name: "docs", pass: string.Empty);
         } else if (!DocsCorpus.TryEnumerate(documents: out var corpus, error: out var corpusError, repositoryRoot: root)) {
             Leg(findings: [corpusError], name: "docs", pass: string.Empty);

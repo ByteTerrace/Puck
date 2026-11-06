@@ -106,6 +106,8 @@ docs/.obsidian
 *.dxbc
 # Compiled worlds are derived products; the build and the runtime write them.
 *.puckb
+# `puck compile` writes each world's JSON document beside its source: a derived product, never committed.
+*.world.json
 scratch
 # The captures that go with gallery.flag (worlds/debug/shapes.md): local, read back by agents, never committed.
 worlds/debug/flags/
