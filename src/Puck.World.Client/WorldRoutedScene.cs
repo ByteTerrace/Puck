@@ -58,8 +58,9 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
     /// <param name="buildsInBackground">Whether the scene's rebuilt programs build on the thread pool
     /// (<see cref="SdfCompositionFrameSource.BuildsInBackground"/>).</param>
-    /// <param name="toonOverride">The host's live cel-shading override; absent follows the destination's default.</param>
-    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings = null, WorldSkyAudition? skyLayers = null, bool buildsInBackground = false, Func<bool?>? toonOverride = null) {
+    /// <param name="session">The host's live render levers that reach the destination (its cel-shading override and
+    /// exposure pin); absent follows the destination's document.</param>
+    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings = null, WorldSkyAudition? skyLayers = null, bool buildsInBackground = false, WorldRenderSettings? session = null) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: endpoint);
         ArgumentNullException.ThrowIfNull(argument: hostFrame);
@@ -73,7 +74,7 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
             domains: domains,
             effectiveCameraName: null,
             mirror: endpoint.Mirror
-        ) { SkyLayers = skyLayers, ToonOverride = toonOverride };
+        ) { SkyLayers = skyLayers, Session = session };
         FrameSource = new SdfCompositionFrameSource(
             dresser: this,
             emitters: [m_emitter]

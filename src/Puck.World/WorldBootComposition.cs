@@ -505,8 +505,7 @@ public static class WorldBootComposition {
                 // baking; a composition without the roots keeps them for the run.
                 MeshLibrary = new SdfMeshLibrary(allocator: sp.GetRequiredService<Puck.Abstractions.Memory.IAllocator>(), store: ((sp.GetService<WorldCacheRoots>() is { } caches) ? new SdfMeshStore(directory: caches.Meshes, allocator: sp.GetRequiredService<Puck.Abstractions.Memory.IAllocator>()) : null)),
                 SkyLayers = sp.GetRequiredService<WorldRenderSettings>().SkyLayers,
-                ToonOverride = () => sp.GetRequiredService<WorldRenderSettings>().ToonOverride,
-                BloomSettings = sp.GetRequiredService<WorldRenderSettings>(),
+                Settings = sp.GetRequiredService<WorldRenderSettings>(),
             };
 
             probe?.MeshSettle.Retarget(target: binder.MeshLibrary.Settles);

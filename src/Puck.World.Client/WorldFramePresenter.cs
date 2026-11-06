@@ -2241,7 +2241,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // The lights and the sky: render.lighting, render.sky and render.environment with every keyed value at its
             // clock's presented phase (a world.row.set render lands on the next frame).
             Lights = lighting.Lights,
-            Exposure = lighting.Exposure,
+            Exposure = WorldRenderSettings.Pinned(exposure: lighting.Exposure, pin: m_settings.ExposurePin),
             Toon = m_settings.ResolveToon(render: m_client.Definition.Render),
             Sky = lighting.Sky,
             // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state at,

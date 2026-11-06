@@ -241,7 +241,7 @@ public sealed class SdfMeshIrradianceGatherDeviceLawTests {
     private static Vector4[] Run(GpuDeviceServices services, string extension, SdfMeshIrradianceParameters parameters, Receiver[] receivers, uint[] words) {
         var block = new byte[SdfFrameBlock.SizeBytes];
 
-        SdfFrameBlock.WriteMeshIrradiance(block: block, volume: in parameters);
+        SdfFrameBlock.WriteMeshIrradiance(block: block, measuring: true, volume: in parameters);
 
         var volumeOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceVolume));
         var levelsOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceLevels));

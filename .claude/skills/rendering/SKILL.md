@@ -51,7 +51,7 @@ Publish that demand for the next `BeginFrame` reconciliation. Reconfiguring from
 placement mixes newly selected capture-fill/environment reads with footprints
 already formed for the current frame and can make a capture refuse or crash.
 
-Pin exposure and local adaptation for on/off captures, and record each EV with
+Pin exposure (`world.exposure pin`, which also stops local adaptation) for on/off captures, and record each EV with
 `world.exposure`. Use `world.rate pause` to hold one simulation tick for the pair.
 
 For a motion burst, arm it inside a sustained pan and inspect its reported ticks:

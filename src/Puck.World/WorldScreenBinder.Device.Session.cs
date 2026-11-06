@@ -20,7 +20,7 @@ public sealed partial class WorldScreenBinder {
             domains: m_domains,
             mirror: feed.Mirror,
             effectiveCameraName: feed.EffectiveCamera
-        ) { SkyLayers = SkyLayers, ToonOverride = ToonOverride };
+        ) { SkyLayers = SkyLayers, Session = Settings };
         var frameSource = new SdfCompositionFrameSource(
             dresser: emitter,
             emitters: [emitter]

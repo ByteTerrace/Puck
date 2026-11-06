@@ -182,6 +182,10 @@ public sealed class SdfViewExposures {
         StageView(index: view);
         return m_metered[view];
     }
+    /// <summary>Returns the <c>EV100</c> a view rendered at in the frame last staged, without staging it.</summary>
+    /// <param name="view">The view's index in the frame's views.</param>
+    /// <returns>The <c>EV100</c>, or <see cref="float.NaN"/> for a view the frame does not hold or that has not rendered.</returns>
+    public float Ev100Of(int view) => (((view < 0) || (view >= m_count)) ? float.NaN : m_ev100[view]);
     /// <summary>Describes each staged view's exposure: its <c>EV100</c>, multiplier, the meter's reading and the open
     /// sky its air sees.</summary>
     /// <returns>One line a view.</returns>

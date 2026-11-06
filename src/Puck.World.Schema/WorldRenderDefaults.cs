@@ -293,13 +293,7 @@ public sealed record WorldRenderExposure(
 
         var authored = ((exposure is null) ? SdfExposure.Default : ResolveSection(exposure: exposure, value: (scalar, field, _) => value(scalar, field)));
 
-        return ((hold > 0f)
-            ? (authored with {
-                Ev100 = hold,
-                Local = 0f,
-                Mode = SdfExposureMode.Manual,
-            })
-            : authored);
+        return ((hold > 0f) ? authored.HeldAt(ev100: hold) : authored);
     }
     // A bindable value at the brightest exposure it can reach: its lowest authored value where a lower one brightens,
     // its highest where a higher one does; a state binding's the domain's end.

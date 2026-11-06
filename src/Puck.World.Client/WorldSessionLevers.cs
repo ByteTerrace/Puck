@@ -31,6 +31,9 @@ public static partial class WorldSessionLevers {
     public const string Cull = "cull";
     /// <summary>The levels of detail the raster passes draw (<c>world.detail</c>), a <see cref="SdfMeshDetailLevel"/>.</summary>
     public const string Detail = "detail";
+    /// <summary>The exposure pin (<c>world.exposure pin</c>): <see cref="WorldSessionLever.B"/> nonzero pins every view at
+    /// the <c>EV100</c> in <see cref="WorldSessionLever.A"/>, zero releases the pin.</summary>
+    public const string ExposurePin = "exposure.pin";
     /// <summary>The indirect-light tier the irradiance volume traces at (<c>world.indirect</c>).</summary>
     public const string Indirect = "indirect";
     /// <summary>The audio mix master gain (<c>world.volume</c>), folding into <c>audio</c>.</summary>
@@ -126,6 +129,17 @@ public static partial class WorldSessionLevers {
         sink.Register(
             name: Indirect,
             setter: lever => settings.IndirectTier = ((SdfIndirectTier)((int)lever.A))
+        );
+        sink.Register(
+            name: ExposurePin,
+            setter: lever => {
+                // The value arrives off the wire, so it is range-checked here rather than thrown through delivery.
+                if ((lever.B != 0d) && (!double.IsFinite(d: lever.A) || (lever.A < SdfPhotometry.MinimumEv100) || (lever.A > SdfPhotometry.MaximumEv100))) {
+                    WorldClientDiagnostics.Report(channel: "world.exposure", text: $"pin {lever.A.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} is outside {SdfPhotometry.MinimumEv100}..{SdfPhotometry.MaximumEv100} EV100 — lever dropped");
+                    return;
+                }
+                settings.ExposurePin = ((lever.B != 0d) ? ((float)lever.A) : null);
+            }
         );
         sink.Register(
             name: RenderScale,
