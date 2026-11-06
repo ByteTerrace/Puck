@@ -787,7 +787,9 @@ laws exercise that boundary.
   stream's tail; the program's appearance is unattached while the field constructor runs, so a read of it there throws
   rather than joining the key. The kernels follow the same split: the stream is field first (`SdfProgram.FieldWords`),
   the field interpreter finds the bound table at `dataOffset + 2 * instructions`, the material and paint strides and
-  lanes live in `sdf-render.hlsli`, and the field fingerprint describes the encoding over `FieldWords` alone. An edit to
+  lanes live in `sdf-render.hlsli`, and the field fingerprint describes the encoding over `FieldWords` alone (the
+  description leaves out a probe input that moves no described word, so a new material input on the probe's material
+  call moves only the whole fingerprint). An edit to
   a material's values, a paint, a screen surface or `SdfAppearance`'s code leaves the identity standing (`puck mesh
   identity --against` reports the same identity and kernels); the one material fact beside places that shapes a mesh,
   glass, enters each glass group's geometry (`SdfMeshGeometryBuilder.AppendGlass`). The diagnostic slice, frame/input
