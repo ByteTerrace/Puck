@@ -235,7 +235,9 @@ public sealed partial class WorldPopulation {
 
         m_rigidPairHits.Clear();
 
-        // The solver views, in roster order, then the touched manifolds in owner then partner order.
+        // The solver views, in roster order, then the touched manifolds in owner then partner order: every body contact
+        // first and every surface contact last, so within each pass the static surfaces answer what the body contacts
+        // did. A push between bodies is then met by the ground before the bodies integrate, rather than a pass later.
         m_rigidStepBodies.Clear();
         m_rigidStepManifolds.Clear();
 
@@ -243,41 +245,9 @@ public sealed partial class WorldPopulation {
             m_rigidStepBodies.Add(item: m_entries[index].Body!.RigidSolverHandle());
         }
 
-        foreach (var index in m_rigidRoster) {
-            var body = m_entries[index].Body!;
-
-            foreach (var contact in body.RigidContacts) {
-                if (!contact.Touched) {
-                    continue;
-                }
-
-                var manifold = contact.Manifold;
-
-                if (contact.Partner == WorldRigidContacts.Surface) {
-                    manifold.BodyA = m_rigidSurface;
-                    manifold.BodyB = body.RigidSolverHandle();
-                    manifold.Friction = body.RigidFriction;
-                    manifold.Restitution = body.RigidRestitution;
-                    manifold.RollingResistance = body.RigidRollingResistance;
-                } else if (m_entries[contact.Partner].Body is { IsRigid: true } other) {
-                    if (!other.RigidStepPrepared) {
-                        continue;
-                    }
-
-                    manifold.BodyA = body.RigidSolverHandle();
-                    manifold.BodyB = other.RigidSolverHandle();
-                    manifold.Friction = AverageNonnegative(left: body.RigidFriction, right: other.RigidFriction);
-                    manifold.Restitution = AverageNonnegative(left: body.RigidRestitution, right: other.RigidRestitution);
-                    manifold.RollingResistance = AverageNonnegative(left: body.RigidRollingResistance, right: other.RigidRollingResistance);
-                } else {
-                    manifold.BodyA = m_entries[contact.Partner].Body!.RigidSolverHandle();
-                    manifold.BodyB = body.RigidSolverHandle();
-                    manifold.Friction = body.RigidFriction;
-                    manifold.Restitution = body.RigidRestitution;
-                    manifold.RollingResistance = body.RigidRollingResistance;
-                }
-
-                m_rigidStepManifolds.Add(item: manifold);
+        for (var surfaces = 0; (surfaces < 2); surfaces++) {
+            foreach (var index in m_rigidRoster) {
+                AddRigidStepManifolds(index: index, surfaces: (surfaces == 1));
             }
         }
 
@@ -313,6 +283,45 @@ public sealed partial class WorldPopulation {
         // Released only once every body has read its support: a contact another body owns supports this one too.
         foreach (var index in m_rigidRoster) {
             ReleaseUntouchedRigidContacts(index: index);
+        }
+    }
+    // Adds one body's touched manifolds of one kind (its surface contact, or its body contacts) to the step, each with
+    // its solver views and the pair's coefficients.
+    private void AddRigidStepManifolds(int index, bool surfaces) {
+        var body = m_entries[index].Body!;
+
+        foreach (var contact in body.RigidContacts) {
+            if (!contact.Touched || ((contact.Partner == WorldRigidContacts.Surface) != surfaces)) {
+                continue;
+            }
+
+            var manifold = contact.Manifold;
+
+            if (contact.Partner == WorldRigidContacts.Surface) {
+                manifold.BodyA = m_rigidSurface;
+                manifold.BodyB = body.RigidSolverHandle();
+                manifold.Friction = body.RigidFriction;
+                manifold.Restitution = body.RigidRestitution;
+                manifold.RollingResistance = body.RigidRollingResistance;
+            } else if (m_entries[contact.Partner].Body is { IsRigid: true } other) {
+                if (!other.RigidStepPrepared) {
+                    continue;
+                }
+
+                manifold.BodyA = body.RigidSolverHandle();
+                manifold.BodyB = other.RigidSolverHandle();
+                manifold.Friction = AverageNonnegative(left: body.RigidFriction, right: other.RigidFriction);
+                manifold.Restitution = AverageNonnegative(left: body.RigidRestitution, right: other.RigidRestitution);
+                manifold.RollingResistance = AverageNonnegative(left: body.RigidRollingResistance, right: other.RigidRollingResistance);
+            } else {
+                manifold.BodyA = m_entries[contact.Partner].Body!.RigidSolverHandle();
+                manifold.BodyB = body.RigidSolverHandle();
+                manifold.Friction = body.RigidFriction;
+                manifold.Restitution = body.RigidRestitution;
+                manifold.RollingResistance = body.RigidRollingResistance;
+            }
+
+            m_rigidStepManifolds.Add(item: manifold);
         }
     }
     // Whether a pair with a sleeper is the resting contact the sleeper was parked in: an occupied contact between them

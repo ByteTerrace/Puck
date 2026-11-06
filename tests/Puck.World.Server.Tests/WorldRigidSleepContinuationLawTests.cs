@@ -34,12 +34,12 @@ public sealed class WorldRigidSleepContinuationLawTests {
             var target = population.EntryBody(index: 0)!;
 
             Assert.True(condition: target.Grounded);
-            Assert.False(condition: target.IsPenetratingStaticGeometry());
+            Assert.False(condition: target.IsPenetratingStaticGeometry(), userMessage: $"the settled sleeper reads as penetrating its floor at y={((double)target.FixedPosition.Y):0.######}");
             Pose(index: 1, population: population, x: 0, y: (target.Position.Y + .7f), z: 0);
             Step(population: population, tick: 1200);
             Assert.True(condition: (population.DynamicContactResolvedPairs > 0));
             Assert.Equal(1, population.SimulatedBodyVisits);
-            Assert.False(condition: target.IsPenetratingStaticGeometry());
+            Assert.False(condition: target.IsPenetratingStaticGeometry(), userMessage: $"the arrival left the sleeper penetrating its floor at y={((double)target.FixedPosition.Y):0.######}");
             Assert.Equal(floorPosition, target.FixedPosition);
             Assert.True(condition: target.Grounded);
             return WorldAuthorityCheckpointCodec.Encode(checkpoint: captured with { Population = population.Capture() });
