@@ -1912,6 +1912,17 @@ export type PaletteFlowDocument = {
   coverageLane?: number | null;
 };
 
+export type PaletteGlassContactDocument = {
+  /**
+   * The distance, in creation units along the view from the glass surface to the opaque surface behind it, over which the added coverage falls to zero; positive.
+   */
+  reach: number;
+  /**
+   * The coverage added where the opaque surface touches the glass's, in [0, 1].
+   */
+  coverage: number;
+};
+
 export type PaletteGlassDocument = {
   /**
    * The thickness, in creation units, over which light takes on the tint; finite and positive. A part twice this thick reads twice as deep.
@@ -1921,6 +1932,18 @@ export type PaletteGlassDocument = {
    * The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49 acrylic (null = 1.5).
    */
   ior?: number | null;
+  /**
+   * The colour the glass scatters as a medium, the colour a deep body of it reads as under the light arriving at its surface (null = none).
+   */
+  scatter?: string | null;
+  /**
+   * How much the medium scatters, per creation unit, finite and non-negative; it also dims what lies behind (null = 0, no scattering).
+   */
+  scattering?: number | null;
+  /**
+   * Foam or a wet margin where an opaque surface behind the glass comes within reach of its surface, revealed through the slot's flow coverage (null = none).
+   */
+  contact?: PaletteGlassContactDocument | null;
 };
 
 export type PaletteInsetDocument = {
@@ -8862,6 +8885,27 @@ export type WorldPrototype = {
          * The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49 acrylic (null = 1.5).
          */
         ior?: number | null;
+        /**
+         * The colour the glass scatters as a medium, the colour a deep body of it reads as under the light arriving at its surface (null = none).
+         */
+        scatter?: string | null;
+        /**
+         * How much the medium scatters, per creation unit, finite and non-negative; it also dims what lies behind (null = 0, no scattering).
+         */
+        scattering?: number | null;
+        /**
+         * Foam or a wet margin where an opaque surface behind the glass comes within reach of its surface, revealed through the slot's flow coverage (null = none).
+         */
+        contact?: {
+          /**
+           * The distance, in creation units along the view from the glass surface to the opaque surface behind it, over which the added coverage falls to zero; positive.
+           */
+          reach: number;
+          /**
+           * The coverage added where the opaque surface touches the glass's, in [0, 1].
+           */
+          coverage: number;
+        } | null;
       } | null;
       /**
        * The slot's own cel style (ToonStyleDocument, on unless it says enabled: false, which keeps the slot continuous); null shades the slot with the world's default style (render.toon).

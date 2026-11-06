@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Puck.HumbleGamingDeck;
 
 /// <summary>The current half of a CPU cycle on the reference master clock.</summary>
@@ -24,6 +26,10 @@ public sealed class HgdClock : ISnapshotable {
     private readonly int m_m2RiseHalfTick;
     private readonly int m_ppuDivider;
     private readonly int m_readTick;
+    // Indexed by CPU phase times the PPU divider plus PPU phase: the ticks before the next one that ends a dot, carries an
+    // M2 edge or is the read point. Built by stepping AdvancePhases, the same advance StepTick makes, so the table and
+    // StepTick cannot disagree about which ticks are quiet.
+    private readonly byte[] m_quietRun;
 
     private ulong m_masterTicks;
     private ulong m_runTargetCycles;
@@ -42,7 +48,10 @@ public sealed class HgdClock : ISnapshotable {
         m_readTick = configuration.Model.ReadTick();
         m_cpuPhase = configuration.PowerOn.AlignmentPhase;
         Rate = configuration.Model.MasterClockRate();
+        m_quietRun = QuietRunTable(cpuDivider: m_cpuDivider, ppuDivider: m_ppuDivider, readTick: m_readTick, riseTick: RiseTick);
     }
+
+    private int RiseTick => ((m_m2RiseHalfTick + 1) / 2);
 
     /// <summary>Gets the completed master ticks.</summary>
     public ulong MasterTicks => m_masterTicks;
@@ -70,28 +79,42 @@ public sealed class HgdClock : ISnapshotable {
     /// <param name="edgeHalfTick">The edge's elapsed time in half master ticks, or zero when there is no edge.</param>
     /// <returns>The M2 transition, or <see cref="HgdM2Edge.None"/> between edges.</returns>
     public HgdM2Edge StepTick(out bool ppuDot, out ulong edgeHalfTick) {
-        edgeHalfTick = 0;
         ++m_masterTicks;
-        ++m_ppuPhase;
-        ppuDot = (m_ppuPhase == m_ppuDivider);
-        if (ppuDot) {
-            m_ppuPhase = 0;
+
+        var edge = AdvancePhases(
+            cpuDivider: m_cpuDivider,
+            cpuPhase: ref m_cpuPhase,
+            ppuDivider: m_ppuDivider,
+            ppuDot: out ppuDot,
+            ppuPhase: ref m_ppuPhase,
+            riseTick: RiseTick
+        );
+
+        edgeHalfTick = edge switch {
+            HgdM2Edge.Falling => (m_masterTicks * 2),
+            HgdM2Edge.Rising => ((m_masterTicks * 2) - ((ulong)(m_m2RiseHalfTick & 1))),
+            _ => 0UL,
+        };
+
+        return edge;
+    }
+    /// <summary>Advances through the ticks before the next one that ends a PPU dot, carries an M2 edge or is the read
+    /// point, stopping at the run target. Such a tick changes nothing but the master-tick count and the two divider
+    /// phases, so the clock ends exactly where stepping each of them through <see cref="StepTick"/> would leave
+    /// it.</summary>
+    public void SkipQuietTicks() {
+        if (m_masterTicks >= m_runTargetCycles) {
+            return;
         }
-        ++m_cpuPhase;
-        if (m_cpuPhase == m_cpuDivider) {
-            m_cpuPhase = 0;
-            edgeHalfTick = (m_masterTicks * 2);
 
-            return HgdM2Edge.Falling;
-        }
+        var skip = ((int)Math.Min(
+            val1: m_quietRun[((m_cpuPhase * m_ppuDivider) + m_ppuPhase)],
+            val2: (m_runTargetCycles - m_masterTicks)
+        ));
 
-        if (m_cpuPhase == ((m_m2RiseHalfTick + 1) / 2)) {
-            edgeHalfTick = ((m_masterTicks * 2) - ((ulong)(m_m2RiseHalfTick & 1)));
-
-            return HgdM2Edge.Rising;
-        }
-
-        return HgdM2Edge.None;
+        m_masterTicks += ((ulong)skip);
+        m_cpuPhase += skip;
+        m_ppuPhase += skip;
     }
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) {
@@ -107,6 +130,46 @@ public sealed class HgdClock : ISnapshotable {
         }
     }
 
+    // One tick's divider advance, the single statement of when a tick ends a dot or carries an M2 edge.
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    private static HgdM2Edge AdvancePhases(ref int cpuPhase, ref int ppuPhase, int cpuDivider, int ppuDivider, int riseTick, out bool ppuDot) {
+        ++ppuPhase;
+        ppuDot = (ppuPhase == ppuDivider);
+        if (ppuDot) {
+            ppuPhase = 0;
+        }
+        ++cpuPhase;
+        if (cpuPhase == cpuDivider) {
+            cpuPhase = 0;
+
+            return HgdM2Edge.Falling;
+        }
+
+        return ((cpuPhase == riseTick) ? HgdM2Edge.Rising : HgdM2Edge.None);
+    }
+    private static byte[] QuietRunTable(int cpuDivider, int ppuDivider, int readTick, int riseTick) {
+        var table = new byte[(cpuDivider * ppuDivider)];
+
+        for (var cpuStart = 0; (cpuStart < cpuDivider); ++cpuStart) {
+            for (var ppuStart = 0; (ppuStart < ppuDivider); ++ppuStart) {
+                var cpuPhase = cpuStart;
+                var ppuPhase = ppuStart;
+                var quiet = 0;
+
+                while (
+                    (AdvancePhases(cpuDivider: cpuDivider, cpuPhase: ref cpuPhase, ppuDivider: ppuDivider, ppuDot: out var ppuDot, ppuPhase: ref ppuPhase, riseTick: riseTick) == HgdM2Edge.None) &&
+                    !ppuDot &&
+                    (cpuPhase != readTick)
+                ) {
+                    ++quiet;
+                }
+
+                table[((cpuStart * ppuDivider) + ppuStart)] = ((byte)quiet);
+            }
+        }
+
+        return table;
+    }
     private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
         transfer.UInt64(value: ref m_masterTicks);
         transfer.UInt64(value: ref m_runTargetCycles);

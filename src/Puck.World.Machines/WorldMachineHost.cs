@@ -27,6 +27,10 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     /// tick through its synchronous advance path before presentation can read its video; otherwise queued machines
     /// submit asynchronously. This changes completion timing, never the tick budget or input.</summary>
     public Func<bool>? SynchronousSteps { get; init; }
+    /// <summary>Gets the presentation audio rate, in frames per emulated second, every machine this host creates
+    /// synthesizes at; zero, the default, for a host with no audio device to play it. Audio is presentation, never
+    /// machine state, so the rate changes no machine's state.</summary>
+    public int AudioSampleRate { get; init; }
 
     private readonly IMachineContentAdmissionPolicy m_contentAdmissionPolicy;
 

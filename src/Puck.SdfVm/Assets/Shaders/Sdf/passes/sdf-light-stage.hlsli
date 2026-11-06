@@ -120,20 +120,11 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // the material table.
             color = ((ScreenGlassColor * (ScreenGlassBase + (ScreenGlassSunTint * sunDiffuse))) / max(passGroup.exposure, 1.0e-12));
         } else {
-            float3 layerPoint = surfacePoint;
-            float3 layerNormal = normal;
-            float3 layerRay = p.rayDirection;
-            float4 frameRotation = float4(0.0, 0.0, 0.0, 1.0);
-            if (s.frameSlot != SDF_TRANSFORM_SLOT_NONE) {
-                float3 frameOrigin = sdfDynamicTransforms[3u * (uint)s.frameSlot].xyz;
-                frameRotation = sdfDynamicTransforms[3u * (uint)s.frameSlot + 1u];
-                layerPoint = rotatePointByInverseQuaternion(surfacePoint - frameOrigin, frameRotation);
-                // Rigid copies share unit-space palette layers; scale belongs to their root, not a palette copy.
-                float materialScale = sdfDynamicTransforms[3u * (uint)s.frameSlot].w;
-                layerPoint /= (materialScale > 0.0 ? materialScale : 1.0);
-                layerNormal = rotatePointByInverseQuaternion(normal, frameRotation);
-                layerRay = rotatePointByInverseQuaternion(p.rayDirection, frameRotation);
-            }
+            float3 layerPoint;
+            float3 layerNormal;
+            float3 layerRay;
+            float4 frameRotation;
+            sdfLayerFrame(s.frameSlot, surfacePoint, normal, p.rayDirection, layerPoint, layerNormal, layerRay, frameRotation);
             // The paints draw on the albedo before the rest of the material is loaded, so none of it is live across their
             // shape dispatch.
             uint paintFirst;
@@ -147,21 +138,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             shadeMaterial.albedo = paintedAlbedo;
             applyInset(layerPoint, layerNormal, layerRay, shadeMaterial);
             applyWeathering(layerPoint, layerNormal, normal.y, s.curvature, p.pixelFootprint * s.t, s.lanes, shadeMaterial);
-            if (shadeMaterial.flowVelocity.w > 0.0) {
-                // A world-frame flow runs in world space, its pattern continuous across every surface wearing it. An
-                // object-frame flow runs in the layer frame: its velocity rides a slot's frame as it is, and a draw shading
-                // in world space (a static copy) turns it by the draw's matrix and carry.
-                bool worldFlow = ((shadeMaterial.flowControl & SDF_FLOW_WORLD_FRAME) != 0u);
-                bool slotFlow = (!worldFlow && (s.frameSlot != SDF_TRANSFORM_SLOT_NONE));
-                float3 flowVelocity = shadeMaterial.flowVelocity.xyz;
-                if (!worldFlow && !slotFlow) {
-                    uint flowRecord = sdfMeshRecord(s.meshDraw);
-                    flowVelocity = sdfMeshCarryDirection(flowRecord, sdfMeshWorldDirection(flowRecord, flowVelocity));
-                }
-                float3 flowNormal = sdfApplyFlow((worldFlow ? surfacePoint : layerPoint), (worldFlow ? normal : layerNormal), flowVelocity,
-                    passGroup.flowClock, p.pixelFootprint * s.t, s.lanes, shadeMaterial);
-                normal = (slotFlow ? rotatePointByQuaternion(flowNormal, frameRotation) : flowNormal);
-            }
+            float revealed;
+            normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, frameRotation, s.frameSlot, s.meshDraw, p.pixelFootprint * s.t,
+                s.lanes, 0.0, shadeMaterial, revealed);
             sdfApplyEmissiveLane(s.lanes, shadeMaterial);
 
             // The surface pass's occlusion, into the ambient fill and unslotted directionals. A wrapped (skin-like)
@@ -277,14 +256,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // and a sunlit floor compresses, while a dark paint under the same light stays dark. It precedes the
             // display-referred terms below.
             float incoming = dot((radiance + indirect), SDF_LUMINANCE);
-            float localGain = 1.0;
+            float localGain = sdfLocalAdaptationGain(incoming);
 
-            if ((passGroup.localAdaptation > 0.0) && (passGroup.meterLuminance > 0.0) && (incoming > 0.0)) {
-                float reference = (passGroup.meterLuminance / SDF_LOCAL_REFLECTANCE);
-
-                localGain = exp2(clamp(log2(reference / incoming), -SDF_LOCAL_ADAPTATION_RANGE, SDF_LOCAL_ADAPTATION_RANGE) * saturate(passGroup.localAdaptation));
-                color *= localGain;
-            }
+            color *= localGain;
 
             // The stylized curvature terms (cavity darkening, ridge light, ink outline) apply to the color the view's
             // exposure shows, at the strength the surface's exposed illumination reaches against a white surface the
