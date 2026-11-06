@@ -76,6 +76,13 @@ public sealed class SdfMeshPathBakeSampledLawTests {
 
         return bytes;
     }
+    // One frame: prepares the frame, answers the batch the frame before took, as a GPU readback lands a frame late, and
+    // returns the batch this frame takes.
+    private static SdfMeshBakeBatch? Step(MeshBakeTestRun run, SdfFrame frame, SdfMeshBakeBatch? dispatched) {
+        _ = run.Dresser.Dress(frame: frame);
+        if (dispatched is not null) { run.Bake.Complete(batch: dispatched, samples: Answer(batch: dispatched, field: Slab)); }
+        return (run.Bake.TryTake(batch: out var batch, field: run.Bake.Program) ? batch : null);
+    }
     // One count of the residency line (SdfMeshPathBake.DescribeResidency).
     private static long Count(SdfMeshPathBake bake, string name) {
         var match = Regex.Match(input: bake.DescribeResidency(radius: 1f), pattern: $@"\b{name}=(\d+)");
@@ -99,17 +106,19 @@ public sealed class SdfMeshPathBakeSampledLawTests {
 
         var frames = 0;
         var baked = sampled.Baked;
+        SdfMeshBakeBatch? dispatched = null;
 
-        // Every frame raises every column a little, so the heights snapshot moves while no column crosses zero.
+        // Every frame raises every column a little, so the heights snapshot moves while no column crosses zero. A batch's
+        // samples come back the frame after it is taken, as a GPU readback does.
         while (completions == 0) {
             Assert.True(condition: (frames < 64), userMessage: "the slice never completed while the heights moved");
             Assert.False(condition: field.Publish(heights: Enumerable.Repeat(count: (Columns * Columns), element: (0.5f + (0.001f * (frames + 1)))).ToArray()));
             sampled = SdfSampledSet.Capture(program: program, previous: sampled);
             Assert.Same(expected: baked, actual: sampled.Baked);
-            _ = run.Dresser.Dress(frame: Frame(program: program, sampled: sampled));
-            if (bake.TryTake(batch: out var batch, field: bake.Program)) { bake.Complete(batch: batch, samples: Answer(batch: batch, field: Slab)); }
+            dispatched = Step(dispatched: dispatched, frame: Frame(program: program, sampled: sampled), run: run);
             frames++;
         }
+        bake.Abandon(batch: dispatched);
 
         Assert.Equal(expected: 1L, actual: Count(bake: bake, name: "restarts"));
         Assert.Equal(expected: 0L, actual: Count(bake: bake, name: "resamples"));
@@ -126,6 +135,7 @@ public sealed class SdfMeshPathBakeSampledLawTests {
         var heights = Enumerable.Repeat(count: (Columns * Columns), element: 0.5f).ToArray();
         var frames = 0;
         var landed = false;
+        SdfMeshBakeBatch? dispatched = null;
 
         _ = run.Dresser.Dress(frame: Frame(program: program, sampled: sampled));
         // Column 0 is lowered to nothing and raised again every frame, which republishes the reference the bake keys, a
@@ -135,8 +145,7 @@ public sealed class SdfMeshPathBakeSampledLawTests {
             heights[0] = (((frames % 2) == 0) ? 0f : 0.5f);
             Assert.True(condition: field.Publish(heights: heights));
             sampled = SdfSampledSet.Capture(program: program, previous: sampled);
-            _ = run.Dresser.Dress(frame: Frame(program: program, sampled: sampled));
-            if (bake.TryTake(batch: out var batch, field: bake.Program)) { bake.Complete(batch: batch, samples: Answer(batch: batch, field: Slab)); }
+            dispatched = Step(dispatched: dispatched, frame: Frame(program: program, sampled: sampled), run: run);
             frames++;
             landed |= bake.TryLandedMesh(mesh: out _, selector: HeightSelector);
             return (landed && (frames >= 8));
@@ -152,9 +161,8 @@ public sealed class SdfMeshPathBakeSampledLawTests {
         var final = Frame(program: program, sampled: sampled);
 
         TestLiveness.Until(reason: () => bake.DescribeResidency(radius: 1f), step: () => {
-            _ = run.Dresser.Dress(frame: final);
-            if (bake.TryTake(batch: out var batch, field: bake.Program)) { bake.Complete(batch: batch, samples: Answer(batch: batch, field: Slab)); }
-            return !bake.Pending;
+            dispatched = Step(dispatched: dispatched, frame: final, run: run);
+            return (!bake.Pending && (dispatched is null));
         });
 
         var newest = SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: 100f, program: program, sampled: sampled.Baked, transforms: [])
