@@ -168,7 +168,7 @@
 #define SDF_HISTORY_FEATURE_WEIGHT_CAP 32.0
 
 // The glass sums the glass raster pass accumulates and the glass shading pass reads.
-#define SDF_GLASS_SUM_WORDS            8u
+#define SDF_GLASS_SUM_WORDS            16u
 #define SDF_GLASS_SUM_SCALE            4096.0
 #define SDF_GLASS_DEPTH_DISTANCE_SCALE 32768.0
 #define SDF_GLASS_ABSORPTION_SCALE     65536.0

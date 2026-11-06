@@ -684,9 +684,9 @@ place:
 
 | Pass | Does |
 |---|---|
-| `glass-clear` | Zeroes the **glass sums**, eight words a render-grid pixel: a signed distance sum, a face count and three 64-bit optical depth sums. |
-| `glass` | Rasterizes the glass draws through the mesh vertex stage into the **glass target** (the nearest glass front face's ray parameter, draw and triangle, as the mesh target holds a hit) through a reversed-Z depth of its own. Every face, front or back, that lies before the pixel's opaque hit (read from the visibility record) adds its ray distance to the sums, a front face subtracting, a back face adding, its face count, and its own material's absorption times its distance to the opaque hit, a front face adding and a back face subtracting. Every sum is integer arithmetic with atomics, so the sums hold the same words whatever order the faces draw in. |
-| `glass-shade` | Writes the lit image again, copying every pixel no glass front face lies before, and shading the rest: the glass surface's normal and material are resolved from the target as the surface pass resolves an opaque hit; the light behind is the lit image, read where the ray bent by Snell's law leaves the glass and carries on, parallel to the pixel's ray, to the opaque hit's depth, and absorbed by Beer–Lambert over the optical depth the sums hold; a material's flow layer (`sdfShadeFlow`, the one the light stage runs) tilts the normal it reflects and refracts by; the surroundings reflect by Fresnel as an opaque surface's do (`worldEnvironmentReflection` blurred by the roughness, then `sdfMeshReflection` from the pixel's one probe gather, the sky alone where no probe answers), and each light adds its highlight through the one light interface (`sdfLightResponse`), its shadowing the probes'; the medium and the contact (below) add their light; frost spreads the read over a disc of taps whose radius grows with the roughness and the distance behind the glass. |
+| `glass-clear` | Zeroes the **glass sums**, sixteen words a render-grid pixel: a signed distance sum, a face count, three 64-bit optical depth sums and the **second glass record** (a front-face count, three front-face entries and the nearest back face). |
+| `glass` | Rasterizes the glass draws through the mesh vertex stage into the **glass target** (the nearest glass front face's ray parameter, draw and triangle, as the mesh target holds a hit) through a reversed-Z depth of its own. Every face, front or back, that lies before the pixel's opaque hit (read from the visibility record) adds its ray distance to the sums, a front face subtracting, a back face adding, its face count, and its own material's absorption times its distance to the opaque hit, a front face adding and a back face subtracting. Every sum is integer arithmetic with atomics, so the sums hold the same words whatever order the faces draw in. Each such front face also counts itself in the second record and, while one of its three entries is free, claims it with its draw and triangle; each back face raises the record's nearest back face, an atomic maximum of its distance's complemented bits. |
+| `glass-shade` | Writes the lit image again, copying every pixel no glass front face lies before, and shading the rest through up to two interfaces, the target's nearest front face and the second-nearest the record names, each by the one loop body: the glass surface's normal and material are resolved from the target as the surface pass resolves an opaque hit; the light behind is the lit image, read once where the ray, bent by Snell's law at each interface and carried through its share of the glass, carries on parallel to the pixel's ray to the opaque hit's depth, and absorbed by Beer–Lambert over the optical depth the sums hold; the far interface composes over that light and the near one over the far one's result; a material's flow layer (`sdfShadeFlow`, the one the light stage runs) tilts the normal it reflects and refracts by; the surroundings reflect by Fresnel as an opaque surface's do (`worldEnvironmentReflection` blurred by the roughness, then `sdfMeshReflection` from the pixel's one probe gather, the sky alone where no probe answers), and each light adds its highlight through the one light interface (`sdfLightResponse`), its shadowing the probes'; the medium and the contact (below) add their light; frost spreads the read over a disc of taps whose radius grows with each interface's roughness and its distance to what lies behind. |
 
 The distance through the glass, which the refraction travels, is the sums'
 matched distance plus the opaque hit's distance for each unmatched front face,
@@ -699,8 +699,13 @@ of the glass is the tint and light through two is the tint squared: thicker
 reads deeper, never a stacked blend, and water seen through a clear pane keeps
 the water's colour. A pair of faces cancels its shared distance to the opaque hit
 exactly in the integer sums, so glass against the far sky absorbs as it does
-against a near wall (`SdfGlassSumsDeviceLawTests`). The glass pixel's coverage is the light behind's, darkened by
-the glass's luminous transmittance, so the sky the composite puts behind a
+against a near wall (`SdfGlassSumsDeviceLawTests`). With two interfaces the
+distance splits at the nearest back face: the near interface's share runs from
+it to that back face (never past the far interface) and absorbs by its own
+material, and the far interface takes the rest of the distance and of the
+optical depth, so a pane over a pool keeps the pane's tint thin and the pool's
+deep. The glass pixel's coverage is the light behind's, darkened by
+each interface's luminous transmittance, so the sky the composite puts behind a
 clear pane shows through at the pixel's own direction. The reflection and the
 highlights pass through the atmosphere over the glass's own distance; the light
 behind carries the atmosphere over the opaque hit's distance already, and the
@@ -720,9 +725,22 @@ gathers at a step, a pier or a bank in the flow's own pattern; the flow's
 revealed coverage covers the glass with its surface, lit by the same light. The
 glass reads the lit image once (or the frost's disc): the medium, the contact
 and the revealed surface are functions of the thickness, the distance to the
-opaque hit and the arriving light alone. Scattering, contact and flow are the
-nearest front face's material's. A slot with neither is the clear absorbing
-glass above.
+opaque hit and the arriving light alone. Each of the two interfaces scatters,
+touches and flows by its own material over its own share, so the reservoir seen
+through the pavilion's pane shows its surface, waterline, medium and flow under
+the pane's tint; the far interface's light, transmission included, is what the
+near one transmits. A slot with neither is the clear absorbing glass above.
+
+**The second interface.** The glass target holds one record, the nearest front
+face its depth test keeps; a depth test keeps one extremum, so the second is the
+sums' second record. Every front face before the opaque hit counts itself and
+claims the next of three entries while one is free; the shading pass takes the
+held face nearest along the pixel's ray other than the target's
+(`sdfGlassSecondInterface`, its distance from the triangle's plane, ties to the
+lower draw and triangle). With three front faces or fewer every one is held, so
+the answer never depends on the order the faces claimed their entries, and the
+order-independence law checks the entries as a set. With more, the record names
+no second interface and the nearest alone is shaded.
 
 In a temporal view the glass pass raises a pixel's reactivity to one where its
 refracted read comes from a pixel away or more
@@ -736,9 +754,10 @@ and its taint rules see glass as any surface: the glass passes read nothing
 external. A debug view's image passes through the glass pass unshaded, and the
 pick reads the visibility record, the opaque hit behind the glass.
 
-The limits: the nearest front face before the opaque hit alone reflects and
-refracts, so glass seen through glass absorbs through both but bends and
-reflects at the nearer pane alone; the sky seen through glass is not refracted and is darkened rather than
+The limits: two interfaces at most reflect, refract and scatter. A third front
+face's glass absorbs within the far interface's share, and what lies beyond the
+second interface is the opaque image, never shaded as glass; past three front
+faces before the opaque hit the nearest alone is shaded; the sky seen through glass is not refracted and is darkened rather than
 tinted; refraction reads a screen-space neighbour, so what lies off screen or
 behind a nearer surface reads the pixel's own sample; an eye inside a glass
 solid sees no front face, so the pixel passes through untinted; the glass
