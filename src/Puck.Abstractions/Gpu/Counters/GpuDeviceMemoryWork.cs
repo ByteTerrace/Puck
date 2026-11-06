@@ -21,8 +21,10 @@ namespace Puck.Abstractions.Gpu;
 /// Each allocation is keyed by the device that made it and the native object whose release frees it, so a driver that
 /// reuses a handle value on a recreated device never collides with an entry leaked from the old one. A device's
 /// teardown ends its entries (<see cref="EndDevice"/>), and one still held there is refused by name: the leak is a
-/// visible defect, never a silent count. The allocated and released counts are per-backend-deterministic; the peak
-/// depends on when retired objects are released, which follows GPU completion, so it is pacing. The counts survive
+/// visible defect, never a silent count. Every count is pacing: which buffers exist when follows GPU completion (retired
+/// objects go after their fences) and wall-clock idle windows (background GPU work releases a slot's buffers once it has
+/// not needed them for <c>SdfGpuWork.IdleSeconds</c>), so two runs of one workload can allocate and release different
+/// bytes. The counts survive
 /// device loss, because a recreated device counts into the same instance. Every count is written under one lock, since
 /// allocation happens on build threads as well as the frame thread.
 /// </para>
@@ -41,28 +43,28 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     private long m_peak;
 
     /// <summary>Gets the kind counting device-local bytes allocated, at each allocation's actual size.</summary>
-    public static WorkKind Allocated { get; } = new(name: "gpu.memory.device-local.allocated", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
+    public static WorkKind Allocated { get; } = new(name: "gpu.memory.device-local.allocated", unit: "bytes", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting device-local bytes released, at each allocation's actual size.</summary>
-    public static WorkKind Released { get; } = new(name: "gpu.memory.device-local.released", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
+    public static WorkKind Released { get; } = new(name: "gpu.memory.device-local.released", unit: "bytes", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind reporting the most device-local bytes held at once.</summary>
     public static WorkKind Peak { get; } = new(name: "gpu.memory.device-local.peak", unit: "bytes", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the part of <see cref="Allocated"/> the host maps through the adapter's aperture
     /// (<see cref="GpuMemoryRole.HostVisibleDeviceLocal"/>), whose heap is small on a discrete adapter.</summary>
-    public static WorkKind ApertureAllocated { get; } = new(name: "gpu.memory.host-visible-device-local.allocated", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
+    public static WorkKind ApertureAllocated { get; } = new(name: "gpu.memory.host-visible-device-local.allocated", unit: "bytes", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the part of <see cref="Released"/> that was aperture memory.</summary>
-    public static WorkKind ApertureReleased { get; } = new(name: "gpu.memory.host-visible-device-local.released", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
+    public static WorkKind ApertureReleased { get; } = new(name: "gpu.memory.host-visible-device-local.released", unit: "bytes", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind reporting the most aperture bytes held at once.</summary>
     public static WorkKind AperturePeak { get; } = new(name: "gpu.memory.host-visible-device-local.peak", unit: "bytes", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting host-visible bytes allocated (<see cref="GpuMemoryRole.HostVisible"/>: staging,
     /// upload and readback memory), disjoint from <see cref="Allocated"/>.</summary>
-    public static WorkKind HostVisibleAllocated { get; } = new(name: "gpu.memory.host-visible.allocated", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
+    public static WorkKind HostVisibleAllocated { get; } = new(name: "gpu.memory.host-visible.allocated", unit: "bytes", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting host-visible bytes released.</summary>
-    public static WorkKind HostVisibleReleased { get; } = new(name: "gpu.memory.host-visible.released", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
+    public static WorkKind HostVisibleReleased { get; } = new(name: "gpu.memory.host-visible.released", unit: "bytes", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind reporting the most host-visible bytes held at once.</summary>
     public static WorkKind HostVisiblePeak { get; } = new(name: "gpu.memory.host-visible.peak", unit: "bytes", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the native allocations the device made, of every role: each <c>vkAllocateMemory</c>,
     /// or each Direct3D 12 heap or committed resource, whatever it holds.</summary>
-    public static WorkKind Allocations { get; } = new(name: "gpu.memory.allocations", unit: "count", workClass: WorkClass.PerBackendDeterministic);
+    public static WorkKind Allocations { get; } = new(name: "gpu.memory.allocations", unit: "count", workClass: WorkClass.Pacing);
 
     /// <summary>Initializes a new instance of the <see cref="GpuDeviceMemoryWork"/> class.</summary>
     /// <param name="backend">The backend's name, as a report labels it (<c>vulkan</c>, <c>directx</c>).</param>

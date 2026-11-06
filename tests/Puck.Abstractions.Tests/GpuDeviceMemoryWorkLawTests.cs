@@ -8,8 +8,7 @@ namespace Puck.Abstractions.Tests;
 /// with, the peak is the most bytes held at once, the aperture rows count the host-mapped part, host-visible bytes count in
 /// their own disjoint rows, every allocation counts once, a release of an object never
 /// counted counts nothing, an allocation is counted once per device, the same handle on two devices is two entries, a
-/// device's teardown names every allocation it still holds, and the class legend makes the byte counts
-/// per-backend-deterministic and the peak pacing.
+/// device's teardown names every allocation it still holds, and the class legend makes every count pacing.
 /// </summary>
 public sealed class GpuDeviceMemoryWorkLawTests {
     private const nint Device = 0xD0;
@@ -140,21 +139,21 @@ public sealed class GpuDeviceMemoryWorkLawTests {
         work.EndDevice(device: (OtherDevice + 1));
     }
     [Fact]
-    public void TheLegendMakesBytesPerBackendDeterministicAndThePeakPacing() {
+    public void TheLegendMakesEveryCountPacing() {
         var work = new GpuDeviceMemoryWork(backend: "vulkan");
 
         Assert.Equal(
             expected: [
-                ("gpu.memory.device-local.allocated", "bytes", WorkClass.PerBackendDeterministic),
-                ("gpu.memory.device-local.released", "bytes", WorkClass.PerBackendDeterministic),
+                ("gpu.memory.device-local.allocated", "bytes", WorkClass.Pacing),
+                ("gpu.memory.device-local.released", "bytes", WorkClass.Pacing),
                 ("gpu.memory.device-local.peak", "bytes", WorkClass.Pacing),
-                ("gpu.memory.host-visible-device-local.allocated", "bytes", WorkClass.PerBackendDeterministic),
-                ("gpu.memory.host-visible-device-local.released", "bytes", WorkClass.PerBackendDeterministic),
+                ("gpu.memory.host-visible-device-local.allocated", "bytes", WorkClass.Pacing),
+                ("gpu.memory.host-visible-device-local.released", "bytes", WorkClass.Pacing),
                 ("gpu.memory.host-visible-device-local.peak", "bytes", WorkClass.Pacing),
-                ("gpu.memory.host-visible.allocated", "bytes", WorkClass.PerBackendDeterministic),
-                ("gpu.memory.host-visible.released", "bytes", WorkClass.PerBackendDeterministic),
+                ("gpu.memory.host-visible.allocated", "bytes", WorkClass.Pacing),
+                ("gpu.memory.host-visible.released", "bytes", WorkClass.Pacing),
                 ("gpu.memory.host-visible.peak", "bytes", WorkClass.Pacing),
-                ("gpu.memory.allocations", "count", WorkClass.PerBackendDeterministic),
+                ("gpu.memory.allocations", "count", WorkClass.Pacing),
             ],
             actual: [.. work.WorkKinds.ToArray().Select(selector: static kind => (kind.Name, kind.Unit, kind.Class))]
         );
