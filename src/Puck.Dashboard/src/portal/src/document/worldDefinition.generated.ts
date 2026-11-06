@@ -10574,6 +10574,10 @@ export type WorldRenderIndirect = {
    * The irradiance work each frame grants the volume and the lighting age it reports past; absent bounds nothing.
    */
   budget?: WorldRenderIndirectBudget | null;
+  /**
+   * Fixed angular and radiometric grids for indirect captures; absent leaves them continuous.
+   */
+  lightingGrid?: WorldRenderIndirectLightingGrid | null;
 };
 
 export type WorldRenderIndirectApply = {
@@ -10604,6 +10608,17 @@ export type WorldRenderIndirectBudget = {
    * The lighting age, in seconds, past which the volume reports it is behind; positive.
    */
   age?: number | null;
+};
+
+export type WorldRenderIndirectLightingGrid = {
+  /**
+   * Directional azimuth and elevation step in degrees, from zero through 180.
+   */
+  directionDegrees?: number | null;
+  /**
+   * Fractional radiance step per power-of-two range, from zero through one.
+   */
+  radiance?: number | null;
 };
 
 export type WorldRenderIndirectSources = {
