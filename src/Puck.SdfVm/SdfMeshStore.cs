@@ -18,10 +18,14 @@ namespace Puck.SdfVm;
 /// <para>Each identity's entries are one set, kept in a directory named for the identity, and the store holds at most
 /// <see cref="CapacityBytes"/> bytes a set at a time, under Puck's one cache retention
 /// (<see cref="Puck.Abstractions.CacheRetention.EnforceSetsOnWrite"/>): a read stamps an entry, a set's last use is its
-/// most recently used entry's, and a write removes whole sets, least recently used first, keeping the writer's own. So a
-/// set a World is baking or loading is never cut short by another's write, and every set the store keeps is whole. A
-/// file directly in the directory, which no identity's set holds, is a set of its own and ages out first once nothing
-/// reads it. Its members are thread-safe.</para>
+/// most recently used entry's, and a write that passes the bound removes whole sets, least recently used first, keeping
+/// the writer's own, down to an eighth below it (<see cref="Puck.Abstractions.CacheBound.LowWater"/>). So a set a World
+/// is baking or loading is never cut short by another's write, and every set the store keeps is whole. One process's
+/// writes never leave the store over its bound; Worlds writing it at once count one another's writes only at their next
+/// listing, at least once a minute while they write. A file directly in the directory, which no identity's set holds,
+/// is a set of its own and ages out first once nothing reads it. The identity records beside the sets
+/// (<see cref="IdentityExtension"/>) are bounded apart, by count (<see cref="RecordedIdentities"/>), and are not counted
+/// in <see cref="CapacityBytes"/>. Its members are thread-safe.</para>
 /// </summary>
 public sealed class SdfMeshStore {
     /// <summary>The bytes a store holds at most unless its owner names another bound: eight gibibytes. One per-user

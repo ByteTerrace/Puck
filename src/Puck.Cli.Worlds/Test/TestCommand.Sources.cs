@@ -26,7 +26,8 @@ public static partial class TestCommand {
     // stem can name the same world. `written` holds every world this run generated and the source it came from:
     // the second claim on a name is refused, since writing it would replace the first source's world and run the
     // second one's twice.
-    private static bool TryGenerateWorlds(string source, string directory, bool sweeping, Dictionary<string, string> written, out IReadOnlyList<TestWorld> worlds, out string? skipped, out string? reason) {
+    private static bool TryGenerateWorlds(string source, string directory, bool sweeping, Dictionary<string, string> written, CliGlob[] filters, out int filtered, out IReadOnlyList<TestWorld> worlds, out string? skipped, out string? reason) {
+        filtered = 0;
         worlds = [];
         reason = null;
         skipped = null;
@@ -68,6 +69,7 @@ public static partial class TestCommand {
                 (authored["state"]?["world"] is JsonArray rows) &&
                 rows.OfType<JsonObject>().Any(predicate: static row => (row["verdict"] is JsonObject))) {
                 var name = Path.GetFileNameWithoutExtension(path: source);
+                if (!Selected(filters, name)) { filtered++; return true; }
 
                 if (written.TryGetValue(key: name, value: out var owner)) {
                     reason = $"{source} and {owner} both generate the test world '{name}' — sources run together need different document names.";
@@ -106,6 +108,7 @@ public static partial class TestCommand {
         var generated = new List<TestWorld>(capacity: compiled.Tests.Count);
 
         foreach (var world in compiled.Tests) {
+            if (!Selected(filters, world.Name, world.Test)) { filtered++; continue; }
             // A test over a composition is several documents: the one the run boots with, plus one per world its
             // schedule arms. Every one is written; only the boot document is a world this verb runs.
             foreach (var name in ((IEnumerable<string>)[world.Name, .. world.Siblings.Select(selector: static sibling => sibling.Name)])) {
@@ -157,7 +160,10 @@ public static partial class TestCommand {
     }
     // Every world a path names: a document runs as it stands, a `.puck` source contributes its generated tests or
     // authored scheduled verdict document, and a directory recursively skips worlds carrying neither.
-    private static bool TryCollectWorlds(string path, string generatedDirectory, out IReadOnlyList<TestWorld> worlds, out string? reason) {
+    private static bool Selected(CliGlob[] filters, string name, string? test = null) => filters.Length == 0 || filters.Any(pattern => pattern.IsMatch(name) || (test is not null && pattern.IsMatch(test)));
+
+    private static bool TryCollectWorlds(string path, string generatedDirectory, CliGlob[] filters, out int filtered, out IReadOnlyList<TestWorld> worlds, out string? reason) {
+        filtered = 0;
         worlds = [];
         reason = null;
 
@@ -165,12 +171,15 @@ public static partial class TestCommand {
 
         if (File.Exists(path: rooted)) {
             if (!WorldDocumentName.IsSourceFile(path: rooted)) {
-                worlds = [TestWorld.ForDocument(path: rooted)];
+                var world = TestWorld.ForDocument(path: rooted);
+                if (Selected(filters, world.Name)) { worlds = [world]; } else { filtered++; }
 
                 return true;
             }
 
             return TryGenerateWorlds(
+                filters: filters,
+                filtered: out filtered,
                 directory: generatedDirectory,
                 reason: out reason,
                 skipped: out _,
@@ -209,7 +218,8 @@ public static partial class TestCommand {
 
         foreach (var document in carriers.Where(predicate: static carrier => !carrier.IsSource).Select(selector: static carrier => carrier.Path)) {
             if (DeclaresSchedule(document: document)) {
-                collected.Add(item: TestWorld.ForDocument(path: document));
+                var world = TestWorld.ForDocument(path: document);
+                if (Selected(filters, world.Name)) { collected.Add(item: world); } else { filtered++; }
             } else {
                 skips.Add(item: $"test: skipped {document} — it declares no schedule section.");
             }
@@ -218,6 +228,8 @@ public static partial class TestCommand {
         // A composition carries each world it declares, so its file may carry several names and runs once.
         foreach (var source in carriers.Where(predicate: static carrier => carrier.IsSource).Select(selector: static carrier => carrier.Path).Distinct(comparer: StringComparer.Ordinal).Concat(second: libraries).Order(comparer: StringComparer.Ordinal)) {
             if (!TryGenerateWorlds(
+                filters: filters,
+                filtered: out var sourceFiltered,
                 directory: generatedDirectory,
                 reason: out var sourceReason,
                 skipped: out var skip,
@@ -234,6 +246,7 @@ public static partial class TestCommand {
             if (skip is { }) {
                 skips.Add(item: skip);
             }
+            filtered += sourceFiltered;
             collected.AddRange(collection: generated);
         }
 
@@ -241,7 +254,7 @@ public static partial class TestCommand {
             Console.WriteLine(value: skip);
         }
 
-        if (collected.Count == 0) {
+        if (collected.Count == 0 && filtered == 0) {
             reason = $"'{path}' holds no test world: no *{WorldDocumentName.DocumentSuffix} document declaring a schedule, and no *{WorldDocumentName.SourceSuffix} source with a test block or scheduled verdict world.";
 
             return false;

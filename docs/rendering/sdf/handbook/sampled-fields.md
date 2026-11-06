@@ -3,8 +3,9 @@
 A **sampled field** is a small 3D photograph of distance: a cubic-voxel lattice
 over a box, one float per voxel, sampled by trilinear interpolation. It is the
 one place values the analytic program cannot express enter the field: a height
-field's columns (`WorldFieldEmitter`), or any producer whose surface is a
-function of data rather than of instructions. The `√3` scale keeps the
+field's baked reference (`SdfHeightField`, which `WorldFieldEmitter` publishes),
+or any producer whose surface is a function of data rather than of
+instructions. The `√3` scale keeps the
 interpolant safe to sample, and the values travel beside the program rather than
 in it, so they can change every few ticks without rebuilding the program. Puck
 has two kinds of baking: these fields, baked by their producer on the CPU, and
@@ -46,7 +47,7 @@ any lattice in flight stand. A changed height therefore keys a new mesh for that
 field's group alone, and a revisited height keys a mesh the library or store
 already holds.
 
-The bake kernel is the only kernel that samples a field (it defines
+The bake kernel is the only kernel that samples a distance field (it defines
 `SDF_SAMPLED_REGIONS`; every other kernel answers `SDF_FAR_DISTANCE`). It reads
 the values from `sdfSampledValues`, a table each bake job writes from the
 snapshots its groups sealed (`SdfMeshBakeGroup.SampledSnapshots`,
@@ -90,9 +91,36 @@ result alone does not constrain the `lerp` intrinsic's SPIR-V `FMix` arithmetic.
 - **Never durable.** Snapshots are derived from document state each frame; they
   are never written to documents, replays or the store. The meshes baked from
   them are caches keyed by their contents.
-- **Drawn heights move in authored steps.** A height field draws its columns at
-  whole `surfaceStep`s with hysteresis (`WorldFieldRow.SurfaceStep`), so a
-  continuously changing store publishes once a step, never once a lattice step.
+## Height fields move as they are drawn
+
+A height field (`SdfHeightField`) is a lattice of columns, each a box from one
+cell below the origin to its height. It owns two sampled fields. Its
+*reference* is the columns' distance lattice with every raised column's top at
+one reference height (`SdfHeightField.ReferenceCells` above the origin); the
+bake samples and keys it, and it is published again only when a column is
+raised from nothing or lowered to nothing. Its *heights* hold one value a
+column, which no instruction samples and the mesh identity never hashes.
+`SdfProgramBuilder.HeightField` emits the reference as an instance's sampled
+instruction and names the heights as that instance's displacement
+(`SdfProgram.HeightFields`), so the field's mesh is keyed by its extent, cell and
+raised columns, never by its heights.
+
+The heights reach the render passes through the frame's sampled table,
+`sdfFrameSampled` (`SdfFrameSampled`): a word per handle naming where its entry
+starts, each height field's entry its grid and its heights this frame and the
+frame before, written into a region that owes only the words that moved. A
+height field's draw names its handle in its record
+(`SdfMeshRecord.DisplacementWord`), and every read of a mesh vertex passes
+through `sdfMeshDisplaced` (`frame/sdf-mesh.hlsli`): the reference top's last
+cell, which holds the top face and its edge rounding, rises by the bilinear
+height over the column centres less the reference, the band below scales from
+the base, and the normal turns by the map's inverse transpose, the height's
+gradient on the top face. The mesh, shadow and glass passes, the surface pass
+and the resolve's reprojection all read that one resolver, so they see one
+surface; the draw's box spans its displacement's band of heights. A height field
+is dynamic for lighting, so the irradiance volume's static scene leaves it out.
+The guarantee and its limits are in the
+[water plan](../../../plans/water-rendering.md#field-surfaces-move-at-draw-time).
 
 ---
 

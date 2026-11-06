@@ -8,8 +8,9 @@ fixed-struct voices—sine as a complex rotor, phase-accumulator pulse/saw/
 triangle, seeded noise, ADSR, control-rate pitch sweep/vibrato, one
 state-variable filter per voice), `AudioSnapshot` (the immutable
 per-block input: listener pose, emitter table, seeded synth triggers), and
-`MachineAudioRate` (the machine-audio output rate every booted
-`IMachineRuntime` shares with the mixer).
+`MachineAudioRate` (the mixer's rate, which a machine synthesizes its audio
+at when its host has an audio device; a headless or offscreen host gives its
+machines rate zero, and they synthesize nothing).
 
 This is presentation-adjacent state: it carries no replay/hash contract of
 its own, and its own byte-identity proofs (when they exist) are
@@ -185,8 +186,7 @@ through `WorldTextSpeechFactory` and pull the same `TextSpeechSource`.
 exact-equality closure the architecture gate enforces:
 `Puck.Abstractions;Puck.Assets;Puck.Commands;Puck.Hosting;Puck.Maths`—no
 `Puck.World.Authoring` edge (no document parsing), no presentation
-or backend row. The authoritative server references it directly (its machine
-host boots every machine at `MachineAudioRate.SampleRate`).
+or backend row. The authoritative server references it directly.
 
 ## Verifying
 

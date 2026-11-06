@@ -459,12 +459,21 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   per-face terms cancel badly against the far sky. Transmission integrates every
   glass material before the opaque hit; only the nearest front face reflects and
   refracts. `SdfGlassSumsDeviceLawTests` runs the accumulation in many orders on
-  both backends. The handbook's
+  both backends. The glass pass reuses the opaque path's mechanisms, never a copy:
+  one probe gather (`sdfMeshProbesAt`) for its reflection (`worldEnvironmentReflection`,
+  `shade/sdf-sky-reflection.hlsli`, then `sdfMeshReflection`, the sky alone where
+  `probes.share` is zero), the light walk (`sdfLightResponse`, uncascaded, probe
+  shadowing) for its highlights and the light its medium receives, and the flow
+  layer (`sdfShadeFlow`). A medium (`SdfGlass.Scatter`, `Scattering`, material row
+  31) and a contact (`ContactReach`, `ContactCoverage`, row 20.w's halves) are
+  functions of the thickness, `opaque - t` and that light alone: the pass reads
+  the lit image once (`sdfGlassLitAt`, or the frost's disc). The handbook's
   [glass section](../../../docs/rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)
   states the limits.
 - **A flow moves shading, never geometry, and never reads a clock.** A palette
   slot's `flow` (`SdfFlow`, material rows 27 to 30) runs `sdfApplyFlow`
-  (`shade/shade-layers.hlsli`) in the light stage after the weathering: two
+  through `sdfShadeFlow` (`shade/shade-flow.hlsli`) in the light stage after the
+  weathering and in the glass pass: two
   half-cycle layers of the lattice noise advected along the velocity's
   tangential part, revealing a surface and tilting the shading normal. Its
   phase enters only through the pass block's `flowClock`, which
@@ -475,8 +484,8 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `time` or `timeDelta`: `puck search -M 0 "frameGroup\.(time|timeDelta)"
   src/Puck.SdfVm/Assets/Shaders/Sdf` finds nothing. An `Object` velocity on a
   draw shading in world space (a static copy) turns by the draw's matrix;
-  `World` keeps the velocity and the pattern in world space. The glass pass
-  does not run the layer.
+  `World` keeps the velocity and the pattern in world space. On glass the
+  revealed coverage covers the glass as a diffusely lit surface.
 - **A shading-time lane is a slot's or the world's.** Lanes 0 to 3 are the
   draw's frame-slot lanes (a body's look lanes; zero on a static copy or an
   animated placement), lanes 4 to 7 the world's `render.lanes`, which
@@ -775,8 +784,15 @@ wrong. The contracts that bite most often:
   the geometry hashes them, and a moved snapshot restarts only the groups that read it
   (`SdfMeshBakeGroup.Refresh`). Each bake job writes the snapshots its groups sealed into
   its own `sdfSampledValues` table, so a lattice never samples a newer publication; never
-  put sampled values back into program words or a shared GPU buffer
+  put sampled values back into program words or a shared GPU buffer the bake reads
   ([sampled fields](../../../docs/rendering/sdf/handbook/sampled-fields.md)).
+- **A height field moves as it is drawn.** `SdfHeightField` bakes a reference (every raised
+  column at `ReferenceCells` above the origin) and names its heights as the instance's
+  displacement; the frame's sampled table (`sdfFrameSampled`) carries the heights, and every
+  vertex read (`sdfMeshWorldPosition`, `sdfMeshWorldNormal`, `sdfMeshPreviousPosition`)
+  displaces through `sdfMeshDisplaced`. A new reader of mesh vertices goes through that
+  resolver, or it draws the reference; a draw's box spans `SdfMeshDisplacement.Low`/`High`,
+  and a displaced draw is `IsDynamic`, out of the irradiance volume's static scene.
 - **A mesh is a function of its geometry.** Groups are keyed by
   `SdfMeshGeometryBuilder`; anything the bake samples that the instructions do
   not hold leaves a stale mesh drawing after an edit until the builder hashes

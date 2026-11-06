@@ -155,7 +155,8 @@ public sealed class SdfReprojectionDeviceLawTests {
                 bindings: [.. Enumerable.Range(count: 5, start: 0).Select(selector: index =>
                     new GpuGroupBinding(binding: ((uint)index), kind: GpuBindingKind.ReadOnlyBuffer)),
                     new GpuGroupBinding(binding: 5, kind: GpuBindingKind.StorageImage),
-                    new GpuGroupBinding(binding: 6, kind: GpuBindingKind.ReadOnlyBuffer)])], pushesIndex: false, stages: GpuShaderStage.Compute));
+                    new GpuGroupBinding(binding: 6, kind: GpuBindingKind.ReadOnlyBuffer),
+                    new GpuGroupBinding(binding: 7, kind: GpuBindingKind.ReadOnlyBuffer)])], pushesIndex: false, stages: GpuShaderStage.Compute));
         using var module = services.ShaderModuleFactory.Create(stage: GpuShaderStage.Compute,
             bytecode: File.ReadAllBytes(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Shaders", path4: (Kernel + extension))));
         using var pipeline = services.PipelineFactory.Create(computeShaderModule: module, description: description, name: default);
@@ -185,6 +186,14 @@ public sealed class SdfReprojectionDeviceLawTests {
             previousTransforms.Write<byte>(data: new byte[(3 * 16)]);
             services.Bindings.WriteBuffer(binding: 6, bufferHandle: previousTransforms.BufferHandle, bufferSize: previousTransforms.SizeBytes,
                 descriptorSetHandle: set, elementStride: 16u, kind: GpuBindingKind.ReadOnlyBuffer);
+            // No draw is displaced (each record's displacement word is SdfFrameSampled.None), so the sampled table is read
+            // by no draw; its binding needs a word.
+            var frameSampled = services.BufferFactory.CreateHostVisible(sizeBytes: sizeof(uint), usage: GpuBufferUsage.Storage, name: default);
+
+            buffers.Add(item: frameSampled);
+            frameSampled.Write<uint>(data: [SdfFrameSampled.None]);
+            services.Bindings.WriteBuffer(binding: 7, bufferHandle: frameSampled.BufferHandle, bufferSize: frameSampled.SizeBytes,
+                descriptorSetHandle: set, elementStride: 4u, kind: GpuBindingKind.ReadOnlyBuffer);
             var recorder = services.Recorder;
             var command = commands.CommandBufferHandle;
 

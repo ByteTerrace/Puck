@@ -36,7 +36,6 @@ public sealed partial class WorldColliderSet {
         m_attachedOrigins[row] = origin; m_attachedRotations[row] = rotation; m_attachedResolved[row] = true;
         m_refreshMargin = FixedQ4816.FromDouble(value: placement.Solid!.Margin); m_refreshRow = row;
         CreationStampEmitter.VisitFixedPrimitiveCopies(document: creation.EngineDocument,
-            transform: new FixedCreationStampTransform(Origin: origin, Rotation: rotation,
-                Scale: FixedQ4816.FromDouble(value: placement.Scale), ReflectionNormal: null), visitor: m_attachedVisitor);
+            transform: new WorldPosedSolid(Creation: creation, Origin: origin, Placement: placement, Rotation: rotation).Transform, visitor: m_attachedVisitor);
     }
 }

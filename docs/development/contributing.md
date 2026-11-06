@@ -267,9 +267,11 @@ recently used entries beyond its bound, keeps the entry it is using whatever its
 stamp, and leaves an entry another process holds open. A cache whose entries
 come in sets one reader uses together (the `meshes` store, a set a bake
 identity) removes a set whole, its last use its newest entry's, and never the
-set it is writing (`CacheRetention.EnforceSetsOnWrite`). A process lists a
-directory for this at most once a minute, so a build that publishes many
-entries pays for one listing. Every cache is content-addressed, so an evicted
+set it is writing (`CacheRetention.EnforceSetsOnWrite`). A process tallies what
+it writes since its last listing and lists the directory again only once that
+tally passes the bound, or a minute on; a listing over the bound trims an eighth
+below it (`CacheBound.LowWater`), so a build that publishes many entries pays
+for few listings and its own writes never leave a cache over its bound. Every cache is content-addressed, so an evicted
 entry costs its next reader a derivation, never a different answer.
 `puck shaders cache prune` applies the same policy with an age bound instead.
 

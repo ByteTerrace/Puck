@@ -1541,6 +1541,21 @@ public static partial class CreationCanonicalizer {
                 if ((glass.Ior is { } ior) && (!float.IsFinite(f: ior) || (ior < SdfGlass.MinIor) || (ior > SdfGlass.MaxIor))) {
                     errors.Add(item: new(Message: $"glass ior must be finite and in [{SdfGlass.MinIor}, {SdfGlass.MaxIor}].", Path: $"palette[{i}].glass.ior"));
                 }
+                if ((glass.Scatter is { } scatter) && !HexColor.TryParse(rgb: out _, value: scatter) && !HexColor.IsStateBinding(value: scatter)) {
+                    errors.Add(item: new(Message: "glass scatter requires #RRGGBB or a state binding.", Path: $"palette[{i}].glass.scatter"));
+                }
+                if ((glass.Scattering is { } scattering) && (!float.IsFinite(f: scattering) || (scattering < 0f))) {
+                    errors.Add(item: new(Message: "glass scattering must be finite and non-negative: how much of the medium's own light fills each unit through it.", Path: $"palette[{i}].glass.scattering"));
+                }
+                if (glass.Contact is { } contact) {
+                    if (!float.IsFinite(f: contact.Reach) || (contact.Reach <= 0f) || (contact.Reach > SdfGlass.MaxContactReach)) {
+                        errors.Add(item: new(Message: $"glass contact reach must be positive and at most {SdfGlass.MaxContactReach}.", Path: $"palette[{i}].glass.contact.reach"));
+                    }
+                    ValidateUnitRange(value: contact.Coverage, name: "glass contact coverage", errors: errors, path: $"palette[{i}].glass.contact.coverage");
+                    if (entry.Flow?.Surface is null) {
+                        errors.Add(item: new(Message: "a glass contact reveals the slot's flow surface: the slot needs a flow naming one.", Path: $"palette[{i}].glass.contact"));
+                    }
+                }
             }
             ValidatePaletteShading(
                 entry: entry,

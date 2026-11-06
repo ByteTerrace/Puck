@@ -7,8 +7,10 @@ public sealed partial class SdfProgram {
     // 0..3 base shading; 4..7 inset frame/ramp controls; 8..11 radial stops;
     // 12..13 weathering controls; 14..17 two reveal surfaces; 18..19 deposit; 26 the pattern lattice's turn;
     // 20 the paints and the emissive lane: (first paint's vector, paint count, emissive lane + 1 or 0 for a static
-    // emissive, 0) as uint bits; 21 the glass: (absorption per world unit, index of refraction), zero for an opaque
-    // material, so a positive index says glass; 22..25 the material's own cel style (SdfToon.WriteRows; KEEP IN SYNC with
+    // emissive, a glass's contact: its reach in the low half and its coverage in the high, half floats, zero for none) as
+    // uint bits; 21 the glass: (absorption per world unit, index of refraction), zero for an opaque material, so a positive
+    // index says glass; 31 the glass's medium: (scatter colour, scattering per world unit), zero for none (KEEP IN SYNC
+    // with sdfGlassContact and the medium in passes/sdf-glass.comp.hlsl); 22..25 the material's own cel style (SdfToon.WriteRows; KEEP IN SYNC with
     // sdfToonStyle in shade/sdf-toon.hlsli), all zero to inherit the world's default, a mode of -1 for a style that
     // keeps the material continuous.
     // Bleed occupies 2.w/7.zw, and indirect receive is 3.w. Weathering pattern XYZ uses
@@ -77,7 +79,9 @@ public sealed partial class SdfProgram {
                     x: BitConverter.UInt32BitsToSingle(value: ((paints.Count > 0) ? (uint)paintCursor : 0u)),
                     y: BitConverter.UInt32BitsToSingle(value: (uint)paints.Count),
                     z: BitConverter.UInt32BitsToSingle(value: ((m.EmissiveLane is { } lane) ? (((uint)lane) + 1u) : 0u)),
-                    w: 0f
+                    w: BitConverter.UInt32BitsToSingle(value: ((m.Glass is { HasContact: true } contact)
+                        ? (BitConverter.HalfToUInt16Bits(value: (Half)contact.ContactReach) | ((uint)BitConverter.HalfToUInt16Bits(value: (Half)contact.ContactCoverage) << 16))
+                        : 0u))
                 )
             );
             foreach (var paint in paints) {
@@ -114,6 +118,7 @@ public sealed partial class SdfProgram {
                         w: glass.Ior
                     )
                 );
+                Row(row: 31, value: new(value: glass.Scatter, w: glass.Scattering));
             }
             if (m.Inset is { } inset) {
                 var paint = inset.Paint;

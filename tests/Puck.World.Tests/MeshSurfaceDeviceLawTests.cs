@@ -31,6 +31,7 @@ public sealed class MeshSurfaceDeviceLawTests {
     private const uint CasesBinding = 1U;
     private const uint ResultsBinding = 2U;
     private const uint TransformsBinding = 3U;
+    private const uint SampledBinding = 4U;
 
     // The slanted triangle on the plane x + y = 1, wound so its face normal is +(1, 1, 0), with that normal at every
     // vertex and palette entry 3 on its one triangle.
@@ -136,6 +137,7 @@ public sealed class MeshSurfaceDeviceLawTests {
                         new GpuGroupBinding(binding: CasesBinding, kind: GpuBindingKind.ReadOnlyBuffer),
                         new GpuGroupBinding(binding: ResultsBinding, kind: GpuBindingKind.StorageImage),
                         new GpuGroupBinding(binding: TransformsBinding, kind: GpuBindingKind.ReadOnlyBuffer),
+                        new GpuGroupBinding(binding: SampledBinding, kind: GpuBindingKind.ReadOnlyBuffer),
                     ],
                     ordinal: Group
                 )],
@@ -180,8 +182,15 @@ public sealed class MeshSurfaceDeviceLawTests {
             usage: GpuBufferUsage.Storage
         );
 
+        using var sampled = services.BufferFactory.CreateHostVisible(
+            name: default,
+            sizeBytes: sizeof(uint),
+            usage: GpuBufferUsage.Storage
+        );
+
         region.Write<uint>(data: words);
         transforms.Write<float>(data: new float[4]);
+        sampled.Write<uint>(data: [SdfFrameSampled.None]);
         cases.Write<float>(data: [.. Cases.SelectMany(selector: static meshCase => ((float[])[meshCase.Point.X, meshCase.Point.Y, meshCase.Point.Z, meshCase.Draw, meshCase.Ray.X, meshCase.Ray.Y, meshCase.Ray.Z, meshCase.Triangle]))]);
 
         var pool = bindings.CreatePool(
@@ -221,6 +230,14 @@ public sealed class MeshSurfaceDeviceLawTests {
                 bufferSize: transforms.SizeBytes,
                 descriptorSetHandle: set,
                 elementStride: (4U * sizeof(float)),
+                kind: GpuBindingKind.ReadOnlyBuffer
+            );
+            bindings.WriteBuffer(
+                binding: SampledBinding,
+                bufferHandle: sampled.BufferHandle,
+                bufferSize: sampled.SizeBytes,
+                descriptorSetHandle: set,
+                elementStride: sizeof(uint),
                 kind: GpuBindingKind.ReadOnlyBuffer
             );
             bindings.WriteStorageImage(

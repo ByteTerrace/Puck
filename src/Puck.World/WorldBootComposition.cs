@@ -399,6 +399,10 @@ public static class WorldBootComposition {
                     derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition: definition),
                     derivedFaceScreens: definition.DerivedFaceScreens
                 )];
+        // Machines synthesize audio only where an audio device can play it: a headless or offscreen host, or a platform
+        // with no render backend, registers no device factory, and its machines pay nothing for audio.
+        static int MachineAudioSampleRate(IServiceProvider services) =>
+            ((services.GetService<IAudioRenderDeviceFactory>() is null) ? 0 : Puck.Audio.Mixing.MachineAudioRate.SampleRate);
 
         // The narration hub of the peers constructed before WorldServer: WorldMachineHost (a constructor parameter of
         // WorldServer — see the remarks below) and the owned-world catalog (its identity refusals and a replay's
@@ -424,7 +428,10 @@ public static class WorldBootComposition {
             catalog: sp.GetRequiredService<WorldMachineCatalog>(),
             narrationHub: sp.GetRequiredService<WorldOutputHub>(),
             contentAdmissionPolicy: sp.GetRequiredService<IMachineContentAdmissionPolicy>()
-        ) { SynchronousSteps = () => (sp.GetService<PresentPacingControl>()?.TickLocked == true) });
+        ) {
+            AudioSampleRate = MachineAudioSampleRate(services: sp),
+            SynchronousSteps = () => (sp.GetService<PresentPacingControl>()?.TickLocked == true),
+        });
         // WorldServer's own constructor asks the container for IWorldMachineHost (its parameter type — Server
         // carries no reference to the concrete host); this shares the SAME peer singleton the line above registers,
         // never a second instance.
@@ -440,7 +447,10 @@ public static class WorldBootComposition {
             catalog: sp.GetRequiredService<WorldMachineCatalog>(),
             narrationHub: narrationHub,
             contentAdmissionPolicy: sp.GetRequiredService<IMachineContentAdmissionPolicy>()
-        ) { SynchronousSteps = () => (sp.GetService<PresentPacingControl>()?.TickLocked == true) });
+        ) {
+            AudioSampleRate = MachineAudioSampleRate(services: sp),
+            SynchronousSteps = () => (sp.GetService<PresentPacingControl>()?.TickLocked == true),
+        });
 
         // Where every presentation reports a bound value it clamps into its field's domain; WorldPostBuildWiring routes
         // the reports to the host's diagnostic fan-out.

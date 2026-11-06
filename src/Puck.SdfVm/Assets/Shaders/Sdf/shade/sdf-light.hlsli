@@ -3,12 +3,26 @@
 // stage folds the responses in the lights' order: the diffuse terms into the radiance the material shade lights by, the
 // rim and specular terms after the shade, and the attenuations into one factor on the reflected light. Every term is
 // photometric (SdfPhotometry): a diffuse term is the illuminance over pi a white surface would show, in nits, and a
-// specular term the luminance its lobe reflects.
+// specular term the luminance its lobe reflects. The glass pass walks the same lights for its highlights and the light
+// its medium and its revealed flow surface receive.
 #ifndef SHADE_SDF_LIGHT_HLSLI
 #define SHADE_SDF_LIGHT_HLSLI
-#ifdef SDF_VIEWS_PASS
 #include "sdf-mesh-irradiance.hlsli"
 #include "sdf-toon.hlsli"
+
+// The local adaptation's gain on a lit surface (SdfExposure.Local): the surface's exposure moves that share of the way
+// from the view's toward the one its own illumination would meter, `incoming` (the luminance a white surface lit by the
+// light arriving here would show) against the view's meter reading taken as a scene of SDF_LOCAL_REFLECTANCE albedo,
+// within SDF_LOCAL_ADAPTATION_RANGE stops; one where adaptation is off or nothing arrives.
+float sdfLocalAdaptationGain(float incoming) {
+    if ((passGroup.localAdaptation <= 0.0) || (passGroup.meterLuminance <= 0.0) || (incoming <= 0.0)) {
+        return 1.0;
+    }
+
+    float reference = (passGroup.meterLuminance / SDF_LOCAL_REFLECTANCE);
+
+    return exp2(clamp(log2(reference / incoming), -SDF_LOCAL_ADAPTATION_RANGE, SDF_LOCAL_ADAPTATION_RANGE) * saturate(passGroup.localAdaptation));
+}
 
 // A bound screen's area light, outside the generated SDF_LIGHT_* kinds, which name the lights table's.
 static const uint SdfLightScreen = 0x100u;
@@ -238,5 +252,4 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface)
     return response;
 }
 
-#endif
 #endif

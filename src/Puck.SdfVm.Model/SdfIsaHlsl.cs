@@ -292,6 +292,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_IDENTITY_WORD", value: SdfMeshProbeTrace.IdentityWord);
         declarations.Count(name: "SDF_PROBE_INSTANCE_INDEX_WORD", value: SdfMeshProbeTrace.InstanceIndexWord);
         declarations.Count(name: "SDF_PROBE_STACK_DEPTH", value: SdfMeshProbeTrace.StackDepth);
+        declarations.Count(name: "SDF_PROBE_MAX_WALK_STEPS", value: SdfMeshProbeTrace.MaxWalkSteps);
         declarations.Count(name: "SDF_PROBE_GROUP_SIZE", value: SdfMeshProbeTrace.GroupSize);
         declarations.Count(name: "SDF_PROBE_RELIGHT_OUTPUT_WORDS", value: SdfMeshProbeRelight.OutputWords);
         declarations.Count(name: "SDF_PROBE_RELIGHT_INPUT_WORDS", value: SdfMeshProbeRelight.InputWords);
@@ -380,6 +381,11 @@ public static class SdfIsaHlsl {
         declarations.Bits(name: "SDF_MESH_MATERIALS_FLAG", value: SdfMeshRecord.MaterialsFlag);
         declarations.Bits(name: "SDF_MESH_SKIN_FLAG", value: SdfMeshRecord.SkinFlag);
         declarations.Bits(name: "SDF_MESH_WORLD_MATERIAL_FLAG", value: SdfMeshRecord.WorldMaterialFlag);
+        declarations.Count(name: "SDF_MESH_DISPLACEMENT_WORD", value: SdfMeshRecord.DisplacementWord);
+        declarations.Section(title: "The frame's sampled table (SdfFrameSampled): a handle with no entry, a height field entry's header, and the reference height its baked reference stands at.");
+        declarations.Bits(name: "SDF_FRAME_SAMPLED_NONE", value: SdfFrameSampled.None);
+        declarations.Count(name: "SDF_FRAME_SAMPLED_HEADER_WORDS", value: SdfFrameSampled.HeaderWords);
+        declarations.Count(name: "SDF_HEIGHT_FIELD_REFERENCE_CELLS", value: SdfFrameSampled.ReferenceCells);
         declarations.Count(name: "SDF_MESH_LEVEL_SHIFT", value: SdfKernelInterfaces.MeshLevelShift);
         declarations.Count(name: "SDF_MESH_SELECTION_GROUP_SIZE", value: SdfKernelInterfaces.MeshSelectionGroupSize);
         declarations.Count(name: "SDF_MESH_SELECTION_GROUPS_PER_ROW", value: SdfKernelInterfaces.MeshSelectionGroupsPerRow);

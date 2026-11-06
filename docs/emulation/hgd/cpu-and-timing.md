@@ -9,7 +9,11 @@ state. Any overshoot from manual stepping remains part of that accounting.
 
 ## Clock edges and the CPU
 
-The reference scheduler advances one master tick at a time. Each CPU cycle
+The reference scheduler advances one master tick at a time
+(`HgdMachine.StepMasterTick`). `RunCycles` skips, as one run, the ticks that
+end no dot and carry no M2 edge or read point (`HgdClock.SkipQuietTicks`):
+such a tick changes only the clock's counters, so the skip leaves the state
+stepping each tick would. Each CPU cycle
 has equal internal φ1 and φ2 halves. The cartridge's M2 signal differs: on
 RP2A03G it rises 4½ master ticks into the cycle and falls at tick twelve,
 remaining high for 15/24 of the cycle, as described by

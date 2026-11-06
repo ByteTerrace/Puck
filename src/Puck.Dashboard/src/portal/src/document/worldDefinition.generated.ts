@@ -1912,6 +1912,17 @@ export type PaletteFlowDocument = {
   coverageLane?: number | null;
 };
 
+export type PaletteGlassContactDocument = {
+  /**
+   * The distance, in creation units along the view from the glass surface to the opaque surface behind it, over which the added coverage falls to zero; positive.
+   */
+  reach: number;
+  /**
+   * The coverage added where the opaque surface touches the glass's, in [0, 1].
+   */
+  coverage: number;
+};
+
 export type PaletteGlassDocument = {
   /**
    * The thickness, in creation units, over which light takes on the tint; finite and positive. A part twice this thick reads twice as deep.
@@ -1921,6 +1932,18 @@ export type PaletteGlassDocument = {
    * The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49 acrylic (null = 1.5).
    */
   ior?: number | null;
+  /**
+   * The colour the glass scatters as a medium, the colour a deep body of it reads as under the light arriving at its surface (null = none).
+   */
+  scatter?: string | null;
+  /**
+   * How much the medium scatters, per creation unit, finite and non-negative; it also dims what lies behind (null = 0, no scattering).
+   */
+  scattering?: number | null;
+  /**
+   * Foam or a wet margin where an opaque surface behind the glass comes within reach of its surface, revealed through the slot's flow coverage (null = none).
+   */
+  contact?: PaletteGlassContactDocument | null;
 };
 
 export type PaletteInsetDocument = {
@@ -8874,6 +8897,27 @@ export type WorldPrototype = {
          * The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49 acrylic (null = 1.5).
          */
         ior?: number | null;
+        /**
+         * The colour the glass scatters as a medium, the colour a deep body of it reads as under the light arriving at its surface (null = none).
+         */
+        scatter?: string | null;
+        /**
+         * How much the medium scatters, per creation unit, finite and non-negative; it also dims what lies behind (null = 0, no scattering).
+         */
+        scattering?: number | null;
+        /**
+         * Foam or a wet margin where an opaque surface behind the glass comes within reach of its surface, revealed through the slot's flow coverage (null = none).
+         */
+        contact?: {
+          /**
+           * The distance, in creation units along the view from the glass surface to the opaque surface behind it, over which the added coverage falls to zero; positive.
+           */
+          reach: number;
+          /**
+           * The coverage added where the opaque surface touches the glass's, in [0, 1].
+           */
+          coverage: number;
+        } | null;
       } | null;
       /**
        * The slot's own cel style (ToonStyleDocument, on unless it says enabled: false, which keeps the slot continuous); null shades the slot with the world's default style (render.toon).
@@ -10530,6 +10574,10 @@ export type WorldRenderIndirect = {
    * The irradiance work each frame grants the volume and the lighting age it reports past; absent bounds nothing.
    */
   budget?: WorldRenderIndirectBudget | null;
+  /**
+   * Fixed angular and radiometric grids for indirect captures; absent leaves them continuous.
+   */
+  lightingGrid?: WorldRenderIndirectLightingGrid | null;
 };
 
 export type WorldRenderIndirectApply = {
@@ -10560,6 +10608,17 @@ export type WorldRenderIndirectBudget = {
    * The lighting age, in seconds, past which the volume reports it is behind; positive.
    */
   age?: number | null;
+};
+
+export type WorldRenderIndirectLightingGrid = {
+  /**
+   * Directional azimuth and elevation step in degrees, from zero through 180.
+   */
+  directionDegrees?: number | null;
+  /**
+   * Fractional radiance step per power-of-two range, from zero through one.
+   */
+  radiance?: number | null;
 };
 
 export type WorldRenderIndirectSources = {
@@ -13218,10 +13277,6 @@ export type WorldStateRow = {
      * Optional surface material using the creation palette vocabulary.
      */
     material?: PaletteEntryDocument | null;
-    /**
-     * The height, in world units, the drawn surface of a row carrying a HeightScale moves by (SurfaceStep); 0 draws it at the baked mesh's own resolution. Presentation only: bodies and media read the full value.
-     */
-    surfaceStep?: number;
     /**
      * The initial fills, applied in order over Initial.
      */

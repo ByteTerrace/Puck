@@ -15,6 +15,10 @@ render {
   // standard's day turns the sun a quarter of a degree a second, so an eight-second age lags it two degrees; a world
   // with a faster day or more probes in view raises `relight` and reads the frame time move in `host.frames`.
   indirect {
+    lightingGrid {
+      directionDegrees: 0.5
+      radiance: 0.015625
+    }
     budget {
       relight: 2048
       trace: 2048

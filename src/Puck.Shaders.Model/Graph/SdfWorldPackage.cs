@@ -222,6 +222,11 @@ public static partial class SdfWorldPackage {
     /// none, then the snapshots' voxel distances as float bits. Each bake job binds its own, written from the snapshots
     /// its groups hashed; the tables bind a filler.</summary>
     public const string SampledValues = "sdfSampledValues";
+    /// <summary>The frame's sampled values the render passes read at draw time: a directory of one word per handle of the
+    /// frame's program, each the word its entry starts at or <c>0xFFFFFFFF</c> for none, then the entries (a height
+    /// field's header and its heights this frame and the frame before, <c>Puck.SdfVm.SdfFrameSampled</c>). The tables
+    /// write it from the frame's sampled set, owing only the words that moved; the mesh bake never reads it.</summary>
+    public const string FrameSampled = "sdfFrameSampled";
     /// <summary>The bounded-volume table.</summary>
     public const string Volumes = "sdfVolumes";
     /// <summary>The mesh region as a stream of words: the draw records, then the positions and indices the mesh pass
@@ -384,6 +389,7 @@ public static partial class SdfWorldPackage {
         Table(element: ShaderValueType.Float4, name: Volumes),
         Table(element: ShaderValueType.Uint, name: MeshRegion),
         Table(element: ShaderValueType.Uint, name: MeshIrradiance),
+        Table(element: ShaderValueType.Uint, name: FrameSampled),
     ];
     /// <summary>Gets the values the mesh bake's two kernels, the instance mask and the field sampler, read from their own
     /// pass block beside the extent: the live program's instance-mask width, the dispatch's lattices and their

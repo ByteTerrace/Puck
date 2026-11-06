@@ -1090,6 +1090,17 @@ visible until its replacement is ready. Camera exposure queries use the same
 service and shading function. CPU traversal and shading remain the diagnostic
 reference, and CPU nearest-surface and short clearance queries still place probes.
 
+Scene updates preserve unchanged geometry addresses. The shared range allocator
+places a replacement's top hierarchy and instance records beside the published
+scene, and a worker serializes only those records and new geometry. B1 stages
+bounded blocks through `GpuRegion` under its host-time, byte and GPU budgets.
+The root is the publication point: no query is admitted during replacement,
+and old allocations retire only after the new root's upload fence. Admission
+then checks the mesh placements again, so a relocation during staging cannot
+pair a scene's instance addresses with another mesh layout. Repacking and
+uploading the whole trace scene for a field's one changed mesh would make
+frame work proportional to world size.
+
 Visibility is an any-hit query: GPU `sdfProbeOccluded` and CPU `Unblocked`
 stop at the first accepted triangle, sharing their nearest-hit walk's node
 and triangle tests. Shadows, light bits and camera visibility use this door.
@@ -1109,6 +1120,18 @@ takes whole bounce sweeps. A sweep retains its initial phase across listings,
 even when later batches shade under newer lighting, and a lockstep drain always visits every cell from
 no bounce. These bounds describe demand under the budget, not guaranteed wall
 time when the device is overloaded.
+
+Indirect capture precision is authored as `render.indirect.lightingGrid`.
+Its neutral engine default is continuous; the standard chooses angular and
+radiometric steps. Directional records used for the lighting key and shading
+come from one snap function. Projected sky coefficients use a fixed quantum
+per colour channel and power-of-two range, rather than a tolerance relative
+to an earlier capture. Converged captures compare the resulting values
+exactly, including with a zero grid. Thus a frame's drained bounce depends
+on its own lighting, scene and window, not when earlier captures happened.
+Crossing a grid boundary still drains from no bounce; within a grid cell the
+moving sun does not owe another full window. The same grid governs ordinary
+asynchronous captures; coarse-level interleave remains a separate work policy.
 Below its bound, a probe outside every local view's frustum gets less age
 priority, and a probe whose last light changed gets more. Neither weight
 removes work. Overdue probes ignore both weights. The budget diagnostic

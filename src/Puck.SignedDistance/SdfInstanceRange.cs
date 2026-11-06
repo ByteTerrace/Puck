@@ -48,4 +48,8 @@ public readonly record struct SdfInstanceRange(
     /// thin member refines its own surface rather than its neighbours' across a cube its length wide.
     /// <see langword="null"/> where the sphere alone bounds the instance.</summary>
     public (Vector3 Low, Vector3 High)? Box { get; init; }
+    /// <summary>Gets the height field a static instance draws (<see cref="SdfProgramBuilder.HeightField"/>), whose
+    /// heights displace its baked reference as it is drawn (<see cref="SdfProgram.HeightFields"/>); <see langword="null"/>
+    /// for an instance drawn as it was baked.</summary>
+    public SdfHeightField? HeightField { get; init; }
 }

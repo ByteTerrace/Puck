@@ -95,7 +95,7 @@ public sealed partial class SdfProgramBuilder {
         if (!material.IsGlassValid) {
             throw new ArgumentOutOfRangeException(
                 nameof(material),
-                $"A glass material needs a finite, positive depth, an index of refraction in [{SdfGlass.MinIor}, {SdfGlass.MaxIor}] and an albedo (its tint) in [0, 1]; got {material.Glass} with albedo {material.Albedo}."
+                $"A glass material needs a finite, positive depth, an index of refraction in [{SdfGlass.MinIor}, {SdfGlass.MaxIor}], an albedo (its tint) and a scatter colour in [0, 1], a non-negative scattering and contact reach, a contact coverage in [0, 1], and for a contact a flow naming the surface its coverage reveals; got {material.Glass} with albedo {material.Albedo} and flow {material.Flow}."
             );
         }
         if (material.Paints is { Count: > SdfProgram.MaxPaintsPerMaterial } paints) {
@@ -289,17 +289,45 @@ public sealed partial class SdfProgramBuilder {
             Active: m_openInstanceActive,
             BakesWithPrevious: m_openInstanceBakesWithPrevious,
             Detail: m_openInstanceDetail
-        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = m_openInstanceBox });
+        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = m_openInstanceBox, HeightField = m_openInstanceHeightField });
 
         ResetOpenInstance();
 
         return this;
+    }
+    /// <summary>Emits a height field (<see cref="SdfHeightField"/>) as a static instance of its own: its reference lattice
+    /// as the instance's sampled instruction, which the mesh bake samples and keys, and its heights as the instance's
+    /// displacement, which the renderer draws the baked reference through. A height change publishes a snapshot and
+    /// rebuilds no program and keys no mesh.</summary>
+    /// <param name="field">The height field.</param>
+    /// <param name="material">The surface material.</param>
+    /// <param name="blend">The field composition.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="field"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">An instance is already open.</exception>
+    public SdfProgramBuilder HeightField(SdfHeightField field, int material, SdfBlendOp blend = SdfBlendOp.Union) {
+        ArgumentNullException.ThrowIfNull(argument: field);
+
+        var boxMin = field.ReferenceMin;
+        var extent = field.ReferenceExtent;
+
+        _ = BeginInstance(boundCenter: (boxMin + (extent * 0.5f)), boundRadius: (extent.Length() * 0.5f), box: (boxMin, (boxMin + extent)));
+        m_openInstanceHeightField = field;
+        return ResetPoint().SampledValues(
+            blend: blend,
+            boundaryFloor: (field.Cell * SdfSampledField.DistanceScale),
+            boxMin: boxMin,
+            cellSize: field.Cell,
+            field: field.Reference,
+            material: material
+        ).EndInstance();
     }
     // Closes the open instance's per-emission state: the instance's first instruction, its box and the flags only
     // BeginInstanceDynamic sets. EndInstance and Clear both run it, so no emission inherits a previous one's.
     private void ResetOpenInstance() {
         m_openInstanceFirst = -1;
         m_openInstanceBox = null;
+        m_openInstanceHeightField = null;
         m_openInstanceBakesSeparately = false;
         m_openInstanceBoundInSlotFrame = false;
     }

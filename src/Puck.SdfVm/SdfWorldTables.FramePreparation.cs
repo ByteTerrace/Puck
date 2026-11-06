@@ -312,6 +312,7 @@ public sealed partial class SdfWorldTables {
             bytes: m_volumeScratch,
             offset: 0
         );
+        PackFrameSampled(frame: frame);
         StageMeshRegion(frame: frame, frameSeconds: frameSeconds);
     }
 }

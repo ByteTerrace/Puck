@@ -338,6 +338,9 @@ public sealed record SdfFrame(
     /// bounds nothing.</summary>
     public SdfIndirectBudget IndirectBudget { get; init; }
 
+    /// <summary>The fixed angular and radiometric grids used by indirect captures. Zero leaves values continuous.</summary>
+    public SdfIndirectLightingGrid IndirectLightingGrid { get; init; }
+
     /// <summary>Gets receiver-only application controls, independent of the traced lighting.</summary>
     public SdfIndirectApplication IndirectApply { get; init; } = SdfIndirectApplication.Default;
 

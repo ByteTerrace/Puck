@@ -831,6 +831,45 @@
                       ],
                       "default": null,
                       "description": "The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49 acrylic (null = 1.5)."
+                    },
+                    "scatter": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "The colour the glass scatters as a medium, the colour a deep body of it reads as under the light arriving at its surface (null = none)."
+                    },
+                    "scattering": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "How much the medium scatters, per creation unit, finite and non-negative; it also dims what lies behind (null = 0, no scattering)."
+                    },
+                    "contact": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "reach": {
+                          "type": "number",
+                          "description": "The distance, in creation units along the view from the glass surface to the opaque surface behind it, over which the added coverage falls to zero; positive."
+                        },
+                        "coverage": {
+                          "type": "number",
+                          "description": "The coverage added where the opaque surface touches the glass\u0027s, in [0, 1]."
+                        }
+                      },
+                      "required": [
+                        "reach",
+                        "coverage"
+                      ],
+                      "additionalProperties": false,
+                      "default": null,
+                      "description": "Foam or a wet margin where an opaque surface behind the glass comes within reach of its surface, revealed through the slot\u0027s flow coverage (null = none)."
                     }
                   },
                   "required": [
