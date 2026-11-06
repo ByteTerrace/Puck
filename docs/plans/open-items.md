@@ -2216,17 +2216,26 @@ Grounded causes and leads:
 - One group in the debug world has a mesh that no draw names, not yet
   identified; `world.residency` counts it resident, since it costs the region
   nothing.
-- A boot's first staging writes the whole mesh region at once, warm or cold
-  (`SdfWorldTables.StageMeshRegionCore`: the arena's first plan owes every
-  placement, bypassing `MeshLandingWords`), and so does every relocation. On
-  the debug world that is about 1.7 GB of sourced mesh words flushed into
-  staging in one upload: the boot's longest frame, read as
-  `render.record.packages-microseconds` over the first frames. Landing it under
-  a budget delays the complete scene by seconds at the reference share, so
-  the choice is the owner's (boot hitch against progressive arrival); a
-  background B1 client streaming the region in chunks, as the probe scene
-  does (`SdfMeshProbeGpuWork.Scene`), would bound the frame without writing a
-  second uploader. Measure it against step 4's budget.
+- The mesh region lands through the background GPU work
+  (`SdfWorldTables.MeshLanding.cs`) at what `SdfGpuWork` admits: four slots of
+  `SdfGpuWork.UploadChunkBytes`, about 4 MiB a frame, so the debug world's
+  1.7 GB region fills in over roughly 300 to 360 frames of a boot whose early
+  frames are slow (`world.residency`'s `owed-frames`). The nearest meshes land
+  first. Whether landing should spend more of a slow frame (more slots, larger
+  chunks, a byte budget that accrues by wall time like the GPU share) is a
+  measurement against the frame bar, not a guess.
+- A relocation owes every placed mesh again and re-lands it from the host,
+  although its words already sit in the old destination. A GPU-side compaction
+  (copy each kept mesh from its old placement into a fresh destination, as a
+  grown region carries its words) would move no byte across the bus and keep
+  the old draws drawable until the copy completes; relocations are rare, so it
+  waits for a case that shows them.
+- `world.wait residency` never settles in the windowed debug world: with the
+  world residency owing nothing, some
+  routed, view or infinity residency `WorldScreenBinder.ViewsBake(resident:
+  true)` checks stays not resident (a residency never staged has no tables, so
+  `MeshesResident` is false). Name it (the wait's reason does not), then decide
+  whether an unstaged residency counts.
 
 ### Vulkan regressions and GPU robustness
 

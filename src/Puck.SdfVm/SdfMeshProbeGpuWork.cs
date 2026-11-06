@@ -224,11 +224,9 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         }
         slot.Origins.Write<Vector4>(query.Origins);
         var command = recording.CommandBuffer;
-        var copies = new GpuRegionCopyRecording(recording.Recorder, GpuStage.ComputeShader, () => command);
         // TryTake admits one query until Complete observes its fence. These shared regions therefore need
         // one upload slot; the service slots still independently own outputs and held readback tokens.
-        if (relight) { copies.Record(m_feedback!, 0, handsToReaders: true); }
-        copies.Finish();
+        if (relight) { recording.CopyRegion(m_feedback!, 0, GpuStage.ComputeShader); }
         Bind(SdfKernelInterfaces.ProbeScene, m_sceneRegion!.Buffer(0), 4);
         Bind(SdfWorldPackage.MeshRegion, query.Meshes!, 4);
         Bind(SdfKernelInterfaces.ProbeOrigins, slot.Origins, 16);

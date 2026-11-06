@@ -108,16 +108,17 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     public void TheDescriptorPoolsTheTablesStateAreThePoolsTheyCreate() {
         using var rig = new Rig();
 
-        // Tables create region-copy, strided-history-copy and World pools. Admission also reserves the bake client's
-        // pool, which the residency creates after the tables; a standalone tables fixture has no bake client.
+        // Tables create region-copy, mesh-region-copy, strided-history-copy and World pools. Admission also reserves the
+        // bake client's pool, which the residency creates after the tables; a standalone tables fixture has no bake client.
         var copyPool = SdfWorldTables.DescriptorPools[1];
+        var meshCopyPool = SdfWorldTables.DescriptorPools[2];
 
         Assert.Equal(
-            expected: [copyPool, GpuBufferStridedCopy.PoolSizes(frameSlotCount: SdfWorldTables.FrameRingSize, recordingCount: 2), SdfWorldTables.DescriptorPoolSizes],
+            expected: [copyPool, meshCopyPool, GpuBufferStridedCopy.PoolSizes(frameSlotCount: SdfWorldTables.FrameRingSize, recordingCount: 2), SdfWorldTables.DescriptorPoolSizes],
             actual: rig.Gpu.PoolsCreated
         );
         Assert.Equal(
-            expected: [SdfWorldTables.DescriptorPoolSizes, copyPool, GpuBufferStridedCopy.PoolSizes(frameSlotCount: SdfWorldTables.FrameRingSize, recordingCount: 2)],
+            expected: [SdfWorldTables.DescriptorPoolSizes, copyPool, meshCopyPool, GpuBufferStridedCopy.PoolSizes(frameSlotCount: SdfWorldTables.FrameRingSize, recordingCount: 2)],
             actual: SdfWorldTables.DescriptorPools[..^1]
         );
     }

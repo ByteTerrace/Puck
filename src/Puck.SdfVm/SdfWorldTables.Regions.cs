@@ -54,6 +54,15 @@ public sealed partial class SdfWorldTables {
     private long m_movedTransformsSerial;
     private IReadOnlyList<DynamicTransform>? m_movedTransformsTable;
 
+    // The mesh region's slots: the upload ring's, then one per background GPU work slot, which lands meshes
+    // (MeshLandingSlot).
+    private const int MeshRegionSlotCount = (FrameRingSize + SdfGpuWork.SlotCount);
+    // The pool of the mesh region's own copy sets, which the region creates with itself at construction.
+    private static GpuDescriptorPoolSizes MeshRegionCopyPoolSizes =>
+        GpuRegionCopyPool.SizesOf(
+            regionCount: 1,
+            slotCount: MeshRegionSlotCount
+        );
     // The one pool of the copy sets the tables reserve for their regions (ReserveRegionCopyPool).
     private static GpuDescriptorPoolSizes RegionCopyPoolSizes =>
         GpuRegionCopyPool.SizesOf(
@@ -63,7 +72,9 @@ public sealed partial class SdfWorldTables {
     // Region index's region of byteCount bytes under the policy the device's profile selects, its ring in the memory the
     // profile selects, named by its table's role and writing the copy sets reserved for it. The mesh region is always
     // staged: it holds every drawn mesh's vertices and is rewritten only when the draws change, so it belongs in
-    // device-local memory rather than in the small host-visible device-local heap every residency's rings share.
+    // device-local memory rather than in the small host-visible device-local heap every residency's rings share. Its
+    // meshes land through the background GPU work (SdfWorldTables.MeshLanding.cs), so it has a slot per background slot
+    // past the upload ring's, and copy sets of its own for all of them (MeshRegionCopyPoolSizes).
     private GpuRegion CreateRegion(int region, int byteCount) {
         var profile = m_deviceContext.MemoryProfile;
 
@@ -72,7 +83,7 @@ public sealed partial class SdfWorldTables {
             buffers: m_gpu.BufferFactory,
             byteCount: byteCount,
             copyPipeline: m_regionCopyPipeline,
-            copySets: m_regionCopyPool.Region(index: region),
+            copySets: ((region is MeshRegionIndex) ? null : m_regionCopyPool.Region(index: region)),
             memory: GpuResidency.RingMemory(profile: profile),
             name: RegionName(region: region),
             policy: ((region is MeshRegionIndex)
@@ -83,7 +94,7 @@ public sealed partial class SdfWorldTables {
                     readersInFlight: true
                 )),
             recorder: m_gpu.Recorder,
-            slotCount: FrameRingSize
+            slotCount: ((region is MeshRegionIndex) ? MeshRegionSlotCount : FrameRingSize)
         );
     }
     // Disposes every region, then the copy pool reserved for them.
@@ -103,6 +114,7 @@ public sealed partial class SdfWorldTables {
     // this pass. An upload owing nothing writes and records nothing.
     private void RecordRegionCopies() {
         StageShadowHandoffs();
+        CountFrameMeshStaging(bytes: m_meshRegion.OwedCopyBytes);
         for (var index = 0; (index < RegionCount); index++) {
             if (RegionAt(index: index) is { } region) {
                 m_regionCopies.Record(

@@ -33,7 +33,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         }
         var first = Draw(1);
 
-        rig.Render(time: 0, meshDraws: [first]);
+        rig.Land(time: 0, meshDraws: [first]);
         var moved = Draw(2);
 
         Assert.Equal(first.MotionIdentity, moved.MotionIdentity);

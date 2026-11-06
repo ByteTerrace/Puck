@@ -43,12 +43,14 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets every descriptor pool the tables create, which a device's heap admits them by: their own
     /// (<see cref="DescriptorPoolSizes"/>), then the one pool holding the copy sets they reserve for all their regions
     /// (<see cref="GpuRegionCopyPool"/>, sized by <see cref="GpuRegionCopyPool.SizesOf"/>), whatever policy the device
-    /// selects: the shared frame tables, the shadow handoff controls and the mesh region. Construction creates these and
+    /// selects: the shared frame tables and the shadow handoff controls, then the mesh region's own pool for its upload
+    /// and background slots. Construction creates these and
     /// the strided history-copy pool, and the residency the mesh bake's background work pool, so no later frame, the
     /// first to draw a mesh or a growing program included, takes a descriptor range.</summary>
     public static GpuDescriptorPoolSizes[] DescriptorPools => [
         DescriptorPoolSizes,
         RegionCopyPoolSizes,
+        MeshRegionCopyPoolSizes,
         GpuBufferStridedCopy.PoolSizes(frameSlotCount: FrameRingSize, recordingCount: 2),
         SdfMeshBakeGpuWork.PoolSizes,
     ];

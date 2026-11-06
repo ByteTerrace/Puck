@@ -35,7 +35,7 @@ internal sealed class UploadModelGpu :
     public const byte RegionCopyBytecode = 0xF7;
 
     private readonly Dictionary<(nint Set, uint Binding), nint> m_bindings = [];
-    private readonly Dictionary<nint, MemoryBuffer> m_buffers = [];
+    private readonly ConcurrentDictionary<nint, MemoryBuffer> m_buffers = new();
     private readonly List<UploadModelBufferBarrier> m_bufferBarriers = [];
 
     private readonly FakeGpuDevice m_inner;
@@ -429,7 +429,7 @@ internal sealed class UploadModelGpu :
 
         public void Dispose() { }
     }
-    private sealed class MemoryBuffer(nint handle, bool hostVisible, bool aperture, Dictionary<nint, MemoryBuffer> owner, ulong sizeBytes, bool uniform, string? part) : IGpuStorageBuffer, IGpuReadbackBuffer {
+    private sealed class MemoryBuffer(nint handle, bool hostVisible, bool aperture, ConcurrentDictionary<nint, MemoryBuffer> owner, ulong sizeBytes, bool uniform, string? part) : IGpuStorageBuffer, IGpuReadbackBuffer {
         public bool Aperture => aperture;
         public nint BufferHandle => handle;
         public bool HostVisible => hostVisible;
@@ -439,7 +439,7 @@ internal sealed class UploadModelGpu :
         public bool Uniform => uniform;
         public long Written { get; set; }
 
-        public void Dispose() => _ = owner.Remove(key: handle);
+        public void Dispose() => _ = owner.TryRemove(key: handle, value: out _);
         public void Read(Span<byte> destination) => Memory.AsSpan(length: destination.Length, start: 0).CopyTo(destination: destination);
         public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => Write(
             data: data,

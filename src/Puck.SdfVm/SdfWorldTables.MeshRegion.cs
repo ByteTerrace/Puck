@@ -8,12 +8,12 @@ namespace Puck.SdfVm;
 // at the words it was first placed at, so a frame whose draw list is the one last packed, at the revision and program
 // composability last packed, packs nothing, and any other packs its draw records and only the meshes the arena newly
 // placed: a body that moves rewrites its record's matrix, and a mesh that lands writes its own words, never the meshes
-// already placed. Newly placed meshes land within a frame's share of words (MeshLandingWords), those the views see largest
-// first (MeshDemand), and a draw whose mesh is still owed waits out of the staged records until it lands, so a body
-// crossing into a world with all its meshes at once lands over a few frames. A plan that relocates every mesh writes every word at once. The
-// region is created with the tables, one draw record long so every set that binds it binds a buffer, and grows to the need
-// plus an eighth without waiting for the device, the next upload carrying the words it held on the GPU; a frame without draws
-// keeps it. A view's mesh pass reads the draws' triangles from it, and primary a mesh hit's material.
+// already placed. Placed meshes land through the background GPU work (SdfWorldTables.MeshLanding.cs), those the views see
+// largest first (MeshDemand), and a draw whose mesh is still owed waits out of the staged records until it lands, so a
+// boot, a relocation or a body crossing into a world with all its meshes at once fills in over several frames from the
+// cameras outward rather than staging every word in one upload. The region is created with the tables, one draw record
+// long so every set that binds it binds a buffer, and grows to the need plus an eighth without waiting for the device, the
+// next upload carrying the words it held on the GPU; a frame without draws keeps it. A view's mesh pass reads the draws' triangles from it, and primary a mesh hit's material.
 public sealed partial class SdfWorldTables {
     private readonly SdfMeshRegionArena m_meshArena = new();
     private long m_meshPlacementVersion;
@@ -49,6 +49,7 @@ public sealed partial class SdfWorldTables {
         try {
             m_meshArena.TrimUnused();
             m_meshesOwed.RemoveWhere(match: mesh => !m_meshArena.Placements.ContainsKey(key: mesh));
+            ForgetAllLanding();
             // The source order walks the placements, so a trim that forgot one rebuilds it.
             m_meshOrderStale = true;
         } finally {
@@ -61,6 +62,15 @@ public sealed partial class SdfWorldTables {
     // The one-based upload required by the current sourced geometry or buffer carry. Draw matrices and irradiance
     // never move it. Zero means no geometry has needed an upload yet.
     private ulong m_meshRequiredUpload;
+
+    /// <summary>Gets whether the latest staged draws name a mesh whose words the region still owes: the mesh lands through
+    /// the background GPU work, and its draws wait out of the staged records until it does. It turns false as the last
+    /// such mesh lands, before a staging names its draws (<see cref="DrawsAwaitMeshes"/>). Read on the frame
+    /// thread.</summary>
+    public bool MeshesLanding => (Volatile.Read(location: ref m_owedWords) != 0);
+    /// <summary>Gets whether the latest staging held a draw out of the staged records because its mesh had not landed, so
+    /// the frame it staged renders without it. Read on the frame thread.</summary>
+    public bool DrawsAwaitMeshes => (m_meshSource is not null) && !m_stagedWhole;
 
     /// <summary>Gets whether the current staged mesh geometry owes no mesh words and its required upload has
     /// completed. Pose, draw-record and irradiance uploads do not delay it. Read on the frame thread; never waits.</summary>
@@ -100,12 +110,6 @@ public sealed partial class SdfWorldTables {
 
     private int m_stagedCount;
     private bool m_stagedWhole;
-
-    /// <summary>The words of owed meshes a 60 Hz frame writes into the mesh region at most, past the first mesh it writes:
-    /// 2 MB, so a body whose meshes land at once, as when it crosses into a world, lands over a few frames rather than in
-    /// one. A longer frame writes a share for each whole 60 Hz frame it spans (<see cref="SdfMeshPathBake.FrameShares"/>),
-    /// so a cold bake's long frames land its meshes at the rate a 60 Hz display would.</summary>
-    public const int MeshLandingWords = (1 << 19);
 
     private readonly GpuRegion m_meshRegion;
 
@@ -178,7 +182,7 @@ public sealed partial class SdfWorldTables {
 
     // Packs new draws or a new revision, growing the region when the list needs more
     // bytes; the upload sends the slot what it owes.
-    private void StageMeshRegion(SdfFrame frame, double frameSeconds) {
+    private void StageMeshRegion(SdfFrame frame) {
         var draws = frame.MeshDraws;
         var revision = frame.MeshDrawsRevision;
         if (!m_meshTrimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested += RequestMeshTrim; m_meshTrimListening = true; }
@@ -195,12 +199,22 @@ public sealed partial class SdfWorldTables {
             (m_meshClaims ??= new SdfMeshClaims()).Update(draws: draws);
             SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.StagingClaimRecords, draws.Count);
         }
-        StageMeshRegionCore(draws: draws, landingWords: (((long)MeshLandingWords) * SdfMeshPathBake.FrameShares(frameSeconds: frameSeconds)), revision: revision);
+        StageMeshRegionCore(draws: draws, revision: revision);
         // Publish the cursor only after the whole roster has staged successfully. No landing-filtered index can be
         // interpreted as an index into the producer's list.
         m_drawChangesSource = (m_meshStaged && m_stagedWhole) ? frame.MeshDrawChanges : null;
         m_drawChangesSerial = frame.MeshDrawChangesSerial;
         CommitMeshTransformCuts(frame);
+    }
+    /// <summary>Stages again the draws of the frame the tables last packed when meshes its draws name have landed since,
+    /// so a frame that stands draws them; does nothing otherwise. Staging the same frame again consumes no transform or
+    /// draw change a staging already consumed.</summary>
+    /// <param name="frame">The frame the tables last packed.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
+    public void StageLandedMeshes(SdfFrame frame) {
+        ArgumentNullException.ThrowIfNull(argument: frame);
+        if (m_disposed || m_meshStaged || !m_meshLandedSinceStaging || !ReferenceEquals(objA: frame.MeshDraws, objB: m_meshSource) || (frame.MeshDrawsRevision != m_meshSourceRevision)) { return; }
+        StageMeshRegion(frame: frame);
     }
     private bool TryStageDrawChanges(SdfFrame frame) {
         var changes = frame.MeshDrawChanges;
@@ -230,7 +244,7 @@ public sealed partial class SdfWorldTables {
         m_drawChangesSerial = frame.MeshDrawChangesSerial;
         return true;
     }
-    private void StageMeshRegionCore(IReadOnlyList<SdfMeshDraw> draws, long landingWords, long revision) {
+    private void StageMeshRegionCore(IReadOnlyList<SdfMeshDraw> draws, long revision) {
         if (
             !ReferenceEquals(
                 objA: draws,
@@ -253,17 +267,19 @@ public sealed partial class SdfWorldTables {
                 }
                 EnsureMeshRegionCapacity(bytes: (((ulong)m_meshArena.Words) * sizeof(uint)));
                 ShadowMeshRecords();
-                // Every mesh is written again at once when the arena moved them or none was written yet, since no mesh's
-                // words stand where its draw reads them. Otherwise the meshes a grown draw reserve moved are written now,
-                // since their draws were drawn from the words the reserve took, and the rest this list placed are owed and
-                // land over the next frames.
+                // Every mesh is owed again when the arena moved them or none was written yet, since no mesh's words
+                // stand where its draw reads them, and lands through the background work. Otherwise the meshes a grown
+                // draw reserve moved are written in this frame's upload, which carries the records naming them, since
+                // their draws were drawn from the words the reserve took; the rest this list placed are owed.
                 if (m_meshArena.Relocated || !m_meshSectionWritten) {
                     m_meshesOwed.Clear();
-                    foreach (var (mesh, placement) in m_meshArena.Placements) { WriteMeshWords(mesh: mesh, placement: placement); }
+                    m_meshesOwed.UnionWith(other: m_meshArena.Placements.Keys);
+                    ForgetAllLanding();
                 } else {
                     m_meshesOwed.UnionWith(other: m_meshArena.Placed);
                     foreach (var mesh in m_meshArena.Moved) {
                         _ = m_meshesOwed.Remove(item: mesh);
+                        ForgetLanding(mesh: mesh);
                         WriteMeshWords(mesh: mesh, placement: m_meshArena.Placements[mesh]);
                     }
                 }
@@ -279,7 +295,8 @@ public sealed partial class SdfWorldTables {
             return;
         }
 
-        WriteOwedMeshes(draws: draws, words: landingWords);
+        m_meshLandedSinceStaging = false;
+        OrderLanding(draws: draws);
         CountOwed(draws);
 
         // A draw whose mesh's words are still owed waits for them: the staged list holds the draws whose meshes are
@@ -394,7 +411,7 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets or sets the demand points the mesh region lands owed meshes by (<see cref="SdfMeshDemand"/>): the
     /// draws they see largest first, a draw no host box bounds (a skinned body) before any, and the list's order among
     /// equals; <see langword="null"/>, or one with no point, lands them in the list's order. Read on the frame's
-    /// thread.</summary>
+    /// thread, when a staging orders the owed meshes.</summary>
     public SdfMeshDemand? MeshDemand { get; set; }
 
     // The draws naming owed meshes by priority, reused frame to frame.
@@ -403,39 +420,10 @@ public sealed partial class SdfWorldTables {
     private static readonly Comparison<(float Priority, int Index)> ByPriority = static (left, right) =>
         ((right.Priority.CompareTo(value: left.Priority) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index));
 
-    // Writes the owed meshes the draw list names, those the demand points see largest first, until the frame's share of
-    // words is spent; a frame writes at least one. A placed mesh no draw names stays owed until a list names it again.
-    private void WriteOwedMeshes(IReadOnlyList<SdfMeshDraw> draws, long words) {
-        if (m_meshesOwed.Count == 0) { return; }
-
-        var demand = ((MeshDemand is { Count: > 0 } points) ? points : null);
-
-        m_owedOrder.Clear();
-        for (var index = 0; (index < draws.Count); index++) {
-            var draw = draws[index];
-
-            if (!m_meshesOwed.Contains(item: draw.Mesh)) { continue; }
-            m_owedOrder.Add(item: (((demand is null)
-                ? 0f
-                : (SdfMeshDemand.BoxOf(center: out var center, draw: in draw, half: out var half) ? demand.Priority(center: center, half: half) : float.PositiveInfinity)), index));
-        }
-        CollectionsMarshal.AsSpan(list: m_owedOrder).Sort(comparison: ByPriority);
-
-        var written = 0L;
-
-        foreach (var (_, index) in m_owedOrder) {
-            var mesh = draws[index].Mesh;
-
-            if (written >= words) { return; }
-            if (m_meshesOwed.Remove(item: mesh)) {
-                WriteMeshWords(mesh: mesh, placement: m_meshArena.Placements[mesh]);
-                written += SdfMeshRegion.WordsOf(mesh: mesh);
-            }
-        }
-    }
-    // Owes one placed mesh's words: the region keeps no copy of the mesh section, and the upload's flush stages the words
-    // from the mesh itself (WriteSourcedMeshWords). The byte offset is a long: a mesh placed past 512 M words starts past
-    // 2 GiB.
+    // Owes one placed mesh's words to this frame's upload: the region keeps no copy of the mesh section, and the upload's
+    // flush stages the words from the mesh itself (WriteSourcedMeshWords). Only a mesh a grown draw reserve moved is
+    // written so; every other lands through the background work. The byte offset is a long: a mesh placed past 512 M
+    // words starts past 2 GiB.
     private void WriteMeshWords(SdfMesh mesh, SdfMeshRegionMesh placement) {
         var words = SdfMeshRegion.WordsOf(mesh: mesh);
 
@@ -454,6 +442,25 @@ public sealed partial class SdfWorldTables {
     private long m_owedTicks;
     private long m_owedWords;
     private long m_owedSince;
+    // The uploads submitted when a staging last stopped owing words; zero while none has.
+    private long m_owedClearedUpload;
+
+    // The mesh region bytes the frame uploads staged: the latest upload's, the most one upload staged, and the sum.
+    private long m_frameStagedLast;
+    private long m_frameStagedMost;
+    private long m_frameStagedTotal;
+    // The one-based upload that staged the most.
+    private long m_frameStagedMostUpload;
+
+    // Counts the mesh region bytes one frame upload stages, before its flush.
+    private void CountFrameMeshStaging(long bytes) {
+        Volatile.Write(location: ref m_frameStagedLast, value: bytes);
+        Volatile.Write(location: ref m_frameStagedTotal, value: (m_frameStagedTotal + bytes));
+        if (bytes > m_frameStagedMost) {
+            Volatile.Write(location: ref m_frameStagedMost, value: bytes);
+            Volatile.Write(location: ref m_frameStagedMostUpload, value: (long)(m_uploads + 1UL));
+        }
+    }
 
     // Counts a staging that still owes meshes, and the time from the first such staging to the one that owes none.
     private void CountOwed(IReadOnlyList<SdfMeshDraw> draws) {
@@ -475,6 +482,7 @@ public sealed partial class SdfWorldTables {
         } else if (m_owedSince != 0) {
             m_owedTicks += (now - m_owedSince);
             m_owedSince = 0;
+            Volatile.Write(location: ref m_owedClearedUpload, value: (long)m_uploads);
         }
     }
 
@@ -484,8 +492,10 @@ public sealed partial class SdfWorldTables {
     /// <returns><see langword="true"/> while the region owes it.</returns>
     public bool OwesMesh(SdfMesh mesh) => (m_meshArena.Placements.ContainsKey(key: mesh) && m_meshesOwed.Contains(item: mesh));
     /// <summary>Describes the mesh region's landing: the bytes it holds and the latest list uses, the mesh bytes written
-    /// into it, the bytes it still owes, the frames and seconds it spent owing them, and the words a frame lands at most.
-    /// Safe to read from any thread, the counts being a frame's.</summary>
+    /// into it, the bytes it still owes, the frames and seconds it spent owing them, the mesh region bytes the frame
+    /// uploads staged (the latest, the most one staged and at which upload, and their sum), the uploads submitted and the
+    /// one at which a staging last stopped owing, and the background landing jobs, their bytes and their chunk. Safe to read
+    /// from any thread, the counts being a frame's.</summary>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeLanding() {
         var since = Volatile.Read(location: ref m_owedSince);
@@ -493,12 +503,18 @@ public sealed partial class SdfWorldTables {
         var seconds = (((double)ticks) / System.Diagnostics.Stopwatch.Frequency);
         var written = (Volatile.Read(location: ref m_meshWordsWritten) * sizeof(uint));
 
-        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s landing-words-per-frame={MeshLandingWords}");
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s frame-staged-last={Volatile.Read(location: ref m_frameStagedLast)}B frame-staged-most={Volatile.Read(location: ref m_frameStagedMost)}B@upload{Volatile.Read(location: ref m_frameStagedMostUpload)} frame-staged-total={Volatile.Read(location: ref m_frameStagedTotal)}B uploads={m_uploads} owed-cleared-upload={Volatile.Read(location: ref m_owedClearedUpload)} {DescribeLandingJobs()}");
     }
 
-    // One placed mesh's words, from its first vertex word, in the mesh scratch.
+    // The mesh whose words the mesh scratch holds, which a landing slicing it over several jobs reads again.
+    private SdfMesh? m_meshWordsMesh;
+
+    // One placed mesh's words, from its first vertex word, in the mesh scratch, written there unless it holds them. A
+    // mesh's words relative to its first vertex word follow from the mesh alone.
     private Span<uint> MeshWordsOf(SdfMesh mesh, SdfMeshRegionMesh placement) {
         var words = SdfMeshRegion.WordsOf(mesh: mesh);
+
+        if (ReferenceEquals(objA: mesh, objB: m_meshWordsMesh)) { return m_meshWords.AsSpan(length: words, start: 0); }
 
         if (words > m_meshWords.Length) {
             m_meshWords = new uint[Math.Max(val1: words, val2: (2 * m_meshWords.Length))];
@@ -517,6 +533,7 @@ public sealed partial class SdfWorldTables {
                 SkinWord: ((placement.SkinWord == 0) ? 0 : (placement.SkinWord - placement.VertexWord))
             )
         );
+        m_meshWordsMesh = mesh;
 
         return destination;
     }
@@ -595,8 +612,8 @@ public sealed partial class SdfWorldTables {
     // disposed once that upload completes (Retire). The region keeps its reserved copy sets, so growing takes no
     // descriptor range.
     // Shrinks the region to MeshRegionGrownBytes of the need when a relocation leaves it holding more than half as much
-    // again, so the meshes no list names any more give back their device-local, staging and host-copy bytes. A
-    // relocation writes every word anyway, so the shrunk region, which owes every word, costs that upload nothing more.
+    // again, so the meshes no list names any more give back their device-local, staging and host-copy bytes. The shrunk
+    // region owes its draw records; a relocation owes every mesh, which lands through the background work.
     private void FitMeshRegion(ulong bytes) {
         var fitted = MeshRegionGrownBytes(needBytes: bytes);
 

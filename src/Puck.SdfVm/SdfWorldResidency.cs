@@ -216,6 +216,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets whether the current staged mesh geometry has landed and its upload completed; false before
     /// tables exist. Pose and irradiance uploads do not delay it. Read on the frame thread; never waits.</summary>
     public bool MeshesResident => (m_tables?.MeshesResident ?? false);
+    /// <summary>Gets whether the latest staging held a draw out of the frame because its mesh had not landed
+    /// (<see cref="SdfWorldTables.DrawsAwaitMeshes"/>); <see langword="false"/> before the tables are built.</summary>
+    public bool DrawsAwaitMeshes => (m_tables?.DrawsAwaitMeshes ?? false);
     /// <summary>Gets the latest captured frame, which every view of the residency renders, or <see langword="null"/>
     /// before the first.</summary>
     public SdfFrame? Frame => m_frame;
@@ -563,11 +566,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 );
             }
 
-            tables.Pack(frame: frame, frameSeconds: context.FrameDeltaSeconds);
+            tables.Pack(frame: frame);
             m_packedFrame = frame;
             m_frame = frame;
             m_pendingFrame = null;
             LiveVolumes = frame.Volumes.Count;
+        } else {
+            // The frame stands, but meshes its draws name can have landed since it was packed.
+            tables.StageLandedMeshes(frame: frame);
         }
 
         FollowRunningCode();

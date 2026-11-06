@@ -202,8 +202,8 @@ laws exercise that boundary.
   instead let far terrain and shells outrank the lobby's small parts, and the
   occupied area landed no sooner than in plan order. `TryTake` takes
   lattices, the work queue (`Schedule`) runs store loads, lattice answers and
-  every CPU stage of the bake, and `SdfWorldTables.WriteOwedMeshes`
-  writes owed mesh words in that order, the plan's or the list's order among
+  every CPU stage of the bake, and `SdfWorldTables.OrderLanding`
+  orders owed meshes for landing in that order, the plan's or the list's order among
   equals and a draw no host box bounds first. With no demand point (the CPU
   laws, `puck mesh audit --cpu`) the plan's order stands. Order never changes
   a mesh. `world.residency [radius]` reads when the groups landed and became
@@ -563,12 +563,20 @@ laws exercise that boundary.
   `StageMeshRegion` (`SdfWorldTables.MeshRegion.cs`) writes the draw records
   (`SdfMeshRegion.WriteDraws`) and only the meshes the arena newly placed. A
   layout that moves placed meshes when one lands (sections by attribute) made
-  every landing rewrite the whole region. Newly placed meshes land within
-  `SdfWorldTables.MeshLandingWords` for each whole 60 Hz frame a frame spans
-  (`SdfMeshPathBake.FrameShares`; at a flat 2 MB a
-  frame, a cold bake's 1.7 GB region at 5 to 7 frames a second lands a minute
-  after the bake finishes), their draws waiting out of the
-  staged records until they do, and a grown region takes the words it held. A
+  every landing rewrite the whole region. Placed meshes land through the
+  background GPU work, never a frame's upload (`SdfWorldTables.MeshLanding.cs`):
+  jobs of at most `SdfGpuWork.UploadChunkBytes` under its byte, host-time and
+  GPU-share budget, nearest the views first, each staged into the job's own slot
+  of the region (`MeshLandingSlot`, past the upload ring's) and copied in the
+  job's command buffer. A mesh leaves `m_meshesOwed` only when every job carrying
+  its current placement has completed, and the landing filter in
+  `StageMeshRegionCore` is the one place its draws are held out until then; a
+  relocation, a moved mesh or a trim drops that mesh's progress, so a job still in
+  flight for its old words lands nothing. A frame that stands is staged again
+  when a mesh lands (`StageLandedMeshes`), and a lockstep frame waits for the
+  landing (`SdfWorldPasses.WaitingOf`). `world.residency`'s
+  landing line reads the frame uploads' staged mesh bytes (`frame-staged-most`)
+  and the landing jobs. A grown region takes the words it held. A
   list past the draw reserve doubles it and moves only the meshes the grown
   reserve takes (`SdfMeshRegionArena.Moved`), written that frame: relocating
   every mesh for it rewrote and compared the whole region in one frame. The
@@ -714,8 +722,8 @@ laws exercise that boundary.
   earlier mesh until the new one lands.
 - **A material id shift renumbers every later mesh.** A group whose material
   ids moved takes its mesh renumbered (`SdfMeshLibrary.TryTake`), a new
-  `SdfMesh` the mesh region lands again word for word, 2 MB a frame, with its
-  draw held out of the frame until it lands. Program material ids are dense in
+  `SdfMesh` the mesh region lands again word for word through the background
+  work, with its draw held out of the frame until it lands. Program material ids are dense in
   registration order, so a placement that stops or starts showing a palette
   shifts every group after it: a responding static row registers the palette
   of every creation it can show (`WorldPlacementStamper.EmitStatic`,

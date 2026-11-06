@@ -14,7 +14,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         using var rig = new Rig(slots: 3);
         rig.Engine.UploadProgram(producer.Program);
         var first = producer.Publish(rootX: 1, memberY: 1, unusedZ: 1);
-        RenderRootCut(rig, first);
+        LandRootCut(rig, first);
         var firstDraw = Assert.Single(first.MeshDraws);
         var moving = producer.Publish(rootX: 2, memberY: 1, unusedZ: 1);
         if (!skipMotion) { RenderRootCut(rig, moving); }
@@ -39,7 +39,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         using var producer = new RootCutProducer(skinned: true);
         using var rig = new Rig(slots: 3);
         rig.Engine.UploadProgram(producer.Program);
-        RenderRootCut(rig, producer.Publish(rootX: 1, memberY: 1, unusedZ: 1));
+        LandRootCut(rig, producer.Publish(rootX: 1, memberY: 1, unusedZ: 1));
         var moving = producer.Publish(rootX: 2, memberY: 2, unusedZ: 1);
         if (!skipMotion) { RenderRootCut(rig, moving); }
         var generation = RootCutGeneration(rig);
@@ -82,8 +82,18 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     }
 
     private static void RenderRootCut(Rig rig, SdfFrame frame) {
+        rig.Engine.GpuWork.Pump(rig.Engine);
         rig.Engine.Pack(frame);
         rig.Engine.SubmitUpload();
+        rig.Engine.GpuWork.Pump(rig.Engine);
+    }
+    // Renders a frame until the mesh region owes none of its meshes.
+    private static void LandRootCut(Rig rig, SdfFrame frame) {
+        RenderRootCut(rig, frame);
+        for (var count = 0; (rig.Engine.MeshesLanding || rig.Engine.DrawsAwaitMeshes); count++) {
+            Assert.True(count < 64);
+            RenderRootCut(rig, frame);
+        }
     }
 
     private static uint RootCutGeneration(Rig rig) => MemoryMarshal.Cast<byte, uint>(rig.Gpu.DeviceLocal(sizeBytes: rig.Engine.MeshRegionBytes, part: "mesh-region"))[SdfMeshRecord.SelectionWord + 11];

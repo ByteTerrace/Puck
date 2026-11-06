@@ -606,6 +606,19 @@ public sealed unsafe class GpuRegion : IDisposable {
         !m_disposed &&
         (m_owed[0].Count > 0)
     );
+    /// <summary>Gets the bytes the next flush stages and <see cref="RecordCopy"/> copies: a staged region's owed words, and
+    /// zero under the other policies.</summary>
+    public long OwedCopyBytes {
+        get {
+            if ((Policy != GpuResidencyPolicy.Staged) || m_disposed) { return 0L; }
+
+            var owed = m_owed[0];
+            var words = 0L;
+
+            for (var run = 0; (run < owed.Count); run++) { words += owed.Length(index: run); }
+            return (words * sizeof(uint));
+        }
+    }
     /// <summary>Gets where the buffers the region's readers bind directly live: its ring's or in-place buffer's memory,
     /// and <see cref="GpuHostVisibleMemory.Host"/> for a staged region, whose staging buffers are host memory.</summary>
     public GpuHostVisibleMemory Memory { get; }
@@ -819,9 +832,11 @@ public sealed unsafe class GpuRegion : IDisposable {
     }
     /// <summary>Shrinks a staged region that owns its destination to <paramref name="byteCount"/> bytes without waiting
     /// for any submission: it creates a destination of the new size, keeps the first <paramref name="byteCount"/> bytes
-    /// of <see cref="Contents"/> and frees the rest, drops any carry a grow still owed, and owes every word of the
-    /// new size, since the new destination holds nothing yet. A staging buffer larger than the next flush needs is
-    /// replaced at that flush (<see cref="StagingFloorBytes"/>).</summary>
+    /// of <see cref="Contents"/> and frees the rest, drops any carry a grow still owed, and owes every word of the new
+    /// size the host copy holds, since the new destination holds nothing yet. The words past the host copy of a region
+    /// with a source (<see cref="Shadow"/>) are not owed: its owner owes the ones its readers need
+    /// (<see cref="OweSourced"/>). A staging buffer larger than the next flush needs is replaced at that flush
+    /// (<see cref="StagingFloorBytes"/>).</summary>
     /// <param name="byteCount">The new size in bytes; positive, smaller than <see cref="ByteCount"/> and a whole number of
     /// uints.</param>
     /// <returns>The destination the region replaced, which the caller now owns and disposes once every submission
@@ -881,10 +896,15 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_carryBytes = 0;
         m_destination = replacement;
         ByteCount = byteCount;
-        // Every word is owed below, so the destination holds the host copy once the copy runs.
+        // Every host-copy word is owed below, so the destination holds the host copy once the copy runs.
         m_knownWords = ((int)(shadow / sizeof(uint)));
         m_copySets!.ForgetWriter(region: this);
-        OweAll(slot: 0);
+        m_owed[0].Clear();
+        m_owed[0].Add(
+            length: m_knownWords,
+            start: 0
+        );
+        m_stagedSlot = -1;
 
         return replaced;
     }
