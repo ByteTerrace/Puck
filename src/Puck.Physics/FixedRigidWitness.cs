@@ -92,13 +92,19 @@ public static class FixedRigidWitness {
         }
     }
     /// <summary>The largest number of points <see cref="SupportManifold"/> writes.</summary>
-    public const int MaximumSupportPoints = 4;
+    public const int MaximumSupportPoints = 5;
+    // The tilt of an ellipsoid's ring points from straight into the contact: cos and sin of 20 degrees.
+    private static readonly FixedQ4816 RingCosine = FixedQ4816.FromDouble(value: 0.93969262078590838d);
+    private static readonly FixedQ4816 RingSine = FixedQ4816.FromDouble(value: 0.34202014332566873d);
 
     /// <summary>Builds the support manifold of <paramref name="volume"/> facing a contact: for a box, the four corners of
     /// the face whose outward normal is closest to the direction into the contact, each named by the box corner it is
     /// (bit 2 set for the positive X half extent, bit 1 for Y, bit 0 for Z), so a corner keeps its identity while the face
     /// it belongs to changes; for a capsule with a length, the support points of both end spheres (feature 0 for the
-    /// lower endpoint, 1 for the upper); one support point, feature 0, for any other volume. Each anchor is on the same
+    /// lower endpoint, 1 for the upper); for an ellipsoid, its support point (feature 0) and a ring of four support points
+    /// along directions tilted 20 degrees from it toward each side (features 1 to 4), so a flat ellipsoid that rocks meets
+    /// its surface within the step rather than pivoting on one point until the next; one support point, feature 0, for a
+    /// sphere. Each anchor is on the same
     /// terms as <see cref="Anchor"/>: relative to the body's centre of mass, in world axes. Points that do not reach the
     /// contact are written too — a caller gives each its own separation, so a corner lifted off the surface is a
     /// speculative contact rather than a missing one.</summary>
@@ -109,7 +115,7 @@ public static class FixedRigidWitness {
     /// <param name="anchors">The destination for the anchors; holds at least <see cref="MaximumSupportPoints"/>.</param>
     /// <param name="features">The destination for each anchor's feature id; holds at least
     /// <see cref="MaximumSupportPoints"/>.</param>
-    /// <returns>The number of points written: 4 for a box, 2 for a capsule with a length, 1 otherwise.</returns>
+    /// <returns>The number of points written: 5 for an ellipsoid, 4 for a box, 2 for a capsule with a length, 1 otherwise.</returns>
     public static int SupportManifold(FixedBodyColliderVolume volume, FixedVector3 centerOffset, FixedQuaternion orientation, FixedVector3 normal, Span<FixedVector3> anchors, Span<int> features) {
         var into = -normal;
 
@@ -150,6 +156,40 @@ public static class FixedRigidWitness {
                     }
 
                     return written;
+                }
+
+            case FixedBodyColliderKind.Ellipsoid: {
+                    anchors[0] = Anchor(
+                        centerOffset: centerOffset,
+                        orientation: orientation,
+                        volume: volume,
+                        worldDirection: into
+                    );
+                    features[0] = 0;
+                    FixedVector3.OrthonormalBasis(
+                        normal: into,
+                        tangent1: out var tangent1,
+                        tangent2: out var tangent2
+                    );
+
+                    for (var ring = 0; (ring < 4); ring++) {
+                        var side = (ring switch {
+                            0 => tangent1,
+                            1 => -tangent1,
+                            2 => tangent2,
+                            _ => -tangent2,
+                        });
+
+                        anchors[(ring + 1)] = Anchor(
+                            centerOffset: centerOffset,
+                            orientation: orientation,
+                            volume: volume,
+                            worldDirection: ((into * RingCosine) + (side * RingSine))
+                        );
+                        features[(ring + 1)] = (ring + 1);
+                    }
+
+                    return 5;
                 }
 
             case FixedBodyColliderKind.Capsule when (volume.Endpoint != volume.Center): {

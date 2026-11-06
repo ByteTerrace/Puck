@@ -193,13 +193,10 @@ public sealed class BodySweepRefusalLawTests {
     }
 
     [Fact]
-    public void ARigidBodyRefusedAcrossItsSubstepsKeepsTheVelocityAndPoseItBeganWith() {
-        // A rigid ball rising at fifteen units a second takes seven substeps a tick. Posed a tenth of a unit under the
-        // carrier's top, its core, 0.15 above its foot, already lies past it, so the first substep is refused: the
-        // snapshot, taken before the tick's damping and gravity, must leave the velocity and the pose it began with.
-        // (A later substep cannot be the first refused: a sweep's box encloses its core's start with the core's radius
-        // and the travel, so it reaches the carrier's end first, and a ball rising toward the end is held by its sweep,
-        // which proves no ground there, a substep before its core's start could leave the carrier.)
+    public void ARigidBodyRefusedByItsProbeKeepsTheVelocityAndPoseItBeganWith() {
+        // A rigid ball rising at fifteen units a second, posed a tenth of a unit under the carrier's top: its core, 0.15
+        // above its foot, already lies past it, so the step's probe sweep is refused, and the start, recorded before the
+        // tick's damping and gravity, must leave the velocity and the pose it began with.
         using var fixture = Fixtures.FreshServer(definition: LatticeWorld(rigid: true));
         var ball = fixture.JoinSeat();
 
@@ -211,7 +208,6 @@ public sealed class BodySweepRefusalLawTests {
 
         fixture.Step();
 
-        Assert.True(condition: (ball.RigidStaticSubstepsThisTick > 1), userMessage: $"the tick took {ball.RigidStaticSubstepsThisTick} substeps; the fixture needs several");
         Assert.Equal(expected: ContactRefusal.UnrepresentableSweep, actual: ball.SweepRefusal);
         Assert.Equal(expected: velocity, actual: ball.RigidVelocity);
         Assert.Equal(expected: before, actual: State(body: ball, fixture: fixture));

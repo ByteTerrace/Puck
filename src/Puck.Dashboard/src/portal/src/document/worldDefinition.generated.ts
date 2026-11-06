@@ -4166,45 +4166,33 @@ export type WorldBodyContactPolicy = {
    */
   candidateBudget?: number;
   /**
-   * The most physical pair corrections incident to one body in a tick.
+   * The most body contacts incident to one body in a tick. It also sizes the rigid contact registry: a rigid body carries at most this many body contacts plus its surface contact, so no admitted contact is ever dropped for want of room.
    */
   maxPairsPerBody?: number;
   /**
-   * The most substeps one rigid body's static-contact integration may take in a tick — the derived-count's own ceiling: the actual count is derived per body per tick from its speed and collider size (a fast ball takes more, a resting one takes one), never authored directly, but the ceiling bounds the worst-case per-tick cost and is echoed in world.budget.
+   * The rigid solver's substeps per tick: each runs a velocity integration, a biased solve, a position integration and an unbiased relax over every contact, and the contact softness is formed at the substep width.
    */
   rigidSubstepCeiling?: number;
   /**
-   * Below this speed (world units/second) of its fastest point, the centre's linear speed plus its angular speed times its bounding radius, a grounded rigid body counts toward the resting hold window (RigidRestHoldSeconds). It scales with each body's live scale, so a long piece turning slowly about its centre stays awake while its ends still move. Non-negative.
+   * Below this speed (world units/second) of its fastest point, the centre's linear speed plus its angular speed times its bounding radius, a supported rigid body counts toward the resting hold window (RigidRestHoldSeconds). It scales with each body's live scale, so a long piece turning slowly about its centre stays awake while its ends still move. Non-negative.
    */
   rigidRestSpeed?: number;
   /**
-   * How long a rigid body must stay under the rest speed while grounded before the resting latch actually closes — long enough that crossing a contact skin's noise band for one tick never freezes a body mid-roll. Non-negative.
+   * How long a rigid body must stay under the rest speed while supported before the resting latch actually closes — long enough that crossing a contact skin's noise band for one tick never freezes a body mid-roll. Non-negative.
    */
   rigidRestHoldSeconds?: number;
   /**
-   * The fraction of a rigid body's own bounding radius one continuous- collision substep may travel — the derived substep COUNT stays derived (never authored directly), but how conservative that derivation is IS a document field: a smaller fraction takes more, cheaper substeps for the same speed; a larger one risks a fast body tunneling through a thin wall before RigidSubstepCeiling forces it to stop deriving more. Strictly positive.
+   * The fraction of a rigid body's own bounding radius its solved motion may depart from the motion its contact probe certified before a guard sweep re-certifies it against the static field: a smaller fraction guards more often. Strictly positive.
    */
   rigidSubstepTravelFraction?: number;
   /**
-   * The floor under one continuous-collision substep's travel bound (world units), independent of RigidSubstepTravelFraction — guards a body whose collider is small enough that the fraction alone would derive a near-zero bound. Strictly positive.
+   * The floor (world units) under that departure bound, independent of RigidSubstepTravelFraction — guards a body whose collider is small enough that the fraction alone would derive a near-zero bound. It is also the travel of the support a sleeping body is woken within. Strictly positive.
    */
   rigidSubstepMinimumTravel?: number;
   /**
-   * Below this closing speed (world units/second), a rigid-vs-rigid contact restitutes at zero rather than the authored coefficient — a pure momentum-conserving separation. A rigid pair carries no rising-edge latch (unlike a body-vs-static-world contact), so without this floor two touching bodies at rest would restitute a hair apart every tick they are found overlapping, separating, and falling back together — a stable micro-bounce that never reaches either rest threshold. Non-negative; small enough that a real strike is unaffected.
+   * Below this closing speed (world units/second), a rigid contact restitutes at zero rather than its pair's coefficient, so two bodies at rest never micro-bounce. Non-negative; small enough that a real strike is unaffected.
    */
   rigidPairRestitutionSpeed?: number;
-  /**
-   * The sequential-impulse pass count a box or capsule rigid body's own ground support manifold (SupportManifold — up to four box corners or two capsule cap points) resolves over each substep, distributing the normal impulse across every manifold point rather than one. Strictly positive.
-   */
-  rigidManifoldIterations?: number;
-  /**
-   * The most EXTRA full sweeps WorldPopulation.ResolveDynamicContacts runs past the first — fresh broadphase and narrowphase, over the same bodies' now-current positions — so an impulse crosses more than one pair-hop within the same tick (a rack break, a falling domino line). The count actually run is derived DOWN from this ceiling by RigidPairIterationBudget divided by the first pass's own resolved-pair count, so a lightly loaded tick gets every authored pass and a crowded one stays bounded. Strictly positive.
-   */
-  rigidPairIterationCeiling?: number;
-  /**
-   * The total pair-pass work one tick's extra rigid-pair sweeps may spend, before RigidPairIterationCeiling caps it — see that field. Strictly positive.
-   */
-  rigidPairIterationBudget?: number;
 };
 
 /**

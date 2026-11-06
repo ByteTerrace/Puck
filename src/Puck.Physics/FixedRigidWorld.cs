@@ -28,6 +28,10 @@ public sealed class FixedRigidWorld {
     // The substep rate is exactly 1/h, so it serves both as the divisor every h-scaled integration uses and as the
     // multiplier the speculative bias applies; the reciprocal is never formed.
     private readonly FixedQ4816 m_substepRate;
+    // A gap this small reads as touching: no speculative bias, a plain non-penetration constraint. One raw unit of a
+    // Q48.16 gap, turned into a speculative speed at the substep rate, is already a few centimetres a second, so without
+    // the slop a resting body jitters by that much and a small one, whose rest speed scales with it, never latches.
+    private static readonly FixedQ4816 TouchingSlop = FixedQ4816.FromRawBits(value: 8L);
 
     /// <summary>Initializes a new instance of the <see cref="FixedRigidWorld"/> class bound to one set of options.</summary>
     /// <param name="options">The solver options.</param>
@@ -164,22 +168,25 @@ public sealed class FixedRigidWorld {
         );
         RefusalCount += refusals;
     }
+    // Restitution reflects each closing slot's pre-solve normal speed, the manifold's points together for the same
+    // reason the normal solve takes them together (SolveOnce).
     private void ApplyRestitution(ReadOnlySpan<FixedRigidManifold> manifolds) {
+        Span<long> deltas = stackalloc long[FixedPairManifoldSlotTable.Capacity];
+
         for (var iteration = 0; (iteration < m_options.RestitutionIterations); ++iteration) {
             foreach (var manifold in manifolds) {
                 if (manifold.Restitution <= FixedQ4816.Zero) {
                     continue;
                 }
 
+                var active = 0;
+
                 for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
                     ref var slot = ref manifold.Slots[index];
 
-                    if (
-                        (slot.Disposition != FixedPairManifoldSlotDisposition.Constraint) ||
-                        (slot.NormalMassRaw <= 0L) ||
-                        (slot.TotalNormalImpulseRaw == 0L) ||
-                        (slot.RelativeVelocity > (-m_options.RestitutionThreshold))
-                    ) {
+                    if (!Restitutes(slot: in slot)) {
+                        deltas[index] = 0L;
+
                         continue;
                     }
 
@@ -193,29 +200,48 @@ public sealed class FixedRigidWorld {
                         factorRaw: slot.RelativeVelocity.Value,
                         factorBits: FixedQ4816.FractionBitCount
                     ));
-                    var delta = -Scale(
+
+                    deltas[index] = (-Scale(
                         value: target,
                         factorRaw: slot.NormalMassRaw,
                         factorBits: m_options.Scales.EffectiveMass
-                    );
+                    )).Value;
+                    ++active;
+                }
+
+                for (var index = 0; ((active > 0) && (index < FixedPairManifoldSlotTable.Capacity)); ++index) {
+                    ref var slot = ref manifold.Slots[index];
+
+                    if (!Restitutes(slot: in slot)) {
+                        continue;
+                    }
+
                     var accumulated = Math.Max(
-                        val1: (slot.NormalImpulseRaw + delta.Value),
+                        val1: (slot.NormalImpulseRaw + (deltas[index] / active)),
                         val2: 0L
                     );
                     var applied = (accumulated - slot.NormalImpulseRaw);
 
                     slot.NormalImpulseRaw = accumulated;
-                    slot.TotalNormalImpulseRaw += applied;
-                    ApplyImpulse(
-                        direction: slot.Normal,
-                        impulseRaw: applied,
-                        manifold: manifold,
-                        slot: in slot
-                    );
+                    slot.MaxNormalImpulseRaw = Math.Max(val1: slot.MaxNormalImpulseRaw, val2: accumulated);
+
+                    if (applied != 0L) {
+                        ApplyImpulse(
+                            direction: slot.Normal,
+                            impulseRaw: applied,
+                            manifold: manifold,
+                            slot: in slot
+                        );
+                    }
                 }
             }
         }
     }
+    private bool Restitutes(in FixedPairManifoldSlot slot) =>
+        (slot.Disposition == FixedPairManifoldSlotDisposition.Constraint) &&
+        (slot.NormalMassRaw > 0L) &&
+        (slot.MaxNormalImpulseRaw > 0L) &&
+        (slot.RelativeVelocity <= (-m_options.RestitutionThreshold));
     private long EffectiveMass(FixedRigidManifold manifold, in FixedPairManifoldSlot slot, FixedVector3 direction) {
         var refusals = 0;
 
@@ -410,16 +436,109 @@ public sealed class FixedRigidWorld {
             );
         }
     }
+    // The normal impulse a slot asks for this pass, from the bodies' current velocities and displacement: the
+    // speculative bias while the slot is still apart, the soft bias (biased pass only) once it overlaps.
+    private long NormalDelta(FixedRigidManifold manifold, in FixedPairManifoldSlot slot, in FixedSoftConstraint softness, bool useBias) {
+        var bodyA = manifold.BodyA!;
+        var bodyB = manifold.BodyB!;
+        var rotatedA = bodyA.DeltaRotation.Rotate(vector: slot.AnchorA);
+        var rotatedB = bodyB.DeltaRotation.Rotate(vector: slot.AnchorB);
+        var relativeDisplacement = ((bodyB.DeltaPosition + rotatedB) - (bodyA.DeltaPosition + rotatedA));
+        var separation = (slot.BaseSeparation + FixedVector3.Dot(
+            left: relativeDisplacement,
+            right: slot.Normal
+        ));
+        var velocityBias = FixedQ4816.Zero;
+        // The two softness weights are read at their own finer scale rather than narrowed to Q48.16 first; a mass
+        // scale as small as 0.0076 keeps only nine significant bits once narrowed.
+        var massScaleRaw = FixedQ4816.One.Value;
+        var massScaleBits = FixedQ4816.FractionBitCount;
+        var impulseScaleRaw = 0L;
+        var impulseScaleBits = FixedQ4816.FractionBitCount;
+
+        if (separation > TouchingSlop) {
+            // Speculative: the constraint may remove exactly the closing speed that would carry the pair past contact
+            // within this substep, and no more, so a first-appearance contact neither tunnels nor stops short.
+            velocityBias = Scale(
+                value: separation,
+                factorRaw: m_substepRate.Value,
+                factorBits: FixedQ4816.FractionBitCount
+            );
+        } else if (useBias && (separation < FixedQ4816.Zero)) {
+            velocityBias = FixedQ4816.Max(
+                x: SoftScale(
+                    softness: in softness,
+                    value: separation
+                ),
+                y: (-m_options.ContactSpeed)
+            );
+            massScaleRaw = softness.MassScaleRaw;
+            massScaleBits = softness.FractionBitCount;
+            impulseScaleRaw = softness.ImpulseScaleRaw;
+            impulseScaleBits = softness.FractionBitCount;
+        }
+
+        var normalVelocity = RelativeVelocity(
+            direction: slot.Normal,
+            manifold: manifold,
+            slot: in slot
+        );
+        var driven = (Scale(
+            factorBits: massScaleBits,
+            factorRaw: massScaleRaw,
+            value: normalVelocity
+        ) + velocityBias);
+
+        return (-Scale(
+            value: driven,
+            factorRaw: slot.NormalMassRaw,
+            factorBits: m_options.Scales.EffectiveMass
+        ) - Scale(
+            value: FixedQ4816.FromRawBits(value: slot.NormalImpulseRaw),
+            factorRaw: impulseScaleRaw,
+            factorBits: impulseScaleBits
+        )).Value;
+    }
     // Every iteration of the budget runs unconditionally: an early break driven by a tolerance would make the
     // measurement change the trajectory it measures.
     private void SolveOnce(ReadOnlySpan<FixedRigidManifold> manifolds, bool useBias) {
+        Span<long> deltas = stackalloc long[FixedPairManifoldSlotTable.Capacity];
+
         foreach (var manifold in manifolds) {
-            var bodyA = manifold.BodyA!;
-            var bodyB = manifold.BodyB!;
-            var softness = ((bodyA.IsDynamic && bodyB.IsDynamic)
+            var softness = ((manifold.BodyA!.IsDynamic && manifold.BodyB!.IsDynamic)
                 ? m_dynamicSoftness
                 : m_staticSoftness
             );
+            var active = 0;
+
+            // A manifold's points are solved together: every point's ask is read from the same velocities, and each
+            // takes an equal share of it. A sweep that visited them in turn would hand most of an impact to whichever
+            // point it reached first, and the uneven impulse would spin the body — a tall piece landing flat would tip
+            // on that alone. The pairs are still visited in turn, and successive passes converge the shares.
+            for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
+                ref var slot = ref manifold.Slots[index];
+
+                if (
+                    (slot.Disposition != FixedPairManifoldSlotDisposition.Constraint) ||
+                    (slot.NormalMassRaw <= 0L)
+                ) {
+                    deltas[index] = 0L;
+
+                    continue;
+                }
+
+                deltas[index] = NormalDelta(
+                    manifold: manifold,
+                    slot: in slot,
+                    softness: in softness,
+                    useBias: useBias
+                );
+                ++active;
+            }
+
+            if (active == 0) {
+                continue;
+            }
 
             for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
                 ref var slot = ref manifold.Slots[index];
@@ -431,71 +550,14 @@ public sealed class FixedRigidWorld {
                     continue;
                 }
 
-                var rotatedA = bodyA.DeltaRotation.Rotate(vector: slot.AnchorA);
-                var rotatedB = bodyB.DeltaRotation.Rotate(vector: slot.AnchorB);
-                var relativeDisplacement = ((bodyB.DeltaPosition + rotatedB) - (bodyA.DeltaPosition + rotatedA));
-                var separation = (slot.BaseSeparation + FixedVector3.Dot(
-                    left: relativeDisplacement,
-                    right: slot.Normal
-                ));
-                var velocityBias = FixedQ4816.Zero;
-                // The two softness weights are read at their own finer scale rather than narrowed to Q48.16 first; a
-                // mass scale as small as 0.0076 keeps only nine significant bits once narrowed.
-                var massScaleRaw = FixedQ4816.One.Value;
-                var massScaleBits = FixedQ4816.FractionBitCount;
-                var impulseScaleRaw = 0L;
-                var impulseScaleBits = FixedQ4816.FractionBitCount;
-
-                if (separation > FixedQ4816.Zero) {
-                    // Speculative: the constraint may remove exactly the closing speed that would carry the pair past
-                    // contact within this substep, and no more, so a first-appearance contact neither tunnels nor stops
-                    // short.
-                    velocityBias = Scale(
-                        value: separation,
-                        factorRaw: m_substepRate.Value,
-                        factorBits: FixedQ4816.FractionBitCount
-                    );
-                } else if (useBias) {
-                    velocityBias = FixedQ4816.Max(
-                        x: SoftScale(
-                            softness: in softness,
-                            value: separation
-                        ),
-                        y: (-m_options.ContactSpeed)
-                    );
-                    massScaleRaw = softness.MassScaleRaw;
-                    massScaleBits = softness.FractionBitCount;
-                    impulseScaleRaw = softness.ImpulseScaleRaw;
-                    impulseScaleBits = softness.FractionBitCount;
-                }
-
-                var normalVelocity = RelativeVelocity(
-                    direction: slot.Normal,
-                    manifold: manifold,
-                    slot: in slot
-                );
-                var driven = (Scale(
-                    factorBits: massScaleBits,
-                    factorRaw: massScaleRaw,
-                    value: normalVelocity
-                ) + velocityBias);
-                var delta = (-Scale(
-                    value: driven,
-                    factorRaw: slot.NormalMassRaw,
-                    factorBits: m_options.Scales.EffectiveMass
-                ) - Scale(
-                    value: FixedQ4816.FromRawBits(value: slot.NormalImpulseRaw),
-                    factorRaw: impulseScaleRaw,
-                    factorBits: impulseScaleBits
-                ));
                 var accumulated = Math.Max(
-                    val1: (slot.NormalImpulseRaw + delta.Value),
+                    val1: (slot.NormalImpulseRaw + (deltas[index] / active)),
                     val2: 0L
                 );
                 var applied = (accumulated - slot.NormalImpulseRaw);
 
                 slot.NormalImpulseRaw = accumulated;
-                slot.TotalNormalImpulseRaw += applied;
+                slot.MaxNormalImpulseRaw = Math.Max(val1: slot.MaxNormalImpulseRaw, val2: accumulated);
                 manifold.LastStepMovementRaw = Math.Max(
                     val1: manifold.LastStepMovementRaw,
                     val2: Math.Abs(value: applied)
@@ -509,11 +571,20 @@ public sealed class FixedRigidWorld {
                         slot: in slot
                     );
                 }
+            }
 
-                // Friction runs in the unbiased pass only: a biased push-out is a position correction, not a contact
-                // force, and coupling friction to it would brake the body by how deep the correction reached.
+            // Friction runs in the unbiased pass only: a biased push-out is a position correction, not a contact
+            // force, and coupling friction to it would brake the body by how deep the correction reached.
+            if (useBias) {
+                continue;
+            }
+
+            for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
+                ref var slot = ref manifold.Slots[index];
+
                 if (
-                    !useBias &&
+                    (slot.Disposition == FixedPairManifoldSlotDisposition.Constraint) &&
+                    (slot.NormalMassRaw > 0L) &&
                     (slot.TangentMass1Raw > 0L)
                 ) {
                     SolveFriction(

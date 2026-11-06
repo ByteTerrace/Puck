@@ -28,8 +28,6 @@ public sealed partial class WorldBody {
     /// ordinary mutation pipeline after the whole population advance.</param>
     /// <returns><see langword="true"/> when <paramref name="engageProbeOrdinal"/>'s rising edge fired this tick
     /// (the caller should engage); otherwise <see langword="false"/>.</returns>
-    /// <param name="rigidPolicy">The authored, once-compiled rigid-contact tunables <see cref="AdvanceRigid"/> reads;
-    /// ignored for a locomotion kit.</param>
     /// <param name="scratch">The step scratch the caller owns, which this step captures the body into before it begins
     /// and restores from if its sweep is refused (<see cref="StepScratch"/>).</param>
     /// <param name="sleepAfterTicks">The authored <c>bodies.sleepAfterSeconds</c> idle floor, in engine ticks, this body sleeps under
@@ -38,7 +36,7 @@ public sealed partial class WorldBody {
     /// <param name="contactFieldVersion">The population's current <see cref="WorldPopulation.ContactFieldVersion"/>,
     /// folded into this body's own idle bookkeeping so a contact-surface change under it is never mistaken for rest.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
-    internal bool Advance(ulong tick, ulong stepTicks, RigidContactPolicy rigidPolicy, StepScratch scratch, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null, ulong sleepAfterTicks = 0UL, ulong contactFieldVersion = 0UL) {
+    internal bool Advance(ulong tick, ulong stepTicks, StepScratch scratch, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null, ulong sleepAfterTicks = 0UL, ulong contactFieldVersion = 0UL) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
         if (PopulationSleeping) { return false; }
 
@@ -55,13 +53,12 @@ public sealed partial class WorldBody {
             return false;
         }
 
-        // A rigid kit hands the whole step to the rigid solver instead of the grounded/free motion program: no
-        // intent, action track, or hold list applies to a passive rigid entity.
+        // A rigid kit hands the whole step to the population's rigid solve instead of the grounded/free motion program:
+        // no intent, action track, or hold list applies to a passive rigid entity. The step is prepared here and solved
+        // with every other rigid body once all of them have advanced (WorldPopulation.Rigid.cs).
         if (m_rigid is not null) {
-            AdvanceRigid(
+            PrepareRigidStep(
                 entityIndex: entityIndex,
-                policy: rigidPolicy,
-                scratch: scratch,
                 stepTicks: stepTicks
             );
 

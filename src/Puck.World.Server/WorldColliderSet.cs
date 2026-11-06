@@ -1078,6 +1078,22 @@ public sealed partial class WorldColliderSet : IContactField {
             candidates: Candidates(orientation: in orientation, position: position, previousPosition: position, volumes: volumes)
         );
     /// <inheritdoc/>
+    public int CollectContacts(in FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 margin,
+        Span<FixedSurfaceContact> destination) {
+        var reach = new FixedVector3(X: margin, Y: margin, Z: margin);
+
+        return m_solver.CollectContacts(
+            candidates: Candidates(orientation: in orientation, position: (position + reach), previousPosition: (position - reach), volumes: [volume]),
+            colliders: m_staticSet,
+            destination: destination,
+            dynamicColliders: m_attachedSet,
+            margin: margin,
+            orientation: in orientation,
+            position: position,
+            volume: in volume
+        );
+    }
+    /// <inheritdoc/>
     public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
         in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         m_solver.ResolveSweep(colliders: m_staticSet,

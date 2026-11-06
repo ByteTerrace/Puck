@@ -6,7 +6,9 @@ namespace Puck.World.Server;
 
 /// <summary>One entity-table slot's checkpointed simulation state — see <see cref="WorldPopulation.Capture"/>. Excludes
 /// presentation-only fields (<c>LookIndex</c>) and read-back-only outcome strings, which the checkpoint's own
-/// exclusion rule (<see cref="WorldServer.TryCaptureCheckpoint"/>) leaves for the next write to that slot to set.</summary>
+/// exclusion rule (<see cref="WorldServer.TryCaptureCheckpoint"/>) leaves for the next write to that slot to set.
+/// <c>RigidContacts</c> holds every occupied manifold slot of the contacts the body owns — the warm-start impulses
+/// its next rigid step solves from, and the edges its sleeping island wakes along.</summary>
 public readonly record struct WorldPopulationEntryCheckpoint(
     int Index,
     byte KitIndex,
@@ -46,6 +48,7 @@ public readonly record struct WorldPopulationEntryCheckpoint(
     WorldBodyTransferState DynamicState,
     WorldBodyIntegrationResidue Residue,
     WorldIdentityProjection? Profile,
+    IReadOnlyList<WorldRigidContactSlotImage> RigidContacts,
     WorldPopulationNavigationCheckpoint? Navigation = null,
     WorldPopulationFlockCheckpoint Flock = default,
     WorldPopulationAutonomyCheckpoint Autonomy = default

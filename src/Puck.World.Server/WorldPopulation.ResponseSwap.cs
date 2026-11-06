@@ -105,7 +105,8 @@ public sealed partial class WorldPopulation {
         if (reach is null) { return; }
         var version = ContactFieldVersion;
 
-        ObserveFieldChange(contactFieldVersion: version, sleepersBefore: sleepersBefore);
+        WorldBodyWork.Process.Add(amount: (sleepersBefore - m_sleepingBodies.Count), kind: WorldBodyWork.FieldWakes);
+        WorldBodyWork.Process.Add(amount: m_sleepingBodies.Count, kind: WorldBodyWork.FieldObserved);
         m_sleepFieldVersion = version;
         RecordSleepFieldObservation(known: true);
     }

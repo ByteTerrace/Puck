@@ -48,6 +48,17 @@ public interface IContactField {
             velocity: ref velocity,
             volumes: volumes
         );
+    /// <summary>Collects every static surface a body volume lies within a margin of, at a fixed pose, one exact query
+    /// per surface (<see cref="FixedStaticContactSolver.CollectContacts"/>). A provider that cannot answer per surface (a
+    /// signed-distance field, a cross-authority merge) declines with a negative count, and the caller probes by sweep.</summary>
+    /// <param name="position">The body's world position.</param>
+    /// <param name="orientation">The body's world orientation.</param>
+    /// <param name="volume">The body-local convex volume.</param>
+    /// <param name="margin">The non-negative distance a surface may lie from the volume and still count.</param>
+    /// <param name="destination">The destination for the surfaces.</param>
+    /// <returns>The number of surfaces written, or -1 when the provider declines.</returns>
+    int CollectContacts(in FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 margin,
+        Span<FixedSurfaceContact> destination) => -1;
     /// <summary>Returns this provider's ambient up candidate at a position. The consuming integrator decides whether
     /// that geometric fact may orient a body; contact providers do not own body-frame policy.</summary>
     /// <param name="position">The body's foot point.</param>

@@ -29,6 +29,12 @@ public readonly ref struct FixedColliderCandidates(ReadOnlySpan<int> indices, Fi
         return ((slack.X >= FixedQ4816.Zero) && (slack.Y >= FixedQ4816.Zero) && (slack.Z >= FixedQ4816.Zero));
     }
 }
+/// <summary>One static surface a body volume lies within a margin of: the collider it belongs to and its exact gap.</summary>
+/// <param name="Source">The collider span: static or per-tick.</param>
+/// <param name="ColliderIndex">The collider's index in that span.</param>
+/// <param name="Normal">The unit surface normal, pointing from the surface toward the body.</param>
+/// <param name="Separation">The signed gap between the volume and the surface; negative overlaps.</param>
+public readonly record struct FixedSurfaceContact(FixedSurfaceColliderSource Source, int ColliderIndex, FixedVector3 Normal, FixedQ4816 Separation);
 /// <summary>
 /// Relaxes a body's compiled volumes out of a set of static colliders — the analytic half of
 /// <see cref="IContactField"/>, written once over <see cref="FixedStaticCollider.TryGetPush"/>.
@@ -92,6 +98,88 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         );
     }
 
+    /// <summary>Collects every static surface one body volume lies within a margin of, at a fixed pose: one exact query
+    /// per collider whose bounds and frame come within the margin of the contact skin, so a surface the volume does not
+    /// yet touch reports its positive gap. Each gap is measured to the skin's shell rather than the surface, so a body
+    /// the solve rests on its surfaces keeps the same skin a swept body keeps. Nothing moves; this is the contact
+    /// generation a rigid step solves from, the margin covering the step's travel.</summary>
+    /// <param name="colliders">The static colliders.</param>
+    /// <param name="dynamicColliders">The per-tick colliders.</param>
+    /// <param name="position">The body's world position.</param>
+    /// <param name="orientation">The body's world orientation.</param>
+    /// <param name="volume">The body-local convex volume.</param>
+    /// <param name="margin">The non-negative distance a surface's skin shell may lie from the volume and still count.</param>
+    /// <param name="candidates">The colliders of <paramref name="colliders"/> reachable from a region covering the
+    /// volume grown by the margin, or the default value to visit every collider.</param>
+    /// <param name="destination">The destination for the surfaces, in collider order, static before attached.</param>
+    /// <returns>The number of surfaces written, surfaces past the destination's length unreported; or -1 when a field
+    /// collider lies within the margin, since a field certifies contact only inside its own band and the margin can
+    /// reach past it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="colliders"/> or <paramref name="dynamicColliders"/> is
+    /// <see langword="null"/>.</exception>
+    public int CollectContacts(FixedStaticColliderSet colliders, FixedStaticColliderSet dynamicColliders, FixedVector3 position,
+        in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 margin, in FixedColliderCandidates candidates,
+        Span<FixedSurfaceContact> destination) {
+        ArgumentNullException.ThrowIfNull(argument: colliders);
+        ArgumentNullException.ThrowIfNull(argument: dynamicColliders);
+
+        var bounds = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume);
+        var reach = (margin + ContactSkin);
+        var grown = (bounds.Extent + new FixedVector3(X: reach, Y: reach, Z: reach));
+        var written = Collect(boxes: colliders.Boxes, candidates: in candidates, colliders: colliders.Colliders, destination: destination,
+            frames: colliders.Frames, grown: grown, reach: reach, orientation: in orientation, position: position,
+            source: FixedSurfaceColliderSource.Static, volume: in volume, written: 0, center: bounds.Center);
+
+        return (written < 0) ? written : Collect(boxes: dynamicColliders.Boxes, candidates: default, colliders: dynamicColliders.Colliders, destination: destination,
+            frames: dynamicColliders.Frames, grown: grown, reach: reach, orientation: in orientation, position: position,
+            source: FixedSurfaceColliderSource.Dynamic, volume: in volume, written: written, center: bounds.Center);
+    }
+    private int Collect(ReadOnlySpan<FixedStaticCollider> colliders, ReadOnlySpan<FixedColliderBox> boxes,
+        ReadOnlySpan<FixedColliderFrame> frames, in FixedColliderCandidates candidates, FixedSurfaceColliderSource source,
+        FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedVector3 center,
+        FixedVector3 grown, FixedQ4816 reach, Span<FixedSurfaceContact> destination, int written) {
+        var indexed = (candidates.IsActive && candidates.Contains(center: center, extent: grown));
+        var next = 0;
+        var noSkin = new FixedStaticContactSolver(ContactSkin: FixedQ4816.Zero, GroundedThreshold: FixedQ4816.Zero, MaxIterations: 0);
+
+        for (var index = 0; ((index < colliders.Length) && (written < destination.Length)); index++) {
+            if (indexed) {
+                while ((next < candidates.Indices.Length) && (candidates.Indices[next] < index)) { next++; }
+                if (next == candidates.Indices.Length) { break; }
+                index = candidates.Indices[next];
+            }
+            if (noSkin.Misses(box: in boxes[index], bodyCenter: center, bodyExtent: grown)) {
+                continue;
+            }
+            if (frames[index].Separates(bodyExtent: in grown, offset: (center - boxes[index].Center), skin: FixedQ4816.Zero)) {
+                continue;
+            }
+            if (colliders[index].Kind == FixedStaticColliderKind.Field) {
+                return -1;
+            }
+
+            var pushes = colliders[index].TryGetPush(
+                orientation: in orientation,
+                position: position,
+                push: out var push,
+                skin: reach,
+                uncertain: out _,
+                volume: in volume
+            );
+
+            FixedStaticContactWork.Process.CountQuery(pushed: pushes);
+            if (pushes) {
+                destination[written++] = new FixedSurfaceContact(
+                    ColliderIndex: index,
+                    Normal: push.Normal,
+                    Separation: ((reach - push.Penetration) - ContactSkin),
+                    Source: source
+                );
+            }
+        }
+
+        return written;
+    }
     /// <summary>Returns whether a collider's bounds lie further than the contact skin from a body's along some world
     /// axis, so its exact query would find no push.</summary>
     /// <param name="colliderCenter">The collider's world center.</param>

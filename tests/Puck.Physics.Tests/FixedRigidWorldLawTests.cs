@@ -12,9 +12,10 @@ public sealed class FixedRigidWorldLawTests {
     private static readonly FixedVector3 Gravity = new(X: FixedQ4816.Zero, Y: FixedQ4816.FromDouble(value: -9.81d), Z: FixedQ4816.Zero);
 
     // A box world over a floor at y = 0: absolute poses here, solver views in the world, one contact query a pair a step.
-    private sealed class BoxWorld {
-        private readonly FixedRigidWorld m_world = new(options: new FixedRigidSolverOptions { RateHz = 60, SubstepCount = 4 });
+    private sealed class BoxWorld(double halfX = 0.1d, double halfY = 0.1d, double halfZ = 0.1d, double mass = 1d, int rateHz = 60, int substeps = 4) {
+        private readonly FixedRigidWorld m_world = new(options: new FixedRigidSolverOptions { RateHz = rateHz, SubstepCount = substeps });
         private readonly FixedRigidBody m_floor = new();
+        private readonly FixedVector3 m_half = new(X: FixedQ4816.FromDouble(value: halfX), Y: FixedQ4816.FromDouble(value: halfY), Z: FixedQ4816.FromDouble(value: halfZ));
 
         internal readonly List<FixedVector3> Positions = [];
         internal readonly List<FixedQuaternion> Orientations = [];
@@ -22,12 +23,13 @@ public sealed class FixedRigidWorldLawTests {
         internal readonly List<FixedRigidManifold> FloorManifolds = [];
         internal readonly Dictionary<(int, int), FixedRigidManifold> PairManifolds = [];
         internal FixedQ4816 Friction = FixedQ4816.FromDouble(value: 0.6d);
+        internal FixedQ4816 Restitution = FixedQ4816.Zero;
 
-        internal static FixedBodyColliderVolume Volume => new(
+        internal FixedBodyColliderVolume Volume => new(
             Kind: FixedBodyColliderKind.Box,
             Center: FixedVector3.Zero,
             Endpoint: FixedVector3.Zero,
-            HalfExtents: new FixedVector3(X: Half, Y: Half, Z: Half),
+            HalfExtents: m_half,
             Rotation: FixedQuaternion.Identity,
             Radius: FixedQ4816.Zero
         );
@@ -35,17 +37,17 @@ public sealed class FixedRigidWorldLawTests {
         internal int RefusalCount => m_world.RefusalCount;
 
         internal int Add(FixedVector3 position) {
-            // A uniform 1 kg cube of half extent h: I = m (2h)^2 / 6 about each axis.
-            var inertia = ((4d * 0.1d * 0.1d) / 6d);
+            // A uniform box of half extents (x, y, z): I = m (b^2 + c^2) / 3 about each axis.
+            static double Inertia(double mass, double b, double c) => ((mass * ((b * b) + (c * c))) / 3d);
 
             Positions.Add(item: position);
             Orientations.Add(item: FixedQuaternion.Identity);
             Bodies.Add(item: new FixedRigidBody {
                 Acceleration = Gravity,
-                InverseMassRaw = Raw(value: 1d, bits: 40),
-                InverseInertiaXX = Raw(value: (1d / inertia), bits: 40),
-                InverseInertiaYY = Raw(value: (1d / inertia), bits: 40),
-                InverseInertiaZZ = Raw(value: (1d / inertia), bits: 40),
+                InverseMassRaw = Raw(value: (1d / mass), bits: 40),
+                InverseInertiaXX = Raw(value: (1d / Inertia(mass: mass, b: halfY, c: halfZ)), bits: 40),
+                InverseInertiaYY = Raw(value: (1d / Inertia(mass: mass, b: halfX, c: halfZ)), bits: 40),
+                InverseInertiaZZ = Raw(value: (1d / Inertia(mass: mass, b: halfX, c: halfY)), bits: 40),
             });
             FloorManifolds.Add(item: new FixedRigidManifold());
 
@@ -62,8 +64,8 @@ public sealed class FixedRigidWorldLawTests {
         internal void Step(Func<List<FixedTwoBodyContact>, List<FixedTwoBodyContact>>? order = null) {
             var active = new List<FixedRigidManifold>();
             var candidates = new List<FixedTwoBodyContact>();
-            Span<FixedVector3> anchors = stackalloc FixedVector3[4];
-            Span<int> features = stackalloc int[4];
+            Span<FixedVector3> anchors = stackalloc FixedVector3[FixedRigidWitness.MaximumSupportPoints];
+            Span<int> features = stackalloc int[FixedRigidWitness.MaximumSupportPoints];
 
             for (var id = 0; (id < Bodies.Count); id++) {
                 Bodies[id].Orientation = Orientations[id];
@@ -77,7 +79,10 @@ public sealed class FixedRigidWorldLawTests {
                     lowest = FixedQ4816.Min(x: lowest, y: (Positions[id].Y + anchors[point].Y));
                 }
 
-                if (lowest <= FixedQ4816.FromDouble(value: 0.02d)) {
+                // A probe of the step's predicted fall: the floor is a candidate once the step could reach it.
+                var reach = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.02d), y: (-Bodies[id].LinearVelocity.Y / FixedQ4816.FromInteger(value: rateHz)) + FixedQ4816.FromDouble(value: 0.02d));
+
+                if (lowest <= reach) {
                     _ = FixedRigidContacts.AppendSurface(body: Shape(id: id), candidates: candidates, normal: Up, separation: lowest,
                         sourceId: 0, surfaceId: FloorId);
                 }
@@ -87,6 +92,7 @@ public sealed class FixedRigidWorldLawTests {
                 manifold.BodyA = m_floor;
                 manifold.BodyB = Bodies[id];
                 manifold.Friction = Friction;
+                manifold.Restitution = Restitution;
                 manifold.Associate(candidates: (order?.Invoke(arg: candidates) ?? candidates));
 
                 if (manifold.Slots.ActiveCount > 0) {
@@ -157,6 +163,25 @@ public sealed class FixedRigidWorldLawTests {
         Assert.True(condition: (FixedQ4816.Abs(value: (world.Positions[box].Y - Half)) < FixedQ4816.FromDouble(value: 0.005d)),
             userMessage: $"the box rests at y={(double)world.Positions[box].Y}");
         Assert.True(condition: (world.Bodies[box].LinearVelocity.Length < FixedQ4816.FromDouble(value: 0.01d)));
+    }
+    [Fact]
+    public void ATallPieceDroppedFlatLandsStanding() {
+        // The debug world's chess piece: 0.09 by 0.24 by 0.09 m, 0.12 kg, at 30 Hz with eight substeps, dropped 0.44 m.
+        var world = new BoxWorld(halfX: 0.045d, halfY: 0.12d, halfZ: 0.045d, mass: 0.12d, rateHz: 30, substeps: 8) {
+            Friction = FixedQ4816.FromDouble(value: 0.5d),
+            Restitution = FixedQ4816.FromDouble(value: 0.1d),
+        };
+        var piece = world.Add(position: At(x: 0d, y: 0.56d, z: 0d));
+
+        for (var step = 0; (step < 90); step++) {
+            world.Step();
+        }
+
+        Assert.Equal(expected: 0, actual: world.RefusalCount);
+        Assert.True(condition: (world.Orientations[piece].W > FixedQ4816.FromDouble(value: 0.999d)),
+            userMessage: $"the piece tipped to {world.Orientations[piece]}");
+        Assert.True(condition: (FixedQ4816.Abs(value: (world.Positions[piece].Y - FixedQ4816.FromDouble(value: 0.12d))) < FixedQ4816.FromDouble(value: 0.01d)),
+            userMessage: $"the piece stands at y={(double)world.Positions[piece].Y}");
     }
     [Fact]
     public void AStackOfThreeBoxesStandsForSixHundredSteps() {

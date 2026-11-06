@@ -1269,35 +1269,36 @@ lowers it to the same JSON as before, except where the look changes on purpose.
     claims exact 1-Lipschitz for every radius, while the Valley packet and
     `hazards.md` keep the CPU/GPU small-radius disagreement open. One of them
     is wrong.
-- [low] A bounded contact-field change still visits every parked rigid body.
-  `WorldPopulation.WakeSleepersNear` (`src/Puck.World.Server/WorldPopulation.Sleep.cs`)
-  box-tests each sleeper, and `ObserveFieldChange` writes each survivor's
-  `m_lastContactFieldVersion`, on every lattice step, carrier move and response
-  swap: the debug world counts 61 `physics.bodies.field-observed` a tick (488
-  sleepers every eight ticks as the pool's medium follows the river). The
-  candidates can come from the retained `SleepingIndex` query over the change
-  box, and a parked body's observation is the population's own
-  (`m_sleepFieldVersion`, which `ParkRigidIslands` already stamps), so the
-  checkpoint's `ContactFieldObservationCurrent` can be derived from it and the
-  per-sleeper write dropped. Done when a change that reaches nobody costs no
-  per-sleeper work and `puck test --reproduce` still matches over a restore.
 - [low] A non-rigid sleeper (`bodies.sleepAfterSeconds` above zero) still wakes
   on every `ContactFieldVersion` move, bounded or not
   (`WorldBody.TryDeferSleepingAdvance`, `src/Puck.World.Server/WorldBody.Sleep.cs`):
   only parked rigid islands take the local wake. No live world enables non-rigid
   sleep yet; the first one that does wants the same box test.
-- [medium] Rigid contact has two implementations. The World solves rigid
-  bodies with `WorldBody.AdvanceRigid` (a full static `ResolveSweep` every
-  substep, `src/Puck.World.Server/WorldBody.Rigid.cs:763`) and
-  `WorldPopulation.ResolveRigidPairContact` (one impulse and a positional split
-  per pair per pass, `src/Puck.World.Server/WorldPopulation.Rigid.cs:65`),
-  while `FixedRigidSolver` and `FixedRigidWorld` (`src/Puck.Physics/`) hold a
-  fixed-point Soft Step solver with warm starting and persistent manifolds that
-  no tick calls. The island graph is also rebuilt every tick, allocating a
-  `SortedSet` per relinked body (`WorldPopulation.Sleep.cs:90-113`). Merge to
-  the one solver as [brief B](physics-and-kernels-lessons.md#brief-b-one-rigid-solver-soft-step)
-  of the physics lessons plan says; done when the old path is deleted and the
-  rigid scenarios reproduce.
+- [medium] A rigid body near a field collider generates its surface contacts by
+  sweep, not per surface. `FixedStaticContactSolver.CollectContacts`
+  (`src/Puck.Physics/FixedStaticContactSolver.cs`) declines when a field collider
+  lies within the step's reach, because a field certifies contact only inside its
+  own band, and `WorldBody.ProbeRigidSurface` then sweeps the predicted motion.
+  The debug world's game tables carry relief, so its stones and pieces take that
+  path: a knocked Go stone costs about 31 exact queries and 15 convex queries per
+  awake stone a tick, against about one per candidate collider on analytic
+  surfaces. Answer per surface over a field collider (its push with the margin
+  bounded by its band, the rest left to the guard sweep); done when the Go knock
+  scene counts about one exact query per candidate pair.
+- [low] A carried body's tangibility push moves a rigid body positionally,
+  outside the rigid solve (`WorldPopulation.Carry.cs`,
+  `WorldBody.ApplyRigidPositionalCorrection`), because the broadphase skips
+  carried bodies. Admit a carried body to the broadphase as a static side that
+  pushes with its velocity, and delete the positional door.
+- [low] A curved body resting on one point has no torsional friction: a Go stone
+  spinning about its normal keeps spinning under rolling resistance alone, and
+  five stones stay awake ten seconds after a knock in the debug world. A
+  torsional (spin) friction row on a surface manifold, clamped by its normal
+  impulse times a patch radius, is the Box2D rolling-resistance shape.
+- [low] The rigid solver's contact softness (`ContactHertz`,
+  `ContactDampingRatio`, `ContactSpeed` in `FixedRigidSolverOptions`) is an
+  engine default the World never authors; give `collision.bodyContacts` the
+  fields with neutral defaults.
 
 Engine defaults that carry a look or a rule of play, which the authors rule
 wants authored with a neutral engine default (each one sits in C# or HLSL,

@@ -1,3 +1,4 @@
+using Puck.Maths;
 using Puck.Physics;
 
 namespace Puck.World.Server;
@@ -229,12 +230,19 @@ public sealed partial class WorldPopulation {
 
             target.ApplyRigidPositionalCorrection(correction: targetShare);
 
-            // A rigid other body must wake through the SAME door WorldPopulation.Rigid.cs's own pair path uses
-            // (ApplyRigidPositionalCorrection) — ApplyDynamicContact is the locomotion body's own planar/vertical-
-            // velocity channels, which a rigid body does not read, so a push through it would move the body's pose
-            // while leaving world.rigid and $physics:quiescent reporting it resting at zero velocity.
+            // A rigid other body takes the push through its rigid door, which wakes it — ApplyDynamicContact is the
+            // locomotion body's own planar/vertical-velocity channels, which a rigid body does not read.
             ApplyPairShare(body: other, share: otherShare);
             ApplyPairShare(body: carrier, share: targetShare);
+        }
+    }
+    // A carry share through the body's own door: the rigid positional correction for a rigid body, the locomotion one
+    // otherwise.
+    private static void ApplyPairShare(WorldBody body, FixedVector3 share) {
+        if (body.IsRigid) {
+            body.ApplyRigidPositionalCorrection(correction: share);
+        } else {
+            body.ApplyDynamicContact(correction: share);
         }
     }
     private void RebuildCarryRelationships() {

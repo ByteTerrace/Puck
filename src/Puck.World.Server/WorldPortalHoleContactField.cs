@@ -195,6 +195,14 @@ public sealed class WorldPortalHoleContactField : IContactField {
         );
     }
     /// <inheritdoc/>
+    /// <remarks>A body standing in an opening declines, so the caller's sweep takes back what the wall behind the glass
+    /// pushed; anywhere else the inner field answers.</remarks>
+    public int CollectContacts(in FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 margin,
+        Span<FixedSurfaceContact> destination) =>
+        (TryOpening(opening: out _, orientation: in orientation, position: in position, volumes: [volume])
+            ? -1
+            : m_inner.CollectContacts(destination: destination, margin: margin, orientation: in orientation, position: in position, volume: in volume));
+    /// <inheritdoc/>
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) => m_inner.TryUp(
         position: in position,
         up: out up

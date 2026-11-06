@@ -23,7 +23,6 @@ public sealed class WorldRigidDynamicsLawTests {
                 BodyContactsRaw = source.Collision.BodyContacts with {
                     CandidateBudget = 1,
                     MaxPairsPerBody = 1,
-                    RigidPairIterationCeiling = 1,
                 },
             },
         };
@@ -248,9 +247,9 @@ public sealed class WorldRigidDynamicsLawTests {
         for (var tick = 0; (tick < 180); tick++) {
             fixture.Step();
             Assert.True(condition: (ball.FixedPosition.Y >= FixedQ4816.FromDouble(value: 0.049d)),
-                userMessage: $"Spawn {height}, tick {tick}: position {ball.FixedPosition}, velocity {ball.RigidVelocity}, contact {ball.RigidGroundContacting}");
+                userMessage: $"Spawn {height}, tick {tick}: position {ball.FixedPosition}, velocity {ball.RigidVelocity}, grounded {ball.Grounded}");
         }
-        Assert.True(condition: (ball.RigidGroundContacting || ball.Resting));
+        Assert.True(condition: (ball.Grounded || ball.Resting));
         Assert.True(condition: ball.Grounded);
         Assert.True(condition: ((ball.Facts & BodyFacts.Grounded) != 0));
     }
@@ -493,7 +492,7 @@ public sealed class WorldRigidDynamicsLawTests {
         };
     }
 
-    /// <summary>A body the rest latch has frozen (<c>WorldBody.AdvanceRigid</c>'s fast path) must WAKE when a live
+    /// <summary>A body the rest latch has frozen must WAKE when a live
     /// solid edit replaces the static world it rested against: lower the floor placement under a settled box and the
     /// box falls to the new floor rather than hanging frozen in the air with <c>resting=1</c>. The discriminating
     /// case for <c>WorldBody.SetContactField</c>'s wake — without it the freeze holds the box bit-identical at its
@@ -684,6 +683,31 @@ public sealed class WorldRigidDynamicsLawTests {
         );
     }
     [Fact]
+    public void ABoxStackedOnABoxStandsForSixHundredTicks() {
+        // One rigid solver holds a stack: the upper box rests on the lower one through a four-point body contact, the
+        // lower on the floor through its surface contact, and neither creeps, tips nor sinks over twenty seconds.
+        using var fixture = TwoJoinedSeats(definition: BoxOnFloorDocument());
+        var lower = fixture.Server.Body(index: 0)!;
+        var upper = fixture.Server.Body(index: 1)!;
+        var lowerY = (FloorTopY + BoxHalfExtents.Y);
+        var upperY = (lowerY + (2f * BoxHalfExtents.Y));
+
+        lower.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: lowerY, yawRadians: 0f, z: 0f);
+        upper.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0.05f, y: upperY, yawRadians: 0f, z: 0f);
+
+        for (var tick = 0; (tick < 600); tick++) {
+            fixture.Step();
+        }
+
+        static float UpAlignment(WorldBody body) => Vector3.Dot(vector1: Vector3.Transform(value: Vector3.UnitY, rotation: body.Orientation), vector2: Vector3.UnitY);
+
+        Assert.True(condition: (UpAlignment(body: lower) > 0.999f), userMessage: $"the lower box tipped (up {UpAlignment(body: lower):0.####})");
+        Assert.True(condition: (UpAlignment(body: upper) > 0.999f), userMessage: $"the upper box tipped (up {UpAlignment(body: upper):0.####})");
+        Assert.True(condition: (MathF.Abs(x: (((float)upper.FixedPosition.Y) - upperY)) < 0.02f), userMessage: $"the upper box stands at y={((double)upper.FixedPosition.Y):0.####}, not {upperY:0.####}");
+        Assert.True(condition: (MathF.Abs(x: (((float)upper.FixedPosition.X) - 0.05f)) < 0.02f), userMessage: $"the upper box crept to x={((double)upper.FixedPosition.X):0.####}");
+        Assert.True(condition: (lower.Resting && upper.Resting), userMessage: $"the stack never came to rest (lower {lower.Resting}, upper {upper.Resting})");
+    }
+    [Fact]
     public void HeadOnEqualMassElasticCollisionConservesMomentumAndSwapsVelocity() {
         using var fixture = TwoJoinedSeats(definition: TwoRigidBallsDocument(
             friction: 0f,
@@ -816,7 +840,7 @@ public sealed class WorldRigidDynamicsLawTests {
 
         Assert.True(condition: restored.RigidResting);
         Assert.True(condition: (restored.RigidRestingHoldTicks > 0UL));
-        Assert.True(condition: restored.RigidGroundContacting);
+        Assert.NotEmpty(collection: fixture.Server.Population.Capture().Entries.Single(predicate: static entry => (entry.Index == 0)).RigidContacts);
         Assert.Equal(
             expected: FixedVector3.Zero,
             actual: restored.RigidVelocity

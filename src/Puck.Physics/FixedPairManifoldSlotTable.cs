@@ -42,8 +42,9 @@ public struct FixedPairManifoldSlot : IManifoldSlot<FixedTwoBodyContact> {
     public long NormalMassRaw;
     /// <summary>The relative normal velocity captured before the step's first solve, for restitution.</summary>
     public FixedQ4816 RelativeVelocity;
-    /// <summary>The total normal impulse applied within the current step.</summary>
-    public long TotalNormalImpulseRaw;
+    /// <summary>The largest accumulated normal impulse raw the current step reached: a slot that carried load at any
+    /// substep restitutes, even when the pair has separated by the step's end and its accumulated impulse is zero.</summary>
+    public long MaxNormalImpulseRaw;
     /// <summary>The first friction direction, orthogonal to <see cref="Normal"/>, for the current step.</summary>
     public FixedVector3 Tangent1;
     /// <summary>The second friction direction, orthogonal to <see cref="Normal"/> and <see cref="Tangent1"/>.</summary>
@@ -91,7 +92,7 @@ public struct FixedPairManifoldSlot : IManifoldSlot<FixedTwoBodyContact> {
         AnchorB = candidate.AnchorB;
         Normal = candidate.Normal;
         Separation = candidate.Separation;
-        TotalNormalImpulseRaw = 0L;
+        MaxNormalImpulseRaw = 0L;
         IdleSteps = 0;
         Disposition = FixedPairManifoldSlotDisposition.Constraint;
     }

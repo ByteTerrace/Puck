@@ -79,7 +79,6 @@ public sealed partial class WorldPopulation {
             Entries: CaptureEntries(),
             Generations: m_entries.Select(selector: entry => entry.Generation).ToArray(),
             EventBodies: m_eventBodies.ToArray(),
-            SleepingSupports: CaptureSleepingSupports(),
             SleepingGravity: [.. m_sleepGravity.OrderBy(keySelector: static pair => pair.Key).Select(selector: static pair => (pair.Key, pair.Value))],
             SharedNavigation: m_navigation.CaptureShared(),
             AttachedSolids: (m_baseContactField as WorldColliderSet)?.CaptureAttached(),
@@ -143,9 +142,12 @@ public sealed partial class WorldPopulation {
         // Only a parked rigid body or an asleep one compares its observation with the field, to decide whether to wake;
         // an awake body overwrites it (ParkRigidIsland, UpdateSleepEligibility) before any read. Its observation is
         // current by construction, so the image never carries a stale stamp that would tie a body's continuation to
-        // field changes elsewhere in the world (a scoped replay compares that image across drives).
-        var observes = ((residue.RigidSleepRootPlusOne != 0) || (residue.AsleepSinceTick != 0UL));
-        var contactFieldObservationCurrent = (!observes || (residue.LastContactFieldVersion == ContactFieldVersion));
+        // field changes elsewhere in the world (a scoped replay compares that image across drives). The parked rigid
+        // bodies observe the field together, through the population's own observation, which a bounded change that
+        // reaches none of them advances without visiting any.
+        var contactFieldObservationCurrent = ((residue.RigidSleepRootPlusOne != 0)
+            ? (m_sleepFieldVersion == ContactFieldVersion)
+            : ((residue.AsleepSinceTick == 0UL) || (residue.LastContactFieldVersion == ContactFieldVersion)));
 
         residue = residue with {
             // Contact-field versions are process-local rebuild counters. A population checkpoint retains only
@@ -217,6 +219,7 @@ public sealed partial class WorldPopulation {
                 ? body.ViewTransferState()
                 : body.CaptureTransferState()),
             Residue: residue,
+            RigidContacts: RigidContactImages(alias: alias, body: body),
             Profile: body.Profile?.Project(),
             Navigation: new WorldPopulationNavigationCheckpoint(
                 ActiveProducerDomainIndex: entry.ProducerState.ActiveProducerNavigationDomainIndex,
@@ -228,6 +231,15 @@ public sealed partial class WorldPopulation {
                 Path: NavigationPath(alias: alias, state: entry.NavigationState)
             )
         );
+    }
+    // A body's owned contact slots: the population's reused scratch for a view, a copy for a capture.
+    private IReadOnlyList<WorldRigidContactSlotImage> RigidContactImages(bool alias, WorldBody body) {
+        var images = (alias ? (m_viewRigidContacts ??= []) : []);
+
+        images.Clear();
+        body.CopyRigidContactImages(destination: images);
+
+        return images;
     }
     // A route's cached path: the population's reused scratch for a view, a copy for a capture.
     private IReadOnlyList<int> NavigationPath(bool alias, BodyNavigationState state) {
@@ -343,6 +355,7 @@ public sealed partial class WorldPopulation {
                 contactFieldVersion: ContactFieldVersion,
                 residue: captured.Residue
             );
+            ApplyRigidContactImages(index: captured.Index, images: captured.RigidContacts);
 
             var designationCount = Math.Min(
                 val1: captured.Designations.Length,
@@ -469,8 +482,7 @@ public sealed partial class WorldPopulation {
     internal void ValidateCheckpoint(WorldPopulationCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         if (m_baseContactField is WorldColliderSet attached) { attached.ValidateAttached(rows: (checkpoint.AttachedSolids ?? [])); }
-        if ((checkpoint.Entries is null) || (checkpoint.EventBodies is null) ||
-            (checkpoint.SleepingSupports is null) || (checkpoint.SleepingGravity is null)) {
+        if ((checkpoint.Entries is null) || (checkpoint.EventBodies is null) || (checkpoint.SleepingGravity is null)) {
             throw new InvalidOperationException(message: "population checkpoint entries are null.");
         }
         // An empty document has no kits and retains the constructor's zero selection sentinel.
@@ -575,16 +587,8 @@ public sealed partial class WorldPopulation {
             }
             previousGravity = row.Body;
         }
-        var previousSupport = (-1, -1);
-
-        foreach (var edge in checkpoint.SleepingSupports) {
-            if ((edge.CompareTo(other: previousSupport) <= 0) || (((uint)edge.Support) >= ((uint)Capacity)) ||
-                (((uint)edge.Body) >= ((uint)Capacity)) || (edge.Support == edge.Body) ||
-                (restored[edge.Support] is not { } support) || (restored[edge.Body] is not { Residue.RigidSleepRootPlusOne: > 0 }) ||
-                (m_kits[CapturedKitIndex(captured: support, seatKit: checkpoint.SeatKit)].Rigid is not null)) {
-                throw new InvalidOperationException(message: "population checkpoint has invalid sleeping support dependencies.");
-            }
-            previousSupport = edge;
+        foreach (var captured in checkpoint.Entries) {
+            ValidateRigidContactImages(captured: captured, restored: restored, seatKit: checkpoint.SeatKit);
         }
 
         foreach (var captured in checkpoint.Entries) {

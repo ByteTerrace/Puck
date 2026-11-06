@@ -110,13 +110,13 @@ public sealed class WorldRigidSleepContinuationLawTests {
         var captured = RoundTrip(definition, population).Population;
 
         Assert.Equal(expected: (rigidSupport ? 2 : 1), actual: captured.SleepingGravity.Count);
-        if (remoteSupport && !rigidSupport) { Assert.Equal(expected: (0, 1), actual: Assert.Single(collection: captured.SleepingSupports)); }
+        // A sleeping load carries its support as its own contact with the remote body.
+        if (remoteSupport && !rigidSupport) { Assert.Contains(collection: captured.Entries.Single(predicate: static entry => (entry.Index == 1)).RigidContacts, filter: static slot => (slot.Partner == 0)); }
         population.Restore(checkpoint: captured, defaults: definition.PlayerDefaults, tick: 1200);
         Assert.Null(@object: population.EntryBody(index: 0));
         Assert.Equal(0, population.SleepingRigidBodies);
         var restored = RoundTrip(definition, population).Population;
 
-        Assert.Empty(collection: restored.SleepingSupports);
         Assert.Empty(collection: restored.SleepingGravity);
         population.Restore(checkpoint: restored, defaults: definition.PlayerDefaults, tick: 1200);
         if (remoteSupport) {

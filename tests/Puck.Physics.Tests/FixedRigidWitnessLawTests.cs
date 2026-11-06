@@ -40,8 +40,8 @@ public sealed class FixedRigidWitnessLawTests {
             Y: FixedQ4816.One,
             Z: FixedQ4816.Zero
         );
-        Span<FixedVector3> anchors = stackalloc FixedVector3[4];
-        Span<int> features = stackalloc int[4];
+        Span<FixedVector3> anchors = stackalloc FixedVector3[FixedRigidWitness.MaximumSupportPoints];
+        Span<int> features = stackalloc int[FixedRigidWitness.MaximumSupportPoints];
         var count = FixedRigidWitness.SupportManifold(
             anchors: anchors,
             centerOffset: centerOffset,
@@ -230,8 +230,8 @@ public sealed class FixedRigidWitnessLawTests {
             Y: FixedQ4816.One,
             Z: FixedQ4816.Zero
         );
-        Span<FixedVector3> sphereAnchors = stackalloc FixedVector3[4];
-        Span<int> sphereFeatures = stackalloc int[4];
+        Span<FixedVector3> sphereAnchors = stackalloc FixedVector3[FixedRigidWitness.MaximumSupportPoints];
+        Span<int> sphereFeatures = stackalloc int[FixedRigidWitness.MaximumSupportPoints];
         var sphereCount = FixedRigidWitness.SupportManifold(
             anchors: sphereAnchors,
             centerOffset: sphereVolume.Center,
