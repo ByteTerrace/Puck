@@ -402,6 +402,10 @@ resolves through `PATH` to WSL's `bash.exe`, which cannot see `D:/` paths, has n
 Forward Git Bash by its full path (`"C:/Program Files/Git/usr/bin/bash.exe" <script>`)
 to run several commands under one lease.
 
+A build, `Puck.slnx` included, takes no heavy lease: run it directly with
+`-nodeReuse:false`, since the heavy queue serves memory-heavy suites and
+replicas and a build queued behind them waits for nothing.
+
 Take the heavy lease once per suite run: one `puck test` invocation (or one
 suite) per `puck lease heavy` acquisition, never a batch of runs under one hold,
 so the queue rotates between lanes. Keep each hold to about 30 minutes; a run
