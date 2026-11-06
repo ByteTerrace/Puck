@@ -89,4 +89,24 @@ public sealed class MeasureLawTests {
         using var answered = JsonDocument.Parse(File.ReadAllText(b));
         Assert.NotNull(answered.RootElement.GetProperty("Report").GetString());
     }
+
+    [Fact]
+    public void AColdIdleSamplerNeverClaimsThatTheMachineIsLoaded() {
+        var thresholds = new Puck.Cli.Host.HostLoadThresholds(60, 10, 4, 10, 75);
+        var sample = new Puck.Cli.Host.HostSample(DateTimeOffset.UnixEpoch, 4, 20, 100, null, 0, CommitChargeGb: 20, CommitLimitGb: 100);
+        var monitor = new Puck.Cli.Host.HostLoadMonitor(thresholds, 3);
+        monitor.Observe(sample);
+        var why = Puck.Cli.Host.HostQuiet.Busy(sample, monitor);
+        Assert.DoesNotContain("loaded", why);
+        Assert.Contains("CPU", why);
+        Assert.Contains("1 of 3", why);
+        monitor.Observe(sample);
+        monitor.Observe(sample);
+        Assert.Null(Puck.Cli.Host.HostQuiet.Busy(sample, monitor));
+        monitor.Observe(sample with { CpuPercent = 100 });
+        monitor.Observe(sample with { CpuPercent = 100 });
+        why = Puck.Cli.Host.HostQuiet.Busy(sample, monitor);
+        Assert.Contains("cpu mean=68.0%", why);
+        Assert.DoesNotContain("freeRAM", why);
+    }
 }
