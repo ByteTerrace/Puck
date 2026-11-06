@@ -20,8 +20,7 @@ public static class MeasureCommand {
         var afterTree = new Option<string?>("--after-input-tree") { Description = "Input tree paired with --after-world-artifact. Required for an artifact side; commit sides use their own whole tree." };
         var metrics = new Option<string[]>("--metric") { Required = true, Description = "Numeric JSON pointer in the command's report, repeatable: /metrics/idle-tick/median for bench world; /metrics/startup/median for bench startup; /signals/0/metrics/<key> for sweep." };
         var decides = new Option<string>("--decides") { Required = true, Description = "What result decides the question, including units and tolerance. Kept with the answer for the lead's judgement." };
-        var command = CliOptions.Forwarded(name: "command", description: "A puck bench world, bench startup or sweep command after -- (omit puck). Sweep plans also measure headless host.frames signals. Output and World artifact are supplied by the runner.");
-        command.Arity = ArgumentArity.OneOrMore;
+        var command = CliOptions.ForwardedCommand(description: "A puck bench world, bench startup or sweep command after -- (omit puck). Sweep plans also measure headless host.frames signals. Output and World artifact are supplied by the runner.");
         var request = new Command("request", "Freeze before and after builds and queue a timing question in the main checkout's ignored scratch.") { name, before, after, beforeCommit, afterCommit, beforeTree, afterTree, metrics, decides, command };
         request.SetAction(async (parse, token) => {
             var root = RepositoryPaths.RequireRoot();
@@ -57,10 +56,10 @@ public static class MeasureCommand {
             }
             return 0;
         });
-        var repeats = new Option<int>("--repeats") { DefaultValueFactory = _ => 5, Description = "Number of paired A/B rounds per request (1..100, default 5), run ABAB." };
-        var wait = new Option<int>("--wait") { DefaultValueFactory = _ => 600, Description = "Total seconds to acquire the priority quiet window (default 600)." };
-        var settle = new Option<int>("--settle") { DefaultValueFactory = _ => 30, Description = "Idle seconds before measurement (default 30); zero explicitly skips settling." };
-        var timeout = new Option<int>("--timeout-seconds") { DefaultValueFactory = _ => 600, Description = "Bound per command sample, including shutdown (1..7200, default 600)." };
+        var repeats = CliOptions.Count(name: "--repeats", description: "Number of paired A/B rounds per request (1..100, default 5), run ABAB.", minimum: 1, defaultValue: 5, maximum: 100);
+        var wait = CliOptions.Count(name: "--wait", description: "Total seconds to acquire the priority quiet window (default 600).", minimum: 0, defaultValue: 600);
+        var settle = CliOptions.Count(name: "--settle", description: "Idle seconds before measurement (default 30); zero explicitly skips settling.", minimum: 0, defaultValue: 30);
+        var timeout = CliOptions.Count(name: "--timeout-seconds", description: "Bound per command sample, including shutdown (1..7200, default 600).", minimum: 1, defaultValue: 600, maximum: 7200);
         var holder = new Option<string>("--holder") { DefaultValueFactory = _ => "measure", Description = "Quiet lease holder/lane (default measure)." };
         var ids = new Argument<string[]>("requests") { Arity = ArgumentArity.ZeroOrMore, Description = "Pending request IDs; omitted drains the pending snapshot in arrival order." };
         var run = new Command("run", "Drain queued questions in one quiet window; report medians, IQR and paired after-minus-before differences.") { repeats, wait, settle, timeout, holder, ids };
