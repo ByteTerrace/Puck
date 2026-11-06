@@ -116,6 +116,17 @@ public static class HostProcesses {
         return ((result.Errors.Count == 0) && (result.CommandResult.Command == command));
     }
 
+    /// <summary>Whether a process is the Puck CLI (<c>puck</c> or <c>Puck.Cli</c>), whose GPU verbs open no device
+    /// themselves: their device work runs in the World and test processes they start under the GPU lease.</summary>
+    /// <param name="name">The process name, without extension.</param>
+    /// <param name="commandLine">Its Windows command line or Linux NUL-delimited argv; empty when unreadable.</param>
+    /// <returns><see langword="true"/> for a Puck CLI process.</returns>
+    public static bool IsPuckCli(string name, string commandLine) {
+        var arguments = Arguments(commandLine: commandLine);
+        var entry = ((arguments.Length == 0) ? ProgramName(path: name) : EntryPoint(arguments: arguments, hostAssembly: out _, next: out _));
+
+        return (entry.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "puck") || entry.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.Cli"));
+    }
     /// <summary>Whether a process is GPU work.</summary>
     /// <param name="name">The process name, without extension.</param>
     /// <param name="commandLine">Its Windows command line or Linux NUL-delimited argv; empty when unreadable.</param>

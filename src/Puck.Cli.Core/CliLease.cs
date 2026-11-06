@@ -144,8 +144,7 @@ public sealed class CliLease : IDisposable {
     /// <param name="Position">The ticket's lane's turn among the queued lanes in the current round.</param>
     /// <param name="Lanes">How many lanes are queued.</param>
     /// <param name="Since">When the waiter took the ticket, or null when its time is unreadable.</param>
-    /// <param name="ProcessId">The waiting process's id, or null when its ticket does not name a readable one.</param>
-    public sealed record LeaseTicket(string Id, string Holder, string Lane, int Ahead, int Position, int Lanes, DateTimeOffset? Since = null, int? ProcessId = null);
+    public sealed record LeaseTicket(string Id, string Holder, string Lane, int Ahead, int Position, int Lanes, DateTimeOffset? Since = null);
     /// <summary>What a lease directory shows at one moment.</summary>
     /// <param name="Holder">The holder name, or null when nothing holds the lease.</param>
     /// <param name="Lane">The holder's lane, or null when nothing holds the lease.</param>
@@ -195,7 +194,6 @@ public sealed class CliLease : IDisposable {
                     Lane: ((lines.Length == 5) ? lines[4] : DefaultLane(holder: lines[0])),
                     Lanes: place.Lanes,
                     Position: place.Position,
-                    ProcessId: (int.TryParse(s: lines[2], provider: CultureInfo.InvariantCulture, result: out var waiting) ? waiting : null),
                     Since: Stamped(lines: lines)
                 ));
             }
