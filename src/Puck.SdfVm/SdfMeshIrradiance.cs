@@ -1254,9 +1254,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
     // Captures the lighting the probes are relit under, and owes a relight when it changes: the directional lights and the
     // static point and spot lights, whole, so a fixture switched off relights the bounce it cast; the sky the bounce
-    // reflects; the gains, the sources, the sweeps and what the scene's materials reflect and emit. Outside lockstep a
-    // Continuous asynchronous lighting is rate-limited because a capture renders the sky. An authored grid instead
-    // gives both modes a fixed, history-independent capture policy. Converged lighting compares sky captures exactly.
+    // reflects; the gains, the sources, the sweeps and what the scene's materials reflect and emit. Nonconverged
+    // captures are rate-limited because a capture renders the sky. An authored grid snaps the capture inputs and
+    // radiance independently of history. Converged lighting compares sky captures exactly.
     private readonly SdfLights m_captureLights = new();
     private void RefreshLighting(SdfFrame frame, Layout layout) {
         var grid = frame.IndirectLightingGrid;

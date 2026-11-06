@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Reflection;
 using Puck.Abstractions.Cameras;
 using Puck.SignedDistance;
 using Xunit;
@@ -191,24 +192,30 @@ public sealed partial class SdfMeshIrradianceLawTests {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CameraOnlyTwinkleDoesNotProjectOrRelightConvergedLighting(bool grid) {
+    public void CameraOnlyTwinkleDoesNotProjectOrAdvanceConvergedLighting(bool grid) {
         var sky = UniformSky(new Vector3(0.01f, 0.02f, 0.1f));
         _ = sky.Add(label: "camera stars", parameters: new SdfSkyStars { Brightness = 2f }, visibility: SdfSkyVisibility.Camera);
-        var gains = new SdfIndirectGains(0, 0, 0, 0, 1);
+        var gains = new SdfIndirectGains(Lights: 0, Emission: 0, Screens: 0, Sky: 1, Feedback: 0);
         var frame = Frame() with {
             Sky = sky, Lights = new SdfLights(), IndirectGains = gains, IndirectSources = gains.Sources,
             ConvergesLighting = true, IndirectBounces = 0,
             IndirectLightingGrid = grid ? new SdfIndirectLightingGrid(1, 0.125f) : default,
         };
         var volume = Volume();
-        volume.Stage(frame, SdfIndirectTier.Medium, false, _ => { });
-        var relit = volume.Counters.Read(SdfMeshIrradiance.Relit);
+        // Exercise production capture invalidation independently of volume tracing.
+        const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
+        var layoutType = typeof(SdfMeshIrradiance).GetNestedType("Layout", BindingFlags.NonPublic)!;
+        var layout = layoutType.GetMethod("Of", BindingFlags.Static | BindingFlags.Public)!.Invoke(null, [SdfIndirectTier.Medium, 0, frame.FarDistance]);
+        var refresh = typeof(SdfMeshIrradiance).GetMethod("RefreshLighting", Private)!;
+        var version = typeof(SdfMeshIrradiance).GetField("m_lightingVersion", Private)!;
+        refresh.Invoke(volume, [frame, layout]);
+        var initialVersion = version.GetValue(volume);
         for (var tick = 1; tick <= 8; tick++) {
             sky.First<SdfSkyStars>().TwinklePhase = tick * 0.1f;
-            volume.Stage(frame, SdfIndirectTier.Medium, false, _ => { });
+            refresh.Invoke(volume, [frame, layout]);
         }
         Assert.Equal(1, volume.Counters.Read(SdfMeshIrradiance.EnvironmentProjections));
-        Assert.Equal(relit, volume.Counters.Read(SdfMeshIrradiance.Relit));
+        Assert.Equal(initialVersion, version.GetValue(volume));
     }
 
     /// <summary>A dim blue added to a bright red sky relights the volume: the blue the slab sends back reaches the probes
