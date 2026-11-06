@@ -351,7 +351,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
                 sizeBytes: uploadBytes
             );
         } catch {
-            DiscardTexture(texture: ((nint)texture));
+            Discard(resource: ((nint)texture));
 
             throw;
         }
@@ -380,8 +380,8 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
                 ResourceHandle = ((nint)texture),
             });
         } catch {
-            DiscardTexture(texture: ((nint)texture));
-            DiscardBuffer(buffer: ((nint)uploadBuffer));
+            Discard(resource: ((nint)texture));
+            Discard(resource: ((nint)uploadBuffer));
 
             throw;
         }
@@ -501,34 +501,23 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             );
         }
     }
-    // Counts a texture no owner will hold as released and releases it.
-    private void DiscardTexture(nint texture) {
+    // Counts a texture or staging buffer no owner will hold as released and releases it.
+    private void Discard(nint resource) {
         try {
             DirectXDeviceMemory.CountReleased(
                 memory: m_deviceContext.Memory,
-                resource: texture
+                resource: resource
             );
         } finally {
-            Release(pointer: ref texture);
-        }
-    }
-    // Counts a staging buffer no owner will hold as released and releases it.
-    private void DiscardBuffer(nint buffer) {
-        try {
-            DirectXDeviceMemory.CountReleased(
-                memory: m_deviceContext.Memory,
-                resource: buffer
-            );
-        } finally {
-            Release(pointer: ref buffer);
+            Release(pointer: ref resource);
         }
     }
     // Releases a staging buffer and a texture, the texture whether or not the buffer's release failed.
     private void RetireNativeResources(nint buffer, nint texture) {
         try {
-            DiscardBuffer(buffer: buffer);
+            Discard(resource: buffer);
         } finally {
-            DiscardTexture(texture: texture);
+            Discard(resource: texture);
         }
     }
     // Releases every replaced texture and buffer and the current ones with the view, whether or not the fence has passed:
