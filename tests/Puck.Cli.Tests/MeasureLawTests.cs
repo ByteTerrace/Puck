@@ -5,6 +5,33 @@ namespace Puck.Cli.Tests;
 
 public sealed class MeasureLawTests {
     [Fact]
+    public void WindowedPointersUseTheSelectedStopsAndPassesBeforeFreezingBuilds() {
+        MeasureCommand.ValidateMetric(["bench", "frames"], "/metrics/boot.frames.p99/median");
+        var error = Assert.Throws<InvalidDataException>(() => MeasureCommand.ValidateMetric(["bench", "frames"], "/metrics/boot.frames.p95/median"));
+        Assert.Contains("/metrics/boot.frames.p50/median", error.Message);
+        Assert.Contains("puck.bench.v1", error.Message);
+        Assert.Throws<InvalidDataException>(() => MeasureCommand.ValidateMetric(["bench", "frames"], "/metrics/boot.frames.p99/samples/1"));
+        MeasureCommand.ValidateMetric(["bench", "frames", "--samples", "2"], "/metrics/boot.frames.p99/samples/1");
+        MeasureCommand.ValidateMetric(["bench", "frames", "--gpu-pass", "world/glass"], "/metrics/boot.gpu.world~1glass/median");
+        Assert.Throws<InvalidDataException>(() => MeasureCommand.ValidateMetric(["bench", "frames"], "/metrics/boot.gpu.world~1glass/median"));
+        using var temporary = new Puck.Testing.TemporaryDirectory(prefix: "puck-frames-plan-");
+        var plan = temporary.PathOf("plan.json");
+        File.WriteAllText(plan, """{"tour":{"stops":[{"name":"pool","lines":[]},{"name":"lake","lines":[]}]}}""");
+        MeasureCommand.ValidateMetric(["bench", "frames", "--plan", plan, "--stop", "pool"], "/metrics/pool.frames.p50/median");
+        Assert.Throws<InvalidDataException>(() => MeasureCommand.ValidateMetric(["bench", "frames", "--plan", plan, "--stop", "pool"], "/metrics/lake.frames.p50/median"));
+    }
+
+    [Fact]
+    public void GpuMetricsRequireAFullCompletedWindowForEverySelectedPass() {
+        const string Pending = "[world.gpu-timing: on window=32\nworld/glass: 0.125 ms samples=31]";
+        Assert.Null(Puck.Cli.Bench.FrameBenchmarks.ReadGpu(Pending, ["world/glass"]));
+        Assert.Null(Puck.Cli.Bench.FrameBenchmarks.ReadGpu(Pending.Replace("31", "32", StringComparison.Ordinal), ["world/missing"]));
+        var measured = Puck.Cli.Bench.FrameBenchmarks.ReadGpu(Pending.Replace("31", "32", StringComparison.Ordinal), ["world/glass"]);
+        Assert.Equal(0.125, measured!["world/glass"]);
+        Assert.Null(Puck.Cli.Bench.FrameBenchmarks.ReadGpu("[world.gpu-timing: on window=32\nworld: refused timestamps unavailable]", ["world/glass"]));
+    }
+
+    [Fact]
     public void DifferencesStayPairedRatherThanSubtractingIndependentMedians() {
         var summary = MeasureCommand.Summarize("work", [1, 100, 101], [2, 2, 102]);
         Assert.Equal(100, summary.Before.Median);

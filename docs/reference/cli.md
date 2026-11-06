@@ -2805,7 +2805,7 @@ puck measure run --holder lead --repeats 5 --wait 600 --settle 30
 
 `--before-commit <revision>` and `--after-commit <revision>` replace the artifact and input-tree options for their side. Each commit side freezes its whole revision tree, including worlds and plan inputs, beside its build. Each artifact side requires `--before-input-tree <root>` or `--after-input-tree <root>` to declare the inputs it pairs with. A git input tree snapshots tracked and nonignored untracked files from disk; a standalone tree copies all its contents. The command runs inside each side's frozen tree, so later edits and removal of the requesting checkout cannot change it. Use repository-relative input paths; absolute paths inside the requesting checkout become relative, and paths escaping it are refused.
 
-Forward the command after `--`, without the leading `puck`. Supported forms are `bench world`, `bench startup` and `sweep`; the runner supplies `--world-artifact` and `--output`, which the request must omit. A headless `host.frames` run or an individual sweep signal uses an ordinary sweep plan (`sweep --plan <plan.json> --no-scenarios`). `--metric` is a repeatable JSON pointer into the existing command's `report.json`, such as `/metrics/idle-tick/median` for `bench world`, `/metrics/startup/median` for startup or `/signals/0/metrics/<key>` for a sweep; both bench lanes write the one `puck.bench.v1` report described under [`puck bench world`](#puck-bench-world). Numeric JSON strings from sweep metrics are accepted; absent or nonfinite values refuse. Use `~1` for `/` and `~0` for `~` within a key.
+Forward the command after `--`, without the leading `puck`. Supported forms are `bench world`, `bench startup`, `bench frames` and `sweep`; the runner supplies `--world-artifact` and `--output`, which the request must omit. A headless `host.frames` run or an individual sweep signal uses an ordinary sweep plan (`sweep --plan <plan.json> --no-scenarios`). `--metric` is a repeatable JSON pointer into the existing command's `report.json`, such as `/metrics/idle-tick/median` for `bench world`, `/metrics/startup/median` for startup, `/metrics/boot.frames.p99/median` for windowed boot frames or `/signals/0/metrics/<key>` for a sweep; the bench lanes write the one `puck.bench.v1` report described under [`puck bench world`](#puck-bench-world). Numeric JSON strings from sweep metrics are accepted; absent or nonfinite values refuse. Use `~1` for `/` and `~0` for `~` within a key.
 
 `run [request-ids...]` takes one [`quiet` lease](#puck-lease-quieta-settle-window) for the pending snapshot, then runs before, after, before, after for `--repeats` paired rounds per request (1–100, default 5). New requests wait for the next window. `--wait` bounds lease acquisition; `--settle` defaults to 30 idle seconds; `--timeout-seconds` bounds each command including shutdown (default 600). The existing bench and sweep harnesses own every measurement; this verb does not time child-process wall clocks. Reports retain raw samples and source reports, plus median and interquartile range (linearly interpolated quartiles) for before, after and the paired **after minus before** difference. The paired median is computed from each pair's difference, not by subtracting the two independent medians.
 
@@ -3189,6 +3189,62 @@ separately and label it explicitly. Use a quiet machine and repeat discrepant
 measurements before treating a difference as an improvement.
 
 ---
+
+### `puck bench frames`
+
+Measures windowed host frame times and explicitly selected GPU passes through
+`WorldLaunch` and the sweep's Operator session. Every process uses `--devices none`
+and isolated persistence, and closes on success, refusal, cancellation or timeout.
+Under `measure run`, the launch's GPU hold nests beneath the runner's quiet hold.
+
+```sh
+puck bench frames worlds/debug --backend directx --samples 1 --ticks 120
+puck bench frames --plan worlds/debug/sweep.json --stop gallery-level-0 gallery-level-1
+puck bench frames --plan worlds/debug/measure-water.json --stop pool falls lake
+puck bench frames --plan worlds/debug/measure-water.json --gpu-pass 'world/sdf.world$glass-shade'
+puck measure request --name 'windowed boot control' \
+  --before-commit <revision> --after-commit <same-revision> \
+  --metric /metrics/boot.frames.p50/median \
+  --metric /metrics/boot.frames.p99/median \
+  --decides 'paired difference near zero in ms, read beside its IQR' \
+  -- bench frames worlds/debug --backend directx
+```
+
+Without `--plan`, the `boot` window retains the host's initial frame history,
+waits for renderer readiness, then runs `--ticks` simulation ticks (default 120,
+1..600). `host.frames` reads the retained history, at most its 4096 iterations;
+this measures host iterations during boot, not process startup latency.
+With `--plan`, the existing sweep plan reader selects its tour and `--stop`
+names (all stops by default). Prelude, reset, framing, steps and after-lines
+are honored. Capture lockstep is disabled. Each stop settles bakes, readiness
+and GPU residency, runs its authored frame/step timeline and settle interval,
+then resets frame history for its ordinary display-paced measurement window.
+There are no still captures or lighting convergence waits in that window.
+
+The `puck.bench.v1` report contains `<stop>.frames.avg`, `.p50`, `.p99` and
+`.max`, in ms, read by the sweep's existing `host.frames` parser. Each is a
+`BenchMetric` over `--samples` fresh processes (default 1, 1..100): for example
+`/metrics/pool.frames.p99/median` is the median of the processes' p99 frame
+times, not a percentile computed by pooling their windows. Raw console answers
+are kept under `rows`, and process streams alongside the report.
+
+Repeat `--gpu-pass <node/pass>` with the exact names shown by `world.gpu-timing`.
+Each selected pass becomes `<stop>.gpu.<node/pass>` in ms; escape its slash in
+a pointer, for example `/metrics/pool.gpu.world~1sdf.world$glass-shade/median`.
+Timing is rearmed for every stop and the harness waits for all selected passes
+to have a complete timestamp window (32 samples). The value is the console's
+rolling mean for that pass. Missing, refused or incomplete timestamps fail the
+sample; they never become zero. Additional timestamp waits extend the frame
+window. Filing a request uses the same option grammar and stop/pass selection
+as execution, so unsupported metric names are refused with available pointers.
+
+`--backend`, `--width` and `--height` select the renderer and window (1280×720
+by default); `--cache-dir` forwards the World cache root. `--timeout-seconds`
+bounds each process and its calls (default 600, 1..7200); `--output` selects a
+parent for a unique report directory. `--json` prints the report. Exit 0 means
+every window completed, 1 keeps incomplete evidence, and 2 refuses arguments
+or build resolution. `puck measure run --repeats N` pairs these reports and
+reports medians and IQR over N independent A/B samples.
 
 ## `puck registry`—world name registry
 

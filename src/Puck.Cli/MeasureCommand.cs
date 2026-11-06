@@ -18,9 +18,9 @@ public static class MeasureCommand {
         var afterCommit = new Option<string?>("--after-commit") { Description = "Commit to export and freeze instead of --after-world-artifact." };
         var beforeTree = new Option<string?>("--before-input-tree") { Description = "Input tree paired with --before-world-artifact: worlds and plan inputs at their repository-relative paths. Copied when filed." };
         var afterTree = new Option<string?>("--after-input-tree") { Description = "Input tree paired with --after-world-artifact. Required for an artifact side; commit sides use their own whole tree." };
-        var metrics = new Option<string[]>("--metric") { Required = true, Description = "Numeric JSON pointer in the command's report, repeatable: /metrics/idle-tick/median for bench world; /metrics/startup/median for bench startup; /signals/0/metrics/<key> for sweep." };
+        var metrics = new Option<string[]>("--metric") { Required = true, Description = "Numeric JSON pointer in the command's report, repeatable: /metrics/idle-tick/median for bench world; /metrics/startup/median for bench startup; /metrics/boot.frames.p99/median for bench frames; /signals/0/metrics/<key> for sweep." };
         var decides = new Option<string>("--decides") { Required = true, Description = "What result decides the question, including units and tolerance. Kept with the answer for the lead's judgement." };
-        var command = CliOptions.ForwardedCommand(description: "A puck bench world, bench startup or sweep command after -- (omit puck). Sweep plans also measure headless host.frames signals. Output and World artifact are supplied by the runner.");
+        var command = CliOptions.ForwardedCommand(description: "A puck bench world, bench startup, bench frames or sweep command after -- (omit puck). Output and World artifact are supplied by the runner.");
         var request = new Command("request", "Freeze before and after builds and queue a timing question in the main checkout's ignored scratch.") { name, before, after, beforeCommit, afterCommit, beforeTree, afterTree, metrics, decides, command };
         request.SetAction(async (parse, token) => {
             var root = RepositoryPaths.RequireRoot();
@@ -198,7 +198,7 @@ public static class MeasureCommand {
     }
 
     private static void ValidateCommand(string[] arguments) {
-        if (!(arguments is ["bench", "world", ..] or ["bench", "startup", ..] or ["sweep", ..])) { throw new ArgumentException("Measurement commands are bench world, bench startup or sweep (including headless frame-signal plans)."); }
+        if (!(arguments is ["bench", "world", ..] or ["bench", "startup", ..] or ["bench", "frames", ..] or ["sweep", ..])) { throw new ArgumentException("Measurement commands are bench world, bench startup, bench frames or sweep (including headless frame-signal plans)."); }
         if (arguments.Any(static value => value is "--world-artifact" or "--output" || value.StartsWith("--world-artifact=", StringComparison.Ordinal) || value.StartsWith("--output=", StringComparison.Ordinal))) {
             throw new ArgumentException("The measurement runner supplies --world-artifact and --output.");
         }
@@ -268,11 +268,12 @@ public static class MeasureCommand {
         if (command[0] == "bench") {
             // Dictionary keys are authored/runtime metric names. Derive numeric members from the report's serializer.
             var report = BenchReport.Start("schema", new BenchBuild("", "", ""), 1, new Dictionary<string, string>()) with {
-                Metrics = new Dictionary<string, BenchMetric> { ["<name>"] = BenchMetric.Of("ms", [0]) },
+                Metrics = command[1] == "frames" ? FrameBenchmarks.MetricSchema(command[2..]) :
+                    new Dictionary<string, BenchMetric> { [command[1] == "startup" ? "startup" : "<name>"] = BenchMetric.Of("ms", [0]) },
             };
             using var json = JsonDocument.Parse(report.ToJson());
             var available = NumericPointers(json.RootElement).Where(p => p.StartsWith("/metrics/", StringComparison.Ordinal)).ToArray();
-            var canonical = parts.Length >= 3 ? "/metrics/<name>/" + string.Join('/', parts.Skip(3).Select(p => int.TryParse(p, NumberStyles.None, CultureInfo.InvariantCulture, out _) ? "0" : p)) : "";
+            var canonical = command[1] == "frames" ? pointer : parts.Length >= 3 ? "/metrics/" + (command[1] == "world" ? "<name>" : parts[2]) + "/" + string.Join('/', parts.Skip(3).Select(p => int.TryParse(p, NumberStyles.None, CultureInfo.InvariantCulture, out _) ? "0" : p)) : "";
             if (parts.Length >= 4 && parts[0] == "" && parts[1] == "metrics" && parts[2].Length > 0 &&
                 (command[1] != "startup" || parts[2] == (command.Contains("--bake", StringComparer.Ordinal) ? "cold-bake" : "startup")) && available.Contains(canonical, StringComparer.Ordinal)) { return; }
             throw new InvalidDataException($"Metric {pointer} is not numeric data in report schema {BenchReport.SchemaName}; available pointers: {string.Join(", ", available.Select(p => command[1] == "startup" ? p.Replace("<name>", (command.Contains("--bake", StringComparer.Ordinal) ? "cold-bake" : "startup"), StringComparison.Ordinal) : p))}.");
