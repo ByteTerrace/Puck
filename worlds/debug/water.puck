@@ -14,17 +14,27 @@
 // total: hydroIce plus hydroWater is the conserved quantity. hydroClock is elapsed simulated melt ticks.
 // A fresh boot returns the cycle to its start.
 import "../standard/hydrology"
-// The gauges the pool reads and the scenery binds.
+import "water-site"
+// The gauges the pool and the river read and the scenery binds.
 exports {
   bindings [glacier, glacierLength, meltStrength, lakeLevel, fallsFlow, fallsVisible, riverDepth, aquiferFill]
-  reads [poolLevel, aquiferFill]
+  reads [poolLevel, aquiferFill, riverDepth]
 }
 
 // The chain's numbers. A cell is a metre; the glacier holds 20 m of water, the aquifer ten cells at bed 0 confined at
 // `fullHead` under a river of four cells at bed 1 whose water above that is the pool's depth above its 1.5 m base
 // (pool.puck). A cell passes `rate` of its water over its neighbour a tick, fast enough that the lake rests within a
 // handful of centimetres of its sill and the falls carry what the glacier melts as it melts.
-hydrology(origin: [-60, -90, 30], meltSeconds: 10800, meltExponent: 3, poolBase: 1.5, poolLevelMax: 2.35, waterPerCell: 10, rate: 0.01, fullHead: 1.6)
+hydrology(
+  origin: [-60, -90, 30],
+  meltSeconds: 10800,
+  meltExponent: 3,
+  poolBase: poolRestDepth,
+  poolLevelMax: 2.35,
+  waterPerCell: 10,
+  rate: 0.01,
+  fullHead: 1.6
+)
 
 commands [
   {

@@ -5,6 +5,7 @@
 // chain's discharge over the sill ebbs and park when it runs dry. The stream stands still and the falls only turn; their
 // shading flows (the standard's flow layers).
 import "../standard/water"
+import "../standard/foliage"
 import "valley-form"
 import "water-site"
 
@@ -29,44 +30,111 @@ let glacierLumps = map(range(0, 6), i => {
   radii [12 + (i % 3) * 2, 8 + (i % 2) * 2, 9]
 })
 
-// The stream leaves the falls' foot, 205 m from the centre toward compass 315, and runs in legs, each a bearing from compass
-// north: it winds east then south to the pool's north bank. Every leg is a placement of one 24 m segment; a shorter leg
-// ends where it should and starts back along the leg before it.
-let streamLegs = [
-  { bearing: 100, length: 24 }
-  { bearing: 120, length: 24 }
-  { bearing: 140, length: 24 }
-  { bearing: 164, length: 24 }
-  { bearing: 188, length: 24 }
-  { bearing: 171, length: 24 }
-  { bearing: 154, length: 24 }
-  { bearing: 154, length: 18 }
-]
-// The length of the one stream segment every leg places.
-let streamSegmentLength = 24
-// A leg's start point, and where its segment is centred: half a segment back from the leg's end.
-function legStart(i) = [
-  -143 + reduce(range(0, i), 0, (sum, k) => sum + sine(streamLegs[k].bearing * compassRadians) * streamLegs[k].length),
-  144 + reduce(range(0, i), 0, (sum, k) => sum + cosine(streamLegs[k].bearing * compassRadians) * streamLegs[k].length)
-]
-function legCentre(i) = [
-  legStart(i)[0] + sine(streamLegs[i].bearing * compassRadians) * (streamLegs[i].length - streamSegmentLength / 2),
-  legStart(i)[1] + cosine(streamLegs[i].bearing * compassRadians) * (streamLegs[i].length - streamSegmentLength / 2)
-]
+// The river runs from the plunge basin's east wall to the pool's north bank (water-site.puck's course) in a channel cut in
+// the ground (`riverChannel`). Its water is one lattice body over the cut ground that the chain's `riverDepth` raises and
+// lowers, flowing along the course's mean heading at the stream's pace.
+let riverSurface = streamMaterial with {
+  flow: streamFlowLayer with { velocity [riverHeading[0] * 1.2, 0, riverHeading[1] * 1.2] }
+}
 
-// The bridge crosses the stream at the start of the fifth leg, its length across the flow.
+// A point `along` leg k of the course and `across` it (positive to its right), at height y: a stone's place.
+function riverPlace(leg, along, across, y) = [
+  riverPoints[leg][0] +
+    sine(riverLegs[leg].bearing * riverRadians) * along +
+    cosine(riverLegs[leg].bearing * riverRadians) * across,
+  y,
+  riverPoints[leg][1] +
+    cosine(riverLegs[leg].bearing * riverRadians) * along -
+    sine(riverLegs[leg].bearing * riverRadians) * across
+]
+// A golden-ratio fraction of k, in [0, 1): the stones' scatter.
+function riverScatter(k, ratio) = k * ratio - floor(k * ratio)
+// The riffle stones lie on the bed, four to a leg at scattered places, and the bank stones sit on each crest, one to a
+// side a leg, half sunk in the turf.
+let riverStones = concat(
+  map(range(0, 4 * length(riverLegs)), k => {
+    position: riverPlace(
+      floor(k / 4),
+      riverLegs[floor(k / 4)].length * ((k % 4) + 0.5 + 0.3 * (riverScatter(k, 0.618034) - 0.5)) / 4,
+      3.2 * (riverScatter(k, 0.381966) - 0.5) + 0.0,
+      riverBed + 0.03
+    )
+    radii [
+      0.22 + 0.2 * riverScatter(k, 0.754878)
+      0.1 + 0.06 * riverScatter(k, 0.569840)
+      0.18 + 0.16 * riverScatter(k, 0.618034)
+    ]
+    yaw: 360 * riverScatter(k, 0.754878)
+  }),
+  map(range(0, 2 * length(riverLegs)), k => {
+    position: riverPlace(
+      floor(k / 2),
+      riverLegs[floor(k / 2)].length * (0.3 + 0.4 * riverScatter(k, 0.618034)),
+      (k % 2 * 2 - 1) * (3.35 + 0.35 * riverScatter(k, 0.381966)),
+      0.02
+    )
+    radii [
+      0.3 + 0.25 * riverScatter(k, 0.754878)
+      0.22 + 0.1 * riverScatter(k, 0.569840)
+      0.26 + 0.2 * riverScatter(k, 0.618034)
+    ]
+    yaw: 360 * riverScatter(k, 0.569840)
+  })
+)
+
+// The bridge crosses the river at the start of the sixth leg, its length across the flow.
 let bridgeLeg = 5
 
 prototypes {
-  fallsRibbon(id: "falls", profile: fallsProfile, width: 8, standoff: 8, flow: fallsFlowLayer with { coverageLane: fallsLane })
+  fallsRibbon(
+    id: "falls",
+    profile: fallsProfile,
+    width: 8,
+    standoff: 8,
+    flow: fallsFlowLayer with { coverageLane: fallsLane }
+  )
   glacierMass(id: "glacier", lumps: glacierLumps, origin: glacierOrigin)
   lakeSurface(id: "lake", radius: lakeSite.radius)
-  streamSegment(id: "stream", length: streamSegmentLength)
+  riverChannel(
+    id: "river-channel",
+    region: riverHole,
+    points: riverPoints,
+    ground: groundSurface(lawnTurf),
+    bed: riverBed,
+    stones: riverStones
+  )
   stoneBridge(id: "bridge")
   floatGauge(id: "reservoir-gauge", height: 1.8)
-  waterBasin(id: "plunge-basin", half: [10, 10], floorY: -2.4)
-  waterBasin(id: "reservoir-basin", half: [5, 6], floorY: -1.9, stepTops: [], openings: [{ position [5, -1.3, 0], half [0.6, 0.6, 1] }])
-  waterBasin(id: "reservoir-passage", half: [1.2, 1], floorY: -1.9, rimY: -0.7, stepTops: [], openings: [{ position [-1.35, -1.3, 0], half [0.6, 0.6, 1] }, { position [1.35, -1.3, 0], half [0.6, 0.6, 1] }])
+  // The plunge basin's east wall is open where the river leaves it, down to a sill under the river's bed.
+  waterBasin(
+    id: "plunge-basin",
+    half: [10, 10],
+    floorY: -2.4,
+    openings: [{
+        position [
+          0 - (riverPlungeMouth[0] + 0.15 - plungeCentre[0]),
+          -0.65
+          0 - (riverPlungeMouth[1] - plungeCentre[1])
+        ]
+        half [0.4, 0.55, 3.9]
+      }
+    ]
+  )
+  waterBasin(
+    id: "reservoir-basin",
+    half: [5, 6],
+    floorY: -1.9,
+    stepTops: [],
+    openings: [{ position [5, -1.3, 0], half [0.6, 0.6, 1] }]
+  )
+  waterBasin(
+    id: "reservoir-passage",
+    half: [1.2, 1],
+    floorY: -1.9,
+    rimY: -0.7,
+    stepTops: [],
+    openings: [{ position [-1.35, -1.3, 0], half [0.6, 0.6, 1] }, { position [1.35, -1.3, 0], half [0.6, 0.6, 1] }]
+  )
   reservoirPavilion(id: "reservoir-pavilion")
   impactSpray(id: "falls-spray")
 }
@@ -94,13 +162,11 @@ placements {
       lakeSite.radial * cosine(wallSector.compass * compassRadians)
     ]
   }
-  // Alternate legs ride 2 cm higher, so the overlapping ends at each bend never share a plane.
-  for (leg, i) in streamLegs {
-    placement $"stream-{i}" {
-      prototype: "stream"
-      position [legCentre(i)[0], (i % 2) * 0.02, legCentre(i)[1]]
-      yawDegrees: leg.bearing + 180
-    }
+  // The channel's ground is placed at the origin: its shapes carry their own world positions.
+  placement "river-channel" {
+    prototype: "river-channel"
+    position [0, 0, 0]
+    solid
   }
   // The reservoir's float gauge beside the pool's steps, its ticks facing the path: the aquifer's fill read off the bank.
   placement "reservoir-gauge" {
@@ -134,14 +200,61 @@ placements {
   }
   placement "bridge" {
     prototype: "bridge"
-    position [legStart(bridgeLeg)[0], 0, legStart(bridgeLeg)[1]]
-    yawDegrees: streamLegs[bridgeLeg].bearing + 90 + 180
+    position [riverPoints[bridgeLeg][0], 0, riverPoints[bridgeLeg][1]]
+    yawDegrees: riverLegs[bridgeLeg].bearing + 90 + 180
     solid
   }
 }
 
+// The river: one body over its channel's ground, its datum the bed, wearing the stream's glass and flow. Outside the cut
+// its top stands under the ground, so the turf hides it.
 waterViews(views: [
-  { name: "reservoir-passage", rowName: "passageWater", gauge: "aquiferFill", hole [-46, -19, -44, -17], floorY: -1.9, initial: 0, maximumDepth: 1, heightScale: 1.8, cell: 0.5 }
-  { name: "plunge", rowName: "plungeWater", gauge: "poolLevel", hole: plungeHole, floorY: -2.4, initial: 1.65, maximumDepth: 2.35, heightScale: 1, cell: 1 }
-  { name: "reservoir", rowName: "reservoirWater", gauge: "aquiferFill", hole: reservoirHole, floorY: -1.9, initial: 0, maximumDepth: 1, heightScale: 1.8, cell: 1 }
+  {
+    name: "river"
+    rowName: "riverWater"
+    gauge: "riverDepth"
+    hole: riverHole
+    floorY: riverBed
+    initial: 0.04
+    maximumDepth: 1.2
+    heightScale: 1
+    cell: 3
+    material: riverSurface
+  }
+  {
+    name: "reservoir-passage"
+    rowName: "passageWater"
+    gauge: "aquiferFill"
+    hole [-46, -19, -44, -17]
+    floorY: -1.9
+    initial: 0
+    maximumDepth: 1
+    heightScale: 1.8
+    cell: 0.5
+    material: waterMaterial
+  }
+  {
+    name: "plunge"
+    rowName: "plungeWater"
+    gauge: "poolLevel"
+    hole: plungeHole
+    floorY: -2.4
+    initial: 1.65
+    maximumDepth: 2.35
+    heightScale: 1
+    cell: 1
+    material: waterMaterial
+  }
+  {
+    name: "reservoir"
+    rowName: "reservoirWater"
+    gauge: "aquiferFill"
+    hole: reservoirHole
+    floorY: -1.9
+    initial: 0
+    maximumDepth: 1
+    heightScale: 1.8
+    cell: 1
+    material: waterMaterial
+  }
 ])

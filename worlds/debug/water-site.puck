@@ -28,4 +28,67 @@ let poolFloor = -2.4
 let poolCentre = [(poolHole[0] + poolHole[2]) / 2, (poolHole[1] + poolHole[3]) / 2]
 let poolHalf = [(poolHole[2] - poolHole[0]) / 2, (poolHole[3] - poolHole[1]) / 2]
 let plungeHole = [-153, 134, -133, 154]
+let plungeCentre = [(plungeHole[0] + plungeHole[2]) / 2, (plungeHole[1] + plungeHole[3]) / 2]
 let reservoirHole = [-44, -24, -34, -12]
+
+// The valley floor's turf, which the floor (lawn.puck) and the ground the river is cut in (water-scenery.puck) both wear.
+let lawnTurf = "#6C8A33"
+
+// The pool's rest depth over its floor (the chain's `poolBase`, water.puck): the river's water stands at the pool's, so
+// the river's bed, the datum of the river's lattice, is where that depth reaches from the pool's floor.
+let poolRestDepth = 1.5
+let riverBed = poolFloor + poolRestDepth
+
+// The river runs from the plunge basin's east wall to the pool's north bank in one carved channel: a course of legs, each
+// a bearing from compass north (0 is world +Z, 90 world +X) and a length, from a point inside the basin. A flow layer runs
+// one way over a surface, so the river's single water body flows along the course's mean heading and the legs turn only
+// gently about it: the more a leg turns from the heading, the more the current's streaks cross the channel there.
+let riverStart = [-139, 143.5]
+let riverLegs = [
+  { bearing: 117, length: 22 }
+  { bearing: 129, length: 22 }
+  { bearing: 143, length: 22 }
+  { bearing: 155, length: 22 }
+  { bearing: 163, length: 22 }
+  { bearing: 167, length: 22 }
+  { bearing: 167, length: 22 }
+  { bearing: 163, length: 22 }
+]
+let riverRadians = 3.141592653589793 / 180
+// The course's vertices [x, z]: where each leg starts, and the last leg's end.
+let riverPoints = map(range(0, length(riverLegs) + 1), i => [
+  riverStart[0] +
+    reduce(range(0, i), 0, (sum, k) => sum + sine(riverLegs[k].bearing * riverRadians) * riverLegs[k].length),
+  riverStart[1] +
+    reduce(range(0, i), 0, (sum, k) => sum + cosine(riverLegs[k].bearing * riverRadians) * riverLegs[k].length)
+])
+let riverSpan = [
+  riverPoints[length(riverLegs)][0] - riverPoints[0][0]
+  riverPoints[length(riverLegs)][1] - riverPoints[0][1]
+]
+// The mean heading of the course, a unit vector [x, z].
+let riverHeading = [
+  riverSpan[0] / squareRoot(riverSpan[0] * riverSpan[0] + riverSpan[1] * riverSpan[1])
+  riverSpan[1] / squareRoot(riverSpan[0] * riverSpan[0] + riverSpan[1] * riverSpan[1])
+]
+// The ground the channel is cut in, between the plunge basin's east wall and the pool's north bank: the floor opens for
+// it (lawn.puck), and the water's lattice spans it.
+let riverHole = [plungeHole[2], poolHole[3], poolHole[2], plungeHole[3]]
+// Where the course crosses the plunge basin's wall (x = riverHole[0]) and the pool's (z = riverHole[1]): the basins open
+// their walls there.
+function riverCrossing(axis, at) = reduce(range(0, length(riverLegs)), riverPoints[0], (found, i) => (riverPoints[i][axis] -
+  at) *
+  (riverPoints[i + 1][axis] - at) <=
+  0 ? [
+    riverPoints[i][0] +
+      (riverPoints[i + 1][0] - riverPoints[i][0]) *
+        (at - riverPoints[i][axis]) /
+        (riverPoints[i + 1][axis] - riverPoints[i][axis]),
+    riverPoints[i][1] +
+      (riverPoints[i + 1][1] - riverPoints[i][1]) *
+        (at - riverPoints[i][axis]) /
+        (riverPoints[i + 1][axis] - riverPoints[i][axis])
+  ] :
+  found)
+let riverPlungeMouth = riverCrossing(0, riverHole[0])
+let riverPoolMouth = riverCrossing(1, riverHole[1])

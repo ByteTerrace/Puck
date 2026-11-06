@@ -797,11 +797,14 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   approach requires enough step height to clear the local touched edge plus
   its fillet radius, never the distant apex of a tilted ramp; an edge witness
   at or below the pre-move foot remains walkable support;
-  resting and falling still meet the rounded surface. Every
-  boolean carve in an unrelieved analytic creation collides as the uncarved
-  shape; relieved field colliders retain the authored blends. Build a doorway,
-  window or stairwell as a union of boxes around the opening, never a
-  subtraction, and keep 2.4 m of headroom over every tread and landing (her
+  resting and falling still meet the rounded surface. A creation whose contact
+  shapes blend other than by hard union (a subtraction, an intersection, a smooth
+  blend) collides as its composed field, as a relieved one does
+  (`WorldColliderSet.CollidesAsField`), so a carve collides as drawn and a river's
+  channel is cut with subtractions (`riverChannel`, `worlds/standard/water.puck`);
+  a field collider costs a certified field solve a query, so keep one local to
+  where bodies walk. The hall builds a doorway, window or stairwell as a union of
+  boxes around the opening, and keeps 2.4 m of headroom over every tread and landing (her
   height plus the 0.3 m step-up raise). `worlds/debug/hall.puck` is the
   worked building: switchback stairs of 0.25 m risers, slabs holed by unions,
   and a lift.

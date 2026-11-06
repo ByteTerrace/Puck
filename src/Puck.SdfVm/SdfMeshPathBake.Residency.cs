@@ -491,7 +491,7 @@ public sealed partial class SdfMeshPathBake {
             var line = new StringBuilder();
             var loadSpan = (((m_loadFirst != 0) && (m_loadLast != 0)) ? Stopwatch.GetElapsedTime(endingTimestamp: m_loadLast, startingTimestamp: m_loadFirst).TotalSeconds : 0d);
 
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $"residency={Residency} demand-points={Demand.Count} groups={groups} landed={landed} resident={resident} all-landed={Since(complete: (landed == groups), stamp: lastLanded)} all-resident={Since(complete: (resident == groups), stamp: lastResident)}");
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $"residency={Residency} residency-id={ResidencyId} demand-points={Demand.Count} groups={groups} landed={landed} resident={resident} all-landed={Since(complete: (landed == groups), stamp: lastLanded)} all-resident={Since(complete: (resident == groups), stamp: lastResident)}");
             // When half and nine tenths of the near groups had landed, and which landed last.
             nearStamps.Sort();
             string Share(float share) {

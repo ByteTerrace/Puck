@@ -18,7 +18,7 @@ public static class StartupBenchmarks {
         var samples = CliOptions.Count(defaultValue: 3, description: "Fresh processes measured per world, 1 to 100.", maximum: 100, minimum: 1, name: "--samples");
         var timeout = CliOptions.Count(defaultValue: 120, description: "Seconds one sample may take before it is abandoned, 1 to 3600.", maximum: 3600, minimum: 1, name: "--timeout-seconds");
         var headless = new Option<bool>("--headless") { Description = "Measure console readiness only; default launches the windowed renderer and requires a completed PNG capture." };
-        var bake = new Option<bool>("--bake") { Description = "Measure from the first mesh-bake start through completion of all started residencies, with a fresh cache and both clocks paused. No frame capture or lighting convergence is timed." };
+        var bake = new Option<bool>("--bake") { Description = "Measure from the first mesh-bake start through completion of every residency reported by world.residency, using a fresh cache and --paused --lockstep to isolate baking from lighting. This is not an ordinary windowed cold boot." };
         var backend = WorldLaunch.BackendOption(description: "Graphics backend for the windowed sample: auto, directx or vulkan.");
         var width = CliOptions.Count(defaultValue: 1280, description: "Window width in pixels for the rendered capture, 1 to 16384.", maximum: 16384, minimum: 1, name: "--width");
         var height = CliOptions.Count(defaultValue: 720, description: "Window height in pixels for the rendered capture, 1 to 16384.", maximum: 16384, minimum: 1, name: "--height");
@@ -29,7 +29,7 @@ public static class StartupBenchmarks {
             (parse.GetValue(argument: worlds) ?? []), parse.GetValue(option: artifact), parse.GetValue(option: output),
             parse.GetValue(option: samples), parse.GetValue(option: timeout), parse.GetValue(option: headless), parse.GetValue(option: width), parse.GetValue(option: height), parse.GetValue(option: cache),
             parse.GetValue(option: json), sampleHost, parse.GetValue(option: bake), parse.GetValue(option: backend)));
-        command.Detail(detail: "Writes report.json (puck.bench.v1) in a unique run directory under --output after every sample: the World build's identity (version with its commit, SHA-256 of its engine assemblies), the host load sampled during the run, and the metric `startup` (console readiness headless, the completed capture windowed, in ms), or `cold-bake` with --bake, as median, p10 and p90. --bake times the first bake start through the last started residency's completion, excluding boot and lighting convergence. `puck measure` reads /metrics/startup/median or /metrics/cold-bake/median. Exit 0 when every sample passed, 1 when one failed, 2 for invalid arguments.");
+        command.Detail(detail: "Writes report.json (puck.bench.v1) in a unique run directory under --output after every sample: the World build's identity (version with its commit, SHA-256 of its engine assemblies), the host load sampled during the run, and the metric `startup` (console readiness headless, the completed capture windowed, in ms), or `cold-bake` with --bake, as median, p10 and p90. --bake uses --paused --lockstep to isolate baking from lighting, rather than measuring an ordinary windowed cold boot. It times the first bake start through completion of every residency world.residency reports after world.wait bakes, matched by residency identity; missing completions fail the sample. Boot, shutdown and lighting convergence are outside the interval. `puck measure` reads /metrics/startup/median or /metrics/cold-bake/median. Exit 0 when every sample passed, 1 when one failed, 2 for invalid arguments.");
         return command;
     }
 
@@ -92,29 +92,16 @@ public static class StartupBenchmarks {
                     StateDirectory = $"{directory}/state",
                     World = worlds[index],
                 };
-                var input = (("world.status\n" + ((headless || bake) ? "" : $"world.wait 1\nworld.screenshot {JsonSerializer.Serialize(capture, StartupJsonContext.Default.String)}\n")) + "wire.errors\n");
-                var pendingBakes = new HashSet<string>(StringComparer.Ordinal);
-                double? firstBake = null;
-                double? lastBake = null;
-                bool BakesComplete(CliProcessOutputLine line) {
-                    if (line.Stream != CliProcessOutputStream.Stderr) { return false; }
-                    const string StartPrefix = "[sdf.mesh-bake] start residency=";
-                    const string DonePrefix = "[sdf.mesh-bake] done residency=";
-                    var starting = line.Line.StartsWith(StartPrefix, StringComparison.Ordinal);
-                    if (!starting && !line.Line.StartsWith(DonePrefix, StringComparison.Ordinal)) { return false; }
-                    var tail = line.Line.AsSpan((starting ? StartPrefix : DonePrefix).Length);
-                    var residency = tail[..tail.IndexOf(' ')].ToString();
-                    if (starting) { firstBake ??= line.ElapsedMilliseconds; pendingBakes.Add(residency); }
-                    else { pendingBakes.Remove(residency); lastBake = line.ElapsedMilliseconds; }
-                    return !starting && firstBake is not null && pendingBakes.Count == 0;
-                }
+                var input = "world.status\n" + (bake
+                    ? $"world.wait bakes {Math.Clamp(timeout - 5, 1, 600)}\nworld.residency\n"
+                    : headless ? "" : $"world.wait 1\nworld.screenshot {JsonSerializer.Serialize(capture, StartupJsonContext.Default.String)}\n") + "wire.errors\n";
                 StartupSample row;
 
                 try {
                     using var launch = WorldLaunch.Admit(request: request);
 
                     var result = launch.Run(input: input, timeout: TimeSpan.FromSeconds(seconds: timeout),
-                        continueWhen: line => (bake ? BakesComplete(line) : headless
+                        continueWhen: line => ((headless || bake)
                             ? ((line.Stream == CliProcessOutputStream.Stdout) && (line.Line == "[wire.errors: 0 rejected]"))
                             : IsCaptureCompletion(capture: capture, line: line)),
                         continuationInput: "quit\n");
@@ -123,10 +110,7 @@ public static class StartupBenchmarks {
                     File.WriteAllText($"{directory}/stderr.log", result.Stderr);
                     row = Assess(worlds[index], sample, result, (headless || bake), capture);
                     if (bake) {
-                        row = row with { BakeMilliseconds = lastBake - firstBake, Error = row.Error ?? ((firstBake is null || lastBake is null || pendingBakes.Count != 0) ? "missing complete cold bake" : null) };
-                        if (result.OutputLines.Any(static line => line.Stream == CliProcessOutputStream.Stderr && line.Line.StartsWith("[sdf.mesh-bake]", StringComparison.Ordinal) && (line.Line.Contains("failed:", StringComparison.Ordinal) || line.Line.Contains("refused:", StringComparison.Ordinal)))) {
-                            row = row with { Error = row.Error ?? "a bake stage failed or refused its group" };
-                        }
+                        row = StartupBake.Assess(row, result);
                     }
                 } catch (Exception exception) when ((exception is Win32Exception or IOException or InvalidOperationException or TimeoutException)) {
                     row = new(worlds[index], sample, null, null, null, exception.Message);
@@ -177,8 +161,11 @@ public static class StartupBenchmarks {
     }
 }
 public sealed record StartupSample(string World, int Sample, double? ConsoleMilliseconds, double? CaptureMilliseconds, int? ExitCode, string? Error) {
-    /// <summary>Gets the first bake start through completion of every started residency, in milliseconds.</summary>
+    /// <summary>Gets the first bake start through completion of every reported residency under paused lockstep scheduling,
+    /// in milliseconds. Lockstep isolates the bake from lighting; this is not ordinary windowed startup.</summary>
     public double? BakeMilliseconds { get; init; }
+    /// <summary>Gets each reported residency's identity and observed bake endpoints, relative to process launch.</summary>
+    public IReadOnlyList<StartupBakeResidency>? BakeResidencies { get; init; }
 }
 
 [JsonSerializable(typeof(string))]

@@ -64,6 +64,21 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// <remarks>A view's screens sample them.</remarks>
     public bool SamplesReads => true;
 
+    /// <summary>Describes every distinct residency this package holds, including views resolved after the host's bake.</summary>
+    /// <param name="radius">The distance in metres within which a bake group counts as near its camera.</param>
+    /// <param name="host">The host residency whose composed source is supplied separately.</param>
+    /// <param name="composition">The host's composed frame source, when wrapped by another source.</param>
+    /// <returns>The residency reports, each beginning with its name and diagnostic identity.</returns>
+    public IReadOnlyList<string> DescribeResidencies(float radius, SdfWorldResidency host, SdfCompositionFrameSource? composition = null) {
+        lock (m_gate) {
+            var lines = new List<string>();
+            foreach (var residency in m_residencies.Keys) {
+                lines.AddRange(residency.DescribeResidency(radius, ReferenceEquals(residency, host) ? composition : null));
+            }
+            return lines;
+        }
+    }
+
     /// <inheritdoc/>
     public string? WaitingOf(string instance) {
         lock (m_gate) {

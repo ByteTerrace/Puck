@@ -707,8 +707,9 @@ template sceneryScatter(id, prototype, rows, origin = [0, 0, 0], contact = null)
 //
 // `holes` opens the ground where something sunk into it stands (a pool's basin): each is [minX, minZ, maxX, maxZ] in
 // world X/Z, disjoint and axis-aligned, and the ground is then the square of the same half-width as boxes tiled around
-// them (groundSlabs), since the analytic contact an unrelieved creation gets has no carve and a body would stand on
-// the uncarved disc over the opening. With no holes the ground is the one disc.
+// them (groundSlabs), so the ground stays a union of boxes and collides as analytic primitives, never as a field
+// solve over a 740 m disc. A cut that is not axis-aligned (a river's channel) is a patch of its own (`riverChannel`,
+// water.puck) filling a hole. With no holes the ground is the one disc.
 function groundEdges(extent, holes) = sort(distinct(concat([0 - extent, extent], flatMap(holes, h => [h[0], h[2]]))))
 // The holes spanning the strip between two edges, nearest the south first, and the slabs and cursor left by cutting the
 // strip's full depth at each.

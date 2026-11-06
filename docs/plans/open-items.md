@@ -77,8 +77,8 @@ milestone. The owner requested its baseline and implementation plan, which
    ordinary work.
 10. [Water feature build](#water) ([plan](water.md#the-lanes)) [ordinary]: the
     chain as the arc has landed (the hidden chain still draws, see the packet);
-    A1 to A5 in parallel next, then R3, P1 last. The owner accepted the
-    plan's three taste calls; A1 builds the carved channel.
+    A2 to A5 in parallel next, then R3, P1 last. The owner accepted the
+    plan's three taste calls; the carved channel has landed.
 11. [Certified field contact](#certified-field-contact): box and ellipsoid
     bodies, then clearance on slopes within a third of a metre.
 12. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
@@ -1080,7 +1080,7 @@ worlds in place is rewritten.
 
 Owner: the water feature lane (rendering, puck-world, sdf-authoring) · ordinary ·
 Next: [the water feature plan](water.md) owns the feature end to end: the arc as a
-specification, the audit, the definition of done and the lanes (A1 to A5 the world
+specification, the audit, the definition of done and the lanes (A2 to A5 the world
 authoring, R3 the particle pool, P1 the tour). The items below
 are what the plan defers or the water strained in a system beside it.
 
@@ -1094,6 +1094,25 @@ are what the plan defers or the water strained in a system beside it.
   flag, or a flow height row the emitter and the contact provider skip), then
   confirm with a windowed World that `[sdf.mesh-bake] done` and `world.budget`
   show no `hydro` groups.
+
+- [medium] The carved channel's acceptance gaps, from A1's captures: at stage 1
+  `riverDepth` is 0.02-0.035 m, so contact foam covers the whole surface and the
+  river reads white; the river settles (0.824) well before stage 4, so stages 4
+  and 5 look the same and the stage ticks in the definition of done need
+  revisiting against the chain's own curve; the river groups' mesh-pass vertex
+  count is unshown (`puck mesh audit --prototype river-channel --cpu`); a dark
+  strip at the river-pool junction in the pool-end capture is unconfirmed (water
+  over the sill, or a gap). The channel's contact cost is the carve-contact
+  lane's. Owner: the next water authoring lane (A4 shares the junction).
+- [low] `water.speed 60` also runs the day clock, so stage captures come out at
+  night unless `day`'s advance is set to 0 and the day reset first; P1's tour
+  rows must pin the day.
+- [medium] A flow that follows a course. A palette flow layer carries one
+  velocity over a surface, so the river's single water body flows along the
+  course's mean heading and the course's legs turn only gently about it
+  ([the river's channel](water.md#the-rivers-channel-as-built)); a river that
+  winds freely needs a flow whose velocity is read per place (from the course's
+  tangent or a lattice row), which is a palette-flow and shader change.
 
 - [medium] Cold mesh residency still misses the one-minute target. Attribute the
   remaining large water meshes with `puck mesh audit --prototype` (now selects
@@ -2976,6 +2995,12 @@ still changes a fraction of a percent of pixels, not exactly zero.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] Two walls the water channel lane hit: template `let`s inside a
+  `prototypes` block are refused (PUCK036), and `with` takes only an object
+  literal, so a shared view material became a required field and helper
+  functions (`worlds/standard/water.puck`, `waterViews`, `riverChannel`). Each
+  is a clumsier form an author reached for (AGENTS.md, "Ergonomic is optimal");
+  lift both, then simplify those templates.
 - [medium] `.puck` has no way to take an imported value and override one field
   of it (`celStyle` with `enabled: false`), so a world that wants the standard's
   cel style as a default that boots off copies all eleven values
