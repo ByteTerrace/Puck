@@ -1075,11 +1075,11 @@ Next: what the water as a forcing workload showed
 the water strained, measured, and not yet fixed. The rendering capabilities
 the water lacks (presentation particles, near-geometry reflections on glass)
 are planned in [water rendering](water-rendering.md), whose W2 flow layer
-([as built](water-rendering.md#w2-as-built)) and W1 glass medium
-([as built](water-rendering.md#w1-as-built), its timing and registers owed) are in, and
-whose W3, W2's field source and the two glass layers a pixel that W1's pavilion
-capture called for are the next lanes here; the items below are the
-system work beside them.
+([as built](water-rendering.md#w2-as-built)), W1 glass medium
+([as built](water-rendering.md#w1-as-built), its timing and registers owed) and two
+glass layers a pixel ([option 3 as built](water-rendering.md#option-3-as-built), its
+timing owed) are in, and whose W3 and W2's field source are the next lanes here; the
+items below are the system work beside them.
 
 - [medium] Cold mesh residency still misses the one-minute target. Attribute the
   remaining large water meshes with `puck mesh audit --prototype` (now selects

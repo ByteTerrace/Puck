@@ -948,6 +948,12 @@ unverified when no device run exists.
 
 ## Hardware and toolchain cautions
 
+- DXC's SPIR-V backend (1.9.0.5512) compiles `RWByteAddressBuffer`'s 64-bit
+  atomics (`InterlockedMax64` and the rest) to 32-bit `OpAtomicUMax` on the low
+  word without a diagnostic, while DXIL keeps them 64-bit. A 64-bit atomic
+  that must agree on both backends is an atomic on a `RWStructuredBuffer<uint64_t>`
+  element, which emits `Int64Atomics`; check the SPIR-V disassembly (`-Fc`) for
+  `OpAtomic* %ulong` before relying on one.
 - Docker Desktop's service can be set to start manually, so a stopped engine
   is not a missing one. When `docker version` reports no server, start Docker
   Desktop and wait until `docker version --format '{{.Server.Version}}'`

@@ -327,11 +327,10 @@ the 2060.
    glass behind glass). The packet's open item; the sums already integrate
    absorption through every layer, and only the reflection and refraction
    use the nearest. A second front face per pixel in the glass target
-   doubles its words and the shade's reads. **Taken, not yet built**: W1's
-   capture through the pavilion's pane shows the reservoir as the pane's
-   tint alone, with no surface, waterline, medium or flow, since only the
-   pane is shaded. It is built as a second record in the same target, never
-   a second pass.
+   doubles its words and the shade's reads. **Built** ([as built](#option-3-as-built)):
+   W1's capture through the pavilion's pane showed the reservoir as the
+   pane's tint alone, since only the pane was shaded; the second record
+   lives in the glass sums the raster already writes, never a second pass.
 4. **Caustics.** Every shipped system fakes them (UE's colour scale, HDRP's
    monochrome projection). The irradiance volume could carry a medium's
    refracted sun as its probes' light, which is correct and costs nothing
@@ -511,8 +510,9 @@ template parameter.
 **Invariant and its door.** A glass pixel reads the lit image once
 (`sdfGlassLitAt`, or the frost's disc); the medium, the contact and the
 revealed surface are functions of the thickness, `opaque - t` and the arriving
-light alone. `sdf-glass.comp.hlsl` is the one read site. Where it stops: glass
-behind glass reads the opaque image behind the nearer pane (option 3 above).
+light alone. `sdf-glass.comp.hlsl` is the one read site. Where it stopped,
+glass behind glass reading the opaque image behind the nearer pane, option 3
+([as built](#option-3-as-built)) moves to the second interface.
 
 **Owed.** `world.gpu-timing` for the glass passes against the build before
 W1, in a quiet window, and the glass kernel's registers beside the views
@@ -522,6 +522,40 @@ shallows are world authoring. The stream sheet stands about 10 cm over the
 lawn, with no bed cut beneath it, so it scatters strongly per metre and its
 contact reaches less than its depth. The falls, now glass, cast no shadow
 ([owned question](#owned-questions)).
+
+### Option 3 as built
+
+**What landed.** A pixel shades up to two glass interfaces. The glass target's
+depth test keeps one record, the nearest front face, and a depth test keeps one
+extremum, so the second record is in the glass sums, which grow from 8 to 16
+words a pixel (`SdfWorldPackage.GlassSumWords`, `frame/sdf-glass.hlsli`): every
+front face before the opaque hit counts itself and claims one of three entries
+(draw plus one, triangle) while one is free, and every back face raises the
+nearest back face, an atomic maximum of its distance's complemented bits.
+`glass-shade` names the second interface as the held front face nearest along
+the pixel's ray other than the target's (`sdfGlassSecondInterface`), splits the
+glass distance at the nearest back face (the near interface absorbs its own
+material over its share, the far one the rest of the distance and optical
+depth), shades both by one loop body (flow through `sdfShadeFlow`, contact,
+medium, the probe reflection, the light walk), and composes the far interface
+inside the near one's transmission. The pass counts each interface it shades as
+a work step (`march.steps` in `world.counters gpu`).
+
+**Invariant and its door.** A pixel reads the lit image once: one
+`sdfGlassLitAt` (or the frost's one disc) after the interface loop, at the
+point both refractions displace; the loop body has no read. The second
+interface is exact and independent of raster order up to three front faces
+before the opaque hit, since every one is held and the choice is by distance
+with ties to the lower draw and triangle; `SdfGlassSumsDeviceLawTests` checks
+the entries as a set and the rest of the words exactly in 24 orders. Where it
+stops: a third front face's glass absorbs within the far interface's share and
+what lies beyond the second interface is the opaque image; past three front
+faces the record names no second interface and the near one alone is shaded.
+A 64-bit atomic k-buffer would lift the count but needs 64-bit buffer elements
+through the interface generator and int64 atomics on both backends, and DXC
+lowers `RWByteAddressBuffer`'s 64-bit atomics to 32-bit ones on SPIR-V.
+
+**Owed.** The glass passes' GPU time before and after in a quiet window.
 
 ### W2 as built
 
