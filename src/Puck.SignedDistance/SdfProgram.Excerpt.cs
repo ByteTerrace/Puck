@@ -53,13 +53,12 @@ public sealed partial class SdfProgram {
             }
         }
 
-        return new SdfProgram(
+        return Of(
+            appearance: Appearance,
             convexPolygonProfiles: polygons,
             instructions: instructions,
-            materials: m_materialsView,
             paths: paths,
             sampledBindings: samples,
-            screenSurfaces: m_screenSurfaces,
             sweepCurves: sweeps
         );
     }

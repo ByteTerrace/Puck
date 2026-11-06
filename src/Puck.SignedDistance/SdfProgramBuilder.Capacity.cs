@@ -56,8 +56,6 @@ public sealed partial class SdfProgramBuilder {
             ConvexPolygonVectors: convexPolygonVectors,
             Instances: m_instances.Count,
             Instructions: instructions,
-            Materials: m_materials.Count,
-            Paints: m_materials.Sum(selector: material => (material.Paints?.Count ?? 0)),
             PathEdges: pathEdges,
             RigidLeaves: checked((2 * shapes)),
             Segments: segments,
@@ -67,7 +65,7 @@ public sealed partial class SdfProgramBuilder {
 
         return new SdfProgramCapacity(
             Instances: m_instances.Count,
-            Words: layout.PartCompilationWordCapacity(reservedPathWords: m_reservedPathWords)
+            Words: layout.PartCompilationWordCapacity(appearanceVectors: SdfAppearance.VectorsOf(materials: m_materials), reservedPathWords: m_reservedPathWords)
         );
     }
 }

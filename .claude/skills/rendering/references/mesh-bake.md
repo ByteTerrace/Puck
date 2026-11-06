@@ -36,8 +36,10 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   counts distinct samples by the cell faces they touch: low boundary, interior,
   or high boundary on each axis. Every interior coordinate has the same holders,
   so its class contributes `split - 1` samples per interior axis. The selected
-  count sizes the lattice's `OwnedBuffer` indexes; `FineKeys` fills them in the
-  original cell/sample order without growing managed lists and copying them.
+  count admits cells. `FineKeys` numbers their slots in the original cell/sample
+  order, then sizes the key buffer from its own count and fills it through those
+  slots. Every sample buffer takes that key buffer's length, independently of
+  admission's estimate, without growing managed lists and copying them.
   Preserve that order and the region admission order: both feed the bake.
 - **Collapse line samples have one owner.** `SdfMeshCollapse.Collapser.AppendLine` links
   samples by index and retains each edge's append order when a collapse moves
@@ -806,9 +808,20 @@ laws exercise that boundary.
   contour calls re-bakes. The standalone `SdfMeshDresser`, `SdfMeshHistory`, `SdfWorldPassRecorder`, `SdfWorldTables`,
   `SdfFrameBlock` and `SdfMeshRegion` are outside the CPU closure, including type-granular applied updates;
   `SdfMeshBakeBlock` and the shared `ShaderParameterWriter` remain inside. Comments and checkout paths do not
-  change the key, and worktrees of one bake share one set. This is a bounded guarantee: the current program packs
-  field and material appearance tables together, so its reached constructor still includes material packing;
-  diagnostic slice, frame/input types, admission and settle accounting also remain conservatively reached.
+  change the key, and worktrees of one bake share one set. Appearance is outside the key by construction: the
+  closure's program root is `SdfProgram`'s only constructor, the field derivation, which takes no material or screen
+  value, only an `SdfAppearanceOutline` (material count, glass materials, declared screens, the appearance section's
+  size). `SdfProgram.Of` runs it and then attaches the `SdfAppearance` and packs its materials and paints into the
+  stream's tail; the program's appearance is unattached while the field constructor runs, so a read of it there throws
+  rather than joining the key. The kernels follow the same split: the stream is field first (`SdfProgram.FieldWords`),
+  the field interpreter finds the bound table at `dataOffset + 2 * instructions`, the material and paint strides and
+  lanes live in `sdf-render.hlsli`, and the field fingerprint describes the encoding over `FieldWords` alone (the
+  description leaves out a probe input that moves no described word, so a new material input on the probe's material
+  call moves only the whole fingerprint). An edit to
+  a material's values, a paint, a screen surface or `SdfAppearance`'s code leaves the identity standing (`puck mesh
+  identity --against` reports the same identity and kernels); the one material fact beside places that shapes a mesh,
+  glass, enters each glass group's geometry (`SdfMeshGeometryBuilder.AppendGlass`). The diagnostic slice, frame/input
+  types, admission and settle accounting remain conservatively reached.
   A new member matters if a positive entry or its callgraph reaches it. Code the bake
   reaches only through reflection or a runtime callback on a type it does not
   construct is outside the walk: add a root to `SdfMeshBakeClosure` for it.

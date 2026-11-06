@@ -50,6 +50,8 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     // What a transform's slot lane hashes as: the group's own slot, or any other, whose pose is hashed beside it.
     private const float OwnSlot = -1f;
     private const float OtherSlot = -2f;
+    // What a glass group's geometry appends (AppendGlass).
+    private const uint GlassMarker = 0x47_4C_41_53u;
     // The most hashers sealed builders keep for later ones: every group of a plan takes two, and a program restart plans
     // thousands.
     private const int MaxSpareHashers = 8192;
@@ -272,6 +274,14 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// reach mesh another surface.</summary>
     /// <param name="reach">The reach, in world units.</param>
     public void AppendReach(float reach) => Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in reach)));
+    /// <summary>Appends that the group bakes as glass: its shapes all carry glass materials, so its mesh lands whole and
+    /// uncollapsed (<see cref="SdfMeshBakeGroup.Glass"/>), and the same shapes opaque key another geometry. Which
+    /// materials are glass is the one material fact beside their places that shapes a mesh.</summary>
+    public void AppendGlass() {
+        var glass = GlassMarker;
+
+        Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<uint>(reference: in glass)));
+    }
     /// <summary>Appends one instruction of a program as it stands, its material included, with the world-space pose of a
     /// slot it reads.</summary>
     /// <param name="program">The program.</param>

@@ -297,7 +297,7 @@ public sealed class SeamBlendLawTests {
             ))
             .ToArray();
 
-        Assert.ThrowsAny<ArgumentException>(testCode: () => new SdfProgram(
+        Assert.ThrowsAny<ArgumentException>(testCode: () => TestPrograms.Of(
             packed,
             [new SdfMaterial(Albedo: Vector3.One)]
         ));

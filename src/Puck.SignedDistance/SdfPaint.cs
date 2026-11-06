@@ -97,7 +97,7 @@ public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Ro
     public const int WinningFrame = -1;
 
     /// <summary>Returns whether a paint can cover a packed shape: every primitive the shape dispatch evaluates from its
-    /// data and a side table of at most <see cref="SdfProgram.PaintTableVectors"/> vectors. A path, a glyph, a sampled
+    /// data and a side table of at most <see cref="SdfAppearance.PaintTableVectors"/> vectors. A path, a glyph, a sampled
     /// region and a screen slab are refused.</summary>
     /// <param name="type">The packed shape.</param>
     /// <returns><see langword="true"/> when a paint can carry it.</returns>
@@ -110,7 +110,7 @@ public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Ro
         (paint is { Shape: { } shape }) &&
         Admits(type: shape.Type) &&
         Enum.IsDefined(value: shape.Type) &&
-        (shape.Table is { Count: <= (SdfProgram.PaintTableVectors * 4) }) &&
+        (shape.Table is { Count: <= (SdfAppearance.PaintTableVectors * 4) }) &&
         VectorFunctions.IsFinite(vector: shape.Scale) &&
         (shape.Scale.X > 0f) && (shape.Scale.Y > 0f) && (shape.Scale.Z > 0f) &&
         (shape.Bound.IsUnbounded || (VectorFunctions.IsFinite(vector: shape.Bound.Center) && VectorFunctions.IsFinite(vector: shape.Bound.HalfExtents) && (shape.Bound.HalfExtents.X >= 0f) && (shape.Bound.HalfExtents.Y >= 0f) && (shape.Bound.HalfExtents.Z >= 0f))) &&

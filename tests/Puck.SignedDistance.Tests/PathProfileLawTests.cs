@@ -113,7 +113,7 @@ public sealed class PathProfileLawTests {
 
         Assert.Equal(-0.5f, BitConverter.UInt32BitsToSingle(value: program.Words[offset]));
         Assert.Equal(1f, program.StepScale);
-        Assert.Throws<ArgumentException>(testCode: () => new SdfProgram(program.Instructions, [new SdfMaterial(Albedo: Vector3.One)]));
+        Assert.Throws<ArgumentException>(testCode: () => TestPrograms.Of(program.Instructions, [new SdfMaterial(Albedo: Vector3.One)]));
         // The contact reading takes the path through the program's own edge table: at the origin the extrusion's half-depth
         // is the nearest face.
         Assert.True(condition: new SdfFieldEvaluator(program: program).TryDistance(distance: out var distance, material: out _, position: Puck.Maths.FixedPosition.FromLocal(local: Puck.Maths.FixedVector3.Zero)));

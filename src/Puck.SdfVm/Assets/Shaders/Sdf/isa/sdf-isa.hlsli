@@ -118,9 +118,7 @@
 // The program header, the first vector of the word stream: the vectors before the instruction headers, and each lane's accessor.
 #define SDF_PROGRAM_HEADER_VECTORS       1u
 #define SDF_PROGRAM_INSTRUCTION_COUNT(v) ((v).x)
-#define SDF_PROGRAM_MATERIAL_COUNT(v)    ((v).y)
 #define SDF_PROGRAM_DATA_OFFSET(v)       ((v).z)
-#define SDF_PROGRAM_MATERIAL_OFFSET(v)   ((v).w)
 
 // An instruction: its header's lane accessors, and the data vectors each instruction holds in the data table.
 #define SDF_INSTRUCTION_OP(v)        ((v).x)
@@ -161,21 +159,17 @@
 #define SDF_SAMPLED_REGION_DIM_MASK 0x000003FFu
 
 // Program capacities, strides and floors.
-#define SDF_MAX_INSTANCES              65536u
-#define SDF_MATERIAL_VECTORS_PER_ENTRY 32u
-#define SDF_PAINT_VECTORS_PER_ENTRY    12u
-#define SDF_MAX_PAINTS_PER_MATERIAL    8u
-#define SDF_PAINT_WINNING_FRAME        0xFFFFFFFFu
-#define SDF_MAX_FIELD_SCOPE_DEPTH      4u
-#define SDF_FLARE_MIN_SCALE            0.05
-#define SDF_LANE_ERODE_RAGGED_AMOUNT   0.35
-#define SDF_SCREEN_MATERIAL            65535
-#define SDF_MAX_NOISE_OCTAVES          8u
-#define SDF_MAX_SWEEP_STRANDS          4u
-#define SDF_MAX_CONVEX_VERTICES        32u
-#define SDF_CONVEX_COUNT_BITS          5u
-#define SDF_MAX_PATH_EDGES             128u
-#define SDF_NOISE_PERIOD_CELLS         4096u
+#define SDF_MAX_INSTANCES            65536u
+#define SDF_MAX_FIELD_SCOPE_DEPTH    4u
+#define SDF_FLARE_MIN_SCALE          0.05
+#define SDF_LANE_ERODE_RAGGED_AMOUNT 0.35
+#define SDF_SCREEN_MATERIAL          65535
+#define SDF_MAX_NOISE_OCTAVES        8u
+#define SDF_MAX_SWEEP_STRANDS        4u
+#define SDF_MAX_CONVEX_VERTICES      32u
+#define SDF_CONVEX_COUNT_BITS        5u
+#define SDF_MAX_PATH_EDGES           128u
+#define SDF_NOISE_PERIOD_CELLS       4096u
 
 // Puck.Abstractions.Gpu.GpuSamplerFilter.
 #define SDF_FILTER_NEAREST 0u

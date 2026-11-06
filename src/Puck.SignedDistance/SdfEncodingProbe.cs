@@ -289,7 +289,7 @@ public static class SdfEncodingProbe {
         Describe(calls: Calls());
     /// <summary>Describes the encoding a set of probe calls exercises. For each call: its packed program's word count and
     /// every word that holds an integer (its exponent bits clear of any float the probe produces, so a count, an offset,
-    /// an enum, a flag or a packed bitfield), by offset; then, for each input, which words move when that input alone is
+    /// an enum, a flag or a packed bitfield), by offset; then, for each input that moves a word, which words move when that input alone is
     /// raised: every integer word that moves with the bits its change spans, and every float word that moves; then, for
     /// each float word that moves, the input that moves it the most, or that the largest moves tie.</summary>
     /// <param name="calls">The calls.</param>
@@ -337,6 +337,12 @@ public static class SdfEncodingProbe {
                 raised[input] = Raised(value: raised[input]);
 
                 var moved = wordsOf(arg: Build(call: call, inputs: raised));
+
+                // An input that moves no described word is left out, so an input a call adds for words outside the
+                // view (a material field, under the field words) leaves the view's description as it was.
+                if ((moved.Length == baseline.Length) && moved.AsSpan().SequenceEqual(other: baseline)) {
+                    continue;
+                }
 
                 text.Append(provider: CultureInfo.InvariantCulture, handler: $"  input {input}:");
 

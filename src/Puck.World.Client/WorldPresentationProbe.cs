@@ -124,8 +124,8 @@ public sealed class WorldPresentationProbe(TimeProvider? time = null) {
         var hash = Fnv1aHash.Create();
         hash.Add((uint)program.Words.Length);
         foreach (var word in program.Words) { hash.Add(word); }
-        hash.Add((uint)program.ScreenSurfaceWords.Length);
-        foreach (var word in program.ScreenSurfaceWords) { hash.Add(word); }
+        hash.Add((uint)program.Appearance.ScreenSurfaceWords.Length);
+        foreach (var word in program.Appearance.ScreenSurfaceWords) { hash.Add(word); }
         return hash.Value;
     }
 

@@ -85,8 +85,8 @@ public sealed partial class SdfWorldPassesLawTests {
             case "light-color": frame.Lights.Set(index: 0, light: frame.Lights[0] with { Color = new Vector3(x: 0.2f, y: 0.4f, z: 0.6f) }); goto case "lighting";
             case "palette":
                 frame = frame with {
-                    Program = new SdfProgram(frame.Program.Instructions,
-                    [new SdfMaterial(new Vector3(x: .2f, y: .4f, z: .6f))]),
+                    Program = SdfProgram.Of(frame.Program.Instructions,
+                    new SdfAppearance([new SdfMaterial(new Vector3(x: .2f, y: .4f, z: .6f))])),
                     ProgramChanged = true,
                 };
                 goto case "lighting";

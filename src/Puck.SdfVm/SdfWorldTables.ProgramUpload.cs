@@ -9,7 +9,7 @@ public sealed partial class SdfWorldTables {
     /// Program and instance buffers grow on demand once the device is idle. Persistent images,
     /// screen bindings and pipelines remain in place. Palette-value edits keep geometry signatures; wrap and shadow
     /// density separately invalidate their consuming passes.
-    /// material reassignment or any other field/layout change invalidates them.</summary>
+    /// Material reassignment or any other field/layout change invalidates them.</summary>
     /// <param name="program">The scene program to upload.</param>
     /// <param name="delta">The words <paramref name="program"/> differs in from the program it was built after, or
     /// <see langword="null"/>: when that program is the one the tables hold, only those words are copied, and otherwise
@@ -53,7 +53,7 @@ public sealed partial class SdfWorldTables {
         // re-upload never resurrects the program's original frame over a live SetScreenSurface write made in between.
         // Only the words that differ are owed.
         _ = m_screenSurfaceRegion.Write(
-            bytes: MemoryMarshal.Cast<uint, byte>(span: program.ScreenSurfaceWords),
+            bytes: MemoryMarshal.Cast<uint, byte>(span: program.Appearance.ScreenSurfaceWords),
             offset: 0
         );
 
@@ -81,7 +81,7 @@ public sealed partial class SdfWorldTables {
     private static ulong WrapSignatureOf(SdfProgram program) {
         var hash = Fnv1aHash.Create();
 
-        foreach (var material in program.Materials) {
+        foreach (var material in program.Appearance.Materials) {
             hash.Add(value: BitConverter.SingleToUInt32Bits(value: material.Wrap));
         }
 
@@ -90,7 +90,7 @@ public sealed partial class SdfWorldTables {
     // Cascades read density; the surface pass reads their optical term. Palette-only uploads must invalidate both.
     private static ulong ShadowDensitySignatureOf(SdfProgram program) {
         var hash = Fnv1aHash.Create();
-        foreach (var material in program.Materials) {
+        foreach (var material in program.Appearance.Materials) {
             hash.Add(value: BitConverter.SingleToUInt32Bits(value: material.Glass?.ShadowDensity ?? 0f));
         }
         return hash.Value;
@@ -104,7 +104,7 @@ public sealed partial class SdfWorldTables {
 
         if ((before.Length != after.Length) || (previous.MaterialCount != current.MaterialCount) ||
             !previous.ShadingWords.Equals(other: current.ShadingWords) ||
-            !previous.ScreenSurfaceWords.SequenceEqual(other: current.ScreenSurfaceWords)) { return false; }
+            !previous.Appearance.ScreenSurfaceWords.SequenceEqual(other: current.Appearance.ScreenSurfaceWords)) { return false; }
         var (first, end) = (current.ShadingWords.Start.Value, current.ShadingWords.End.Value);
 
         return (before[..first].SequenceEqual(other: after[..first]) && before[end..].SequenceEqual(other: after[end..]));
