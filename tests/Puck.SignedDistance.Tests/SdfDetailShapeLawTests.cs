@@ -11,7 +11,7 @@ namespace Puck.SignedDistance.Tests;
 public sealed class SdfDetailShapeLawTests {
     private static readonly SdfMaterial[] OneMaterial = [new SdfMaterial(Albedo: Vector3.One)];
 
-    private static SdfProgram Build(IReadOnlyList<SdfInstruction> instructions) => new(
+    private static SdfProgram Build(IReadOnlyList<SdfInstruction> instructions) => TestPrograms.Of(
         instances: null,
         instructions: instructions,
         materials: OneMaterial,

@@ -111,8 +111,6 @@ open.
 
 `SdfMeshPathBake` owns derivation and `SdfMeshDresser` owns draw expansion. Renderer
 and draw edits no longer enter the bake closure through that combined class.
-Canonical field packing still conservatively reaches appearance and needs its
-own dependency separation. Do not replace a real dependency with a blacklist.
 
 `GpuChangedRows` supplies captured-endpoint history to transforms and draws.
 Dressing follows reverse slot/copy dependencies; GPU staging compares affected

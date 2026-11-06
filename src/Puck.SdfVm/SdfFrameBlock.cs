@@ -251,11 +251,11 @@ public static partial class SdfFrameBlock {
     // The flow layer's clock at the frame's presented tick (SdfFlow.Clock): the one value the flow layer's phase enters the
     // kernels through. Zero for a program with no flow, so its views stand while nothing else changes.
     private static float FlowClockOf(SdfFrame frame) =>
-        (frame.Program.HasFlow ? SdfFlow.Clock(seconds: frame.Clock.Integrate(modulus: SdfFlow.ClockPeriodSeconds, ratePerSecond: 1d)) : 0f);
+        (frame.Program.Appearance.HasFlow ? SdfFlow.Clock(seconds: frame.Clock.Integrate(modulus: SdfFlow.ClockPeriodSeconds, ratePerSecond: 1d)) : 0f);
     // The world's render lanes (SdfFrame.WorldLanes): the one value a world lane enters the kernels through. Zero for a
     // frame whose program materials and volumes read none, so its views stand while the world's state moves.
     private static Vector4 WorldLanesOf(SdfFrame frame) {
-        if (frame.Program.ReadsWorldLanes) { return frame.WorldLanes; }
+        if (frame.Program.Appearance.ReadsWorldLanes) { return frame.WorldLanes; }
         foreach (var volume in frame.Volumes) {
             if (volume.IntensityLane >= SdfLanes.FirstWorld) { return frame.WorldLanes; }
         }

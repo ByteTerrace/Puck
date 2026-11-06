@@ -439,8 +439,8 @@ kernel's.
 ### W2 as built
 
 A palette slot's `flow` (`PaletteFlowDocument`, lowered to `SdfFlow` on
-`SdfMaterial.Flow`) packs material rows 27 to 30 (`SdfProgram.PackMaterials`;
-the stride is `SdfProgram.MaterialVectorsPerEntry`) and runs `sdfApplyFlow`
+`SdfMaterial.Flow`) packs material rows 27 to 30 (`SdfAppearance.Pack`;
+the stride is `SdfAppearance.MaterialVectorsPerEntry`) and runs `sdfApplyFlow`
 (`shade/shade-layers.hlsli`) in the views pass's light stage after
 `applyWeathering`: the weathering's lattice noise with an analytic gradient
 (`sdfFlowNoise`), advected along the velocity's tangential part in two layers
@@ -460,7 +460,7 @@ which `SdfFrameBlock` integrates from `SdfFrame.Clock` with
 `PresentedTick.Integrate`, as `SdfVolumeMotion.At` does for volumes, reduced by
 `SdfFlow.ClockPeriodSeconds`; the material carries a whole number of cycles a
 clock period (`SdfFlow.CyclesPerClock`), so the layer joins where the clock
-wraps. A program with no flow (`SdfProgram.HasFlow`) writes zero, so a still
+wraps. A program with no flow (`SdfAppearance.HasFlow`) writes zero, so a still
 world's views stand; the clock is a lighting member of the cadence signature
 (`SdfWorldTables.Cadence.cs`), so the shading passes rerun as the flow moves
 and the geometry, the cascades and the surface pass stand. No `sdf-*` kernel

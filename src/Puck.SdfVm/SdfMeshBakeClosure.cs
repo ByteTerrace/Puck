@@ -9,7 +9,7 @@ namespace Puck.SdfVm;
 /// edit anywhere else (the rest of the renderer, a new public member of a referenced assembly, a comment, the checkout's
 /// path) leaves it as it was, and an edit to anything the bake runs changes it.
 /// <para>The bake's roots (<see cref="BakeRoots"/>) are its planning, sampling, contouring and meshing types, the
-/// frame-block rows its kernel reads, the program's packing of the words the kernel walks, and the store's entry format.
+/// frame-block rows its kernel reads, the program's derivation of the field words the kernel walks (never its appearance), and the store's entry format.
 /// The walk stops at the library and the store, which hold meshes rather than make them; at the GPU region and its owed
 /// runs and bake-input transport, which allocate and carry a table's words rather than choose them, as the driver does; at the kernels' interfaces and
 /// the render graph's package, whose declarations reach the bake through the kernels' bytecode; and at assemblies outside
@@ -38,7 +38,9 @@ public sealed class SdfMeshBakeClosure {
         ("Puck.SdfVm", "Puck.SdfVm.SdfMesh", "NativeCopy"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshStore", "Encode"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshStore", "TryDecode"),
-        // The program packs the words the bake kernel walks; a group's geometry hashes its instructions, not their packing.
+        // The program's only constructor derives the field words the bake kernel walks, from the field's inputs and the
+        // appearance's outline alone; SdfProgram.Of packs the appearance after it, outside this closure. A group's
+        // geometry hashes its instructions, not their packing.
         ("Puck.SignedDistance", "Puck.SignedDistance.SdfProgram", ".ctor"),
     ];
     private static readonly HashSet<string> StopTypes = new(collection: [

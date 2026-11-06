@@ -10,8 +10,14 @@ compiled programs and fixed march budgets. These counts carry no cycle price.
 `Puck.SignedDistance.Illumination` holds the indirect-light controls the frame
 carries (`SdfIndirectTier`, `SdfIndirectSources`, `SdfIndirectGains`) and the
 octahedral direction mapping the sky environment map uses (`SdfOctahedral`).
-`SdfProgram.Materials` exposes the same snapshotted palette the packed shader
-reads, including immutable nested lists.
+A program is a field joined to an appearance (`SdfProgram.Of`). The field
+constructor derives every word the field interpreter reads (`SdfProgram.FieldWords`)
+from the field's inputs and the appearance's outline (`SdfAppearanceOutline`: the
+material count, the glass materials, the declared screens) alone; `SdfAppearance`
+validates and packs the materials, paints and screen surfaces into the stream's
+tail. The mesh bake's identity is rooted at the field constructor, so no
+appearance value or packing code reaches it. `SdfAppearance.Materials` exposes the
+same snapshotted palette the packed shader reads, including immutable nested lists.
 
 `SdfProgram.InspectInstance` reads exclusive packed ownership and culling facts for a
 live instance. Its count includes instructions and their data/bounds, owned segment and

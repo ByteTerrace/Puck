@@ -158,7 +158,7 @@ public sealed class SdfEncodingProbeLawTests {
     // The vector offset of a program's instance directory, after the segment directory.
     private static int InstanceDirectoryOf(SdfProgram program) {
         var words = program.Words;
-        var boundsOffset = (((int)words[SdfProgram.ProgramMaterialOffsetLane]) + (SdfProgram.MaterialVectorsPerEntry * ((int)words[SdfProgram.ProgramMaterialCountLane])));
+        var boundsOffset = (((int)words[SdfProgram.ProgramDataOffsetLane]) + (SdfProgram.InstructionDataVectors * ((int)words[SdfProgram.ProgramInstructionCountLane])));
         var segmentOffset = (boundsOffset + (SdfProgram.BoundRecordVectors * program.InstructionCount));
 
         return ((segmentOffset + SdfProgram.DirectoryHeaderVectors) + (SdfProgram.BoundRecordVectors * ((int)words[((segmentOffset * 4) + SdfProgram.SegmentCountLane)])));

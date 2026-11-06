@@ -275,6 +275,9 @@ public sealed partial class SdfMeshPathBake {
     /// <summary>Gets the name of the residency whose program the bake meshes, which its start and done lines name.</summary>
     public string Residency { get; init; } = string.Empty;
 
+    /// <summary>Gets this residency's process-local diagnostic identity, independent of its display name and program.</summary>
+    public string ResidencyId { get; } = Guid.NewGuid().ToString("N");
+
     /// <summary>Gets the selectors of the groups the bake bakes, every group when <see langword="null"/>: a group outside
     /// it finishes unbaked, with no mesh, and no selected group of its geometry waits on it (an offline audit of chosen
     /// groups).</summary>
@@ -1299,7 +1302,7 @@ public sealed partial class SdfMeshPathBake {
             m_loadsDone = 0;
             m_loadFirst = ((started.Loading > 0) ? restarted : 0);
             m_loadLast = 0;
-            Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} groups={m_groups.Count} baking={started.Baking} loading={started.Loading} shared={started.Shared} dynamic={m_groups.Count(predicate: static group => group.Dynamic)} instances={instances}");
+            Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} residency-id={ResidencyId} groups={m_groups.Count} baking={started.Baking} loading={started.Loading} shared={started.Shared} dynamic={m_groups.Count(predicate: static group => group.Dynamic)} instances={instances}");
             // The store's account reads its directory, so it runs off the frame's thread.
             if (Library.Disk is { } disk) {
                 var parts = Identity;
@@ -2166,7 +2169,7 @@ public sealed partial class SdfMeshPathBake {
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: m_groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
 
-        return (($"[sdf.mesh-bake] done residency={Residency} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} merged={m_merged} loaded={m_loaded} skinned={skinned} triangles={triangles} vertices={vertices} levelled={levelled} level1={first} level2={second} seconds={m_seconds:0.000}" + DescribeAccounts()) + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty));
+        return (($"[sdf.mesh-bake] done residency={Residency} residency-id={ResidencyId} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} merged={m_merged} loaded={m_loaded} skinned={skinned} triangles={triangles} vertices={vertices} levelled={levelled} level1={first} level2={second} seconds={m_seconds:0.000}" + DescribeAccounts()) + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty));
     }
 
     // How far off the surface, in the contour's finest cells, an unpinned vertex may lie and stay where the contour put it

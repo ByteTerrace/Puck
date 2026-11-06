@@ -233,10 +233,7 @@ Thousands of independent authored grass poses still warrant generic pose-program
 work; caching repeated slots alone does not remove them. Cold bake, physical
 memory, density sweeps and target-device bars remain open.
 
-- [medium] A surface-pattern code edit forces a full native rebake with no
-  stored groups loaded, though no authored shape changed. That exceeds the
-  one-minute bake bar and reinforces the appearance/field identity separation
-  below. The bounded clearing relief also adds real mesh and query work: scale
+- [medium] The bounded clearing relief adds real mesh and query work: scale
   it only with measured detail/visibility handling. Pattern filtering uses a
   conservative footprint approximation; an area fix pass over the
   reserved-component packing and filtering is owed. Owner: material/bake owner.
@@ -253,14 +250,6 @@ memory, density sweeps and target-device bars remain open.
   then retain against the exact emitted inputs. Preserve the root/routed scopes'
   different placement, screen and adjacency policies. Their frequency in the
   forest workload is unmeasured. Owner: presentation-query owner.
-- [medium] `SdfProgram` still packs appearance before field bounds, segments and
-  instances (`src/Puck.SignedDistance/SdfProgram.cs:140`). Material
-  stride/extent therefore affect field offsets, and its constructor's bake
-  closure conservatively reaches appearance code. Separate canonical field
-  packing from appearance, preserving the exact field interpreter inputs and
-  material-boundary semantics; prove appearance-only edits keep bake identity
-  and field/skin/material-cut changes invalidate it. Do not replace the
-  remaining real dependency with a blacklist. Owner: graphics/bake owner.
 
 An area fix pass over this packet's code is owed.
 
@@ -1117,6 +1106,18 @@ are what the plan defers or the water strained in a system beside it.
   confirm with a windowed World that `[sdf.mesh-bake] done` and `world.budget`
   show no `hydro` groups.
 
+- [medium] The carved channel's acceptance gaps, from A1's captures: at stage 1
+  `riverDepth` is 0.02-0.035 m, so contact foam covers the whole surface and the
+  river reads white; the river settles (0.824) well before stage 4, so stages 4
+  and 5 look the same and the stage ticks in the definition of done need
+  revisiting against the chain's own curve; the river groups' mesh-pass vertex
+  count is unshown (`puck mesh audit --prototype river-channel --cpu`); a dark
+  strip at the river-pool junction in the pool-end capture is unconfirmed (water
+  over the sill, or a gap). The channel's contact cost is the carve-contact
+  lane's. Owner: the next water authoring lane (A4 shares the junction).
+- [low] `water.speed 60` also runs the day clock, so stage captures come out at
+  night unless `day`'s advance is set to 0 and the day reset first; P1's tour
+  rows must pin the day.
 - [medium] A flow that follows a course. A palette flow layer carries one
   velocity over a surface, so the river's single water body flows along the
   course's mean heading and the course's legs turn only gently about it
@@ -1160,6 +1161,13 @@ are what the plan defers or the water strained in a system beside it.
   footprint filtering that preserve history when valid and reject it when
   the refracted content changes; simply zeroing reactivity would ghost motion.
   Coordinate with the [temporal packet](#temporal-shimmer-and-cadence-flicker).
+- [medium] The debug-world arc scenario (`worlds/debug/water-arc-tests.puck`,
+  405,040 ticks of the full debug world, twice under `--reproduce`) ran 2 h 46 m
+  without a verdict and was stopped; the chain-only twin passes in minutes.
+  Make the integration proof affordable without weakening it: run the arc at
+  `water.speed` if the chain's numbers are speed-invariant (prove it with the
+  chain twin first), or profile what the full world ticks per step that the
+  chain does not. Until then H1's full-world verdict is unproven.
 - [low] The glass passes' GPU time is owed: read it per pass at the pool, the
   falls and the lake through [the measurement window](#measurement-window); the
   plan's budget table holds counts only, so no frame-bar claim about the glass
@@ -2591,6 +2599,23 @@ Render-graph lifecycle lows (read at the cited lines; none run):
 Owner: MCP lane (specialist) · medium · Next: the schema switch, then the stale
 lease holder.
 
+- [medium] Memory admission never admits a windowed World or a cold bake
+  while a long heavy suite runs: on a machine with a 45.7 GB commit limit,
+  `puck_world_start` and `bench startup --bake` waited out 1,200 s and 27
+  minutes asking for 24 GB (a declared 18 GB peak plus 6 GB growth reserved
+  for a running `puck test --reproduce`) against 19-23 GB of headroom, which
+  held two lanes' GPU evidence for over an hour. Measure each kind's real peak
+  (the deck-memory attribution read a cold-baking windowed World near 13 GB
+  private) and let admission use it, and make a long heavy suite's reservation
+  shrink with its observed growth; a wait past its deadline names what holds it.
+- [low] A quiet lease whose holder process is gone stays listed
+  (`puck lease list`: "stale: no process holds its lock") for hours after its
+  worktree is removed; prune it when the holder is proven dead.
+- [low] An edit that moves the whole-ISA fingerprint regenerates
+  `SdfIsaFingerprint.cs` and the non-bake interfaces during the World build, so
+  `puck_world_start` discards that build once with "sources changed while
+  building"; the retry succeeds. Generated outputs of the build itself should
+  not count as source changes.
 - Time the MCP front's swap to a newly activated build, from a private install
   root (`puck mcp --prepare-install --install-root <worktree>/.claude/mcp-install`):
   activating in the shared root reaches every session's tools, so it cannot be
@@ -2629,6 +2654,16 @@ lease holder.
 Owner: suites lane · dormant until the owner restores test requirements (AGENTS.md
 suspends them for the refactoring campaign) · Next: triage the failing Windows
 shards by cause.
+
+- Failures the field-packing lane met in code it did not touch (unconfirmed
+  on its base): `SdfPackedContractLawTests.TheConstructorAdmitsTheReinterpretedIntegerLanes`
+  builds a SampledRegion with no binding, which `BindSampledFields` refuses;
+  three `SdfMeshStoreLawTests` capacity laws, passing before the change titled
+  "cache retention lists again"; `SdfWorldPassesLawTests.AViewAllocatesEachScratchBufferOnce`
+  and `CadenceCanBeDisabledAndDoesNotAllocateOnAStillView`, a per-frame
+  closure allocation in `SdfMeshIrradiance`; and
+  `AViewSizesItsCascadesByItsShadowResolution…` timing out at 5 minutes.
+  Each is a defect in the code or the law; fix or delete it, never keep it red.
 
 The suite target (100 % line coverage plus the keep-list) and CI's `coverage` job
 are suspended; a red test or coverage job is not a stop, and a refactor rewrites
@@ -3005,6 +3040,12 @@ still changes a fraction of a percent of pixels, not exactly zero.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] Two walls the water channel lane hit: template `let`s inside a
+  `prototypes` block are refused (PUCK036), and `with` takes only an object
+  literal, so a shared view material became a required field and helper
+  functions (`worlds/standard/water.puck`, `waterViews`, `riverChannel`). Each
+  is a clumsier form an author reached for (AGENTS.md, "Ergonomic is optimal");
+  lift both, then simplify those templates.
 - [medium] `.puck` has no way to take an imported value and override one field
   of it (`celStyle` with `enabled: false`), so a world that wants the standard's
   cel style as a default that boots off copies all eleven values

@@ -83,7 +83,7 @@ public sealed class PartProgramLawTests {
         Assert.False(condition: rejects, userMessage: "The bound of an optional intersection cannot reject the remaining subject.");
     }
 
-    private static SdfProgram Build(List<SdfInstruction> instructions, SdfInstanceRange[] instances) => new(
+    private static SdfProgram Build(List<SdfInstruction> instructions, SdfInstanceRange[] instances) => TestPrograms.Of(
         instructions: instructions,
         instances: instances,
         materials: Enumerable.Repeat(
@@ -101,7 +101,7 @@ public sealed class PartProgramLawTests {
         Data1: Vector4.Zero
     );
     private static int PartTable(ReadOnlySpan<uint> words) {
-        var segment = (((int)((words[3] + (((uint)SdfProgram.MaterialVectorsPerEntry) * words[1])) + (2u * words[0]))) * 4);
+        var segment = (((int)((words[2] + (2u * words[0])) + (2u * words[0]))) * 4);
         var instances = ((segment + 4) + (8 * ((int)words[segment])));
 
         return (((int)words[(instances + 1)]) * 4);
@@ -729,7 +729,7 @@ public sealed class PartProgramLawTests {
         var other = vertices.Select(selector: vertex => (vertex * (different
             ? 2f
             : 1f))).ToArray();
-        var words = new SdfProgram(
+        var words = TestPrograms.Of(
             instructions: first,
             instances: [Range(
                     end: 8,

@@ -107,7 +107,7 @@ own; on level ground the two forms are one.
 ### Slope, altitude and curvature materials
 
 A palette slot gains **layers**, up to four, packed into a side table as paints
-are (`SdfProgram.PackPaint`), so the material row grows by one word. Each layer
+are (`SdfAppearance.PackPaint`), so the material row grows by one word. Each layer
 is a material response (colour, roughness, specular, optional detail relief)
 over a mask built from:
 

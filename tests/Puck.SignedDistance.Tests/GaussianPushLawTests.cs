@@ -96,7 +96,7 @@ public sealed class GaussianPushLawTests {
             ? i with { Shape = BitConverter.SingleToUInt32Bits(value: float.NaN) }
             : i)).ToArray();
 
-        Assert.Throws<ArgumentException>(testCode: () => new SdfProgram(
+        Assert.Throws<ArgumentException>(testCode: () => TestPrograms.Of(
             instructions,
             [new SdfMaterial(Vector3.One)]
         ));

@@ -50,7 +50,7 @@ public sealed class ResponsePaletteLawTests {
             placements: definition.Placements
         );
 
-        return [.. builder.Build().Materials.Select(selector: static material => material.Albedo)];
+        return [.. builder.Build().Appearance.Materials.Select(selector: static material => material.Albedo)];
     }
 
     [Fact]

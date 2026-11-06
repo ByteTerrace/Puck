@@ -1341,7 +1341,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         if (ReferenceEquals(objA: program, objB: m_materialsProgram) && ReferenceEquals(objA: m_scene, objB: m_materialsScene)) { return m_materialsKey; }
 
         var key = 17;
-        var materials = program.Materials;
+        var materials = program.Appearance.Materials;
 
         foreach (var id in (m_scene?.Materials ?? [])) {
             if ((id < 0) || (id >= materials.Count)) {
@@ -2999,7 +2999,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 Lights = [.. lights],
                 LightIndices = [.. indices],
                 Program = frame.Program,
-                Materials = (ReferenceEquals(objA: previous?.Program, objB: frame.Program) ? previous!.Materials : [.. frame.Program.Materials]),
+                Materials = (ReferenceEquals(objA: previous?.Program, objB: frame.Program) ? previous!.Materials : [.. frame.Program.Appearance.Materials]),
                 Points = [.. points],
                 Sky = ((sources & SdfIndirectSources.Sky) != 0),
                 SkyCoefficients = coefficients,

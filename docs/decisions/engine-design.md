@@ -515,9 +515,14 @@ dependency and notification boundaries; it adds no frozen identity or exceptions
 for particular counter names. See the [bake procedure](../../.claude/skills/rendering/references/mesh-bake.md)
 for the input, product and invalidation witnesses.
 
-This boundary is specific, not a claim that every appearance edit is neutral:
-the program constructor still packs appearance and field data together. Real
-shared dependencies stay in the closure until their ownership is separated.
+Appearance has its own boundary of the same kind. `SdfProgram`'s constructor, the
+closure's program root, derives the field from the field's inputs and an
+`SdfAppearanceOutline` alone (material count, glass materials, declared screens),
+and `SdfProgram.Of` packs the `SdfAppearance` into the stream's tail after it
+returns, so a material, paint or screen edit and an edit to their packing keep
+every stored mesh. Material facts that shape a mesh enter the group's geometry
+instead: each shape's material by place, and glass. Real shared dependencies stay
+in the closure until their ownership is separated.
 
 The owner explicitly includes compiled cartridge JSON twins in this decision.
 Only their authored sources are committed; consumers compile those sources,

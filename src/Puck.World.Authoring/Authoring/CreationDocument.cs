@@ -609,7 +609,7 @@ public sealed record CreationDocument(
     /// clamp into <c>[0, PaletteSize)</c> at normalization.</summary>
     public const int PaletteSize = 32;
     /// <summary>The most paints one palette slot draws (<see cref="PaletteEntryDocument.Paints"/>).</summary>
-    public const int MaxPalettePaints = SdfProgram.MaxPaintsPerMaterial;
+    public const int MaxPalettePaints = SdfAppearance.MaxPaintsPerMaterial;
 
     /// <summary>Unknown sections preserved across a round-trip — the data-side plugin extensibility posture. Null
     /// when the document carries no unknown members. A settable (not <c>init</c>)
