@@ -1283,17 +1283,19 @@ A mesh no draw names any more stays where it lies, so a body that leaves the
 world and returns finds its meshes placed and writes nothing for them; the arena
 packs again only once those words outnumber the named meshes' words and 32 MB
 (`SdfMeshRegionArena.RetainedSlackWords`).
-Meshes a list newly places land within a frame's share of words
-(`SdfWorldTables.MeshLandingWords`, 2 MB for each whole 60 Hz frame the frame
-spans, `SdfMeshPathBake.FrameShares`, so a cold bake's long frames land meshes
-as fast as a 60 Hz display would), in the list's order; a draw whose
-mesh is still owed waits out of the staged records until it lands, so a body
-whose meshes all arrive at once, as when it crosses into a world, lands over a
-few frames. A list with more draws than the reserve doubles it and moves only the
-meshes whose words the grown reserve takes, writing them in that frame
+Placed meshes never land in a frame's upload: they stream through the
+residency's background GPU work (`SdfWorldTables.MeshLanding.cs`, a client of
+`SdfGpuWork`), in jobs of at most `SdfGpuWork.UploadChunkBytes` under that
+service's byte, host-time and GPU-share budget, the meshes the views see largest
+first (`SdfMeshDemand`). A draw whose mesh is still owed waits out of the staged
+records until its last job has completed, so a boot, a relocation or a body whose
+meshes all arrive at once fills in from the cameras outward over several frames
+rather than staging every word in one upload. A list with more draws than the
+reserve doubles it and moves only the meshes whose words the grown reserve takes,
+writing them in that frame's upload with the records that name them
 (`SdfMeshRegionArena.Moved`); a body that straddles a door draws twice, so a list
-outgrows the reserve wherever bodies stand. Every mesh is written again at once
-only on the first list and when the arena packs; a region that grows, to
+outgrows the reserve wherever bodies stand. Every mesh is owed again only on the
+first list and when the arena packs; a region that grows, to
 its need plus an eighth, takes the words it held without waiting for the device: the
 next upload clears the new buffer and copies the old one into it on the GPU,
 and the old buffer is disposed once that upload has completed. The bake keys each group by its

@@ -97,7 +97,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         SdfMeshDraw[] Draws(Matrix4x4 a, Matrix4x4 b) => [
             new(Identity: "a", Material: 0, Mesh: mesh, ObjectToWorld: a), new(Identity: "b", Material: 0, Mesh: mesh, ObjectToWorld: b),
         ];
-        rig.Render(time: 0f, meshDraws: Draws(a: first, b: second));
+        rig.Land(time: 0f, meshDraws: Draws(a: first, b: second));
         Assert.Equal(expected: new[] { first, second }, actual: PreviousMatrices(rig: rig, draws: 2));
         var movedFirst = (first * Matrix4x4.CreateRotationY(radians: 0.3f));
 
@@ -169,7 +169,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         var second = Matrix4x4.CreateScale(xScale: 2f, yScale: 3f, zScale: 4f);
         var third = Matrix4x4.CreateTranslation(xPosition: -4f, yPosition: 0f, zPosition: 1f);
 
-        rig.Render(time: 0f, meshDraws: [
+        rig.Land(time: 0f, meshDraws: [
             new(Identity: "a", Material: 0, Mesh: mesh, ObjectToWorld: first), new(Identity: "b", Material: 0, Mesh: mesh, ObjectToWorld: second),
         ]);
         rig.Render(time: 0f, meshDraws: [

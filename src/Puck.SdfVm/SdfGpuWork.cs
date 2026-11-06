@@ -130,6 +130,21 @@ public readonly ref struct SdfGpuWorkRecording {
     /// <param name="bytes">The bytes to copy, at most the buffer's size.</param>
     /// <exception cref="InvalidOperationException">The job already copied.</exception>
     public void CopyToReadback(IGpuBuffer source, ulong bytes) => m_owner.CopyToReadback(bytes: bytes, commandBuffer: CommandBuffer, slot: m_slot, source: source);
+    /// <summary>Records the copy of what a staged region owes into the slot's command buffer: flushes the region's
+    /// <paramref name="regionSlot"/>, records a grown region's carry and the copy, and hands the region's buffer to
+    /// <paramref name="readers"/>, which read it in this or any later submission. A region that owes nothing records
+    /// nothing.</summary>
+    /// <param name="region">The region, whose owed words the job wrote or owed before this call.</param>
+    /// <param name="regionSlot">The region's slot whose staging buffer the job stages into: one that no submission in
+    /// flight still reads, which a slot of this service is once its job completed.</param>
+    /// <param name="readers">The shader stages that read the region's buffer.</param>
+    public void CopyRegion(GpuRegion region, int regionSlot, GpuStage readers) {
+        var command = CommandBuffer;
+        var copies = new GpuRegionCopyRecording(recorder: Recorder, readers: readers, begin: () => command);
+
+        copies.Record(handsToReaders: true, region: region, slot: regionSlot);
+        _ = copies.Finish();
+    }
 }
 /// <summary>
 /// A residency's background GPU work: work that is not a frame's (the mesh bake's sampling, a probe trace), submitted
@@ -155,6 +170,15 @@ public sealed class SdfGpuWork : IDisposable {
     public const int UploadChunkBytes = 1 << 20;
     /// <summary>The most host payload bytes one pump stages.</summary>
     public const int UploadBudgetBytes = SlotCount * UploadChunkBytes;
+    /// <summary>The rate, in bytes a second, an upload job's GPU time is estimated at until its timestamps measure it:
+    /// the copy kernel's read of host staging memory across the bus.</summary>
+    public const double UploadBytesPerSecond = 1e10;
+
+    /// <summary>Returns the GPU time, in seconds, an upload job of <paramref name="bytes"/> host payload bytes is
+    /// estimated to take (<see cref="UploadBytesPerSecond"/>).</summary>
+    /// <param name="bytes">The job's host payload bytes.</param>
+    /// <returns>The estimate, in seconds.</returns>
+    public static double UploadSecondsOf(long bytes) => (bytes / UploadBytesPerSecond);
     private static readonly TimeSpan HostBudget = TimeSpan.FromMilliseconds(2);
     // The GPU time, in seconds, an idle service may bank: an idle spell admits no more than this at once.
     private const double MostCreditSeconds = 0.02;

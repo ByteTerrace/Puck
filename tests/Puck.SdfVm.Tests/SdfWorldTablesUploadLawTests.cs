@@ -787,7 +787,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         var stillBytes = rig.Gpu.HostBytes();
 
-        rig.Render(
+        rig.Land(
             meshDraws: draws,
             time: 0f
         );
@@ -849,7 +849,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 0f, y: 2f, z: 0f), new(x: 2f, y: 0f, z: 0f) }
         );
 
-        rig.Render(
+        rig.Land(
             meshDraws: [.. shifted, new(Identity: "landed", Material: 7, Mesh: landed, ObjectToWorld: Matrix4x4.Identity)],
             time: 0f
         );
@@ -888,16 +888,16 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         using var fresh = new Rig(slots: 1);
 
         rig.Warm();
-        rig.Render(meshDraws: [new(Identity: "big", Material: 1, Mesh: big, ObjectToWorld: Matrix4x4.Identity)], time: 0f);
+        rig.Land(meshDraws: [new(Identity: "big", Material: 1, Mesh: big, ObjectToWorld: Matrix4x4.Identity)], time: 0f);
 
         var grown = rig.Engine.MeshRegionBytes;
 
-        rig.Render(meshDraws: many, time: 0f);
+        rig.Land(meshDraws: many, time: 0f);
         // A region that never grew past the granule, planned through the same draw lists but a small first mesh, lays the
         // second list out alike.
         fresh.Warm();
-        fresh.Render(meshDraws: [new(Identity: "big", Material: 1, Mesh: quad, ObjectToWorld: Matrix4x4.Identity)], time: 0f);
-        fresh.Render(meshDraws: many, time: 0f);
+        fresh.Land(meshDraws: [new(Identity: "big", Material: 1, Mesh: quad, ObjectToWorld: Matrix4x4.Identity)], time: 0f);
+        fresh.Land(meshDraws: many, time: 0f);
 
         var used = ((int)rig.Engine.MeshRegionUsedBytes);
 
@@ -1241,6 +1241,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             }
 
             m_pendingReseats.Clear();
+            // As the residency stages a frame: the background work, through which placed meshes land, is pumped at the
+            // top of the frame and after the upload.
+            Engine.GpuWork.Pump(tables: Engine);
             Engine.Pack(frame: Frame(
                 program: m_program,
                 time: time,
@@ -1252,6 +1255,16 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                 Volumes = (volumes ?? []),
             });
             Engine.SubmitUpload();
+            Engine.GpuWork.Pump(tables: Engine);
+        }
+        // Renders the draws until the mesh region owes none of their meshes: the background work lands them over the
+        // frames, and the staging after the last landing names every draw.
+        public void Land(float time, IReadOnlyList<SdfMeshDraw> meshDraws) {
+            Render(meshDraws: meshDraws, time: time);
+            for (var frame = 0; Engine.MeshesLanding; frame++) {
+                Assert.True(condition: (frame < 64), userMessage: "The mesh region never landed its meshes.");
+                Render(meshDraws: meshDraws, time: time);
+            }
         }
         // Renders until every ring slot has taken its first frame, so later frames read steady-state writes.
         public void Warm() {

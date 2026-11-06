@@ -26,7 +26,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
         if (!upload.Chunks.Reader.TryRead(out var chunk) && (m_sceneInFlight != 0 || !upload.TryRoot(out chunk))) { return false; }
         m_sceneInFlight++;
         job = chunk;
-        estimatedSeconds = chunk.Count * sizeof(uint) / 1e9;
+        estimatedSeconds = SdfGpuWork.UploadSecondsOf(bytes: chunk.Count * sizeof(uint));
         return true;
     }
 
@@ -40,10 +40,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
         }
         if (chunk.Word == 0) { m_sceneRegion.Write(0, MemoryMarshal.AsBytes(chunk.Words.AsSpan(0, chunk.Count))); }
         else { m_sceneRegion.OweSourced(chunk.Word * 4L, chunk.Count * 4L); }
-        var command = recording.CommandBuffer;
-        var copies = new GpuRegionCopyRecording(recording.Recorder, GpuStage.ComputeShader, () => command);
-        copies.Record(m_sceneRegion, recording.Slot, handsToReaders: true);
-        copies.Finish();
+        recording.CopyRegion(m_sceneRegion, recording.Slot, GpuStage.ComputeShader);
         upload.Bytes += chunk.Count * sizeof(uint);
     }
 

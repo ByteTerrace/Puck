@@ -2219,17 +2219,6 @@ Grounded causes and leads:
 - One group in the debug world has a mesh that no draw names, not yet
   identified; `world.residency` counts it resident, since it costs the region
   nothing.
-- A boot's first staging writes the whole mesh region at once, warm or cold
-  (`SdfWorldTables.StageMeshRegionCore`: the arena's first plan owes every
-  placement, bypassing `MeshLandingWords`), and so does every relocation. On
-  the debug world that is about 1.7 GB of sourced mesh words flushed into
-  staging in one upload: the boot's longest frame, read as
-  `render.record.packages-microseconds` over the first frames. Landing it under
-  a budget delays the complete scene by seconds at the reference share, so
-  the choice is the owner's (boot hitch against progressive arrival); a
-  background B1 client streaming the region in chunks, as the probe scene
-  does (`SdfMeshProbeGpuWork.Scene`), would bound the frame without writing a
-  second uploader. Measure it against step 4's budget.
 
 ### Vulkan regressions and GPU robustness
 

@@ -263,7 +263,7 @@ public sealed partial class SdfWorldTables : IDisposable {
         m_regionCopyPipeline = regionCopy;
         m_regionCopies = new GpuRegionCopyRecording(
             begin: BeginUpload,
-            readers: GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader,
+            readers: RegionReaders,
             recorder: gpu.Recorder
         );
 
@@ -393,6 +393,8 @@ public sealed partial class SdfWorldTables : IDisposable {
         // The background GPU work records and submits through the device's own services: its submissions are no upload
         // of the tables' ledger.
         m_gpuWork = scope.Own(created: new SdfGpuWork(device: device, name: ObjectOwner));
+        // The mesh region's owed words land through it (SdfWorldTables.MeshLanding.cs).
+        m_gpuWork.Add(client: new MeshLanding(tables: this));
 
         // The sky's environment, which the World sets bind and the graph's shared producer renders after upload.
         // Its constructor joins each object it creates to the scope, which releases them should a later step throw.
