@@ -27,7 +27,7 @@ public sealed class BodySweepRefusalLawTests {
             KitRowsRaw = [.. source.Kits.Select(selector: kit => kit with {
                 Collider = new WorldCollider.Sphere(Radius: (rigid ? 0.15f : 0.5f)),
                 BodyContact = (rigid ? WorldBodyContactMode.Solid : kit.BodyContact),
-                Rigid = (rigid ? new WorldRigid(AngularDamping: 0f, Friction: 0f, LinearDamping: 0f, Mass: 0.3f, Restitution: 0f, RollingFriction: 0f) : kit.Rigid),
+                Rigid = (rigid ? new WorldRigid(AngularDamping: 0f, Friction: 0f, LinearDamping: 0f, Mass: 0.3f, Restitution: 0f, RollingResistance: 0f) : kit.Rigid),
             })],
             CollisionRaw = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
         };

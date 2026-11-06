@@ -814,7 +814,10 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            var radius = body.BroadphaseRadius;
+            // A body reaches as far as it can move this step, plus half the rest band a pair keeps its contact within,
+            // so a rigid pair is found before it overlaps.
+            var travel = body.ContactTravel(stepTicks: m_rigidTickStepTicks);
+            var radius = ((body.BroadphaseRadius + travel) + RigidRestOffset);
 
             maximumRadius = FixedQ4816.Max(x: maximumRadius, y: radius);
 
@@ -822,7 +825,8 @@ public sealed partial class WorldPopulation {
                 Index: index,
                 MinimumX: (body.FixedPosition.X - radius),
                 MaximumX: (body.FixedPosition.X + radius),
-                Radius: radius
+                Radius: radius,
+                Travel: travel
             );
             included[index] = true;
         }
@@ -853,7 +857,7 @@ public sealed partial class WorldPopulation {
 
                     if (included[index] || (BodyContact(index: index) != WorldBodyContactMode.Solid)) { continue; }
                     var sleeper = m_entries[index].Body!;
-                    var radius = sleeper.BroadphaseRadius;
+                    var radius = (sleeper.BroadphaseRadius + RigidRestOffset);
 
                     included[index] = true;
                     maximumRadius = FixedQ4816.Max(x: maximumRadius, y: radius);
@@ -971,6 +975,11 @@ public sealed partial class WorldPopulation {
                     }
                     DynamicContactNarrowPairs++;
 
+                    var pairIsRigid = (left.IsRigid || right.IsRigid);
+                    // A rigid pair is solved speculatively: within what both can travel this step plus the rest band,
+                    // its contact exists before it overlaps. Two kit bodies resolve by position, overlap only.
+                    var margin = (pairIsRigid ? ((leftContact.Travel + rightContact.Travel) + RigidRestBand) : FixedQ4816.Zero);
+
                     if (FixedDynamicBodyContacts.TryCorrection(
                         leftPosition: left.FixedPosition,
                         leftOrientation: left.FixedOrientation,
@@ -979,21 +988,21 @@ public sealed partial class WorldPopulation {
                         rightOrientation: right.FixedOrientation,
                         rightVolumes: right.ScaledColliderVolumes(),
                         tieBreaker: leftIndex ^ rightIndex,
-                        correction: out var correction
+                        correction: out var correction,
+                        margin: margin
                     )) {
-                        var pairIsRigid = (left.IsRigid || right.IsRigid);
+                        var depth = (correction.Length - margin);
 
                         if (pairIsRigid && (left.PopulationSleeping || right.PopulationSleeping) &&
-                            RestingContactHolds(correction: correction, left: leftIndex, right: rightIndex)) {
-                            // The sleeper rests in this very contact: the soft solve leaves a resting pair overlapping
-                            // a little, and an overlap no deeper than that wakes nothing.
+                            RestingContactHolds(depth: depth, left: leftIndex, right: rightIndex)) {
+                            // The sleeper rests in this very contact, and a contact no deeper than its rest wakes nothing.
                             continue;
                         }
                         if (pairIsRigid) {
                             // The pair is a body contact of this tick's rigid step; its sleepers join the step.
                             if (left.PopulationSleeping) { WakeBodyIsland(index: leftIndex); }
                             if (right.PopulationSleeping) { WakeBodyIsland(index: rightIndex); }
-                            m_rigidPairHits.Add(item: new RigidPairHit(Correction: correction, Left: leftIndex, Right: rightIndex));
+                            m_rigidPairHits.Add(item: new RigidPairHit(Correction: correction, Depth: depth, Left: leftIndex, Right: rightIndex));
                         } else {
                             var (leftShare, rightShare) = SplitPairCorrection(
                                 correction: correction,

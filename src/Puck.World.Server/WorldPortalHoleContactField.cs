@@ -210,6 +210,10 @@ public sealed class WorldPortalHoleContactField : IContactField {
         in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) =>
         m_inner.TrySupportDistance(descent: out descent, orientation: in orientation, position: in position, reach: reach, up: in up, volumes: volumes);
     /// <inheritdoc/>
+    public ContactSupportWitness? SupportWitness(ReadOnlySpan<FixedSurfaceContact> contacts, in FixedVector3 position, in FixedQuaternion orientation,
+        in FixedBodyColliderVolume volume, in FixedVector3 up) =>
+        m_inner.SupportWitness(contacts: contacts, orientation: in orientation, position: in position, up: in up, volume: in volume);
+    /// <inheritdoc/>
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) => m_inner.TryUp(
         position: in position,
         up: out up

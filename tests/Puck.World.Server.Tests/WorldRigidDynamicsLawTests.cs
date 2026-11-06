@@ -136,7 +136,7 @@ public sealed class WorldRigidDynamicsLawTests {
             CreationsRaw = [.. source.Creations, new WorldPrototype(Id: "lens", Document: creation.Document, HashRaw: creation.Hash)],
             KitRowsRaw = [.. source.Kits.Select(selector: kit => kit with {
                 Collider = new WorldCollider.FromCreation(PrototypeId: "lens"),
-                Rigid = kit.Rigid! with { Mass = 0.05f, Restitution = 0.05f, Friction = 0.6f, RollingFriction = 0.2f },
+                Rigid = kit.Rigid! with { Mass = 0.05f, Restitution = 0.05f, Friction = 0.6f, RollingResistance = 0.002f },
             })],
         };
     }
@@ -348,7 +348,7 @@ public sealed class WorldRigidDynamicsLawTests {
             LinearDamping: 0.02f,
             Mass: 1f,
             Restitution: 0.1f,
-            RollingFriction: 0.05f
+            RollingResistance: 0.0005f
         );
 
         return source with {
@@ -422,7 +422,7 @@ public sealed class WorldRigidDynamicsLawTests {
             LinearDamping: 0.01f,
             Mass: 1f,
             Restitution: 0.4f,
-            RollingFriction: 0.05f
+            RollingResistance: 0.0005f
         );
 
         return source with {
@@ -480,7 +480,7 @@ public sealed class WorldRigidDynamicsLawTests {
             LinearDamping: 0f,
             Mass: mass,
             Restitution: restitution,
-            RollingFriction: 0f
+            RollingResistance: 0f
         );
 
         return source with {

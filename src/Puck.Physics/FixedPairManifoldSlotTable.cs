@@ -26,10 +26,13 @@ public struct FixedPairManifoldSlot : IManifoldSlot<FixedTwoBodyContact> {
     public FixedVector3 AnchorB;
     /// <summary>The unit contact normal, in world axes, pointing from A toward B.</summary>
     public FixedVector3 Normal;
-    /// <summary>The accumulated normal impulse raw, at Q48.16; the normal warm-start carrier.</summary>
+    /// <summary>The accumulated normal impulse raw, at <see cref="FixedRigidScales.Impulse"/>; the normal warm-start
+    /// carrier.</summary>
     public long NormalImpulseRaw;
-    /// <summary>The accumulated friction impulse in world axes; the friction warm-start carrier, kept as a world vector
-    /// because the tangent basis is rebuilt from <see cref="Normal"/> every step.</summary>
+    /// <summary>The accumulated friction impulse in world axes, each component's raw at
+    /// <see cref="FixedRigidScales.Impulse"/> rather than Q48.16; the friction warm-start carrier, kept as a world vector
+    /// because the tangent basis is rebuilt from <see cref="Normal"/> every step. Only linear operations (a sum, a dot
+    /// with a unit vector, a scale by a Q48.16 factor) read it, and each keeps the raw's placement.</summary>
     public FixedVector3 FrictionImpulse;
     /// <summary>The associations the slot has missed since it was last claimed.</summary>
     public int IdleSteps;
@@ -42,8 +45,9 @@ public struct FixedPairManifoldSlot : IManifoldSlot<FixedTwoBodyContact> {
     public long NormalMassRaw;
     /// <summary>The relative normal velocity captured before the step's first solve, for restitution.</summary>
     public FixedQ4816 RelativeVelocity;
-    /// <summary>The largest accumulated normal impulse raw the current step reached: a slot that carried load at any
-    /// substep restitutes, even when the pair has separated by the step's end and its accumulated impulse is zero.</summary>
+    /// <summary>The largest accumulated normal impulse raw, at <see cref="FixedRigidScales.Impulse"/>, the current step
+    /// reached: a slot that carried load at any substep restitutes, even when the pair has separated by the step's end
+    /// and its accumulated impulse is zero.</summary>
     public long MaxNormalImpulseRaw;
     /// <summary>The first friction direction, orthogonal to <see cref="Normal"/>, for the current step.</summary>
     public FixedVector3 Tangent1;
@@ -54,10 +58,23 @@ public struct FixedPairManifoldSlot : IManifoldSlot<FixedTwoBodyContact> {
     public long TangentMass1Raw;
     /// <summary>The effective mass raw along <see cref="Tangent2"/>, at <see cref="FixedRigidScales.EffectiveMass"/>.</summary>
     public long TangentMass2Raw;
-    /// <summary>The accumulated friction impulse raw along <see cref="Tangent1"/>, at Q48.16, for the current step.</summary>
+    /// <summary>The accumulated friction impulse raw along <see cref="Tangent1"/>, at
+    /// <see cref="FixedRigidScales.Impulse"/>, for the current step.</summary>
     public long TangentImpulse1Raw;
-    /// <summary>The accumulated friction impulse raw along <see cref="Tangent2"/>, at Q48.16, for the current step.</summary>
+    /// <summary>The accumulated friction impulse raw along <see cref="Tangent2"/>, at
+    /// <see cref="FixedRigidScales.Impulse"/>, for the current step.</summary>
     public long TangentImpulse2Raw;
+    /// <summary>The effective angular mass raw about <see cref="Tangent1"/>, at <see cref="FixedRigidScales.EffectiveMass"/>;
+    /// zero disables rolling resistance on the slot this step.</summary>
+    public long RollingMass1Raw;
+    /// <summary>The effective angular mass raw about <see cref="Tangent2"/>, at <see cref="FixedRigidScales.EffectiveMass"/>.</summary>
+    public long RollingMass2Raw;
+    /// <summary>The accumulated rolling-resistance angular impulse raw about <see cref="Tangent1"/> (metres times an
+    /// impulse raw at <see cref="FixedRigidScales.Impulse"/>) for the current step; it starts each step at zero.</summary>
+    public long RollingImpulse1Raw;
+    /// <summary>The accumulated rolling-resistance angular impulse raw about <see cref="Tangent2"/> for the current
+    /// step.</summary>
+    public long RollingImpulse2Raw;
     /// <summary>What the slot is doing this step.</summary>
     public FixedPairManifoldSlotDisposition Disposition;
 

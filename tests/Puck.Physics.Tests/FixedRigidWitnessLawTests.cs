@@ -8,6 +8,7 @@ namespace Puck.Physics.Tests;
 public sealed class FixedRigidWitnessLawTests {
     private static readonly FixedRigidScales Scales = new(
         EffectiveMass: 32,
+        Impulse: 16,
         InverseInertia: 40,
         InverseMass: 40
     );

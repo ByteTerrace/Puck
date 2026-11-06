@@ -19,10 +19,14 @@ public sealed class FixedRigidManifold {
     public FixedQ4816 Friction { get; set; }
     /// <summary>Gets or sets the pair's coefficient of restitution, in <c>[0, 1]</c>.</summary>
     public FixedQ4816 Restitution { get; set; }
+    /// <summary>Gets or sets the pair's rolling-resistance lever, in metres and non-negative: each contact point resists
+    /// the bodies' relative rolling (angular velocity about the axes tangent to its surface) with an angular impulse of
+    /// at most this lever times the point's normal impulse.</summary>
+    public FixedQ4816 RollingResistance { get; set; }
     /// <summary>Gets the pair's persistent manifold slots.</summary>
     public FixedPairManifoldSlotTable Slots { get; } = new();
-    /// <summary>Gets the largest applied-impulse change, in raw Q48.16 units, the most recent step's solve left — a reading,
-    /// never a control.</summary>
+    /// <summary>Gets the largest applied-impulse change, in raw units at <see cref="FixedRigidScales.Impulse"/>, the most
+    /// recent step's solve left — a reading, never a control.</summary>
     public long LastStepMovementRaw { get; internal set; }
 
     /// <summary>Associates one step's candidates into the slots, putting them in canonical order first.</summary>
@@ -35,7 +39,7 @@ public sealed class FixedRigidManifold {
         Slots.Associate(candidates: candidates);
     }
     /// <summary>Gets the largest accumulated normal impulse raw any slot carries.</summary>
-    /// <returns>The impulse raw, at Q48.16, zero when no slot is loaded.</returns>
+    /// <returns>The impulse raw, at <see cref="FixedRigidScales.Impulse"/>, zero when no slot is loaded.</returns>
     public long MaximumNormalImpulseRaw() {
         var maximum = 0L;
 

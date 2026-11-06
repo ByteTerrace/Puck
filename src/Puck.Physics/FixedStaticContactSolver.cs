@@ -134,6 +134,54 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             frames: dynamicColliders.Frames, grown: grown, reach: reach, orientation: in orientation, position: position,
             source: FixedSurfaceColliderSource.Dynamic, volume: in volume, written: written, center: bounds.Center);
     }
+    /// <summary>Builds the diagnostic support witness of the deepest walkable surface among those
+    /// <see cref="CollectContacts"/> wrote: its collider, its normal and its depth into the skin. Nothing is queried.</summary>
+    /// <param name="colliders">The static colliders the surfaces were collected from.</param>
+    /// <param name="dynamicColliders">The per-tick colliders the surfaces were collected from.</param>
+    /// <param name="contacts">The collected surfaces.</param>
+    /// <param name="position">The body's world position at collection.</param>
+    /// <param name="orientation">The body's world orientation.</param>
+    /// <param name="volume">The body-local convex volume.</param>
+    /// <param name="up">The body's unit up axis.</param>
+    /// <returns>The witness, or <see langword="null"/> when no surface lies within <see cref="GroundedThreshold"/> of
+    /// <paramref name="up"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="colliders"/> or <paramref name="dynamicColliders"/> is
+    /// <see langword="null"/>.</exception>
+    public ContactSupportWitness? SupportWitness(FixedStaticColliderSet colliders, FixedStaticColliderSet dynamicColliders,
+        ReadOnlySpan<FixedSurfaceContact> contacts, FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume,
+        in FixedVector3 up) {
+        ArgumentNullException.ThrowIfNull(argument: colliders);
+        ArgumentNullException.ThrowIfNull(argument: dynamicColliders);
+
+        var deepest = -1;
+
+        for (var index = 0; (index < contacts.Length); index++) {
+            var alignment = FixedVector3.Dot(left: contacts[index].Normal, right: up);
+
+            if (
+                (alignment > FixedQ4816.Zero) &&
+                (alignment >= GroundedThreshold) &&
+                ((deepest < 0) || (contacts[index].Separation < contacts[deepest].Separation))
+            ) {
+                deepest = index;
+            }
+        }
+
+        if (deepest < 0) {
+            return null;
+        }
+
+        var contact = contacts[deepest];
+        var set = ((contact.Source == FixedSurfaceColliderSource.Static) ? colliders : dynamicColliders);
+
+        return new ContactSupportWitness(Collider: set.Colliders[contact.ColliderIndex], ColliderIndex: contact.ColliderIndex,
+            Orientation: orientation, Position: position, Push: new FixedContactPush(Normal: contact.Normal, Penetration: -contact.Separation),
+            Source: contact.Source, Volume: volume) {
+            BodyPoint = (position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -contact.Normal)),
+            Up = up,
+            WalkableThreshold = GroundedThreshold,
+        };
+    }
     private int Collect(ReadOnlySpan<FixedStaticCollider> colliders, ReadOnlySpan<FixedColliderBox> boxes,
         ReadOnlySpan<FixedColliderFrame> frames, in FixedColliderCandidates candidates, FixedSurfaceColliderSource source,
         FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedVector3 center,

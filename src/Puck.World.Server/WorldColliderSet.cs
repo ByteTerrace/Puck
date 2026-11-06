@@ -1078,6 +1078,11 @@ public sealed partial class WorldColliderSet : IContactField {
         );
     }
     /// <inheritdoc/>
+    public ContactSupportWitness? SupportWitness(ReadOnlySpan<FixedSurfaceContact> contacts, in FixedVector3 position, in FixedQuaternion orientation,
+        in FixedBodyColliderVolume volume, in FixedVector3 up) =>
+        m_solver.SupportWitness(colliders: m_staticSet, contacts: contacts, dynamicColliders: m_attachedSet, orientation: in orientation,
+            position: position, up: in up, volume: in volume);
+    /// <inheritdoc/>
     public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
         in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         m_solver.ResolveSweep(colliders: m_staticSet,

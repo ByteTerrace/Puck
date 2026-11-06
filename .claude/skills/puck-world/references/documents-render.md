@@ -478,12 +478,14 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
 
 ### A kit's `rigid` facet
 
-`mass`, `restitution`, `friction`, `rollingFriction`,
+`mass`, `restitution`, `friction`, `rollingResistance`,
 `linearDamping`, `angularDamping` hand its bodies to the rigid solver
 instead of a locomotion program — see
 [the server reference](../../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
-`mass` is required and positive; the other four are non-negative per-second
-decay rates, never per-tick fractions. Requires `collider` with exactly one
+`mass` is required and positive; `restitution` is in `[0, 1]`, `friction` a
+non-negative coefficient, `rollingResistance` a non-negative lever in metres,
+and the two dampings non-negative per-second decay rates, never per-tick
+fractions. Requires `collider` with exactly one
 sphere, capsule, box or ellipsoid volume and `bodyContact: solid`. A
 `fromCreation` collider admits a creation's single primitive too; a nonuniform
 Sphere or Ellipsoid retains its actual radii and curved support, rather than

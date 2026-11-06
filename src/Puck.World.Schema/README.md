@@ -2860,7 +2860,7 @@ wake conditions.
 ### Rigid dynamics (`WorldRigid.cs`)
 
 A kit's optional `rigid` facet (`WorldRigid`: `mass`, `restitution`,
-`friction`, `rollingFriction`, `linearDamping`, `angularDamping`) hands its
+`friction`, `rollingResistance`, `linearDamping`, `angularDamping`) hands its
 bodies to the rigid solver instead of a locomotion motion program—a passive
 physical entity such as a billiard ball, a bowling pin, or a chess piece.
 Rigid is a kit FACET, never a second body kind: any kit may carry it, and the
@@ -2868,7 +2868,9 @@ facet's presence alone is the switch.
 `mass` is required and strictly positive; `restitution` lies in `[0, 1]`;
 `friction` is a Coulomb coefficient at a contact point (non-negative, not
 bounded by 1)—the SAME meaning against the static world and, as the pair's
-average, against another rigid body; `rollingFriction`/`linearDamping`/`angularDamping`
+average, against another rigid body; `rollingResistance` is a non-negative
+lever in metres at scale one (each contact point resists rolling with a torque
+of at most the lever times its normal force); `linearDamping`/`angularDamping`
 are non-negative per-second decay RATES (applied as `1 - rate·dt`, never a
 flat per-tick fraction, so the same authored value decays identically at any
 simulation rate). A rigid kit REQUIRES `collider` with one sphere, capsule,

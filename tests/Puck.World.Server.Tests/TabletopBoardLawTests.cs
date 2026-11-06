@@ -106,7 +106,7 @@ public sealed class TabletopBoardLawTests {
             LinearDamping: 1f,
             Mass: 1f,
             Restitution: 0.05f,
-            RollingFriction: 2f
+            RollingResistance: 0.005f
         );
         var topology = new LatticeTopology.Grid(
             "board",
@@ -472,7 +472,7 @@ public sealed class TabletopBoardLawTests {
             LinearDamping: 1f,
             Mass: 1f,
             Restitution: 0.05f,
-            RollingFriction: 2f
+            RollingResistance: 0.005f
         );
         var topology = new LatticeTopology.Grid(
             "board",

@@ -12,8 +12,11 @@ namespace Puck.World.Server;
 public sealed record WorldDiagnosticBudget(double CollisionMargin, double ContactSkin, double Numerical, double BakeHalfDiagonal = 0) {
     /// <summary>A shape-derived maximum inward error of a conservative collider. Never permits outward error.</summary>
     public double ConservativeInset { get; init; }
+    /// <summary>The rest band a rigid support settles within past the contact skin
+    /// (<see cref="WorldPopulation.RigidRestBand"/>), in metres; zero for any other body.</summary>
+    public double RestBand { get; init; }
     /// <summary>Total explained uncertainty.</summary>
-    public double Total => (((Math.Abs(value: CollisionMargin) + Math.Abs(value: ContactSkin)) + Math.Abs(value: Numerical)) + Math.Abs(value: BakeHalfDiagonal));
+    public double Total => ((((Math.Abs(value: CollisionMargin) + Math.Abs(value: ContactSkin)) + Math.Abs(value: Numerical)) + Math.Abs(value: BakeHalfDiagonal)) + Math.Abs(value: RestBand));
 }
 /// <summary>The source and matching-state identity of one diagnostic observation.</summary>
 /// <param name="Snapshot">Unique report snapshot id.</param>

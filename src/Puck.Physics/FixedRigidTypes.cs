@@ -5,16 +5,22 @@ namespace Puck.Physics;
 /// <summary>
 /// Where each family of solver quantity sits in its 64-bit carrier. Mass and inertia span a wider window than any one
 /// carrier holds once world scale and density are free, so the placement is a per-body-family parameter rather than a
-/// library constant; length, velocity and impulse stay at <see cref="FixedQ4816"/>'s own scale because that is what the
-/// vector and quaternion types already carry.
+/// library constant. Impulse spans the same window, since it is mass times velocity: a body a thousandth of a kilogram
+/// carries a per-substep gravity impulse below one Q48.16 raw, so impulses have their own placement too. Length and
+/// velocity stay at <see cref="FixedQ4816"/>'s own scale because that is what the vector and quaternion types carry.
 /// </summary>
 /// <param name="InverseMass">The fraction bit count inverse mass is placed at.</param>
 /// <param name="InverseInertia">The fraction bit count the body-local inverse inertia tensor is placed at.</param>
 /// <param name="EffectiveMass">The fraction bit count a constraint's effective mass is placed at.</param>
-public readonly record struct FixedRigidScales(int InverseMass, int InverseInertia, int EffectiveMass) {
-    /// <summary>A placement that suits a body of roughly one to a hundred kilograms at metre scale.</summary>
+/// <param name="Impulse">The fraction bit count every accumulated and applied impulse raw (linear and angular) is placed
+/// at.</param>
+public readonly record struct FixedRigidScales(int InverseMass, int InverseInertia, int EffectiveMass, int Impulse) {
+    /// <summary>A placement that suits a body from about a tenth of a gram to a hundred kilograms at metre scale: 32
+    /// impulse fraction bits resolve a tenth of a gram's gravity impulse at a 480 Hz substep in thousands of raws and
+    /// still carry two billion newton-seconds.</summary>
     public static FixedRigidScales RoomScale => new(
         EffectiveMass: 32,
+        Impulse: 32,
         InverseInertia: 40,
         InverseMass: 40
     );
@@ -43,12 +49,19 @@ public sealed class FixedRigidSolverOptions {
     public FixedQ4816 ContactSpeed { get; init; } = FixedQ4816.FromInteger(value: 3L);
     /// <summary>The closing normal speed below which a contact restitutes at zero rather than its pair's coefficient.</summary>
     public FixedQ4816 RestitutionThreshold { get; init; } = FixedQ4816.FromInteger(value: 1L);
+    /// <summary>The rest offset: the separation a contact settles at. A contact whose separation lies within twice this
+    /// of zero is held as a plain non-penetration constraint, with no bias and no softness, so a body at rest neither
+    /// sinks under its load nor jitters; a deeper contact's soft push and a speculative contact's approach both aim at
+    /// this separation, so either ends inside that band. It must exceed the soft contact's own deflection under the
+    /// loads the world rests (gravity over the contact frequency squared, per body of load) for a resting body to reach
+    /// the band rather than settle at the soft spring's deflection below zero.</summary>
+    public FixedQ4816 RestOffset { get; init; } = FixedQ4816.FromRawBits(value: 32L);
     /// <summary>Whether stored impulses are re-applied at the head of each substep.</summary>
     public bool WarmStart { get; init; } = true;
-    /// <summary>The largest accumulated impulse change, in raw Q48.16 units, an iteration may leave and still be read
-    /// as converged. It is a READING, never a control: the solve always runs its full iteration budget, so changing
-    /// this cannot change a trajectory.</summary>
-    public long ConvergenceToleranceRaw { get; init; } = 64L;
+    /// <summary>The largest accumulated impulse change, in raw units at <see cref="FixedRigidScales.Impulse"/>, an
+    /// iteration may leave and still be read as converged. It is a READING, never a control: the solve always runs its
+    /// full iteration budget, so changing this cannot change a trajectory.</summary>
+    public long ConvergenceToleranceRaw { get; init; } = (64L << 16);
     /// <summary>Where each family of solver quantity sits in its carrier.</summary>
     public FixedRigidScales Scales { get; init; } = FixedRigidScales.RoomScale;
 }

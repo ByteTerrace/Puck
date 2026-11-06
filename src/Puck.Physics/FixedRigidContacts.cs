@@ -66,16 +66,16 @@ public static class FixedRigidContacts {
 
         return count;
     }
-    /// <summary>Appends the candidates of two overlapping bodies. Two boxes contribute the corners of the B body's face
-    /// toward the A body, each clamped onto the A body's box grown by the margin — the overlap rectangle of two aligned
-    /// faces, whichever face is larger; a curved body contacts at its own support point. Each point carries both anchors,
-    /// on the same world point, and its own separation.</summary>
+    /// <summary>Appends the candidates of two bodies in contact or within a speculative margin of it. Two boxes contribute
+    /// the corners of the B body's face toward the A body, each clamped onto the A body's box grown by the margin and the
+    /// depth's magnitude — the overlap rectangle of two aligned faces, whichever face is larger; a curved body contacts at
+    /// its own support point. Each point carries both anchors, on the same world point, and its own separation.</summary>
     /// <param name="candidates">The list the candidates are appended to.</param>
     /// <param name="sourceId">The source id of the pair's contact, stable from step to step.</param>
     /// <param name="a">The body the normal points away from.</param>
     /// <param name="b">The body the normal points toward.</param>
     /// <param name="normal">The unit contact normal, from <paramref name="a"/> toward <paramref name="b"/>.</param>
-    /// <param name="depth">The non-negative overlap depth along the normal.</param>
+    /// <param name="depth">The signed overlap depth along the normal; negative is a gap.</param>
     /// <param name="clipMargin">The non-negative growth of the A box a face point is clamped onto.</param>
     /// <returns>The number of candidates appended.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="candidates"/> is <see langword="null"/>.</exception>
@@ -106,7 +106,7 @@ public static class FixedRigidContacts {
 
             for (var index = 0; (index < count); index++) {
                 var point = FixedRigidWitness.BoxClamp(
-                    margin: (depth + clipMargin),
+                    margin: (FixedQ4816.Abs(value: depth) + clipMargin),
                     orientation: a.Orientation,
                     point: (centerB + anchors[index]),
                     root: a.Root,
@@ -143,15 +143,16 @@ public static class FixedRigidContacts {
 
         return 1;
     }
-    /// <summary>Appends the one candidate of a body overlapping a side whose shape the solve does not read — a kinematic
-    /// body that pushes without being pushed: the B body's own support point toward the A side.</summary>
+    /// <summary>Appends the one candidate of a body touching, or within a speculative margin of, a side whose shape the
+    /// solve does not read — a kinematic body that pushes without being pushed: the B body's own support point toward the
+    /// A side.</summary>
     /// <param name="candidates">The list the candidate is appended to.</param>
     /// <param name="sourceId">The source id of the pair's contact, stable from step to step.</param>
     /// <param name="aId">The A side's body id.</param>
     /// <param name="aCenter">The A side's world centre, which its anchor is measured from.</param>
     /// <param name="b">The body the normal points toward.</param>
     /// <param name="normal">The unit contact normal, from the A side toward <paramref name="b"/>.</param>
-    /// <param name="depth">The non-negative overlap depth along the normal.</param>
+    /// <param name="depth">The signed overlap depth along the normal; negative is a gap.</param>
     /// <returns>The number of candidates appended: one.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="candidates"/> is <see langword="null"/>.</exception>
     public static int AppendWitness(List<FixedTwoBodyContact> candidates, int sourceId, int aId, FixedVector3 aCenter, in FixedRigidContactShape b, FixedVector3 normal, FixedQ4816 depth) {

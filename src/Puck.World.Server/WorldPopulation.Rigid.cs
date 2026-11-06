@@ -20,6 +20,13 @@ public sealed partial class WorldPopulation {
     // How far a box face corner may lie outside the other box and still be clamped onto it as a contact point.
     private static readonly FixedQ4816 RigidPairClipMargin = FixedQ4816.FromDouble(value: 0.001d);
 
+    /// <summary>Gets the rigid solver's rest offset (<see cref="FixedRigidSolverOptions.RestOffset"/>): the separation, in
+    /// metres past a surface's contact skin or a body's own surface, a rigid contact settles at.</summary>
+    public static FixedQ4816 RigidRestOffset { get; } = new FixedRigidSolverOptions().RestOffset;
+    /// <summary>Gets the rest band, twice <see cref="RigidRestOffset"/>: a resting rigid body lies within this of its
+    /// support's skin, and body pairs within it of each other keep their contact.</summary>
+    public static FixedQ4816 RigidRestBand => (RigidRestOffset + RigidRestOffset);
+
     private readonly FixedRigidBody m_rigidSurface = new();
     private readonly List<FixedRigidBody> m_rigidStepBodies = [];
     private readonly List<FixedRigidManifold> m_rigidStepManifolds = [];
@@ -50,7 +57,9 @@ public sealed partial class WorldPopulation {
     /// unrepresentable velocity.</summary>
     public FixedQ4816 RigidVelocityCeiling => m_rigidVelocityCeiling;
 
-    private readonly record struct RigidPairHit(int Left, int Right, FixedVector3 Correction);
+    // A broadphase pair within its speculative margin: the correction's direction is the contact normal, and the depth
+    // is the signed overlap (negative is a gap the step may close).
+    private readonly record struct RigidPairHit(int Left, int Right, FixedVector3 Correction, FixedQ4816 Depth);
 
     /// <summary>Describes the rigid solver's current census and last-tick work — the <c>world.budget</c> cost-sheet
     /// segment: rigid body count, resting and sleeping counts, the bodies, manifolds and contact points the last step
@@ -93,6 +102,7 @@ public sealed partial class WorldPopulation {
         ) {
             m_rigidWorld = world = new FixedRigidWorld(options: new FixedRigidSolverOptions {
                 RateHz = rateHz,
+                RestOffset = RigidRestOffset,
                 RestitutionThreshold = m_rigidContactPolicy.PairRestitutionThreshold,
                 Scales = FixedWorldRigid.Scales,
                 SubstepCount = m_rigidContactPolicy.SubstepCeiling,
@@ -173,7 +183,7 @@ public sealed partial class WorldPopulation {
             var left = m_entries[hit.Left].Body!;
             var right = m_entries[hit.Right].Body!;
             var normal = hit.Correction.Normalize();
-            var depth = hit.Correction.Length;
+            var depth = hit.Depth;
 
             m_rigidCandidates.Clear();
 
@@ -248,6 +258,7 @@ public sealed partial class WorldPopulation {
                     manifold.BodyB = body.RigidSolverHandle();
                     manifold.Friction = body.RigidFriction;
                     manifold.Restitution = body.RigidRestitution;
+                    manifold.RollingResistance = body.RigidRollingResistance;
                 } else if (m_entries[contact.Partner].Body is { IsRigid: true } other) {
                     if (!other.RigidStepPrepared) {
                         continue;
@@ -257,11 +268,13 @@ public sealed partial class WorldPopulation {
                     manifold.BodyB = other.RigidSolverHandle();
                     manifold.Friction = AverageNonnegative(left: body.RigidFriction, right: other.RigidFriction);
                     manifold.Restitution = AverageNonnegative(left: body.RigidRestitution, right: other.RigidRestitution);
+                    manifold.RollingResistance = AverageNonnegative(left: body.RigidRollingResistance, right: other.RigidRollingResistance);
                 } else {
                     manifold.BodyA = m_entries[contact.Partner].Body!.RigidSolverHandle();
                     manifold.BodyB = body.RigidSolverHandle();
                     manifold.Friction = body.RigidFriction;
                     manifold.Restitution = body.RigidRestitution;
+                    manifold.RollingResistance = body.RigidRollingResistance;
                 }
 
                 m_rigidStepManifolds.Add(item: manifold);
@@ -304,7 +317,7 @@ public sealed partial class WorldPopulation {
     }
     // Whether a pair with a sleeper is the resting contact the sleeper was parked in: an occupied contact between them
     // whose overlap reaches no deeper than the contact reach plus the rigid support travel (FieldWakeMargin).
-    private bool RestingContactHolds(int left, int right, FixedVector3 correction) {
+    private bool RestingContactHolds(int left, int right, FixedQ4816 depth) {
         var leftBody = m_entries[left].Body!;
         var rightBody = m_entries[right].Body!;
         int owner;
@@ -321,7 +334,7 @@ public sealed partial class WorldPopulation {
         return (
             (FindRigidContact(body: m_entries[owner].Body!, partner: partner) is { } contact) &&
             contact.Manifold.Slots.AnyOccupied &&
-            (correction.Length <= FieldWakeMargin())
+            (depth <= FieldWakeMargin())
         );
     }
     private void Associate(WorldRigidContact contact) {

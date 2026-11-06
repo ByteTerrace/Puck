@@ -93,6 +93,12 @@ public sealed partial class WorldBody {
     /// <summary>Gets the rigid facet's authored friction against another rigid body — a dimensionless coefficient,
     /// unaffected by <see cref="Scale"/>. Zero for a locomotion kit.</summary>
     public FixedQ4816 RigidFriction => (m_rigid?.Friction ?? FixedQ4816.Zero);
+    /// <summary>Gets the rigid facet's rolling-resistance lever, in metres, at this body's live <see cref="Scale"/>.
+    /// Zero for a locomotion kit.</summary>
+    public FixedQ4816 RigidRollingResistance => ((m_rigid is { } rigid)
+        ? ScaleRigid(rigid: rigid).RollingResistance
+        : FixedQ4816.Zero
+    );
     /// <summary>Gets the rigid facet's conservative bounding radius at this body's live <see cref="Scale"/> — the
     /// same radius the pair-contact anchor approximation and the static-contact substep bound both read, scaled
     /// linearly with <see cref="Scale"/> (see <see cref="ScaleRigid"/>). Zero for a locomotion kit.</summary>
@@ -110,10 +116,10 @@ public sealed partial class WorldBody {
 
     // Derives a scale-consistent copy of a compiled rigid facet for this body's live Scale: mass ∝ Scale³ against the
     // authored mass at scale 1 (a uniformly bigger body of the same material is heavier by its volume ratio), inertia
-    // (mass·length²) ∝ Scale⁵ so inverse inertia ∝ Scale⁻⁵, and CenterOffset/BoundingRadius ∝ Scale — the same linear
-    // rule ScaledColliderVolumes applies to the collider itself, so a rigid body's mass distribution and its collider
-    // stay geometrically consistent. Restitution, friction, rolling friction, and both damping rates are dimensionless
-    // per-second/coefficient quantities — unaffected by Scale. Scale == One (the overwhelming common case) returns
+    // (mass·length²) ∝ Scale⁵ so inverse inertia ∝ Scale⁻⁵, and CenterOffset/BoundingRadius/RollingResistance ∝ Scale —
+    // the same linear rule ScaledColliderVolumes applies to the collider itself, so a rigid body's mass distribution,
+    // its rolling lever and its collider stay geometrically consistent. Restitution, friction and both damping rates
+    // are dimensionless coefficients or per-second rates — unaffected by Scale. Scale == One (the overwhelming common case) returns
     // rigid unchanged, touching no arithmetic.
     //
     // InverseInertia's Scale⁻⁵ law reaches FixedRigidScales.RoomScale's 40-fraction-bit placement (23 integer bits,
@@ -209,6 +215,7 @@ public sealed partial class WorldBody {
         ),
             CenterOffset = (rigid.CenterOffset * m_scale),
             BoundingRadius = (rigid.BoundingRadius * m_scale),
+            RollingResistance = (rigid.RollingResistance * m_scale),
         };
     }
 
@@ -315,8 +322,8 @@ public sealed partial class WorldBody {
 
     // The tick-rate-independent decay factor an authored per-second rate applies over an elapsed duration:
     // (1 - rate*seconds), clamped to [0, 1] so an aggressive rate at a wide step never reverses the quantity it
-    // damps. Shared by linear/angular damping and (contact) friction/rolling friction — the same rate authored once
-    // means the same physical decay whatever the world's simulation rate.
+    // damps. Shared by linear and angular damping — the same rate authored once means the same physical decay whatever
+    // the world's simulation rate.
     private static FixedQ4816 RateDecay(FixedQ4816 rate, FixedQ4816 seconds) {
         if (
             (rate <= FixedQ4816.Zero) ||
@@ -588,6 +595,30 @@ public sealed partial class WorldBody {
                 break;
         }
     }
+    /// <summary>Gets the farthest any point of this body can move over a step: a prepared rigid body's mean linear speed
+    /// under its prepared acceleration plus its angular speed times its bounding radius, any other body's world speed,
+    /// times the step's duration. The contact generation reaches this far ahead, so a contact the step can close is
+    /// found before it overlaps.</summary>
+    /// <param name="stepTicks">The exact engine ticks the step advances.</param>
+    /// <returns>The travel, in metres, non-negative.</returns>
+    internal FixedQ4816 ContactTravel(ulong stepTicks) {
+        var seconds = StepSeconds(stepTicks: stepTicks);
+
+        if (!IsRigid) {
+            return SaturatingNonnegativeProduct(left: ApproximateWorldVelocity().Length, right: seconds);
+        }
+
+        // The step's mean velocity: the exact displacement of a constant acceleration over the step is (v + a·dt/2)·dt.
+        var velocity = (RigidStepPrepared
+            ? (m_rigidVelocity + (m_rigidAcceleration * (seconds / FixedQ4816.FromInteger(value: 2L))))
+            : m_rigidVelocity
+        );
+
+        return SaturatingNonnegativeProduct(
+            left: (velocity.Length + SaturatingNonnegativeProduct(left: m_angularVelocity.Length, right: RigidBoundingRadius)),
+            right: seconds
+        );
+    }
     /// <summary>The most static surfaces one body's contact generation reports a step.</summary>
     internal const int MaximumRigidSurfaces = 3;
     // Two surfaces whose normals agree past this cosine are one face: a support built of flush tiles is one floor.
@@ -619,10 +650,9 @@ public sealed partial class WorldBody {
 
         Span<FixedSurfaceContact> found = stackalloc FixedSurfaceContact[16];
         var volume = RigidWitnessVolume();
-        var travel = FixedQ4816.Max(x: velocity.Length, y: (velocity + (m_angularVelocity * RigidBoundingRadius)).Length);
         var collected = field.CollectContacts(
             destination: found,
-            margin: ((travel * seconds) + reach),
+            margin: (ContactTravel(stepTicks: m_rigidStepTicks) + reach),
             orientation: in m_orientation,
             position: in root,
             volume: in volume
@@ -669,6 +699,9 @@ public sealed partial class WorldBody {
                     surfaces[shallowest] = new RigidSurface(Normal: contact.Normal, Separation: contact.Separation, SourceId: sourceId);
                 }
             }
+
+            DiagnosticSupport = field.SupportWitness(contacts: found[..collected], orientation: in m_orientation, position: in root,
+                up: FixedVector3.UnitY, volume: in volume);
 
             return new RigidSurfaceProbe(Count: count, Refused: false, ResolvedRoot: resolved);
         }
@@ -784,9 +817,8 @@ public sealed partial class WorldBody {
 
         return guarded;
     }
-    /// <summary>Finishes the step: publishes the measured support, applies rolling resistance while supported, and counts
-    /// the rest hold window, latching rest (and zeroing both velocities) once the body has stayed supported under the
-    /// rest speed for the authored hold.</summary>
+    /// <summary>Finishes the step: publishes the measured support and counts the rest hold window, latching rest (and
+    /// zeroing both velocities) once the body has stayed supported under the rest speed for the authored hold.</summary>
     /// <param name="supported">Whether a contact under the walkable slope carried load this step.</param>
     /// <param name="loadedPoint">The world point of the most loaded surface contact, for the contact diagnostics.</param>
     /// <param name="policy">The compiled rigid policy.</param>
@@ -821,13 +853,6 @@ public sealed partial class WorldBody {
 
             return;
         }
-
-        // Rolling resistance: a pure angular-velocity decay while supported, distinct from the contact friction the
-        // solve already ran.
-        m_angularVelocity *= RateDecay(
-            rate: rigid.RollingFriction,
-            seconds: StepSeconds(stepTicks: stepTicks)
-        );
 
         if (RigidUnderRestSpeed(boundingRadius: rigid.BoundingRadius, policy: policy)) {
             m_restingHoldTicks += stepTicks;

@@ -5440,7 +5440,7 @@ public static partial class WorldModelShape {
                 M("mass", typeof(global::System.Single), typeof(global::Puck.World.WorldRigid), "Mass", Read | Write | Required, static value => ((global::Puck.World.WorldRigid)value).Mass),
                 M("restitution", typeof(global::System.Single), typeof(global::Puck.World.WorldRigid), "Restitution", Read | Write, static value => ((global::Puck.World.WorldRigid)value).Restitution),
                 M("friction", typeof(global::System.Single), typeof(global::Puck.World.WorldRigid), "Friction", Read | Write, static value => ((global::Puck.World.WorldRigid)value).Friction),
-                M("rollingFriction", typeof(global::System.Single), typeof(global::Puck.World.WorldRigid), "RollingFriction", Read | Write, static value => ((global::Puck.World.WorldRigid)value).RollingFriction),
+                M("rollingResistance", typeof(global::System.Single), typeof(global::Puck.World.WorldRigid), "RollingResistance", Read | Write, static value => ((global::Puck.World.WorldRigid)value).RollingResistance),
                 M("linearDamping", typeof(global::System.Single), typeof(global::Puck.World.WorldRigid), "LinearDamping", Read | Write, static value => ((global::Puck.World.WorldRigid)value).LinearDamping),
                 M("angularDamping", typeof(global::System.Single), typeof(global::Puck.World.WorldRigid), "AngularDamping", Read | Write, static value => ((global::Puck.World.WorldRigid)value).AngularDamping),
             ],

@@ -11790,9 +11790,9 @@ export type WorldRigid = {
    */
   friction?: number;
   /**
-   * The angular-velocity decay rate, per second, applied while a rigid body is in contact with a surface — the resistance that lets a rolling ball settle instead of spinning forever. Non-negative; the applied decay is clamped so a wide step never reverses spin.
+   * The rolling-resistance lever, in metres at scale one: each contact point resists the body's rolling (its angular velocity about the axes tangent to the surface, relative to what it touches) with a torque of at most this lever times the point's normal force, so a rolling ball or a rocking disc settles instead of rolling forever, and a heavier load resists more. It scales with the body like its collider, against another rigid body the pair's average applies, and it never resists spin about the contact normal. Non-negative; zero (the default) applies none.
    */
-  rollingFriction?: number;
+  rollingResistance?: number;
   /**
    * The linear-velocity decay rate, per second — applied as (1 - rate·dt) each tick, so the same authored value decays velocity the same way whatever the world's simulation rate. Non-negative; zero (the default) applies none.
    */

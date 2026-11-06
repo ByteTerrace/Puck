@@ -337,7 +337,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
             BodyMotionProgram = "idle",
             Collider = new WorldCollider.Sphere(Radius: .4f),
             BodyContact = WorldBodyContactMode.Solid,
-            Rigid = new WorldRigid(AngularDamping: .02f, Friction: .3f, LinearDamping: .01f, Mass: 1, Restitution: .4f, RollingFriction: .05f),
+            Rigid = new WorldRigid(AngularDamping: .02f, Friction: .3f, LinearDamping: .01f, Mass: 1, Restitution: .4f, RollingResistance: 0.0005f),
         };
 
         return source with {

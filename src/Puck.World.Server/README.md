@@ -1110,9 +1110,12 @@ awake rigid body together through `Puck.Physics.FixedRigidWorld`
   walkable and non-walkable normals become the surfaces; that sweep's refusal
   blocks the body for the tick. `Puck.Physics.FixedRigidContacts` spreads each
   surface over the body's support features with their own separations.
-- **Body contacts.** A broadphase pair with a rigid side wakes its sleepers and
-  becomes a manifold of its own: two boxes contribute the upper face's corners
-  clamped onto the lower box, a curved body its support point. A kit body is a
+- **Body contacts.** A broadphase pair with a rigid side, within what both
+  bodies can travel this step plus the rest band (`WorldBody.ContactTravel`,
+  `WorldPopulation.RigidRestBand`), wakes its sleepers and becomes a manifold of
+  its own, so the step meets the contact speculatively before the pair overlaps:
+  two boxes contribute the upper face's corners clamped onto the lower box, a
+  curved body its support point. A kit body is a
   static side carrying its live velocity (`WorldBody.TwoBodyHandle`), so it pushes
   a rigid body and is never pushed by one. Two kit bodies still share their
   overlap positionally.
@@ -1127,17 +1130,23 @@ awake rigid body together through `Puck.Physics.FixedRigidWorld`
   by more than `rigidSubstepTravelFraction` of its bounding radius (floored by
   `rigidSubstepMinimumTravel`) is re-certified by a guard sweep from its start,
   whose refusal blocks it. Rigid integration publishes `Grounded` and the contact
-  count from contacts under the walkable slope that carried load; rolling
-  resistance (`rollingFriction`) decays the angular velocity while supported.
+  count from contacts under the walkable slope that carried load.
+- **Rest and rolling.** A contact settles at the solver's rest offset
+  (`FixedRigidSolverOptions.RestOffset`): within the rest band it is a plain
+  non-penetration constraint, so a resting body neither sinks under its load nor
+  reads as penetrating its support's skin. Each contact point resists the pair's
+  relative rolling with an angular impulse of at most `rollingResistance` times
+  its normal impulse, solved beside friction; spin about the normal is not
+  resisted.
 
 `WorldBody.ScaleRigid` derives a scale-consistent copy of the compiled facet
 from the body's own live `Scale` (`WorldBody.Scale.cs`) on every read:
 mass ∝ `Scale`³ against the authored mass at scale 1, inertia (mass·length²)
 ∝ `Scale`⁵ so inverse mass/inertia scale by `Scale`⁻³/`Scale`⁻⁵, and the
-centre-of-mass offset and bounding radius ∝ `Scale`—the same linear rule
-`ScaledColliderVolumes` applies to the collider itself. Restitution, friction,
-rolling friction and both damping rates are dimensionless or per-second
-coefficients, unaffected by `Scale`. `RigidCenterOfMass` (`body.where`'s
+centre-of-mass offset, bounding radius and rolling-resistance lever ∝
+`Scale`—the same linear rule `ScaledColliderVolumes` applies to the collider
+itself. Restitution, friction and both damping rates are dimensionless or
+per-second coefficients, unaffected by `Scale`. `RigidCenterOfMass` (`body.where`'s
 `com=`) is `root + orientation·(CenterOffset × Scale)`. Restitution below
 `collision.bodyContacts.rigidPairRestitutionSpeed` is zero, so bodies at rest
 never micro-bounce. A carried body's tangibility push on a rigid body it

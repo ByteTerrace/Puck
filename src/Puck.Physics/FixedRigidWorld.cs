@@ -11,8 +11,13 @@ namespace Puck.Physics;
 /// </summary>
 /// <remarks>
 /// <para><b>Substep sequence.</b> Per substep: integrate velocities, warm start, biased solve, integrate positions,
-/// unbiased relax (the only pass that solves friction). Restitution runs once at the end of the step, then each slot's
-/// friction impulse is stored back as a world vector. The softness coefficients are formed at the substep width.</para>
+/// unbiased relax (the only pass that solves friction and rolling resistance). Restitution runs once at the end of the
+/// step, then each slot's friction impulse is stored back as a world vector. The softness coefficients are formed at the
+/// substep width.</para>
+/// <para><b>Rest.</b> A contact within twice <see cref="FixedRigidSolverOptions.RestOffset"/> of zero separation is a
+/// plain non-penetration constraint: no bias and no softness, so a resting body neither sinks under its load nor creeps.
+/// A speculative contact approaches, and a deeper contact's soft push returns, to the rest offset, so either ends in
+/// that band.</para>
 /// <para><b>Order.</b> Bodies are integrated in the order the caller lists them and manifolds are solved in the order the
 /// caller lists them, each manifold's slots in ascending index order. The caller supplies a canonical order; nothing here
 /// reads a hash container.</para>
@@ -28,16 +33,14 @@ public sealed class FixedRigidWorld {
     // The substep rate is exactly 1/h, so it serves both as the divisor every h-scaled integration uses and as the
     // multiplier the speculative bias applies; the reciprocal is never formed.
     private readonly FixedQ4816 m_substepRate;
-    // A gap this small reads as touching: no speculative bias, a plain non-penetration constraint. One raw unit of a
-    // Q48.16 gap, turned into a speculative speed at the substep rate, is already a few centimetres a second, so without
-    // the slop a resting body jitters by that much and a small one, whose rest speed scales with it, never latches.
-    private static readonly FixedQ4816 TouchingSlop = FixedQ4816.FromRawBits(value: 8L);
+    // The top of the rest band, twice the rest offset.
+    private readonly FixedQ4816 m_restBand;
 
     /// <summary>Initializes a new instance of the <see cref="FixedRigidWorld"/> class bound to one set of options.</summary>
     /// <param name="options">The solver options.</param>
     /// <exception cref="ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The rate or substep count is not strictly positive, an iteration
-    /// count, speed or tolerance is negative, or a carrier placement is outside <c>[0, 64]</c>.</exception>
+    /// count, speed, rest offset or tolerance is negative, or a carrier placement is outside <c>[0, 64]</c>.</exception>
     public FixedRigidWorld(FixedRigidSolverOptions options) {
         ArgumentNullException.ThrowIfNull(argument: options);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: options.RateHz, paramName: nameof(FixedRigidSolverOptions.RateHz));
@@ -47,10 +50,12 @@ public sealed class FixedRigidWorld {
         ArgumentOutOfRangeException.ThrowIfNegative(value: options.RestitutionIterations, paramName: nameof(FixedRigidSolverOptions.RestitutionIterations));
         ArgumentOutOfRangeException.ThrowIfNegative(value: options.ContactSpeed.Value, paramName: nameof(FixedRigidSolverOptions.ContactSpeed));
         ArgumentOutOfRangeException.ThrowIfNegative(value: options.RestitutionThreshold.Value, paramName: nameof(FixedRigidSolverOptions.RestitutionThreshold));
+        ArgumentOutOfRangeException.ThrowIfNegative(value: options.RestOffset.Value, paramName: nameof(FixedRigidSolverOptions.RestOffset));
         ArgumentOutOfRangeException.ThrowIfNegative(value: options.ConvergenceToleranceRaw, paramName: nameof(FixedRigidSolverOptions.ConvergenceToleranceRaw));
         ValidateScale(fractionBitCount: options.Scales.InverseMass, paramName: nameof(FixedRigidScales.InverseMass));
         ValidateScale(fractionBitCount: options.Scales.InverseInertia, paramName: nameof(FixedRigidScales.InverseInertia));
         ValidateScale(fractionBitCount: options.Scales.EffectiveMass, paramName: nameof(FixedRigidScales.EffectiveMass));
+        ValidateScale(fractionBitCount: options.Scales.Impulse, paramName: nameof(FixedRigidScales.Impulse));
 
         var substepRate = (((long)options.RateHz) * options.SubstepCount);
 
@@ -72,6 +77,7 @@ public sealed class FixedRigidWorld {
             fractionBitCount: FixedSoftConstraint.DefaultFractionBitCount
         );
         m_substepRate = FixedQ4816.FromInteger(value: substepRate);
+        m_restBand = (options.RestOffset + options.RestOffset);
         m_doubleSubstepRate = FixedQ4816.FromInteger(value: (2L * substepRate));
     }
 
@@ -168,6 +174,19 @@ public sealed class FixedRigidWorld {
         );
         RefusalCount += refusals;
     }
+    private void ApplyAngularImpulse(FixedRigidManifold manifold, FixedVector3 axis, long impulseRaw) {
+        var refusals = 0;
+
+        FixedTwoBodyKernel.ApplyAngularImpulse(
+            axis: axis,
+            bodyA: manifold.BodyA!,
+            bodyB: manifold.BodyB!,
+            impulseRaw: impulseRaw,
+            refusals: ref refusals,
+            scales: m_options.Scales
+        );
+        RefusalCount += refusals;
+    }
     // Restitution reflects each closing slot's pre-solve normal speed, the manifold's points together for the same
     // reason the normal solve takes them together (SolveOnce).
     private void ApplyRestitution(ReadOnlySpan<FixedRigidManifold> manifolds) {
@@ -195,17 +214,9 @@ public sealed class FixedRigidWorld {
                         manifold: manifold,
                         slot: in slot
                     );
-                    var target = (normalVelocity + Scale(
-                        value: manifold.Restitution,
-                        factorRaw: slot.RelativeVelocity.Value,
-                        factorBits: FixedQ4816.FractionBitCount
-                    ));
+                    var target = (normalVelocity + manifold.Restitution * slot.RelativeVelocity);
 
-                    deltas[index] = (-Scale(
-                        value: target,
-                        factorRaw: slot.NormalMassRaw,
-                        factorBits: m_options.Scales.EffectiveMass
-                    )).Value;
+                    deltas[index] = -ToImpulse(value: target, factorRaw: slot.NormalMassRaw);
 
                     if ((slot.NormalImpulseRaw > 0L) || (deltas[index] > 0L)) {
                         ++active;
@@ -257,6 +268,21 @@ public sealed class FixedRigidWorld {
             scales: m_options.Scales,
             normalMassRaw: out var mass,
             refusals: ref refusals
+        );
+        RefusalCount += refusals;
+
+        return mass;
+    }
+    private long AngularMass(FixedRigidManifold manifold, FixedVector3 axis) {
+        var refusals = 0;
+
+        _ = FixedTwoBodyKernel.TryAngularMass(
+            angularMassRaw: out var mass,
+            axis: axis,
+            bodyA: manifold.BodyA!,
+            bodyB: manifold.BodyB!,
+            refusals: ref refusals,
+            scales: m_options.Scales
         );
         RefusalCount += refusals;
 
@@ -334,6 +360,19 @@ public sealed class FixedRigidWorld {
                     slot.TangentImpulse1Raw = 0L;
                     slot.TangentImpulse2Raw = 0L;
                 }
+
+                slot.RollingImpulse1Raw = 0L;
+                slot.RollingImpulse2Raw = 0L;
+
+                if (manifold.RollingResistance > FixedQ4816.Zero) {
+                    slot.RollingMass1Raw = AngularMass(axis: slot.Tangent1, manifold: manifold);
+                    slot.RollingMass2Raw = AngularMass(axis: slot.Tangent2, manifold: manifold);
+                }
+
+                if ((manifold.RollingResistance <= FixedQ4816.Zero) || (slot.RollingMass1Raw <= 0L) || (slot.RollingMass2Raw <= 0L)) {
+                    slot.RollingMass1Raw = 0L;
+                    slot.RollingMass2Raw = 0L;
+                }
             }
         }
 
@@ -347,22 +386,40 @@ public sealed class FixedRigidWorld {
             bodyB: manifold.BodyB!,
             normal: direction
         );
-    private FixedQ4816 Scale(FixedQ4816 value, long factorRaw, int factorBits) {
+    // a·b, each read at its own placement, rounded once to the requested one; a product past the carrier is refused and
+    // counted, reading zero.
+    private long Product(long aRaw, int aBits, long bRaw, int bBits, int outBits) {
         if (!FusedArithmetic.TryMixedScaleProduct(
-            a: value.Value,
-            fractionBitsA: FixedQ4816.FractionBitCount,
-            b: factorRaw,
-            fractionBitsB: factorBits,
-            fractionBitsOut: FixedQ4816.FractionBitCount,
+            a: aRaw,
+            fractionBitsA: aBits,
+            b: bRaw,
+            fractionBitsB: bBits,
+            fractionBitsOut: outBits,
             result: out var product
         )) {
             ++RefusalCount;
 
-            return FixedQ4816.Zero;
+            return 0L;
         }
 
-        return FixedQ4816.FromRawBits(value: product);
+        return product;
     }
+    // A velocity times an effective mass: the impulse raw that changes the velocity by that much.
+    private long ToImpulse(FixedQ4816 value, long factorRaw) => Product(
+        aBits: FixedQ4816.FractionBitCount,
+        aRaw: value.Value,
+        bBits: m_options.Scales.EffectiveMass,
+        bRaw: factorRaw,
+        outBits: m_options.Scales.Impulse
+    );
+    // A Q48.16 coefficient times an impulse raw, at the impulse placement.
+    private long ScaleImpulse(FixedQ4816 coefficient, long impulseRaw) => Product(
+        aBits: FixedQ4816.FractionBitCount,
+        aRaw: coefficient.Value,
+        bBits: m_options.Scales.Impulse,
+        bRaw: impulseRaw,
+        outBits: m_options.Scales.Impulse
+    );
     // massScale · biasRate · separation, with the two softness operands read at their own finer scale and the whole
     // triple product rounded once.
     private FixedQ4816 SoftScale(in FixedSoftConstraint softness, FixedQ4816 value) {
@@ -396,25 +453,15 @@ public sealed class FixedRigidWorld {
             manifold: manifold,
             slot: in slot
         );
-        var delta1 = -Scale(
-            value: velocity1,
-            factorRaw: slot.TangentMass1Raw,
-            factorBits: m_options.Scales.EffectiveMass
-        );
-        var delta2 = -Scale(
-            value: velocity2,
-            factorRaw: slot.TangentMass2Raw,
-            factorBits: m_options.Scales.EffectiveMass
-        );
-        var maximum = Scale(
-            value: manifold.Friction,
-            factorRaw: slot.NormalImpulseRaw,
-            factorBits: FixedQ4816.FractionBitCount
-        );
+        var delta1 = -ToImpulse(value: velocity1, factorRaw: slot.TangentMass1Raw);
+        var delta2 = -ToImpulse(value: velocity2, factorRaw: slot.TangentMass2Raw);
+        var maximum = ScaleImpulse(coefficient: manifold.Friction, impulseRaw: slot.NormalImpulseRaw);
+        // The pair's raws sit at the impulse placement; the clamp compares and rescales raws exactly, so it reads them
+        // at any placement.
         var accumulated = new FixedVector2(
-            X: FixedQ4816.FromRawBits(value: (slot.TangentImpulse1Raw + delta1.Value)),
-            Y: FixedQ4816.FromRawBits(value: (slot.TangentImpulse2Raw + delta2.Value))
-        ).ClampLength(maximum: maximum);
+            X: FixedQ4816.FromRawBits(value: (slot.TangentImpulse1Raw + delta1)),
+            Y: FixedQ4816.FromRawBits(value: (slot.TangentImpulse2Raw + delta2))
+        ).ClampLength(maximum: FixedQ4816.FromRawBits(value: maximum));
         var applied1 = (accumulated.X.Value - slot.TangentImpulse1Raw);
         var applied2 = (accumulated.Y.Value - slot.TangentImpulse2Raw);
 
@@ -439,8 +486,34 @@ public sealed class FixedRigidWorld {
             );
         }
     }
+    // The angular impulse about both tangent axes that stops the bodies' relative rolling at this point, the
+    // accumulated pair shortened toward zero onto rollingResistance · (the normal impulse this pass just left): a
+    // rolling contact does no work on its own, so without this a body rocking on a curved point never loses energy.
+    private void SolveRolling(FixedRigidManifold manifold, ref FixedPairManifoldSlot slot) {
+        var delta1 = -ToImpulse(
+            factorRaw: slot.RollingMass1Raw,
+            value: FixedTwoBodyKernel.RelativeAngularVelocity(axis: slot.Tangent1, bodyA: manifold.BodyA!, bodyB: manifold.BodyB!)
+        );
+        var delta2 = -ToImpulse(
+            factorRaw: slot.RollingMass2Raw,
+            value: FixedTwoBodyKernel.RelativeAngularVelocity(axis: slot.Tangent2, bodyA: manifold.BodyA!, bodyB: manifold.BodyB!)
+        );
+        var maximum = ScaleImpulse(coefficient: manifold.RollingResistance, impulseRaw: slot.NormalImpulseRaw);
+        var accumulated = new FixedVector2(
+            X: FixedQ4816.FromRawBits(value: (slot.RollingImpulse1Raw + delta1)),
+            Y: FixedQ4816.FromRawBits(value: (slot.RollingImpulse2Raw + delta2))
+        ).ClampLength(maximum: FixedQ4816.FromRawBits(value: maximum));
+        var applied1 = (accumulated.X.Value - slot.RollingImpulse1Raw);
+        var applied2 = (accumulated.Y.Value - slot.RollingImpulse2Raw);
+
+        slot.RollingImpulse1Raw = accumulated.X.Value;
+        slot.RollingImpulse2Raw = accumulated.Y.Value;
+        ApplyAngularImpulse(axis: slot.Tangent1, impulseRaw: applied1, manifold: manifold);
+        ApplyAngularImpulse(axis: slot.Tangent2, impulseRaw: applied2, manifold: manifold);
+    }
     // The normal impulse a slot asks for this pass, from the bodies' current velocities and displacement: the
-    // speculative bias while the slot is still apart, the soft bias (biased pass only) once it overlaps.
+    // speculative bias while the slot lies above the rest band, the soft bias (biased pass only) once it overlaps, each
+    // aiming at the rest offset, and a plain non-penetration constraint inside the band.
     private long NormalDelta(FixedRigidManifold manifold, in FixedPairManifoldSlot slot, in FixedSoftConstraint softness, bool useBias) {
         var bodyA = manifold.BodyA!;
         var bodyB = manifold.BodyB!;
@@ -459,19 +532,15 @@ public sealed class FixedRigidWorld {
         var impulseScaleRaw = 0L;
         var impulseScaleBits = FixedQ4816.FractionBitCount;
 
-        if (separation > TouchingSlop) {
-            // Speculative: the constraint may remove exactly the closing speed that would carry the pair past contact
-            // within this substep, and no more, so a first-appearance contact neither tunnels nor stops short.
-            velocityBias = Scale(
-                value: separation,
-                factorRaw: m_substepRate.Value,
-                factorBits: FixedQ4816.FractionBitCount
-            );
+        if (separation > m_restBand) {
+            // Speculative: the constraint may remove exactly the closing speed that would carry the pair past the rest
+            // offset within this substep, and no more, so a first-appearance contact neither tunnels nor stops short.
+            velocityBias = ((separation - m_options.RestOffset) * m_substepRate);
         } else if (useBias && (separation < FixedQ4816.Zero)) {
             velocityBias = FixedQ4816.Max(
                 x: SoftScale(
                     softness: in softness,
-                    value: separation
+                    value: (separation - m_options.RestOffset)
                 ),
                 y: (-m_options.ContactSpeed)
             );
@@ -486,21 +555,21 @@ public sealed class FixedRigidWorld {
             manifold: manifold,
             slot: in slot
         );
-        var driven = (Scale(
-            factorBits: massScaleBits,
-            factorRaw: massScaleRaw,
-            value: normalVelocity
-        ) + velocityBias);
+        var driven = (FixedQ4816.FromRawBits(value: Product(
+            aBits: FixedQ4816.FractionBitCount,
+            aRaw: normalVelocity.Value,
+            bBits: massScaleBits,
+            bRaw: massScaleRaw,
+            outBits: FixedQ4816.FractionBitCount
+        )) + velocityBias);
 
-        return (-Scale(
-            value: driven,
-            factorRaw: slot.NormalMassRaw,
-            factorBits: m_options.Scales.EffectiveMass
-        ) - Scale(
-            value: FixedQ4816.FromRawBits(value: slot.NormalImpulseRaw),
-            factorRaw: impulseScaleRaw,
-            factorBits: impulseScaleBits
-        )).Value;
+        return (-ToImpulse(value: driven, factorRaw: slot.NormalMassRaw) - Product(
+            aBits: m_options.Scales.Impulse,
+            aRaw: slot.NormalImpulseRaw,
+            bBits: impulseScaleBits,
+            bRaw: impulseScaleRaw,
+            outBits: m_options.Scales.Impulse
+        ));
     }
     // Every iteration of the budget runs unconditionally: an early break driven by a tolerance would make the
     // measurement change the trajectory it measures.
@@ -582,8 +651,8 @@ public sealed class FixedRigidWorld {
                 }
             }
 
-            // Friction runs in the unbiased pass only: a biased push-out is a position correction, not a contact
-            // force, and coupling friction to it would brake the body by how deep the correction reached.
+            // Friction and rolling resistance run in the unbiased pass only: a biased push-out is a position correction,
+            // not a contact force, and coupling either to it would brake the body by how deep the correction reached.
             if (useBias) {
                 continue;
             }
@@ -597,6 +666,17 @@ public sealed class FixedRigidWorld {
                     (slot.TangentMass1Raw > 0L)
                 ) {
                     SolveFriction(
+                        manifold: manifold,
+                        slot: ref slot
+                    );
+                }
+
+                if (
+                    (slot.Disposition == FixedPairManifoldSlotDisposition.Constraint) &&
+                    (slot.NormalMassRaw > 0L) &&
+                    (slot.RollingMass1Raw > 0L)
+                ) {
+                    SolveRolling(
                         manifold: manifold,
                         slot: ref slot
                     );
@@ -670,6 +750,9 @@ public sealed class FixedRigidWorld {
                         slot: in slot
                     );
                 }
+
+                ApplyAngularImpulse(axis: slot.Tangent1, impulseRaw: slot.RollingImpulse1Raw, manifold: manifold);
+                ApplyAngularImpulse(axis: slot.Tangent2, impulseRaw: slot.RollingImpulse2Raw, manifold: manifold);
             }
         }
     }
