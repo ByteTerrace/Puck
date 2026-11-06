@@ -53,7 +53,7 @@ public sealed class GateBaselineLawTests : GateRunLaws {
         using var branches = new Branches();
 
         branches.Checkout.Write(name: "build/trigger.props", text: "<Project />");
-        Assert.True(condition: AffectedCommand.TryPlan(repositoryRoot: branches.Checkout.Root, schemaSourceTypes: SuiteRoot.Composition.SchemaSourceTypes, since: branches.Base,
+        Assert.True(condition: AffectedCommand.TryPlan(repositoryRoot: branches.Checkout.Root, since: branches.Base,
             changed: out _, plan: out var plan, error: out var error), userMessage: error);
         using var text = new StringWriter();
 

@@ -6,13 +6,13 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
-using Puck.Assets;
+using Puck.Cli.Packaging;
 
 namespace Puck.Cli.NuGet;
 
 /// <summary>
 /// <c>puck nuget</c> — the shared-version NuGet release: pack every opted-in project, select and verify a batch, push
-/// it, and the GitHub-side gate, tag, release record, and CLI pin that surround a publication.
+/// it, and the GitHub-side gate, tag, release record, and published-CLI check that surround a publication.
 /// </summary>
 public static class NuGetCommand {
     private static readonly StringComparer PackageComparer = StringComparer.OrdinalIgnoreCase;
@@ -59,7 +59,7 @@ public static class NuGetCommand {
                         path2: name
                     )
                 );
-                files.Add(item: ((JsonNode)new JsonObject { ["name"] = name, ["sha256"] = ContentPin.OfFile(path: path).Hex }));
+                files.Add(item: ((JsonNode)ReleaseInventory.Entry(name: name, nameKey: "name", path: path)));
             }
             packages.Add(item: ((JsonNode)new JsonObject { ["id"] = package.Id, ["version"] = version, ["files"] = files }));
         }
@@ -171,16 +171,14 @@ public static class NuGetCommand {
                     name.Contains(value: '/') ||
                     name.Contains(value: '\\')
                 ) { throw new InvalidDataException(message: "Invalid artifact filename."); }
-                if (!string.Equals(
-                    a: ContentPin.OfFile(path: Path.Combine(
+                ReleaseInventory.Require(
+                    name: name,
+                    path: Path.Combine(
                         path1: directory,
                         path2: name
-                    )).Hex,
-                    b: ((string?)files[index]!["sha256"]),
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    throw new InvalidDataException(message: $"Artifact checksum mismatch: {name}.");
-                }
+                    ),
+                    sha256: ((string?)files[index]!["sha256"])
+                );
             }
         }
         return manifest;
@@ -546,10 +544,10 @@ public static class NuGetCommand {
             description: "Pack, select, verify, and push a shared-version NuGet release.",
             name: "nuget"
         ) {
-            version, pack, prepare, verify, push, NuGetReleaseCommand.Gate(), NuGetReleaseCommand.Tag(), NuGetReleaseCommand.Release(), NuGetReleaseCommand.Pin(), NuGetReleaseCommand.PinPublished(), NuGetReleaseCommand.Smoke(),
+            version, pack, prepare, verify, push, NuGetReleaseCommand.Gate(), NuGetReleaseCommand.Tag(), NuGetReleaseCommand.Release(), NuGetReleaseCommand.VerifyPublished(), NuGetReleaseCommand.Smoke(),
         };
 
-        command.Detail(detail: "prepare, verify, and push use VERSION (or the shared version) and GITHUB_SHA (or git HEAD).");
+        command.Detail(detail: "prepare, verify, and push use the shared version and GITHUB_SHA (or git HEAD).");
 
         version.SetAction(action: _ => PrintVersion());
         pack.SetAction(action: (parseResult, _) => PackAsync(

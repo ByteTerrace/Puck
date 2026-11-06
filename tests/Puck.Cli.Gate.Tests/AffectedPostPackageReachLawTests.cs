@@ -38,8 +38,7 @@ public sealed class AffectedPostPackageReachLawTests {
         }
         """;
 
-    // The grain canary's world runs grain, the post canary's world runs nothing, and both ran the packages' owner when
-    // coverage was recorded, as every canary that draws a post pass does.
+    // The grain canary's world runs grain and the post canary's world runs nothing.
     private static readonly AffectedMemoryTree Tree = new(files: new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
         ["src/Engine/Engine.csproj"] = """<Project><ItemGroup><VertexShaderSource Include="Assets/**/*.vert.hlsl" /><FragmentShaderSource Include="Assets/**/*.frag.hlsl" /></ItemGroup></Project>""",
         ["src/Engine/Assets/fullscreen.vert.hlsl"] = "float4 main() : SV_Position { return 0; }",
@@ -53,9 +52,6 @@ public sealed class AffectedPostPackageReachLawTests {
 
     private static AffectedPlan Select(string changed) {
         AffectedCanary[] canaries = [GrainCanary, PostCanary];
-        var coverage = new Dictionary<string, IReadOnlySet<string>>(comparer: StringComparer.Ordinal) {
-            [Owner] = new HashSet<string>(collection: ["grain", "post"]),
-        };
         var shaders = new AffectedShaders(packages: Packages, projects: [Engine], tree: Tree);
         var reachedBy = AffectedDocuments.ReachedBy(canaries: canaries, packageFiles: shaders.FilesOf, tree: Tree);
 
@@ -66,17 +62,8 @@ public sealed class AffectedPostPackageReachLawTests {
                 : new HashSet<string>()),
             changed: [changed],
             consumersOf: static _ => [],
-            coverage: coverage,
             declaresTests: static _ => false,
             projects: [Engine],
-            standInsFor: AffectedStandIns.Create(
-                documented: source => reachedBy.ContainsKey(key: source),
-                indexed: [.. coverage.Keys],
-                projects: [Engine],
-                schemaSourceTypes: SuiteRoot.Composition.SchemaSourceTypes,
-                shaders: shaders,
-                tree: Tree
-            ),
             worldClosure: new HashSet<string>(collection: ["Engine"], comparer: StringComparer.OrdinalIgnoreCase),
             worldInput: static _ => false
         );
@@ -88,16 +75,14 @@ public sealed class AffectedPostPackageReachLawTests {
             var plan = Select(changed: $"src/Engine/Assets/{path}");
 
             Assert.Equal(actual: plan.Canaries, expected: ["grain"]);
-            Assert.Empty(collection: plan.Unmapped);
         }
     }
     [Fact]
-    public void AnUnnamedPackageFallsBackToItsOwner() {
+    public void AnUnnamedPackageChoosesEveryCanaryOfTheWorldBuild() {
         foreach (var path in ((string[])["haze.frag.hlsl", "haze.interface.hlsli"])) {
             var plan = Select(changed: $"src/Engine/Assets/{path}");
 
             Assert.Equal(actual: plan.Canaries, expected: ["grain", "post"]);
-            Assert.Empty(collection: plan.Unmapped);
         }
     }
 }

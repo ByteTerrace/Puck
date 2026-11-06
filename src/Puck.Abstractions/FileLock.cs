@@ -38,6 +38,34 @@ public static class FileLock {
             path: path,
             share: FileShare.None
         );
+    /// <summary>Takes the exclusive lock on an existing <paramref name="path"/> without waiting, and deletes the file
+    /// when the lock is disposed, so the file is removed while no other process can hold it: a run that opens the path
+    /// afterwards creates a new file, and one that tries meanwhile finds the lock held.</summary>
+    /// <param name="path">The lock file.</param>
+    /// <returns>The held lock, whose disposal deletes the file; or <see langword="null"/> when the file does not exist
+    /// or another holder has it.</returns>
+    /// <exception cref="IOException">The lock file cannot be opened for a reason other than another holder.</exception>
+    /// <exception cref="UnauthorizedAccessException">The lock file cannot be opened for writing or deleted.</exception>
+    public static FileStream? TryAcquireForDeletion(string path) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: path);
+
+        try {
+            return new FileStream(
+                access: FileAccess.ReadWrite,
+                mode: FileMode.Open,
+                bufferSize: 1,
+                options: FileOptions.DeleteOnClose,
+                path: path,
+                share: FileShare.None
+            );
+        } catch (FileNotFoundException) {
+            return null;
+        } catch (DirectoryNotFoundException) {
+            return null;
+        } catch (IOException exception) when (IsContention(exception: exception)) {
+            return null;
+        }
+    }
     /// <summary>Takes a shared hold on <paramref name="path"/> without waiting: any number of shared holders coexist,
     /// and none can coexist with an exclusive holder. The file is opened read-only with a shared mode, which .NET
     /// turns into a shared advisory lock on Unix.</summary>

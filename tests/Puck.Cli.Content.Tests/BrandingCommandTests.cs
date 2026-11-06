@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 
 using Puck.Cli.Branding;
@@ -160,15 +159,6 @@ public sealed class BrandingCommandTests {
         )));
     }
     [Fact]
-    public void InvalidSourceHashRefusesBeforeWriting() {
-        using var fixture = Fixture.Create(manifestHash: new string(
-            c: '0',
-            count: 64
-        ));
-
-        AssertRefusesWithoutChangingCopy(fixture: fixture);
-    }
-    [Fact]
     public void MissingSourceRefusesBeforeWriting() {
         using var fixture = Fixture.Create(manifestSource: "branding/missing.bin");
 
@@ -283,7 +273,6 @@ public sealed class BrandingCommandTests {
         public static Fixture Create(
             bool deferred = false,
             bool destinationMatches = false,
-            string? manifestHash = null,
             string manifestSource = "branding/source.bin",
             string copyAsset = "source",
             string copyPath = "consumer/copy.bin",
@@ -331,7 +320,6 @@ public sealed class BrandingCommandTests {
                 ? sourceBytes
                 : new byte[] { 9, 9, 9 })
             );
-            var hash = Convert.ToHexString(inArray: SHA256.HashData(source: sourceBytes)).ToLowerInvariant();
             var copies = new List<object> { new { asset = copyAsset, path = copyPath } };
 
             if (secondCopyPath is not null) {
@@ -343,7 +331,7 @@ public sealed class BrandingCommandTests {
 
             var manifest = new {
                 schema = "puck.branding.v1",
-                assets = new[] { new { id = "source", source = manifestSource, sha256 = (manifestHash ?? hash) } },
+                assets = new[] { new { id = "source", source = manifestSource } },
                 copies,
                 wiring = new[] { new { path = "consumer/wiring.txt", contains = wiringText, description = "fixture wiring" } },
             };

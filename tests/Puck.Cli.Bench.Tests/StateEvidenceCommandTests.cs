@@ -66,8 +66,7 @@ public sealed class StateEvidenceCommandTests {
 
         Assert.Equal(ReferenceScheduleManifest.Digest, inventory.ManifestDigest);
         Assert.All(inventory.Kernels.SelectMany(selector: static kernel => kernel.Sources), static source => {
-            Assert.Null(@object: source.ActualSha256);
-            Assert.False(condition: source.Matches);
+            Assert.Null(@object: source.Sha256);
         });
         Assert.Contains(collection: inventory.Kernels, filter: static kernel => (kernel.UnresolvedTargets.Count > 0));
         Assert.All(inventory.MemoryGaps, static memoryClass => Assert.NotEmpty(collection: memoryClass.Value));

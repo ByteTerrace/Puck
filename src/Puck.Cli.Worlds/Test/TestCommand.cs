@@ -23,15 +23,9 @@ public static partial class TestCommand {
     private const string ScratchPrefix = "puck-test-";
 
 
-    private static int Run(string path, TestHost host, string? worldArtifact, string? keep, int jobs, bool reproduce, string? cacheDirectory, string? workers, string? record, string? compare, string[] filters) {
+    private static int Run(string path, string? worldArtifact, string? keep, int jobs, bool reproduce, string? cacheDirectory, string? workers, string? record, string? compare, string[] filters) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             Console.Error.WriteLine(value: "ERROR: puck test must run inside the repository.");
-
-            return 2;
-        }
-
-        if (host == TestHost.Browser) {
-            Console.Error.WriteLine(value: "ERROR: --host browser is not implemented: the browser engine host has no command ingress, no acting principal and no authoritative server, so it cannot submit a scheduled command at all. Cross-host determinism there is an open gap, not a leg this verb can run.");
 
             return 2;
         }

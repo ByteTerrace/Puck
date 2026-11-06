@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -971,13 +970,7 @@ public static class ReferenceCapture {
             var sources = new JsonArray();
 
             foreach (var source in kernel.Sources) {
-                sources.Add(value: new JsonObject {
-                    ["path"] = source.Path,
-                    ["sha256"] = Convert.ToHexStringLower(inArray: SHA256.HashData(source: File.ReadAllBytes(path: Path.Combine(
-                        path1: repositoryRoot,
-                        path2: source.Path
-                    )))),
-                });
+                sources.Add(value: new JsonObject { ["path"] = source.Path });
             }
             pinned["sources"] = sources;
 

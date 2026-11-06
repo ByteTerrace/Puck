@@ -113,6 +113,27 @@ public static class ShaderDeclarations {
             .. owned.Values,
         ];
     }
+    /// <summary>Names the interfaces the model declares: each engine package that has pass-group members, and each SDF
+    /// engine kernel's interface (<see cref="SdfKernelInterfaces.Includes"/>) that no package already names.</summary>
+    /// <param name="packages">The engine packages whose declared interfaces are owned includes.</param>
+    /// <returns>The packages' ids, in catalog order, then the kernel interfaces' names, in declaration order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="packages"/> is <see langword="null"/>.</exception>
+    public static (IReadOnlyList<string> Packages, IReadOnlyList<string> Kernels) OwnerNames(RenderGraphPackageCatalog packages) {
+        ArgumentNullException.ThrowIfNull(argument: packages);
+
+        var kernels = new SdfKernelInterfaces(fieldStamp: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.DescribeFieldFingerprint()), stamp: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.DescribeFingerprint())).Includes
+            .Select(selector: static include => include.Interface.Name)
+            .ToArray();
+        var kernelNames = kernels.ToHashSet(comparer: StringComparer.Ordinal);
+
+        return (
+            [.. packages.Packages
+                .Where(predicate: static package => (package.Members.Count > 0))
+                .Where(predicate: package => !kernelNames.Contains(item: ShaderPipelineParameterLayout.ForPackage(config: package.Config, members: package.Members, package: package.Id, pushesIndex: package.PushesIndex).Interface.Name))
+                .Select(selector: static package => package.Id)],
+            kernels
+        );
+    }
     /// <summary>Lists the interface includes under a tree's <c>src</c> directory, as <see cref="Of"/> reads them: every
     /// <c>*.interface.hlsli</c>, repository-relative with forward slashes, outside a project's <c>bin</c> and <c>obj</c>
     /// build output.</summary>

@@ -366,7 +366,7 @@ public static partial class CompileCommand {
         var watchOption = new Option<bool>(
             name: "--watch",
             aliases: ["-w"]
-        ) { Description = "Watch the source file and its imported dependencies for changes and recompile automatically." };
+        ) { Description = "Recompile whenever a .puck file under the source's own directory changes; an import from outside that directory is not watched." };
         var strictOption = new Option<bool>(name: "--strict") { Description = "Treat warnings as errors." };
         var validateOption = new Option<bool>(name: "--validate") { Description = "Validate semantic engine schema rules on the emitted document. A world source validated without --output writes nothing." };
         var measureOption = new Option<bool>(name: "--measure") { Description = "Report elapsed time, process peak working set and managed allocation for this invocation." };

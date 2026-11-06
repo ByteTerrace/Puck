@@ -54,15 +54,12 @@ public sealed class AffectedDocumentsLawTests {
             canariesReaching: static path => ((path == "src/World/Assets/ink.hlsl") ? new HashSet<string>(collection: ["ink"]) : new HashSet<string>()),
             changed: ["src/World/Assets/ink.hlsl"],
             consumersOf: static _ => [],
-            coverage: new Dictionary<string, IReadOnlySet<string>>(),
             declaresTests: static _ => false,
             projects: [new AffectedProject(Directory: "src/World", IsSuite: false, Name: "World", References: [])],
-            standInsFor: static _ => [],
             worldClosure: new HashSet<string>(collection: ["World"], comparer: StringComparer.OrdinalIgnoreCase),
             worldInput: static _ => false
         );
 
         Assert.Equal(actual: plan.Canaries, expected: ["ink"]);
-        Assert.Empty(collection: plan.Unmapped);
     }
 }

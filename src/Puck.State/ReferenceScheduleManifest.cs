@@ -72,11 +72,9 @@ public sealed record InstructionForm(string Form, IReadOnlyDictionary<string, In
 /// <param name="Url">Where the source is read.</param>
 /// <param name="Redistribution">The source's redistribution terms, when they restrict what may be stored here.</param>
 public sealed record PublishedSource(string Name, string Url, string? Redistribution);
-/// <summary>A reference kernel's source file and the digest its evidence was read against. A change to the file
-/// changes the digest, which invalidates the kernel's recorded price.</summary>
+/// <summary>A reference kernel's source file: the file its evidence is read from, which a capture compiles afresh.</summary>
 /// <param name="Path">The repository-relative source path.</param>
-/// <param name="Sha256">The file's SHA-256 digest, lowercase hexadecimal.</param>
-public sealed record KernelSource(string Path, string Sha256);
+public sealed record KernelSource(string Path);
 /// <summary>A loop inside a reference kernel and the source contract that bounds its iteration count.</summary>
 /// <param name="Symbol">The symbol carrying the loop.</param>
 /// <param name="Iterations">The bound, in iterations.</param>
@@ -503,10 +501,6 @@ public static class ReferenceScheduleManifest {
                 Path: Text(
                     element: source,
                     name: "path"
-                ),
-                Sha256: Text(
-                    element: source,
-                    name: "sha256"
                 )
             ));
         }
