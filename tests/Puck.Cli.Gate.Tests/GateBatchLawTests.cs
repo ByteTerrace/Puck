@@ -43,7 +43,7 @@ public sealed class GateBatchLawTests : GateRunLaws {
 
             Assert.Equal([.. AffectedCommand.TestArguments(suite: suite), .. GatePlan.DeviceSuites.Single(predicate: device => (device.Suite == suite)).Selection], arguments);
         }
-        Assert.Equal(new[] { "run Puck.World.Tests", "run Puck.DirectX.Tests", "run Puck.Vulkan.Tests", "run Puck.Platform.Windows.Tests", "run docs citations" },
+        Assert.Equal(new[] { "run Puck.World.Tests", "run Puck.DirectX.Tests", "run Puck.Vulkan.Tests", "run Puck.Platform.Windows.Tests", "run docs citations", "run verbs" },
             runner.Events.Skip(count: deviceStart).Where(predicate: entry => entry.StartsWith(comparisonType: StringComparison.Ordinal, value: "run ")));
     }
     [Fact]
@@ -111,10 +111,14 @@ public sealed class GateAdmissionLawTests : GateRunLaws {
         var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: ""));
 
         Assert.Equal(CliExit.Success, Gate(branches, runner, directory, gpu: true).ExitCode);
-        string[] heavy = ["build", "affected", "Puck.DirectX.Tests", "Puck.Vulkan.Tests", "Puck.Platform.Windows.Tests", "docs citations"];
+        string[] heavy = ["build", "affected", "verbs", "Puck.DirectX.Tests", "Puck.Vulkan.Tests", "Puck.Platform.Windows.Tests", "docs citations", "verbs windowed"];
 
         Assert.Equal(heavy.Select(selector: name => ("admit " + name)), runner.Events.Where(predicate: entry => entry.StartsWith(comparisonType: StringComparison.Ordinal, value: "admit ")));
-        foreach (var name in heavy) { Assert.Equal(("run " + name), runner.Events[(runner.Events.IndexOf(item: ("admit " + name)) + 1)]); }
+        for (var index = 0; (index < runner.Events.Count); index++) {
+            if (runner.Events[index].StartsWith(comparisonType: StringComparison.Ordinal, value: "admit ")) {
+                Assert.StartsWith(expectedStartString: "run ", actualString: runner.Events[(index + 1)]);
+            }
+        }
     }
     [Fact]
     public void OnlyADeviceStepWaitsForAnIdleGpuAndOnlyAHeavySuiteForAnotherHeavyRun() {
@@ -124,7 +128,7 @@ public sealed class GateAdmissionLawTests : GateRunLaws {
 
         Assert.Equal(CliExit.Success, Gate(branches, runner, directory, gpu: true).ExitCode);
         // Heavy device-suite admission is inside the process runner's lease, not this preflight.
-        Assert.Equal(expected: [("build", false, false), ("affected", false, false), ("Puck.DirectX.Tests", true, false), ("Puck.Vulkan.Tests", true, false), ("Puck.Platform.Windows.Tests", true, false), ("docs citations", true, false)], actual: runner.Admissions);
+        Assert.Equal(expected: [("build", false, false), ("affected", false, false), ("verbs", false, false), ("Puck.DirectX.Tests", true, false), ("Puck.Vulkan.Tests", true, false), ("Puck.Platform.Windows.Tests", true, false), ("docs citations", true, false), ("verbs windowed", true, false)], actual: runner.Admissions);
         // The baselines and affected's suites run CPU tests alone: none of their classes carries the Gpu trait.
         Assert.All(collection: GatePlan.Steps.Where(predicate: static step => ((step.Kind is GateStepKind.Build or GateStepKind.Baseline) || (step.Name == "affected"))), action: static step => Assert.False(condition: step.Gpu));
     }

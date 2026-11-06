@@ -250,7 +250,9 @@ public sealed partial class WorldBody {
     private readonly bool[] m_previousChannelBit = new bool[ActionLaneCount];
     private readonly ulong[] m_laneTimers = new ulong[ActionLaneCount];
     private readonly FixedQ4816[] m_channelTimerValues = new FixedQ4816[ActionLaneCount];
-    private bool m_grounded = true;
+    // Whether the last contact solve found support. Only a body with a collider runs one, so this is false for a
+    // colliderless body at every write: construction, teleport (ResetVertical) and kit recompile each take CanBeGrounded.
+    private bool m_grounded;
     private FixedRateAccumulator m_planarRampAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     // The shaping table's shared recency clocks — one per Recently gate across the whole table (allocated to match the
     // compiled tuning's RecencySlots), refreshed while the fact holds and decaying otherwise. Reset by a teleport and a
@@ -380,6 +382,7 @@ public sealed partial class WorldBody {
         m_roleOrdinals = roleOrdinals;
         CompileActionState(state: actionState);
         m_collider = collider;
+        m_grounded = CanBeGrounded;
         RescaleColliderVolumes();
         m_rigid = rigid;
         m_carry = carry;

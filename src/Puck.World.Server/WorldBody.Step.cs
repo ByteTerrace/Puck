@@ -1151,7 +1151,7 @@ public sealed partial class WorldBody {
     // body, not the player's buttons.
     private void ResetVertical() {
         m_positionAccumulator.ResetY();
-        m_grounded = true;
+        m_grounded = CanBeGrounded;
         ResetTranslationMomentum();
 
         // A hard teleport also clears observations about the prior support/medium.

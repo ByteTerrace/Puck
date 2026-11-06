@@ -937,17 +937,20 @@ could know it. The plan runs serially in this order:
 8. `architecture`: `puck architecture --check`.
 9. `registry`: `puck registry --check`.
 10. `vocabulary`: `puck vocabulary --check`.
-11. `shaders generate`: `puck shaders generate --check`.
-12. `wasm-stdlib`: `puck wasm-stdlib --check`.
-13. `branding`: `puck branding --check`.
-14. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
-15. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
-16. `parity`: `puck parity` when selected, only with `--gpu`.
-17. `Puck.World.Tests`: device suite, only with `--gpu`.
-18. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
-19. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
-20. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
-21. `docs citations`: `puck docs citations`, only with `--gpu`.
+11. `verbs`: `puck verbs --check --headless-only`, which boots the headless World and fails on a console verb
+    the catalog lacks or records with another bindability or audience.
+12. `shaders generate`: `puck shaders generate --check`.
+13. `wasm-stdlib`: `puck wasm-stdlib --check`.
+14. `branding`: `puck branding --check`.
+15. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
+16. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
+17. `parity`: `puck parity` when selected, only with `--gpu`.
+18. `Puck.World.Tests`: device suite, only with `--gpu`.
+19. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
+20. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
+21. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
+22. `docs citations`: `puck docs citations`, only with `--gpu`.
+23. `verbs windowed`: `puck verbs --check`, the full catalog check over a headless and a windowed World, only with `--gpu`.
 
 The device suites run `dotnet test --project <suite> -c Release --no-build` over the
 solution build's binaries, as affected's suites do, since Microsoft.Testing.Platform hands
@@ -3198,7 +3201,9 @@ it too (named, bindable, `text` accepted, value kind). Regenerate after adding,
 renaming or changing the bindability or audience of a console verb.
 `--headless-only` boots headless alone, for a host without a free GPU, and
 keeps every catalogued verb the headless World does not register; only a full
-run drops a verb no shape registers any more.
+run drops a verb no shape registers any more. [`puck gate`](#puck-gatethe-change-scoped-gate)
+runs `--check --headless-only` on every run and the full `--check` with `--gpu`, so a verb
+added without regenerating the catalog fails the gate.
 
 ```text
 puck verbs                   boot headless and windowed, then write the catalog

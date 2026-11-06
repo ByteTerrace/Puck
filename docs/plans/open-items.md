@@ -3186,11 +3186,6 @@ ordinary · Next: new content and art on the owner's call.
   needs. The granary board deals its pieces in cell order, which from its -Z
   chair runs right to left (`granaries.puck`'s deal facet).
 
-- Owed: `puck verbs` with a windowed boot. The checked-in catalog is stale: the
-  clearance operation removed
-  `player.camera.clearance` by hand, and `puck verbs --check --headless-only`
-  now stops at `world.state.hash`, whose audience the catalog records as
-  `anyone` where the headless World registers it `operator`.
 - The faerie: the companion becomes small, abstract and original (nothing that
   reads as Ocarina of Time's) beside the moth, its animation rich, varied and
   reactive, dodging a swat through one generic threat input (a point and

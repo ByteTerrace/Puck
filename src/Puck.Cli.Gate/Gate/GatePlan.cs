@@ -37,6 +37,7 @@ public static class GatePlan {
         new("architecture", GateStepKind.Puck, ["architecture", "--check"]),
         new("registry", GateStepKind.Puck, ["registry", "--check"]),
         new("vocabulary", GateStepKind.Puck, ["vocabulary", "--check"]),
+        new("verbs", GateStepKind.Puck, ["verbs", "--check", "--headless-only"], Heavy: true),
         new("shaders generate", GateStepKind.Puck, ["shaders", "generate", "--check"]),
         new("wasm-stdlib", GateStepKind.Puck, ["wasm-stdlib", "--check"]),
         new("branding", GateStepKind.Puck, ["branding", "--check"]),
@@ -46,9 +47,11 @@ public static class GatePlan {
         new("parity", GateStepKind.Parity, ["parity"], Heavy: true, Gpu: true),
         .. DeviceSuites.Select(selector: static device => DeviceSuite(selection: device.Selection, suite: device.Suite)),
         new("docs citations", GateStepKind.Puck, ["docs", "citations"], Heavy: true, Gpu: true),
+        new("verbs windowed", GateStepKind.Puck, ["verbs", "--check"], Heavy: true, Gpu: true),
     ];
     /// <summary>Every check omitted from the batch needs an explicit decision here.</summary>
     public static readonly IReadOnlyDictionary<string, string> CheckExclusions = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+        ["agents link"] = "Checks one machine's harness links in one checkout, state outside the change.",
         ["compile"] = "Needs a tree and output; affected runs the shipped catalog check when reached.",
         ["packages"] = "Its valued --check needs the document whose generated package section is checked.",
         ["embed"] = "Needs an authored embedding root; checked by its owning change.",

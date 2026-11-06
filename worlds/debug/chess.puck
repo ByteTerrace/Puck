@@ -336,6 +336,27 @@ rule "chess-ai-enable" {
 
 chessMoveDoor(settleTicks: chessSettleTicks, scope: "chess-demo")
 
+// A captured piece stands on the table's own margin (the top is 2 m across, the board 1.6 m, so a margin is 0.2 m wide),
+// one column of 16 places 0.1 m apart per colour: White's along the -X margin (x -0.9 in the table's frame), Black's
+// along the +X margin (0.9), each running +Z from -0.75 to 0.75. The offsets are from cell 0's centre (-0.7, -0.7).
+let captureColumnX = [-0.2, 1.6]
+for side in range(0, 2) {
+  for slot in range(0, 16) {
+    rule $"chess-ai-capture-{16 * side + slot}" {
+      when (ai.pending == 1 and
+        pieceCell[$"piece{16 * side + slot}"] != ((aiBefore[$"piece{16 * side + slot}"] & 127) - 1) and
+        pieceCell[$"piece{16 * side + slot}"] < 0)
+      mode: Level
+      poseCell(
+        key: $"placement:piece{16 * side + slot}",
+        topology: chessBoard,
+        expression: 0,
+        offset: [captureColumnX[side], 0.3, 0.1 * slot - 0.05]
+      )
+    }
+  }
+}
+
 for i in range(0, 32) {
   rule $"chess-ai-place-{i}" {
     when (ai.pending == 1 and
@@ -343,19 +364,6 @@ for i in range(0, 32) {
       pieceCell[$"piece{i}"] >= 0)
     mode: Level
     poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: pieceCell[$"piece{i}"], offset: [0, 0.08, 0])
-  }
-  rule $"chess-ai-capture-{i}" {
-    when (ai.pending == 1 and
-      pieceCell[$"piece{i}"] != ((aiBefore[$"piece{i}"] & 127) - 1) and
-      pieceCell[$"piece{i}"] < 0)
-    mode: Level
-    // Each captured piece gets its own place beside the board.
-    poseCell(
-      key: $"placement:piece{i}",
-      topology: chessBoard,
-      expression: 0,
-      offset: [-0.4 - 0.15 * (i % 4), 0.3, 0.18 * (i / 4)]
-    )
   }
 }
 
@@ -367,7 +375,7 @@ chessMoveDone()
 // side the seat sits on. The pick button lifts the side to move's piece under the cursor, which then hovers over the
 // cursor; the next press puts it down there, or a release away from the square it left does (a drag). Pressing on the
 // square it left, the cancel button or standing up puts it back. A put-down hands the move to the computer's own apply
-// path (ai[from], ai[to], ai[pending]): it takes a captured piece beside the board, moves a castling rook, lifts the
+// path (ai[from], ai[to], ai[pending]): it stands a captured piece on the table margin, moves a castling rook, lifts the
 // pawn an en-passant capture takes and queens a pawn on the last rank, then the settled arrangement is judged as ever.
 // An arrangement judged illegal is put back as it stood before the put-down.
 
