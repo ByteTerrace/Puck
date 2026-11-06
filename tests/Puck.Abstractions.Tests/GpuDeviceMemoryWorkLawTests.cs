@@ -5,7 +5,8 @@ namespace Puck.Abstractions.Tests;
 
 /// <summary>
 /// Laws for <see cref="GpuDeviceMemoryWork"/>: allocations and releases count at the size each allocation was counted
-/// with, the peak is the most bytes held at once, the aperture rows count the host-mapped part, only the adapter's roles count bytes though every allocation counts once, a release of an object never
+/// with, the peak is the most bytes held at once, the aperture rows count the host-mapped part, host-visible bytes count in
+/// their own disjoint rows, every allocation counts once, a release of an object never
 /// counted counts nothing, an allocation is counted once per device, the same handle on two devices is two entries, a
 /// device's teardown names every allocation it still holds, and the class legend makes the byte counts
 /// per-backend-deterministic and the peak pacing.
@@ -22,7 +23,7 @@ public sealed class GpuDeviceMemoryWorkLawTests {
 
         return value;
     }
-    private static bool Allocate(GpuDeviceMemoryWork work, nint allocation, long bytes, nint device = Device, GpuMemoryRole role = GpuMemoryRole.DeviceLocal) =>
+    private static void Allocate(GpuDeviceMemoryWork work, nint allocation, long bytes, nint device = Device, GpuMemoryRole role = GpuMemoryRole.DeviceLocal) =>
         work.CountAllocated(
             allocation: allocation,
             bytes: bytes,
@@ -34,10 +35,10 @@ public sealed class GpuDeviceMemoryWorkLawTests {
     public void AllocationsAndReleasesCountTheirSizesAndThePeakHeld() {
         var work = new GpuDeviceMemoryWork(backend: "vulkan");
 
-        Assert.True(condition: Allocate(work: work, allocation: 0x10, bytes: 4096L));
-        Assert.True(condition: Allocate(work: work, allocation: 0x20, bytes: 1024L));
+        Allocate(work: work, allocation: 0x10, bytes: 4096L);
+        Allocate(work: work, allocation: 0x20, bytes: 1024L);
         Assert.True(condition: work.CountReleased(allocation: 0x10, device: Device));
-        Assert.True(condition: Allocate(work: work, allocation: 0x30, bytes: 2048L));
+        Allocate(work: work, allocation: 0x30, bytes: 2048L);
         Assert.True(condition: work.CountReleased(allocation: 0x20, device: Device));
 
         Assert.Equal(expected: "memory.vulkan", actual: work.Name);
@@ -47,21 +48,22 @@ public sealed class GpuDeviceMemoryWorkLawTests {
         Assert.Equal(expected: 2048L, actual: work.Held);
     }
     [Fact]
-    public void OnlyTheRolesInTheAdaptersMemoryCount() {
+    public void HostVisibleBytesCountInTheirOwnDisjointRows() {
         var work = new GpuDeviceMemoryWork(backend: "vulkan");
 
-        Assert.True(condition: GpuDeviceMemoryWork.IsCounted(role: GpuMemoryRole.DeviceLocal));
-        Assert.True(condition: GpuDeviceMemoryWork.IsCounted(role: GpuMemoryRole.HostVisibleDeviceLocal));
-        Assert.False(condition: GpuDeviceMemoryWork.IsCounted(role: GpuMemoryRole.HostVisible));
-        Assert.True(condition: Allocate(work: work, allocation: 0x20, bytes: 1024L, role: GpuMemoryRole.HostVisibleDeviceLocal));
-        Assert.True(condition: work.CountReleased(allocation: 0x20, device: Device));
-        work = new GpuDeviceMemoryWork(backend: "vulkan");
-        Assert.False(condition: Allocate(work: work, allocation: 0x10, bytes: 4096L, role: GpuMemoryRole.HostVisible));
-        Assert.False(condition: work.CountReleased(allocation: 0x10, device: Device));
-        Assert.Equal(expected: (0L, 0L), actual: (Read(kind: GpuDeviceMemoryWork.Allocated, work: work), work.Held));
-        // Every native allocation counts as one, whatever its role holds.
-        Assert.Equal(expected: 1L, actual: Read(kind: GpuDeviceMemoryWork.Allocations, work: work));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GpuDeviceMemoryWork.IsCounted(role: ((GpuMemoryRole)7)));
+        Assert.True(condition: GpuDeviceMemoryWork.IsDeviceLocal(role: GpuMemoryRole.DeviceLocal));
+        Assert.True(condition: GpuDeviceMemoryWork.IsDeviceLocal(role: GpuMemoryRole.HostVisibleDeviceLocal));
+        Assert.False(condition: GpuDeviceMemoryWork.IsDeviceLocal(role: GpuMemoryRole.HostVisible));
+        Allocate(work: work, allocation: 0x10, bytes: 4096L, role: GpuMemoryRole.HostVisible);
+        Allocate(work: work, allocation: 0x20, bytes: 1024L);
+        Allocate(work: work, allocation: 0x30, bytes: 512L, role: GpuMemoryRole.HostVisible);
+        Assert.True(condition: work.CountReleased(allocation: 0x10, device: Device));
+
+        Assert.Equal(expected: (1024L, 512L), actual: (work.Held, work.HostVisibleHeld));
+        Assert.Equal(expected: (1024L, 0L), actual: (Read(kind: GpuDeviceMemoryWork.Allocated, work: work), Read(kind: GpuDeviceMemoryWork.Released, work: work)));
+        Assert.Equal(expected: (4608L, 4096L, 4608L), actual: (Read(kind: GpuDeviceMemoryWork.HostVisibleAllocated, work: work), Read(kind: GpuDeviceMemoryWork.HostVisibleReleased, work: work), Read(kind: GpuDeviceMemoryWork.HostVisiblePeak, work: work)));
+        Assert.Equal(expected: 3L, actual: Read(kind: GpuDeviceMemoryWork.Allocations, work: work));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GpuDeviceMemoryWork.IsDeviceLocal(role: ((GpuMemoryRole)7)));
     }
     // The aperture rows are the part of the device-local rows the host maps: a small heap on a discrete adapter, which each
     // residency's ring tables live in.
@@ -69,11 +71,11 @@ public sealed class GpuDeviceMemoryWorkLawTests {
     public void TheApertureRowsCountThePartOfDeviceLocalMemoryTheHostMaps() {
         var work = new GpuDeviceMemoryWork(backend: "vulkan");
 
-        Assert.True(condition: Allocate(work: work, allocation: 0x10, bytes: 4096L));
-        Assert.True(condition: Allocate(work: work, allocation: 0x20, bytes: 1024L, role: GpuMemoryRole.HostVisibleDeviceLocal));
-        Assert.True(condition: Allocate(work: work, allocation: 0x30, bytes: 512L, role: GpuMemoryRole.HostVisibleDeviceLocal));
+        Allocate(work: work, allocation: 0x10, bytes: 4096L);
+        Allocate(work: work, allocation: 0x20, bytes: 1024L, role: GpuMemoryRole.HostVisibleDeviceLocal);
+        Allocate(work: work, allocation: 0x30, bytes: 512L, role: GpuMemoryRole.HostVisibleDeviceLocal);
         Assert.True(condition: work.CountReleased(allocation: 0x20, device: Device));
-        Assert.True(condition: Allocate(work: work, allocation: 0x40, bytes: 256L, role: GpuMemoryRole.HostVisibleDeviceLocal));
+        Allocate(work: work, allocation: 0x40, bytes: 256L, role: GpuMemoryRole.HostVisibleDeviceLocal);
         Assert.True(condition: work.CountReleased(allocation: 0x10, device: Device));
 
         Assert.Equal(expected: 5888L, actual: Read(kind: GpuDeviceMemoryWork.Allocated, work: work));
@@ -86,7 +88,7 @@ public sealed class GpuDeviceMemoryWorkLawTests {
     public void AnUncountedReleaseCountsNothing() {
         var work = new GpuDeviceMemoryWork(backend: "directx");
 
-        _ = Allocate(work: work, allocation: 0x10, bytes: 64L);
+        Allocate(work: work, allocation: 0x10, bytes: 64L);
 
         Assert.False(condition: work.CountReleased(allocation: 0, device: Device));
         Assert.False(condition: work.CountReleased(allocation: 0x99, device: Device));
@@ -99,7 +101,7 @@ public sealed class GpuDeviceMemoryWorkLawTests {
     public void AnAllocationIsCountedOncePerDevice() {
         var work = new GpuDeviceMemoryWork(backend: "vulkan");
 
-        _ = Allocate(work: work, allocation: 0x10, bytes: 64L);
+        Allocate(work: work, allocation: 0x10, bytes: 64L);
 
         _ = Assert.Throws<ArgumentException>(testCode: () => Allocate(work: work, allocation: 0x10, bytes: 64L));
         _ = Assert.Throws<ArgumentException>(testCode: () => Allocate(work: work, allocation: 0, bytes: 64L));
@@ -111,8 +113,8 @@ public sealed class GpuDeviceMemoryWorkLawTests {
     public void AHandleReusedByARecreatedDeviceIsItsOwnEntry() {
         var work = new GpuDeviceMemoryWork(backend: "directx");
 
-        Assert.True(condition: Allocate(work: work, allocation: 0x10, bytes: 64L));
-        Assert.True(condition: Allocate(work: work, allocation: 0x10, bytes: 32L, device: OtherDevice));
+        Allocate(work: work, allocation: 0x10, bytes: 64L);
+        Allocate(work: work, allocation: 0x10, bytes: 32L, device: OtherDevice);
         Assert.True(condition: work.CountReleased(allocation: 0x10, device: OtherDevice));
 
         Assert.Equal(expected: (96L, 32L, 64L), actual: (Read(kind: GpuDeviceMemoryWork.Allocated, work: work), Read(kind: GpuDeviceMemoryWork.Released, work: work), work.Held));
@@ -121,9 +123,9 @@ public sealed class GpuDeviceMemoryWorkLawTests {
     public void ATeardownHoldingAnAllocationNamesEveryLeakAndKeepsItHeld() {
         var work = new GpuDeviceMemoryWork(backend: "vulkan");
 
-        _ = Allocate(work: work, allocation: 0x30, bytes: 2048L);
-        _ = Allocate(work: work, allocation: 0x10, bytes: 4096L);
-        _ = Allocate(work: work, allocation: 0x20, bytes: 1024L, device: OtherDevice);
+        Allocate(work: work, allocation: 0x30, bytes: 2048L);
+        Allocate(work: work, allocation: 0x10, bytes: 4096L);
+        Allocate(work: work, allocation: 0x20, bytes: 1024L, device: OtherDevice);
 
         var refusal = Assert.Throws<InvalidOperationException>(testCode: () => work.EndDevice(device: Device));
 
@@ -133,7 +135,7 @@ public sealed class GpuDeviceMemoryWorkLawTests {
         );
         Assert.Equal(expected: 7168L, actual: work.Held);
         Assert.False(condition: work.CountReleased(allocation: 0x10, device: Device));
-        Assert.True(condition: Allocate(work: work, allocation: 0x10, bytes: 8L));
+        Allocate(work: work, allocation: 0x10, bytes: 8L);
 
         work.EndDevice(device: (OtherDevice + 1));
     }
@@ -149,6 +151,9 @@ public sealed class GpuDeviceMemoryWorkLawTests {
                 ("gpu.memory.host-visible-device-local.allocated", "bytes", WorkClass.PerBackendDeterministic),
                 ("gpu.memory.host-visible-device-local.released", "bytes", WorkClass.PerBackendDeterministic),
                 ("gpu.memory.host-visible-device-local.peak", "bytes", WorkClass.Pacing),
+                ("gpu.memory.host-visible.allocated", "bytes", WorkClass.PerBackendDeterministic),
+                ("gpu.memory.host-visible.released", "bytes", WorkClass.PerBackendDeterministic),
+                ("gpu.memory.host-visible.peak", "bytes", WorkClass.Pacing),
                 ("gpu.memory.allocations", "count", WorkClass.PerBackendDeterministic),
             ],
             actual: [.. work.WorkKinds.ToArray().Select(selector: static kind => (kind.Name, kind.Unit, kind.Class))]

@@ -217,7 +217,7 @@ internal sealed class FakeGpuDevice :
         }
 
         if (deviceLocal) {
-            _ = Memory.CountAllocated(
+            Memory.CountAllocated(
                 allocation: creation.Handle,
                 bytes: ((long)deviceLocalBytes),
                 device: DeviceHandle,

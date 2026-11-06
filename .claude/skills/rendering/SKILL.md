@@ -707,7 +707,11 @@ compares and fails naming the file that drifted, it writes nothing.
   buffers, retirement bookkeeping and the CPU shadow before publishing growth;
   a failed allocation preserves the old buffers, contents, capacity and bindings.
   `SdfWorldTables.EnsureDynamicTransformCapacity` prepares motion history before
-  growing the region and publishes capacity only after both succeed. A device with
+  growing the region and publishes capacity only after both succeed.
+  A Direct3D 12 buffer or image placed by `DirectXHeapArena` keeps its range
+  until its owner calls `DirectXDeviceMemory.CountReleased` before the last
+  `Release`; an owner that only releases the resource leaks its range and
+  keeps the heap for the run. A device with
   a large host-visible device-local heap (resizable BAR) gives a small per-frame table a ring, while the CPU fake
   device's default profile stages every region, so a region path written or
   tested for one policy alone passes the device-free suites and fails on such
