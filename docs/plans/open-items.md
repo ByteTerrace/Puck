@@ -3549,6 +3549,12 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [low · unconfirmed] `puck measure request --after-commit` built the World
+  but Windows refused `WorldArtifactStore.Publish`'s directory rename after its
+  retries (`src/Puck.Cli.Harness/WorldArtifactStore.cs:183`, `Directory.Move`),
+  so the request failed until refiled from the built artifact. What held the
+  directory is not named: find the holder (a scanner, a lingering build node,
+  the store's own handle) and fix it there, never with more retries.
 - [medium] `puck integrate`: the lead's integration steps as one verb, in
   place of the hand-run sequence. It composes the existing pieces under one
   report: the build, each generator's `--check`, `puck docs links`, a headless
