@@ -216,9 +216,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets whether the current staged mesh geometry has landed and its upload completed; false before
     /// tables exist. Pose and irradiance uploads do not delay it. Read on the frame thread; never waits.</summary>
     public bool MeshesResident => (m_tables?.MeshesResident ?? false);
-    /// <summary>Gets whether the latest staged draws name a mesh whose words the mesh region still lands
-    /// (<see cref="SdfWorldTables.MeshesLanding"/>); <see langword="false"/> before the tables are built.</summary>
-    public bool MeshesLanding => (m_tables?.MeshesLanding ?? false);
+    /// <summary>Gets whether the latest staging held a draw out of the frame because its mesh had not landed
+    /// (<see cref="SdfWorldTables.DrawsAwaitMeshes"/>); <see langword="false"/> before the tables are built.</summary>
+    public bool DrawsAwaitMeshes => (m_tables?.DrawsAwaitMeshes ?? false);
     /// <summary>Gets the latest captured frame, which every view of the residency renders, or <see langword="null"/>
     /// before the first.</summary>
     public SdfFrame? Frame => m_frame;

@@ -64,8 +64,13 @@ public sealed partial class SdfWorldTables {
     private ulong m_meshRequiredUpload;
 
     /// <summary>Gets whether the latest staged draws name a mesh whose words the region still owes: the mesh lands through
-    /// the background GPU work, and its draws wait out of the staged records until it does. Read on the frame thread.</summary>
+    /// the background GPU work, and its draws wait out of the staged records until it does. It turns false as the last
+    /// such mesh lands, before a staging names its draws (<see cref="DrawsAwaitMeshes"/>). Read on the frame
+    /// thread.</summary>
     public bool MeshesLanding => (Volatile.Read(location: ref m_owedWords) != 0);
+    /// <summary>Gets whether the latest staging held a draw out of the staged records because its mesh had not landed, so
+    /// the frame it staged renders without it. Read on the frame thread.</summary>
+    public bool DrawsAwaitMeshes => (m_meshSource is not null) && !m_stagedWhole;
 
     /// <summary>Gets whether the current staged mesh geometry owes no mesh words and its required upload has
     /// completed. Pose, draw-record and irradiance uploads do not delay it. Read on the frame thread; never waits.</summary>

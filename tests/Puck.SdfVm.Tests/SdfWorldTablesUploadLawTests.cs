@@ -1261,7 +1261,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // frames, and the staging after the last landing names every draw.
         public void Land(float time, IReadOnlyList<SdfMeshDraw> meshDraws) {
             Render(meshDraws: meshDraws, time: time);
-            for (var frame = 0; Engine.MeshesLanding; frame++) {
+            for (var frame = 0; (Engine.MeshesLanding || Engine.DrawsAwaitMeshes); frame++) {
                 Assert.True(condition: (frame < 64), userMessage: "The mesh region never landed its meshes.");
                 Render(meshDraws: meshDraws, time: time);
             }

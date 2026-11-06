@@ -23,8 +23,12 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Assert.False(condition: rig.Engine.MeshesResident);
         landing.Completed = true;
         rig.Engine.GpuWork.Pump(tables: rig.Engine);
-        rig.Engine.Pack(frame: frame);
+        // The words have landed, so a residency whose view is held reads resident, but the staged records still hold the
+        // draw out until the next staging names it.
         Assert.False(condition: rig.Engine.MeshesLanding);
+        Assert.True(condition: rig.Engine.DrawsAwaitMeshes);
+        rig.Engine.Pack(frame: frame);
+        Assert.False(condition: rig.Engine.DrawsAwaitMeshes);
         return upload;
     }
 

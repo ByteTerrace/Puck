@@ -155,6 +155,11 @@ public sealed partial class SdfWorldTables {
             if (m_meshesOwed.Remove(item: slice.Mesh)) {
                 m_meshStaged = false;
                 m_meshLandedSinceStaging = true;
+                // The staged list's owed words fall as its meshes land, so a residency whose view is held (no staging
+                // until it renders again) reads resident once they have; any render stages the landed draws first.
+                if (m_activeOwed.Remove(item: slice.Mesh)) {
+                    Volatile.Write(location: ref m_owedWords, value: (m_owedWords - progress.Words));
+                }
             }
         }
     }

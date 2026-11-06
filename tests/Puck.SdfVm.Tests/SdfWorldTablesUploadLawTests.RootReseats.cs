@@ -90,7 +90,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     // Renders a frame until the mesh region owes none of its meshes.
     private static void LandRootCut(Rig rig, SdfFrame frame) {
         RenderRootCut(rig, frame);
-        for (var count = 0; rig.Engine.MeshesLanding; count++) {
+        for (var count = 0; (rig.Engine.MeshesLanding || rig.Engine.DrawsAwaitMeshes); count++) {
             Assert.True(count < 64);
             RenderRootCut(rig, frame);
         }
