@@ -51,7 +51,8 @@ Repeat `--filter` for alternatives; generated world names and authored test
 names both match, and the verb reports the skipped count. The same selection
 governs `--record` and `--compare`. The lead runs full suites once per batch.
 Timing questions go to `puck measure request` with frozen before/after World
-artifacts (or commits), the bench startup or sweep command, numeric JSON-pointer
+artifacts with explicit `--before-input-tree` and `--after-input-tree` roots
+(or commits, which freeze their whole trees), the bench world, startup or sweep command, numeric JSON-pointer
 metrics and `--decides`. `puck measure list` shows the queue; the lead's
 `puck measure run` takes quiet once and drains it with ABAB pairs, reporting
 median, IQR and paired differences from those existing measurement harnesses.

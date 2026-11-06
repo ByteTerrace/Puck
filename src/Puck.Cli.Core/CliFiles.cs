@@ -8,9 +8,9 @@ namespace Puck.Cli;
 public static class CliFiles {
     private static readonly JsonSerializerOptions Indented = new() { NewLine = "\n", WriteIndented = true };
 
-    public static void CopyDirectory(string source, string destination) {
+    public static void CopyDirectory(string source, string destination, IEnumerable<string>? files = null) {
         Directory.CreateDirectory(path: destination);
-        foreach (var file in Directory.EnumerateFiles(
+        foreach (var file in files ?? Directory.EnumerateFiles(
             path: source,
             searchOption: SearchOption.AllDirectories,
             searchPattern: "*"
