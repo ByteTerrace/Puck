@@ -49,7 +49,11 @@ public sealed record OperatorWorldRequest(string Checkout, string Document, Puck
 /// <param name="Lease">Holds the World's build in its store and, for a windowed World, the GPU lease; released once the World
 /// has exited.</param>
 /// <param name="Refusal">Why no World started, or <see langword="null"/>.</param>
-public sealed record OperatorWorldStart(Process? Process, string? Build, IDisposable? Lease, string? Refusal);
+public sealed record OperatorWorldStart(Process? Process, string? Build, IDisposable? Lease, string? Refusal) {
+    /// <summary>Gets what reads each line the World writes, with whether it came on standard output, so the launch can mark
+    /// the World ready on its own report of steady state; <see langword="null"/> for none.</summary>
+    public Action<string, bool>? Observe { get; init; }
+}
 
 /// <summary>
 /// The Worlds the Operator adapter started: <c>puck_world_start</c> boots one from the build of a checkout's current
@@ -303,7 +307,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         var begun = clock.GetTimestamp();
         var started = new Started(build: start.Build!, checkout: checkout, document: path, lease: start.Lease, leased: windowed, process: process, runDirectory: runDirectory);
 
-        started.Exited = WatchAsync(started: started);
+        started.Exited = WatchAsync(observe: start.Observe, started: started);
         m_started[process.Id] = started;
 
         progress.StderrLog = started.StderrLog;
@@ -502,19 +506,24 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             ConfinedDirectory.RemoveTree(path: runDirectory);
         } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) { }
     }
-    // Copies both streams to the run's log files, and releases the lease once the World has exited.
-    private static async Task WatchAsync(Started started) {
-        async Task CopyAsync(Stream source, string path) {
+    // Copies both streams to the run's log files line by line, showing each line to the launch's readiness, and releases
+    // the lease once the World has exited.
+    private static async Task WatchAsync(Started started, Action<string, bool>? observe) {
+        async Task CopyAsync(StreamReader source, string path, bool stdout) {
             await using var file = new FileStream(access: FileAccess.Write, bufferSize: 0, mode: FileMode.Create, path: path, share: FileShare.ReadWrite | FileShare.Delete);
+            await using var writer = new StreamWriter(stream: file, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)) { AutoFlush = true };
 
             try {
-                await source.CopyToAsync(destination: file).ConfigureAwait(continueOnCapturedContext: false);
+                while (await source.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false) is { } line) {
+                    await writer.WriteLineAsync(value: line).ConfigureAwait(continueOnCapturedContext: false);
+                    observe?.Invoke(arg1: line, arg2: stdout);
+                }
             } catch (IOException) { }
         }
 
         var pumps = Task.WhenAll(
-            CopyAsync(path: started.StdoutLog, source: started.Process.StandardOutput.BaseStream),
-            CopyAsync(path: started.StderrLog, source: started.Process.StandardError.BaseStream)
+            CopyAsync(path: started.StdoutLog, source: started.Process.StandardOutput, stdout: true),
+            CopyAsync(path: started.StderrLog, source: started.Process.StandardError, stdout: false)
         );
 
         try {

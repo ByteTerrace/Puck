@@ -91,9 +91,11 @@ public static class HostAdmission {
     /// heavy suite when <paramref name="heavySuite"/> is set and an ordinary step otherwise.</param>
     /// <param name="tracker">Reads what the starts already admitted still have to grow and reserves this start's peak when it
     /// is admitted; <see langword="null"/> for a tracker of this call alone.</param>
+    /// <param name="reserve">Whether an admitted start reserves its expected peak; a caller that only waits for headroom to
+    /// exist, and judges the start itself later, reserves nothing.</param>
     /// <returns><see langword="true"/> once the host can take the step; <see langword="false"/> when the bound passed
     /// first.</returns>
-    public static bool Wait(string step, bool device, bool heavySuite, Func<HostSample> sample, TimeProvider clock, Action<TimeSpan> delay, TextWriter error, CancellationToken cancellationToken, HostLoadThresholds thresholds, TimeSpan? bound = null, Action<string>? stage = null, HostStartKind? kind = null, HostStartTracker? tracker = null) {
+    public static bool Wait(string step, bool device, bool heavySuite, Func<HostSample> sample, TimeProvider clock, Action<TimeSpan> delay, TextWriter error, CancellationToken cancellationToken, HostLoadThresholds thresholds, TimeSpan? bound = null, Action<string>? stage = null, HostStartKind? kind = null, HostStartTracker? tracker = null, bool reserve = true) {
         var started = clock.GetTimestamp();
         var limit = (bound ?? (heavySuite ? CliLease.DefaultWait : Timeout));
         var printed = started;
@@ -108,7 +110,7 @@ public static class HostAdmission {
             var heavy = (heavySuite ? reading.HeavyTestHolder : null);
             // The peak is judged last: only a start that nothing else holds back reserves its headroom.
             var held = ((gpu is not null) || (heavy is not null) || Shortfalls(reading: reading, thresholds: thresholds, demand: null).Any());
-            var demand = starts.Judge(clock: clock, kind: peak, reading: reading, reserve: !held, thresholds: thresholds);
+            var demand = starts.Judge(clock: clock, kind: peak, reading: reading, reserve: (reserve && !held), thresholds: thresholds);
 
             if (!held && demand.Covered) {
                 if (reason is not null) { error.WriteLine(value: $"gate: capacity returned for {step}."); }
@@ -140,7 +142,7 @@ public static class HostAdmission {
             delay(((remaining < Interval) ? remaining : Interval));
         }
     }
-    /// <summary>Waits as <see cref="Wait(string, bool, bool, Func{HostSample}, TimeProvider, Action{TimeSpan}, TextWriter, CancellationToken, HostLoadThresholds, TimeSpan?, Action{string}?, HostStartKind?, HostStartTracker?)"/>
+    /// <summary>Waits as <see cref="Wait(string, bool, bool, Func{HostSample}, TimeProvider, Action{TimeSpan}, TextWriter, CancellationToken, HostLoadThresholds, TimeSpan?, Action{string}?, HostStartKind?, HostStartTracker?, bool)"/>
     /// does, on this machine's thresholds and a reading from <paramref name="probe"/>, sleeping on the host's timer between
     /// readings. It blocks the calling thread.</summary>
     /// <param name="step">The step's name, for the wait lines.</param>
@@ -155,10 +157,11 @@ public static class HostAdmission {
     /// <param name="kind">What the start is (<see cref="HostStartKind"/>); <see langword="null"/> for a heavy suite when
     /// <paramref name="heavySuite"/> is set and an ordinary step otherwise. The start is read against
     /// <see cref="HostStartTracker.Session"/>.</param>
+    /// <param name="reserve">Whether an admitted start reserves its expected peak.</param>
     /// <returns><see langword="true"/> once the host can take the step; <see langword="false"/> when the bound passed
     /// first.</returns>
-    public static bool Wait(string step, bool device, bool heavySuite, HostProbe probe, TimeProvider clock, TextWriter error, CancellationToken cancellationToken, TimeSpan? bound = null, Action<string>? stage = null, HostStartKind? kind = null) =>
-        Wait(step, device, heavySuite, () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), clock, delay => Task.Delay(cancellationToken: cancellationToken, delay: delay, timeProvider: clock).GetAwaiter().GetResult(), error, cancellationToken, HostLoadThresholds.ThisMachine, bound, stage, kind, HostStartTracker.Session);
+    public static bool Wait(string step, bool device, bool heavySuite, HostProbe probe, TimeProvider clock, TextWriter error, CancellationToken cancellationToken, TimeSpan? bound = null, Action<string>? stage = null, HostStartKind? kind = null, bool reserve = true) =>
+        Wait(step, device, heavySuite, () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), clock, delay => Task.Delay(cancellationToken: cancellationToken, delay: delay, timeProvider: clock).GetAwaiter().GetResult(), error, cancellationToken, HostLoadThresholds.ThisMachine, bound, stage, kind, HostStartTracker.Session, reserve);
     /// <summary>Gets the admission the root hands to the verbs that cannot reference this assembly: each call samples with a
     /// <see cref="HostProbe"/> over the caller's checkout and waits on a thread-pool thread.</summary>
     /// <param name="clock">The clock the bound and the sleeps are measured on.</param>
@@ -166,6 +169,15 @@ public static class HostAdmission {
     public static HostAdmit For(TimeProvider clock) =>
         (checkout, step, device, heavySuite, kind, bound, progress, stage, cancellationToken) => Task.Run(
             function: () => Wait(step, device, heavySuite, new HostProbe(checkoutRoot: checkout), clock, progress, cancellationToken, bound, stage, kind),
+            cancellationToken: cancellationToken
+        );
+    /// <summary>Gets the admission the root installs for World starts (<see cref="WorldAdmission"/>): as <see cref="For"/>,
+    /// with the caller choosing whether an admitted start reserves its peak.</summary>
+    /// <param name="clock">The clock the bound and the sleeps are measured on.</param>
+    /// <returns>The admission.</returns>
+    public static WorldAdmit ForWorlds(TimeProvider clock) =>
+        (checkout, step, device, heavySuite, kind, bound, reserve, progress, stage, cancellationToken) => Task.Run(
+            function: () => Wait(step, device, heavySuite, new HostProbe(checkoutRoot: checkout), clock, progress, cancellationToken, bound, stage, kind, reserve),
             cancellationToken: cancellationToken
         );
 }

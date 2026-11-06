@@ -25,10 +25,13 @@ public sealed class WorldProcess : IDisposable {
     private readonly StreamWriter m_stderr;
     private readonly StreamWriter m_stdout;
 
+    private readonly WorldReadiness m_readiness;
+
     private IDisposable? m_gpu;
 
-    private WorldProcess(Process process, StreamWriter stdout, StreamWriter stderr, IDisposable? gpu) {
+    private WorldProcess(Process process, StreamWriter stdout, StreamWriter stderr, IDisposable? gpu, WorldReadiness readiness) {
         m_gpu = gpu;
+        m_readiness = readiness;
         m_process = process;
         m_stderr = stderr;
         m_stdout = stdout;
@@ -47,7 +50,7 @@ public sealed class WorldProcess : IDisposable {
         }
     }
 
-    internal static WorldProcess Start(string fileName, IReadOnlyList<string> arguments, IReadOnlyDictionary<string, string?>? environment, string workingDirectory, string logDirectory, string logPrefix, IDisposable? gpu) {
+    internal static WorldProcess Start(string fileName, IReadOnlyList<string> arguments, IReadOnlyDictionary<string, string?>? environment, string workingDirectory, string logDirectory, string logPrefix, IDisposable? gpu, Func<Process, WorldReadiness> readiness) {
         _ = Directory.CreateDirectory(path: logDirectory);
 
         // Acquire fallible log sinks before spawning a child. A failure here starts no World.
@@ -59,7 +62,7 @@ public sealed class WorldProcess : IDisposable {
         try {
             stderr = new StreamWriter(path: Path.Combine(path1: logDirectory, path2: $"{logPrefix}stderr.log"), append: false, encoding: Utf8);
             process = WorldLaunch.Contain(process: Puck.Abstractions.ChildProcess.StartRedirected(arguments: arguments, encoding: Utf8, environment: environment, fileName: fileName, workingDirectory: workingDirectory));
-            world = new WorldProcess(gpu: gpu, process: process, stderr: stderr, stdout: stdout);
+            world = new WorldProcess(gpu: gpu, process: process, readiness: readiness(arg: process), stderr: stderr, stdout: stdout);
             Console.Error.WriteLine(value: $"[world.launch: started process {process.Id}]");
         } catch {
             stdout.Dispose();
@@ -191,6 +194,7 @@ public sealed class WorldProcess : IDisposable {
                     var log = ((stream == CliProcessOutputStream.Stdout) ? m_stdout : m_stderr);
 
                     log.WriteLine(value: text);
+                    m_readiness.Observe(line: text, stdout: (stream == CliProcessOutputStream.Stdout));
                     log.Flush();
                     Monitor.PulseAll(obj: m_gate);
                 }

@@ -241,10 +241,10 @@ public sealed class HostAdmissionLawTests {
         var readings = 0;
         var asked = new List<(string Step, bool Device, bool Heavy, HostStartKind Kind)>();
         using var error = new StringWriter();
-        HostAdmit admit = (checkout, step, device, heavySuite, kind, bound, progress, stage, cancellationToken) => {
+        WorldAdmit admit = (checkout, step, device, heavySuite, kind, bound, reserve, progress, stage, cancellationToken) => {
             asked.Add(item: (step, device, heavySuite, kind));
 
-            return Task.FromResult(result: HostAdmission.Wait(step, device, heavySuite, () => ((readings++ < 2) ? Sample(commit: 90, limit: 64) : Sample(commit: 60, limit: 64)), clock, clock.Advance, error, cancellationToken, Thresholds, bound, stage, kind));
+            return Task.FromResult(result: HostAdmission.Wait(step, device, heavySuite, () => ((readings++ < 2) ? Sample(commit: 90, limit: 64) : Sample(commit: 60, limit: 64)), clock, clock.Advance, error, cancellationToken, Thresholds, bound, stage, kind, reserve: reserve));
         };
 
         WorldAdmission.Install(admit: admit);
@@ -331,6 +331,33 @@ public sealed class HostAdmissionLawTests {
         Assert.False(condition: tracker.Judge(reading: Sample(commit: 50, starts: growing), kind: HostStartKind.WindowedWorld, thresholds: Thresholds, clock: new GateClock(), reserve: false).Covered);
         Assert.True(condition: tracker.Judge(reading: Sample(commit: 50), kind: HostStartKind.WindowedWorld, thresholds: Thresholds, clock: new GateClock(), reserve: false).Covered);
     }
+    // Reserved growth covers only the starts that have not reported ready: an idle headless World at 0.6 GB that reported
+    // steady state counts its usage alone (which the charge already holds), so a windowed start that needs 18 GB of the
+    // 22 GB headroom goes ahead beside it; the same World before it reported ready holds its 5.4 GB still to grow and
+    // keeps the start out.
+    [Fact]
+    public void AStartThatReportedReadyReservesNoGrowth() {
+        HostRunningStart[] booting = [new(Id: 9, Kind: HostStartKind.HeadlessWorld, PrivateGb: 0.6)];
+        HostRunningStart[] ready = [new(Id: 9, Kind: HostStartKind.HeadlessWorld, PrivateGb: 0.6, Ready: true)];
+        // Commit 45% of 40 GB leaves 22 GB.
+        var unready = new HostStartTracker().Judge(reading: Sample(commit: 45, starts: booting), kind: HostStartKind.WindowedWorld, thresholds: Thresholds, clock: new GateClock(), reserve: false);
+        var settled = new HostStartTracker().Judge(reading: Sample(commit: 45, starts: ready), kind: HostStartKind.WindowedWorld, thresholds: Thresholds, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (5.4, 1, false), actual: (Math.Round(value: unready.GrowthGb, digits: 6), unready.Growing, unready.Covered));
+        Assert.Equal(expected: (0.0, 0, true, 18.0), actual: (settled.GrowthGb, settled.Growing, settled.Covered, settled.NeedGb));
+    }
+    // A World reports steady state in its own words: a headless World once it answers on its console or publishes its
+    // attachment, a World that opens a device once its renderer is ready or its bakes settle; boot narration is neither.
+    [InlineData("[world.status: tick 3]", true, false, true)]
+    [InlineData("[world.control: operator attachment C:/t/puck-control-1.json]", false, false, true)]
+    [InlineData("[world.host] physical input devices are off (--devices none); this boot shape opens none either way.", false, false, false)]
+    [InlineData("[world.status: tick 3]", true, true, false)]
+    [InlineData("[engine: ready at tick 41]", false, true, true)]
+    [InlineData("[bakes: settled at tick 90]", false, true, true)]
+    [InlineData("[bakes: not settled after 600 seconds, so world.wait released: debug]", false, true, false)]
+    [Theory]
+    public void AWorldReportsReadyInItsOwnWords(string line, bool stdout, bool device, bool ready) =>
+        Assert.Equal(expected: ready, actual: WorldReadiness.Signals(line: line, opensDevice: device, stdout: stdout));
     // Two starts asked in a row cannot take the same headroom: the first admitted start holds its peak until its process
     // shows up, so the second waits, then goes ahead when the process appears (counted at its live size) or the hold passes.
     [Fact]

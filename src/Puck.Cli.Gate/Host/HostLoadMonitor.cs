@@ -25,7 +25,9 @@ public readonly record struct HostSample(DateTimeOffset At, double CpuPercent, d
 /// <param name="Id">The process id.</param>
 /// <param name="Kind">What the process is (<see cref="HostProcesses.RunningStart"/>).</param>
 /// <param name="PrivateGb">The process's private bytes, in gigabytes: the commit it holds now.</param>
-public readonly record struct HostRunningStart(int Id, HostStartKind Kind, double PrivateGb);
+/// <param name="Ready">Whether the process has reported steady state (<see cref="WorldReadiness"/>), so it has no growth
+/// left to reserve.</param>
+public readonly record struct HostRunningStart(int Id, HostStartKind Kind, double PrivateGb, bool Ready = false);
 /// <summary>The thresholds that turn readings into admission lines. A threshold left out is never judged, so with
 /// none the monitor reports only GPU transitions.</summary>
 /// <param name="CapacityCpuPercent">CAPACITY needs the CPU mean below this.</param>

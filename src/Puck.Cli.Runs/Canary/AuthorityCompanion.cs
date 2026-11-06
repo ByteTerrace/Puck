@@ -92,7 +92,7 @@ public sealed class AuthorityCompanion : IDisposable {
     // A headless authority opens no device, so its launch carries no GPU lease to hand over.
     internal static AuthorityCompanion Start(WorldLaunch launch, string quitInput, CancellationToken cancellationToken) {
         cancellationToken.ThrowIfCancellationRequested();
-        var process = launch.StartRedirected(gpu: out _);
+        var process = launch.StartRedirected(gpu: out _, readiness: out _);
         var companion = new AuthorityCompanion(process: process, quitInput: quitInput);
 
         companion.m_cancellation = cancellationToken.Register(callback: companion.Kill);

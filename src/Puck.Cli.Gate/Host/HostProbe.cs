@@ -15,6 +15,24 @@ namespace Puck.Cli.Host;
 /// <param name="checkoutRoot">The checkout whose drive's free disk is read.</param>
 public sealed partial class HostProbe(string checkoutRoot) {
     private (ulong Idle, ulong Total)? m_previous;
+    private string? m_leaseRoot;
+    private bool m_leaseRootRead;
+
+    // The Worlds that have reported steady state (WorldReadiness), read from the checkout's shared lease directory; none
+    // when the checkout names no such directory.
+    private IReadOnlySet<(int ProcessId, long StartTicks)> ReadyWorlds(Dictionary<int, (int Parent, DateTime Started)> tree) {
+        if (!m_leaseRootRead) {
+            m_leaseRootRead = true;
+            try { m_leaseRoot = CliLease.RootAsync(checkout: checkoutRoot).GetAwaiter().GetResult(); } catch (InvalidOperationException) { }
+        }
+        if (m_leaseRoot is null) { return new HashSet<(int, long)>(); }
+
+        try {
+            return WorldReadiness.ReadyAmong(root: m_leaseRoot, running: tree.Where(predicate: static entry => (entry.Value.Started != DateTime.MinValue)).ToDictionary(keySelector: static entry => entry.Key, elementSelector: static entry => entry.Value.Started.ToUniversalTime().Ticks));
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            return new HashSet<(int, long)>();
+        }
+    }
 
     [LibraryImport(libraryName: "kernel32.dll", SetLastError = true)]
     [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
@@ -127,12 +145,13 @@ public sealed partial class HostProbe(string checkoutRoot) {
         var own = HostProcesses.Descendants(processes: tree, root: self);
 
         List<HostRunningStart> starts = [];
+        var ready = ReadyWorlds(tree: tree);
 
         foreach (var (id, name, commandLine, privateGb) in running) {
             var label = $"{name} {id.ToString(provider: CultureInfo.InvariantCulture)}";
 
             if (HostProcesses.RunningStart(commandLine: commandLine, name: name) is { } kind) {
-                starts.Add(item: new HostRunningStart(Id: id, Kind: kind, PrivateGb: privateGb));
+                starts.Add(item: new HostRunningStart(Id: id, Kind: kind, PrivateGb: privateGb, Ready: ready.Contains(item: (id, tree[id].Started.ToUniversalTime().Ticks))));
             }
 
             if ((holder is null) && !own.Contains(item: id) && HostProcesses.IsGpuWork(commandLine: commandLine, name: name)) {

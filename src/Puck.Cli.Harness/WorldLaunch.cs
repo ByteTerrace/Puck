@@ -215,28 +215,66 @@ public sealed class WorldLaunch : IDisposable {
     /// <exception cref="InvalidOperationException">The checkout names no shared lease directory.</exception>
     public static async Task<WorldLaunch> AdmitAsync(WorldLaunchRequest request, CancellationToken cancellationToken = default, Func<IDisposable>? queue = null, Action<string>? stage = null) {
         using var waiting = queue?.Invoke();
-        IDisposable? gpu = null;
 
-        try {
-            if (request.OpensDevice) {
-                stage?.Invoke(obj: "gpu-lease");
+        if (!request.OpensDevice) {
+            stage?.Invoke(obj: "host-admission");
+            await AdmitHostAsync(bound: null, cancellationToken: cancellationToken, request: request, reserve: true, stage: stage, refuse: true).ConfigureAwait(continueOnCapturedContext: false);
 
-                var checkout = (request.Checkout ?? (CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root) ? root : Environment.CurrentDirectory));
+            return new WorldLaunch(gpu: null, request: request);
+        }
 
-                gpu = await WorldGpuHold.AcquireAsync(cancellationToken: cancellationToken, checkout: checkout, holder: (request.Holder ?? request.Step), lane: (request.Lane ?? CliLease.LaneOf(checkout: checkout))).ConfigureAwait(continueOnCapturedContext: false);
+        var checkout = (request.Checkout ?? (CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root) ? root : Environment.CurrentDirectory));
+
+        // A device World waits for headroom before it asks for the GPU lease, reserving nothing, so the GPU never idles
+        // under a lease while memory is short. Headroom is then judged again, and reserved, with the lease held: the lease
+        // is what serializes device starts across processes (a reservation lives only in the process that made it), so of
+        // two device starts only the holder reads the headroom it is about to take. A leased judgement that does not pass
+        // within LeasedAdmissionBound gives the lease back and waits for headroom again rather than idling the GPU.
+        for (var attempt = 1; ; attempt++) {
+            stage?.Invoke(obj: "host-admission");
+            await AdmitHostAsync(bound: null, cancellationToken: cancellationToken, refuse: true, request: request, reserve: false, stage: stage).ConfigureAwait(continueOnCapturedContext: false);
+            stage?.Invoke(obj: "gpu-lease");
+
+            var gpu = await WorldGpuHold.AcquireAsync(cancellationToken: cancellationToken, checkout: checkout, holder: (request.Holder ?? request.Step), lane: (request.Lane ?? CliLease.LaneOf(checkout: checkout))).ConfigureAwait(continueOnCapturedContext: false);
+
+            try {
+                stage?.Invoke(obj: "host-admission");
+
+                if (await AdmitHostAsync(bound: LeasedAdmissionBound, cancellationToken: cancellationToken, refuse: false, request: request, reserve: true, stage: stage).ConfigureAwait(continueOnCapturedContext: false)) {
+                    return new WorldLaunch(gpu: gpu, request: request);
+                }
+            } catch {
+                gpu.Dispose();
+
+                throw;
             }
 
-            // Headroom is judged with the lease held, so the one start that holds it reads the machine before it takes any.
-            stage?.Invoke(obj: "host-admission");
-            await WorldAdmission.AdmitAsync(cancellationToken: cancellationToken, device: request.OpensDevice, heavySuite: request.HeavySuite, kind: request.Kind, stage: stage, step: request.Step).ConfigureAwait(continueOnCapturedContext: false);
+            gpu.Dispose();
 
-            return new WorldLaunch(gpu: gpu, request: request);
-        } catch {
-            gpu?.Dispose();
-
-            throw;
+            if (attempt == MaximumRequeues) { throw new HostAdmissionRefusedException(step: request.Step); }
+            Console.Error.WriteLine(value: $"{request.Step}: the host's headroom went to another start while the GPU lease was held; released it and waiting for headroom again.");
         }
     }
+
+    /// <summary>The longest a device start judges headroom while it holds the GPU lease before it gives the lease back:
+    /// three readings at the host admission's ten-second interval, so the GPU idles under a lease for no longer.</summary>
+    public static readonly TimeSpan LeasedAdmissionBound = TimeSpan.FromSeconds(seconds: 30);
+    /// <summary>How many times a device start gives the GPU lease back for headroom before it is refused.</summary>
+    public const int MaximumRequeues = 8;
+
+    private static async Task<bool> AdmitHostAsync(WorldLaunchRequest request, TimeSpan? bound, bool reserve, bool refuse, Action<string>? stage, CancellationToken cancellationToken) {
+        var admitted = await WorldAdmission.TryAdmitAsync(bound: bound, cancellationToken: cancellationToken, device: request.OpensDevice, heavySuite: request.HeavySuite, kind: request.Kind, reserve: reserve, stage: stage, step: request.Step).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (!admitted && refuse) { throw new HostAdmissionRefusedException(step: request.Step); }
+
+        return admitted;
+    }
+    // The readiness of a World this launch started, which marks it ready on its own report of steady state.
+    private WorldReadiness Readiness(Process process) => WorldReadiness.For(
+        checkout: (m_request.Checkout ?? (CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root) ? root : Environment.CurrentDirectory)),
+        opensDevice: m_request.OpensDevice,
+        process: process
+    );
 
     /// <summary>Runs the admitted World to exit with its streams captured, as <see cref="CliProcess.RunCaptured"/> does,
     /// and releases the GPU lease once it has exited.</summary>
@@ -256,6 +294,8 @@ public sealed class WorldLaunch : IDisposable {
     public CliProcessResult Run(string input, TimeSpan timeout, CancellationToken cancellationToken = default, Func<CliProcessOutputLine, bool>? continueWhen = null, string continuationInput = "", Task? continuationGate = null, Action<CliProcessOutputLine>? onOutput = null, bool retainOutput = true) {
         Use();
 
+        WorldReadiness? readiness = null;
+
         try {
             return CliProcess.RunCaptured(
                 arguments: m_request.CommandLine(),
@@ -266,9 +306,15 @@ public sealed class WorldLaunch : IDisposable {
                 environment: m_request.Environment,
                 fileName: m_request.FileName,
                 input: input,
-                onOutput: onOutput,
+                onOutput: line => {
+                    readiness?.Observe(line: line.Line, stdout: (line.Stream == CliProcessOutputStream.Stdout));
+                    onOutput?.Invoke(obj: line);
+                },
                 retainOutput: retainOutput,
-                started: ChildProcessJob.Assign,
+                started: process => {
+                    ChildProcessJob.Assign(process: process);
+                    readiness = Readiness(process: process);
+                },
                 timeout: timeout,
                 workingDirectory: m_request.WorkingDirectory
             );
@@ -288,7 +334,7 @@ public sealed class WorldLaunch : IDisposable {
         Use();
 
         try {
-            var process = WorldProcess.Start(fileName: m_request.FileName, arguments: m_request.CommandLine(), environment: m_request.Environment, gpu: m_gpu, logDirectory: logDirectory, logPrefix: logPrefix, workingDirectory: (m_request.WorkingDirectory ?? Environment.CurrentDirectory));
+            var process = WorldProcess.Start(fileName: m_request.FileName, arguments: m_request.CommandLine(), environment: m_request.Environment, gpu: m_gpu, logDirectory: logDirectory, logPrefix: logPrefix, readiness: Readiness, workingDirectory: (m_request.WorkingDirectory ?? Environment.CurrentDirectory));
 
             m_gpu = null;
 
@@ -298,18 +344,21 @@ public sealed class WorldLaunch : IDisposable {
         }
     }
     /// <summary>Starts the admitted World with its standard streams redirected and unread, for an owner that reads them
-    /// itself. The caller owns the returned GPU lease and disposes it once the World has exited.</summary>
+    /// itself. The caller owns the returned GPU lease and disposes it once the World has exited, and passes every line it
+    /// reads to the returned readiness, so the host admission stops reserving the World's growth once it reports ready.</summary>
     /// <param name="gpu">The GPU lease the World runs under, or <see langword="null"/> for a World that opens no
     /// device.</param>
+    /// <param name="readiness">The World's readiness, which the caller feeds the lines it reads.</param>
     /// <returns>The started process.</returns>
     /// <exception cref="InvalidOperationException">This launch already started its World, or the World could not start
     /// or join the job that ends it with this process.</exception>
-    public Process StartRedirected(out IDisposable? gpu) {
+    public Process StartRedirected(out IDisposable? gpu, out WorldReadiness readiness) {
         Use();
 
         try {
-            var process = Contain(process: Puck.Abstractions.ChildProcess.StartRedirected(arguments: m_request.CommandLine(), environment: m_request.Environment, fileName: m_request.FileName, workingDirectory: m_request.WorkingDirectory));
+            var process = Contain(process: Puck.Abstractions.ChildProcess.StartRedirected(arguments: m_request.CommandLine(), encoding: new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false), environment: m_request.Environment, fileName: m_request.FileName, workingDirectory: m_request.WorkingDirectory));
 
+            readiness = Readiness(process: process);
             gpu = m_gpu;
             m_gpu = null;
 
