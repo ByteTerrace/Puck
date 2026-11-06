@@ -161,7 +161,7 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
     }
 
     private void Count(nint heap, ulong bytes) =>
-        _ = m_memory?.CountAllocated(
+        m_memory?.CountAllocated(
             allocation: heap,
             bytes: checked((long)bytes),
             device: m_device,

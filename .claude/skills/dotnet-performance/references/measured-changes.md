@@ -81,7 +81,7 @@ techniques and the defects review found are what transfer. Each technique cites 
 | Hoist keyed setup out of a repeated operation | #70157 | `SdfWorldTables.UpdateTablesSignature` hashes each region once with `XxHash3` ([source](../../../../src/Puck.SdfVm/SdfWorldTables.Cadence.cs)) |
 | Size first, then write once into the final destination | #70134 | `SdfWorldTables.StageChangedDraws` writes a draw straight into its staged record ([source](../../../../src/Puck.SdfVm/SdfWorldTables.MeshRegion.cs)) |
 | Remove re-copies and rescans of finished work | #70139 | `SdfMeshPathBake.Pending`'s done-through cursor ([source](../../../../src/Puck.SdfVm/SdfMeshPathBake.cs)) |
-| Allocate rarely used state on first use | #70189 | `WorldEffectorSolver.TryProbeSurface` builds its answer ring on a thread's first probe ([source](../../../../src/Puck.World.Client/WorldEffectorSolver.cs)) |
+| Allocate rarely used state on first use | #70189 | `SdfFieldEvaluator`'s point walk builds its reach scratch on a thread's first walk ([source](../../../../src/Puck.SignedDistance/Queries/SdfFieldEvaluator.PointWalk.cs)) |
 | A `static` lambda with a state argument, not a capturing closure | #70185 | `WorldSchema.ResolveDescriptionForMember` ([source](../../../../src/Puck.World.Schema/WorldSchema.cs)) |
 | Without PGO, loop over the concrete collection where an interface enumerator boxes | #70147 | `SdfMeshPathBake` indexes copy membership when topology changes; `SdfMeshDresser` reads retained bindings instead of enumerating all copies per group |
 | Format text only when it is emitted | #70178 | `GenlockPhaseAligner.LogPhase` checks `IsEnabled` first ([source](../../../../src/Puck.Launcher/GenlockPhaseAligner.cs)) |

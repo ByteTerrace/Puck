@@ -17,6 +17,7 @@ let waterGlass = {
   ior: 1.333
   scatter: "#1A8A94"
   scattering: 0.35
+  shadowDensity: 0.8
   contact { reach: 0.4, coverage: 0.6 }
 }
 // The white the water's foam and streaks reveal.
@@ -115,7 +116,7 @@ let streamGlass = waterGlass with { scattering: 4, contact { reach: 0.06, covera
 // A falls runs down every sheet at the sheet's own slope: only the velocity's part along a surface moves it. Its velocity
 // and pattern are in world space, so the flow runs down a sheet however the sheet turns. A world that binds a render lane
 // to its discharge thins the foam with it (`coverageLane`, a world lane from 4 to 7: `fallsFlowLayer with { coverageLane:
-// 4 }` under `render { lanes ["state.meltStrength"] }`).
+// 4 }` under `render { lanes ["state.fallsFlow"] }`).
 let fallsFlowLayer = {
   frame: World
   velocity [0, -4, 0]
@@ -177,11 +178,12 @@ template streamSegment(id, length, width = 4.5, overlap = 0.5, palette = waterPa
 }
 // A falls is a ribbon of sheets down the wall's profile, its shading falling down each sheet (`flow`). Each sheet turns
 // about its own flow axis as the discharge `state.<gauge>` falls from one to zero, edge-on to the valley at zero, so the
-// falls narrows as it ebbs; the flow's foam thins with it where the world binds the flow's coverage to a lane. The caller
-// supplies the endpoint visibility, which parks the edge-on ribbon when the falls runs dry. The sheets are glass (`glass`):
-// the rock shows through them, and as glass they cast no shadow. A sheet's `thickness` is what a view along the wall
+// falls narrows as it ebbs; the flow's foam thins with it where the world binds the flow's coverage to a lane. The
+// endpoint visibility `state.<visible>` (one or zero) parks the edge-on ribbon when the falls runs dry; both gauges are the
+// chain's own, never the clock. The sheets are glass (`glass`):
+// the rock shows through them and the authored glass density shades it. A sheet's `thickness` is what a view along the wall
 // crosses many times over, so a thick sheet's medium covers the rock behind it.
-template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gauge = "meltStrength", visible = "meltVisible", palette = waterPalette, flow = fallsFlowLayer, glass = fallsGlass) {
+template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gauge = "fallsFlow", visible = "fallsVisible", palette = waterPalette, flow = fallsFlowLayer, glass = fallsGlass) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -306,7 +308,7 @@ let gaugePalette = [
 ]
 
 // Spray is an ordinary cloud volume. The same state driver scales its support and hides it when discharge is zero.
-template impactSpray(id, gauge = "meltStrength", extent = [7, 4, 5]) {
+template impactSpray(id, gauge = "fallsFlow", extent = [7, 4, 5]) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"

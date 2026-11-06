@@ -196,7 +196,7 @@ public static class SdfEncodingProbe {
                         new SdfPaint(Color: new Vector3(x: v[77], y: v[78], z: v[79]), Origin: Vector3.Zero, Rotation: Quaternion.Identity, Shape: SdfPaintShape.Of(curve: new SdfSweepParameters(A: new Vector3(x: v[70], y: v[71], z: v[72]), B: new Vector3(x: v[73], y: v[74], z: v[75]), Bulge: 0f, C: new Vector3(x: 0.9f, y: 0.1f, z: 0.2f), RadiusEnd: v[76], RadiusStart: v[76], StrandOffset: 0f, Strands: 1, Twist: 0f), scale: Vector3.One, type: SdfSolidPrimitive.Sweep), Stroke: 0f, Slot: 3),
                     ],
                     EmissiveLane: ((int)v[80]),
-                    Glass: new SdfGlass(Depth: v[81], Ior: v[82], Scatter: new Vector3(x: v[119], y: v[120], z: v[121]), Scattering: v[122], ContactReach: v[123], ContactCoverage: v[124]),
+                    Glass: new SdfGlass(Depth: v[81], Ior: v[82], Scatter: new Vector3(x: v[119], y: v[120], z: v[121]), Scattering: v[122], ContactReach: v[123], ContactCoverage: v[124], ShadowDensity: v[125]),
                     Toon: new SdfToon {
                         Enabled = true, Band = SdfToonBand.Combined, Threshold = v[83], Softness = v[84],
                         ShadowTint = new Vector3(x: v[85], y: v[86], z: v[87]), OutlineWidth = v[88], OutlineDistance = v[89],
@@ -231,7 +231,7 @@ public static class SdfEncodingProbe {
                 2f, 0.004f, 1.5f, 0.41f, 0.12f, 0.31f, 0.42f, 0.53f, 1.25f, 10f, 0.6f, 0.11f,
                 0.21f, 0.32f, 0.03f, 0.75f, 0.7f, 2.03f, 0.4f, 0.1f, 0.2f, 0.3f, 0.9f,
                 0.4f, -0.2f, 1.1f, 1.5f, 3f, 2.5f, 0.3f, 0.45f, 0.2f, 0.9f, 0.95f, 0.97f, 0.1f, 0.6f, 77f, 1f,
-                0.35f, 0.65f, 0.72f, 0.8f, 0.25f, 0.55f,
+                0.35f, 0.65f, 0.72f, 0.8f, 0.25f, 0.55f, 0.4f,
             ],
             name: "material"
         );
@@ -289,7 +289,7 @@ public static class SdfEncodingProbe {
         Describe(calls: Calls());
     /// <summary>Describes the encoding a set of probe calls exercises. For each call: its packed program's word count and
     /// every word that holds an integer (its exponent bits clear of any float the probe produces, so a count, an offset,
-    /// an enum, a flag or a packed bitfield), by offset; then, for each input, which words move when that input alone is
+    /// an enum, a flag or a packed bitfield), by offset; then, for each input that moves a word, which words move when that input alone is
     /// raised: every integer word that moves with the bits its change spans, and every float word that moves; then, for
     /// each float word that moves, the input that moves it the most, or that the largest moves tie.</summary>
     /// <param name="calls">The calls.</param>
@@ -337,6 +337,12 @@ public static class SdfEncodingProbe {
                 raised[input] = Raised(value: raised[input]);
 
                 var moved = wordsOf(arg: Build(call: call, inputs: raised));
+
+                // An input that moves no described word is left out, so an input a call adds for words outside the
+                // view (a material field, under the field words) leaves the view's description as it was.
+                if ((moved.Length == baseline.Length) && moved.AsSpan().SequenceEqual(other: baseline)) {
+                    continue;
+                }
 
                 text.Append(provider: CultureInfo.InvariantCulture, handler: $"  input {input}:");
 

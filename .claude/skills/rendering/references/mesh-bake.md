@@ -650,7 +650,12 @@ laws exercise that boundary.
   line's `gpu-work=[…]` reads jobs, their measured GPU time, the wall time some
   job was in flight and the GPU's share of it, the most in flight, the pumps,
   the pumps the World set could not be bound in and those the budget held;
-  `world.gpu-timing` does not see the work. Gradients are measured only at the
+  `world.gpu-timing` does not see the work. A slot's readback and the bake's
+  per-slot point table, sampled table, masks and samples grow to its largest
+  batch and go once a free slot has not needed them for `SdfGpuWork.IdleSeconds`
+  (`ISdfGpuWorkClient.ReleaseIdle`, called only where `Refill` would reuse the
+  slot), so a settled bake holds none; `world.residency`'s `gpu-work` line
+  reads what remains. Gradients are measured only at the
   samples `SdfDualContouring` reads a normal at
   (`SdfSampledLattice.GradientPoints`): a cell's normal reads its own eight
   corners, so no other sample needs one.

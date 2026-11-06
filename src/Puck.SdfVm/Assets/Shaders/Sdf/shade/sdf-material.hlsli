@@ -43,6 +43,7 @@ struct SdfMaterialData {
     float scattering;
     float contactReach;
     float contactCoverage;
+    float shadowDensity;
     // The material's own cel style (SdfToon, rows 22 to 25), laid out as the pass block's toon members: bands (mode,
     // threshold, softness, specular size), shadow (tint, exposure gain), outline (width, distance, normal, shoulder),
     // ink (tint). A zero mode inherits the world's default style (sdfToonStyle).
@@ -144,6 +145,7 @@ SdfMaterialData sdfMaterialLoad(int material) {
     data.scattering = asfloat(sdfWords[materialBase + 31u]).w;
     data.contactReach = f16tof32(sdfWords[materialBase + 20u].w & 0xFFFFu);
     data.contactCoverage = f16tof32(sdfWords[materialBase + 20u].w >> 16u);
+    data.shadowDensity = asfloat(sdfWords[materialBase + 25u]).w;
     data.toonBands = asfloat(sdfWords[materialBase + 22u]);
     data.toonShadow = asfloat(sdfWords[materialBase + 23u]);
     data.toonOutline = asfloat(sdfWords[materialBase + 24u]);

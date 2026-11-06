@@ -1,0 +1,58 @@
+// The probes of the water's arc, imported by the two scenarios that assert it (`water-arc-tests.puck` on the debug world,
+// `water-chain-tests.puck` on the chain alone; a scenario's `test` block must be in its own document, so the claims stand
+// in each). The arc: the glacier melts over three hours of simulated time as (1 - t/T)^3 (324 000 ticks at 30 Hz); the lake
+// rests at its sill; the falls carry the melt as it melts and run dry within a quarter hour of T; the confined aquifer
+// fills by 3T/4 and then backs the river up; and the river is settled within half an hour of T (water.puck, the standard's
+// hydrology). Every gauge is latched into a probe table at each milestone, and `--reproduce` shows the run replays bit for
+// bit.
+
+// The probe rows a scenario's claims read.
+exports {
+  reads [glacierAt, lakeAt, fallsAt, riverAt, aquiferAt, poolAt, totalAt]
+}
+
+// Ticks of the melt, T, and the milestones probed: every eighth of the melt, then the settling tail at T + 15, 30 and
+// 45 minutes.
+let arcMeltTicks = 324000
+let arcTail = 27000
+let arcMilestones = concat(map(range(0, 9), i => i * arcMeltTicks / 8), map(range(1, 4), j => arcMeltTicks + j * arcTail))
+
+let arcProbes = ["glacierAt", "lakeAt", "fallsAt", "riverAt", "aquiferAt", "poolAt"]
+state {
+  world {
+    for name in arcProbes {
+      row {
+        name: name
+        kind: "Fixed"
+        capacity: length(arcMilestones)
+        min: "0"
+        max: "4"
+        cells: map(range(0, length(arcMilestones)), i => { key: $"{i}", value: "0" })
+      }
+    }
+    row {
+      name: "totalAt"
+      kind: "Fixed"
+      capacity: length(arcMilestones)
+      min: "0"
+      max: "1000"
+      cells: map(range(0, length(arcMilestones)), i => { key: $"{i}", value: "0" })
+    }
+  }
+}
+
+// Each probe fires once, on the first tick at or past its milestone (the first probe at tick 30, once the chain has
+// stepped), and copies the gauges of that tick.
+for (m, i) in arcMilestones {
+  rule $"water-arc-probe-{i}" {
+    when $tick >= maximum(30, m)
+    mode: Edge
+    glacierAt[i] = glacier
+    lakeAt[i] = lakeLevel
+    fallsAt[i] = fallsFlow
+    riverAt[i] = riverDepth
+    aquiferAt[i] = aquiferFill
+    poolAt[i] = poolLevel
+    totalAt[i] = hydroTotal
+  }
+}

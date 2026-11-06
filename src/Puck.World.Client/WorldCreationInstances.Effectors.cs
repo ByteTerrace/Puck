@@ -82,6 +82,8 @@ public sealed partial class WorldCreationInstances {
             var goal = new EffectorGoal(
                 client: client,
                 effector: effector,
+                index: index,
+                live: live,
                 reads: live.Reads,
                 rootRotation: rootRotation,
                 scale: placementScale,
@@ -114,7 +116,10 @@ public sealed partial class WorldCreationInstances {
                     target: out targetWorld
                 );
             } else {
-                resolved = goal.Resolve(normal: out normalWorld, target: out targetWorld);
+                // A closed gate eases the tip off its target; once its weight has reached zero no solve reads a target,
+                // so none is asked.
+                (targetWorld, normalWorld) = (tipWorld, Vector3.UnitY);
+                resolved = ((live.EffectorWeight[index] > 0f) && goal.Resolve(normal: out normalWorld, target: out targetWorld));
                 // A contact released in flight cannot be reused on a later landing at another world point.
                 live.EffectorPlanted[index] = false;
                 live.EffectorStepping[index] = false;
@@ -346,7 +351,7 @@ public sealed partial class WorldCreationInstances {
         return true;
     }
     // The effector's goal for one frame: resolved (TryResolveTarget) at most once, and only when a branch reads it.
-    private ref struct EffectorGoal(CreationEffectorDocument effector, IWorldStampSource client, WorldStateLease reads, Vector3 tipWorld, Quaternion rootRotation, float scale) {
+    private ref struct EffectorGoal(CreationEffectorDocument effector, Registration live, int index, IWorldStampSource client, WorldStateLease reads, Vector3 tipWorld, Quaternion rootRotation, float scale) {
         private bool m_asked;
         private bool m_resolved;
         private Vector3 m_target;
@@ -356,6 +361,7 @@ public sealed partial class WorldCreationInstances {
             if (!m_asked) {
                 m_asked = true;
                 m_resolved = TryResolveTarget(
+                    answer: ref live.EffectorProbe[index],
                     client: client,
                     effector: effector,
                     normal: out m_normal,
@@ -706,7 +712,7 @@ public sealed partial class WorldCreationInstances {
     // body target that is not live, a state cell that holds no point. The normal is the probed surface's; a body or
     // state target names no surface and reports world up. A surface probe's reach and standoff are the body's own
     // lengths, at its scale.
-    private static bool TryResolveTarget(CreationEffectorDocument effector, IWorldStampSource client, WorldStateLease reads, Vector3 tipWorld, Quaternion rootRotation, float scale, out Vector3 target, out Vector3 normal) {
+    private static bool TryResolveTarget(ref WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer> answer, CreationEffectorDocument effector, IWorldStampSource client, WorldStateLease reads, Vector3 tipWorld, Quaternion rootRotation, float scale, out Vector3 target, out Vector3 normal) {
         target = tipWorld;
         normal = Vector3.UnitY;
 
@@ -744,6 +750,7 @@ public sealed partial class WorldCreationInstances {
                 }
             default: {
                     return WorldEffectorSolver.TryProbeSurface(
+                        answer: ref answer,
                         field: client.StaticField,
                         origin: tipWorld,
                         reach: ((goal.Reach?.Value ?? 0f) * scale),
@@ -890,7 +897,8 @@ public readonly record struct WorldRigDriver(string Name, float Phase, float Wei
 /// <param name="Weight">Its eased gate weight in [0, 1].</param>
 /// <param name="Planted">Whether its contact latch is holding a target this frame.</param>
 /// <param name="Target">The world point its tip is being asked for, or <see langword="null"/> when nothing
-/// resolved (a probe that found no surface, an inactive body target, a cell holding no point).</param>
+/// resolved (a probe that found no surface, an inactive body target, a cell holding no point) or nothing was asked (a
+/// closed gate whose weight has eased to zero).</param>
 /// <param name="Bones">The bones its chain resolved to — fewer than
 /// <see cref="CreationEffectorDocument.MinChainBones"/> means the effector is inert.</param>
 /// <param name="Stepping">Whether its resting plant is mid-step toward a new point

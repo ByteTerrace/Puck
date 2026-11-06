@@ -294,7 +294,12 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
     // Arms the stop's pinned steps from a start tick a lead after the World's completed tick, and names the tick the
     // capture is pinned to. False, with the reason added, when the World's tick could not be read or the steps were refused.
-    private bool Pin(SweepStop stop, SweepTour tour, List<string> reasons, out ulong captureTick, out IReadOnlyList<(ulong Tick, string Command)> expected) {
+    private bool Pin(SweepStop stop, SweepTour tour, List<string> reasons, out ulong captureTick, out IReadOnlyList<(ulong Tick, string Command)> expected) =>
+        PinStop(world, stop, tour, "world.rate pause", reasons, out captureTick, out expected);
+
+    /// <summary>Arms a stop's authored framing and steps, followed by a final line at its settle tick, and resumes it.</summary>
+    public static bool PinStop(SweepWorld world, SweepStop stop, SweepTour tour, string finalLine, List<string> reasons,
+        out ulong captureTick, out IReadOnlyList<(ulong Tick, string Command)> expected) {
         captureTick = 0UL;
         expected = [];
 
@@ -319,7 +324,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
         var steps = (tour.Frame ?? []).Select(selector: line => new SweepStep(At: 0, Run: line)).Concat(second: (stop.Steps ?? [])).ToArray();
 
-        steps = [.. steps, new SweepStep(At: (stop.Settle ?? tour.Settle), Run: "world.rate pause")];
+        steps = [.. steps, new SweepStep(At: (stop.Settle ?? tour.Settle), Run: finalLine)];
         expected = steps.Select(selector: step => ((start + ((ulong)step.At)), step.Run)).ToArray();
         {
             var script = JsonSerializer.Serialize(value: new { start, steps = steps.Select(selector: static step => new { at = step.At, run = step.Run }) });
@@ -339,7 +344,10 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
     // Why the World can no longer be driven, or null while it can.
     private string? Stopped() => (world.Gone ? "the World's attachment closed" : world.Budget.Reason);
     // Tick waits advance a bounded interval; readiness waits and coordinator round trips leave authority held.
-    private SweepAnswer TourLine(string line) {
+    private SweepAnswer TourLine(string line) => RunTourLine(world, line);
+
+    /// <summary>Runs authored tour lines with bounded tick waits, temporarily resuming a paused world for a wait.</summary>
+    public static SweepAnswer RunTourLine(SweepWorld world, string line) {
         if (!TryTickWait(line: line, ticks: out var ticks) || (ticks <= WaitChunkTicks)) {
             return world.Run(script: TickWaits(script: line), timeoutSeconds: 120);
         }

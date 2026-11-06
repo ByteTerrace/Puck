@@ -1,6 +1,6 @@
 # Puck.Cli.Bench
 
-Puck.Cli.Bench holds `puck bench`: the Puck.Maths and State kernel benchmarks, State evidence, and the startup and World lanes.
+Puck.Cli.Bench holds `puck bench`: the Puck.Maths and State kernel benchmarks, State evidence, and the startup, windowed frames and World lanes.
 
 ## Documentation
 

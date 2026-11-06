@@ -140,7 +140,7 @@ agree closely.
 
 A thread-time trace finds the frame thread busy all the time. Within produce,
 the largest costs are CPU field queries: the creation effectors' surface probes
-(`WorldCreationInstances.ApplyEffectors` into `WorldEffectorSolver.Probe`) and
+(`WorldCreationInstances.ApplyEffectors` into `WorldSurfaceQuery.March`) and
 the chase camera's clearance march (`WorldCameraClearance.Clear`), which together
 take roughly a third of the frame. The presenter's `Dress` label is mostly that
 clearance march, not draw work. Mesh dressing and changed-draw staging, residency

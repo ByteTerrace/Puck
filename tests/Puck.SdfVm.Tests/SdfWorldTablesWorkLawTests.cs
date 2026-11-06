@@ -363,6 +363,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                 meshRaster: MeshRaster,
                 shadowRaster: ShadowRaster,
                 shadowExitRaster: ShadowRaster,
+                shadowGlassRaster: ShadowRaster,
                 glassRaster: GlassRaster,
                 occlusion: Occlusion,
                 regionCopy: RegionCopy.Compute!

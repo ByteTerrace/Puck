@@ -299,6 +299,24 @@ public sealed class SdfAppearance {
         return words;
     }
 
+    // MaterialVectorsPerEntry float4 rows. KEEP IN SYNC with sdfMaterialLoad in shade/sdf-material.hlsli.
+    // 0..3 base shading; 4..7 inset frame/ramp controls; 8..11 radial stops;
+    // 12..13 weathering controls; 14..17 two reveal surfaces; 18..19 deposit; 26 the pattern lattice's turn;
+    // 20 the paints and the emissive lane: (first paint's vector, paint count, emissive lane + 1 or 0 for a static
+    // emissive, a glass's contact: its reach in the low half and its coverage in the high, half floats, zero for none) as
+    // uint bits; 21 the glass: (absorption per world unit, index of refraction), zero for an opaque material, so a positive
+    // index says glass; 31 the glass's medium: (scatter colour, scattering per world unit), zero for none (KEEP IN SYNC
+    // with sdfGlassContact and the medium in passes/sdf-glass.comp.hlsl); 22..25 the material's own cel style (SdfToon.WriteRows; KEEP IN SYNC with
+    // sdfToonStyle in shade/sdf-toon.hlsli), all zero to inherit the world's default, a mode of -1 for a style that
+    // keeps the material continuous. Row 25.w carries glass shadow extinction per world unit, independent of cel ink RGB.
+    // Bleed occupies 2.w/7.zw, and indirect receive is 3.w. Weathering pattern XYZ uses
+    // 15.w/17.w/19.z; noise coverage is 19.w; reveal softness is 17.z. The second octave's frequency ratio is 15.z and
+    // its gain 18.w (zero reads one octave); the turn is row 26 as a unit quaternion (x, y, z, w). A reveal stage is
+    // present when its threshold (14.w, 16.w) is positive, and a deposit when the settle share (12.z) is.
+    // 27..30 the flow layer (SdfFlow; KEEP IN SYNC with sdfApplyFlow in shade/shade-layers.hlsli): 27 (velocity,
+    // pattern scale), 28 (stretch, cycles per clock period, tilt, coverage), 29 (revealed colour, softness), 30 (revealed
+    // roughness, revealed metal, seed bits, control bits: FlowControl); all zero for a material with no flow, which a zero
+    // scale says.
     /// <summary>Writes the material table at a vector of a program's word stream, then the paints after it, every paint
     /// and side-table reference naming its absolute vector: the stream's appearance section, which follows every table
     /// the field interpreter reads.</summary>
@@ -344,7 +362,7 @@ public sealed class SdfAppearance {
                 paintCursor += PaintVectorsPerEntry;
             }
             if (m.Toon is { } toon) {
-                toon.WriteRows(inkW: 0f, mode: (toon.Enabled ? toon.Mode : -1f), rows: toonRows);
+                toon.WriteRows(inkW: (m.Glass?.ShadowDensity ?? 0f), mode: (toon.Enabled ? toon.Mode : -1f), rows: toonRows);
                 for (var row = 0; (row < toonRows.Length); row++) {
                     Row(row: (22 + row), value: toonRows[row]);
                 }
@@ -368,6 +386,8 @@ public sealed class SdfAppearance {
             if (m.Glass is { } glass) {
                 Row(row: 21, value: new(value: glass.Absorption(tint: m.Albedo), w: glass.Ior));
                 Row(row: 31, value: new(value: glass.Scatter, w: glass.Scattering));
+                // Row 25.w is independent of the cel ink's RGB; keep the existing table stride.
+                if (m.Toon is null) { Row(row: 25, value: new Vector4(0f, 0f, 0f, glass.ShadowDensity)); }
             }
             if (m.Inset is { } inset) {
                 var paint = inset.Paint;

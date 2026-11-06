@@ -59,6 +59,29 @@ an eight-tick pan can finish before the first of eight asynchronous captures lan
 
 ## Mesh pipeline limits
 
+Glass shadow extinction is authored by `SdfGlass.ShadowDensity` (zero by
+default; standard water opts in). Cascade selection's fourth indirect phase
+routes glass to `SdfMeshRasterPass.ShadowGlassKey`; opaque entry/exit stay in
+their existing phases. Count glass vertices once, opaque vertices twice.
+The cascade's optical-depth buffer integrates to its first opaque depth with
+the shared `frame/sdf-optical-depth.hlsli` accumulator. Surface shadow taps
+read extinction and nearest glass entry beside the opaque depths. Glass is
+still absent from the irradiance trace. Keep the separate glass descriptor
+set: binding the sampled entry depth while it is an attachment is invalid on
+Vulkan even when an earlier shader does not read that binding. Return the
+entry depth to its attachment layout before the graph's outgoing transition.
+Material row 25.w carries shadow density beside cel ink RGB; keep its C# pack
+and HLSL load together without changing the row stride.
+For a neutral-default comparison, omit density from both prototype palettes
+and field materials in `state.world`; changing only the prototypes leaves
+field water shadowing. Compare the original and new surface shadow estimator
+in the same paused World to keep geometry and temporal capture state fixed.
+`world.shaders.reload` replaces that kernel but not `SdfMeshRasterPass`'s
+occlusion/selection pipeline; a selection diagnostic needs a rebuilt host.
+For an independent vertex check, `world.cull off` and one fixed `world.detail`
+level make the mesh, glass and cascades select the same geometry: each cascade
+must count twice the mesh vertices plus exactly the glass vertices.
+
 Draw selection reads the retained `SdfWorldTables` staged draw span, the same
 records whose boxes and GPU records were uploaded. Never borrow the frame source's
 mutable draw list across staging: a portal handoff can clear it while the retained
@@ -300,8 +323,9 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   Draws a kernel issues are counted on the GPU past the
   counter rows (`GpuKernelCounters.DrawnWords`), so `gpu.draws` and
   `gpu.vertices` include them. Cascade selection emits entry and exactly one
-  exit command per kept draw: solid exits use front-face culling, thin/clipped
-  exits the unculled pipeline. Count those emitted commands, without another
+  exit command per kept opaque draw: solid exits use front-face culling, thin/clipped
+  exits the unculled pipeline. Glass emits once in its extinction phase.
+  Count those emitted commands, without another
   selection or history write. Count entry and exit with separate wave reductions:
   64 lanes of a maximum mesh's vertices fit a uint sum, twice that does not;
   `puckAddWork` carries each addition into the 64-bit accumulator.
@@ -451,8 +475,8 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   their own (`SdfMeshBakeGroup.Glass`; the stampers emit them as instances
   apart from the opaque ones) and draw in the glass raster pass over the opaque
   image (`passes/sdf-mesh-glass.frag.hlsl`, `passes/sdf-glass.comp.hlsl`). The
-  mesh pass, the cascades and the irradiance trace skip glass draws
-  (`SdfMeshDraw.Glass`). Thickness and RGB optical depth are the glass sums,
+  opaque mesh pass and the irradiance trace skip glass draws
+  (`SdfMeshDraw.Glass`); cascades select their extinction pipeline. Thickness and RGB optical depth are the glass sums,
   integers the raster accumulates with atomics (`frame/sdf-glass.hlsli`,
   `sdfGlassAccumulate`): never read a glass shape's thickness from its mesh, and
   never accumulate a sum in floats, whose rounding follows raster order and whose
@@ -707,7 +731,11 @@ compares and fails naming the file that drifted, it writes nothing.
   buffers, retirement bookkeeping and the CPU shadow before publishing growth;
   a failed allocation preserves the old buffers, contents, capacity and bindings.
   `SdfWorldTables.EnsureDynamicTransformCapacity` prepares motion history before
-  growing the region and publishes capacity only after both succeed. A device with
+  growing the region and publishes capacity only after both succeed.
+  A Direct3D 12 buffer or image placed by `DirectXHeapArena` keeps its range
+  until its owner calls `DirectXDeviceMemory.CountReleased` before the last
+  `Release`; an owner that only releases the resource leaks its range and
+  keeps the heap for the run. A device with
   a large host-visible device-local heap (resizable BAR) gives a small per-frame table a ring, while the CPU fake
   device's default profile stages every region, so a region path written or
   tested for one policy alone passes the device-free suites and fails on such
@@ -832,7 +860,7 @@ banks, coalescing, waits) and how to read it is
 
 ```text
 world.cadence off      # a still scene otherwise skips frames and reads near zero
-world.rates off        # far or small work (far cascade, small windows, screens, bodies) otherwise updates at least 30 or 15 times a second
+world.rates off        # far or small work (far cascade, small windows, screens, bodies) otherwise updates at least 30 or 15 times a second, far bodies down to 5
 world.debug-view rates # tint each rated item by its tier; world.rates lists each one's size and tier (worlds/debug/range.md)
 world.counters gpu     # per-pass counted work: dispatches, shape evaluations, texels, uploads
 world.gpu-timing on    # per-pass timestamps; `world.gpu-timing timeline` orders each node's latest span on the queue's clock with the idle gap before it

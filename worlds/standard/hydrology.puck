@@ -6,10 +6,11 @@
 // the default design). Water flows from a cell to a neighbour whose bed plus water stands lower, so the lake stands at its
 // sill and a cell of the falls passes what the lake gives, and the river and the aquifer, joined at the river's last cell,
 // level out against each other: the aquifer takes the river's water while it is lower, gives it back as springs when it is
-// higher, and the river's depth and the aquifer's head meet at one level. Nothing is lost: a lattice cell's water changes
-// only by flow between cells and by the melt, so the total (`world.fields` prints each row's `total`) is the water the
-// design starts with plus the glacier, and the steady level is that total shared across the river and aquifer cells,
-// above the river's bed. A capacity is the number of cells a stage has and the elevation of its bed.
+// higher, and the river's depth and the aquifer's head meet at one level. The aquifer is confined: no cell holds more than
+// `fullHead` of water, so once its cells are full the river takes what the glacier still melts and rises, and the falls'
+// lower cells, standing under the river's head, back up with it. Nothing is lost: a lattice cell's water changes only by
+// flow between cells and by the melt, so the total (`hydroTotal`, and `world.fields` prints each row's `total`) is the
+// water the design starts with plus the glacier. A capacity is the number of cells a stage has and the elevation of its bed.
 //
 // The glacier is a finite hydroIce store in each source cell. A transform transfers ice above hydroTarget per tick,
 // debiting exactly what the water cell receives. Ice plus water is conserved even if a rule firing is refused or a
@@ -17,19 +18,23 @@
 // hydroSpeed scales simulated elapsed ticks and flow; 1 is the authored pace. Exponent 1 is constant-rate melt.
 // The chain's columns are drawn at their stores' full values, moving at draw time with no rebake.
 //
-// The gauges are state rows the world's visuals bind to: `lakeLevel` (the lake's last cell's water), `fallsFlow` (the falls'
-// top cell's water, the discharge), `riverDepth` (the river's last cell's water) and `aquiferFill` (the aquifer's last
-// cell's water over `fullHead`).
+// The gauges are state rows the world's visuals bind to, each read off the chain and none off the melt clock: `lakeLevel`
+// (the lake's last cell's water, metres), `fallsFlow` (the discharge over the sill: the falls' top cell's water as a
+// fraction of the melt's peak discharge, which the melt's own `meltStrength` equals while the chain keeps up, and zero
+// when the falls run dry), `fallsVisible` (one while the discharge is over `fallsVisibleAt`, for a look that parks),
+// `riverDepth` (the river's last cell's water, metres) and `aquiferFill` (the aquifer's last cell's water over `fullHead`).
+// `glacier` and `glacierLength` (the remaining volume, and the linear fraction of the melt clock left) and `meltStrength`
+// (the melt's discharge) are the glacier's own and read the melt.
 
 // The default chain, upstream to downstream: kind, cell count, bed elevation at its first and last cell, starting water.
 // It starts running: the lake a little over its sill and the falls carrying what a full glacier's melt sends them, so the
 // falls are on at the first tick and no melt has yet to reach them.
 let hydrologyStages = [
   { kind: "source", count: 2, bed: 3, bedEnd: 3, water: 0 }
-  { kind: "lake", count: 3, bed: 2, bedEnd: 2, water: 0.5 }
-  { kind: "sill", count: 1, bed: 2.4, bedEnd: 2.4, water: 0 }
-  { kind: "falls", count: 4, bed: 2, bedEnd: 1.1, water: 0.2 }
-  { kind: "river", count: 4, bed: 1, bedEnd: 1, water: 0.15 }
+  { kind: "lake", count: 3, bed: 2, bedEnd: 2, water: 0.47 }
+  { kind: "sill", count: 1, bed: 2.4, bedEnd: 2.4, water: 0.04 }
+  { kind: "falls", count: 4, bed: 2, bedEnd: 1.1, water: 0.04 }
+  { kind: "river", count: 4, bed: 1, bedEnd: 1, water: 0.04 }
   { kind: "aquifer", count: 10, bed: 0, bedEnd: 0, water: 0 }
 ]
 
@@ -48,10 +53,20 @@ function hydrologyLast(stages, kind) = hydrologyFirst(stages, kind) +
   reduce(filter(stages, stage => stage.kind == kind), 0, (count, stage) => count + stage.count) -
   1
 
-template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, meltSeconds = 10800, meltExponent = 1, rateHz = 30, waterPerCell = 10, rate = 0.000625, fullHead = 1.8, poolBase = 0, poolLevelMax = 100) {
+template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, meltSeconds = 10800, meltExponent = 1, rateHz = 30, waterPerCell = 10, rate = 0.01, fullHead = 1.6, fallsVisibleAt = 0.002, resolution = 1024, poolBase = 0, poolLevelMax = 100) {
   let meltTicks = meltSeconds * rateHz
   let cells = hydrologyCells(stages)
   let sourceCount = length(filter(cells, c => c.kind == "source"))
+  // The stores hold `resolution` units to a metre of water, and a row's `heightScale` turns a unit back into a metre. A
+  // lattice cell's value is a fixed-point number of 2^-16 units, and the flow gives a neighbour whole units only: a cell
+  // holding under two raw units over `rate` stops giving, so a store in metres strands a trickle of about a millimetre
+  // a cell (the slowest discharge the falls pass is under a thousandth of the melt's peak, a millimetre in the lake).
+  // Finer units move that floor down in proportion, and every gauge reads metres.
+  let unit = resolution
+  // The falls gauge's scale, to a fraction of the melt's peak discharge: a cell passes `rate * water / 2` units a tick (the
+  // flow's fair share toward one of a one-row chain's two neighbours), and the melt sends the falls
+  // `waterPerCell * unit * sourceCount * meltExponent / meltTicks` units a tick at its peak.
+  let fallsScale = rate * meltTicks / (2 * meltExponent * sourceCount * waterPerCell * unit)
   let lakeCell = hydrologyLast(stages, "lake")
   let fallsCell = hydrologyFirst(stages, "falls")
   let riverCell = hydrologyLast(stages, "river")
@@ -72,7 +87,7 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
               { field: hydroIce, comparison: Greater, value: 0 }
             ],
             then: [
-              { field: hydroWater, op: Add, takeFrom: hydroIce, value: waterPerCell, retain { row: "hydroTarget" } }
+              { field: hydroWater, op: Add, takeFrom: hydroIce, value: waterPerCell * unit, retain { row: "hydroTarget" } }
             ]
           )
           flow(field: hydroWater, rate: { row: "hydroRate" }, over: [hydroBed])
@@ -87,8 +102,8 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
         field {
           initial: 0
           min: 0
-          max: 4
-          heightScale: 1
+          max: fullHead * unit
+          heightScale: 1 / unit
           color: "#3FB8C4"
           paint: map(range(0, length(cells)), i => {
             $type: "rect"
@@ -96,7 +111,7 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
             minZ: origin[2] + cell * 0.25
             maxX: origin[0] + cell * (i + 0.75)
             maxZ: origin[2] + cell * 0.75
-            value: cells[i].water
+            value: cells[i].water * unit
           })
         }
       }
@@ -107,8 +122,8 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
         field {
           initial: 0
           min: 0
-          max: 4
-          heightScale: 1
+          max: 4 * unit
+          heightScale: 1 / unit
           color: "#B9A78A"
           paint: map(range(0, length(cells)), i => {
             $type: "rect"
@@ -116,7 +131,7 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
             minZ: origin[2] + cell * 0.25
             maxX: origin[0] + cell * (i + 0.75)
             maxZ: origin[2] + cell * 0.75
-            value: cells[i].bed
+            value: cells[i].bed * unit
           })
         }
       }
@@ -127,14 +142,14 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
         field {
           initial: 0
           min: 0
-          max: waterPerCell
+          max: waterPerCell * unit
           paint: map(range(0, length(cells)), i => {
             $type: "rect"
             minX: origin[0] + cell * (i + 0.25)
             minZ: origin[2] + cell * 0.25
             maxX: origin[0] + cell * (i + 0.75)
             maxZ: origin[2] + cell * 0.75
-            value: cells[i].kind == "source" ? waterPerCell : 0
+            value: cells[i].kind == "source" ? waterPerCell * unit : 0
           })
         }
       }
@@ -142,14 +157,15 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
       slot hydroClock = 0.0 bounds(0.0..1000000.0)
       slot hydroSpeed = 1.0 bounds(0.0..1000.0)
       slot hydroRate = rate bounds(0.0..1.0)
-      slot hydroTarget = waterPerCell bounds(0.0..1000000.0)
-      slot hydroRemaining = sourceCount * waterPerCell bounds(0.0..1000000.0)
+      slot hydroTarget = waterPerCell * unit bounds(0.0..1000000.0)
+      slot hydroRemaining = sourceCount * waterPerCell * unit bounds(0.0..1000000.0)
       slot glacierLength = 1.0 bounds(0.0..1.0)
       slot meltStrength = 1.0 bounds(0.0..1.0)
-      slot meltVisible = 1.0 bounds(0.0..1.0)
       slot glacier = 1.0 bounds(0.0..1.0)
+      slot hydroTotal = reduce(cells, 0, (sum, c) => sum + c.water) + sourceCount * waterPerCell bounds(0.0..1000000.0)
       slot lakeLevel = 0.0 bounds(0.0..4.0)
-      slot fallsFlow = 0.0 bounds(0.0..4.0)
+      slot fallsFlow = 0.0 bounds(0.0..1.0)
+      slot fallsVisible = 1.0 bounds(0.0..1.0)
       slot riverDepth = 0.0 bounds(0.0..4.0)
       slot aquiferFill = 0.0 bounds(0.0..1.0)
       slot poolLevel = poolBase + cells[riverCell].water bounds(0.0..4.0)
@@ -163,7 +179,7 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
     mode: Level
     hydroClock = minimum(meltTicks, hydroClock + hydroSpeed)
     glacierLength = hydroClock < meltTicks ? maximum(0.0000152587890625, 1.0 - hydroClock / meltTicks) : 0.0
-    hydroTarget = waterPerCell
+    hydroTarget = waterPerCell * unit
     meltStrength = 1.0
     for i in range(0, meltExponent) {
       hydroTarget *= glacierLength
@@ -173,7 +189,6 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
     }
     hydroTarget = hydroClock < meltTicks ? maximum(0.0000152587890625, hydroTarget) : 0.0
     meltStrength = hydroClock < meltTicks ? meltStrength : 0.0
-    meltVisible = hydroClock < meltTicks ? 1.0 : 0.0
     hydroRate = minimum(1, rate * hydroSpeed)
   }
 
@@ -181,14 +196,18 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
     when $tick >= 0
     mode: Level
     hydroRemaining = 0.0
+    hydroTotal = 0.0
     for i in range(0, length(cells)) {
       hydroRemaining += hydroIce[i]
+      hydroTotal += hydroIce[i] + hydroWater[i]
     }
-    glacier = maximum(0, minimum(1, hydroRemaining / (sourceCount * waterPerCell)))
-    lakeLevel = minimum(4, hydroWater[lakeCell])
-    fallsFlow = minimum(4, hydroWater[fallsCell])
-    riverDepth = minimum(4, hydroWater[riverCell])
-    aquiferFill = minimum(1, hydroWater[aquiferCell] / fullHead)
-    poolLevel = minimum(poolLevelMax, poolBase + hydroWater[riverCell])
+    hydroTotal = hydroTotal / unit
+    glacier = maximum(0, minimum(1, hydroRemaining / (sourceCount * waterPerCell * unit)))
+    lakeLevel = minimum(4, hydroWater[lakeCell] / unit)
+    fallsFlow = minimum(1, hydroWater[fallsCell] * fallsScale)
+    fallsVisible = fallsFlow > fallsVisibleAt ? 1.0 : 0.0
+    riverDepth = minimum(4, hydroWater[riverCell] / unit)
+    aquiferFill = minimum(1, hydroWater[aquiferCell] / (fullHead * unit))
+    poolLevel = minimum(poolLevelMax, poolBase + hydroWater[riverCell] / unit)
   }
 }

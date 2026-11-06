@@ -466,6 +466,23 @@ fault. A new place that evaluates rule expressions opens a scope
 is a `WorldOutputHub.Narrate` call, bound to stderr (or stdout for answers) by
 the composition root.
 
+**A presentation field query keeps its answer on its owner.** An effector's
+surface probe and the chase arm's clearance sweeps answer through
+`WorldFieldAnswer<TQuery, TResult>.Ask`, held in the registration's
+`EffectorProbe` array and in `WorldCameraClearance`'s one slot per question,
+never in a shared or thread-static ring. The query states its reuse bound
+(`IWorldFieldQuery.Covers`) and a reuse that cannot prove it marches. A surface
+probe (`WorldSurfaceQuery`) is reused only for bit-identical inputs, since a
+ray's hit is not continuous in its origin. A clearance sweep of eye radius `r`
+along a boom of length `L` is cast at `r + m` (`m` is `ReuseMargin` times the
+body's scale) and reused while `|Δtarget| + L·|Δdirection|`, plus a few Q48.16
+steps of rounding, stays within `m`; the reused room then lies between the
+rooms the current question finds at `r` and at `r + 2m`, so the eye never comes
+nearer geometry than `r`. A target inside geometry (the obstructed overlap
+test) keeps exact inputs. `world.counters world.field-queries` reads requests,
+skipped, reused and marched per family; a headless World poses no creation and
+places no camera, so it counts none.
+
 **Mint generated names through `GeneratedName`** (`$` inside a document, `~` in
 a path), never by concatenation.
 

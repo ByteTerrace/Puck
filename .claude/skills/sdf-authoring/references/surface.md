@@ -291,9 +291,9 @@ fills the clock's 4096 s period), `tilt` (0), `coverage` (0, in [0, 1]),
 body lane on a placement without lanes stands still), `coverageLane` (none: a
 render lane in [0, 7] whose value, saturated to [0, 1], scales `coverage`) and
 `frame` (`Object`, or `World`). A world lane drives a flow on any placement,
-static copies included: the debug world's falls thins its foam with the melt's
+static copies included: the debug world's falls thins its foam with the chain's
 discharge through `coverageLane: 4` under `render { lanes
-["state.meltStrength"] }`. Keep the travel of one cycle
+["state.fallsFlow"] }`. Keep the travel of one cycle
 (`|velocity| × cycle`) under about a third of a pattern feature along the flow
 (`stretch / scale`), or the pattern visibly smears before it fades.
 
@@ -324,7 +324,7 @@ every other bindable render value:
 
 ```puck
 render {
-  lanes ["state.meltStrength"]   // lane 4
+  lanes ["state.fallsFlow"]   // lane 4
 }
 ```
 

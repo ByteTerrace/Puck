@@ -1,20 +1,20 @@
 // What the water looks like in the debug world, from the standard's scenery (../standard/water.puck): the falls and the
 // glacier on the north-west wall, the lake in its bowl on the rim, the stream from the falls' foot to the pool, and the
 // stone bridge over it. Everything here is a look bound to the gauges water.puck keeps: the glacier contracts about its
-// cradle as the melt clock runs, the lake rises and falls with its level, the falls narrow and their foam thins as the melt
-// ebbs and park when it runs dry. The stream stands still and the falls only turn; their shading flows (the standard's
-// flow layers).
+// cradle as the melt clock runs, the lake rises and falls with its level, the falls narrow and their foam thins as the
+// chain's discharge over the sill ebbs and park when it runs dry. The stream stands still and the falls only turn; their
+// shading flows (the standard's flow layers).
 import "../standard/water"
 import "valley-form"
 import "water-site"
 
 let compassRadians = 3.141592653589793 / 180
 
-// The world's render lanes, which every surface reads as lanes 4 to 7 however it is placed: lane 4 is the melt's
-// discharge, and the falls' foam covers its sheets by it.
-let meltLane = 4
+// The world's render lanes, which every surface reads as lanes 4 to 7 however it is placed: lane 4 is the falls' discharge,
+// and the falls' foam covers its sheets by it.
+let fallsLane = 4
 render {
-  lanes ["state.meltStrength"]
+  lanes ["state.fallsFlow"]
 }
 
 // The wall's own sector frame: a placement of yaw (compass + 180) turns the creation's +Z out from the ring's centre.
@@ -58,7 +58,7 @@ function legCentre(i) = [
 let bridgeLeg = 5
 
 prototypes {
-  fallsRibbon(id: "falls", profile: fallsProfile, width: 8, standoff: 8, flow: fallsFlowLayer with { coverageLane: meltLane })
+  fallsRibbon(id: "falls", profile: fallsProfile, width: 8, standoff: 8, flow: fallsFlowLayer with { coverageLane: fallsLane })
   glacierMass(id: "glacier", lumps: glacierLumps, origin: glacierOrigin)
   lakeSurface(id: "lake", radius: lakeSite.radius)
   streamSegment(id: "stream", length: streamSegmentLength)
