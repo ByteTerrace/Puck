@@ -349,7 +349,7 @@ public sealed class WorldEventFeed {
             void IncludeNeighbours(int index) {
                 Include(index: index);
                 if ((population.EntryBody(index: index) is { } body) && population.IsActive(index: index)) {
-                    var nearby = population.NearbySleepingBodies(body: body, destination: m_nearbySleeping);
+                    var nearby = population.NearbySleepingBodies(body: body, destination: m_nearbySleeping, reach: body.BroadphaseRadius);
 
                     for (var neighbour = 0; (neighbour < nearby); neighbour++) { Include(index: m_nearbySleeping[neighbour]); }
                 }

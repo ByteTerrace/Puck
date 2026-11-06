@@ -21,6 +21,25 @@ internal static class WorldRigidContacts {
     internal const int GroundSource = 0;
     /// <summary>The source id of a body's non-walkable surface contact.</summary>
     internal const int ObstructionSource = 1;
+
+    /// <summary>The owner rule, the one place it is stated: of a pair with a rigid side, the lower index owns a pair of
+    /// two rigid bodies, and the rigid side owns a pair with a locomotion (kit) body. Every reader of a pair's contact
+    /// (contact generation, the resting-contact test, support, checkpoint validation) asks here, so they can never
+    /// disagree about which body holds the manifold.</summary>
+    /// <param name="left">One side's population index.</param>
+    /// <param name="leftRigid">Whether that side is rigid.</param>
+    /// <param name="right">The other side's population index.</param>
+    /// <param name="rightRigid">Whether that side is rigid.</param>
+    /// <returns>The owning side and its partner.</returns>
+    internal static (int Owner, int Partner) Owner(int left, bool leftRigid, int right, bool rightRigid) =>
+        ((leftRigid && rightRigid)
+            ? (Math.Min(val1: left, val2: right), Math.Max(val1: left, val2: right))
+            : (leftRigid ? (left, right) : (right, left)));
+    /// <summary>Whether the owner is its manifold's A side: it is against a rigid partner (the pair's lower index is A,
+    /// and the normal runs from B toward A), and the B side against the static field or a kit body, which is A.</summary>
+    /// <param name="partnerRigid">Whether the partner is a rigid body.</param>
+    /// <returns><see langword="true"/> when the owner is the A side.</returns>
+    internal static bool OwnerIsA(bool partnerRigid) => partnerRigid;
 }
 /// <summary>One occupied manifold slot of a rigid body's owned contact, as its checkpoint entry carries it: the partner,
 /// the slot's index and the slot's persistent state.</summary>
@@ -96,13 +115,6 @@ public sealed partial class WorldBody {
         contact.Manifold.BodyA = null;
         contact.Manifold.BodyB = null;
         m_releasedRigidContacts.Add(item: contact);
-    }
-    /// <summary>Clears every owned contact's slots, dropping their warm start after a discontinuity: the contacts stay
-    /// listed so the population's partner index stays exact, and the next step releases those it does not touch.</summary>
-    internal void ClearRigidContactSlots() {
-        foreach (var contact in m_rigidContacts) {
-            contact.Manifold.Slots.Clear();
-        }
     }
     /// <summary>Appends every occupied slot of the owned contacts to a list, in contact then slot order.</summary>
     /// <param name="destination">The list the images are appended to.</param>

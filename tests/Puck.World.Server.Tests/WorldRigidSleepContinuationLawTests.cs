@@ -279,6 +279,115 @@ public sealed class WorldRigidSleepContinuationLawTests {
         Assert.Equal(1, population.SleepingRigidBodies);
     }
 
+    // A pose is a discontinuity: the island the posed support parked with wakes by its recorded root, even though the
+    // pose forgets the very contact (owned by the support, the lower index) that joined the load to it.
+    [Fact]
+    public void PosingAParkedSupportWakesTheLoadParkedOnIt() {
+        var source = Document();
+        var definition = source with {
+            KitRowsRaw = [source.Kits[0] with {
+                Collider = new WorldCollider.Box(HalfExtents: new DocumentVector3(value: new Vector3(value: .4f)), Rotation: new DocumentQuaternion(value: Quaternion.Identity)),
+                Rigid = source.Kits[0].Rigid! with { Restitution = 0 },
+            }],
+        };
+        var population = new WorldPopulation(definition: definition);
+
+        population.SetSimulatedCount(2);
+        Pose(index: 0, population: population, x: 0, y: 1, z: 0);
+        Pose(index: 1, population: population, x: 0, y: 2.5f, z: 0);
+        Settle(count: 2, population: population);
+        var support = population.EntryBody(index: 0)!;
+        var load = population.EntryBody(index: 1)!;
+        var height = load.FixedPosition.Y;
+
+        Assert.True(condition: (height > (support.FixedPosition.Y + FixedQ4816.FromDouble(value: .7))), userMessage: $"the load at {height} rests on the support at {support.FixedPosition.Y}, not the floor");
+        Pose(index: 0, population: population, x: 6, y: ((float)support.FixedPosition.Y), z: 0);
+        Assert.Equal(0, population.SleepingRigidBodies);
+        for (var tick = 1200; (tick < 1260); tick++) { Step(population: population, tick: tick); }
+        Assert.True(condition: (load.FixedPosition.Y < (height - FixedQ4816.FromDouble(value: .5))), userMessage: $"the load hung at {load.FixedPosition.Y} over empty space");
+    }
+    // Removal is a discontinuity seen before the slot drops its body: a load parked on a locomotion support wakes when
+    // the support's slot retires, rather than sleeping on over the gap with its contact released.
+    [Fact]
+    public void RetiringASupportWakesTheLoadParkedOnIt() {
+        var source = SupportedDocument();
+        var definition = source with { AssignmentRaw = new WorldRowAssignment(WorldSequence.IndexDefault, ["ball", "support"]) };
+        var population = new WorldPopulation(definition: definition);
+
+        population.SetSimulatedCount(2);
+        Pose(index: 1, population: population, x: 0, y: 2, z: 0);
+        Pose(index: 0, population: population, x: 0, y: 3, z: 0);
+        Settle(count: 1, population: population);
+        var load = population.EntryBody(index: 0)!;
+        var height = load.FixedPosition.Y;
+
+        Assert.True(condition: (height > FixedQ4816.FromInteger(value: 2)), userMessage: $"the load rests on the support, not the floor ({height})");
+        population.SetSimulatedCount(1);
+        Assert.Null(@object: population.EntryBody(index: 1));
+        Assert.Equal(0, population.SleepingRigidBodies);
+        for (var tick = 1200; (tick < 1260); tick++) { Step(population: population, tick: tick); }
+        Assert.True(condition: (load.FixedPosition.Y < (height - FixedQ4816.One)), userMessage: $"the load hung at {load.FixedPosition.Y} over the retired support");
+    }
+    // A kit swap that makes a support rigid changes which body owns their contact (WorldRigidContacts.Owner): the swap
+    // wakes the load and forgets the contact, so a checkpoint taken at that boundary restores.
+    [Fact]
+    public void ACheckpointAfterASupportTurnsRigidRestores() {
+        var source = Document();
+        var definition = source with {
+            DefaultSeatKitRaw = "locomotion",
+            KitRowsRaw = [source.Kits[0] with { Name = "locomotion", Rigid = null }, source.Kits[0] with { Rigid = source.Kits[0].Rigid! with { Restitution = 0 } }],
+            AssignmentRaw = new WorldRowAssignment(WorldSequence.IndexDefault, ["locomotion", "ball"],
+                Select: new WorldRowSelector(BodyState: "mode", Cases: [new WorldRowSelectorCase(Row: "ball", Value: 1)])),
+            StateRaw = new WorldStateSection(Body: [new ActionStateSlot("mode", ActionStateKind.Counter, Initial: 0,
+                Envelope: new ActionStateEnvelope.Range(Maximum: 1, Minimum: 0))]),
+        };
+        var population = new WorldPopulation(definition: definition);
+
+        population.BindActionStateLane(arena: new StateArena(definition.StateCatalog, definition.StateRaw, ArenaTime.Origin), definition: definition);
+        population.SetSimulatedCount(2);
+        population.SyncBodyCells(definition: definition);
+        Assert.False(condition: population.EntryBody(index: 0)!.IsRigid);
+        Pose(index: 0, population: population, x: 0, y: 2, z: 0);
+        Pose(index: 1, population: population, x: 0, y: 3, z: 0);
+        Settle(count: 1, population: population);
+        Assert.True(condition: WorldBodyStateReads.TryResolveSlot(definition: definition, kind: out _, name: "mode", slot: out var slot));
+        population.ActionStateLane.Write(slot: slot, ordinal: 0, raw: FixedQ4816.One.Value);
+        population.SyncBodyCells(definition: definition);
+        Assert.True(condition: population.EntryBody(index: 0)!.IsRigid);
+        Assert.Equal(0, population.SleepingRigidBodies);
+        var captured = RoundTrip(definition, population).Population;
+
+        population.Restore(checkpoint: captured, defaults: definition.PlayerDefaults, tick: 1200);
+        Assert.Equal(captured.Entries.Count, population.Capture().Entries.Count);
+    }
+    // A sleeper joins the sweep through the same bound the pair test applies: an awake body's travel-grown radius. A
+    // fast ball a short gap from a parked one forms its speculative pair before it overlaps, instead of integrating
+    // into the sleeper first.
+    [Fact]
+    public void AFastBodyMeetsASleeperBeforeItOverlaps() {
+        var definition = Document();
+        var population = new WorldPopulation(definition: definition);
+
+        population.SetSimulatedCount(1);
+        Pose(index: 0, population: population, x: 0, y: .5f, z: 0);
+        Settle(count: 1, population: population);
+        var sleeper = population.EntryBody(index: 0)!;
+
+        population.SetSimulatedCount(2);
+        var ball = population.EntryBody(index: 1)!;
+        var gap = FixedQ4816.FromDouble(value: .1);
+        var touching = FixedQ4816.FromDouble(value: .8);
+
+        ball.Pose(position: (sleeper.FixedPosition - (FixedVector3.UnitX * (touching + gap))), yawRadians: FixedQ4816.Zero, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
+        Assert.True(condition: ball.TryApplyRigidImpulse(impulse: (FixedVector3.UnitX * FixedQ4816.FromInteger(value: 10)), velocityCeiling: FixedQ4816.FromInteger(value: 1000)));
+        Assert.Equal(1, population.SleepingRigidBodies);
+        Step(population: population, tick: 1200);
+        var separation = (sleeper.FixedPosition - ball.FixedPosition).Length;
+
+        Assert.True(condition: (separation >= (touching - RigidOverlapTolerance)), userMessage: $"the ball integrated {((double)(touching - separation)):0.####} m into the sleeper before the pair formed");
+    }
+    private static readonly FixedQ4816 RigidOverlapTolerance = FixedQ4816.FromDouble(value: .01);
+
     private static WorldAuthorityCheckpoint RoundTrip(WorldDefinition definition, WorldPopulation population, WorldEventFeed? feed = null) {
         using var fixture = Fixtures.FreshServer(definition: definition);
 

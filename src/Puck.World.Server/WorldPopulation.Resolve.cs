@@ -845,12 +845,14 @@ public sealed partial class WorldPopulation {
 
         // The one broadphase-plus-narrowphase sweep over the work set, extended by the sleepers near it.
         {
-            // Frozen bodies retain their spatial index. Only bodies near an awake contact enter this sweep.
+            // Frozen bodies retain their spatial index. Only bodies near an awake contact enter this sweep, found with
+            // the awake body's travel-grown sweep radius plus the rest offset a sleeper's sweep radius adds to its own:
+            // exactly the bound the pair test below applies, so no pair it would form is missed.
             for (var ordinal = 0; (ordinal < count); ordinal++) {
                 var body = m_entries[contacts[ordinal].Index].Body!;
 
                 if (body.PopulationSleeping) { continue; }
-                var nearby = NearbySleepingBodies(body: body, destination: m_sleepQueries);
+                var nearby = NearbySleepingBodies(body: body, destination: m_sleepQueries, reach: (contacts[ordinal].Radius + RigidRestOffset));
 
                 for (var neighbour = 0; (neighbour < nearby); neighbour++) {
                     var index = m_sleepQueries[neighbour];

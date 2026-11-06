@@ -453,6 +453,12 @@ public sealed partial class WorldPopulation {
                     return;
                 }
 
+                // A slot going inactive releases its body: the discontinuity door runs first, while the slot still
+                // holds it.
+                if (field) {
+                    Owner.DisturbBody(index: Index);
+                }
+
                 field = value;
 
                 if (value) {
@@ -467,9 +473,14 @@ public sealed partial class WorldPopulation {
             get;
             set {
                 if (ReferenceEquals(objA: field, objB: value)) { return; }
-                if (field is { } previous) { previous.BindPopulationWake(index: Index, observer: null); }
+                // The outgoing body passes the discontinuity door while the slot still holds it, so the door wakes
+                // what rests on it and forgets its contacts before the slot forgets the body.
+                if (field is { } previous) {
+                    Owner.DisturbBody(index: Index);
+                    previous.BindPopulation(index: Index, population: null);
+                }
                 field = value;
-                value?.BindPopulationWake(index: Index, observer: Owner.BodyWoke);
+                value?.BindPopulation(index: Index, population: Owner);
                 Owner.BodyEntryChanged(index: Index);
             }
         }

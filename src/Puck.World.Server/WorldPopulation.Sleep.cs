@@ -13,6 +13,11 @@ public sealed partial class WorldPopulation {
     private readonly BodyWorkSet m_eventBodies;
 
     private readonly Dictionary<int, FixedVector3?> m_sleepGravity = [];
+    // The parked bodies by the island root they parked with (one plus the root slot), each list in slot order: the
+    // index of each body's Parked(root) state (WorldBody.RigidSleepRootPlusOne), which a wake reads instead of walking
+    // contacts. Written only with that state, by ParkIslandMember and WakeIsland.
+    private readonly Dictionary<int, List<int>> m_islandMembers = [];
+    private readonly Stack<List<int>> m_islandMemberPool = [];
     private readonly List<int> m_island = [];
     private readonly HashSet<int> m_islandVisited = [];
     private readonly HashSet<int> m_parkVisited = [];
@@ -38,47 +43,103 @@ public sealed partial class WorldPopulation {
     /// <summary>Number of simulated bodies visited by the integration pass this tick.</summary>
     public int SimulatedBodyVisits { get; private set; }
 
+    // An entry's slot changed (it took or lost its body, or became active or inactive): the work sets follow. A slot
+    // that lets its body go has already passed DisturbBody (Entry's setters), while it still held the body.
     private void BodyEntryChanged(int index) {
-        WakeBodyIsland(index: index);
-        if (m_entries[index] is not { Active: true, Body: not null }) { ForgetRigidContacts(index: index, keepReferred: false); }
         m_eventBodies.Add(item: index);
         if (m_entries[index] is { Active: true, Body: not null }) { m_awakeBodies.Add(item: index); } else { m_awakeBodies.Remove(item: index); }
     }
-    private void BodyWoke(int index) {
+    /// <summary>Wakes a body and every parked island it touches: the body's continuous change (an input, a press, a
+    /// glide, a rest-latch break) means whatever rests on it or holds it must solve again.</summary>
+    /// <param name="index">The body's population index.</param>
+    internal void BodyWoke(int index) {
         WakeBodyIsland(index: index);
         m_eventBodies.Add(item: index);
         if (m_entries[index] is { Active: true, Body: not null }) { m_awakeBodies.Add(item: index); }
     }
+    /// <summary>THE DISCONTINUITY DOOR. A slot's body is about to change by a discontinuity (a teleport, a collider or
+    /// rigid-facet change, or the slot letting its body go): wakes the body's own island and every parked island it
+    /// touches, then forgets every contact the body owns and every contact another body owns with it, whose manifolds
+    /// describe a body that is no longer there. It runs before the change lands, so it sees the body, its contacts and
+    /// its island as they were. This is the one place the invariant holds that a parked body wakes whenever anything it
+    /// rests on, or that rests on it, changes by a discontinuity: <see cref="WorldBody"/>'s teleport commit and kit
+    /// recompile reach it through their population binding, and <see cref="Entry"/>'s Body and Active setters before a
+    /// slot releases its body.</summary>
+    /// <param name="index">The slot's population index.</param>
+    internal void DisturbBody(int index) {
+        WakeBodyIsland(index: index);
+        ForgetRigidContacts(index: index, keepReferred: false);
+    }
+    // Wakes the body's own island, by the root it parked with, then every parked island one of its contacts joins it to:
+    // the contacts it owns and the contacts other bodies own with it, occupied or not. Membership is read from what
+    // parking recorded and from the contact lists, never from slot occupancy, so a contact cleared or a body removed a
+    // moment earlier cannot hide a sleeper resting on it.
     private void WakeBodyIsland(int index) {
         if (m_wakingIsland) { return; }
-        if (!m_sleepingBodies.Contains(item: index)) {
-            // An awake kit body's change wakes the sleeping islands it supports.
-            if ((m_entries[index].Body is { IsRigid: false }) && (index < m_rigidContactReferrers.Length) &&
-                (m_rigidContactReferrers[index] is { Count: > 0 } supported)) {
-                m_rigidNeighbourScratch.Clear();
-                m_rigidNeighbourScratch.AddRange(collection: supported);
-                foreach (var owner in m_rigidNeighbourScratch) {
-                    if (m_sleepingBodies.Contains(item: owner)) { WakeBodyIsland(index: owner); }
+        m_wakingIsland = true;
+        if (m_sleepingBodies.Contains(item: index)) { WakeIsland(rootPlusOne: m_entries[index].Body!.RigidSleepRootPlusOne); }
+        if (m_entries[index].Body is { } body) {
+            foreach (var contact in body.RigidContacts) {
+                if ((contact.Partner >= 0) && m_sleepingBodies.Contains(item: contact.Partner)) {
+                    WakeIsland(rootPlusOne: m_entries[contact.Partner].Body!.RigidSleepRootPlusOne);
                 }
             }
-            return;
         }
-        m_wakingIsland = true;
-        CollectRigidIsland(root: index);
-        foreach (var member in m_island) {
-            if (m_sleepingBodies.Remove(item: member)) {
-                m_sleepGravity.Remove(key: member);
-                m_sleepIndexDirty = true;
-                if (m_entries[member] is { Active: true, Body: { } body }) {
-                    body.WakeRigidIsland();
+        if ((index < m_rigidContactReferrers.Length) && (m_rigidContactReferrers[index] is { } referrers)) {
+            foreach (var owner in referrers) {
+                if (m_sleepingBodies.Contains(item: owner)) { WakeIsland(rootPlusOne: m_entries[owner].Body!.RigidSleepRootPlusOne); }
+            }
+        }
+        m_wakingIsland = false;
+    }
+    // Wakes every body parked under one root, in slot order. With ParkIslandMember the only writer of island membership:
+    // the body's Parked(root) state, the sleeping work set and the root index change together here and nowhere else.
+    private void WakeIsland(int rootPlusOne) {
+        if (!m_islandMembers.Remove(key: rootPlusOne, value: out var members)) { return; }
+        foreach (var member in members) {
+            if (!m_sleepingBodies.Remove(item: member)) { continue; }
+            m_sleepGravity.Remove(key: member);
+            if (m_entries[member].Body is { } body) {
+                body.WakeRigidIsland();
+                if (m_entries[member].Active) {
                     m_awakeBodies.Add(item: member);
                     m_eventBodies.Add(item: member);
                 }
             }
         }
-        m_wakingIsland = false;
+        m_sleepIndexDirty = true;
+        members.Clear();
+        m_islandMemberPool.Push(item: members);
     }
-    // Collects into m_island, in slot order, the rigid bodies the root's occupied rigid contacts join it to.
+    // Parks one body under a root: its Parked(root) state, the sleeping work set and the root index, together. The
+    // caller records the sleeper's solved gravity.
+    private void ParkIslandMember(int index, int rootPlusOne, ulong contactFieldVersion) {
+        m_entries[index].Body!.ParkRigidIsland(contactFieldVersion: contactFieldVersion, rootPlusOne: rootPlusOne);
+        m_awakeBodies.Remove(item: index);
+        m_sleepingBodies.Add(item: index);
+        if (!m_islandMembers.TryGetValue(key: rootPlusOne, value: out var members)) {
+            members = ((m_islandMemberPool.Count > 0) ? m_islandMemberPool.Pop() : []);
+            m_islandMembers.Add(key: rootPlusOne, value: members);
+        }
+        var position = members.BinarySearch(item: index);
+
+        if (position < 0) { members.Insert(index: ~position, item: index); }
+        m_sleepIndexDirty = true;
+    }
+    private FixedVector3? SolvedSleepGravity(int index) =>
+        (((m_gravityField is { } gravity) && gravity.TryAcceleration(acceleration: out var acceleration, entityIndex: index)) ? acceleration : null);
+    /// <summary>Parks a body a scoped replay restored under the island root its captured residue names, as the
+    /// checkpoint restore does for a whole population (<see cref="RestoreSleepingIslands"/>): the residue never writes
+    /// island membership itself.</summary>
+    /// <param name="index">The body's population index.</param>
+    /// <param name="rootPlusOne">The captured residue's island root plus one; zero leaves the body awake.</param>
+    internal void AdoptRestoredIsland(int index, int rootPlusOne) {
+        if ((rootPlusOne == 0) || m_sleepingBodies.Contains(item: index) || (m_entries[index] is not { Active: true, Body: not null })) { return; }
+        ParkIslandMember(contactFieldVersion: m_sleepFieldVersion, index: index, rootPlusOne: rootPlusOne);
+        m_sleepGravity[index] = SolvedSleepGravity(index: index);
+    }
+    // Collects into m_island, in slot order, the rigid bodies the root's occupied rigid contacts join it to: the island
+    // parking records. Waking never re-derives it (WakeBodyIsland).
     private void CollectRigidIsland(int root) {
         m_island.Clear();
         m_islandVisited.Clear();
@@ -214,13 +275,9 @@ public sealed partial class WorldPopulation {
             var rootPlusOne = (m_island[0] + 1);
 
             foreach (var member in m_island) {
-                m_entries[member].Body!.ParkRigidIsland(contactFieldVersion: m_sleepFieldVersion, rootPlusOne: rootPlusOne);
-                m_awakeBodies.Remove(item: member);
-                m_sleepingBodies.Add(item: member);
-                m_sleepGravity[member] = (((m_gravityField is { } gravity) && gravity.TryAcceleration(acceleration: out var acceleration, entityIndex: member))
-                    ? acceleration : null);
+                ParkIslandMember(contactFieldVersion: m_sleepFieldVersion, index: member, rootPlusOne: rootPlusOne);
+                m_sleepGravity[member] = SolvedSleepGravity(index: member);
             }
-            m_sleepIndexDirty = true;
         }
     }
     // Rebuild the index and an equivalent star graph from canonical roots; adjacency within a frozen component
@@ -228,6 +285,11 @@ public sealed partial class WorldPopulation {
     private void RestoreSleepingIslands(WorldPopulationCheckpoint checkpoint) {
         m_awakeBodies.Clear();
         m_sleepingBodies.Clear();
+        foreach (var members in m_islandMembers.Values) {
+            members.Clear();
+            m_islandMemberPool.Push(item: members);
+        }
+        m_islandMembers.Clear();
         for (var index = 0; (index < Capacity); index++) {
             if (m_entries[index] is { Active: true, Body: not null }) { m_awakeBodies.Add(item: index); }
         }
@@ -249,17 +311,16 @@ public sealed partial class WorldPopulation {
         m_eventBodies.Clear();
         foreach (var index in checkpoint.EventBodies) { m_eventBodies.Add(item: index); }
 
-        foreach (var index in m_awakeBodies.ToArray()) {
-            var body = m_entries[index].Body!;
-            var residue = body.CaptureIntegrationResidue();
-            var root = (residue.RigidSleepRootPlusOne - 1);
+        // Each surviving body parks under the root its captured residue names; the residue never writes it itself.
+        foreach (var captured in checkpoint.Entries) {
+            var rootPlusOne = captured.Residue.RigidSleepRootPlusOne;
 
-            if (root < 0) { continue; }
-            if (retiredRoots.Contains(item: (root + 1))) { body.WakeRigidIsland(); continue; }
-            body.ParkRigidIsland(rootPlusOne: (root + 1), contactFieldVersion: residue.LastContactFieldVersion);
-            pendingFieldWake |= (residue.LastContactFieldVersion != ContactFieldVersion);
-            m_awakeBodies.Remove(item: index);
-            m_sleepingBodies.Add(item: index);
+            if ((rootPlusOne == 0) || (m_entries[captured.Index] is not { Active: true, Body: { } body })) { continue; }
+            if (retiredRoots.Contains(item: rootPlusOne)) { body.WakeRigidIsland(); continue; }
+            var observed = body.LastContactFieldVersion;
+
+            ParkIslandMember(contactFieldVersion: observed, index: captured.Index, rootPlusOne: rootPlusOne);
+            pendingFieldWake |= (observed != ContactFieldVersion);
         }
         RecordSleepFieldObservation(known: !pendingFieldWake);
         if (pendingFieldWake) { m_sleepFieldVersion = unchecked((ContactFieldVersion - 1UL)); }
@@ -309,12 +370,19 @@ public sealed partial class WorldPopulation {
             if (!m_awakeBodies.Contains(item: index)) { m_eventBodies.Remove(item: index); }
         }
     }
-    internal int NearbySleepingBodies(WorldBody body, int[] destination) {
+    /// <summary>Lists the sleepers whose broadphase bounds may meet a sphere about a body: every one whose centre lies
+    /// within <paramref name="reach"/> plus its own broadphase radius on each axis, and perhaps a few more.</summary>
+    /// <param name="body">The body whose position centres the query.</param>
+    /// <param name="reach">The query radius, in metres: the body's broadphase radius, or the radius it sweeps this
+    /// step, grown by whatever its pair test adds to the sleeper's own radius.</param>
+    /// <param name="destination">The array the sleepers' population indices are written to.</param>
+    /// <returns>The number of indices written.</returns>
+    internal int NearbySleepingBodies(WorldBody body, FixedQ4816 reach, int[] destination) {
         if (m_sleepIndexDirty) {
             m_sleepIndex.Rebuild(population: this, sleeping: m_sleepingBodies);
             m_sleepIndexDirty = false;
         }
-        return m_sleepIndex.Query(body: body, destination: destination);
+        return m_sleepIndex.Query(position: body.FixedPosition, radius: reach, destination: destination);
     }
 
     // A retained broadphase over frozen bounds. Only island membership changes rebuild it. Queries visit cached
@@ -392,10 +460,8 @@ public sealed partial class WorldPopulation {
                 }
             }
         }
-        internal int Query(WorldBody body, int[] destination) {
+        internal int Query(FixedVector3 position, FixedQ4816 radius, int[] destination) {
             if (m_cells.Count == 0) { return 0; }
-            var position = body.FixedPosition;
-            var radius = body.BroadphaseRadius;
             var reach = radius.Value.AddSaturating(right: m_maximumRadius);
             var firstY = position.Y.Value.SubtractSaturating(right: reach).FloorDivide(divisor: m_width);
             var lastY = position.Y.Value.AddSaturating(right: reach).FloorDivide(divisor: m_width);

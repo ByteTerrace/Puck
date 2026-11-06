@@ -743,7 +743,8 @@ public sealed partial class WorldBody {
         m_angularVelocity = residue.RigidAngularVelocity;
         m_resting = residue.RigidResting;
         m_restingHoldTicks = residue.RigidRestingHoldTicks;
-        m_rigidSleepRootPlusOne = residue.RigidSleepRootPlusOne;
+        // The residue's island root is not applied here: the population parks the restored body under it
+        // (WorldPopulation.RestoreSleepingIslands, AdoptRestoredIsland), the one writer of island membership.
         m_carryingIndex = residue.Carrying;
         m_carriedByIndex = residue.CarriedBy;
     }
