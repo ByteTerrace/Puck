@@ -10,6 +10,10 @@ public static partial class WorldDefinitionValidator {
             }
         }
         if (definition.Render.Indirect is not { } indirect) { return; }
+        if (indirect.LightingGrid is { } grid) {
+            if (grid.DirectionDegrees is { } direction && (!float.IsFinite(direction) || direction < 0 || direction > 180)) { errors.Add("render.indirect.lightingGrid.directionDegrees must be finite and in [0, 180]."); }
+            if (grid.Radiance is { } radiance && (!float.IsFinite(radiance) || radiance < 0 || radiance > 1)) { errors.Add("render.indirect.lightingGrid.radiance must be finite and in [0, 1]."); }
+        }
         if (!Enum.IsDefined(value: indirect.Tier)) { errors.Add(item: "render.indirect.tier must be off, medium or high."); }
         if ((indirect.Bounces is { } bounces) && ((bounces < 0) || (bounces > SdfIndirectGains.MaximumBounces))) {
             errors.Add(item: $"render.indirect.bounces must be an integer from 0 to {SdfIndirectGains.MaximumBounces}; the selected tier caps its actual depth.");

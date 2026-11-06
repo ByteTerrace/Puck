@@ -136,6 +136,11 @@ public sealed partial class WorldPopulation {
     /// <summary>The static collider inputs actually held by the analytic solver, with authored provenance.</summary>
     public IReadOnlyList<WorldDiagnosticCollider> DiagnosticColliders =>
         ((m_baseContactField as WorldColliderSet)?.DiagnosticColliders ?? []);
+    /// <summary>The attached solid rows held by the analytic solver at the pose its latest refresh sampled, with their
+    /// colliders and authored provenance (<see cref="WorldColliderSet.DiagnosticAttached"/>); empty under another provider.</summary>
+    /// <returns>The posed rows.</returns>
+    public IReadOnlyList<WorldAttachedDiagnostic> DiagnosticAttached() =>
+        ((m_baseContactField as WorldColliderSet)?.DiagnosticAttached() ?? []);
     /// <summary>Gets or sets the hub this population narrates through, the owning server's own; <see langword="null"/>
     /// narrates nothing.</summary>
     public WorldOutputHub? NarrationHub { get; set; }

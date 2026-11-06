@@ -24,6 +24,24 @@ to create work.
 
 ## Spend verification, not writing
 
+**Three phases, each with its own evidence (the owner's ruling: measurements
+on a noisy machine have no value, and measurement must never become the
+bottleneck).**
+
+| Phase | Who and when | Evidence | Never |
+|---|---|---|---|
+| Iterate | every lane, in parallel | load-independent only: counters, state hashes, bytes, executes, law results, captures; laws filtered to the step; a reproduce of only the scenarios the change reaches | a timing claim; a full suite per step; a second heavy job queued behind one's own |
+| Integrate | the lead, once per landing batch | full reproduce suites, the sweep against the tip report, windowed boots on both backends, over the merged batch | per-lane repetition of the same suites |
+| Measure | the lead, in a scheduled quiet window after each batch (about every two to three hours) | lanes queue `puck measure request` with frozen before/after builds, metrics and what decides it; the lead reads `puck measure list` and drains it with `puck measure run`: one priority quiet lease, repeated ABAB, median, IQR and paired difference from the existing bench/sweep reports | a lane timing its own change; a window that waits for the machine to go quiet by itself |
+
+A lane with a timing question uses `puck measure request` (the frozen builds
+or commits, the bench startup or sweep command, JSON-pointer metrics and what
+decides it) and hands back on its load-independent evidence; `puck measure run`
+answers it in the lead's window. The [CLI reference](../../../docs/reference/cli.md#puck-measurequeued-measurement-windows)
+owns the forms. Lanes' processes keep running; their next leased grant waits
+for the measurement window. Quiet priority is enforced at `CliLease.TryAcquire`,
+under the same short lock that registers tickets, before any resource grant.
+
 Writing is cheap and verifying is expensive: builds, boots, suites and GPU
 windows on one shared machine set the pace, so the work in flight is bounded by
 what the machine can verify. How many lanes run at once has no fixed maximum
@@ -44,14 +62,13 @@ direction:
 - **The lead's verification window outranks lane legs.** Windowed checks owed by
   several lanes are one session the lead runs with GPU priority; it is never
   queued behind the lanes it verifies.
-- **Speed claims get a quiet window.** The machine is never idle while lanes
-  run, so a lane proves its win on load-independent counters (allocated bytes,
-  march and ray step counts, `world.budget` work counts) and lands on them. The
-  lead holds a short quiet window at a natural pause (lanes parked at WIP
-  commits) to re-measure the speedups landed since the last one with
-  interleaved A/B wall-clock rounds, or a lane runs those rounds under the heavy
-  lease; a timing claim stands only once measured there, and the window never
-  holds a landing. Every benchmark or counter check first shows that its steady
+- **Speed claims get a quiet window.** A lane proves its win on load-independent
+  counters (allocated bytes, march and ray step counts, `world.budget` work
+  counts) and lands on them. It queues the timing question with `puck measure
+  request`; the lead's `puck measure run` reserves a priority quiet window and
+  answers the batch with interleaved A/B rounds. A heavy lease alone does not
+  make the machine quiet. A timing claim stands only once measured there, and
+  the window never holds a landing. Every benchmark or counter check first shows that its steady
   state runs the changed branch, not a warm cache or a default path: in the
   ASP.NET agent effort (dotnet/aspnetcore#70219), review repeatedly found
   benchmarks and tests that never reached the changed code. A change is

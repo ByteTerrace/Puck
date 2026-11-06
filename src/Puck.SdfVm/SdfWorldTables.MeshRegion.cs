@@ -26,9 +26,9 @@ public sealed partial class SdfWorldTables {
         return BindsBackgroundWork && (m_meshRequiredUpload <= m_uploads) && scene.HasGpuPlacements(placements, m_meshesOwed);
     }
 
-    internal GpuRegion CreateProbeSceneRegion(int bytes) => new(
+    internal GpuRegion CreateProbeSceneRegion(int bytes, int slots = 1) => new(
         policy: GpuResidencyPolicy.Staged, memory: GpuResidency.RingMemory(m_deviceContext.MemoryProfile),
-        byteCount: bytes, slotCount: 1, buffers: m_gpu.BufferFactory, bindings: m_gpu.Bindings,
+        byteCount: bytes, slotCount: slots, buffers: m_gpu.BufferFactory, bindings: m_gpu.Bindings,
         recorder: m_gpu.Recorder, copyPipeline: m_regionCopyPipeline, name: NameOf("probe-scene"));
 
     private SdfMeshClaims? m_meshClaims;

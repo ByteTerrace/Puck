@@ -238,8 +238,17 @@ exact rim contact.
 A walking body's `motion.groundSnap` is a downward reach, scaled with the
 body (0.3 m by default; zero disables it). The controller projects its walking
 velocity onto the current support, then uses `FixedStepUp.TrySnap` to find
-walkable support below the completed step. The same bounded landing search
-serves step-up and snap. A crest removes the climb's upward velocity; a
+walkable support below the completed step: one support-distance query
+(`IContactField.TrySupportDistance`), then one landing sweep that descends
+`FixedStepUp.LandingDepth` past it and must ground. The same landing serves
+step-up and snap. The query reads each collider's own push query with its skin
+padded by the remaining reach (`FixedSupportDistance`): the separation of two
+convex solids is convex along a straight descent, so a Newton step from below
+lands on a flat face in one step and closes on a rounded edge in a few, never
+passing the first touch. A field collider, which is not convex, is bracketed
+against its own push alone. A body step's two snaps share one answer where the
+body has not moved between them (`WorldBody`'s `BodySupportMemo`, keyed by the
+field, the volumes' derivation, the start, orientation, up and reach). A crest removes the climb's upward velocity; a
 descent follows its surface. Jump and upward launch operations release
 grounding before integration, and a drop past the reach becomes a fall.
 The old inward-speed `groundStick` setting is removed.
@@ -331,10 +340,10 @@ arriving there.
 as a wall. It runs every move through the caller's own `IFixedContactStep`, a
 sweep bound to one body's orientation, volumes and up axis, so it works over
 either provider. It raises the start by the step height, moves the step's
-planar displacement, and bisects downward (`LandingProbes`, 8 sweeps) for the
-shallowest descent that meets support, no lower than where the original step
-would have ended along up. The bisection finds a shallow top contact rather
-than resolving a deeply embedded endpoint through the nearer side.
+planar displacement, and lowers onto support through `TrySnap`, no lower than
+where the original step would have ended along up. Landing a sliver past the
+support distance finds a shallow top contact rather than resolving a deeply
+embedded endpoint through the nearer side.
 `FixedContactPush.IsEdge` distinguishes a box edge/fillet or cylinder rim from
 a face. `FixedStaticContactSolver.ResolveSweep` projects an approached edge's
 push across up without lifting or converting forward drive into upward
@@ -349,7 +358,7 @@ repeated partial landings cannot turn a kerb into a ramp.
 The raised across move must be free of obstruction and make more progress
 than the blocked step. The landing must ground on a walkable surface, no higher
 than the step height above the start and higher than the blocked step. A wall costs
-two sweeps; an accepted step costs `LandingProbes` plus four. The World calls
+two sweeps; an accepted step costs four sweeps and one support-distance query. The World calls
 it from the kit's `motion.stepHeight`, zero by default.
 
 Exact chamfered-box and superellipsoid contacts use GJK followed by EPA. GJK

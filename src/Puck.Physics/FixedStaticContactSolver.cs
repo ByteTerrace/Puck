@@ -413,26 +413,81 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             Uncertainty = ((parts > count) ? uncertain.Union(other: ContactUncertainty.Unknown) : uncertain) };
     }
 
+    /// <summary>Finds the support distance below a body (<see cref="IContactField.TrySupportDistance"/>) over the static
+    /// set and the per-tick colliders: the least of each collider's own support distance
+    /// (<see cref="FixedSupportDistance.TryDescend"/>), visiting only the colliders whose bounds come within the skin of
+    /// the box every pose of the descent lies in.</summary>
+    /// <param name="colliders">The static colliders, with the bounds the query culls by.</param>
+    /// <param name="dynamicColliders">The per-tick colliders, with the bounds the query culls by.</param>
+    /// <param name="position">The foot point the descent starts from.</param>
+    /// <param name="orientation">The body orientation.</param>
+    /// <param name="volumes">The body volumes.</param>
+    /// <param name="up">The body's unit up axis.</param>
+    /// <param name="reach">The greatest descent searched, in metres.</param>
+    /// <param name="descent">The least descent, in metres, at which the body first comes within the skin of a collider.</param>
+    /// <param name="candidates">The colliders of <paramref name="colliders"/> reachable from a region around the descent,
+    /// or the default value to visit every collider.</param>
+    /// <returns><see langword="true"/> when a collider is met within the reach; <see langword="false"/> as well for a
+    /// non-positive reach or a descent outside the Q48.16 carrier.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="colliders"/> or <paramref name="dynamicColliders"/> is
+    /// <see langword="null"/>.</exception>
+    public bool TrySupportDistance(FixedStaticColliderSet colliders, FixedStaticColliderSet dynamicColliders, in FixedVector3 position,
+        in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedQ4816 reach,
+        out FixedQ4816 descent, FixedColliderCandidates candidates = default) {
+        ArgumentNullException.ThrowIfNull(argument: colliders);
+        ArgumentNullException.ThrowIfNull(argument: dynamicColliders);
+        FixedStaticContactWork.Process.CountSupportDistance();
+        descent = FixedQ4816.Zero;
+        if ((reach <= FixedQ4816.Zero) || !FixedVector3.TrySubtract(difference: out var lowest, left: position, right: (up * reach))) {
+            return false;
+        }
+        var met = false;
+        var nearest = reach;
+        var (center, extent) = SweptBounds(orientation: in orientation, position: in lowest, previousPosition: in position, volumes: volumes);
+
+        foreach (ref readonly var volume in volumes) {
+            Descend(boxes: colliders.Boxes, candidates: in candidates, center: in center, colliders: colliders.Colliders, extent: in extent,
+                frames: colliders.Frames, met: ref met, nearest: ref nearest, orientation: in orientation, position: in position, up: in up, volume: in volume);
+            Descend(boxes: dynamicColliders.Boxes, candidates: default, center: in center, colliders: dynamicColliders.Colliders, extent: in extent,
+                frames: dynamicColliders.Frames, met: ref met, nearest: ref nearest, orientation: in orientation, position: in position, up: in up, volume: in volume);
+        }
+        descent = (met ? nearest : FixedQ4816.Zero);
+        return met;
+    }
+    // Lowers the nearest support distance found by every collider of one span the descent's box can reach. Each collider
+    // searches only as far as the nearest found so far, since a support met past it cannot lower it.
+    private void Descend(ReadOnlySpan<FixedStaticCollider> colliders, ReadOnlySpan<FixedColliderBox> boxes, ReadOnlySpan<FixedColliderFrame> frames,
+        in FixedColliderCandidates candidates, in FixedVector3 center, in FixedVector3 extent, in FixedVector3 position, in FixedQuaternion orientation,
+        in FixedBodyColliderVolume volume, in FixedVector3 up, ref FixedQ4816 nearest, ref bool met) {
+        var culls = (boxes.Length == colliders.Length);
+        var indexed = (culls && candidates.IsActive && candidates.Contains(center: center, extent: extent));
+        var next = 0;
+
+        for (var index = 0; (index < colliders.Length); index++) {
+            if (indexed) {
+                while ((next < candidates.Indices.Length) && (candidates.Indices[next] < index)) { next++; }
+                if (next == candidates.Indices.Length) { break; }
+                index = candidates.Indices[next];
+            }
+            if (culls && (Misses(box: in boxes[index], bodyCenter: center, bodyExtent: extent) ||
+                frames[index].Separates(bodyExtent: in extent, offset: (center - boxes[index].Center), skin: ContactSkin))) {
+                continue;
+            }
+            if (FixedSupportDistance.TryDescend(collider: in colliders[index], descent: out var descent, orientation: in orientation,
+                position: position, reach: nearest, skin: ContactSkin, up: in up, volume: in volume) && (!met || (descent < nearest))) {
+                nearest = descent;
+                met = true;
+            }
+        }
+    }
+
     // Every intermediate pose of a straight move lies inside the box spanning its start and end bounds. A collider
     // whose bounds miss that box, grown by the skin, pushes no slice, so slicing is spent only where a push can happen.
     // A collider without bounds (a half-space) may meet any move.
     private bool SweptBoundsMeetCollider(FixedStaticColliderSet colliders, FixedStaticColliderSet dynamicColliders,
         in FixedVector3 previousPosition, in FixedVector3 position, in FixedQuaternion orientation,
         ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedColliderCandidates candidates) {
-        var low = new FixedVector3(X: FixedQ4816.MaxValue, Y: FixedQ4816.MaxValue, Z: FixedQ4816.MaxValue);
-        var high = new FixedVector3(X: FixedQ4816.MinValue, Y: FixedQ4816.MinValue, Z: FixedQ4816.MinValue);
-
-        foreach (ref readonly var volume in volumes) {
-            foreach (var at in (ReadOnlySpan<FixedVector3>)[previousPosition, position]) {
-                var (center, extent) = FixedColliderBounds.WorldBounds(orientation: in orientation, position: at, volume: in volume);
-
-                low = Lowest(left: low, right: (center - extent));
-                high = FixedVector3.Max(left: high, right: (center + extent));
-            }
-        }
-        var halfSpan = ((high - low) / FixedQ4816.FromInteger(value: 2L));
-        var middle = (low + halfSpan);
-        var half = (halfSpan + new FixedVector3(X: FixedQ4816.Epsilon, Y: FixedQ4816.Epsilon, Z: FixedQ4816.Epsilon));
+        var (middle, half) = SweptBounds(orientation: in orientation, position: in position, previousPosition: in previousPosition, volumes: volumes);
         var boxes = colliders.Boxes;
 
         if (candidates.IsActive && candidates.Contains(center: middle, extent: half)) {
@@ -448,6 +503,25 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             if (!Misses(box: in box, bodyCenter: middle, bodyExtent: half)) { return true; }
         }
         return false;
+    }
+    // The world box every volume's bounds lie in at every pose of a straight move, as a centre and a half-extent widened
+    // by one raw.
+    private static (FixedVector3 Center, FixedVector3 Extent) SweptBounds(in FixedVector3 previousPosition, in FixedVector3 position,
+        in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+        var low = new FixedVector3(X: FixedQ4816.MaxValue, Y: FixedQ4816.MaxValue, Z: FixedQ4816.MaxValue);
+        var high = new FixedVector3(X: FixedQ4816.MinValue, Y: FixedQ4816.MinValue, Z: FixedQ4816.MinValue);
+
+        foreach (ref readonly var volume in volumes) {
+            foreach (var at in (ReadOnlySpan<FixedVector3>)[previousPosition, position]) {
+                var (center, extent) = FixedColliderBounds.WorldBounds(orientation: in orientation, position: at, volume: in volume);
+
+                low = Lowest(left: low, right: (center - extent));
+                high = FixedVector3.Max(left: high, right: (center + extent));
+            }
+        }
+        var halfSpan = ((high - low) / FixedQ4816.FromInteger(value: 2L));
+
+        return ((low + halfSpan), (halfSpan + new FixedVector3(X: FixedQ4816.Epsilon, Y: FixedQ4816.Epsilon, Z: FixedQ4816.Epsilon)));
 
         static FixedVector3 Lowest(FixedVector3 left, FixedVector3 right) => new(X: FixedQ4816.Min(x: left.X, y: right.X),
             Y: FixedQ4816.Min(x: left.Y, y: right.Y), Z: FixedQ4816.Min(x: left.Z, y: right.Z));

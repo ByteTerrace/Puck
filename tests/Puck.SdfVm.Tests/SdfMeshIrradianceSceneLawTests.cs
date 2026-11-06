@@ -27,7 +27,7 @@ public sealed class SdfMeshIrradianceSceneLawTests {
         Assert.InRange(scene.TopDepth, 0, SdfMeshProbeTrace.StackDepth - 2);
         Assert.True(scene.MedianSplits > 0);
         AnswersAsTheSearch(scene, draws);
-        Assert.Equal(0, scene.Counters.Read(SdfMeshIrradiance.StackOverflow));
+        Assert.Equal(0, scene.Counters.Read(SdfMeshIrradiance.TraversalFaults));
     }
     [Fact]
     public void NearestSurfaceAgreesWithAnIndependentWorldTriangleSearch() {

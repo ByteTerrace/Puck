@@ -101,6 +101,7 @@ public static class PuckRootCommand {
             LawsCommand.Create(),
             LeaseCommand.Create(admit: HostAdmission.For(clock: clock, composition: Gate), clock: clock, settleWait: (settle, timeout, progress, cancellationToken) => HostQuiet.SettleAsync(cancellationToken: cancellationToken, clock: clock, composition: Gate, progress: progress, settle: settle, timeout: timeout)),
             LocksCommand.Create(),
+            MeasureCommand.Create(clock: clock, settleWait: (settle, timeout, progress, cancellationToken) => HostQuiet.SettleAsync(cancellationToken: cancellationToken, clock: clock, composition: Gate, progress: progress, settle: settle, timeout: timeout)),
             McpCommand.Create(admit: HostAdmission.For(clock: clock, composition: Gate), ancestor: ProcessInspection.IsAncestor),
             MotionCommand.Create(),
             NuGetCommand.Create(),

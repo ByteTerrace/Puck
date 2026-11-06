@@ -619,6 +619,12 @@ public sealed class InPlacePortalCrossingLawTests {
 
             return new ContactResolution(Grounded: true, ObstructionNormal: FixedVector3.Zero, GroundNormal: FixedVector3.UnitY);
         }
+        public bool TrySupportDistance(in FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes,
+            in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) {
+            descent = FixedQ4816.Max(x: position.Y, y: FixedQ4816.Zero);
+
+            return (descent <= reach);
+        }
         public bool TryUp(in FixedVector3 position, out FixedVector3 up) {
             up = FixedVector3.UnitY;
 

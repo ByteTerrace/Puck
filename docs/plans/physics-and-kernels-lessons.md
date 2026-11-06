@@ -5,8 +5,9 @@ the successor to Box2D v3) and from OpenBLAS, for accuracy and for
 performance. This memo is the research round's answer. It reads Puck's live
 physics paths, names what the debug world measured, sets each lesson against
 the opened sources (several independent ones per topic, with their
-disagreements), ranks the lessons, and gives a brief for each of the top
-two (the gyroscopic term, the rest latch and brief B have landed). Every page cited under [Sources](#sources) was opened for this memo;
+disagreements), ranks the lessons, and keeps the brief for lesson 2, the one
+rigid solver (it has landed, as have the kit-body contact work, the gyroscopic
+term and the rest latch). Every page cited under [Sources](#sources) was opened for this memo;
 a claim that rests on a page that could not be opened is marked so.
 
 Nothing here ran a World or changed engine code. The counts quoted are the
@@ -35,9 +36,9 @@ from a float engine and what Puck's integers make better.
   (`Misses`, `:143`; counted at `:161`). Candidates come from a 4 m grid over
   the static colliders (`WorldColliderSet.cs:66-71`). A step that ends
   ungrounded on a crest or a descent runs `FixedStepUp.TrySnap`
-  (`WorldBody.Contacts.cs:83`): one sweep to test, eight bisection sweeps
-  (`FixedStepUp.LandingProbes`, `FixedStepUp.cs:41`) and a landing sweep, each
-  a full `ResolveSweep`.
+  (`WorldBody.Contacts.cs`): one support-distance query over each nearby
+  collider's own push query (`FixedSupportDistance`) and one landing sweep, a
+  full `ResolveSweep`.
 - **Rigid bodies** (chess pieces, Go stones, reversi discs, alchemy tokens)
   are solved together by one `FixedRigidWorld` soft-step solve a tick
   (`WorldPopulation.SolveRigidContacts`, `WorldPopulation.Rigid.cs`), from
@@ -80,11 +81,14 @@ analytic static sweep (`FixedStaticContactSolver.Sweep` into
 `FixedConvexContact`), about 73 ms over 41,341 queries, or about 1.8 µs a
 query including the sweep's own overhead. The same unit cost over today's
 4,030 queries would be about 7 ms, more than the whole 5.9 ms tick, so a
-walker's query costs less than a rigid piece's GJK query did. Brief A's profile
-of the idle tick (on a loaded machine) put all contact work at 0.31 ms a tick,
-17 % of the tick's managed CPU, with walker queries near 0.08 µs each; the
-[brief](#brief-a-kit-body-contact-work-certify-cheaply-query-exactly-only-what-a-certificate-cannot-settle)
-records what it found and what remains.
+walker's query costs less than a rigid piece's GJK query did. A profile of the
+idle tick (on a loaded machine) put all contact work at 0.31 ms a tick, 17 % of
+the tick's managed CPU, with walker queries near 0.08 µs each. Lesson 1 has
+landed: the per-tick (attached) colliders are culled like the static ones,
+behind one door (`FixedStaticColliderSet`, which compiles each collider's
+`FixedColliderBox` and `FixedColliderFrame` from the collider itself), and the
+ground snap asks one support-distance query instead of bisecting with sweeps.
+The commits carry the counts.
 
 Two order-dependent accumulations were fixed just before this round: glass
 optical depth now sums integer-quantized terms with integer atomics
@@ -172,7 +176,7 @@ builds the mechanism once rather than a fix per site.
 | 3 | The gyroscopic term | Implicit integration of a quadratic term in the frame where its operator is constant | Directly | Accuracy for 457 thin rigid pieces in flight | One Newton step, exact integers | Small |
 | 4 | Wake and islands proportional to change | A spatial index over the parked set; persistent islands | Directly (filed) | 488 sleeper visits each lattice step, about 61 a tick; allocation in active scenes | Order fixed by slot index | Small |
 | 5 | Order-free merges and exact reductions for the parallel tick | Combine with an associative, commutative operation and a total tie-break | Directly (a contract) | Enables the job system's later phases without hash drift | The point of it | Small |
-| 6 | Packed hot data and integer SIMD kernels with runtime dispatch | Pack once, stream many; one architecture-specific micro-kernel | Inspires | Unmeasured; follows brief A's profile | Integer lanes are exact at every width | Medium |
+| 6 | Packed hot data and integer SIMD kernels with runtime dispatch | Pack once, stream many; one architecture-specific micro-kernel | Inspires | Unmeasured; follows the idle-tick profile | Integer lanes are exact at every width | Medium |
 | 7 | Graph colouring for a parallel rigid solve | Partition constraints so no body appears twice in a batch | Inspires; after lesson 2 | Active scenes only | Colouring computed serially in a fixed order | Medium |
 | 8 | Contact recycling across steps | Reuse a cached linearization while relative motion stays under a tolerance | Inspires; after lesson 2 | About 40 % of Box2D 3.2's gain; Puck's share unmeasured | The cache becomes continuation state | Medium |
 | 9 | Sleep on the farthest point's speed | Bound a body's motion by its fastest surface point | Directly | Accuracy of the rest latch for thin pieces | None beyond a hash move | Small |
@@ -205,11 +209,10 @@ analytic kinds have closed-form distances. The bound check reads
 `FixedStaticCollider.Center` from the full collider record and the extent from
 a `FixedVector3?[]`, not from a packed bounds array.
 
-**Expected gain.** Almost all of the 4,030 queries a tick are kit bodies'; brief A
-reads `physics.contact.resolves`, `.queries`, `.convex-queries` and
-`.supports` per tick (already rows of `puck bench world`,
-`src/Puck.Cli.Bench/WorldBenchmarks.cs:508-513`) to split them into sweeps,
-passes and candidates before choosing a cut. If the 1.8 µs estimate is near
+**Expected gain.** Almost all of the 4,030 queries a tick are kit bodies';
+`physics.contact.resolves`, `.support-distances`, `.queries`,
+`.convex-queries` and `.supports` per tick (rows of `puck bench world`) split
+them into sweeps, passes and candidates before choosing a cut. If the 1.8 µs estimate is near
 the walkers' cost, the queries are most of the idle tick and a cull that
 removes half of them is worth about a quarter of it.
 
@@ -219,10 +222,9 @@ would return no push, and `ResolveSweep` already states that contract
 `FixedStaticContactSolver.cs` on `colliderExtents`). Puck's bounds are exact
 integer comparisons, so the cull needs no round-off margin, where Box3D
 shrinks its radius "slightly for round-off safety". State hashes must not move
-at all: the strongest possible check. Replacing the snap's bisection with a
-distance query does move results (the landing lands at the exact support
-instead of within the bisection's resolution) and is a deliberate correction
-with a re-record.
+at all: the strongest possible check. The snap's support-distance query lands
+at the support it measures rather than within a bisection's resolution, so it
+moved results once, as a deliberate correction.
 
 **Cost.** A tighter bound per collider kind (the oriented box Puck already
 owns in `FixedOrientedBox`, a sphere for rounded and superellipsoid kinds) at
@@ -401,7 +403,7 @@ arithmetic. As with PDEP and PEXT
 ([maths-usage](../../.claude/skills/maths-usage/SKILL.md)), dispatch reads a
 capability gate, never a bare `IsSupported`.
 
-**Cost.** Medium; scheduled from brief A's profile, not before it.
+**Cost.** Medium; scheduled from the idle-tick profile, not before it.
 
 ### 7. Graph colouring for a parallel rigid solve
 
@@ -475,41 +477,6 @@ position correction is not done.
   nondeterministic (islands post); Puck's serial island bookkeeping is the
   right shape.
 
-## Brief A: kit-body contact work: certify cheaply, query exactly only what a certificate cannot settle
-
-**Mechanism.** A conservative certificate cheaper than the exact query,
-tested first, so the exact work runs only where the certificate cannot rule a
-push out. It is the same mechanism as the field sweep's bounds queries, Box3D's
-inscribed spheres and Box2D's fat-box margin.
-
-**Invariant.** A collider the certificate skips would have returned no push.
-**Enforcement:** one door, `FixedStaticColliderSet`: the solver takes colliders
-only as sets, static and per-tick alike, and a set compiles each collider's
-`FixedColliderBox` and `FixedColliderFrame` from the collider itself. **Where it
-stops:** the certificates say nothing about the colliders they keep, which take
-the exact query, and the snap change below is outside the invariant, a
-deliberate correction.
-
-**Where it stands.** Steps 0 to 3 closed (their evidence is in the commits). The
-idle queries' cause was not walkers against the static field: every per-tick
-(attached) collider, the gallery lift's car, was queried by every sweep in the
-world, unculled. With it culled, `physics.contact.queries` fell from 4,030 to
-766 a tick, every state hash unchanged. Carrying separation from pass to pass
-(step 3) skipped 16 queries a tick and was not landed. 160 of the 170 resolves a
-tick are still ground-snap sweeps: `FixedStepUp.TrySnap` runs twice per walking
-body per tick (the support search in `IntegratePlanarAndVerticalVelocity` and
-the crest snap in `ResolveProgramContacts`), ten sweeps each.
-
-**The remaining step.** Replace the snap's bisection with one support-distance
-query (the convex nearest-point query or the analytic distance) followed by the
-landing sweep, keeping `TrySnap`'s acceptance rules, and let the two snaps of one
-tick share it where the body has not moved between them. **Check:**
-`physics.contact.resolves` a tick falls toward the moves' own count; the range
-walkers still follow the ground on the range's slopes (a headless `body.where`
-trace over their loop); hashes move once and the persisted replays it
-invalidates are re-recorded in the same change. It wants a lane that loads
-`sdf-authoring` for contact admission.
-
 ## Brief B: one rigid solver: Soft Step
 
 **Mechanism.** Hoist geometry out of the iteration loop: compute each
@@ -539,7 +506,7 @@ world's sweep reads red").
 
 ## Open questions and who settles them
 
-- **Whether lesson 6 pays.** After brief A the contact work of the idle tick is
+- **Whether lesson 6 pays.** With lesson 1 landed the contact work of the idle tick is
   about 0.2 ms; lesson 6 is not scheduled until a quiet-window profile shows a
   bounds pass worth vectorising.
 - **Whether contact recycling pays in fixed point.** Settled inside the one

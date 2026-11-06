@@ -291,6 +291,32 @@ public sealed partial class WorldColliderSet : IContactField {
     // A capsule's half segment per unit of its scale.y: the segment is 0.5·scale.y long.
     private static readonly FixedQ4816 CapsuleHalfSegment = FixedQ4816.FromDouble(value: 0.25);
 
+    // The one collider a solid row compiles for a creation's primitive copy, static and attached rows alike: a plane a
+    // half-space, a uniformly scaled sphere a sphere, anything else its finite collider; each grown by the margin.
+    private static FixedStaticCollider CopyCollider(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) {
+        if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
+            var normal = copy.PlaneNormal;
+
+            return FixedStaticCollider.HalfSpace(point: (copy.Center + (normal * margin)), normal: normal);
+        }
+        if (IsSphereCopy(copy: copy)) {
+            var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
+
+            return FixedStaticCollider.Sphere(center: copy.Center, radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin));
+        }
+
+        return PlacementFinite(copy: copy, margin: margin);
+    }
+    private static bool IsSphereCopy(in FixedCreationStampPrimitiveCopy copy) =>
+        ((copy.Shape.Type == SdfSolidPrimitive.Sphere) && (copy.UniformScale > FixedQ4816.Zero));
+    // A compiled collider with the authored source the diagnostics name it by.
+    private static WorldDiagnosticCollider DiagnosticOf(in FixedStaticCollider collider, in FixedCreationStampPrimitiveCopy copy, WorldPlacement placement, WorldPrototype creation) =>
+        new(collider, placement.Id.ToString(), creation.Id.ToString(),
+            (copy.Shape.Name?.ToString() ?? copy.Shape.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
+            $"{copy.Shape.Type}/{copy.Shape.Blend}", placement.Solid!.Margin, !creation.EngineDocument.IsGlassShape(shape: copy.Shape)) {
+            ConservativeInset = ((collider.Kind == FixedStaticColliderKind.Cylinder) ? (double)CylinderInset(copy: copy).Length : 0),
+        };
+
     private static FixedStaticCollider PlacementFinite(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) {
         if (copy.Shape.Type == SdfSolidPrimitive.Box) {
             var stampScale = copy.StampScale;
@@ -697,45 +723,19 @@ public sealed partial class WorldColliderSet : IContactField {
                 document: creation.EngineDocument,
                 transform: transform,
                 visitor: copy => {
-                    FixedStaticCollider placementCollider;
+                    var placementCollider = CopyCollider(copy: copy, margin: margin);
 
                     if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
-                        var normal = copy.PlaneNormal;
-
-                        placementCollider = FixedStaticCollider.HalfSpace(
-                            point: (copy.Center + (normal * margin)),
-                            normal: normal
-                        );
                         planes++;
-                    } else if (
-                        (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
-                        (copy.UniformScale > FixedQ4816.Zero)
-                    ) {
-                        var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
-
-                        placementCollider = FixedStaticCollider.Sphere(
-                            center: copy.Center,
-                            radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin)
-                        );
+                    } else if (IsSphereCopy(copy: copy)) {
                         spheres++;
+                    } else if (placementCollider.Kind == FixedStaticColliderKind.Cylinder) {
+                        cylinders++;
                     } else {
-                        placementCollider = PlacementFinite(
-                            copy: copy,
-                            margin: margin
-                        );
-                        if (placementCollider.Kind == FixedStaticColliderKind.Cylinder) {
-                            cylinders++;
-                        } else {
-                            boxes++;
-                        }
+                        boxes++;
                     }
-
                     colliders.Add(item: placementCollider);
-                    diagnostics.Add(item: new WorldDiagnosticCollider(placementCollider, placement.Id.ToString(),
-                        creation.Id.ToString(), (copy.Shape.Name?.ToString() ?? copy.Shape.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
-                        $"{copy.Shape.Type}/{copy.Shape.Blend}", solid.Margin, !creation.EngineDocument.IsGlassShape(shape: copy.Shape)) {
-                        ConservativeInset = ((placementCollider.Kind == FixedStaticColliderKind.Cylinder) ? (double)CylinderInset(copy: copy).Length : 0),
-                    });
+                    diagnostics.Add(item: DiagnosticOf(collider: placementCollider, copy: copy, creation: creation, placement: placement));
                 }
             );
             }
@@ -841,50 +841,34 @@ public sealed partial class WorldColliderSet : IContactField {
 
     private void RecordAttachedCopy(FixedCreationStampPrimitiveCopy copy) {
 
-        FixedStaticCollider attached;
+        var attached = CopyCollider(copy: copy, margin: m_refreshMargin);
 
-        if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
-            var normal = copy.PlaneNormal;
+        m_attachedColliders.Add(item: attached);
+        m_attachedColliderRows.Add(item: m_refreshRow);
+        FoldCollider(collider: in attached, hash: ref m_refreshHash);
+    }
+    /// <summary>Returns every attached solid row its carrier resolved at the latest refresh, at the pose that refresh
+    /// sampled (the one every solve this tick runs against), with the colliders compiled there and their authored
+    /// sources: what a diagnostic compares with the authored solid at the same pose. A row whose carrier is inactive
+    /// collides with nothing and is absent.</summary>
+    /// <returns>The posed rows, in attached-row order.</returns>
+    public IReadOnlyList<WorldAttachedDiagnostic> DiagnosticAttached() {
+        var rows = new List<WorldAttachedDiagnostic>();
 
-            attached = FixedStaticCollider.HalfSpace(
-                point: (copy.Center + (normal * m_refreshMargin)),
-                normal: normal
-            );
-            m_attachedColliders.Add(item: attached);
-            m_attachedColliderRows.Add(item: m_refreshRow);
-            FoldCollider(
-                collider: in attached,
-                hash: ref m_refreshHash
-            );
-        } else if (
-            (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
-            (copy.UniformScale > FixedQ4816.Zero)
-        ) {
-            var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
+        for (var row = 0; (row < m_attachedRows.Count); row++) {
+            if (!m_attachedResolved[row]) { continue; }
 
-            attached = FixedStaticCollider.Sphere(
-                center: copy.Center,
-                radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + m_refreshMargin)
-            );
-            m_attachedColliders.Add(item: attached);
-            m_attachedColliderRows.Add(item: m_refreshRow);
-            FoldCollider(
-                collider: in attached,
-                hash: ref m_refreshHash
-            );
-        } else {
-            attached = PlacementFinite(
-                copy: copy,
-                margin: m_refreshMargin
-            );
-            m_attachedColliders.Add(item: attached);
-            m_attachedColliderRows.Add(item: m_refreshRow);
-            FoldCollider(
-                collider: in attached,
-                hash: ref m_refreshHash
-            );
+            var (placement, creation) = m_attachedRows[row];
+            var margin = FixedQ4816.FromDouble(value: placement.Solid!.Margin);
+            var colliders = new List<WorldDiagnosticCollider>();
+            var pose = new WorldPosedSolid(Creation: creation, Origin: m_attachedOrigins[row], Placement: placement, Rotation: m_attachedRotations[row]);
+
+            CreationStampEmitter.VisitFixedPrimitiveCopies(document: creation.EngineDocument, transform: pose.Transform,
+                visitor: copy => colliders.Add(item: DiagnosticOf(collider: CopyCollider(copy: copy, margin: margin), copy: copy, creation: creation, placement: placement)));
+            rows.Add(item: new WorldAttachedDiagnostic(Colliders: colliders, Pose: pose));
         }
 
+        return rows;
     }
     private void RefreshAttachedRows(WorldPopulation population) {
         m_refreshHash = Fnv1aHash.Create();
@@ -1101,6 +1085,12 @@ public sealed partial class WorldColliderSet : IContactField {
             previousPosition: in previousPosition, position: ref position, velocity: ref velocity,
             orientation: in orientation, volumes: volumes, up: in up,
             candidates: Candidates(orientation: in orientation, position: position, previousPosition: in previousPosition, volumes: volumes));
+    /// <inheritdoc/>
+    public bool TrySupportDistance(in FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes,
+        in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) =>
+        m_solver.TrySupportDistance(colliders: m_staticSet, dynamicColliders: m_attachedSet, position: in position,
+            orientation: in orientation, volumes: volumes, up: in up, reach: reach, descent: out descent,
+            candidates: Candidates(orientation: in orientation, position: (position - (up * reach)), previousPosition: in position, volumes: volumes));
     /// <inheritdoc/>
     // Searches m_holdableColliders alone (never m_attachedColliders — see the field's own remarks), with a zero
     // assist cone: a hold aims at the surface it is already touching, not at a target it is trying to acquire.

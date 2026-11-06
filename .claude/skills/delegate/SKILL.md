@@ -88,6 +88,11 @@ orders, verifying a change by building and running it, and fixing a defect at it
   while an earlier wait on it is still running (three bounded copies on one log is still three
   copies); a background wait notifies once, so take the next step on its notification instead of
   arming another.
+- Evidence is load-independent ([the phases](../orchestration/SKILL.md#spend-verification-not-writing)):
+  counters, hashes, bytes, executes, laws, captures. Report no timing as a result. A timing
+  question goes in your hand-back as a measurement request (frozen before and after builds, the
+  command, what decides it) for the lead's quiet window. Check each step with filtered laws and a
+  reproduce of only the scenarios it reaches; the lead runs the full suites once per batch.
 - A build takes no lease beyond the build lease a `puck` verb takes itself: `puck lease heavy` is
   for the memory-heavy test assemblies and reproduce replicas, and a build queued behind them waits
   for nothing.

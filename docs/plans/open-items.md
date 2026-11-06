@@ -51,8 +51,8 @@ milestone. The owner requested its baseline and implementation plan, which
 2. [Lighting and GI](#lighting-and-gi) [high]: the
    [graphics architecture plan](graphics-architecture.md)'s G1 acceptance work:
    reduce the landed GPU trace/relight's lockstep drain to a frame's work;
-   the sun's fixed grid stays the lockstep drain's correctness
-   fix beside it.
+   the authored capture grid bounds when changing lighting owes a drain,
+   while each boundary still needs the same full convergence.
 3. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
    M1 read, after the draw-identity fix R2's review found
    ([GPU robustness](#vulkan-regressions-and-gpu-robustness)).
@@ -737,9 +737,13 @@ Remaining:
   form would not tighten the enclosure, which is already the exact range of
   each octave's blend over the box, and an octave cut is only the drawn relief's
   own cut (the terrain pass's step 3), never a contact approximation.
-- `FixedStepUp.TrySnap`'s landing probes issue most relief contact queries while
-  walking, and the snap now also runs on unproved steps. Measure whether each
-  probe is needed before cutting the solve itself.
+- A ground snap's support distance against a field collider (relief) still
+  brackets that collider's own push by halving the reach
+  (`FixedSupportDistance.FieldProbes` solves), where a convex collider takes a
+  Newton step or two. A directed certified descent over the field's box bounds
+  would replace the bracket; the one certified sweep (`CertifiedFieldSweep`)
+  lives in `Puck.SignedDistance`, out of `Puck.Physics`' reach, so the field
+  collider would carry it as an `ICertifiedSweepQuery` the World supplies.
 - [low] Relieved instances are never culled from `WorldSolidField`'s program,
   because `NoiseDisplace` has no reach certificate (`SdfFieldEvaluator.Cull.cs`,
   `TryCertifyInstance`).
@@ -1674,8 +1678,8 @@ confirmed the AV1 item in the code; the rest are unconfirmed):
    (`Puck.World.Transpiler/Composition/WorldCompileCache.cs:186`, `494`) repeat
    `AssemblyReach.Of` (`Puck.Assets/AssemblyReach.cs:18`),
    and `CacheRetention.EnforceOnWrite`,
-   skipping `CacheRetention.Due`'s one-minute scan throttle on every cache
-   write (S) `[low]`.
+   skipping its per-process write tally (it lists only once its own writes pass
+   the bound, or a minute on) on every cache write (S) `[low]`.
 3. Camera plane validation and L8/BGRA packing:
    `Win32FaceAuthenticationPixelGraph`
    (`Puck.Platform.Windows/Win32FaceAuthenticationCameraGraph.cs:204`) beside
@@ -1737,6 +1741,17 @@ and owns the coarse levels' connectivity visibility (G3), and the
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) holds
 the fixed poses and the approaches already rejected.
 
+- [medium] Probe scene capacity retains its high-water allocation:
+  `GpuArena.Allocate` (`src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:147`)
+  never lowers `Words`, and `RecordSceneUpload`
+  (`src/Puck.SdfVm/SdfMeshProbeGpuWork.Scene.cs:33`) only grows the region.
+  Reclaim capacity after a large scene leaves, without moving a published
+  root or storage still read by an in-flight submission. Owner: lighting batch.
+- [medium] Unify the keyed placement arenas in `SdfMeshIrradianceScene.GpuArena`
+  (`src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:140`) and `SdfMeshRegionArena`
+  (`src/Puck.SdfVm/SdfMeshRegionArena.cs:20`). Both own keyed placement over
+  shared free ranges; one mechanism should retain their distinct payloads and
+  publication lifetimes. Owner: lighting batch.
 - Attribute `SdfMeshIrradiance.DescribeRelightReference`'s outdoor next-bounce
   discrepancy at `world.probe -3 1 -5 0 1 0`, after the fixed outdoor visit
   with day held. Separate retraced hit differences, shadow rays and the
@@ -1748,6 +1763,11 @@ the fixed poses and the approaches already rejected.
   `SdfMeshProbeRelight.OutputWords` prefix and publication copies the device
   buffer. Preserve the source output's readback-token/fence ownership through
   commit; do not trade that lifetime guarantee for fewer copied bytes.
+  `SdfMeshProbeGpuWork.Complete` (`src/Puck.SdfVm/SdfMeshProbeGpuWork.cs:352-358`)
+  also allocates the full readback and copies its payload again to strip the
+  assertion word. Carry an explicit logical length through the answer instead
+  of copying that payload; count answer bytes and allocations beside relight
+  time when compacting it.
 
 - [medium] GPU probe work still duplicates memory and copies.
   - The probe service's feedback region keeps a CPU copy as large as the
@@ -1758,10 +1778,10 @@ the fixed poses and the approaches already rejected.
     interleaves records; one scatter dispatch replaces them.
   - The bloom kernels (`sdf-bloom-down`, `sdf-bloom-apply`) and the overlay
     keep literal luminance weights instead of the generated `SDF_LUMINANCE`.
-  - `SdfMeshProbeGpuWork.Abandon` leaves the scene carry to the next
-    completion.
-  - Relight, select, meter and cache have no CPU/GPU parity law; only
-    `world.probe`'s relight reference compares them.
+  - Full relight, selection, metering and hit-cache paths need CPU/GPU parity
+    coverage. The trace law covers miss-only directional visibility and the
+    gather law covers receiver lookup; `world.probe` supplies the broader
+    relight reference.
 
 - [high] Night lighting, from the owner's walkthrough at the lawn's trees:
   - **The jump to night is wrong.** Forcing midnight
@@ -1781,32 +1801,6 @@ the fixed poses and the approaches already rejected.
     mean luma. This is probably stepped relighting or exposure updates. Check it
     against the lockstep relight work below.
 
-- [high] Under lockstep a moving sun relights the whole probe window every tick
-  from no bounce: a lockstep frame drains the irradiance relight to the end
-  before it renders (`SdfMeshIrradiance.Stage`, `SdfMeshIrradiance.cs:538-563`),
-  and the day cycle moves the lighting version in `DrainKey()` (`:578`) every
-  tick, the capture limit skipped at `:1084`. A lockstep tick with the day
-  running therefore takes seconds, so the sweep's windowed leg cannot run with
-  the day cycle ([sweep](#sweep-and-visual-checks)). Fix at the cause: quantize
-  the sun on a fixed grid under lockstep (never against the last capture, which
-  would make the image depend on when a run started), so a lockstep frame
-  relights only what its own time moved. One function snaps the directional
-  lights' direction and radiance, read by both `RefreshLighting`'s key
-  (`SdfMeshIrradiance.cs:1076`) and `Lighting.Capture` (`:1092`), so the drained
-  light stays a pure function of the frame; the windowed path can take the same
-  snapped key in place of its wall-clock `LightingInterval`, leaving one policy.
-  The sky-only tolerance (`SkyMatches`, `:1086,1097`) compares against the
-  previous capture too, so lockstep's sky bounce also depends on history; the
-  same quantization removes it. A drain relights the whole window from no
-  bounce until a pass moves nothing, and that from-no-bounce invariant stays.
-  Measured in the debug world at High: with the day running at its authored
-  1/1440 per second, every lockstep tick advanced `sdf.mesh-gi.relit` by
-  1,032,192 (73,728 probes × 14 passes); with the day pinned, 100 stationary
-  lockstep ticks relit nothing, and each window move (a `debug.go`, a tier
-  switch) relit the same 1,032,192 once, which a walk crossing a window's band
-  repeats. Prove it by `sdf.mesh-gi.relit` per tick and drains per 100
-  ticks under lockstep with the day cycle running, and by two lockstep runs
-  started at different ticks capturing an identical still at one tick.
 - From step 1: stretching the far cascade to cover the valley costs too much,
   so the valley waits for the terrain pass's step 7 static cascade; indoors a
   cel style tints bounced light as its shadow band, so banded materials in the
@@ -2030,8 +2024,8 @@ colliders report's only red findings left are the valley's relief
 - A creation whose contact shapes blend other than by hard union collides as
   its composed field (`WorldColliderSet.CollidesAsField`), relieved or not. A
   cheaper exact join would be a smooth-union primitive pair with its k/4 seam
-  bound, if the field's cost ever becomes the limit; on the rim the step-up's
-  landing probes (`FixedStepUp.TrySnap`) are the larger share
+  bound, if the field's cost ever becomes the limit; on the rim the ground
+  snap's field bracket (`FixedSupportDistance`) is the share to measure first
   ([certified field contact](#certified-field-contact)).
 - The bake-side causes live in the [rendering plan's](rendering.md)
   bake items: a long thin member of a static union baking at the union's capped
@@ -2544,16 +2538,6 @@ both runs.
   valid readings against a baseline whose only red reason was a prior baseline
   difference remain clean, rather than becoming red for `red -> clean`.
 
-- [high] The windowed leg never reaches its tour while the day cycle runs.
-  After settling, the sweep runs `world.rate resume`, `world.wait 300`,
-  `world.rate pause` in one 120 s call (`SweepCommand.cs:267`) with lockstep on,
-  and every lockstep frame relights every probe under the moving sun, so the
-  call times out and every windowed signal and still goes unmeasured. The cause
-  is the [lockstep relight](#lighting-and-gi); holding the sun in the plan's
-  prelude does not help, since the warm-up runs before the prelude. Until it is
-  fixed, a tour runs attached with the sun held before attaching
-  (`world.row.set state day advance
-  {"perSecondNumerator":0,"perSecondDenominator":1}`).
 - [medium] `world.debug-view report colliders --json` throws
   `DivideByZeroException` (`[world.debug-view: handler threw
   DivideByZeroException: Attempted to divide by zero.]`) on the debug world,
@@ -2576,10 +2560,9 @@ both runs.
   the repository like any derived product; each machine compares against its
   own. The tour splits into a main part and a `night-field` part per backend,
   as attached windowed legs with the sun held (`--no-headless --no-scenarios`),
-  and each part compares with its own counterpart. Known red signals are the
-  baseline's drift, the colliders refusal, frames read under lockstep (each tick
-  waiting for its frame, so not the frame bar), and the watchdog's
-  `companion-overlap` records.
+  and each part compares with its own counterpart. Warm-up and timing signals
+  use ordinary presentation (`SweepCommand.Run`); only the still tour converges
+  its clock and lighting.
 - [low] A sweep's `--baseline` names one report, but a split run (a headless
   report and a windowed one, or a tour in parts) marks every signal the other
   part read as `baseline: new signal`, red, and a report does not merge two runs
