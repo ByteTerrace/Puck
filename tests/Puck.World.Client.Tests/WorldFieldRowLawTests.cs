@@ -104,7 +104,7 @@ public sealed class WorldFieldRowLawTests {
         var context = new SdfEmitContext(true, 0f, Vector3.Zero, Vector3.Zero, 0);
         emitter.Emit(builder: builder, context: in context);
         var program = builder.Build();
-        var actual = Assert.Single(collection: program.Materials);
+        var actual = Assert.Single(collection: program.Appearance.Materials);
         Assert.Equal(expected: 0.16f, actual: actual.Roughness);
         Assert.Equal(expected: 0.3f, actual: actual.Coat);
         Assert.NotNull(@object: actual.Glass);

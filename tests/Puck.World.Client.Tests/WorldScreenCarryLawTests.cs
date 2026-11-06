@@ -88,7 +88,7 @@ public sealed class WorldScreenCarryLawTests {
     // Packs one frame of body 0 wearing the holder at the origin, facing the engine's default heading.
     // The surface the frame's program declares for the carried screen; the slots above it are the reserved band's.
     private static SdfScreenSurface Surface(SdfFrame frame) => Assert.Single(
-        collection: frame.Program.ScreenSurfaces,
+        collection: frame.Program.Appearance.ScreenSurfaces,
         predicate: surface => (surface.ScreenIndex == ScreenIndex)
     );
     // The stamp wears the world's creation unless a stamped one is given, as a live edit leaves it out of step.
@@ -177,7 +177,7 @@ public sealed class WorldScreenCarryLawTests {
             screens: heldWorld.Screens,
             slotBase: 0
         );
-        Assert.Single(collection: builder.Build().ScreenSurfaces);
+        Assert.Single(collection: builder.Build().Appearance.ScreenSurfaces);
 
         var (restingPool, restingClient) = Pack(world: World(carry: carry));
 

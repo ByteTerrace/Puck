@@ -39,7 +39,7 @@ public sealed class PalettePaintEmissionLawTests {
         ]
     ), id: "painted");
     private static IReadOnlyList<SdfPaint> PaintsOf(SdfProgram program) =>
-        program.Materials.Single(predicate: static material => (material.Paints is { Count: > 0 })).Paints!;
+        program.Appearance.Materials.Single(predicate: static material => (material.Paints is { Count: > 0 })).Paints!;
 
     [InlineData(false)]
     [InlineData(true)]
@@ -54,7 +54,7 @@ public sealed class PalettePaintEmissionLawTests {
         }
         var program = CreationDomainParentLawTests.EmitProgram(creation: creation, scale: Scale);
         var material = program.Instructions.First(instruction => (instruction.Op == SdfOp.ShapeBlend)).Material;
-        var paints = program.Materials[((int)material)].Paints!;
+        var paints = program.Appearance.Materials[((int)material)].Paints!;
         var localScale = (articulated ? Scale : 1f);
 
         Assert.Equal(expected: 2, actual: paints.Count);

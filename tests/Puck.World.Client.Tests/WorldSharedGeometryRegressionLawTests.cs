@@ -62,7 +62,7 @@ public sealed class WorldSharedGeometryRegressionLawTests {
 
         Assert.Equal(2, before.Program.Instructions.Count(i => (i.Op == SdfOp.ShapeBlend)));
         Assert.Single(isolated.Program.Instructions, i => (i.Op == SdfOp.ShapeBlend));
-        var painted = isolated.Program.Materials.Where(m => (m.Paints is not null)).ToArray();
+        var painted = isolated.Program.Appearance.Materials.Where(m => (m.Paints is not null)).ToArray();
 
         Assert.NotEmpty(painted);
         Assert.All(painted, m => Assert.Single(m.Paints!));
