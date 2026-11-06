@@ -91,189 +91,75 @@ public static class FixedRigidWitness {
                 return volume.Center;
         }
     }
-    /// <summary>Builds the resting support manifold for <paramref name="volume"/> against a near-horizontal contact
-    /// <paramref name="normal"/>: the box's own true support corners near its face closest to the surface (up to
-    /// four; fewer once the body is tilted enough that not every corner of that face is still the deepest — see
-    /// <see cref="DepthToleranceFraction"/>) or, for a capsule lying on its side, its two end-sphere centres offset
-    /// out to the surface — each anchor on the same terms as <see cref="Anchor"/> (relative to the body's centre of
-    /// mass, world axes). A standing capsule, a sphere, or any other volume kind writes exactly the single point
-    /// <see cref="Anchor"/> itself would compute — a manifold caller can always read the returned count as "the
-    /// manifold, one point or many" without a separate branch.</summary>
-    /// <param name="volume">The body-local collider volume (already scaled for the body's live scale).</param>
+    /// <summary>The largest number of points <see cref="SupportManifold"/> writes.</summary>
+    public const int MaximumSupportPoints = 4;
+
+    /// <summary>Builds the support manifold of <paramref name="volume"/> facing a contact: for a box, the four corners of
+    /// the face whose outward normal is closest to the direction into the contact, each named by the box corner it is
+    /// (bit 2 set for the positive X half extent, bit 1 for Y, bit 0 for Z), so a corner keeps its identity while the face
+    /// it belongs to changes; for a capsule with a length, the support points of both end spheres (feature 0 for the
+    /// lower endpoint, 1 for the upper); one support point, feature 0, for any other volume. Each anchor is on the same
+    /// terms as <see cref="Anchor"/>: relative to the body's centre of mass, in world axes. Points that do not reach the
+    /// contact are written too — a caller gives each its own separation, so a corner lifted off the surface is a
+    /// speculative contact rather than a missing one.</summary>
+    /// <param name="volume">The body-local collider volume, already scaled for the body's live scale.</param>
     /// <param name="centerOffset">The collider's own centre-of-mass offset from the body root, body-local axes.</param>
     /// <param name="orientation">The body's current world orientation.</param>
-    /// <param name="normal">The contact normal, world axes, pointing away from the surface toward the body.</param>
-    /// <param name="anchors">Receives the manifold's anchors; must hold at least 4.</param>
-    /// <returns>The number of anchors written: 1-4 for a box (fewer once tilted), 2 for a side-lying capsule, 1
-    /// otherwise.</returns>
-    public static int SupportManifold(FixedBodyColliderVolume volume, FixedVector3 centerOffset, FixedQuaternion orientation, FixedVector3 normal, Span<FixedVector3> anchors) {
+    /// <param name="normal">The contact normal, world axes, pointing away from the contact toward the body.</param>
+    /// <param name="anchors">The destination for the anchors; holds at least <see cref="MaximumSupportPoints"/>.</param>
+    /// <param name="features">The destination for each anchor's feature id; holds at least
+    /// <see cref="MaximumSupportPoints"/>.</param>
+    /// <returns>The number of points written: 4 for a box, 2 for a capsule with a length, 1 otherwise.</returns>
+    public static int SupportManifold(FixedBodyColliderVolume volume, FixedVector3 centerOffset, FixedQuaternion orientation, FixedVector3 normal, Span<FixedVector3> anchors, Span<int> features) {
         var into = -normal;
-        var localInto = orientation.RotateInverse(vector: into).Normalize();
 
         switch (volume.Kind) {
             case FixedBodyColliderKind.Box: {
-                    var half = volume.HalfExtents;
-                    var absX = FixedQ4816.Abs(value: localInto.X);
-                    var absY = FixedQ4816.Abs(value: localInto.Y);
-                    var absZ = FixedQ4816.Abs(value: localInto.Z);
-                    Span<FixedVector3> corners = stackalloc FixedVector3[4];
-
-                    if (
-                        (absX >= absY) &&
-                        (absX >= absZ)
-                    ) {
-                        var x = ((localInto.X >= FixedQ4816.Zero)
-                            ? half.X
-                            : -half.X
-                        );
-
-                        corners[0] = new FixedVector3(
-                            X: x,
-                            Y: half.Y,
-                            Z: half.Z
-                        );
-                        corners[1] = new FixedVector3(
-                            X: x,
-                            Y: half.Y,
-                            Z: -half.Z
-                        );
-                        corners[2] = new FixedVector3(
-                            X: x,
-                            Y: -half.Y,
-                            Z: half.Z
-                        );
-                        corners[3] = new FixedVector3(
-                            X: x,
-                            Y: -half.Y,
-                            Z: -half.Z
-                        );
-                    } else if (absY >= absZ) {
-                        var y = ((localInto.Y >= FixedQ4816.Zero)
-                            ? half.Y
-                            : -half.Y
-                        );
-
-                        corners[0] = new FixedVector3(
-                            X: half.X,
-                            Y: y,
-                            Z: half.Z
-                        );
-                        corners[1] = new FixedVector3(
-                            X: half.X,
-                            Y: y,
-                            Z: -half.Z
-                        );
-                        corners[2] = new FixedVector3(
-                            X: -half.X,
-                            Y: y,
-                            Z: half.Z
-                        );
-                        corners[3] = new FixedVector3(
-                            X: -half.X,
-                            Y: y,
-                            Z: -half.Z
-                        );
-                    } else {
-                        var z = ((localInto.Z >= FixedQ4816.Zero)
-                            ? half.Z
-                            : -half.Z
-                        );
-
-                        corners[0] = new FixedVector3(
-                            X: half.X,
-                            Y: half.Y,
-                            Z: z
-                        );
-                        corners[1] = new FixedVector3(
-                            X: half.X,
-                            Y: -half.Y,
-                            Z: z
-                        );
-                        corners[2] = new FixedVector3(
-                            X: -half.X,
-                            Y: half.Y,
-                            Z: z
-                        );
-                        corners[3] = new FixedVector3(
-                            X: -half.X,
-                            Y: -half.Y,
-                            Z: z
-                        );
-                    }
-
-                    // The four corners share the box's dominant-axis coordinate, so they are coplanar in the box's LOCAL
-                    // frame; under any tilt they sit at different world depths along `into`, and only the deepest one
-                    // (or, for a single-axis tilt, the deepest edge pair) is the true support point — the others are a
-                    // torque-free rectangle only at exact rest. Keep candidates within DepthToleranceFraction of the
-                    // deepest, scaled by the box's own half-extent span rather than a fixed world-unit slack (which
-                    // would cover a thin body's whole tipping range — see DepthToleranceFraction).
-                    Span<FixedVector3> candidates = stackalloc FixedVector3[4];
-                    Span<FixedQ4816> depths = stackalloc FixedQ4816[4];
-                    var deepest = FixedQ4816.MinValue;
-
-                    for (var index = 0; (index < 4); index++) {
-                        var local = (volume.Center + volume.Rotation.Rotate(vector: corners[index]));
-                        var anchor = orientation.Rotate(vector: (local - centerOffset));
-                        var depth = FixedVector3.Dot(
-                            left: anchor,
-                            right: into
-                        );
-
-                        candidates[index] = anchor;
-                        depths[index] = depth;
-                        deepest = FixedQ4816.Max(
-                            x: deepest,
-                            y: depth
-                        );
-                    }
-
-                    var depthTolerance = (half.Length * DepthToleranceFraction);
+                    var boxInto = volume.Rotation.RotateInverse(vector: orientation.RotateInverse(vector: into));
+                    var absX = FixedQ4816.Abs(value: boxInto.X);
+                    var absY = FixedQ4816.Abs(value: boxInto.Y);
+                    var absZ = FixedQ4816.Abs(value: boxInto.Z);
+                    // The face's fixed axis and its sign; the other two axes run over both signs.
+                    var axis = (((absX >= absY) && (absX >= absZ))
+                        ? 0
+                        : ((absY >= absZ) ? 1 : 2)
+                    );
+                    var positive = (axis switch {
+                        0 => (boxInto.X >= FixedQ4816.Zero),
+                        1 => (boxInto.Y >= FixedQ4816.Zero),
+                        _ => (boxInto.Z >= FixedQ4816.Zero),
+                    });
                     var written = 0;
 
-                    for (var index = 0; (index < 4); index++) {
-                        if ((deepest - depths[index]) <= depthTolerance) {
-                            anchors[written] = candidates[index];
-                            written++;
+                    for (var corner = 0; (corner < 8); corner++) {
+                        var bit = (1 << (2 - axis));
+
+                        if (((corner & bit) != 0) != positive) {
+                            continue;
                         }
+
+                        var local = new FixedVector3(
+                            X: (((corner & 4) != 0) ? volume.HalfExtents.X : -volume.HalfExtents.X),
+                            Y: (((corner & 2) != 0) ? volume.HalfExtents.Y : -volume.HalfExtents.Y),
+                            Z: (((corner & 1) != 0) ? volume.HalfExtents.Z : -volume.HalfExtents.Z)
+                        );
+
+                        anchors[written] = orientation.Rotate(vector: ((volume.Center + volume.Rotation.Rotate(vector: local)) - centerOffset));
+                        features[written] = corner;
+                        written++;
                     }
 
                     return written;
                 }
 
-            case FixedBodyColliderKind.Capsule: {
-                    var axis = (volume.Endpoint - volume.Center);
-                    var axisLength = axis.Length;
-
-                    if (axisLength <= FixedQ4816.Zero) {
-                        anchors[0] = Anchor(
-                            centerOffset: centerOffset,
-                            orientation: orientation,
-                            volume: volume,
-                            worldDirection: into
-                        );
-                        return 1;
-                    }
-
-                    var axisUnit = (axis / axisLength);
-                    var alignment = FixedQ4816.Abs(value: FixedVector3.Dot(
-                        left: axisUnit,
-                        right: localInto
-                    ));
-
-                    if (alignment >= LyingOnSideAlignmentCeiling) {
-                        anchors[0] = Anchor(
-                            centerOffset: centerOffset,
-                            orientation: orientation,
-                            volume: volume,
-                            worldDirection: into
-                        );
-                        return 1;
-                    }
-
-                    var capOffset = (localInto * volume.Radius);
+            case FixedBodyColliderKind.Capsule when (volume.Endpoint != volume.Center): {
+                    var capOffset = (orientation.RotateInverse(vector: into).Normalize() * volume.Radius);
 
                     anchors[0] = orientation.Rotate(vector: ((volume.Center + capOffset) - centerOffset));
+                    features[0] = 0;
                     anchors[1] = orientation.Rotate(vector: ((volume.Endpoint + capOffset) - centerOffset));
+                    features[1] = 1;
+
                     return 2;
                 }
 
@@ -284,18 +170,31 @@ public static class FixedRigidWitness {
                     volume: volume,
                     worldDirection: into
                 );
+                features[0] = 0;
+
                 return 1;
         }
     }
+    /// <summary>Returns the point of a box volume grown by a margin on every axis nearest a world point: the point
+    /// itself when it lies inside, otherwise the point clamped onto the grown box along the box's own axes.</summary>
+    /// <param name="volume">The body-local box volume.</param>
+    /// <param name="root">The body root's world position.</param>
+    /// <param name="orientation">The body's world orientation.</param>
+    /// <param name="point">The world point.</param>
+    /// <param name="margin">The non-negative growth on every axis.</param>
+    /// <returns>The clamped world point.</returns>
+    public static FixedVector3 BoxClamp(FixedBodyColliderVolume volume, FixedVector3 root, FixedQuaternion orientation, FixedVector3 point, FixedQ4816 margin) {
+        var local = volume.Rotation.RotateInverse(vector: (orientation.RotateInverse(vector: (point - root)) - volume.Center));
+        var limit = (volume.HalfExtents + new FixedVector3(X: margin, Y: margin, Z: margin));
+        var clamped = new FixedVector3(
+            X: FixedQ4816.Clamp(value: local.X, minimum: -limit.X, maximum: limit.X),
+            Y: FixedQ4816.Clamp(value: local.Y, minimum: -limit.Y, maximum: limit.Y),
+            Z: FixedQ4816.Clamp(value: local.Z, minimum: -limit.Z, maximum: limit.Z)
+        );
 
-    // cos(45deg) at Q16: a capsule axis within this alignment of the contact normal reads as "standing" (one cap
-    // touches); further from it reads as "lying on its side" (both caps touch a flat support at once). A geometric
-    // classification threshold, not an authored tunable — every capsule reads the same boundary between one contact
-    // point and two.
-    private static readonly FixedQ4816 LyingOnSideAlignmentCeiling = FixedQ4816.FromDouble(value: 0.70710678d);
-    // The fraction of a box's own half-extent span (HalfExtents.Length) two candidate corners' depths along the
-    // contact normal may differ by and still count as the same support point. A geometric classification threshold,
-    // not an authored tunable, on the same terms as LyingOnSideAlignmentCeiling above — scaled by the shape rather
-    // than a flat world-unit slack so it never swallows a thin body's own critical tipping range.
-    private static readonly FixedQ4816 DepthToleranceFraction = FixedQ4816.FromDouble(value: 0.0625d);
+        return ((clamped == local)
+            ? point
+            : (root + orientation.Rotate(vector: (volume.Center + volume.Rotation.Rotate(vector: clamped))))
+        );
+    }
 }

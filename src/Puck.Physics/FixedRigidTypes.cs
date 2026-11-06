@@ -19,19 +19,10 @@ public readonly record struct FixedRigidScales(int InverseMass, int InverseInert
         InverseMass: 40
     );
 }
-/// <summary>How the solver activates a contact whose current separation is still positive.</summary>
-public enum FixedSpeculativeActivation {
-    /// <summary>Current separation minus a conservatively rounded-UP bound on the closing travel this step.</summary>
-    Conservative,
-    /// <summary>Current separation alone — the sabotage that removes the predicted term entirely.</summary>
-    CurrentOnly,
-    /// <summary>Current separation minus a round-to-NEAREST bound on the closing travel — the sabotage that keeps the
-    /// prediction but drops its direction.</summary>
-    NearestRounded,
-}
 /// <summary>
-/// The production rigid solver's authored controls. Mechanism-isolation switches used by its retained promotion
-/// battery remain internal and the public surface always selects the intended deterministic path.
+/// The rigid solver's controls: the step's rate and substep sequence, the contact softness and the carrier placement.
+/// Friction and restitution are per contact pair (<see cref="FixedRigidManifold"/>), and a body's acceleration is its own
+/// (<see cref="FixedRigidBody.Acceleration"/>), so neither is a world-wide option.
 /// </summary>
 public sealed class FixedRigidSolverOptions {
     /// <summary>The world's simulation rate in hertz.</summary>
@@ -50,39 +41,10 @@ public sealed class FixedRigidSolverOptions {
     public FixedQ4816 ContactDampingRatio { get; init; } = FixedQ4816.FromInteger(value: 10L);
     /// <summary>The ceiling on the push-out speed a biased solve may request.</summary>
     public FixedQ4816 ContactSpeed { get; init; } = FixedQ4816.FromInteger(value: 3L);
-    /// <summary>The coefficient of restitution.</summary>
-    public FixedQ4816 Restitution { get; init; } = FixedQ4816.Zero;
-    /// <summary>The relative normal speed below which restitution is not applied.</summary>
+    /// <summary>The closing normal speed below which a contact restitutes at zero rather than its pair's coefficient.</summary>
     public FixedQ4816 RestitutionThreshold { get; init; } = FixedQ4816.FromInteger(value: 1L);
-    /// <summary>The coefficient of friction, applied uniformly to every contact. Zero by default, so a caller that
-    /// never sets it sees no tangential resistance.</summary>
-    public FixedQ4816 Friction { get; init; } = FixedQ4816.Zero;
-    /// <summary>The uniform acceleration applied to every dynamic body each substep.</summary>
-    public FixedVector3 Gravity { get; init; } = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.FromDouble(value: -9.81d),
-        Z: FixedQ4816.Zero
-    );
-    /// <summary>An extra uniform acceleration applied to every dynamic body each substep.</summary>
-    public FixedVector3 AppliedAcceleration { get; init; } = FixedVector3.Zero;
-    /// <summary>The separation at or below which an ordinary contact activates.</summary>
-    public FixedQ4816 ContactMargin { get; init; } = FixedQ4816.FromDouble(value: 0.04d);
-    /// <summary>The separation below which a contact is routed to the recovery path rather than solved.</summary>
-    public FixedQ4816 RecoveryThreshold { get; init; } = FixedQ4816.FromDouble(value: -0.05d);
-    /// <summary>The ceiling on the extraction speed the recovery path may request.</summary>
-    public FixedQ4816 RecoverySpeed { get; init; } = FixedQ4816.FromInteger(value: 2L);
     /// <summary>Whether stored impulses are re-applied at the head of each substep.</summary>
     public bool WarmStart { get; init; } = true;
-    /// <summary>Whether candidates are canonically ordered before they are associated into slots.</summary>
-    public bool CanonicalOrder { get; init; } = true;
-    /// <summary>Whether a candidate is associated by its composite identity plus deterministic geometric matching.
-    /// Turning it off keys a slot by the BODY FEATURE index alone — the refuted scheme in which one sphere touching a
-    /// floor and a wall at once collapses into a single cache entry.</summary>
-    public bool CompositeIdentity { get; init; } = true;
-    /// <summary>How a positive current separation is turned into an activation decision.</summary>
-    public FixedSpeculativeActivation Activation { get; init; } = FixedSpeculativeActivation.Conservative;
-    /// <summary>Whether a candidate past <see cref="RecoveryThreshold"/> is routed to the bounded extraction path.</summary>
-    public bool DeepRecovery { get; init; } = true;
     /// <summary>The largest accumulated impulse change, in raw Q48.16 units, an iteration may leave and still be read
     /// as converged. It is a READING, never a control: the solve always runs its full iteration budget, so changing
     /// this cannot change a trajectory.</summary>
@@ -93,9 +55,14 @@ public sealed class FixedRigidSolverOptions {
 /// <summary>
 /// One rigid body as the solver sees it. There is no absolute position anywhere on this type: the solver reads the
 /// per-step displacement it has itself accumulated and the contact anchors a candidate carried, and nothing else. The
-/// owning fixture holds the absolute placement and applies the committed displacement at the end of a step.
+/// owning fixture holds the absolute placement and applies the committed displacement at the end of a step. A body with
+/// zero inverse mass is static: it never receives an impulse and never integrates, but its velocity still enters a
+/// contact's relative velocity, so a kinematic body pushes without being pushed.
 /// </summary>
 public sealed class FixedRigidBody {
+    /// <summary>The uniform acceleration (gravity and any applied field) the solver adds to a dynamic body's linear
+    /// velocity each substep, in world axes.</summary>
+    public FixedVector3 Acceleration { get; set; }
     /// <summary>The angular velocity in world axes.</summary>
     public FixedVector3 AngularVelocity { get; set; }
     /// <summary>Gets the rotation taking body axes to world axes as of the current substep.</summary>
@@ -125,14 +92,9 @@ public sealed class FixedRigidBody {
     public FixedQuaternion Orientation { get; set; } = FixedQuaternion.Identity;
     /// <summary>The rotation accumulated within the current step.</summary>
     public FixedQuaternion DeltaRotation { get; set; } = FixedQuaternion.Identity;
-    /// <summary>The AUTHORED direction the recovery path extracts a deeply overlapping body along. It is authored
-    /// rather than derived because a body embedded past a thin solid's midplane has a nearest surface on the wrong
-    /// side, and a normal read off that surface would extract it further in.</summary>
-    public FixedVector3 EscapeDirection { get; set; } = FixedVector3.UnitY;
 
     /// <summary>Folds the persistent simulation state into a running digest in a fixed order — linear velocity,
-    /// angular velocity, then orientation — leaving the per-step accumulators and the authored escape direction
-    /// outside the digest.</summary>
+    /// angular velocity, then orientation — leaving the per-step accumulators outside the digest.</summary>
     /// <param name="digest">The running digest, advanced in place.</param>
     public void Fold(ref Fnv1aHash digest) {
         digest.Add(value: LinearVelocity.X.Value);
@@ -150,76 +112,5 @@ public sealed class FixedRigidBody {
     public void ResetStepAccumulators() {
         DeltaPosition = FixedVector3.Zero;
         DeltaRotation = FixedQuaternion.Identity;
-    }
-}
-/// <summary>
-/// One contact CANDIDATE: a surface a generator believes the body may be touching, carrying the identity of what
-/// produced it, the witness geometry, and the separation. A candidate is not yet a constraint — a slot table decides
-/// which persistent manifold slot it lands in, and only a slot carries an accumulated impulse.
-/// </summary>
-/// <param name="SourceId">The identity of the surface the candidate came from.</param>
-/// <param name="FeatureId">The identity of the body feature the candidate came from.</param>
-/// <param name="Anchor">The contact point relative to the body's centre of mass, in world axes.</param>
-/// <param name="Normal">The unit surface normal, in world axes, pointing out of the surface toward the body.</param>
-/// <param name="Separation">The signed gap; negative means overlapping.</param>
-public readonly record struct FixedContactCandidate(
-    int SourceId,
-    int FeatureId,
-    FixedVector3 Anchor,
-    FixedVector3 Normal,
-    FixedQ4816 Separation
-) : IManifoldCandidate {
-    /// <summary>Sorts a candidate list into canonical order in place.</summary>
-    /// <param name="candidates">The candidates to order.</param>
-    /// <remarks>An explicit insertion sort rather than a library sort: the ordering is part of the contract the D4 law
-    /// proves, so it is written where it can be read, and its cost is irrelevant at manifold sizes.</remarks>
-    public static void Canonicalize(List<FixedContactCandidate> candidates) =>
-        FixedContactCanonicalization.InsertionSort(
-            candidates: candidates,
-            compare: Compare
-        );
-    /// <summary>Compares two candidates on a TOTAL key: source, feature, normal, separation, then anchor, each read as
-    /// a raw carrier word.</summary>
-    /// <param name="left">The first candidate.</param>
-    /// <param name="right">The second candidate.</param>
-    /// <returns>A negative value, zero, or a positive value as <paramref name="left"/> orders before, with, or after
-    /// <paramref name="right"/>.</returns>
-    /// <remarks>The key covers every declared field, so two candidates comparing equal are bitwise identical and
-    /// therefore interchangeable — which is what makes the ordering independent of the order the generator emitted
-    /// them in, without needing a stable sort.</remarks>
-    public static int Compare(FixedContactCandidate left, FixedContactCandidate right) {
-        var order = left.SourceId.CompareTo(value: right.SourceId);
-
-        if (order != 0) { return order; }
-
-        order = left.FeatureId.CompareTo(value: right.FeatureId);
-
-        if (order != 0) { return order; }
-
-        order = left.Normal.X.Value.CompareTo(value: right.Normal.X.Value);
-
-        if (order != 0) { return order; }
-
-        order = left.Normal.Y.Value.CompareTo(value: right.Normal.Y.Value);
-
-        if (order != 0) { return order; }
-
-        order = left.Normal.Z.Value.CompareTo(value: right.Normal.Z.Value);
-
-        if (order != 0) { return order; }
-
-        order = left.Separation.Value.CompareTo(value: right.Separation.Value);
-
-        if (order != 0) { return order; }
-
-        order = left.Anchor.X.Value.CompareTo(value: right.Anchor.X.Value);
-
-        if (order != 0) { return order; }
-
-        order = left.Anchor.Y.Value.CompareTo(value: right.Anchor.Y.Value);
-
-        if (order != 0) { return order; }
-
-        return left.Anchor.Z.Value.CompareTo(value: right.Anchor.Z.Value);
     }
 }

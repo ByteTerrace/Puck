@@ -3,61 +3,54 @@ using Puck.Maths;
 namespace Puck.Physics;
 
 /// <summary>
-/// SHAPE ONLY — not wired into any world tick. A multi-body orchestrator over <see cref="FixedTwoBodyKernel"/> and
-/// per-pair <see cref="FixedPairManifoldSlotTable"/>s: one <see cref="FixedRigidSolver"/> generalizes to a body, this
-/// generalizes to any number of bodies and the pairs among them. It acquires no absolute position, broadphase, or
-/// world-schema dependency — candidates arrive caller-supplied, exactly as <see cref="FixedRigidSolver"/>'s already do.
+/// The rigid contact solver: a deterministic soft-step sequential-impulse solve over temporal substeps, for any number
+/// of bodies and the contact manifolds among them and against static surfaces. The contact geometry enters once a step,
+/// as caller-generated candidates associated into each <see cref="FixedRigidManifold"/>; the substeps and solver passes
+/// then re-derive every separation from the displacement the solver has itself accumulated, so no geometry query runs
+/// inside the solve.
 /// </summary>
 /// <remarks>
-/// <para><b>Body identity.</b> A body's id is assigned at <see cref="AddBody"/> as the NEXT ordinal of an
-/// ever-increasing counter, and doubles as its dense-array storage index — there is no separate id-to-index map, and
-/// no hash container anywhere in this type. An id is never reused within one instance's lifetime, including after its
-/// body is removed: <see cref="RemoveBody"/> tombstones the array slot (sets it to <see langword="null"/>) rather than
-/// swap-removing, so removing one body never changes another's storage index mid-tick. The id space is an
-/// <see cref="int"/> ordinal — up to <see cref="int.MaxValue"/> bodies over the world's lifetime, effectively
-/// unbounded for a real session; growth cost lives in the backing array, never in the id itself.</para>
-/// <para><b>Pair storage.</b> Each active body pair owns its OWN <see cref="FixedPairManifoldSlotTable"/> — the same
-/// per-body 16-slot cap <see cref="FixedRigidSolver"/> already uses, now read as a per-PAIR cap — rather than one
-/// global flat array. The pair registry itself is a dense, canonically-ordered array with a DECLARED
-/// <see cref="MaxActivePairs"/> budget: at capacity, a new pair evicts the least-recently-active existing pair, and
-/// once every slot is claimed for the step, the overflow pair's candidates are dropped rather than destroying a
-/// claimed contact — the same policy <see cref="FixedManifoldSlotTable.Associate"/> already applies at the slot
-/// level, one level up.</para>
-/// <para><b>Order.</b> Every candidate is canonicalized on the world's own (bodyIdMin, bodyIdMax, source, feature,
-/// normal, separation, anchorA, anchorB) key before association. Bodies are integrated in ascending id order; pairs
-/// are solved in ascending registry-index order, and each pair's own slots in ascending slot-index order.</para>
+/// <para><b>Substep sequence.</b> Per substep: integrate velocities, warm start, biased solve, integrate positions,
+/// unbiased relax (the only pass that solves friction). Restitution runs once at the end of the step, then each slot's
+/// friction impulse is stored back as a world vector. The softness coefficients are formed at the substep width.</para>
+/// <para><b>Order.</b> Bodies are integrated in the order the caller lists them and manifolds are solved in the order the
+/// caller lists them, each manifold's slots in ascending index order. The caller supplies a canonical order; nothing here
+/// reads a hash container.</para>
+/// <para><b>Rounding.</b> Every mixed-scale product goes through the refusing face of the fused kernels, so a result that
+/// leaves its carrier is declined and counted (<see cref="RefusalCount"/>) rather than wrapped into an ordinary
+/// answer.</para>
 /// </remarks>
 public sealed class FixedRigidWorld {
-    /// <summary>The default declared budget on simultaneously active body pairs.</summary>
-    public const int DefaultMaxActivePairs = 64;
-
     private readonly FixedQ4816 m_doubleSubstepRate;
     private readonly FixedSoftConstraint m_dynamicSoftness;
     private readonly FixedRigidSolverOptions m_options;
-    private readonly long[] m_pairStepMovement;
-    private readonly PairRecord[] m_pairs;
     private readonly FixedSoftConstraint m_staticSoftness;
+    // The substep rate is exactly 1/h, so it serves both as the divisor every h-scaled integration uses and as the
+    // multiplier the speculative bias applies; the reciprocal is never formed.
     private readonly FixedQ4816 m_substepRate;
-    private readonly FixedVector3 m_substepVelocityDelta;
 
-    private FixedRigidBody?[] m_bodies = new FixedRigidBody?[16];
-    private int m_bodyCount;
-
-    /// <summary>Creates a world bound to one set of options.</summary>
-    /// <param name="options">The solver options, shared with the pair kernels.</param>
-    /// <param name="maxActivePairs">The declared budget on simultaneously active body pairs, strictly positive.</param>
+    /// <summary>Initializes a new instance of the <see cref="FixedRigidWorld"/> class bound to one set of options.</summary>
+    /// <param name="options">The solver options.</param>
     /// <exception cref="ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxActivePairs"/> is not strictly positive.</exception>
-    public FixedRigidWorld(FixedRigidSolverOptions options, int maxActivePairs = DefaultMaxActivePairs) {
+    /// <exception cref="ArgumentOutOfRangeException">The rate or substep count is not strictly positive, an iteration
+    /// count, speed or tolerance is negative, or a carrier placement is outside <c>[0, 64]</c>.</exception>
+    public FixedRigidWorld(FixedRigidSolverOptions options) {
         ArgumentNullException.ThrowIfNull(argument: options);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: maxActivePairs);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: options.RateHz, paramName: nameof(FixedRigidSolverOptions.RateHz));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: options.SubstepCount, paramName: nameof(FixedRigidSolverOptions.SubstepCount));
+        ArgumentOutOfRangeException.ThrowIfNegative(value: options.SolveIterations, paramName: nameof(FixedRigidSolverOptions.SolveIterations));
+        ArgumentOutOfRangeException.ThrowIfNegative(value: options.RelaxIterations, paramName: nameof(FixedRigidSolverOptions.RelaxIterations));
+        ArgumentOutOfRangeException.ThrowIfNegative(value: options.RestitutionIterations, paramName: nameof(FixedRigidSolverOptions.RestitutionIterations));
+        ArgumentOutOfRangeException.ThrowIfNegative(value: options.ContactSpeed.Value, paramName: nameof(FixedRigidSolverOptions.ContactSpeed));
+        ArgumentOutOfRangeException.ThrowIfNegative(value: options.RestitutionThreshold.Value, paramName: nameof(FixedRigidSolverOptions.RestitutionThreshold));
+        ArgumentOutOfRangeException.ThrowIfNegative(value: options.ConvergenceToleranceRaw, paramName: nameof(FixedRigidSolverOptions.ConvergenceToleranceRaw));
+        ValidateScale(fractionBitCount: options.Scales.InverseMass, paramName: nameof(FixedRigidScales.InverseMass));
+        ValidateScale(fractionBitCount: options.Scales.InverseInertia, paramName: nameof(FixedRigidScales.InverseInertia));
+        ValidateScale(fractionBitCount: options.Scales.EffectiveMass, paramName: nameof(FixedRigidScales.EffectiveMass));
 
         var substepRate = (((long)options.RateHz) * options.SubstepCount);
 
         m_options = options;
-        // The static-side softness is stiffer and less damped than the ordinary contact softness — 2x the contact
-        // hertz, 0.5x the damping ratio — matching a contact touching an immovable body needing to converge faster
-        // since it carries none of the give a dynamic-dynamic pair's shared compliance provides.
         m_dynamicSoftness = FixedSoftConstraint.Create(
             rateHz: options.RateHz,
             substepCount: options.SubstepCount,
@@ -65,6 +58,8 @@ public sealed class FixedRigidWorld {
             dampingRatio: options.ContactDampingRatio,
             fractionBitCount: FixedSoftConstraint.DefaultFractionBitCount
         );
+        // A contact against an immovable side carries none of the give a dynamic pair's shared compliance provides, so
+        // it is formed stiffer and less damped: twice the contact hertz (before the substep clamp), half the damping.
         m_staticSoftness = FixedSoftConstraint.Create(
             rateHz: options.RateHz,
             substepCount: options.SubstepCount,
@@ -74,56 +69,110 @@ public sealed class FixedRigidWorld {
         );
         m_substepRate = FixedQ4816.FromInteger(value: substepRate);
         m_doubleSubstepRate = FixedQ4816.FromInteger(value: (2L * substepRate));
-        m_substepVelocityDelta = ((options.Gravity + options.AppliedAcceleration) / m_substepRate);
-        m_pairs = new PairRecord[maxActivePairs];
-        m_pairStepMovement = new long[maxActivePairs];
-
-        for (var index = 0; (index < maxActivePairs); ++index) {
-            m_pairs[index] = new();
-        }
     }
 
-    /// <summary>Gets the number of ids assigned so far, including tombstoned ones — the exclusive upper bound on a
-    /// live id.</summary>
-    public int BodyCount => m_bodyCount;
-    /// <summary>Gets the number of pair candidates the most recent step dropped because every pair slot was already
-    /// claimed — a measured overflow count, never a silent one.</summary>
-    public int LastStepDroppedPairCount { get; private set; }
-    /// <summary>Gets the number of active pair-manifolds whose largest applied-impulse movement the most recent step
-    /// left at or below <see cref="FixedRigidSolverOptions.ConvergenceToleranceRaw"/>. A READING toward a future
-    /// sleeping/islands decision — never a control; every pair still runs its full iteration budget regardless of
-    /// this count.</summary>
-    public int LastStepQuiescentPairCount { get; private set; }
-    /// <summary>Gets the declared budget on simultaneously active body pairs.</summary>
-    public int MaxActivePairs => m_pairs.Length;
-    /// <summary>Gets the number of kernel refusals the world has counted; a healthy fixture ends at zero.</summary>
+    /// <summary>Gets the number of constraint slots the most recent step solved.</summary>
+    public int LastStepConstraintCount { get; private set; }
+    /// <summary>Gets the number of manifolds whose largest applied-impulse change the most recent step left at or below
+    /// <see cref="FixedRigidSolverOptions.ConvergenceToleranceRaw"/> — a reading, never a control.</summary>
+    public int LastStepQuiescentManifoldCount { get; private set; }
+    /// <summary>Gets the options the world was formed with.</summary>
+    public FixedRigidSolverOptions Options => m_options;
+    /// <summary>Gets the number of kernel refusals the world has counted; a healthy world stays at zero.</summary>
     public int RefusalCount { get; private set; }
+    /// <summary>Gets the soft-constraint coefficients formed at the substep width for a contact between two dynamic
+    /// bodies.</summary>
+    public FixedSoftConstraint Softness => m_dynamicSoftness;
 
-    private void ApplyRestitution() {
-        if (m_options.Restitution == FixedQ4816.Zero) {
-            return;
+    /// <summary>Advances the dynamic bodies by one step against the manifolds, which already hold this step's associated
+    /// candidates. Static bodies in the list or in a manifold are read and never written.</summary>
+    /// <param name="bodies">The bodies to integrate, in canonical order; each one's step accumulators are reset first.</param>
+    /// <param name="manifolds">The manifolds to solve, in canonical order; each names both its bodies.</param>
+    /// <exception cref="ArgumentException">A manifold is missing a body.</exception>
+    public void Step(ReadOnlySpan<FixedRigidBody> bodies, ReadOnlySpan<FixedRigidManifold> manifolds) {
+        foreach (var manifold in manifolds) {
+            if ((manifold.BodyA is null) || (manifold.BodyB is null)) {
+                throw new ArgumentException(message: "every manifold names both of its bodies.", paramName: nameof(manifolds));
+            }
+
+            manifold.LastStepMovementRaw = 0L;
         }
 
+        foreach (var body in bodies) {
+            body.ResetStepAccumulators();
+        }
+
+        Prepare(manifolds: manifolds);
+
+        for (var substep = 0; (substep < m_options.SubstepCount); ++substep) {
+            foreach (var body in bodies) {
+                if (body.IsDynamic) {
+                    body.LinearVelocity += (body.Acceleration / m_substepRate);
+                }
+            }
+
+            WarmStart(manifolds: manifolds);
+
+            for (var iteration = 0; (iteration < m_options.SolveIterations); ++iteration) {
+                SolveOnce(
+                    manifolds: manifolds,
+                    useBias: true
+                );
+            }
+
+            foreach (var body in bodies) {
+                if (body.IsDynamic) {
+                    body.DeltaPosition += (body.LinearVelocity / m_substepRate);
+                    body.DeltaRotation = (FixedQuaternion.Exp(bivector: (body.AngularVelocity / m_doubleSubstepRate)) * body.DeltaRotation).Normalize();
+                }
+            }
+
+            for (var iteration = 0; (iteration < m_options.RelaxIterations); ++iteration) {
+                SolveOnce(
+                    manifolds: manifolds,
+                    useBias: false
+                );
+            }
+        }
+
+        ApplyRestitution(manifolds: manifolds);
+        StoreFriction(manifolds: manifolds);
+
+        var quiescent = 0;
+
+        foreach (var manifold in manifolds) {
+            if (manifold.LastStepMovementRaw <= m_options.ConvergenceToleranceRaw) {
+                ++quiescent;
+            }
+        }
+
+        LastStepQuiescentManifoldCount = quiescent;
+    }
+
+    private void ApplyImpulse(FixedRigidManifold manifold, in FixedPairManifoldSlot slot, FixedVector3 direction, long impulseRaw) {
+        var refusals = 0;
+
+        FixedTwoBodyKernel.ApplyImpulse(
+            bodyA: manifold.BodyA!,
+            anchorA: slot.AnchorA,
+            bodyB: manifold.BodyB!,
+            anchorB: slot.AnchorB,
+            normal: direction,
+            impulseRaw: impulseRaw,
+            scales: m_options.Scales,
+            refusals: ref refusals
+        );
+        RefusalCount += refusals;
+    }
+    private void ApplyRestitution(ReadOnlySpan<FixedRigidManifold> manifolds) {
         for (var iteration = 0; (iteration < m_options.RestitutionIterations); ++iteration) {
-            for (var index = 0; (index < m_pairs.Length); ++index) {
-                var pair = m_pairs[index];
-
-                if (!pair.Occupied) {
+            foreach (var manifold in manifolds) {
+                if (manifold.Restitution <= FixedQ4816.Zero) {
                     continue;
                 }
 
-                var bodyA = m_bodies[pair.BodyIdMin];
-                var bodyB = m_bodies[pair.BodyIdMax];
-
-                if (
-                    (bodyA is null) ||
-                    (bodyB is null)
-                ) {
-                    continue;
-                }
-
-                for (var slotIndex = 0; (slotIndex < FixedPairManifoldSlotTable.Capacity); ++slotIndex) {
-                    ref var slot = ref pair.Slots[slotIndex];
+                for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
+                    ref var slot = ref manifold.Slots[index];
 
                     if (
                         (slot.Disposition != FixedPairManifoldSlotDisposition.Constraint) ||
@@ -134,15 +183,13 @@ public sealed class FixedRigidWorld {
                         continue;
                     }
 
-                    var normalVelocity = FixedTwoBodyKernel.RelativeNormalVelocity(
-                        anchorA: slot.AnchorA,
-                        anchorB: slot.AnchorB,
-                        bodyA: bodyA,
-                        bodyB: bodyB,
-                        normal: slot.Normal
+                    var normalVelocity = RelativeVelocity(
+                        direction: slot.Normal,
+                        manifold: manifold,
+                        slot: in slot
                     );
                     var target = (normalVelocity + Scale(
-                        value: m_options.Restitution,
+                        value: manifold.Restitution,
                         factorRaw: slot.RelativeVelocity.Value,
                         factorBits: FixedQ4816.FractionBitCount
                     ));
@@ -159,157 +206,45 @@ public sealed class FixedRigidWorld {
 
                     slot.NormalImpulseRaw = accumulated;
                     slot.TotalNormalImpulseRaw += applied;
-
-                    var refusals = 0;
-
-                    FixedTwoBodyKernel.ApplyImpulse(
-                        bodyA: bodyA,
-                        anchorA: slot.AnchorA,
-                        bodyB: bodyB,
-                        anchorB: slot.AnchorB,
-                        normal: slot.Normal,
+                    ApplyImpulse(
+                        direction: slot.Normal,
                         impulseRaw: applied,
-                        scales: m_options.Scales,
-                        refusals: ref refusals
+                        manifold: manifold,
+                        slot: in slot
                     );
-                    RefusalCount += refusals;
                 }
             }
         }
     }
-    private void AssociatePairs(List<FixedTwoBodyContact> candidates, int step) {
-        LastStepDroppedPairCount = 0;
+    private long EffectiveMass(FixedRigidManifold manifold, in FixedPairManifoldSlot slot, FixedVector3 direction) {
+        var refusals = 0;
 
-        var bucket = new List<FixedTwoBodyContact>();
-        var index = 0;
+        _ = FixedTwoBodyKernel.TryEffectiveMass(
+            bodyA: manifold.BodyA!,
+            anchorA: slot.AnchorA,
+            bodyB: manifold.BodyB!,
+            anchorB: slot.AnchorB,
+            normal: direction,
+            scales: m_options.Scales,
+            normalMassRaw: out var mass,
+            refusals: ref refusals
+        );
+        RefusalCount += refusals;
 
-        while (index < candidates.Count) {
-            var min = candidates[index].BodyIdA;
-            var max = candidates[index].BodyIdB;
-
-            bucket.Clear();
-
-            while (
-                (index < candidates.Count) &&
-                (candidates[index].BodyIdA == min) &&
-                (candidates[index].BodyIdB == max)
-            ) {
-                bucket.Add(item: candidates[index]);
-                ++index;
-            }
-
-            var pair = FindPair(
-                max: max,
-                min: min
-            );
-
-            if (pair is null) {
-                pair = FindFreePair();
-            }
-
-            if (pair is null) {
-                pair = EvictPair();
-            }
-
-            if (pair is null) {
-                LastStepDroppedPairCount += bucket.Count;
-
-                continue;
-            }
-
-            pair.Occupied = true;
-            pair.BodyIdMin = min;
-            pair.BodyIdMax = max;
-            pair.LastActiveStep = step;
-            pair.Slots.Associate(
-                candidates: bucket,
-                step: step
-            );
-        }
+        return mass;
     }
-    private PairRecord? EvictPair() {
-        PairRecord? victim = null;
+    private void Prepare(ReadOnlySpan<FixedRigidManifold> manifolds) {
+        var constraints = 0;
 
-        for (var index = 0; (index < m_pairs.Length); ++index) {
-            var candidate = m_pairs[index];
-
-            if (
-                (victim is null) ||
-                (candidate.LastActiveStep < victim.LastActiveStep)
-            ) {
-                victim = candidate;
-            }
-        }
-
-        return victim;
-    }
-    private PairRecord? FindFreePair() {
-        for (var index = 0; (index < m_pairs.Length); ++index) {
-            if (!m_pairs[index].Occupied) {
-                return m_pairs[index];
-            }
-        }
-
-        return null;
-    }
-    private PairRecord? FindPair(int min, int max) {
-        for (var index = 0; (index < m_pairs.Length); ++index) {
-            var pair = m_pairs[index];
-
-            if (
-                pair.Occupied &&
-                (pair.BodyIdMin == min) &&
-                (pair.BodyIdMax == max)
-            ) {
-                return pair;
-            }
-        }
-
-        return null;
-    }
-    // Every candidate is re-expressed with BodyIdA == the pair's canonical minimum id, so every candidate landing in
-    // the same pair's bucket agrees on which anchor is A and which is B. Swapping which body is A flips which body
-    // the normal points FROM, so the normal is negated along with the swap to preserve its physical meaning.
-    private static void NormalizeRoles(List<FixedTwoBodyContact> candidates) {
-        for (var index = 0; (index < candidates.Count); ++index) {
-            var candidate = candidates[index];
-
-            if (candidate.BodyIdA > candidate.BodyIdB) {
-                candidates[index] = candidate with {
-                    BodyIdA = candidate.BodyIdB,
-                    BodyIdB = candidate.BodyIdA,
-                    AnchorA = candidate.AnchorB,
-                    AnchorB = candidate.AnchorA,
-                    Normal = -candidate.Normal,
-                };
-            }
-        }
-    }
-    private void Prepare() {
-        for (var index = 0; (index < m_pairs.Length); ++index) {
-            var pair = m_pairs[index];
-
-            if (!pair.Occupied) {
-                continue;
-            }
-
-            var bodyA = m_bodies[pair.BodyIdMin];
-            var bodyB = m_bodies[pair.BodyIdMax];
-
-            if (
-                (bodyA is null) ||
-                (bodyB is null)
-            ) {
-                continue;
-            }
-
-            for (var slotIndex = 0; (slotIndex < FixedPairManifoldSlotTable.Capacity); ++slotIndex) {
-                ref var slot = ref pair.Slots[slotIndex];
+        foreach (var manifold in manifolds) {
+            for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
+                ref var slot = ref manifold.Slots[index];
 
                 if (slot.Disposition != FixedPairManifoldSlotDisposition.Constraint) {
                     continue;
                 }
 
+                ++constraints;
                 slot.BaseSeparation = (slot.Separation - FixedVector3.Dot(
                     left: (slot.AnchorB - slot.AnchorA),
                     right: slot.Normal
@@ -317,51 +252,72 @@ public sealed class FixedRigidWorld {
 
                 if (!m_options.WarmStart) {
                     slot.NormalImpulseRaw = 0L;
+                    slot.FrictionImpulse = FixedVector3.Zero;
                 }
 
-                var refusals = 0;
-
-                _ = FixedTwoBodyKernel.TryEffectiveMass(
-                    bodyA: bodyA,
-                    anchorA: slot.AnchorA,
-                    bodyB: bodyB,
-                    anchorB: slot.AnchorB,
+                slot.NormalMassRaw = EffectiveMass(
+                    direction: slot.Normal,
+                    manifold: manifold,
+                    slot: in slot
+                );
+                slot.RelativeVelocity = RelativeVelocity(
+                    direction: slot.Normal,
+                    manifold: manifold,
+                    slot: in slot
+                );
+                FixedVector3.OrthonormalBasis(
                     normal: slot.Normal,
-                    scales: m_options.Scales,
-                    normalMassRaw: out var normalMass,
-                    refusals: ref refusals
+                    tangent1: out slot.Tangent1,
+                    tangent2: out slot.Tangent2
                 );
-                RefusalCount += refusals;
-                slot.NormalMassRaw = normalMass;
-                slot.RelativeVelocity = FixedTwoBodyKernel.RelativeNormalVelocity(
-                    anchorA: slot.AnchorA,
-                    anchorB: slot.AnchorB,
-                    bodyA: bodyA,
-                    bodyB: bodyB,
-                    normal: slot.Normal
-                );
+
+                if (manifold.Friction > FixedQ4816.Zero) {
+                    slot.TangentMass1Raw = EffectiveMass(
+                        direction: slot.Tangent1,
+                        manifold: manifold,
+                        slot: in slot
+                    );
+                    slot.TangentMass2Raw = EffectiveMass(
+                        direction: slot.Tangent2,
+                        manifold: manifold,
+                        slot: in slot
+                    );
+                } else {
+                    slot.TangentMass1Raw = 0L;
+                    slot.TangentMass2Raw = 0L;
+                }
+
+                if (
+                    (slot.TangentMass1Raw > 0L) &&
+                    (slot.TangentMass2Raw > 0L)
+                ) {
+                    slot.TangentImpulse1Raw = FixedVector3.Dot(
+                        left: slot.FrictionImpulse,
+                        right: slot.Tangent1
+                    ).Value;
+                    slot.TangentImpulse2Raw = FixedVector3.Dot(
+                        left: slot.FrictionImpulse,
+                        right: slot.Tangent2
+                    ).Value;
+                } else {
+                    slot.TangentMass1Raw = 0L;
+                    slot.TangentMass2Raw = 0L;
+                    slot.TangentImpulse1Raw = 0L;
+                    slot.TangentImpulse2Raw = 0L;
+                }
             }
         }
-    }
-    private void RecordQuiescence() {
-        var quiescent = 0;
 
-        for (var index = 0; (index < m_pairs.Length); ++index) {
-            if (
-                m_pairs[index].Occupied &&
-                (m_pairStepMovement[index] <= m_options.ConvergenceToleranceRaw)
-            ) {
-                ++quiescent;
-            }
-        }
-
-        LastStepQuiescentPairCount = quiescent;
+        LastStepConstraintCount = constraints;
     }
-    private void RunIterations(int iterations, bool useBias) {
-        for (var iteration = 0; (iteration < iterations); ++iteration) {
-            SolveOnce(useBias: useBias);
-        }
-    }
+    private static FixedQ4816 RelativeVelocity(FixedRigidManifold manifold, in FixedPairManifoldSlot slot, FixedVector3 direction) =>
+        FixedTwoBodyKernel.RelativeNormalVelocity(
+            anchorA: slot.AnchorA,
+            anchorB: slot.AnchorB,
+            bodyA: manifold.BodyA!,
+            bodyB: manifold.BodyB!,
+            normal: direction
+        );
     private FixedQ4816 Scale(FixedQ4816 value, long factorRaw, int factorBits) {
         if (!FusedArithmetic.TryMixedScaleProduct(
             a: value.Value,
@@ -372,53 +328,101 @@ public sealed class FixedRigidWorld {
             result: out var product
         )) {
             ++RefusalCount;
+
             return FixedQ4816.Zero;
         }
 
         return FixedQ4816.FromRawBits(value: product);
     }
-    private FixedQ4816 SoftScale(long first, long second, FixedQ4816 value, int fractionBitCount) {
+    // massScale · biasRate · separation, with the two softness operands read at their own finer scale and the whole
+    // triple product rounded once.
+    private FixedQ4816 SoftScale(in FixedSoftConstraint softness, FixedQ4816 value) {
         if (!FusedArithmetic.TryMixedScaleProduct(
-            a: first,
-            fractionBitsA: fractionBitCount,
-            b: second,
-            fractionBitsB: fractionBitCount,
+            a: softness.MassScaleRaw,
+            fractionBitsA: softness.FractionBitCount,
+            b: softness.BiasRateRaw,
+            fractionBitsB: softness.FractionBitCount,
             c: value.Value,
             fractionBitsC: FixedQ4816.FractionBitCount,
             fractionBitsOut: FixedQ4816.FractionBitCount,
             result: out var product
         )) {
             ++RefusalCount;
+
             return FixedQ4816.Zero;
         }
 
         return FixedQ4816.FromRawBits(value: product);
     }
-    private void SolveOnce(bool useBias) {
-        for (var index = 0; (index < m_pairs.Length); ++index) {
-            var pair = m_pairs[index];
+    // The tangential impulse along both friction directions, each driven through its own effective mass, then the
+    // accumulated pair shortened toward zero onto the Coulomb limit friction · (the normal impulse this pass just left).
+    private void SolveFriction(FixedRigidManifold manifold, ref FixedPairManifoldSlot slot) {
+        var velocity1 = RelativeVelocity(
+            direction: slot.Tangent1,
+            manifold: manifold,
+            slot: in slot
+        );
+        var velocity2 = RelativeVelocity(
+            direction: slot.Tangent2,
+            manifold: manifold,
+            slot: in slot
+        );
+        var delta1 = -Scale(
+            value: velocity1,
+            factorRaw: slot.TangentMass1Raw,
+            factorBits: m_options.Scales.EffectiveMass
+        );
+        var delta2 = -Scale(
+            value: velocity2,
+            factorRaw: slot.TangentMass2Raw,
+            factorBits: m_options.Scales.EffectiveMass
+        );
+        var maximum = Scale(
+            value: manifold.Friction,
+            factorRaw: slot.NormalImpulseRaw,
+            factorBits: FixedQ4816.FractionBitCount
+        );
+        var accumulated = new FixedVector2(
+            X: FixedQ4816.FromRawBits(value: (slot.TangentImpulse1Raw + delta1.Value)),
+            Y: FixedQ4816.FromRawBits(value: (slot.TangentImpulse2Raw + delta2.Value))
+        ).ClampLength(maximum: maximum);
+        var applied1 = (accumulated.X.Value - slot.TangentImpulse1Raw);
+        var applied2 = (accumulated.Y.Value - slot.TangentImpulse2Raw);
 
-            if (!pair.Occupied) {
-                continue;
-            }
+        slot.TangentImpulse1Raw = accumulated.X.Value;
+        slot.TangentImpulse2Raw = accumulated.Y.Value;
 
-            var bodyA = m_bodies[pair.BodyIdMin];
-            var bodyB = m_bodies[pair.BodyIdMax];
+        if (applied1 != 0L) {
+            ApplyImpulse(
+                direction: slot.Tangent1,
+                impulseRaw: applied1,
+                manifold: manifold,
+                slot: in slot
+            );
+        }
 
-            if (
-                (bodyA is null) ||
-                (bodyB is null)
-            ) {
-                continue;
-            }
-
+        if (applied2 != 0L) {
+            ApplyImpulse(
+                direction: slot.Tangent2,
+                impulseRaw: applied2,
+                manifold: manifold,
+                slot: in slot
+            );
+        }
+    }
+    // Every iteration of the budget runs unconditionally: an early break driven by a tolerance would make the
+    // measurement change the trajectory it measures.
+    private void SolveOnce(ReadOnlySpan<FixedRigidManifold> manifolds, bool useBias) {
+        foreach (var manifold in manifolds) {
+            var bodyA = manifold.BodyA!;
+            var bodyB = manifold.BodyB!;
             var softness = ((bodyA.IsDynamic && bodyB.IsDynamic)
                 ? m_dynamicSoftness
                 : m_staticSoftness
             );
 
-            for (var slotIndex = 0; (slotIndex < FixedPairManifoldSlotTable.Capacity); ++slotIndex) {
-                ref var slot = ref pair.Slots[slotIndex];
+            for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
+                ref var slot = ref manifold.Slots[index];
 
                 if (
                     (slot.Disposition != FixedPairManifoldSlotDisposition.Constraint) ||
@@ -435,27 +439,28 @@ public sealed class FixedRigidWorld {
                     right: slot.Normal
                 ));
                 var velocityBias = FixedQ4816.Zero;
+                // The two softness weights are read at their own finer scale rather than narrowed to Q48.16 first; a
+                // mass scale as small as 0.0076 keeps only nine significant bits once narrowed.
                 var massScaleRaw = FixedQ4816.One.Value;
                 var massScaleBits = FixedQ4816.FractionBitCount;
                 var impulseScaleRaw = 0L;
                 var impulseScaleBits = FixedQ4816.FractionBitCount;
 
                 if (separation > FixedQ4816.Zero) {
+                    // Speculative: the constraint may remove exactly the closing speed that would carry the pair past
+                    // contact within this substep, and no more, so a first-appearance contact neither tunnels nor stops
+                    // short.
                     velocityBias = Scale(
                         value: separation,
                         factorRaw: m_substepRate.Value,
                         factorBits: FixedQ4816.FractionBitCount
                     );
                 } else if (useBias) {
-                    var soft = SoftScale(
-                        first: softness.MassScaleRaw,
-                        second: softness.BiasRateRaw,
-                        value: separation,
-                        fractionBitCount: softness.FractionBitCount
-                    );
-
                     velocityBias = FixedQ4816.Max(
-                        x: soft,
+                        x: SoftScale(
+                            softness: in softness,
+                            value: separation
+                        ),
                         y: (-m_options.ContactSpeed)
                     );
                     massScaleRaw = softness.MassScaleRaw;
@@ -464,12 +469,10 @@ public sealed class FixedRigidWorld {
                     impulseScaleBits = softness.FractionBitCount;
                 }
 
-                var normalVelocity = FixedTwoBodyKernel.RelativeNormalVelocity(
-                    anchorA: slot.AnchorA,
-                    anchorB: slot.AnchorB,
-                    bodyA: bodyA,
-                    bodyB: bodyB,
-                    normal: slot.Normal
+                var normalVelocity = RelativeVelocity(
+                    direction: slot.Normal,
+                    manifold: manifold,
+                    slot: in slot
                 );
                 var driven = (Scale(
                     factorBits: massScaleBits,
@@ -480,8 +483,7 @@ public sealed class FixedRigidWorld {
                     value: driven,
                     factorRaw: slot.NormalMassRaw,
                     factorBits: m_options.Scales.EffectiveMass
-                )
-                    - Scale(
+                ) - Scale(
                     value: FixedQ4816.FromRawBits(value: slot.NormalImpulseRaw),
                     factorRaw: impulseScaleRaw,
                     factorBits: impulseScaleBits
@@ -494,215 +496,101 @@ public sealed class FixedRigidWorld {
 
                 slot.NormalImpulseRaw = accumulated;
                 slot.TotalNormalImpulseRaw += applied;
+                manifold.LastStepMovementRaw = Math.Max(
+                    val1: manifold.LastStepMovementRaw,
+                    val2: Math.Abs(value: applied)
+                );
 
-                var movement = Math.Abs(value: applied);
-
-                if (movement > m_pairStepMovement[index]) {
-                    m_pairStepMovement[index] = movement;
+                if (applied != 0L) {
+                    ApplyImpulse(
+                        direction: slot.Normal,
+                        impulseRaw: applied,
+                        manifold: manifold,
+                        slot: in slot
+                    );
                 }
 
-                var refusals = 0;
-
-                FixedTwoBodyKernel.ApplyImpulse(
-                    bodyA: bodyA,
-                    anchorA: slot.AnchorA,
-                    bodyB: bodyB,
-                    anchorB: slot.AnchorB,
-                    normal: slot.Normal,
-                    impulseRaw: applied,
-                    scales: m_options.Scales,
-                    refusals: ref refusals
-                );
-                RefusalCount += refusals;
+                // Friction runs in the unbiased pass only: a biased push-out is a position correction, not a contact
+                // force, and coupling friction to it would brake the body by how deep the correction reached.
+                if (
+                    !useBias &&
+                    (slot.TangentMass1Raw > 0L)
+                ) {
+                    SolveFriction(
+                        manifold: manifold,
+                        slot: ref slot
+                    );
+                }
             }
         }
     }
-    private void WarmStart() {
+    // Recomposes each constraint slot's tangent impulses onto the world-space carrier that survives to the next step's
+    // Prepare — the tangent basis itself is rebuilt from the normal every step.
+    private static void StoreFriction(ReadOnlySpan<FixedRigidManifold> manifolds) {
+        foreach (var manifold in manifolds) {
+            for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
+                ref var slot = ref manifold.Slots[index];
+
+                if (slot.Disposition != FixedPairManifoldSlotDisposition.Constraint) {
+                    continue;
+                }
+
+                slot.FrictionImpulse = ((slot.Tangent1 * FixedQ4816.FromRawBits(value: slot.TangentImpulse1Raw)) +
+                                        (slot.Tangent2 * FixedQ4816.FromRawBits(value: slot.TangentImpulse2Raw)));
+            }
+        }
+    }
+    private static void ValidateScale(int fractionBitCount, string paramName) {
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            paramName: paramName,
+            value: fractionBitCount
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            other: 64,
+            paramName: paramName,
+            value: fractionBitCount
+        );
+    }
+    private void WarmStart(ReadOnlySpan<FixedRigidManifold> manifolds) {
         if (!m_options.WarmStart) {
             return;
         }
 
-        for (var index = 0; (index < m_pairs.Length); ++index) {
-            var pair = m_pairs[index];
+        foreach (var manifold in manifolds) {
+            for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); ++index) {
+                ref var slot = ref manifold.Slots[index];
 
-            if (!pair.Occupied) {
-                continue;
-            }
-
-            var bodyA = m_bodies[pair.BodyIdMin];
-            var bodyB = m_bodies[pair.BodyIdMax];
-
-            if (
-                (bodyA is null) ||
-                (bodyB is null)
-            ) {
-                continue;
-            }
-
-            for (var slotIndex = 0; (slotIndex < FixedPairManifoldSlotTable.Capacity); ++slotIndex) {
-                ref var slot = ref pair.Slots[slotIndex];
-
-                if (
-                    (slot.Disposition != FixedPairManifoldSlotDisposition.Constraint) ||
-                    (slot.NormalImpulseRaw == 0L)
-                ) {
+                if (slot.Disposition != FixedPairManifoldSlotDisposition.Constraint) {
                     continue;
                 }
 
-                var refusals = 0;
+                if (slot.NormalImpulseRaw != 0L) {
+                    ApplyImpulse(
+                        direction: slot.Normal,
+                        impulseRaw: slot.NormalImpulseRaw,
+                        manifold: manifold,
+                        slot: in slot
+                    );
+                }
 
-                FixedTwoBodyKernel.ApplyImpulse(
-                    bodyA: bodyA,
-                    anchorA: slot.AnchorA,
-                    bodyB: bodyB,
-                    anchorB: slot.AnchorB,
-                    normal: slot.Normal,
-                    impulseRaw: slot.NormalImpulseRaw,
-                    scales: m_options.Scales,
-                    refusals: ref refusals
-                );
-                RefusalCount += refusals;
-            }
-        }
-    }
+                if (slot.TangentImpulse1Raw != 0L) {
+                    ApplyImpulse(
+                        direction: slot.Tangent1,
+                        impulseRaw: slot.TangentImpulse1Raw,
+                        manifold: manifold,
+                        slot: in slot
+                    );
+                }
 
-    /// <summary>Adds a body and returns its id.</summary>
-    /// <param name="body">The body.</param>
-    /// <returns>The assigned id — the same value for the whole lifetime of this world instance, never reused.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="body"/> is <see langword="null"/>.</exception>
-    public int AddBody(FixedRigidBody body) {
-        ArgumentNullException.ThrowIfNull(argument: body);
-
-        var id = m_bodyCount;
-
-        if (id >= m_bodies.Length) {
-            Array.Resize(
-                array: ref m_bodies,
-                newSize: (m_bodies.Length * 2)
-            );
-        }
-
-        m_bodies[id] = body;
-        ++m_bodyCount;
-
-        return id;
-    }
-    /// <summary>Gets the body at an id, or <see langword="null"/> when the id is out of range or tombstoned.</summary>
-    /// <param name="id">The body id.</param>
-    /// <returns>The body, or <see langword="null"/>.</returns>
-    public FixedRigidBody? GetBody(int id) =>
-        (((id >= 0) && (id < m_bodyCount))
-            ? m_bodies[id]
-            : null
-        );
-    /// <summary>Gets the pair-manifold slot table for an active pair, or <see langword="null"/> when the pair is not
-    /// currently tracked.</summary>
-    /// <param name="bodyIdA">One body id.</param>
-    /// <param name="bodyIdB">The other body id.</param>
-    /// <returns>The pair's slot table, or <see langword="null"/>.</returns>
-    public FixedPairManifoldSlotTable? GetPairSlots(int bodyIdA, int bodyIdB) {
-        var min = Math.Min(
-            val1: bodyIdA,
-            val2: bodyIdB
-        );
-        var max = Math.Max(
-            val1: bodyIdA,
-            val2: bodyIdB
-        );
-
-        for (var index = 0; (index < m_pairs.Length); ++index) {
-            var pair = m_pairs[index];
-
-            if (
-                pair.Occupied &&
-                (pair.BodyIdMin == min) &&
-                (pair.BodyIdMax == max)
-            ) {
-                return pair.Slots;
-            }
-        }
-
-        return null;
-    }
-    /// <summary>Tombstones a body's storage slot. The id is never reassigned, and no other body's id or index moves.</summary>
-    /// <param name="id">The body id.</param>
-    public void RemoveBody(int id) {
-        if (
-            (id >= 0) &&
-            (id < m_bodyCount)
-        ) {
-            m_bodies[id] = null;
-        }
-    }
-    /// <summary>Advances every dynamic body by one step against one step's contact candidates.</summary>
-    /// <param name="candidates">This step's candidates, canonicalized in place.</param>
-    /// <param name="step">The step ordinal.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="candidates"/> is <see langword="null"/>.</exception>
-    public void Step(List<FixedTwoBodyContact> candidates, int step) {
-        ArgumentNullException.ThrowIfNull(argument: candidates);
-
-        FixedTwoBodyContact.Canonicalize(candidates: candidates);
-        NormalizeRoles(candidates: candidates);
-        AssociatePairs(
-            candidates: candidates,
-            step: step
-        );
-
-        for (var id = 0; (id < m_bodyCount); ++id) {
-            m_bodies[id]?.ResetStepAccumulators();
-        }
-
-        Array.Clear(array: m_pairStepMovement);
-        Prepare();
-
-        for (var substep = 0; (substep < m_options.SubstepCount); ++substep) {
-            for (var id = 0; (id < m_bodyCount); ++id) {
-                var body = m_bodies[id];
-
-                if (
-                    (body is not null) &&
-                    body.IsDynamic
-                ) {
-                    body.LinearVelocity += m_substepVelocityDelta;
+                if (slot.TangentImpulse2Raw != 0L) {
+                    ApplyImpulse(
+                        direction: slot.Tangent2,
+                        impulseRaw: slot.TangentImpulse2Raw,
+                        manifold: manifold,
+                        slot: in slot
+                    );
                 }
             }
-
-            WarmStart();
-            RunIterations(
-                iterations: m_options.SolveIterations,
-                useBias: true
-            );
-
-            for (var id = 0; (id < m_bodyCount); ++id) {
-                var body = m_bodies[id];
-
-                if (
-                    (body is not null) &&
-                    body.IsDynamic
-                ) {
-                    body.DeltaPosition += (body.LinearVelocity / m_substepRate);
-                    body.DeltaRotation = (FixedQuaternion.Exp(bivector: (body.AngularVelocity / m_doubleSubstepRate)) * body.DeltaRotation).Normalize();
-                }
-            }
-
-            RunIterations(
-                iterations: m_options.RelaxIterations,
-                useBias: false
-            );
         }
-
-        ApplyRestitution();
-        RecordQuiescence();
-    }
-
-    // One table per active pair — never a slice of one flat global array — with the same 16-slot cap
-    // FixedManifoldSlotTable already uses per body, now read as a per-pair cap.
-    private sealed class PairRecord {
-        internal int BodyIdMax;
-        internal int BodyIdMin;
-        internal bool Occupied;
-
-        internal int LastActiveStep = int.MinValue;
-        internal FixedPairManifoldSlotTable Slots { get; } = new();
     }
 }

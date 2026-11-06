@@ -3,9 +3,8 @@ using Puck.Maths;
 namespace Puck.Physics;
 
 /// <summary>
-/// The two-dynamic-body generalization of the scalar kernels <see cref="FixedRigidSolver"/> uses internally for one
-/// body against a candidate source: the combined effective mass, relative normal velocity, and impulse application
-/// across two named bodies, either of which may be static. A static body's zero inverse mass and inverse inertia
+/// The scalar kernels of a two-body contact that <see cref="FixedRigidWorld"/> solves: the combined effective mass,
+/// relative normal velocity, and impulse application across two named bodies, either of which may be static. A static body's zero inverse mass and inverse inertia
 /// contribute exactly zero to every sum, so a dynamic-vs-static pair degenerates to the single-body formula without a
 /// special case.
 /// </summary>

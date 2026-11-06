@@ -41,9 +41,11 @@ public sealed class FixedRigidWitnessLawTests {
             Z: FixedQ4816.Zero
         );
         Span<FixedVector3> anchors = stackalloc FixedVector3[4];
+        Span<int> features = stackalloc int[4];
         var count = FixedRigidWitness.SupportManifold(
             anchors: anchors,
             centerOffset: centerOffset,
+            features: features,
             normal: normal,
             orientation: FixedQuaternion.Identity,
             volume: boxVolume
@@ -229,9 +231,11 @@ public sealed class FixedRigidWitnessLawTests {
             Z: FixedQ4816.Zero
         );
         Span<FixedVector3> sphereAnchors = stackalloc FixedVector3[4];
+        Span<int> sphereFeatures = stackalloc int[4];
         var sphereCount = FixedRigidWitness.SupportManifold(
             anchors: sphereAnchors,
             centerOffset: sphereVolume.Center,
+            features: sphereFeatures,
             normal: normal,
             orientation: FixedQuaternion.Identity,
             volume: sphereVolume
