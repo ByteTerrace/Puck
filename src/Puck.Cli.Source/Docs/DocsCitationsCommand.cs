@@ -229,8 +229,8 @@ public static class DocsCitationsCommand {
         if (sourceFiles is null) {
             return CliExit.Refused;
         }
-        // Command modules live in the COMPOSITION ROOT and nowhere else — src/Puck.World/ proper, never its
-        // .Data or .Server siblings.
+        // Command modules live in the composition root, src/Puck.World/, and in the console modules it composes,
+        // src/Puck.World.Console/ — never the .Data, .Schema or .Server siblings.
         //
         // The narrowing is a real guard, not tidiness. Line-anchoring alone is FORMATTING-DEPENDENT: the
         // validator's `RequireGain(value: …, name: "audio.masterGain", …)` is family-shaped and escapes the
@@ -239,11 +239,14 @@ public static class DocsCitationsCommand {
         // and exit-3 a perfectly current enumeration. A gate whose correctness depends on how a neighbouring
         // file happens to be wrapped is not a gate. Excluding the projects that cannot contain a registration
         // closes the class outright rather than betting on layout.
-        var commandRoot = $"{Path.DirectorySeparatorChar}Puck.World{Path.DirectorySeparatorChar}";
-        var commandFiles = sourceFiles.Where(predicate: path => path.Contains(
+        string[] commandRoots = [
+            $"{Path.DirectorySeparatorChar}Puck.World{Path.DirectorySeparatorChar}",
+            $"{Path.DirectorySeparatorChar}Puck.World.Console{Path.DirectorySeparatorChar}",
+        ];
+        var commandFiles = sourceFiles.Where(predicate: path => commandRoots.Any(predicate: commandRoot => path.Contains(
             comparisonType: StringComparison.Ordinal,
             value: commandRoot
-        )).ToArray();
+        ))).ToArray();
         var registered = SweepLiterals(
             files: commandFiles,
             pattern: Registration

@@ -100,10 +100,6 @@ public static class EmbedCommand {
             Description = "The target embedding space name (optional if only one space is declared).",
         };
 
-        var againstOption = new Option<string?>(name: "--against") {
-            Description = "Optional table name to rank similarity against (defaults to all locked texts in the space).",
-        };
-
         var topOption = new Option<int>(name: "--top") {
             DefaultValueFactory = static _ => 5,
             Description = "Maximum number of similarity matches to display (default 5).",
@@ -123,7 +119,6 @@ public static class EmbedCommand {
             pathArgument,
             textArgument,
             spaceOption,
-            againstOption,
             topOption,
             providerOption,
             endpointOption,
@@ -135,7 +130,6 @@ public static class EmbedCommand {
             var path = parseResult.GetRequiredValue(argument: pathArgument);
             var text = parseResult.GetRequiredValue(argument: textArgument);
             var space = parseResult.GetValue(option: spaceOption);
-            var against = parseResult.GetValue(option: againstOption);
             var top = parseResult.GetValue(option: topOption);
             var provider = parseResult.GetValue(option: providerOption);
             var endpoint = parseResult.GetValue(option: endpointOption);
@@ -143,7 +137,6 @@ public static class EmbedCommand {
             var timeoutSeconds = parseResult.GetValue(option: timeoutSecondsOption);
 
             return await ExecuteProbeAsync(
-                against: against,
                 cancellationToken: cancellationToken,
                 endpoint: endpoint,
                 omitDimensions: omitDimensions,
@@ -351,7 +344,6 @@ public static class EmbedCommand {
         string path,
         string text,
         string? space,
-        string? against,
         int top,
         string? provider,
         string? endpoint,

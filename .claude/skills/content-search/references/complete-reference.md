@@ -60,7 +60,7 @@ search <pattern> [path ...]     search contents recursively (default path: cwd)
                    basename, and a matching directory is pruned; with '/' -> matches
                    the cwd-relative path of a file
   -s               span mode: run over whole-file text, print start-end line ranges
-  -M <n>           max results (default 250, 0 = unlimited) — truncation is SILENT
+  -M <n>           max results (default 250, 0 = unlimited) — truncation is on stderr only
   --files          enumerate the files that would be searched — takes NO pattern;
                    in --files mode EVERY positional is a path
   -q               quiet: exit code only (--files included)
@@ -334,7 +334,7 @@ the bare form wrongly also returns `gamma cat dog`). The span-mode analog uses
 | `rg -g '*.cs'` / `--glob` | `-g "*.cs"` — but see Globs above: no braces/classes, and `**` needs an intermediate dir |
 | `rg -g '!*.md'` (exclude) | `--not "*.md"` |
 | `rg -g '!dir/'` (exclude a directory) | `--not "dir"` — the basename form prunes the subtree; `--not "dir/**"` only works when `dir` sits directly under the cwd |
-| `grep -rn PATTERN` | `search -M 0 PATTERN` (recursive + line numbers are the default; `-M 0` because the verb otherwise stops at 250, silently) |
+| `grep -rn PATTERN` | `search -M 0 PATTERN` (recursive + line numbers are the default; `-M 0` because the verb otherwise stops at 250, saying so only on stderr) |
 | `grep -F` | `-F` |
 | `rg -U` / `grep -Pz` multiline, `(?s)` dotall | `-s` (and `_` for any-incl-newline; mind the CRLF caveat for `$` and `\n`) |
 | `grep -L` (files without match) | `-s -l "\A~(_*PATTERN_*)\z"` |
@@ -366,8 +366,9 @@ the bare form wrongly also returns `gamma cat dog`). The span-mode analog uses
   semantics).
 - **Case-sensitive by default** — pass `-i` (pattern only; never applies to
   `-g` globs). A stray case mismatch is the most common "why no results".
-- **The default `-M` 250 cap truncates SILENTLY** — no warning, no marker, and
-  the exit code stays 0. A "result" is mode-dependent: matching lines in
+- **The default `-M` 250 cap truncates stdout** — the exit code stays 0, and the
+  only sign is one stderr line (`search: stopped at the -M 250 cap; N results
+  matched`), which a pipe that keeps stdout alone never sees. A "result" is mode-dependent: matching lines in
   default mode (context lines are free), files with `-l`, spans with `-s`. Any
   exhaustive pass (find-all-usages, `-l` inventories, piping to `wc -l`) must
   pass `-M 0`. `-c` and `--files` are never capped, so `-c` is the safe way to

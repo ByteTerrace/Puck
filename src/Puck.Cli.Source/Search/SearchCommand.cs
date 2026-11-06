@@ -171,7 +171,7 @@ public static class SearchCommand {
         var maxResultsOption = new Option<int>(
             name: "--max-results",
             aliases: ["-M"]
-        ) { DefaultValueFactory = _ => SearchOptions.DefaultMaxResults, Description = "Stop after n results; 0 is unlimited." };
+        ) { DefaultValueFactory = _ => SearchOptions.DefaultMaxResults, Description = "Stop after n results, saying so on stderr when more matched; 0 is unlimited." };
         var noLineNumbersOption = new Option<bool>(
             name: "--no-line-number",
             aliases: ["-N"]
