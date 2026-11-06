@@ -41,6 +41,8 @@ public interface ISdfGpuWorkClient : IDisposable {
     void Abandon(object job);
     /// <summary>Gets the bytes of the client's own buffers for its jobs, by the memory they live in.</summary>
     GpuMemoryBytes OwnedBytes { get; }
+    /// <summary>Gets the category the client's jobs count under in <see cref="GpuQueueWork"/>.</summary>
+    GpuQueueCategory Category { get; }
 }
 /// <summary>What a completed job of the background GPU work copied back (<see cref="ISdfGpuWorkClient.Complete"/>): the
 /// slot's readback, which its client reads and then releases, on any thread, giving the slot back to the service. The
@@ -407,8 +409,10 @@ public sealed class SdfGpuWork : IDisposable {
         // Retain the taken job even if submission throws after executing commands but before arming its fence.
         slot.Job = job;
         slot.Client = client;
-        try { m_gpu.QueueSubmitter.Submit(commandBufferHandles: [commandBuffer], fence: slot.Fence); }
-        catch { m_submissionFailed = true; throw; }
+        try {
+            using var attribution = GpuQueueWork.Attribute(category: client.Category);
+            m_gpu.QueueSubmitter.Submit(commandBufferHandles: [commandBuffer], fence: slot.Fence);
+        } catch { m_submissionFailed = true; throw; }
         slot.Estimate = estimate;
         m_credit -= estimate;
         m_submitted++;

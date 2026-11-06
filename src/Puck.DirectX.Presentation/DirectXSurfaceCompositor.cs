@@ -441,13 +441,16 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             commandList: commandList
         );
 
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Present);
         var executable = ((ID3D12CommandList*)commandListHandle);
         var commandQueue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
 
+        GpuQueueWork.Process.Execute(cause: GpuQueueCause.Unbatched, lists: 1);
         commandQueue->ExecuteCommandLists(
             NumCommandLists: 1,
             ppCommandLists: &executable
         );
+        GpuQueueWork.Process.Present();
         swapChain->Present(
             Flags: ((DXGI_PRESENT)m_presentFlags),
             SyncInterval: m_syncInterval

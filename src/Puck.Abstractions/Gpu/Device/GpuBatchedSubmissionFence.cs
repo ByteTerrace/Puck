@@ -42,7 +42,7 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
     /// keeping the batch open for the rest of its submissions.</remarks>
     public void Wait() {
         m_disposalFailure?.Throw();
-        m_deferred?.Split();
+        m_deferred?.Split(cause: GpuQueueCause.FenceWait);
         if (m_alias is { } alias) {
             // The owner moves its generation only once its submission retired, so an unmoved one is still the batch's.
             if (alias.m_generation == m_aliasGeneration) {
