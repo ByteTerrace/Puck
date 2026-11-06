@@ -632,14 +632,16 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   equivalence, including compiler changes and skin/material/refinement behavior.
   The latest native forest legs have different aggregate triangle counts, so
   source equality alone is not proof of identical products or a halved cold cost.
-- The cold bake fails the one-minute bar on both backends. Its GPU half no
-  longer bounds it: the background GPU work dispatches batches as its slots
-  complete, the whole bake is 6 to 7 s of measured GPU time, and 39 to 47% of
-  the bake's takes find no group owing a lattice. The contour work saturates
-  every processor: its stages log 1,100 to 1,500 thread seconds, the collapse
-  (`SdfMeshCollapse.Levels`, the `land` stage) about 40% of the workers' CPU,
-  the crossing and prepare stages about 15 to 20% each and the contour
-  (`ExtractRefined`) about 10%. Roughly half the contour CPU has to fall.
+- The cold bake has not met the one-minute bar on either backend. The CPU
+  stages remain the target after removing the repeated refinement-index walk,
+  fine-cell sign scan and collapse fan preparation. `SdfMeshCollapse.Levels`
+  still dominates `land`; its `Measure` and `MeasureReverse` checks are the
+  next profile-led cuts. Preserve their sample order, exact distances and
+  acceptance bounds. The overall CPU-halving target remains open. Queue
+  `bench startup worlds/debug --bake --backend <backend>` through `puck measure`
+  for the quiet wall-time comparison. The stage log's `cpu` fields sum worker
+  elapsed intervals, including descheduling and GC/profiler suspension; they
+  are diagnostics, not measured processor time or a quiet-wall-time result.
 - [medium] Every view still renders every frame while a bake is pending
   (`SdfWorldResidency.IsUnchanged` returns false on `MeshPathBake.Pending`),
   which the frame-paced bake needed to dispatch and the background GPU work
@@ -673,14 +675,12 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   `--profile gc-verbose` in the same leg as the memory split above, then write
   each into storage its worker owns: one `float` buffer filled once, appends
   without the wrapper, and a projection workspace per worker.
-- Next cuts, largest first: `SdfMeshCollapse` (4.8 M tried collapses for a
-  valley sector's 0.89 M triangles, about 3.5 µs each; skipping places whose
-  neighbourhood no collapse changed saves only a quarter of the tries and no
-  time, so the cost is in the tries that run); the contour's `ExtractRefined`
-  measures every fine cell's corner signs a third time, where `CrossingEdges`
-  already lists the crossed fine cells (`m_crossedFineCells`); the frame thread's
-  `SdfWorldResidency.Capture` and the render graph's per-view recording while
-  hundreds of views stand.
+- Next cuts: the exact forward/reverse sample checks in `SdfMeshCollapse`
+  (skipping unchanged neighbourhoods previously cut tries without a measured
+  CPU gain); the frame thread's `SdfWorldResidency.Capture` and the render
+  graph's per-view recording while hundreds of views stand. The crossed-cell
+  masks already flow from `CrossingEdges` to `ExtractRefined`; do not introduce
+  a second topology scan there.
 - [low] The audit counts a chunked mesh's seam edges as open edges: weld the
   joined query view's coincident seam vertices, or skip edges two chunks share,
   so a chunked group's open edges mean holes.
