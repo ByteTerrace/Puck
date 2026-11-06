@@ -22,6 +22,12 @@ techniques and the defects review found are what transfer. Each technique cites 
 
 ## Measure
 
+- **Stop a redirected trace explicitly and collect rundown.** `dotnet-trace`
+  does not treat Enter as cancellation when stdin is redirected
+  ([collector source](https://github.com/dotnet/diagnostics/blob/main/src/Tools/dotnet-trace/CommandLine/Commands/CollectCommand.cs)).
+  Use its bounded duration, or stop the EventPipe session through DiagnosticsClient,
+  and let the collector drain while the target remains alive. Killing a collector
+  can leave a readable trace whose missing rundown makes managed stacks unusable.
 - **A lane proves a win on load-independent counters:** allocated bytes
   (`AllocationWindow`, `puck bench world`'s allocation rows), march and ray step
   counts, `world.budget` work counts, and `puck bench world`'s contact counts.

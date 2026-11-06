@@ -2,9 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
-using Puck.Hosting.Jobs;
 using Puck.SignedDistance;
-using Puck.SignedDistance.Baking;
 
 namespace Puck.SdfVm;
 
@@ -44,51 +42,19 @@ public sealed partial class SdfMeshPathBake {
     // Monitor.Wait, so the count has its own monitor.
     private static readonly object ProgressGate = new();
     private static long ProgressCount;
-    private static readonly List<(Group Group, Action<SdfSampledLattice.RefinementScratch> Work)> WorkQueue = [];
-    private static readonly Queue<Action<SdfSampledLattice.RefinementScratch>> AnswerQueue = new();
+    private static readonly List<(Group Group, Action Work)> WorkQueue = [];
+    private static readonly Queue<Action> AnswerQueue = new();
 
     private static int RunningWorkers;
 
     // The workers that run at once: one a processor.
     private static int Workers => Math.Max(val1: 1, val2: Environment.ProcessorCount);
 
-    // Slots, not threads, own scratch. A slot is handed to exactly one running task under WorkGate, and keeps its
-    // workspace when the GPU briefly leaves the CPU queue empty. Nothing is rented from or returned to another slot.
+    // A slot is handed to exactly one running task under WorkGate; workspaces belong to the groups they serve.
     private sealed class WorkerSlot {
         public bool Running;
-        // The scratch bytes this slot last reported to WorkerScratchMemory.
-        public long Reported;
-
-        public readonly SdfSampledLattice.RefinementScratch Scratch = new();
-
-        // Reports the slot's retained scratch to the process account; only the slot's holder calls it.
-        public void Report() {
-            var retained = Scratch.RetainedBytes;
-
-            if (retained != Reported) { WorkerScratchMemory.Change(bytes: (retained - Reported)); }
-            Reported = retained;
-        }
     }
-
-    // The worker slots' retained refinement scratch, which outlives any one bake: idle slots release it once a bake
-    // settles and whenever the account asks the caches to trim.
-    private static readonly MemoryAccount.Owner WorkerScratchMemory = MemoryAccount.Shared.CreateOwner(name: "mesh-bake-worker-scratch");
-    private static readonly WorkerSlot[] WorkerSlots = CreateWorkerSlots();
-
-    private static WorkerSlot[] CreateWorkerSlots() {
-        MemoryAccount.Shared.TrimRequested += ReleaseIdleWorkerScratch;
-        return [.. Enumerable.Range(0, Workers).Select(selector: static _ => new WorkerSlot())];
-    }
-    // Releases the scratch of every slot no worker holds.
-    private static void ReleaseIdleWorkerScratch() {
-        lock (WorkGate) {
-            foreach (var slot in WorkerSlots) {
-                if (slot.Running) { continue; }
-                slot.Scratch.Release();
-                slot.Report();
-            }
-        }
-    }
+    private static readonly WorkerSlot[] WorkerSlots = [.. Enumerable.Range(0, Workers).Select(selector: static _ => new WorkerSlot())];
 
     // The bake's CPU stages, whose summed thread time the done line reports (Account).
     private enum BakeStage {
@@ -211,7 +177,7 @@ public sealed partial class SdfMeshPathBake {
             // Renumbering the mesh for the follower's materials copies arrays as large as the mesh, so it runs on the
             // workers, outside the gate the frame takes.
             group.Contouring = true;
-            Schedule(group: group, work: _ => TakeFollowed(group: group));
+            Schedule(group: group, work: () => TakeFollowed(group: group));
         }
     }
     // Takes the mesh a follower's leader landed, renumbered for the follower's materials; a follower whose mesh the library
@@ -235,7 +201,7 @@ public sealed partial class SdfMeshPathBake {
     // Queues a group's work off the frame's thread, taken by priority (TakeWork) or, urgent, before any other in the
     // order it came, and starts a worker for it if one is free. Work that takes the bake's gate waits while a caller
     // holds it, as a restart does.
-    private bool Schedule(Group group, Action<SdfSampledLattice.RefinementScratch> work) {
+    private bool Schedule(Group group, Action work) {
         if (!group.QueueWork()) { return false; }
         Enqueue(group: group, urgent: false, work: work);
         return true;
@@ -244,17 +210,17 @@ public sealed partial class SdfMeshPathBake {
     // completed dispatch's samples are read and decoded there, off the frame's thread.
     internal static void RunFirst(Action work) {
         lock (WorkGate) {
-            AnswerQueue.Enqueue(item: _ => work());
+            AnswerQueue.Enqueue(item: work);
             StartWorkers();
         }
     }
     // Queues work for which the group's job count is already taken (Group.QueueWork). A stage that throws finishes its
     // group with no new mesh (Fail), so its reservation and workspace are released and the bake still settles. An
     // urgent answer runs even once its group retires, since it owns its decoded samples and frees them.
-    private void Enqueue(Group group, Action<SdfSampledLattice.RefinementScratch> work, bool urgent) {
-        void Run(SdfSampledLattice.RefinementScratch scratch) {
+    private void Enqueue(Group group, Action work, bool urgent) {
+        void Run() {
             try {
-                if (urgent || !group.Retired) { work(scratch); }
+                if (urgent || !group.Retired) { work(); }
             } catch (Exception exception) {
                 Fail(exception: exception, group: group);
             } finally {
@@ -345,12 +311,10 @@ public sealed partial class SdfMeshPathBake {
                 // returns its batch's unanswered lattices), so the line names the fault, out of memory included, and the
                 // worker carries on rather than ending silently.
                 try {
-                    work(slot.Scratch);
+                    work();
                 } catch (Exception exception) {
                     Console.Error.WriteLine(value: $"[sdf.mesh-bake] work failed: {exception}");
                 } finally {
-                    slot.Scratch.TrimForWorkers(workers: WorkerSlots.Length);
-                    slot.Report();
                     lock (ProgressGate) {
                         ProgressCount++;
                         Monitor.PulseAll(obj: ProgressGate);
@@ -367,7 +331,7 @@ public sealed partial class SdfMeshPathBake {
     }
     // Takes the earliest queued answer, else the queued work whose group has the highest priority, the earliest queued
     // among equals, or null when none is queued. A group's priority is read as the frame thread last left it.
-    private static Action<SdfSampledLattice.RefinementScratch>? TakeWork() {
+    private static Action? TakeWork() {
         lock (WorkGate) {
             if (AnswerQueue.TryDequeue(result: out var answer)) { return answer; }
 

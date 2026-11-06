@@ -274,8 +274,8 @@ public static class MeasureCommand {
             var available = NumericPointers(json.RootElement).Where(p => p.StartsWith("/metrics/", StringComparison.Ordinal)).ToArray();
             var canonical = parts.Length >= 3 ? "/metrics/<name>/" + string.Join('/', parts.Skip(3).Select(p => int.TryParse(p, NumberStyles.None, CultureInfo.InvariantCulture, out _) ? "0" : p)) : "";
             if (parts.Length >= 4 && parts[0] == "" && parts[1] == "metrics" && parts[2].Length > 0 &&
-                (command[1] != "startup" || parts[2] == "startup") && available.Contains(canonical, StringComparer.Ordinal)) { return; }
-            throw new InvalidDataException($"Metric {pointer} is not numeric data in report schema {BenchReport.SchemaName}; available pointers: {string.Join(", ", available.Select(p => command[1] == "startup" ? p.Replace("<name>", "startup", StringComparison.Ordinal) : p))}.");
+                (command[1] != "startup" || parts[2] == (command.Contains("--bake", StringComparer.Ordinal) ? "cold-bake" : "startup")) && available.Contains(canonical, StringComparer.Ordinal)) { return; }
+            throw new InvalidDataException($"Metric {pointer} is not numeric data in report schema {BenchReport.SchemaName}; available pointers: {string.Join(", ", available.Select(p => command[1] == "startup" ? p.Replace("<name>", (command.Contains("--bake", StringComparer.Ordinal) ? "cold-bake" : "startup"), StringComparison.Ordinal) : p))}.");
         }
         if (parts is ["", "signals", var index, "metrics", var key] && int.TryParse(index, NumberStyles.None, CultureInfo.InvariantCulture, out _) && key.Length > 0) { return; }
         throw new InvalidDataException($"Metric {pointer} is not a signal metric in report schema {Puck.Cli.Sweep.SweepReport.SchemaName}; available pointers: /signals/<index>/metrics/<name> (numeric readings from the plan).");

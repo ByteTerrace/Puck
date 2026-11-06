@@ -32,6 +32,28 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
 
 ## Contouring
 
+- **Count ownership classes, then fill owned indexes.** `SdfSampledLattice.Refine`
+  counts distinct samples by the cell faces they touch: low boundary, interior,
+  or high boundary on each axis. Every interior coordinate has the same holders,
+  so its class contributes `split - 1` samples per interior axis. The selected
+  count sizes the lattice's `OwnedBuffer` indexes; `FineKeys` fills them in the
+  original cell/sample order without growing managed lists and copying them.
+  Preserve that order and the region admission order: both feed the bake.
+- **Collapse line samples have one owner.** `SdfMeshCollapse.Collapser.AppendLine` links
+  samples by index and retains each edge's append order when a collapse moves
+  them. `MeasureLines` must finish before `CommitLines` relinks any sample.
+  This is the line counterpart of the collapse's existing surface-sample links;
+  changing traversal order can change equal-distance choices.
+- **Reuse crossed topology.** `CrossingEdges` saves each crossed fine cell's
+  low corner and mask after `CloseSheets`; gradient requests and
+  `SdfDualContouring.ExtractRefined` consume that same coarse-cell/fine-cell order.
+  Fine signs cannot change between that preparation and contouring. Coarse
+  vertices remain interleaved in their original order; appending all fine
+  vertices afterward changes the payload.
+- **Reuse a collapse's source fan until commit.** `SdfMeshCollapse.Collapser.PrepareFrom`
+  lays out the unchanged source triangles once for all attempted neighbours.
+  A refused neighbour mutates no source geometry; the first accepted neighbour
+  ends that fan's attempts. Keep that lifetime explicit when changing `Pass`.
 - **One contouring.** `SdfSampledLattice` contours a GPU-sampled lattice through
   `SdfDualContouring` over `ISdfContourLattice`; never write a second mesher.
   A final lattice refines the cells its samples cannot resolve
@@ -664,7 +686,11 @@ laws exercise that boundary.
   <shapes>`: its done line's samples, triangles, vertices and level counts must
   not move. Stages that hold a worker past two seconds log
   `[sdf.mesh-bake] slow … stage=…` with the group and its lattice, and the done
-  line's `kinds=` and `cpu=` split samples by stage and thread seconds by stage.
+  line's `kinds=` and `cpu=` split samples by stage and summed worker-stage
+  elapsed seconds. `Account` uses `Stopwatch`: these totals include descheduling,
+  GC suspension and waits inside a stage, not just consumed processor time.
+  Read them beside a .NET sample profile and allocation events; queue wall-time
+  comparisons through `puck measure request` for the quiet window.
 
 ## The library and the store
 

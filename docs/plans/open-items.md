@@ -617,10 +617,11 @@ Direct3D 12 and 129 s on Vulkan on a busy machine); narrow `SdfMeshBakeClosure` 
 store for both backends from the HLSL source closure of `MeshBake` and
 `MeshBakeMask`; then cut the collapse (`SdfMeshCollapse`), now the bake's
 largest CPU stage, toward the owner's bar: one minute at most per backend from
-an empty store (AGENTS.md), and work proportional to change. Two bakes of one
-build are not byte-identical (1 to 4 of about 1,306 payloads differ), so a
-product keyed across processes keys on the payload it was built from, never on
-the geometry key alone.
+an empty store (AGENTS.md), and work proportional to change. Cold-bake
+reproduction pins both authority and display time before the first frame
+(`paused` and `lockstep` at launch), then compares key sets and every decompressed
+payload. Pausing after attachment does not reproduce the initial poses; see
+[the bake procedure](../../.claude/skills/rendering/references/mesh-bake.md#reproducing-a-cold-bake).
 
 - [high] Each backend still keeps its own store because `SdfMeshBakeIdentity`
   hashes the actual mask/bake kernel bytes. The bake/dresser, view/bake parameter
@@ -2302,7 +2303,7 @@ Grounded causes and leads:
   fields of `host.memory`, and let `MemoryAccount` be the one budget authority
   with `ShaderPipelineMemoryBudget` as a reservation from it, not a second
   budget. The account's budget is three quarters of installed RAM and sees only
-  mesh payloads, bake group workspaces and worker scratch, never the managed
+  mesh payloads and bake group workspaces, never the managed
   heap, `GpuRegion` host copies, device or staging heaps, so on a unified-memory
   Deck it pays no regard to the GPU's share of the same memory.
 - The mesh library's fix is at its cause: a payload stays findable while any
