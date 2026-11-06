@@ -463,7 +463,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 cut: frame.Views[view].CutRevision);
         }
 
-        SdfFrameBlock.WriteMeshIrradiance(block: recording.PassBlock, volume: residency.MeshIrradianceParameters);
+        SdfFrameBlock.WriteMeshIrradiance(block: recording.PassBlock, volume: residency.MeshIrradianceParameters, measuring: (residency.IndirectTier != Puck.SignedDistance.SdfIndirectTier.Off));
 
         var cascades = m_owner.CascadesOf(frame: frame, instance: m_context.Instance, texels: BoundCascadeTexels(recording: in recording), view: view);
 

@@ -58,8 +58,8 @@ public static partial class SdfWorldPackage {
     /// <summary>The irradiance volume, a World-group table of uints: per probe slot its cell key and its sky
     /// visibility and radiance ambient cubes as halves (<c>SdfMeshIrradiance</c> in <c>Puck.SdfVm</c>).</summary>
     public const string MeshIrradiance = "sdfMeshIrradiance";
-    /// <summary>The pass-block value saying whether views read the irradiance volume, nonzero when they do
-    /// (<c>uint</c>).</summary>
+    /// <summary>The pass-block value saying whether views read the irradiance volume, nonzero while it is on, published
+    /// or not (<c>uint</c>).</summary>
     public const string MeshIrradianceVolume = "meshIrradianceVolume";
     /// <summary>The pass-block array holding each irradiance level's probe spacing along each axis in metres in xyz,
     /// finest first, zero for a level not yet published (<c>float4</c> a level).</summary>

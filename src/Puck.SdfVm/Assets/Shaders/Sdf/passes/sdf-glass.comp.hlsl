@@ -22,8 +22,9 @@
 // - its surroundings reflect in it by Fresnel (Schlick over the index's normal reflectance): the sky the lighting sees,
 //   blurred by the roughness (worldEnvironmentReflection), occluded by the irradiance volume and replaced by the light its
 //   probes measured where they do not see the sky (sdfMeshReflection), as an opaque surface reflects them; where no probe
-//   answers, the sky alone. Each light adds its highlight through the one light interface (sdfLightResponse), its
-//   shadowing read from the probes, since the glass casts into no cascade and reads none. Reflection, medium and
+//   answers, the sky as far as the camera sample sees it open (sdfMeshReflectionSeen). Each light adds its highlight
+//   through the one light interface (sdfLightResponse), its shadowing read from the probes, since the glass casts into no
+//   cascade and reads none. The surface's local adaptation scales its reflection, highlights and medium alike. Reflection, medium and
 //   revealed surface pass through the atmosphere's transmittance over the glass's own distance; the light through the
 //   glass carries the atmosphere over the opaque hit's distance already.
 // The glass pixel's coverage is the light behind's, darkened by the glass's luminous transmittance, so the sky the
@@ -110,7 +111,7 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
     surface.ambientOcclusion = 1.0;
     surface.shadowVisibility = float4(1.0, 1.0, 1.0, 1.0);
     surface.cascaded = false;
-    surface.probed = probed;
+    surface.probed = (probed && sdfMeshAnswers(probes));
     surface.probes = probes;
 
     bool indirectSky = (probed && ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u));
@@ -132,7 +133,7 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
         highlights += response.specular;
     }
 
-    float3 indirect = (probed ? sdfMeshIndirect(probes, normal) : float3(0.0, 0.0, 0.0));
+    float3 indirect = (probed ? sdfMeshIndirectSeen(probes, normal) : float3(0.0, 0.0, 0.0));
 
     incoming = dot((radiance + indirect), SDF_LUMINANCE);
 
@@ -250,15 +251,21 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         SdfMeshProbes probes = sdfMeshProbesAt(surfacePoint, normal);
         float3 highlights;
         float incoming;
-        float3 received = (sdfGlassReceived(material, surfacePoint, normal, rayDirection, probed, probes, highlights, incoming) * sdfLocalAdaptationGain(incoming));
+        float3 received = sdfGlassReceived(material, surfacePoint, normal, rayDirection, probed, probes, highlights, incoming);
         float3 reflectDirection = reflect(rayDirection, normal);
         float3 environment = worldEnvironmentReflection(reflectDirection, roughness);
 
-        if (probed && (probes.share > 0.0)) {
-            environment = sdfMeshReflection(probes, reflectDirection, environment);
+        if (probed) {
+            environment = sdfMeshReflectionSeen(probes, reflectDirection, environment);
         }
 
-        float3 shaded = ((((environment * fresnel) + highlights) + (((1.0 - fresnel) * medium) * received)) * air) + (((1.0 - fresnel) * transmittance) * through.rgb);
+        // The surface's local adaptation (sdfLocalAdaptationGain) scales all it reflects and scatters, as it scales an
+        // opaque surface's whole shade; the light through it was adapted at the opaque surface behind.
+        float localGain = sdfLocalAdaptationGain(incoming);
+
+        received *= localGain;
+
+        float3 shaded = ((((((environment * fresnel) + highlights) * localGain) + (((1.0 - fresnel) * medium) * received)) * air) + (((1.0 - fresnel) * transmittance) * through.rgb));
         float luminous = dot(transmittance, SDF_LUMINANCE);
         float coverage = (1.0 - ((1.0 - through.a) * ((1.0 - fresnel) * luminous)));
 

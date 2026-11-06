@@ -52,16 +52,19 @@ public static partial class SdfFrameBlock {
         WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0, temporal: false);
     }
     /// <summary>Writes the irradiance volume the views pass reads (<see cref="SdfMeshIrradiance"/>): whether views read
-    /// it, then each level's window and spacing along each axis; a disabled volume, or a level not
-    /// published, writes zero spacing, and views then light as without that level.</summary>
+    /// it, then each level's window and spacing along each axis. A level not published writes zero spacing and views
+    /// then light as without that level; a surface no published level answers reads the open sky the view's camera
+    /// sample measured.</summary>
     /// <param name="block">The pass block <see cref="Write"/> filled.</param>
     /// <param name="volume">The volume's parameters.</param>
-    public static void WriteMeshIrradiance(Span<byte> block, in SdfMeshIrradianceParameters volume) {
+    /// <param name="measuring">Whether the volume is on (an indirect tier other than off), published or not: views then
+    /// shade by the volume's model, and the authored fill (the indirect-off look) stays off.</param>
+    public static void WriteMeshIrradiance(Span<byte> block, in SdfMeshIrradianceParameters volume, bool measuring) {
         var offset = Offset(member: SdfWorldPackage.MeshIrradianceVolume);
         var levels = Offset(member: SdfWorldPackage.MeshIrradianceLevels);
         var spacings = Offset(member: SdfWorldPackage.MeshIrradianceSpacings);
 
-        WriteUInt32(block: block, offset: offset, value: (volume.Enabled ? 1u : 0u));
+        WriteUInt32(block: block, offset: offset, value: ((measuring || volume.Enabled) ? 1u : 0u));
         for (var level = 0; (level < SdfMeshIrradianceProbe.Levels); level++) {
             // A level not published keeps its probe counts, which place every coarser level's slots, and reads as absent
             // by its zero spacing.

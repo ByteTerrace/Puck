@@ -24,6 +24,46 @@ float sdfLocalAdaptationGain(float incoming) {
     return exp2(clamp(log2(reference / incoming), -SDF_LOCAL_ADAPTATION_RANGE, SDF_LOCAL_ADAPTATION_RANGE) * saturate(passGroup.localAdaptation));
 }
 
+// Whether the irradiance volume answers a surface: some published probe about it measured it (sdfMeshProbesAt). While
+// the volume is on, a surface it has not measured (every surface before a level first publishes; past every published
+// probe after a camera cut, until the moved windows land) is lit as the view's camera sample measured the surroundings,
+// one probe at the camera that the exposure meter traces there the moment a view arrives: the share of the sky open
+// about the camera (airLight, SdfViewExposures.AirLightOf) arrives as the live sky, and the rest as the luminance the
+// meter read (meterLuminance), as a probe's sky share and reflected radiance do; its traced lights go unoccluded as
+// with the volume off. It reads neither darkness nor the unoccluded sky, and the image agrees with the exposure the
+// meter set from the same sample. Pixel passes only: a probe's relight never reads this, so an unmeasured hit never
+// feeds the volume a guess.
+bool sdfMeshAnswers(SdfMeshProbes probes) {
+    return (probes.share > 0.0);
+}
+// The camera sample's light from the surroundings it did not see open: the meter's luminance over the closed share,
+// grey, since the meter reads luminance alone.
+float3 sdfMeshCameraSurroundings() {
+    return (max(passGroup.meterLuminance, 0.0) * (1.0 - saturate(passGroup.airLight))).xxx;
+}
+// The volume's indirect light at a surface (sdfMeshIndirect), or where it has measured nothing the camera sample's: its
+// open sky under the volume's sky source, and its surroundings.
+float3 sdfMeshIndirectSeen(SdfMeshProbes probes, float3 normal) {
+    if (sdfMeshAnswers(probes)) {
+        return sdfMeshIndirect(probes, normal);
+    }
+
+    float3 sky = float3(0.0, 0.0, 0.0);
+
+    if ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u) {
+        sky = (sdfSkyPhysicalIrradiance(normal) * ((saturate(passGroup.airLight) * passGroup.indirectSourceGains.w) / 3.141592653589793));
+    }
+    return (sky + sdfMeshCameraSurroundings());
+}
+// The environment a surface reflects along a mirror direction under the volume (sdfMeshReflection), or where it has
+// measured nothing the camera sample's: the environment as far as it sees the sky open, and its surroundings for the
+// rest.
+float3 sdfMeshReflectionSeen(SdfMeshProbes probes, float3 direction, float3 environment) {
+    return (sdfMeshAnswers(probes)
+        ? sdfMeshReflection(probes, direction, environment)
+        : ((environment * saturate(passGroup.airLight)) + sdfMeshCameraSurroundings()));
+}
+
 // A bound screen's area light, outside the generated SDF_LIGHT_* kinds, which name the lights table's.
 static const uint SdfLightScreen = 0x100u;
 

@@ -1846,12 +1846,18 @@ the fixed poses and the approaches already rejected.
   be a `commands` row or a binding. A rule effect that writes a row's advance
   rate would make it one.
 - The Deck leg of step 0 is unmeasured.
-- [medium] A cold area lights as without the irradiance volume until its first
-  level publishes: on gallery level 2, arriving by `debug.go`, the Moth and the
-  hall read near-black for about 20 s on both backends, then light correctly.
-  Light from the coarser levels or the sky term the moment a view arrives, so no
-  cut shows a dark interval; then re-confirm the owner's far-east level-2 view
-  at (47.6, 9.1, 23.3) and the valley summit on both backends.
+- [medium] A surface no published probe answers is lit by the exposure meter's
+  camera sample (`sdfMeshAnswers`, [mesh GI](../../.claude/skills/rendering/references/mesh-gi.md)).
+  Re-confirm the owner's far-east level-2 view at (47.6, 9.1, 23.3) and the
+  valley summit on both backends after a `debug.go` cut. The sample is one
+  scalar luminance and one open-sky share per view, so a doorway that frames
+  the outdoors from inside lights both sides alike until the windows land; the
+  meter's six axis readings would make it directional.
+- [low] The meter's open-sky share (`airLight`) reads about 0.42 on the open
+  lawn at noon (`world.exposure`, the boot's first views), where the meter's
+  `SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE` scaling means it to read one. It
+  scales the atmosphere's in-scatter and the camera sample's sky; check the
+  probes-source path's per-axis sky shares against the camera trace's.
 - [medium] The outdoor lighting has no direction: a pale grey-blue sky, a white
   sun key, hard black shadows with no sky fill, no rim and no aerial haze. A
   lighting-direction pass (sky colour and fill, sun colour and height, shadow

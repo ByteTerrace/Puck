@@ -5,7 +5,7 @@
 #define DEBUG_SDF_DEBUG_VIEWS_HLSLI
 #ifdef SDF_VIEWS_PASS
 #include "../frame/sdf-reprojection.hlsli"
-#include "../shade/sdf-mesh-irradiance.hlsli"
+#include "../shade/sdf-light.hlsli"
 
 // A distinct, stable hue per material id (an HSV hue ramp), not the table albedo — so id boundaries read clearly
 // in the material-id debug view.
@@ -97,7 +97,7 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
                                         // shows apart from the direct light
             float3 surfacePoint = (p.rayOrigin + (p.rayDirection * s.t));
 
-            viewColor = ((s.hit && sdfMeshIrradianceEnabled()) ? min((sdfMeshIndirect(sdfMeshProbesAt(surfacePoint, s.normal), s.normal) * passGroup.exposure), SDF_LUMINANCE_CEILING) : float3(0.0, 0.0, 0.0));
+            viewColor = ((s.hit && sdfMeshIrradianceEnabled()) ? min((sdfMeshIndirectSeen(sdfMeshProbesAt(surfacePoint, s.normal), s.normal) * passGroup.exposure), SDF_LUMINANCE_CEILING) : float3(0.0, 0.0, 0.0));
             break;
         }
         case SDF_DEBUG_VIEW_RATES:

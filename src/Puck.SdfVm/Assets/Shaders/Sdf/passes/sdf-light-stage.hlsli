@@ -150,8 +150,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 
             // The irradiance volume is the indirect light, gathered once about the surface: its enabled sky source
             // replaces the unoccluded harmonic ambient (disabling that source retains the authored ambient look), its
-            // probes occlude the traced point and spot lights and the reflected environment. Direct lights and
-            // atmosphere remain independent.
+            // probes occlude the traced point and spot lights and the reflected environment, and a surface no probe has
+            // measured yet reads the camera sample's open sky (sdfMeshAnswers). Direct lights and atmosphere remain
+            // independent.
             bool meshIndirect = sdfMeshIrradianceEnabled();
             bool indirectSky = (meshIndirect && ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u));
             SdfMeshProbes probes = sdfMeshProbesAt(surfacePoint, normal);
@@ -168,7 +169,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             shadeSurface.ambientOcclusion = ambientOcclusion;
             shadeSurface.shadowVisibility = shadowVisibility;
             shadeSurface.cascaded = ((passGroup.meshShadowCount > 0u) && !worldSoftShadowsDisabled());
-            shadeSurface.probed = meshIndirect;
+            shadeSurface.probed = (meshIndirect && sdfMeshAnswers(probes));
             shadeSurface.probes = probes;
 
             float3 radiance = indirectSky ? 0.0 : worldSkyIrradiance(normal) * ambientOcclusion;
@@ -206,7 +207,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             float3 indirect = float3(0.0, 0.0, 0.0);
 
             if (meshIndirect) {
-                indirect = sdfMeshIndirect(probes, normal);
+                indirect = sdfMeshIndirectSeen(probes, normal);
                 if (toon) { indirect *= style.shadow.rgb; }
                 color += indirect * shadeMaterial.albedo
                     * passGroup.indirectApply.rgb
@@ -236,7 +237,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
                 float3 environment = worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness);
 
                 if (meshIndirect) {
-                    environment = sdfMeshReflection(probes, reflectDirection, environment);
+                    environment = sdfMeshReflectionSeen(probes, reflectDirection, environment);
                 }
                 color += ((environment * sdfMaterialEnvironmentBrdf(f0, shadeMaterial.roughness, nDotV)) * ambientOcclusion);
             }

@@ -206,8 +206,9 @@ after the main residency's done line; a nested residency's done line is insuffic
   coarser level answer inside a finer window: at 25 m a 32 m probe's angular
   tap is metres wide, its patch test cannot resolve a thin wall the fine probe
   measured, and the wall law reads visibility 1 through it. A receiver with no
-  answering probe never reads black: far gallery walls and outdoor shaded faces
-  past a window drew pure black under that rule.
+  answering probe never reads black: the extended stages answer far gallery walls
+  and outdoor shaded faces past a window, and a receiver no stage answers reads
+  the camera sample's open sky (`sdfMeshAnswers`, below).
   `SdfMeshIrradianceGatherDeviceLawTests` runs both gathers on one published
   volume and requires the same sixteen slots, weights, share and measured flags
   on both backends; `SdfMeshIrradianceLawTests.FarField.cs` holds the four-storey
@@ -446,9 +447,22 @@ after the main residency's done line; a nested residency's done line is insuffic
   only when the layout changes. On a resize or window move, retain the uploaded
   GPU table **and its old coordinates** until every new slot has a measured
   sample. Never publish unwritten cells as darkness or initialize them to
-  unoccluded sky. Until a level first publishes, the parameters are disabled
-  and views light as without the volume (harmonic sky ambient and authored
-  fill). `world.probe` answers `unsettled` only while geometry is owed (a scene
+  unoccluded sky. Until a level first publishes, no level has spacing, but the
+  volume flag is set whenever the tier is on (`SdfFrameBlock.WriteMeshIrradiance`'s
+  `measuring`), so views shade by the volume's model and never by the
+  indirect-off look (harmonic sky ambient and authored fill). A surface no
+  published probe answers (`sdfMeshAnswers` in `shade/sdf-light.hlsli`: every
+  surface before the first publication, and surfaces past every published probe
+  after a camera cut until the moved windows land) is lit by the exposure
+  meter's sample at the camera as one probe: the sky over the share it sees open
+  (`airLight`) and its metered luminance (`meterLuminance`, grey) over the rest,
+  for both its indirect light and its reflection, with its traced lights
+  unoccluded. The meter sets the exposure from that same sample, so a cold room
+  reads as the meter measured it, never white and blue-washed under the
+  unoccluded sky. `world.indirect high` (or back to medium) resets the layout,
+  which reproduces the unpublished state on a warm boot. Before the meter's first reading `airLight` is one
+  and the luminance zero, so the first frames of a boot still read the open sky.
+  Only pixel passes read it; a relight never does. `world.probe` answers `unsettled` only while geometry is owed (a scene
   build, a trace, a refill, a traced probe not yet published); a relight in
   progress reads as `relighting=1` on its first line.
 - A frame requesting `SdfFrame.ConvergesLighting` (`Drain`) relights its whole window from no bounce, each

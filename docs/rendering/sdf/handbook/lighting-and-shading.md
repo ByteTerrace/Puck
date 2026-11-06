@@ -274,9 +274,14 @@ in the frame.
   light is never traced and goes unoccluded. Past the coarsest window, the
   lookup clamps to its boundary probes while their depth tests still use the
   pushed receiver position. They extend only the light their visibility
-  supports; the volume boundary adds no sky. Until a level first publishes, the
-  views light as without the volume (the harmonic sky ambient and the authored
-  fill). `world.debug-view
+  supports; the volume boundary adds no sky. A surface no published probe
+  answers, every surface until a level first publishes and those past every
+  published probe just after a camera cut, is lit by the exposure meter's sample
+  at the view's camera, taken the moment the view arrives, as one probe: the sky
+  over the share it sees open and its metered luminance over the rest, for its
+  indirect light and its reflection, with its traced lights unoccluded. It reads
+  neither black nor lit by the unoccluded sky, and agrees with the exposure the
+  same sample sets; the authored fill stays the indirect-off look alone. `world.debug-view
   indirect` shows the volume's light alone. A window's view and a sky layer's
   view of another world read that world's own volume, at the tier its
   `render.indirect` authors, so its meter, fixtures and bounce are its own.
