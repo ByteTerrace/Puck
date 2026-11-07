@@ -1013,6 +1013,19 @@ before a plan relies on them (the rule applies to all families alike: this
 project's Claude and Codex lanes have shipped regressions and wrong claims
 that review caught too).
 
+Its first coding trial (identity template, a designed step with a headless
+check) made no edit in about 790 steps over 80 minutes, re-reading the memo and
+schema, and was stopped. Two setup faults came first: `dotnet` died on start
+reading its telemetry device id from the registry ("Requested registry access
+is not allowed"), and copying its CLI into the worktree's `.claude/scratch/`
+was denied part-way. So an Antigravity launch sets
+`DOTNET_CLI_TELEMETRY_OPTOUT=1`, the lead pre-builds and copies the lane's CLI
+before launch, and a coding brief asks for a short edit plan written to the
+worktree within its first steps and then edits; with `stream-json`, the lead
+counts edit tool calls in the log and treats a long run with none as a stall
+to act on. Re-test with the next bounded coding item before concluding
+anything about the family.
+
 Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden
 a small direction into a quota or an always rule. Using two families is not the
