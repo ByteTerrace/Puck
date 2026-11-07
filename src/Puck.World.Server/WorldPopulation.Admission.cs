@@ -543,15 +543,13 @@ public sealed partial class WorldPopulation {
     /// <param name="bodyIndex">The 0-based body index.</param>
     public bool PeerAuthorityTransferred(int bodyIndex) =>
         ((((uint)bodyIndex) < Capacity) && m_entries[bodyIndex].IsAuthorityTransferred);
-    /// <summary>The verified admission identity's own (Domain, Subject) for the connection currently bound to
-    /// <paramref name="bodyIndex"/> (see <see cref="TryAdmitRemotePeer"/>), or two empty strings when the slot is
-    /// not a remote-admitted peer. <see cref="Server.WorldGrants.RemintPeerAdmissionGrants"/>'s re-authorization
-    /// key — it re-matches this pair against the rebuild candidate's own admission entries
-    /// (<see cref="WorldAdmissionDoor.TryMatchEntry"/>) rather than trusting <see cref="PeerAdmissionInstalledGrantTemplates"/>
-    /// is still what the current document would mint.</summary>
+    /// <summary>The exact mode and pinned identity that authenticated this peer. Reauthorization uses this
+    /// provenance with <see cref="WorldAdmissionDoor.TryMatchEntry"/> instead of selecting a different trust row
+    /// with the same domain and subject.</summary>
     /// <param name="bodyIndex">The 0-based body index.</param>
     public WorldAdmissionTrustIdentity? PeerAdmissionTrust(int bodyIndex) => m_entries[bodyIndex].AdmissionTrust;
-    /// <summary>Gets the admitted identity names.</summary>
+    /// <summary>Gets the admitted identity names, or two empty strings for a slot without a remote identity.</summary>
+    /// <param name="bodyIndex">The 0-based body index.</param>
     public (string Domain, string Subject) PeerIdentity(int bodyIndex) =>
         ((((uint)bodyIndex) < Capacity)
             ? (m_entries[bodyIndex].IdentityDomain, m_entries[bodyIndex].IdentitySubject)

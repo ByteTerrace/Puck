@@ -568,9 +568,8 @@ public sealed partial class WorldPopulation {
         public HashSet<(WorldCapability Capability, GrantSubject Subject)> AdmissionRevokedKeys { get; set; } = [];
         // The verified admission identity's own (Domain, Subject) for THIS connection — set at TryAdmitRemotePeer,
         // restored by ApplyPeerAdmitted during replay, and cleared everywhere the installed baseline is cleared.
-        // RemintPeerAdmissionGrants' re-authorization key: it re-matches THESE against the rebuild candidate's own
-        // admission entries (WorldAdmissionDoor.TryMatchEntry) rather than trusting the stored templates are still
-        // what the current document would mint.
+        // RemintPeerAdmissionGrants uses these claim names WITH AdmissionTrust's exact mode and pinned identity
+        // against the candidate policy, rather than trusting stored templates or selecting another proof mode.
         public string IdentityDomain { get; set; } = string.Empty;
         public string IdentitySubject { get; set; } = string.Empty;
 

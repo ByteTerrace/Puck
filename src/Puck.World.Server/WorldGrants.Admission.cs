@@ -373,10 +373,9 @@ public sealed partial class WorldGrants {
     // against a peer, or an operator narrowing/removing its admission entry, is honored across a
     // world.reset/load/reload rather than silently undone:
     //
-    //  1. Re-match the peer's verified (Domain, Subject) — WorldPopulation.PeerIdentity, stored at
-    //     TryAdmitRemotePeer, never recomputed here — against the CANDIDATE document's OWN admission entries,
-    //     through WorldAdmissionDoor.TryMatchEntry: the SAME (domain, subject, mode) rule a fresh connection would
-    //     be judged by. No match at all (the identity's entry was removed, or never existed in this candidate)
+    //  1. Re-match the peer's verified claim names AND retained PeerAdmissionTrust (mode and pinned key identity)
+    //     against the candidate's admission entries through WorldAdmissionDoor.TryMatchEntry. A different proof
+    //     mode or key cannot inherit the connection. No match (the verifying entry was removed or replaced)
     //     ends transferred embodiments; connection owners evict their own live sessions and disconnect once.
     //  2. A match's CURRENT Grants list governs, not the stored connection-time templates — narrower or wider than
     //     what was minted at connection, exactly as if this peer connected fresh right now.

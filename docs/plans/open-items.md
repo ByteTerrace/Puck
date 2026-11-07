@@ -3384,6 +3384,15 @@ step's completion criteria; C1 to C7 are in.
 Owner: an independent reviewer (Argon) · unconfirmed · Next: the researcher
 brief's priorities ([security review](../development/security-review.md)).
 
+- [low, latent API hazard] The verified review's 1.4 is not a reproduced player
+  escalation. `WorldRemoteAuthority.TryRouteCredential` still selects the lowest
+  body's credential for an unbound, body-agnostic request. Production seat routes
+  carry immutable wrapper credentials through `WorldInstanceHost.PublishCommittedTransfer`;
+  no unprivileged path to the shared link was established. Follow-up: restrict
+  gameplay submission to traveler-bound capabilities and remove collection-order
+  credential selection, with a bound-seat positive control and an unbound-link
+  refusal case.
+
 - [medium, confirmed] Rejected payload selection (verified finding 2.1).
   `StubInstall.RevertToLastGood` cancels the failed version's intent but records
   no durable rejection; `StubHealth.IncrementAndFlush` replaces its single health
