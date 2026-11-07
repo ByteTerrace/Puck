@@ -81,6 +81,10 @@ public static class SdfUpdateRateTiers {
     public const float ShadowFarTurnRadians = 0.0087f;
     /// <summary>The camera move, in metres, past which a held far cascade refreshes at once.</summary>
     public const float ShadowFarMoveMetres = 0.5f;
+    /// <summary>The light turn, in radians, past which a held far cascade refreshes at once: a shadow cast 120 m moves
+    /// about one far texel (12 cm). A sun on a day clock turns far less in the hold's 30th of a second (a 24-minute day
+    /// turns it 0.15 milliradians), so only a light that jumps ends a hold.</summary>
+    public const float ShadowFarLightTurnRadians = 0.001f;
 
     /// <summary>Returns the rate a posed creation (a body, or a placed creation) updates at for its largest pixels per
     /// metre over the views that may see it and the fastest its parts move relative to its root: the slowest tier at

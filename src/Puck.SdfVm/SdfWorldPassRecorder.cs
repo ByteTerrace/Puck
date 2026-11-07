@@ -479,6 +479,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         SdfFrameBlock.WriteMeshIrradiance(block: recording.PassBlock, volume: residency.MeshIrradianceParameters, measuring: (residency.IndirectTier != Puck.SignedDistance.SdfIndirectTier.Off));
 
+        // The far cascade may draw one layer of a split refresh; asking commits the camera each drawn layer holds.
+        var layers = ((m_part == SdfWorldPackage.Parts.ShadowFar) ? m_owner.RecordFar(instance: m_context.Instance) : SdfFarLayers.Both);
         var cascades = m_owner.CascadesOf(frame: frame, instance: m_context.Instance, texels: BoundCascadeTexels(recording: in recording), view: view);
 
         SdfFrameBlock.WriteMeshShadows(block: recording.PassBlock, cascades: in cascades);
@@ -516,6 +518,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                             : SdfMeshDetail.Of(camera: frame.Views[view].Camera, displayHeight: recording.FrameHeight)),
                         _ => SdfMeshDetail.Forced(level: (((int)frame.MeshDetail) - 1)),
                     })),
+                layers: layers,
                 recording: in recording,
                 tables: tables
             );
@@ -691,7 +694,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // a set never rewrites what it binds once written.
     private static int MeshSetOf(int slot, SdfWorldTables tables) =>
         ((slot * SdfWorldTables.FrameRingSize) + tables.CurrentSlot);
-    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels, in SdfMeshCull cull, in SdfMeshDetail detail, bool occlude) {
+    // A cascade draws its depth (with the glass extinction that reads it) and its exit layer as `layers` says; a layer it
+    // skips keeps what an earlier frame drew into it.
+    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels, in SdfMeshCull cull, in SdfMeshDetail detail, bool occlude, SdfFarLayers layers) {
+        var drawsDepth = (!IsShadowCascade || ((layers & SdfFarLayers.Depth) != 0));
+        var drawsExit = ((layers & SdfFarLayers.Exit) != 0);
         var count = tables.MeshDrawCount;
         var slot = recording.Slot;
         var recorder = recording.Recorder;
@@ -718,7 +725,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             }
         }
 
-        if (HasShadowOptical) {
+        if (HasShadowOptical && drawsDepth) {
             var optical = recording.Outputs[2].Buffer!;
             recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: optical.BufferHandle,
                 sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.FragmentShader,
@@ -787,18 +794,20 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             Y: 0
         );
 
-        recorder.BeginRenderPass(
-            area: area,
-            commandBufferHandle: commandBuffer,
-            framebuffer: framebuffer
-        );
-        if (occlusion is not null) {
-            // The first phase: what the previous frame found visible, and every draw no host box bounds.
-            RecordMeshPhase(commandBuffer: commandBuffer, phase: 0, pipeline: pipeline, recorder: recorder, selection: occlusion, set: set);
+        if (drawsDepth) {
+            recorder.BeginRenderPass(
+                area: area,
+                commandBufferHandle: commandBuffer,
+                framebuffer: framebuffer
+            );
+            if (occlusion is not null) {
+                // The first phase: what the previous frame found visible, and every draw no host box bounds.
+                RecordMeshPhase(commandBuffer: commandBuffer, phase: 0, pipeline: pipeline, recorder: recorder, selection: occlusion, set: set);
+            }
+            recorder.EndRenderPass(commandBufferHandle: commandBuffer);
         }
-        recorder.EndRenderPass(commandBufferHandle: commandBuffer);
 
-        if (IsShadowCascade) {
+        if (IsShadowCascade && drawsExit) {
             // Exit solids use front-face culling; sheets and clipped draws use the unculled pipeline.
             recorder.BeginRenderPass(area: area, commandBufferHandle: commandBuffer, framebuffer: lateFramebuffer!);
             if (occlusion is not null) {
@@ -807,7 +816,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             }
             recorder.EndRenderPass(commandBufferHandle: commandBuffer);
         }
-        if (HasShadowOptical && occlusion is not null) {
+        if (HasShadowOptical && drawsDepth && (occlusion is not null)) {
             // Separate descriptors: early raster/selection must never bind the entry depth while it is an attachment.
             var glassSetIndex = meshSet + m_meshSets.Length / 2;
             var glassSet = m_meshSets[glassSetIndex];

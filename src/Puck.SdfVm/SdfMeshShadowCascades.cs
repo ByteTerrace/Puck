@@ -36,11 +36,13 @@ public readonly struct SdfMeshShadowCascades {
     private readonly SdfMeshShadowCamera m_near;
     private readonly SdfMeshShadowCamera m_far;
     private readonly SdfMeshShadowCamera m_second;
+    private readonly SdfMeshShadowCamera m_farExit;
 
-    private SdfMeshShadowCascades(SdfMeshShadowCamera near, SdfMeshShadowCamera far, SdfMeshShadowCamera second, int count, float penumbraSlope, float secondSlope, int texels) {
+    private SdfMeshShadowCascades(SdfMeshShadowCamera near, SdfMeshShadowCamera far, SdfMeshShadowCamera second, SdfMeshShadowCamera farExit, int count, float penumbraSlope, float secondSlope, int texels) {
         m_near = near;
         m_far = far;
         m_second = second;
+        m_farExit = farExit;
         Count = count;
         PenumbraSlope = penumbraSlope;
         SecondPenumbraSlope = secondSlope;
@@ -59,21 +61,26 @@ public readonly struct SdfMeshShadowCascades {
     public int Texels { get; }
 
     /// <summary>Gets one cascade's camera.</summary>
-    /// <param name="index">The cascade: zero the key light's near one, one its far one, two the second slot's.</param>
+    /// <param name="index">The cascade: zero the key light's near one, one its far one, two the second slot's, three the
+    /// camera the far cascade's exit layer holds (<see cref="WithFar"/>).</param>
     /// <returns>The camera.</returns>
     public SdfMeshShadowCamera this[int index] => index switch {
         0 => m_near,
         1 => m_far,
-        _ => m_second,
+        2 => m_second,
+        _ => m_farExit,
     };
 
-    /// <summary>Returns these cascades with the far cascade's camera replaced: a far cascade held from an earlier frame
-    /// (<see cref="SdfUpdateRates.ShadowFar"/>), whose depth was drawn from that camera and is read through it.</summary>
-    /// <param name="far">The far cascade's camera.</param>
+    /// <summary>Returns these cascades with the far cascade's cameras replaced: a far cascade held from an earlier frame
+    /// (<see cref="SdfUpdateRates.ShadowFar"/>), whose layers were drawn from those cameras and are read through them. The
+    /// exit layer's camera differs from the depth's only on the frame a refresh redraws the depth alone.</summary>
+    /// <param name="far">The camera the far cascade's depth was drawn from.</param>
+    /// <param name="exit">The camera its exit layer was drawn from.</param>
     /// <returns>The cascades, every other member unchanged.</returns>
-    public SdfMeshShadowCascades WithFar(in SdfMeshShadowCamera far) => new(
+    public SdfMeshShadowCascades WithFar(in SdfMeshShadowCamera far, in SdfMeshShadowCamera exit) => new(
         count: Count,
         far: far,
+        farExit: exit,
         near: m_near,
         penumbraSlope: PenumbraSlope,
         second: m_second,
@@ -112,9 +119,12 @@ public readonly struct SdfMeshShadowCascades {
             ? Cascade(camera: camera, casters: coverage.Casters, forward: -SdfLights.UnitDirection(direction: lights[secondSlot].Direction), depth: MathF.Min(SecondSplit, far), texels: side)
             : default);
 
+        var farCamera = Cascade(camera: camera, casters: coverage.Casters, forward: forward, depth: far, texels: side);
+
         return new SdfMeshShadowCascades(
             count: 2,
-            far: Cascade(camera: camera, casters: coverage.Casters, forward: forward, depth: far, texels: side),
+            far: farCamera,
+            farExit: farCamera,
             near: Cascade(camera: camera, casters: coverage.Casters, forward: forward, depth: MathF.Min(coverage.Near, far), texels: side),
             penumbraSlope: MathF.Max(light.Param, 1.0e-3f),
             second: second,

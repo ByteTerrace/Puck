@@ -920,6 +920,21 @@ iteration (avg, p50, p99, max) and the worst iterations split into their
 phases (simulate, begin, produce, present, wait) with their collections and the
 pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 
+- **The far cascade is the frame's largest variable pass; read whether it
+  holds.** It draws nearly every caster in a 280 m box out to 200 m toward the
+  sun, at each mesh's coarsest level whose error fits a texel, in two layers,
+  so a view facing the debug world's lawn, forest and studio draws many times
+  the mesh pass's vertices there (`world.counters gpu pass sdf.world$shadow-far
+  counter vertices`). `world.counters sdf.rates` counts
+  `shadow-far.rendered` against `.held`: a far cascade that never holds pays
+  that on every frame. The hold tolerates the light turning by
+  `SdfUpdateRateTiers.ShadowFarLightTurnRadians` (a day clock's sun turns every
+  frame), and a timed refresh draws the depth on one frame and the exit layer
+  on the next (`SdfFarLayers`, `SdfWorldPasses.RecordFar`), which commits each
+  layer's camera; the surface pass reads the exit layer through the pass
+  block's fourth camera. Compare `world.gpu-timing`'s `sdf.world$shadow-far`
+  with `world.debug-view indirect`, which keeps the cascades but drops the
+  views shading's cost and the temporal resolve.
 - **A window whose extent swings rebuilds on a backoff.** A window a moving
   camera crosses (the endless fall's floor and ceiling paintings) requests a new
   extent every few frames; a resize build the request outran is discarded, and

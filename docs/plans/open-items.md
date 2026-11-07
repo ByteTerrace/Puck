@@ -40,96 +40,103 @@ milestone. The owner requested its baseline and implementation plan, which
 [the plan](dense-landscapes.md) holds.
 
 1. The frame bar [high]: 60 FPS steady state on the lead machine is not met.
-   A quiet `bench frames` tour of all 59 sweep stops (Direct3D 12, 1280x720,
-   one complete sample) passes p99 at 3 stops; p50 is at the display rate at
-   about 34, and the worst stops run at 15 FPS (`studio` p50 67 / p99 90 ms,
-   `finding-teal-roof` 69 / 77, `gather-teal-door-near` 67 / 88,
-   `gather-stairwell-flight-b-1` 67 / 75, `finding-wall-slivers` 61 / 67;
-   the granaries and wing doors near 30). Lead: most stops' `-indirect` twin
-   (the same camera under `world.debug-view indirect`, run right after) holds
-   16.7 ms where the plain view is 2-4x slower, so either the passes the indirect
-   view skips cost the frame or the first stop at a place pays a settling cost;
-   read per-pass GPU time (`bench frames --gpu-pass`) at the five worst stops
-   before choosing. Then fix the worst at their causes
+   The worst sweep stops (the teal room, flight B of the second storey, the
+   studio) are GPU-bound on the root view, not settling: a stop measured again
+   after its `-indirect` twin is as slow as on arrival. The far shadow cascade
+   holds under the day clock's sun and splits each refresh over two frames
+   (`SdfFarLayers`), so those stops run at the display rate at p50 but still
+   miss vsync on some frames (p99 one 30 Hz period): the root view's GPU time
+   stays just under a 60 Hz frame, mostly `views` and `resolve`, which
+   `world.debug-view indirect` skips. Next: the views shading's and the
+   temporal resolve's own cost per pixel (registers, occupancy, the history
+   window's reads; [gpu cost](../../.claude/skills/rendering/references/gpu-cost.md)),
+   then the far cascade's caster count. It keeps about three quarters of the
+   world's draws, at each mesh's coarsest level, and a light-space occlusion
+   test on the existing pyramid machinery would cull casters hidden behind
+   nearer ones. Arrival at a new place can also pay a settling cost of several
+   seconds, with produce and simulate both inflated as if the frame thread were
+   starved, which the steady readings do not show and a quiet tour's first stop
+   at a place sometimes catches; attribute it with a `dotnet-trace` of the
+   frame thread on arrival
    ([frame-time findings](#other-frame-time-findings)). The disclosure leaks,
    transmission's exit-layer highs, the lockstep relight under a moving sun and
    the tour's and cold bake's memory are open highs in their own packets, not
    owner decisions.
-3. [Dense landscapes](#dense-landscapes) [high, the first landscape milestone]:
+2. [Dense landscapes](#dense-landscapes) [high, the first landscape milestone]:
    continuous forest, roads, shrubs and grass at the performance target; lead
    with counted query/motion work and the shared instance contract. The fresh
    [baseline and implementation order](dense-landscapes.md) keep CPU field
    queries first and connect static-copy sharing, retained updates, GPU
    instancing, geometry/shadow work and memory to one proving landscape.
-4. [Memory](#memory-on-the-deck-tier) [high, the Deck]: the debug world's
+3. [Memory](#memory-on-the-deck-tier) [high, the Deck]: the debug world's
    process plus GPU memory at or under 10 GB on the Deck tier, attribution
    first.
-5. [Lighting and GI](#lighting-and-gi) [high]: the
+4. [Lighting and GI](#lighting-and-gi) [high]: the
    [graphics architecture plan](graphics-architecture.md)'s G1 acceptance work:
    reduce the landed GPU trace/relight's lockstep drain to a frame's work;
    the authored capture grid bounds when changing lighting owes a drain,
    while each boundary still needs the same full convergence.
-6. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
+5. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
    M1 read, after the draw-identity fix R2's review found
    ([GPU robustness](#vulkan-regressions-and-gpu-robustness)).
-7. [Transmission](transmission.md) [high]: its implementation lanes in order,
+6. [Transmission](transmission.md) [high]: its implementation lanes in order,
    once the owner's look calls are answered or the design's choices stand.
-8. [Bake proportional to change](#bake-proportional-to-change) [high, the
+7. [Bake proportional to change](#bake-proportional-to-change) [high, the
    cold-bake bar]: a static copy bakes in its prototype's frame and is shared,
    bake grouping and detail derive from meaning rather than spelling, then
    narrow the closure and share one store across both backends.
-9. [Disclosure](disclosure.md#the-build-order) [high, the long pole before
+8. [Disclosure](disclosure.md#the-build-order) [high, the long pole before
    `main`]: steps 1-6 behind the harness, step 0b's principals, and the
    owner's search-output decision.
-10. [Rule faults](rule-faults.md) [high, before `main`]: build the designed
-    outcome type, single interpreter and journal-backed firing in its steps,
-    each reviewed.
-11. [Engine job system](#engine-job-system) [high]: scheduling, the
+9. [Rule faults](rule-faults.md) [high, before `main`]: build the designed
+   outcome type, single interpreter and journal-backed firing in its steps,
+   each reviewed.
+10. [Engine job system](#engine-job-system) [high]: scheduling, the
     garbage-collection cuts, then J1; the replay burst's tick budget and F17 as
     ordinary work.
-12. [Water feature build](#water) ([plan](water.md#the-lanes)) [ordinary]: the
+11. [Water feature build](#water) ([plan](water.md#the-lanes)) [ordinary]: the
     chain as the arc has landed (the hidden chain still draws, see the packet);
     A2 to A5 in parallel next, then R3, P1 last. The owner accepted the
     plan's three taste calls; the carved channel has landed.
-13. [Certified field contact](#certified-field-contact): box and ellipsoid
+12. [Certified field contact](#certified-field-contact): box and ellipsoid
     bodies, then clearance on slopes within a third of a metre.
-14. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
+13. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
     to 10.
-15. [Language and authoring](#language-and-authoring) and [author leaks to the
+14. [Language and authoring](#language-and-authoring) and [author leaks to the
     standard](#author-leaks-to-the-standard): what lang-2 leaves of S11, the
     cost corpus, the overlay text advance.
-16. Antigravity's coding trial ([agent tooling](#agent-tooling-and-skills)),
+15. Antigravity's coding trial ([agent tooling](#agent-tooling-and-skills)),
     once the current batch has landed.
-17. [Delivery](#delivery-launcher-and-ci): the production deploy, CI's steady
+16. [Delivery](#delivery-launcher-and-ci): the production deploy, CI's steady
     state, the shader cache and the GC-hole retirement.
-18. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
+17. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
     the meadow (lane 9) now; then the second seat, the authored passes and the
     quilt, each ahead of the job-system step it proves.
-19. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
+18. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
     the boot's JSON round trip in `BindLive`, then a reboot for an edit outside
     `PuckHotReload`; measure the cold and warm builds.
-20. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
+19. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
     meter), with steps 2, 3, 6 and step 4's bound fix in parallel.
-21. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
+20. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
     growth path with the uniform view limit enforced there, the two overlay
     writers, the survey's remaining groups.
-22. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups sharp
+21. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups sharp
     boxes left worse.
-23. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
+22. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
     levels or the sky term the moment a view arrives; the rest after the image
     meter.
-24. [Test runner and replay](#test-runner-and-replay): profile what recording
+23. [Test runner and replay](#test-runner-and-replay): profile what recording
     still folds whole every tick before choosing the next segment.
-25. [Bake detail](#bake-detail): measure the static round-section term.
-26. [Residency and streaming](#residency-and-streaming): step 2 after the memo
+24. [Bake detail](#bake-detail): measure the static round-section term.
+25. [Residency and streaming](#residency-and-streaming): step 2 after the memo
     names GI's work units.
-27. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
+26. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
     the crossing frame and the pixel-pass gap.
-28. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
+27. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
     schema switch; the stale lease holder.
-29. [Tests (suspended)](#tests-suspended): triage the failing Windows shards by
+28. [Tests (suspended)](#tests-suspended): triage the failing Windows shards by
     cause.
-30. [Card tables](#card-tables-in-the-board-game-room) (the windowed look, then
+29. [Card tables](#card-tables-in-the-board-game-room) (the windowed look, then
     Spider), [Debug tools](#debug-tools) (windowed checks and exhibits),
     [Sweep](#sweep-and-visual-checks) (the paired tour) and
     [Temporal](#temporal-shimmer-and-cadence-flicker) (the blink re-measure).
@@ -418,6 +425,21 @@ The custom no-GC runtime port stays later work, on the
   ([motion](#dual-stick-play-and-the-moths-motion)) is the mechanism to reuse.
 
 #### Other frame-time findings
+
+- [high] The far shadow cascade draws nearly every caster in its box at the
+  coarsest level whose error fits its texel (`world.counters gpu pass
+  sdf.world$shadow-far counter vertices` against the mesh pass's), in two
+  layers. Three things keep that count high. A level chain of two levels stops
+  at two contour cells of error, so a finely contoured mesh (the card backs and
+  console bricks at sub-millimetre cells) never coarsens toward a far texel:
+  four levels (`SdfMeshCollapse.CellShares` to 128 cells) made no level past
+  the second for the card back under `puck mesh audit --cpu --level`, since its
+  material edges slide only along themselves, while the oak went from 3,052 to
+  1,440 triangles, still above a far texel's error. Draws with members, such
+  as the falls' 14 slots of up to 150,000 triangles each, have no host box and
+  draw level zero in every pass. No caster is culled behind a nearer one in
+  light space. Measure each against the cascade's vertices before changing the
+  bake identity.
 
 - [high] The frame thread's CPU field queries (Next item 0;
   [where the frame thread goes](engine-job-system.md#where-the-frame-thread-goes)).
