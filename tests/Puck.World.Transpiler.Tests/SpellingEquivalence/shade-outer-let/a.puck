@@ -1,0 +1,10 @@
+// Equivalent authored shading: shade-outer-let.
+schema: "puck.world.definition.v1"
+documentId: "shade-pair"
+shade template program(seed) { let n = select(clock, seed, seed)
+surface { roughness: lattice(surface.position, n) } }
+prototypes { prototype "p" { document {
+  schema: "puck.creation.v1"
+  palette [{ color: "#808080", shade: program(7) }]
+  shape Box "box" { scale [1, 1, 1] }
+} } }

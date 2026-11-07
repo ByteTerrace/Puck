@@ -50,6 +50,10 @@ public sealed partial class SdfShadeProgram {
     private static bool Fold(SdfShadeOp op, SdfShadeType type, Node[] args, out uint[] bits) {
         bits = [];
         if ((args.Length == 0) || args.Any(predicate: a => (a.Op != SdfShadeOp.Constant)) || SdfShadeOps.IsUInt(type: type)) { return false; }
+        if (op == SdfShadeOp.Equal && args[0].Type == SdfShadeType.UInt) {
+            bits = [BitConverter.SingleToUInt32Bits(args[0].Bits[0] == args[1].Bits[0] ? 1f : 0f)];
+            return true;
+        }
         if (op is not (SdfShadeOp.Add or SdfShadeOp.Subtract or SdfShadeOp.Multiply or SdfShadeOp.Divide or
             SdfShadeOp.Min or SdfShadeOp.Max or SdfShadeOp.Equal or SdfShadeOp.Less or SdfShadeOp.LessEqual or
             SdfShadeOp.Negate or SdfShadeOp.Vector2 or SdfShadeOp.Vector3 or SdfShadeOp.Vector4)) { return false; }

@@ -1344,36 +1344,13 @@ and the Water packet).
 
 ### Author shaders
 
-Owner: rendering · ordinary · Next: the step-0 review's findings below, then
+Owner: rendering · ordinary · Next:
 [step 2 of the design memo](author-shaders.md#6-implementation-steps) (the
 interpreter's cost and registers on the bar devices). Steps 0 and 1 have
 landed; step 1's GPU lifetimes (retained identity lists through fence
 retirement in `SdfWorldResidency`, the bounded `SdfShadeDispatch` records) owe
 an adversarial review.
 
-- [high] `SdfShadeHlsl.Emit` subscripts a scalar for `SdfShadeOp.Component` on
-  a width-1 operand (`clock.x` emits `asfloat(regs.r0).x[0u]`), which DXC
-  rejects, so tier 2 cannot specialize a program tier 1 admits.
-- [high] `WorldShadeLowering` types runtime parameters from one expected type:
-  `hash` never asks for `UInt3`, `select` arms and user `function` bodies drop
-  the expectation, and `ParameterType` rewrites a slot in place when one
-  parameter is used as float and uint, failing later as an internal mismatch.
-- [high] Canonical identity depends on spelling: `==` and `!=` are not ordered
-  as commutative, and `SdfShadeProgram.Compiler` fills its parameter slots in
-  declaration order, so dead parameters stay and two equivalent programs get
-  different `Identity`, layout and cost.
-- [high] `WrapSignatureOf` (`SdfWorldTables.ProgramUpload.cs`) ignores
-  `material.Shade.Demand`, so a palette-only edit that widens shadow demand
-  never re-runs the Surface pass. Check against step 1's upload changes first.
-- [medium] `shape(...)` in a shade program skips the document's member checks
-  and `TryValidateScaledPrimitive`, keeps uncanonicalized fields in the
-  program's definition, and drops an elliptic cylinder's rotation
-  (`CapturePaintShape` ignores `SdfOp.Rotate`).
-- [medium] `MaxOps` counts dispatch-scaled work as instructions, capping a
-  program near 63 instructions and refusing any multi-strand `Sweep` shape.
-- [medium] A `let` outside a phase block is not bound as a shade expression.
-- [low] Raw JSON shade definitions reach `Compile` without null or overflow
-  guards.
 The owner's ruling (AGENTS.md, "Authors rule"): authors may bring their own
 shaders, so a look is never limited to what the engine's shading offers.
 [The design memo](author-shaders.md) answers the owner's questions from

@@ -1,0 +1,9 @@
+// Equivalent authored shading: shade-inequality.
+schema: "puck.world.definition.v1"
+documentId: "shade-pair"
+shade template program() { surface { roughness: clock != material.roughness } }
+prototypes { prototype "p" { document {
+  schema: "puck.creation.v1"
+  palette [{ color: "#808080", shade: program() }]
+  shape Box "box" { scale [1, 1, 1] }
+} } }
