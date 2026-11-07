@@ -31,9 +31,10 @@ public sealed class TextComparisonLawTests {
             }) {
                 var compiled = RuleCompiler.Compile(new Rule(Name("compare"), [], Gate: gate), context, requireEffects: false);
                 var trace = new List<string>();
+                var frame = new EvaluationFrame(reader);
+
                 Assert.Equal(comparison == ExpressionOp.Equal ? expected : !expected,
-                    RuleEvaluation.GateHolds(reader, compiled.Gate, out var fault, trace));
-                Assert.Equal(ExpressionFault.None, fault);
+                    RuleEvaluation.Decide(ref frame, compiled.Gate, trace) is Verdict.Open);
                 Assert.Single(trace);
             }
         }

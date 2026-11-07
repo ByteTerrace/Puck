@@ -178,21 +178,20 @@ public static partial class RuleExpressions {
             var spelled = FoldWord(
                 body: program,
                 kind: word.WordKind,
-                length: out var length,
                 reader: reader,
                 rowOrdinal: rowOrdinal,
                 start: start,
                 word: reader.PatternWord
             );
 
-            if (spelled != ExpressionFault.None) {
-                return ((spelled == ExpressionFault.Absent)
+            if (!spelled.TryFinite(raw: out var length)) {
+                return ((spelled.Case == FaultCase.Absent)
                     ? Fact.Absent(kind: operand.ValueKind)
                     : Fact.Faulted(kind: operand.ValueKind));
             }
 
             return word.MatchWord(
-                length: length,
+                length: ((int)length),
                 reader: reader
             );
         }
@@ -213,18 +212,17 @@ public static partial class RuleExpressions {
     /// <param name="body">The per-token program.</param>
     /// <param name="kind">The kind the program evaluates in.</param>
     /// <param name="word">The word buffer.</param>
-    /// <param name="length">The word's length, when every token spelled a letter.</param>
     /// <param name="start">The position the word starts at.</param>
-    /// <returns><see cref="ExpressionFault.None"/> when every token spelled a letter;
-    /// <see cref="ExpressionFault.Absent"/> when a token's letter is absent; otherwise the token's fault.</returns>
+    /// <returns>The word's length as a finite answer when every token spelled a letter; an absence when a token's
+    /// letter is absent; otherwise the token's fault.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-    public static ExpressionFault FoldWord(IStateReader reader, int rowOrdinal, CompiledExpressionToken[] body, CellKind kind, Span<long> word, out int length, int start = 0) {
+    public static Outcome FoldWord(IStateReader reader, int rowOrdinal, CompiledExpressionToken[] body, CellKind kind, Span<long> word, int start = 0) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         var arena = reader.Arena;
         var cursor = start;
-
-        length = 0;
+        var frame = new EvaluationFrame(reader: reader);
+        var length = 0;
 
         try {
             while (arena.TryNextCell(
@@ -244,17 +242,17 @@ public static partial class RuleExpressions {
                     ? previous
                     : default
                 );
-                if (!TryEvaluate(
-                    fault: out var fault,
-                    kind: kind,
-                    program: body,
-                    reader: reader,
-                    value: out var raw
-                )) {
-                    length = 0;
 
-                    return fault;
+                var letter = Evaluate(
+                    frame: ref frame,
+                    kind: kind,
+                    program: body
+                );
+
+                if (!letter.TryFinite(raw: out var raw)) {
+                    return letter;
                 }
+
                 word[length++] = raw;
             }
         } finally {
@@ -262,7 +260,7 @@ public static partial class RuleExpressions {
             reader.BoundTokenKey = default;
         }
 
-        return ExpressionFault.None;
+        return Outcome.Finite(raw: length);
     }
 }
 /// <summary>Reads an operand where no enclosing program feeds it: a gate side, an effect's source or a read-back.</summary>

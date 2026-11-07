@@ -94,11 +94,10 @@ public sealed partial class WorldRuleHost {
             : key
         ); m_boundRight = candidate;
         try {
-            return m_evaluator.GateOpen(
-            faulted: out _,
+            return (m_evaluator.Decide(
             gate: option.Gate,
             ruleName: ruleName
-        );
+        ) is Verdict.Open);
         } finally { m_boundLeft = left; m_boundRight = right; }
     }
     private bool DecisionPerceptible(DecisionPerception image, CompiledWorldFactsDecisionNeighbors neighbors, int observer, int candidate) {
@@ -320,21 +319,20 @@ public sealed partial class WorldRuleHost {
         try {
             if (
                 !gateAlreadyOpen &&
-                !m_evaluator.GateOpen(
-                faulted: out _,
+                (m_evaluator.Decide(
                 gate: option.Gate,
                 ruleName: ruleName
-            )
+            ) is not Verdict.Open)
             ) { return false; }
             m_decisionWork = m_decisionWork with { Scored = (m_decisionWork.Scored + 1) };
+            var scoreFrame = new EvaluationFrame(reader: this);
+
             if (
-                !RuleExpressions.TryEvaluate(
-                fault: out _,
+                !RuleExpressions.Evaluate(
+                frame: ref scoreFrame,
                 kind: policy.ScoreKind,
-                program: option.Score,
-                reader: this,
-                value: out var score
-            ) ||
+                program: option.Score
+            ).TryFinite(raw: out var score) ||
                 ((policy.Mode == WorldDecisionMode.Weighted) && (score <= 0))
             ) { return false; }
             if (

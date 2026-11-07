@@ -15,80 +15,78 @@ public static partial class RuleExpressions {
     [ThreadStatic]
     private static ArenaScratch? FoldScratch;
 
-    /// <summary>Evaluates a compiled postfix program. This is where every rule fault begins: a
-    /// <see cref="ExpressionFault.Domain"/> or <see cref="ExpressionFault.Forever"/> failure is raised into the
-    /// reader's <see cref="ArenaScratch"/> before it returns, so the fault scope of whichever caller decides what the
-    /// evaluation means sees it, whatever an intermediate caller does with the result. An absence is not raised: its
-    /// caller answers it.</summary>
-    /// <param name="reader">The evaluation in flight, or <see langword="null"/> to fold constants — a live read
-    /// refuses without one, and a fold raises nothing.</param>
+    /// <summary>Evaluates a compiled postfix program for the evaluation a frame names. The answer is the program's
+    /// <see cref="Outcome"/>: a number, an absence, or a fault (<see cref="ExpressionFault.Domain"/> or
+    /// <see cref="ExpressionFault.Forever"/>). A fault is also raised into the frame's reader's
+    /// <see cref="ArenaScratch"/>, where the fault scope of whichever caller decides what the evaluation means sees it,
+    /// until every deciding place reads the outcome in hand; an absence is not raised: its caller answers it.</summary>
+    /// <param name="frame">The evaluation in flight.</param>
     /// <param name="program">The postfix program.</param>
     /// <param name="kind">The kind to evaluate in.</param>
-    /// <param name="value">The raw result.</param>
-    /// <param name="fault">Why the program failed, or <see cref="ExpressionFault.None"/>.</param>
-    /// <returns><see langword="true"/> when the program evaluated.</returns>
-    /// <exception cref="InvalidOperationException">The program faulted with no fault scope open on the reader's
-    /// scratch.</exception>
-    public static bool TryEvaluate(IStateReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, out long value, out ExpressionFault fault) {
-        if (Run(
+    /// <returns>What the program answered.</returns>
+    /// <exception cref="InvalidOperationException">The frame names no reader, or the program faulted with no fault
+    /// scope open on the reader's scratch.</exception>
+    public static Outcome Evaluate(ref EvaluationFrame frame, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) {
+        var reader = frame.Reader;
+        var outcome = Run(
             arguments: [],
-            fault: out fault,
             kind: kind,
             member: null,
             program: program,
-            reader: reader,
-            value: out value
-        )) {
-            return true;
-        }
-        if ((reader is not null) && (fault is (ExpressionFault.Domain or ExpressionFault.Forever))) {
-            reader.Scratch.RaiseFault(fault: fault);
+            reader: reader
+        );
+
+        if (outcome.Case == FaultCase.Faulted) {
+            reader.Scratch.RaiseFault(fault: outcome.Fault);
         }
 
-        return false;
+        return outcome;
     }
-    /// <summary>Evaluates a compiled postfix program as a fault scope of its own, for a caller that is itself what
-    /// decides what a fault means (a read-back, a perception sample): the caller receives the fault as
-    /// <paramref name="fault"/>, and any scope enclosing this one sees it too.</summary>
-    /// <param name="reader">The evaluation in flight.</param>
+    /// <summary>Evaluates a compiled postfix program for a caller that is not a firing and decides what a fault means
+    /// where it sits: the compiler's constant folder (no reader), the search score, a flock's affinity, the console's
+    /// read-back and the browser's. With a reader the evaluation is a fault scope of its own, so the caller receives
+    /// the fault in the outcome and any scope enclosing this one sees it too.</summary>
+    /// <param name="reader">The evaluation in flight, or <see langword="null"/> to fold constants: a live read
+    /// refuses without one, and a fold raises nothing.</param>
     /// <param name="program">The postfix program.</param>
     /// <param name="kind">The kind to evaluate in.</param>
-    /// <param name="value">The raw result.</param>
-    /// <param name="fault">The first fault anything in the evaluation raised, else why the program did not evaluate,
-    /// or <see cref="ExpressionFault.None"/>.</param>
-    /// <returns><see langword="true"/> when the program evaluated and nothing in it faulted.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-    public static bool TryEvaluateAlone(IStateReader reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, out long value, out ExpressionFault fault) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
+    /// <returns>What the program answered; a fault anything in the evaluation raised is the answer.</returns>
+    public static Outcome EvaluateDetached(IStateReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) {
+        if (reader is null) {
+            return Run(
+                arguments: [],
+                kind: kind,
+                member: null,
+                program: program,
+                reader: null
+            );
+        }
 
         var scratch = reader.Scratch;
         var scope = scratch.EnterFaultScope();
-        bool evaluated;
+        Outcome outcome;
         ExpressionFault raised;
 
         try {
-            evaluated = TryEvaluate(
-                fault: out fault,
+            var frame = new EvaluationFrame(reader: reader);
+
+            outcome = Evaluate(
+                frame: ref frame,
                 kind: kind,
-                program: program,
-                reader: reader,
-                value: out value
+                program: program
             );
         } finally {
             raised = scratch.LeaveFaultScope(scope: scope);
         }
-        if (raised != ExpressionFault.None) {
-            fault = raised;
 
-            return false;
-        }
-
-        return evaluated;
+        return ((raised != ExpressionFault.None)
+            ? Outcome.Faulted(why: raised)
+            : outcome);
     }
 
-    private static bool Run(IStateReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, long? member, ReadOnlySpan<long> arguments, out long value, out ExpressionFault fault) {
-        fault = ExpressionFault.Domain;
-
+    // Every evaluation of authored tokens runs here, and answers an Outcome: a nested call, fold member or short-circuit
+    // body is a local the caller combines, so no variable is shared between a program and the programs it calls.
+    private static Outcome Run(IStateReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, long? member, ReadOnlySpan<long> arguments) {
         // A token pushes at most one value, so a program's own length bounds its stack: the lease is as deep as
         // this program can reach, and a nested call or fold takes the next one down rather than more machine stack.
         var scratch = (reader?.Scratch ?? (FoldScratch ??= new ArenaScratch()));
@@ -116,9 +114,7 @@ public static partial class RuleExpressions {
                 }
                 if (token.Operation == ExpressionOp.Argument) {
                     if (((ulong)token.Constant) >= ((ulong)arguments.Length)) {
-                        value = 0L;
-
-                        return false;
+                        return Outcome.Faulted(why: ExpressionFault.Domain);
                     }
 
                     absent[top] = false;
@@ -128,9 +124,7 @@ public static partial class RuleExpressions {
                 }
                 if (token.Operation == ExpressionOp.Member) {
                     if (member is not { } bound) {
-                        value = 0L;
-
-                        return false;
+                        return Outcome.Faulted(why: ExpressionFault.Domain);
                     }
 
                     absent[top] = false;
@@ -140,9 +134,7 @@ public static partial class RuleExpressions {
                 }
                 if (token.Operation == ExpressionOp.Operand) {
                     if (reader is null) {
-                        value = 0L;
-
-                        return false;
+                        return Outcome.Faulted(why: ExpressionFault.Domain);
                     }
 
                     var operand = token.Operand!;
@@ -163,12 +155,9 @@ public static partial class RuleExpressions {
                     );
 
                     if (fact.Outcome.Case is FaultCase.Forever or FaultCase.Faulted) {
-                        fault = ((fact.Outcome.Case == FaultCase.Faulted)
+                        return Outcome.Faulted(why: ((fact.Outcome.Case == FaultCase.Faulted)
                             ? ExpressionFault.Domain
-                            : ExpressionFault.Forever);
-                        value = 0L;
-
-                        return false;
+                            : ExpressionFault.Forever));
                     }
 
                     var factAbsent = (fact.Outcome.Case == FaultCase.Absent);
@@ -192,10 +181,14 @@ public static partial class RuleExpressions {
                 }
                 if (token.Operation == ExpressionOp.Not) {
                     if (token.Call is { } truthBody) {
-                        if (!Run(reader, truthBody.Body, kind, member, arguments, out var truthValue, out var truthFault)) {
-                            if (truthFault != ExpressionFault.Absent) { value = 0L; fault = truthFault; return false; }
-                            truthValue = 0L;
+                        var truthOutcome = Run(reader, truthBody.Body, kind, member, arguments);
+
+                        if (truthOutcome.Case == FaultCase.Faulted) {
+                            return truthOutcome;
                         }
+
+                        // An absent body is false.
+                        _ = truthOutcome.TryFinite(raw: out var truthValue);
                         stack[top] = truthValue;
                         absent[top++] = false;
                     }
@@ -207,10 +200,13 @@ public static partial class RuleExpressions {
                     var truth = (!absent[(top - 1)] && (stack[(top - 1)] != 0L));
 
                     if (((token.Operation == ExpressionOp.And) && truth) || ((token.Operation == ExpressionOp.Or) && !truth)) {
-                        if (!Run(reader, token.Call!.Body, kind, member, arguments, out var rightTruth, out var rightFault)) {
-                            if (rightFault != ExpressionFault.Absent) { value = 0L; fault = rightFault; return false; }
-                            rightTruth = 0L;
+                        var rightOutcome = Run(reader, token.Call!.Body, kind, member, arguments);
+
+                        if (rightOutcome.Case == FaultCase.Faulted) {
+                            return rightOutcome;
                         }
+
+                        _ = rightOutcome.TryFinite(raw: out var rightTruth);
                         truth = (rightTruth != 0L);
                     }
                     stack[(top - 1)] = (truth ? 1L : 0L);
@@ -229,16 +225,14 @@ public static partial class RuleExpressions {
                     continue;
                 }
                 if (token.Fold is { } fold) {
-                    if (!TryFold(
+                    var foldOutcome = Fold(
                         arguments: arguments,
-                        fault: out fault,
                         fold: fold,
-                        reader: reader,
-                        value: out var folded
-                    )) {
-                        value = 0L;
+                        reader: reader
+                    );
 
-                        return false;
+                    if (!foldOutcome.TryFinite(raw: out var folded)) {
+                        return foldOutcome;
                     }
 
                     absent[top] = false;
@@ -248,34 +242,27 @@ public static partial class RuleExpressions {
                 }
                 if (token.Call is { } call) {
                     if (call.Arity > MaxArguments) {
-                        value = 0L;
-
-                        return false;
+                        return Outcome.Faulted(why: ExpressionFault.Domain);
                     }
 
                     top -= call.Arity;
                     for (var slot = 0; (slot < call.Arity); slot++) {
                         if (absent[(top + slot)]) {
-                            fault = ExpressionFault.Absent;
-                            value = 0L;
-
-                            return false;
+                            return Outcome.Absent;
                         }
 
                         frame[slot] = stack[(top + slot)];
                     }
-                    if (!Run(
+                    var calledOutcome = Run(
                         arguments: frame[..call.Arity],
-                        fault: out fault,
                         kind: kind,
                         member: member,
                         program: call.Body,
-                        reader: reader,
-                        value: out var called
-                    )) {
-                        value = 0L;
+                        reader: reader
+                    );
 
-                        return false;
+                    if (!calledOutcome.TryFinite(raw: out var called)) {
+                        return calledOutcome;
                     }
 
                     absent[top] = false;
@@ -288,10 +275,7 @@ public static partial class RuleExpressions {
 
                 for (var slot = (top - arity); (slot < top); slot++) {
                     if (absent[slot]) {
-                        fault = ExpressionFault.Absent;
-                        value = 0L;
-
-                        return false;
+                        return Outcome.Absent;
                     }
                 }
 
@@ -302,9 +286,7 @@ public static partial class RuleExpressions {
                     var input = stack[--top];
 
                     if (minimum > maximum) {
-                        value = 0L;
-
-                        return false;
+                        return Outcome.Faulted(why: ExpressionFault.Domain);
                     }
 
                     stack[top++] = Math.Clamp(
@@ -338,9 +320,7 @@ public static partial class RuleExpressions {
                         value: input,
                         width: width
                     )) {
-                        value = 0L;
-
-                        return false;
+                        return Outcome.Faulted(why: ExpressionFault.Domain);
                     }
 
                     stack[top++] = field;
@@ -360,9 +340,7 @@ public static partial class RuleExpressions {
                         value: input,
                         width: width
                     )) {
-                        value = 0L;
-
-                        return false;
+                        return Outcome.Faulted(why: ExpressionFault.Domain);
                     }
 
                     stack[top++] = inserted;
@@ -413,9 +391,7 @@ public static partial class RuleExpressions {
                         value: out var applied
                     )
                     ) {
-                        value = 0L;
-
-                        return false;
+                        return Outcome.Faulted(why: ExpressionFault.Domain);
                     }
 
                     stack[top++] = applied;
@@ -429,9 +405,7 @@ public static partial class RuleExpressions {
                         stack[(top - 1)],
                         out var unary
                     )) {
-                        value = 0L;
-
-                        return false;
+                        return Outcome.Faulted(why: ExpressionFault.Domain);
                     }
 
                     stack[(top - 1)] = unary;
@@ -451,51 +425,34 @@ public static partial class RuleExpressions {
                     right,
                     out var result
                 )) {
-                    value = 0L;
-
-                    return false;
+                    return Outcome.Faulted(why: ExpressionFault.Domain);
                 }
 
                 stack[top++] = result;
             }
         } catch (ArithmeticException) {
-            value = 0L;
-
-            return false;
+            return Outcome.Faulted(why: ExpressionFault.Domain);
         }
 
         if (
             (top == 1) &&
             absent[0]
         ) {
-            fault = ExpressionFault.Absent;
-            value = 0L;
-
-            return false;
+            return Outcome.Absent;
         }
 
-        value = ((top == 1)
-            ? stack[0]
-            : 0L
-        );
-        fault = ((top == 1)
-            ? ExpressionFault.None
-            : ExpressionFault.Domain
-        );
-
-        return (top == 1);
+        return ((top == 1)
+            ? Outcome.Finite(raw: stack[0])
+            : Outcome.Faulted(why: ExpressionFault.Domain));
     }
     // Every cell the family's member row holds is visited once, in the arena's own member order, so the reduction
-    // is deterministic.
-    private static bool TryFold(CompiledFold fold, IStateReader? reader, ReadOnlySpan<long> arguments, out long value, out ExpressionFault fault) {
-        fault = ExpressionFault.Domain;
-        value = 0L;
-
+    // is deterministic. A member's own outcome that is not a number is the fold's.
+    private static Outcome Fold(CompiledFold fold, IStateReader? reader, ReadOnlySpan<long> arguments) {
         if (
             (reader is null) ||
             (fold.RowOrdinal < 0)
         ) {
-            return false;
+            return Outcome.Faulted(why: ExpressionFault.Domain);
         }
 
         var accumulator = ((fold.Operation == ExpressionOp.All)
@@ -518,34 +475,28 @@ public static partial class RuleExpressions {
                 value: out var member
             );
 
-            if (!Run(
+            var memberOutcome = Run(
                 arguments: arguments,
-                fault: out fault,
                 kind: fold.MemberKind,
                 member: member,
                 program: fold.Body,
-                reader: reader,
-                value: out var applied
-            )) {
-                return false;
+                reader: reader
+            );
+
+            if (!memberOutcome.TryFinite(raw: out var applied)) {
+                return memberOutcome;
             }
 
             switch (fold.Operation) {
                 case ExpressionOp.All:
                     if (applied == 0L) {
-                        fault = ExpressionFault.None;
-                        value = 0L;
-
-                        return true;
+                        return Outcome.Finite(raw: 0L);
                     }
 
                     break;
                 case ExpressionOp.Any:
                     if (applied != 0L) {
-                        fault = ExpressionFault.None;
-                        value = 1L;
-
-                        return true;
+                        return Outcome.Finite(raw: 1L);
                     }
 
                     break;
@@ -564,16 +515,13 @@ public static partial class RuleExpressions {
                         applied,
                         out accumulator
                     )) {
-                        return false;
+                        return Outcome.Faulted(why: ExpressionFault.Domain);
                     }
 
                     break;
             }
         }
 
-        fault = ExpressionFault.None;
-        value = accumulator;
-
-        return true;
+        return Outcome.Finite(raw: accumulator);
     }
 }

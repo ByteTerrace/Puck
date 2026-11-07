@@ -90,7 +90,7 @@ public sealed partial class WorldCreationInstances {
                 tipWorld: tipWorld
             );
 
-            var gateHolds = WorldGaitDrivers.GateHolds(
+            var gateHolds = WorldGaitDrivers.HoldsGate(
                 facts: facts,
                 gate: effector.When,
                 moving: moving,
@@ -350,6 +350,7 @@ public sealed partial class WorldCreationInstances {
 
         return true;
     }
+
     // The effector's goal for one frame: resolved (TryResolveTarget) at most once, and only when a branch reads it.
     private ref struct EffectorGoal(CreationEffectorDocument effector, Registration live, int index, IWorldStampSource client, WorldStateLease reads, Vector3 tipWorld, Quaternion rootRotation, float scale) {
         private bool m_asked;
@@ -379,6 +380,7 @@ public sealed partial class WorldCreationInstances {
             return m_resolved;
         }
     }
+
     // Holds the effector's target, and the contact normal there, where it was when the plant window opened, and
     // reports whether a usable target exists: a latched contact survives a probe that misses this frame, which is the
     // whole point of latching.

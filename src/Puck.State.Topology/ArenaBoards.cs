@@ -56,7 +56,7 @@ public static class ArenaBoards {
     /// <returns><see langword="true"/> when the query answered.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="arena"/> or <paramref name="query"/> is
     /// <see langword="null"/>.</exception>
-    public static bool TryEvaluate(StateArena arena, int rowOrdinal, BoardQuery query, int source, Span<long> values, out long result, out string reason, int dynamicTarget = 0) {
+    public static bool TryQuery(StateArena arena, int rowOrdinal, BoardQuery query, int source, Span<long> values, out long result, out string reason, int dynamicTarget = 0) {
         ArgumentNullException.ThrowIfNull(argument: query);
 
         result = 0L;

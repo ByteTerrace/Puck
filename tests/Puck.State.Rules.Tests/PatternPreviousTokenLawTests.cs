@@ -41,7 +41,6 @@ public sealed class PatternPreviousTokenLawTests {
         var spelled = RuleExpressions.FoldWord(
             body: program!,
             kind: CellKind.Int,
-            length: out var length,
             reader: host,
             rowOrdinal: TransformFixture.Ordinal(
                 context: context,
@@ -50,12 +49,9 @@ public sealed class PatternPreviousTokenLawTests {
             word: word
         );
 
+        Assert.True(condition: spelled.TryFinite(raw: out var length));
         Assert.Equal(
-            actual: spelled,
-            expected: ExpressionFault.None
-        );
-        Assert.Equal(
-            actual: word[..length].ToArray(),
+            actual: word[..((int)length)].ToArray(),
             expected: [1L, 4L, 2L]
         );
     }

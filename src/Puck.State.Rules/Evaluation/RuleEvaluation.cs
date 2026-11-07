@@ -43,35 +43,51 @@ public static class RuleEvaluation {
         ExpressionFault.Absent => "the read went through a dynamic key that named no cell (an empty zone's endpoint); answer the absence with 'isAbsent(...)' or '... ?? <fallback>'",
         _ => "the expression overflowed, divided by zero, left a function's domain, or produced an invalid stack result",
     };
-    /// <summary>Evaluates a compiled postfix gate inside a fault scope of its own. A conjunct that faults leaves the
-    /// gate undecided: evaluation stops ahead of any negation or grouping, the gate answers
-    /// <see langword="false"/>, and <paramref name="fault"/> names the fault, which also passes on to any enclosing
-    /// scope. Both sides of a comparison are read, so an absence on one side never hides a fault on the other. A gate
-    /// with no tokens always holds.</summary>
-    /// <param name="reader">The evaluation in flight.</param>
+    /// <summary>Names why an evaluation did not answer a number, in the author's own vocabulary.</summary>
+    /// <param name="outcome">The answer: an absence or a fault.</param>
+    /// <returns>The sentence.</returns>
+    public static string DescribeOutcome(Outcome outcome) => DescribeFault(fault: ((outcome.Case == FaultCase.Absent)
+        ? ExpressionFault.Absent
+        : outcome.Fault));
+    /// <summary>Decides a compiled postfix gate inside a fault scope of its own. A conjunct that faults leaves the
+    /// gate undecided: evaluation stops ahead of any negation or grouping and the verdict is
+    /// <see cref="Verdict.Faulted"/>, which also passes on to any enclosing scope. Both sides of a comparison are read,
+    /// so an absence on one side never hides a fault on the other. A gate with no tokens is always open.</summary>
+    /// <param name="frame">The evaluation in flight.</param>
     /// <param name="gate">The compiled postfix gate.</param>
-    /// <param name="fault">The first fault any conjunct raised, or <see cref="ExpressionFault.None"/>; a caller
-    /// seeing a fault decides what an undecided gate means where it sits.</param>
     /// <param name="trace">An optional per-conjunct narration sink.</param>
-    /// <returns><see langword="true"/> when the gate holds and nothing faulted.</returns>
-    public static bool GateHolds(IStateReader reader, GateToken[] gate, out ExpressionFault fault, List<string>? trace = null) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
+    /// <returns>What the gate decided; a caller reading <see cref="Verdict.Faulted"/> decides what an undecided gate
+    /// means where it sits.</returns>
+    public static Verdict Decide(ref EvaluationFrame frame, GateToken[] gate, List<string>? trace = null) => Decide(
+        fault: out _,
+        frame: ref frame,
+        gate: gate,
+        trace: trace
+    );
+    /// <summary>Decides a compiled postfix gate and names the fault that left it undecided, for the one caller that
+    /// words a refusal from it.</summary>
+    /// <param name="frame">The evaluation in flight.</param>
+    /// <param name="gate">The compiled postfix gate.</param>
+    /// <param name="fault">The first fault any conjunct raised, or <see cref="ExpressionFault.None"/>.</param>
+    /// <param name="trace">An optional per-conjunct narration sink.</param>
+    /// <returns>What the gate decided.</returns>
+    public static Verdict Decide(ref EvaluationFrame frame, GateToken[] gate, out ExpressionFault fault, List<string>? trace = null) {
         ArgumentNullException.ThrowIfNull(argument: gate);
 
-        if (gate.Length == 0) {
-            fault = ExpressionFault.None;
+        fault = ExpressionFault.None;
 
-            return true;
+        if (gate.Length == 0) {
+            return Verdict.Open;
         }
 
-        var scratch = reader.Scratch;
+        var scratch = frame.Reader.Scratch;
         var scope = scratch.EnterFaultScope();
-        bool holds;
+        Verdict verdict;
 
         try {
-            holds = Fold(
+            verdict = Fold(
+                frame: ref frame,
                 gate: gate,
-                reader: reader,
                 scratch: scratch,
                 trace: trace
             );
@@ -79,29 +95,38 @@ public static class RuleEvaluation {
             fault = scratch.LeaveFaultScope(scope: scope);
         }
 
-        return (holds && (fault == ExpressionFault.None));
+        // Whatever the scope saw, an undecided gate is faulted whether or not the conjunct that faulted answered it.
+        return ((fault != ExpressionFault.None)
+            ? Verdict.Faulted
+            : verdict);
     }
-    // Folds the gate's postfix program, returning false the moment a conjunct raises a fault.
-    private static bool Fold(IStateReader reader, GateToken[] gate, ArenaScratch scratch, List<string>? trace) {
+
+    // Folds the gate's postfix program, answering Faulted the moment a conjunct faults.
+    private static Verdict Fold(scoped ref EvaluationFrame frame, GateToken[] gate, ArenaScratch scratch, List<string>? trace) {
         // A token pushes at most one Boolean. Bound machine-stack use independently of authored
         // program size; larger gates keep the arena's reusable storage. Both run the same fold.
         if (gate.Length <= 128) {
             Span<bool> stack = stackalloc bool[gate.Length];
-            return Fold(reader: reader, gate: gate, scratch: scratch, trace: trace, stack: stack);
+
+            return Fold(frame: ref frame, gate: gate, stack: stack, trace: trace);
         }
         using var stackLease = scratch.Rent<bool>(length: gate.Length);
-        return Fold(reader: reader, gate: gate, scratch: scratch, trace: trace, stack: stackLease.Span);
+
+        return Fold(frame: ref frame, gate: gate, trace: trace, stack: stackLease.Span);
     }
-    private static bool Fold(IStateReader reader, GateToken[] gate, ArenaScratch scratch, List<string>? trace, Span<bool> stack) {
+    private static Verdict Fold(scoped ref EvaluationFrame frame, GateToken[] gate, List<string>? trace, scoped Span<bool> stack) {
+        var reader = frame.Reader;
         var top = 0;
 
-        for (var index = 0; index < gate.Length; index++) {
+        for (var index = 0; (index < gate.Length); index++) {
             ref readonly var predicate = ref gate[index];
+
             if (predicate.Op == GateOp.ShortCircuit) {
-                var answer = stack[top - 1];
+                var answer = stack[(top - 1)];
+
                 if (answer == predicate.SkipWhen) {
                     top -= predicate.Arity;
-                    stack[top - 1] = answer;
+                    stack[(top - 1)] = answer;
                     index += predicate.Skip;
                 }
                 continue;
@@ -131,35 +156,34 @@ public static class RuleEvaluation {
 
             var leftSource = predicate.LeftSource;
             var rightSource = predicate.RightSource;
+
             if (predicate.ValueKind == CellKind.Text) {
-                var leftResolved = ((leftSource.Text is { } leftLiteral) ? Resolved<string>.Named(leftLiteral) : ReadText(reader, leftSource.Operand));
-                var rightResolved = ((rightSource.Text is { } rightLiteral) ? Resolved<string>.Named(rightLiteral) : ReadText(reader, rightSource.Operand));
-                var leftNamed = leftResolved.TryNamed(out var leftValue);
-                var rightNamed = rightResolved.TryNamed(out var rightValue);
+                var leftResolved = ((leftSource.Text is { } leftLiteral) ? Resolved<string>.Named(value: leftLiteral) : ReadText(reader: reader, source: leftSource.Operand));
+                var rightResolved = ((rightSource.Text is { } rightLiteral) ? Resolved<string>.Named(value: rightLiteral) : ReadText(reader: reader, source: rightSource.Operand));
+                var leftNamed = leftResolved.TryNamed(value: out var leftValue);
+                var rightNamed = rightResolved.TryNamed(value: out var rightValue);
                 var leftText = (leftValue ?? string.Empty);
                 var rightText = (rightValue ?? string.Empty);
-                var equal = string.Equals(leftText, rightText, StringComparison.Ordinal);
-                var textHolds = leftNamed && rightNamed &&
-                    (predicate.Comparison == ExpressionOp.Equal ? equal : !equal);
+                var equal = string.Equals(a: leftText, b: rightText, comparisonType: StringComparison.Ordinal);
+                var textHolds = (leftNamed && rightNamed &&
+                    ((predicate.Comparison == ExpressionOp.Equal) ? equal : !equal));
+
                 stack[top++] = textHolds;
-                trace?.Add($"{predicate.Describe}: \"{leftText}\" {predicate.Comparison.Symbol()} \"{rightText}\" -> {Spell(textHolds)}");
-                if (scratch.RaisedFault != ExpressionFault.None) {
-                    return false;
+                trace?.Add(item: $"{predicate.Describe}: \"{leftText}\" {predicate.Comparison.Symbol()} \"{rightText}\" -> {Spell(value: textHolds)}");
+                if ((leftResolved.Case == FaultCase.Faulted) || (rightResolved.Case == FaultCase.Faulted)) {
+                    return Verdict.Faulted;
                 }
                 continue;
             }
-            var leftRead = TryReadSource(
-                fact: out var left,
-                fault: out _,
+
+            var left = ReadSource(
+                frame: ref frame,
                 kind: predicate.ValueKind,
-                reader: reader,
                 source: in leftSource
             );
-            var rightRead = TryReadSource(
-                fact: out var right,
-                fault: out _,
+            var right = ReadSource(
+                frame: ref frame,
                 kind: predicate.ValueKind,
-                reader: reader,
                 source: in rightSource
             );
 
@@ -174,8 +198,6 @@ public static class RuleEvaluation {
             right.Outcome.TryFinite(raw: out var rightRaw);
 
             var holds = (
-                leftRead &&
-                rightRead &&
                 !absent &&
                 predicate.Comparison.Holds(
                 expected: FixedQ4816.FromRawBits(value: rightRaw),
@@ -188,75 +210,73 @@ public static class RuleEvaluation {
             stack[top++] = holds;
             trace?.Add(item: $"{predicate.Describe}: {Spell(
                 fact: in left,
-                read: leftRead
+                read: Read(
+                    fact: in left,
+                    source: in leftSource
+                )
             )} {predicate.Comparison.Symbol()} {Spell(
                 fact: in right,
-                read: rightRead
+                read: Read(
+                    fact: in right,
+                    source: in rightSource
+                )
             )} -> {Spell(value: holds)}");
 
             // A faulted comparison has no truth value to negate or combine.
-            if (scratch.RaisedFault != ExpressionFault.None) {
-                return false;
+            if ((left.Outcome.Case == FaultCase.Faulted) || (right.Outcome.Case == FaultCase.Faulted)) {
+                return Verdict.Faulted;
             }
         }
 
-        return (
-            (top == 1) &&
-            stack[0]
-        );
+        return (((top == 1) && stack[0])
+            ? Verdict.Open
+            : Verdict.Closed);
     }
+    // Whether a source answered: an operand always does (an absence is its answer), a program only when it left a number.
+    private static bool Read(in Fact fact, in CompiledValueSource source) => (!source.IsExpression || (fact.Outcome.Case == FaultCase.Finite));
+
     /// <summary>Reads one compiled value source for the evaluation in flight. A literal answers its already-converted
     /// raw value, an operand its live fact, and an expression the number its program computes.</summary>
-    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="frame">The evaluation in flight.</param>
     /// <param name="source">The compiled source.</param>
     /// <param name="kind">The encoding the read answers in.</param>
-    /// <param name="fact">The fact, on success.</param>
-    /// <param name="fault">Why the read did not answer, or <see cref="ExpressionFault.None"/>. An operand answering
-    /// the absent fact faults <see cref="ExpressionFault.Absent"/>, and one whose address computation faulted
-    /// (<see cref="FaultCase.Faulted"/>) faults <see cref="ExpressionFault.Domain"/>; one answering <c>forever</c> does not fault, since
-    /// a fact comparison answers it under infinity semantics. <see cref="ExpressionFault.Forever"/> comes only from an
-    /// expression, whose numeric evaluation cannot read infinity.</param>
-    /// <returns><see langword="true"/> when the source answered. An operand answering the absent or forever fact
-    /// still answers: the caller decides what an absence means where it sits.</returns>
-    public static bool TryReadSource(IStateReader reader, in CompiledValueSource source, CellKind kind, out Fact fact, out ExpressionFault fault) {
-        fault = ExpressionFault.None;
-
+    /// <returns>The fact. An operand answering the absent or forever fact still answers: the caller decides what an
+    /// absence means where it sits. An expression that left no number answers its absence or its fault, which is
+    /// raised into the evaluation's scope as every fault is; a fact comparison answers <see cref="FaultCase.Forever"/>
+    /// under infinity semantics, and only an expression's numeric evaluation faults with
+    /// <see cref="ExpressionFault.Forever"/>.</returns>
+    public static Fact ReadSource(ref EvaluationFrame frame, in CompiledValueSource source, CellKind kind) {
         if (source.Operand is { } operand) {
-            ArgumentNullException.ThrowIfNull(argument: reader);
+            var reader = frame.Reader;
+            var read = operand.Read(reader: reader);
 
-            fact = operand.Read(reader: reader);
-            fault = (fact.Outcome.Case switch {
-                FaultCase.Faulted => ExpressionFault.Domain,
-                FaultCase.Absent => ExpressionFault.Absent,
-                _ => ExpressionFault.None,
-            });
-            if (fact.Outcome.Case == FaultCase.Faulted) {
+            if (read.Outcome.Case == FaultCase.Faulted) {
                 reader.Scratch.RaiseFault(fault: ExpressionFault.Domain);
             }
 
-            return true;
+            return read;
         }
         if (source.Expression is { } expression) {
             // A Bool destination's program was compiled in Int, the kind a comparison leaves, so it evaluates in Int
             // and lands as 0 for zero and 1 for anything else.
-            var computedKind = source.CarrierKind ?? ((kind == CellKind.Bool)
+            var computedKind = (source.CarrierKind ?? ((kind == CellKind.Bool)
                 ? CellKind.Int
                 : kind
+            ));
+            var outcome = RuleExpressions.Evaluate(
+                frame: ref frame,
+                kind: computedKind,
+                program: expression
             );
 
-            if (!RuleExpressions.TryEvaluate(
-                fault: out fault,
-                kind: computedKind,
-                program: expression,
-                reader: reader,
-                value: out var computed
-            )) {
-                fact = Fact.Absent(kind: kind);
-
-                return false;
+            if (!outcome.TryFinite(raw: out var computed)) {
+                return new Fact(
+                    kind: kind,
+                    outcome: outcome
+                );
             }
 
-            fact = Fact.Finite(
+            return Fact.Finite(
                 kind: kind,
                 value: ((kind == CellKind.Bool)
                 ? ((computed != 0L)
@@ -264,16 +284,12 @@ public static class RuleEvaluation {
                     : 0L)
                 : computed)
             );
-
-            return true;
         }
 
-        fact = Fact.Finite(
+        return Fact.Finite(
             kind: kind,
             value: source.RawValue
         );
-
-        return true;
     }
 
     private static string Spell(bool value) => (value
@@ -284,6 +300,7 @@ public static class RuleEvaluation {
         ? DescribeFact(fact: in fact)
         : "refused"
     );
+
     /// <summary>Reads a live Text operand through the same addresses used by text-copy effects and gates.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="source">The compiled text operand.</param>

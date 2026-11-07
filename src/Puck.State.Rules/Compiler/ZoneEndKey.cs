@@ -65,6 +65,14 @@ public sealed class ZoneEndKey : RuleKeyFact {
                 selected: Resolved<int>.Named(value: m_rowOrdinal)
             ));
     }
+    /// <inheritdoc/>
+    public override Resolved<long> ResolveIndex(IStateReader reader, in AddressFeed feed) => IndexOf(
+        reader: reader,
+        resolved: Resolve(
+            feed: in feed,
+            reader: reader
+        )
+    );
 
     private Resolved<CellKey> EndOf(IStateReader reader, Resolved<int> selected) {
         if (!selected.TryNamed(value: out var ordinal)) {

@@ -189,15 +189,14 @@ public abstract class RuleKeyFact : IRuleKey {
     /// <inheritdoc/>
     public virtual Resolved<CellKey> Resolve(IStateReader reader, in AddressFeed feed) => Resolve(reader: reader);
     /// <inheritdoc/>
-    public virtual Resolved<long> ResolveIndex(IStateReader reader, in AddressFeed feed) => IndexOf(
-        reader: reader,
-        resolved: Resolve(
-            feed: in feed,
-            reader: reader
-        )
-    );
+    public virtual Resolved<long> ResolveIndex(IStateReader reader, in AddressFeed feed) => ResolveIndex(reader: reader);
 
-    private static Resolved<long> IndexOf(IStateReader reader, Resolved<CellKey> resolved) {
+    /// <summary>Reads a resolved key's interned name as an integer index.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="resolved">What the key resolved to.</param>
+    /// <returns>The index when the key spells an integer, <see cref="FaultCase.Faulted"/> when resolving it faulted,
+    /// and <see cref="FaultCase.Absent"/> otherwise.</returns>
+    protected static Resolved<long> IndexOf(IStateReader reader, Resolved<CellKey> resolved) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         if (resolved.Case == FaultCase.Faulted) {

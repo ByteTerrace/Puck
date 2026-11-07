@@ -167,6 +167,7 @@ public sealed partial class RuleEvaluator {
 
         return RuleOutcome.Fired;
     }
+
     // Delivers one irreversible arm after its firing's commit. A transactional install may have replaced the arena,
     // and with it the scratch every read raises into, so the delivery's fault scope is opened on the scratch the host
     // serves now, never on one taken before the commit. Past the commit nothing rewinds, so a delivery that faulted
@@ -194,7 +195,6 @@ public sealed partial class RuleEvaluator {
 
         return delivered;
     }
-
     // Everything a firing does before its commit: the reversible effects, then each queued arm's preflight against
     // the state they propose, then the host's preparation of the transactional arms as one unit. False means
     // refused, already reported.
@@ -662,13 +662,13 @@ public sealed partial class RuleEvaluator {
     private bool FireIf(IfEffect effect, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
 
-        var open = GateOpen(
-            faulted: out var faulted,
+        var verdict = Decide(
             gate: effect.Condition,
             ruleName: firing.RuleName
         );
+        var open = (verdict is Verdict.Open);
 
-        if (faulted) {
+        if (verdict is Verdict.Faulted) {
             if (m_traceEntry is not null) {
                 m_traceEffectValue = "condition failed";
             }
@@ -1171,17 +1171,21 @@ public sealed partial class RuleEvaluator {
         raw = 0L;
         refused = false;
 
-        if (!RuleEvaluation.TryReadSource(
-            fact: out var fact,
-            fault: out var fault,
+        var frame = new EvaluationFrame(reader: m_host);
+        var fact = RuleEvaluation.ReadSource(
+            frame: ref frame,
             kind: kind,
-            reader: m_host,
             source: in source
-        )) {
+        );
+
+        // A program that left no number refuses with its own fault; an operand's absence or fault is worded below.
+        if (source.IsExpression && (fact.Outcome.Case is FaultCase.Absent or FaultCase.Faulted)) {
             refused = true;
             RefuseSource(
                 effect: effect,
-                fault: fault,
+                fault: ((fact.Outcome.Case == FaultCase.Absent)
+                    ? ExpressionFault.Absent
+                    : fact.Outcome.Fault),
                 firing: in firing
             );
 
