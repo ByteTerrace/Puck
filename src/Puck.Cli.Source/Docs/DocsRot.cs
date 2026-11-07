@@ -6,8 +6,7 @@ namespace Puck.Cli.Docs;
 /// <summary>
 /// The markers of a page that has started to rot, each read from current state with nothing recorded: a date or a
 /// commit SHA (a record of when the repository changed, which belongs in the commit), a path into an agent's scratch
-/// or job output (which outlives nothing), a branch that no longer exists, and in a durable page a <c>file:line</c>
-/// citation (which drifts with every edit above the line). The rule each marker enforces is the documentation guide's
+/// or job output (which outlives nothing), and a branch that no longer exists. The rule each marker enforces is the documentation guide's
 /// (docs/development/documentation.md, "Keep documents from rotting"); its exemptions are structural, each derived
 /// from the tree: a date the code spells in a string literal (a protocol revision), a date before the repository's
 /// first commit (a historical fact, which cannot record a change to it), and a SHA the third-party notices pin.
@@ -35,30 +34,23 @@ internal sealed partial class DocsRot {
     // directory. Group 1 is what follows the directory, empty when the path names only the directory.
     [GeneratedRegex(pattern: @"(?:\.claude[/\\]scratch|\.(?:claude|codex)[/\\]jobs|(?i:AppData[/\\]Local[/\\]Temp))[/\\]([^\s`'"")\]]*)")]
     private static partial Regex ScratchPath();
-    // `name.ext:123` or `name.ext#L123`: a file cited at a line.
-    [GeneratedRegex(pattern: @"(?<![\w.\-/])([A-Za-z0-9_][A-Za-z0-9_./\-]*\.([A-Za-z][A-Za-z0-9]{0,9}))(?::|#L)(\d+)\b")]
-    private static partial Regex FileLine();
     [GeneratedRegex(pattern: @"^[A-Za-z0-9][A-Za-z0-9._\-]*(?:/[A-Za-z0-9._\-]+)*$")]
     private static partial Regex BranchShape();
 
     private readonly IReadOnlySet<string> m_literalDates;
     private readonly IReadOnlySet<string> m_pinnedHashes;
-    private readonly IReadOnlySet<string> m_extensions;
     private readonly DateOnly? m_firstCommit;
     private readonly Branches? m_branches;
 
     /// <summary>Initializes a new instance of the <see cref="DocsRot"/> class.</summary>
     /// <param name="literalDates">The dates the code spells inside string literals: revision names it speaks, exempt.</param>
     /// <param name="pinnedHashes">The hex runs the third-party notices carry: upstream provenance pins, exempt.</param>
-    /// <param name="extensions">The file extensions the tree holds, lowercased, which tell a <c>file:line</c> citation
-    /// from a host and port.</param>
     /// <param name="firstCommit">The date of the repository's first commit, before which a date is history, or
     /// <see langword="null"/> when the clone is shallow and cannot say.</param>
     /// <param name="branches">The branches that exist, or <see langword="null"/> when there are none to judge against.</param>
-    public DocsRot(IReadOnlySet<string> literalDates, IReadOnlySet<string> pinnedHashes, IReadOnlySet<string> extensions, DateOnly? firstCommit, Branches? branches) {
+    public DocsRot(IReadOnlySet<string> literalDates, IReadOnlySet<string> pinnedHashes, DateOnly? firstCommit, Branches? branches) {
         m_literalDates = literalDates;
         m_pinnedHashes = pinnedHashes;
-        m_extensions = extensions;
         m_firstCommit = firstCommit;
         m_branches = branches;
     }
@@ -93,13 +85,12 @@ internal sealed partial class DocsRot {
     private bool IsHistory(DateOnly last) => ((m_firstCommit is { } first) && (last < first));
 
     /// <summary>Returns the rot one line of a page shows, apart from the branch names its code spans cite. A date or
-    /// SHA is rot anywhere, a transcript in a fenced block included; a scratch path or a <c>file:line</c> inside a
+    /// SHA is rot anywhere, a transcript in a fenced block included; a scratch path inside a
     /// fenced block is an example command or tool output showing the shape, so only prose is checked for them.</summary>
     /// <param name="line">The line.</param>
-    /// <param name="durable">Whether the page is durable, so a <c>file:line</c> citation in it is rot.</param>
     /// <param name="code">Whether the line belongs to a fenced block.</param>
     /// <returns>The findings, each a category and its message.</returns>
-    public IEnumerable<(string Category, string Message)> Line(string line, bool durable, bool code) {
+    public IEnumerable<(string Category, string Message)> Line(string line, bool code) {
         var text = Address().Replace(
             input: line,
             replacement: " "
@@ -155,13 +146,6 @@ internal sealed partial class DocsRot {
             }
         }
 
-        if (durable) {
-            foreach (Match match in FileLine().Matches(input: text)) {
-                if (m_extensions.Contains(item: match.Groups[2].Value.ToLowerInvariant())) {
-                    yield return ("file-line", $"'{match.Value}' cites a line, which drifts; cite the symbol by name");
-                }
-            }
-        }
     }
     /// <summary>Returns the finding for a code span that names a branch which no longer exists, or
     /// <see langword="null"/>. A span is a branch name when it is shaped like this repository's branches

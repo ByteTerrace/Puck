@@ -862,7 +862,7 @@ pool later declares enters through `ReadsWhole` alone.
   `skirmishFair`, scored over blue's own `knowledge` row, answers the same every
   time. A transform that reads a restricted row is refused when its
   destination's audience is wider (`TransformWidensAudience`,
-  `src/Puck.State.Rules/Transforms/Disclosure.cs:120-143`); a search's outputs
+  `src/Puck.State.Rules/Transforms/Disclosure.cs:118-141`); a search's outputs
   go through no such check. The fair job is honest only because its score reads
   nothing but blue's memory: its candidates still step onto cells where red's
   hidden units stand (`relocate(displace: true)` takes them), so a score reading

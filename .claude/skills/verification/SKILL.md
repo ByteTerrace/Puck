@@ -436,6 +436,9 @@ resolves through `PATH` to WSL's `bash.exe`, which cannot see `D:/` paths, has n
 Forward Git Bash by its full path (`"C:/Program Files/Git/usr/bin/bash.exe" <script>`)
 to run several commands under one lease.
 
+Focused CPU-only laws with small fixtures can run directly; the heavy lease is
+for memory-heavy or broad suite runs, not every invocation of a test assembly.
+
 Take the heavy lease once per suite run: one `puck test` invocation (or one
 suite) per `puck lease heavy` acquisition, never a batch of runs under one hold,
 so the queue rotates between lanes. Keep each hold to about 30 minutes; a run

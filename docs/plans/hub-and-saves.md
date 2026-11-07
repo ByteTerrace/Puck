@@ -428,7 +428,7 @@ shared online hub (the silo's instance owned by the platform's public-content
 identity, [play decisions](../decisions/play.md#the-game)) is a `global`
 destination the local hub offers, not the session's `hub`. Booting is a travel
 into `hub` from nowhere, so the boot row is a resolved instance and boot and
-exit share one path. `--entry` (`Program.cs:72-75`) stays an author's tool for
+exit share one path. `--entry` (`src/Puck.World/Program.cs:72-75`) stays an author's tool for
 booting another world of a composition.
 
 In the debug world, the debug world is the hub: its lobby is the arrival, the

@@ -1011,7 +1011,7 @@ retirement.
   - Cause: `ReusePublishedContainerAsync` begins with a catalog listing
     (`AzureContainerRetention.cs:9`). The publishing identity deliberately
     holds only "Container Registry Repository Contributor" under
-    `AbacRepositoryPermissions` (`main.bicep:2144-2151`), and
+    `AbacRepositoryPermissions` (`src/Puck.Azure.Resources/main.bicep:2144-2151`), and
     `abacConditions.bicep:135` says catalog listing is not needed.
   - Fix: ask for the known tag directly (`az acr repository show --image
     <repo>:<commit>`) and treat only a not-found answer as "not published".
@@ -1900,9 +1900,6 @@ file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
    - Probe shaders: `AccumulateScale`, `MaxAccumulateScale` and the group
      accumulators are copied into each of `Puck.Shaders/Assets/Probes/average.hlsl`,
      `faerie.hlsl`, `ir-blob.hlsl` and `ir-marker.hlsl`; one shared include.
-   - Fibonacci sphere directions copied exactly:
-     `Puck.Cli.Worlds/Mesh/MeshSceneCommand.cs:212` and
-     `Puck.SdfVm/SdfMeshIrradiance.cs:2145`.
 
 Duplicates the survey left to the lanes that own their areas:
 
@@ -2337,7 +2334,7 @@ reproduce worker for what remains.
   directory (`src/Puck.Cli.Worlds/WorldsRoot.cs:49`), and `TestCommandLawTests`
   and CI runs, which pass no `--cache-dir`, write the real per-user
   compiled-world, compile and mesh caches. Make `--cache-dir` cover the compile
-  cache too, or narrow the wording of `--cache-dir` in `TestCommand.Leg.cs:515`
+  cache too, or narrow the wording of `--cache-dir` in `TestCommand.Leg.cs:405`
   and `docs/reference/cli.md` the way the verification skill's worker-cache
   paragraph already is.
 - `replay.record` mid-session re-grants document grants revoked at runtime
