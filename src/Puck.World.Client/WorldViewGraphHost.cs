@@ -1818,7 +1818,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         );
 
         if (sight == PortalSight.Seen && m_runtime?.SettledCapturePath is null &&
-            RenderSettings is { Cull: SdfMeshCullLevel.Occlusion } && Pickers is { } passes && ViewScenes is { } scenes &&
+            RenderSettings is { Cull: SdfMeshCullLevel.Occlusion or SdfMeshCullLevel.Camera } && Pickers is { } passes && ViewScenes is { } scenes &&
             scenes.PortalGlass(consumer, producer, out var screen) == WorldPortalGlass.Found &&
             (m_cameras.TryGetValue(consumer, out var camera) || scenes.TryVisibilityCamera(consumer, out camera))) {
             var slab = WorldPortalVisibility.Slab(screen!);

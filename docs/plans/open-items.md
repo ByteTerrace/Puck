@@ -42,8 +42,8 @@ milestone. The owner requested its baseline and implementation plan, which
 1. The frame bar [high]: 60 FPS steady state on the lead machine is not met.
    The worst sweep stops (the teal room, flight B of the second storey, the
    studio) are GPU-bound on the root view, not settling: a stop measured again
-   after its `-indirect` twin is as slow as on arrival. The far shadow cascade
-   holds under the day clock's sun and splits each refresh over two frames
+   after its `-indirect` twin is as slow as on arrival. With box-only cascade
+   selection, the far shadow cascade holds under the day clock's sun and splits each refresh over two frames
    (`SdfFarLayers`), so those stops run at the display rate at p50 but still
    miss vsync on some frames (p99 one 30 Hz period): the root view's GPU time
    stays just under a 60 Hz frame, mostly `views` and `resolve`, which
@@ -53,10 +53,12 @@ milestone. The owner requested its baseline and implementation plan, which
    far cascade itself costs less. Next: the views shading's and the
    temporal resolve's own cost per pixel (registers, occupancy, the history
    window's reads; [gpu cost](../../.claude/skills/rendering/references/gpu-cost.md)),
-   then the far cascade's caster count. It keeps about three quarters of the
-   world's draws, at each mesh's coarsest level, and a light-space occlusion
-   test on the existing pyramid machinery would cull casters hidden behind
-   nearer ones. Arrival at a new place can also pay a settling cost of several
+   then the remaining caster geometry after receiver and light-space culling.
+   The far cascade now classifies through `SdfMeshOcclusion`'s current receiver
+   mask and two-phase entry depth; its exit list remains independent of entry
+   visibility. Receiver-conditioned depth refreshes both layers on changes,
+   so measure its total saving against the box-only path's cadence.
+   Arrival at a new place can also pay a settling cost of several
    seconds, with produce and simulate both inflated as if the frame thread were
    starved, which the steady readings do not show and a quiet tour's first stop
    at a place sometimes catches; attribute it with a `dotnet-trace` of the
@@ -429,10 +431,10 @@ The custom no-GC runtime port stays later work, on the
 
 #### Other frame-time findings
 
-- [high] The far shadow cascade draws nearly every caster in its box at the
+- [high] With box-only selection, the far shadow cascade draws nearly every caster in its box at the
   coarsest level whose error fits its texel (`world.counters gpu pass
   sdf.world$shadow-far counter vertices` against the mesh pass's), in two
-  layers. Three things keep that count high. A level chain of two levels stops
+  layers. Two geometry limits remain after receiver and light-space culling. A level chain of two levels stops
   at two contour cells of error, so a finely contoured mesh (the card backs and
   console bricks at sub-millimetre cells) never coarsens toward a far texel:
   four levels (`SdfMeshCollapse.CellShares` to 128 cells) made no level past
@@ -440,8 +442,7 @@ The custom no-GC runtime port stays later work, on the
   material edges slide only along themselves, while the oak went from 3,052 to
   1,440 triangles, still above a far texel's error. Draws with members, such
   as the falls' 14 slots of up to 150,000 triangles each, have no host box and
-  draw level zero in every pass. No caster is culled behind a nearer one in
-  light space. Measure each against the cascade's vertices before changing the
+  draw level zero in every pass. Measure each against the cascade's vertices before changing the
   bake identity.
 
 - [high] The frame thread's CPU field queries (Next item 0;

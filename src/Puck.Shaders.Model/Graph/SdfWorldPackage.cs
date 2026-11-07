@@ -467,10 +467,10 @@ public static partial class SdfWorldPackage {
         InputVersions: [],
         OutputVersions: [Color],
         Passes: [
+            Raster(depth: Parts.MeshDepth, name: Parts.Mesh, target: Parts.MeshTarget),
             ShadowRaster(depth: Parts.ShadowNearDepth, exit: Parts.ShadowNearExit, name: Parts.ShadowNear),
             ShadowRaster(depth: Parts.ShadowFarDepth, exit: Parts.ShadowFarExit, name: Parts.ShadowFar),
             ShadowRaster(depth: Parts.ShadowSecondDepth, exit: Parts.ShadowSecondExit, name: Parts.ShadowSecond),
-            Raster(depth: Parts.MeshDepth, name: Parts.Mesh, target: Parts.MeshTarget),
             Pass(inputs: [Parts.MeshTarget], name: Parts.Pyramid, outputs: [Parts.MeshPyramid]),
             Pass(
                 inputs: [
@@ -590,8 +590,8 @@ public static partial class SdfWorldPackage {
     // the nearest face turned from the light (where it leaves the first solid it crosses).
     private static RenderGraphFragmentPass ShadowRaster(string name, string depth, string exit) => new(
         CountsKernelWork: true,
-        InputAccesses: [],
-        Inputs: [],
+        InputAccesses: name == Parts.ShadowFar ? [RenderGraphPortAccess.ComputeRead] : [],
+        Inputs: name == Parts.ShadowFar ? [new ResourceReference(Name: Parts.MeshTarget)] : [],
         Name: name,
         OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
         Outputs: [new ResourceReference(Name: depth), new ResourceReference(Name: exit)]

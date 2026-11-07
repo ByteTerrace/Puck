@@ -1624,15 +1624,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
     bool ISdfFrameDresser.TickLocked => TickLocked;
 
-    /// <summary>Returns the cull a frame renders with: the box cull in place of the occlusion test, whose first phase
-    /// draws the previous frame's visible set, while the frame is held for a settled capture.</summary>
-    /// <param name="cull">The session's cull level.</param>
-    /// <param name="settles">Whether the frame is held for a settled capture.</param>
-    /// <returns>The frame's cull level.</returns>
-    public static SdfMeshCullLevel CullOf(SdfMeshCullLevel cull, bool settles) => ((settles && (cull == SdfMeshCullLevel.Occlusion))
-        ? SdfMeshCullLevel.Frustum
-        : cull);
-
     // The display pixels each of the frame's views is shown over, which the bodies lever rates a body by: a seat's view its
     // region of the display, and a view the binder filmed after them the display's height times the share of it the view
     // reached last frame (WorldViewGraphHost.DisplayShareOf), which is none for a window out of every view's sight; a
@@ -2210,7 +2201,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             EnableCadenceGate = m_settings.CadenceGate,
             // A frame held for a settled capture renders free of earlier frames' visible set and rated updates, so a
             // still of a tick is the same image whatever frames preceded it.
-            MeshCull = CullOf(cull: m_settings.Cull, settles: SettlesCapture),
+            MeshCull = m_settings.Cull,
             MeshDetail = m_settings.Detail,
             UpdateRates = RatesOf(rates: m_settings.UpdateRates, settles: SettlesCapture),
             TickLocked = TickLocked,

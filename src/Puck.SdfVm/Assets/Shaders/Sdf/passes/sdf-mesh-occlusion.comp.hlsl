@@ -49,12 +49,17 @@ uint sdfOcclusionWord(uint2 dims, uint level, uint2 texel) {
 // A pixel's forward depth as the pyramid orders it: positive floats' bits order as the floats do.
 uint sdfOcclusionPixel(uint2 pixel) {
     float4 texel = meshVisibility.Load(int3(int2(pixel), 0));
-
+    if ((sdfMeshOcclusionCandidates[0].z & 2u) != 0u) {
+        // Orthographic reversed depth: zero is uncovered, otherwise 1-z orders near to far.
+        return texel.x > 0.0 ? asuint(1.0 - texel.x) : SdfOcclusionUncovered;
+    }
     return ((texel.y >= 1.0) ? asuint(max(texel.w, 0.0)) : SdfOcclusionUncovered);
 }
 uint sdfOcclusionTexel(uint2 dims, uint level, uint2 texel) {
     return ((level == 0u) ? sdfOcclusionPixel(texel) : sdfMeshOcclusionDepthRW[sdfOcclusionWord(dims, level, texel)]);
 }
+
+#include "../frame/sdf-caster-receivers.hlsli"
 
 // Adds a phase's commands, and their vertices, to the pass's drawn counts: the wave sums both, its first lane adds each.
 void sdfOcclusionCount(uint draws, uint vertices) {
@@ -108,17 +113,18 @@ bool sdfOcclusionMaySee(float3 center, float3 halfX, float3 halfY, float3 halfZ,
     float2 high = float2(-1.0e30, -1.0e30);
     float nearest = 1.0e30;
     bool crossesNear = false;
+    bool cascade = (sdfMeshOcclusionCandidates[0].z & 2u) != 0u;
 
     [unroll]
     for (uint corner = 0u; (corner < 8u); corner++) {
         float3 p = (((center + (((corner & 1u) != 0u) ? halfX : -halfX)) + (((corner & 2u) != 0u) ? halfY : -halfY)) + (((corner & 4u) != 0u) ? halfZ : -halfZ));
         float3 relative = (p - view.position.xyz);
         float w = dot(relative, view.forward.xyz);
-        float2 ndc = (float2((scaleX * (dot(relative, view.right.xyz) - (view.lens.y * w))), (scaleY * (dot(relative, view.up.xyz) - (view.lens.z * w)))) / max(w, 1.0e-6));
+        float2 ndc = (float2((scaleX * (dot(relative, view.right.xyz) - (view.lens.y * w))), (scaleY * (dot(relative, view.up.xyz) - (view.lens.z * w)))) / (cascade ? 1.0 : max(w, 1.0e-6)));
         float2 at = float2((((ndc.x * 0.5) + 0.5) * (float)dims.x), ((0.5 - (ndc.y * 0.5)) * (float)dims.y));
 
-        crossesNear = (crossesNear || (w <= near));
-        nearest = min(nearest, w);
+        crossesNear = (crossesNear || (w <= (cascade ? worldNearDistance(view) : near)));
+        nearest = min(nearest, cascade ? (w - worldNearDistance(view)) / (worldFarDistance(view) - worldNearDistance(view)) : w);
         low = min(low, at);
         high = max(high, at);
     }
@@ -160,23 +166,26 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint step = (pushedIndex.index >> SDF_MESH_LEVEL_SHIFT);
 
     // One workgroup tests the consumer's portal slabs with exactly the draw test and the same pyramid.
-    // Four rows per screen follow the selection controls; the count buffer's first four words remain draw counts.
+    // Four rows per screen follow the selection controls; the first five count words are draw phases.
     if (step == 3u) {
         uint rows;
         uint stride;
         sdfMeshOcclusionCandidates.GetDimensions(rows, stride);
-        uint screens = (rows - 14u) / 4u;
+        uint screens = (rows - 15u) / 4u;
         if (id.x < screens) {
-            uint row = 14u + id.x * 4u;
+            uint row = 15u + id.x * 4u;
             float4 center = asfloat(sdfMeshOcclusionCandidates[row]);
             bool visible = center.w == 0.0 || sdfOcclusionMaySee(center.xyz,
                 asfloat(sdfMeshOcclusionCandidates[row + 1u].xyz),
                 asfloat(sdfMeshOcclusionCandidates[row + 2u].xyz),
                 asfloat(sdfMeshOcclusionCandidates[row + 3u].xyz), sdfMeshOcclusionCandidates[0].y);
-            sdfMeshOcclusionCountsRW[4u + id.x] = visible ? 1u : 0u;
+            sdfMeshOcclusionCountsRW[5u + id.x] = visible ? 1u : 0u;
         }
         return;
     }
+
+    if (step == 4u) { sdfReceiverMark(id.x); return; }
+    if (step == 5u) { sdfReceiverReduce(id.x, pushedIndex.index & SdfMeshDrawMask); return; }
 
     if (step == SdfOcclusionDepth) {
         ViewportData view = worldView();
@@ -204,7 +213,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     uint4 header = sdfMeshOcclusionCandidates[0];
     bool splitExit = (header.z & 2u) != 0u;
-    bool optical = (header.z >> 2u) == 4u;
+    bool optical = (header.z >> 2u) == 5u;
     uint draws = 0u;
     uint vertices = 0u;
     uint exitDraws = 0u;
@@ -214,9 +223,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     if (id.x == 0u) {
         sdfMeshOcclusionCountsRW[((step == SdfOcclusionLate) ? 1u : 0u)] = header.x;
         if (splitExit && step == SdfOcclusionEarly) {
-            sdfMeshOcclusionCountsRW[1] = header.x;
             sdfMeshOcclusionCountsRW[2] = header.x;
-            if (optical) { sdfMeshOcclusionCountsRW[3] = header.x; }
+            sdfMeshOcclusionCountsRW[3] = header.x;
+            if (optical) { sdfMeshOcclusionCountsRW[4] = header.x; }
         }
     }
     if (id.x < header.x) {
@@ -236,6 +245,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         uint level = min(state.y, d.w);
         if (step == SdfOcclusionEarly) {
             kept = (splitExit || (((a.w >> 1u) & 1u) == (header.w & 1u))) &&(unboxed || sdfSelectionKeeps(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz)));
+            if (kept && splitExit && occlude && !unboxed) {
+                kept = sdfReceiverMayShadow(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz));
+            }
             if (kept) {
                 level = sdfSelectionLevel(record, state, unboxed);
                 state.y = level;
@@ -262,16 +274,22 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         if (splitExit && step == SdfOcclusionEarly) {
             bool encloses = (a.w & 4u) != 0u;
             uint identity = draw | (level << SDF_MESH_LEVEL_SHIFT);
-            bool exitEmit = opaqueEmit && exitLayer;
-            sdfOcclusionEmit(1u, id.x, identity, count, exitEmit && encloses);
-            sdfOcclusionEmit(2u, id.x, identity, count, exitEmit && !encloses);
-            if (optical) { sdfOcclusionEmit(3u, id.x, identity, count, emit && glass && depthLayer); }
+            // The final exit/peel and glass lists depend ONLY on receiver/box selection.
+            // Entry visibility (was/visible) must never remove a potential second surface.
+            bool exitEmit = kept && !glass && exitLayer;
+            bool glassEmit = optical && kept && glass && depthLayer;
+            sdfOcclusionEmit(2u, id.x, identity, count, exitEmit && encloses);
+            sdfOcclusionEmit(3u, id.x, identity, count, exitEmit && !encloses);
+            if (optical) { sdfOcclusionEmit(4u, id.x, identity, count, glassEmit); }
             exitDraws = exitEmit ? 1u : 0u;
             exitVertices = exitEmit ? count : 0u;
+            // Optical draws execute once, independently of the two entry phases.
+            draws += glassEmit ? 1u : 0u;
+            vertices += glassEmit ? count : 0u;
         }
-        emit = emit && depthLayer;
-        draws = emit ? 1u : 0u;
-        vertices = emit ? count : 0u;
+        emit = opaqueEmit && depthLayer;
+        draws += emit ? 1u : 0u;
+        vertices += emit ? count : 0u;
     }
 
     sdfOcclusionCount(draws, vertices);

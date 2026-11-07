@@ -647,9 +647,9 @@ identity, keeps the 1/1.1 display-pixel band while the mesh is unchanged,
 survives buffer growth and ignores prior levels for a settled still. Rejected
 commands are empty slots, preserving staged order and depth ties. Opaque
 occlusion retains its early and late phases; glass uses one. Each cascade
-selects once, emitting entry, solid-exit and thin-exit argument phases. Entry
-uses one counted call; exit uses one per pipeline bucket, with no intervening
-selection or history write.
+selects entry, solid-exit and thin-exit argument phases. The far cascade uses
+current receiver occupancy and two entry phases through the shared selector;
+exit uses one call per pipeline bucket independently of entry visibility.
 The CPU records one counted indirect call per phase regardless of draw count;
 CPU `Choose` and its direct-draw loop are deleted. Vulkan without native
 counting consumes the same initialized arguments, in one multi-draw where

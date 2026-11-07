@@ -52,21 +52,23 @@ public sealed partial class WorldScreenBinder : IWorldBakeReadiness {
     }
 
     /// <inheritdoc/>
-    public bool IsResidentSince(long mark) => (IsSettledSince(mark) && ViewHost is { MeshesResident: true } && !ViewsBake(resident: true));
+    public bool IsResidentSince(long mark) => IsSettledSince(mark) && PendingMeshResidency is null;
     /// <inheritdoc/>
-    public string? PendingResidencyReasonSince(long mark) => (PendingReasonSince(mark) ??
-        (IsResidentSince(mark) ? null : "rendered geometry still owes mesh landing or its GPU upload completion"));
+    public string? PendingResidencyReasonSince(long mark) => PendingReasonSince(mark) ?? PendingMeshResidency;
+    private string? PendingMeshResidency => m_renderProbe is { Root.Runtime: { } runtime, Views: { } views }
+        ? views.PendingMeshesIn(runtime)
+        : "the render graph is not ready";
     // Whether a residency besides the world's own still owes its bake; allocates nothing, so a hold polls it every drain.
-    private bool ViewsBake(bool resident = false) {
+    private bool ViewsBake() {
         foreach (var residency in m_routedResidencies.Values) {
-            if (residency.MeshPathBake.Pending || (resident && !residency.MeshesResident)) { return true; }
+            if (residency.MeshPathBake.Pending) { return true; }
         }
         foreach (var view in m_viewResidencies.Values) {
-            if (view.Residency.MeshPathBake.Pending || (resident && !view.Residency.MeshesResident)) { return true; }
+            if (view.Residency.MeshPathBake.Pending) { return true; }
         }
         foreach (var root in m_infinityRoots.Values) {
             foreach (var entry in root.Entries.Values) {
-                if (entry.Residency is { } residency && (residency.MeshPathBake.Pending || (resident && !residency.MeshesResident))) { return true; }
+                if (entry.Residency is { MeshPathBake.Pending: true }) { return true; }
             }
         }
 

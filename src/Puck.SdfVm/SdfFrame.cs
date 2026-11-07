@@ -276,7 +276,8 @@ public sealed record SdfFrame(
     public bool DisableScreenLights { get; init; }
     /// <summary>Engine-bench lever: how much of the mesh draws the raster passes skip. The default,
     /// <see cref="SdfMeshCullLevel.Occlusion"/>, skips what the box cull (<see cref="SdfMeshCull"/>) and the mesh pass's
-    /// occlusion test (<see cref="SdfMeshOcclusion"/>) find no pixel of; every level changes no pixel, so the lever
+    /// occlusion test (<see cref="SdfMeshOcclusion"/>) find no pixel of, and far-cascade casters no current receiver can
+    /// read or whose entry is wholly hidden by light-space depth; every level changes no pixel, so the lever
     /// measures each one's saving and checks it shows the same image. The cadence signature folds it, so a change
     /// re-renders.</summary>
     public SdfMeshCullLevel MeshCull { get; init; }

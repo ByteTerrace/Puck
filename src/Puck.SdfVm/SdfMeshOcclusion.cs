@@ -8,8 +8,10 @@ namespace Puck.SdfVm;
 /// <summary>
 /// One raster pass's GPU selection and counted indirect commands. All passes cull boxes and choose levels from the
 /// residency's retained mesh records. Opaque occlusion draws the previous visible set, builds a conservative depth
-/// pyramid, and draws newly visible records in a second phase. Cascades select once for opaque entry/exit and glass
-/// extinction; glass and a non-occluding mesh pass use one phase. Level and surface generation persist per draw within
+/// pyramid, and draws newly visible records in a second phase. The far cascade additionally classifies against current
+/// camera receivers and runs entry depth in the same two phases. Exit and glass lists depend only on receiver/box
+/// classification, never on entry visibility, and draw after entry is final. Other cascades and glass use one entry phase.
+/// Level and surface generation persist per draw within
 /// one table owner, including across buffer growth;
 /// changing owners clears selection history, and a capture ignores prior levels.
 /// Each phase preserves staged draw order with empty commands for rejected records, so depth ties resolve alike.
@@ -21,12 +23,15 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private const uint DepthStep = 1u;
     private const uint LateStep = 2u;
     private const uint SightStep = 3u;
+    private const uint ReceiverStep = 4u;
+    private const uint ReceiverReduceStep = 5u;
+    private const int ReceiverShift = 4;
     // Controls only; bounds and level metadata live in the shared mesh region. Paired with sdf-mesh-selection.hlsli:
-    // one header row, three detail rows, ten cull rows.
-    private const int HeaderWords = (14 * 4);
-    // Early/late for camera passes; entry/solid exit/thin exit and optional extinction for cascades.
+    // one header row, three detail rows, ten cull rows, one receiver sample row.
+    private const int HeaderWords = (15 * 4);
+    // Every pass reserves early/late entry; cascades add solid exit, thin exit and optional extinction.
     private readonly uint m_argumentPhases;
-    private const ulong CountsBytes = ((4 + SdfPortalSight.Capacity) * sizeof(uint));
+    private const ulong CountsBytes = ((5 + SdfPortalSight.Capacity) * sizeof(uint));
 
     private readonly IGpuBufferFactory m_buffers;
     private readonly string m_owner;
@@ -47,6 +52,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private uint m_levels;
     private uint m_width;
     private uint m_height;
+    private bool m_cascade;
+    private bool m_receivers;
+    private uint m_receiverWidth;
+    private uint m_receiverHeight;
     private int m_slot;
     private readonly SdfPortalSight? m_sight;
     private readonly SightSlot[] m_sightSlots;
@@ -89,15 +98,14 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             if (slot.Fence is not { IsSignaled: true }) { continue; }
             slot.Fence = null;
             slot.Buffer!.Read(bytes);
-            m_sight.Complete(slot.Epoch, slot.Queries, System.Runtime.InteropServices.MemoryMarshal.Cast<byte, uint>(bytes)[4..]);
+            m_sight.Complete(slot.Epoch, slot.Queries, System.Runtime.InteropServices.MemoryMarshal.Cast<byte, uint>(bytes)[5..]);
         }
     }
 
     // Each pass uploads constant-sized controls. The residency already uploaded each changed draw once.
     // A cascade that draws one layer of a split refresh (skipsDepth, skipsExit) emits and counts commands for that layer
     // alone, so its counted draws and vertices are the work it draws.
-    public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false, bool skipsDepth = false, bool skipsExit = false, Puck.Abstractions.Cameras.CameraSnapshot camera = default) {
-        if (occlude && splitExit) { throw new ArgumentException(message: "A selection cannot combine depth occlusion and exit partitioning."); }
+    public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false, bool skipsDepth = false, bool skipsExit = false, Puck.Abstractions.Cameras.CameraSnapshot camera = default, uint receiverWidth = 0, uint receiverHeight = 0, System.Numerics.Vector2 jitter = default) {
         // The recording slot's fence has completed before Stage. Retire replacements only on its next reuse, after all
         // preceding submissions and this slot's history copy have completed.
         foreach (var buffer in m_retired[slot]) { buffer.Dispose(); }
@@ -107,13 +115,17 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         m_width = Math.Max(val1: width, val2: 1u);
         m_height = Math.Max(val1: height, val2: 1u);
         m_levels = LevelsOf(height: m_height, width: m_width);
+        m_cascade = splitExit;
+        m_receivers = splitExit && occlude;
+        m_receiverWidth = receiverWidth;
+        m_receiverHeight = receiverHeight;
         PollSight();
         var sightSlot = m_sightSlots[slot];
         sightSlot.Recorded = false;
         sightSlot.Fence = null;
-        Span<System.Numerics.Vector4> rows = stackalloc System.Numerics.Vector4[14 + (4 * SdfPortalSight.Capacity)];
+        Span<System.Numerics.Vector4> rows = stackalloc System.Numerics.Vector4[15 + (4 * SdfPortalSight.Capacity)];
         rows.Clear();
-        if (occlude && m_sight is not null) { sightSlot.Epoch = m_sight.Capture(rows[14..], sightSlot.Queries, in camera); }
+        if (occlude && m_sight is not null) { sightSlot.Epoch = m_sight.Capture(rows[15..], sightSlot.Queries, in camera); }
         var words = System.Runtime.InteropServices.MemoryMarshal.Cast<System.Numerics.Vector4, uint>(span: rows);
 
         words[0] = count;
@@ -122,6 +134,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         words[3] = (glass ? 1u : 0u) | (skipsDepth ? 2u : 0u) | (skipsExit ? 4u : 0u);
         detail.WriteGpu(rows: rows[1..4], held: held);
         cull.WriteGpu(rows: rows[4..]);
+        rows[14] = new(receiverWidth, receiverHeight, jitter.X, jitter.Y);
         EnsureBuffers(depth: occlude, draws: count);
         // Generations are table-local. Follow can preserve this pass while changing its tables, whose first cells
         // can carry the same tokens as the previous owner. Reset after growth so its seed cannot restore old history.
@@ -188,6 +201,19 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         }
 
         Bind(commandBuffer: commandBuffer, pipeline: pipeline, recorder: recorder, set: set);
+        if (m_receivers) {
+            // The receiver set samples current camera depth before any cascade attachment is drawn.
+            recorder.ClearStorageBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_depth!.BufferHandle, sizeBytes: m_depth.SizeBytes);
+            Ready(buffer: m_depth, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.TransferWrite, sourceStage: GpuStage.Transfer);
+            Dispatch(commandBuffer: commandBuffer, invocations: m_receiverWidth * m_receiverHeight, level: 0, pipeline: pipeline, recorder: recorder, step: ReceiverStep);
+            Ready(buffer: m_depth, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
+            var width = Extent(m_width, ReceiverShift);
+            var height = Extent(m_height, ReceiverShift);
+            for (var level = 1u; level <= LevelsOf(width, height); level++) {
+                Dispatch(commandBuffer: commandBuffer, invocations: Extent(width, level) * Extent(height, level), level: level, pipeline: pipeline, recorder: recorder, step: ReceiverReduceStep);
+                Ready(buffer: m_depth, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
+            }
+        }
         Dispatch(commandBuffer: commandBuffer, invocations: m_count, level: 0u, pipeline: pipeline, recorder: recorder, step: EarlyStep);
         ToIndirect(commandBuffer: commandBuffer, recorder: recorder);
     }
@@ -227,12 +253,13 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             destinationStageMask: GpuStage.ComputeShader,
             imageHandle: target,
             newLayout: GpuImageLayout.ShaderReadOnly,
-            oldLayout: GpuImageLayout.RenderTarget,
-            sourceAccessMask: GpuAccess.ColorAttachmentWrite,
-            sourceStageMask: GpuStage.ColorAttachmentOutput
+            oldLayout: m_cascade ? GpuImageLayout.DepthAttachment : GpuImageLayout.RenderTarget,
+            sourceAccessMask: m_cascade ? GpuAccess.DepthAttachmentWrite : GpuAccess.ColorAttachmentWrite,
+            sourceStageMask: m_cascade ? GpuStage.FragmentTests : GpuStage.ColorAttachmentOutput
         );
         Bind(commandBuffer: commandBuffer, pipeline: pipeline, recorder: recorder, set: set);
 
+        Ready(buffer: m_depth!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
         for (var level = 1u; (level <= m_levels); level++) {
             var width = Extent(level: level, size: m_width);
             var height = Extent(level: level, size: m_height);
@@ -266,10 +293,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         ToIndirect(commandBuffer: commandBuffer, recorder: recorder);
         recorder.TransitionImageLayout(
             commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuAccess.ColorAttachmentRead | GpuAccess.ColorAttachmentWrite,
-            destinationStageMask: GpuStage.ColorAttachmentOutput,
+            destinationAccessMask: m_cascade ? GpuAccess.DepthAttachmentRead | GpuAccess.DepthAttachmentWrite : GpuAccess.ColorAttachmentRead | GpuAccess.ColorAttachmentWrite,
+            destinationStageMask: m_cascade ? GpuStage.FragmentTests : GpuStage.ColorAttachmentOutput,
             imageHandle: target,
-            newLayout: GpuImageLayout.RenderTarget,
+            newLayout: m_cascade ? GpuImageLayout.DepthAttachment : GpuImageLayout.RenderTarget,
             oldLayout: GpuImageLayout.ShaderReadOnly,
             sourceAccessMask: GpuAccess.ShaderRead,
             sourceStageMask: GpuStage.ComputeShader
@@ -356,6 +383,11 @@ internal sealed class SdfMeshOcclusion : IDisposable {
 
         if (!depth) { return; }
         var depthBytes = (DepthWords(height: m_height, levels: m_levels, width: m_width) * sizeof(uint));
+        if (m_receivers) {
+            var width = Extent(m_width, ReceiverShift);
+            var height = Extent(m_height, ReceiverShift);
+            depthBytes += ((ulong)width * height + DepthWords(width, height, LevelsOf(width, height))) * sizeof(uint);
+        }
 
         if ((m_depth is null) || (m_depth.SizeBytes < depthBytes)) {
             if (m_depth is { } previous) { m_retired[m_slot].Add(item: previous); }

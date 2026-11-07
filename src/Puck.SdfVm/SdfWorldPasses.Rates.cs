@@ -5,13 +5,14 @@ using Puck.Maths;
 
 namespace Puck.SdfVm;
 
-// The far cascade's rate (SdfUpdateRates.ShadowFar): a view holds its far cascade's layers and fit while a refresh at
+// The far cascade's rate (SdfUpdateRates.ShadowFar), for box-only selection: a view holds its layers and fit while a refresh at
 // least 30 times a second of presentation time allows (SdfUpdateRateTiers.Holds), so the shadow-far pass stands between
 // refreshes whatever else of the frame renders. A hold ends early when the fit it stands for no longer covers what the
 // view shows: the light turns by more than the far camera's depth span moves a shadow one texel, the camera turns or
 // moves past the tiers' tolerances, the cascade's extent or texels change, the camera cuts, the instance follows another
 // view or residency, or a capture converges. A sun on a day clock turns every frame, by less than that in a 30th of a
-// second, so it holds as a still light does.
+// second, so it holds as a still light does. Receiver-conditioned occlusion instead refreshes both layers on changes:
+// newly exposed receivers cannot use a mask from a previous view.
 //
 // A refresh the rate alone calls for (the fit still covers the view) draws the cascade's two layers on consecutive frames
 // when two frames fit in the rate's period: the depth (with its glass extinction) first, then the exit layer on a frame
@@ -127,7 +128,10 @@ public sealed partial class SdfWorldPasses {
         var fresh = cascades[1];
         var snapshot = frame.Views[Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1))];
         var camera = snapshot.Camera;
-        var rated = ((frame.UpdateRates & SdfUpdateRates.ShadowFar) != 0);
+        // Receiver-conditioned depth is valid only for the exact current camera samples.
+        // A motion tolerance or a 30 Hz hold cannot prove that newly exposed receivers
+        // were covered. Ordinary unchanged-pass signatures may still retain it.
+        var rated = ((frame.UpdateRates & SdfUpdateRates.ShadowFar) != 0 && frame.MeshCull != SdfMeshCullLevel.Occlusion);
         // Every frame since the refresh decided, so the time since it is this view's presentation time.
         var continuous = (entry.FarDecided == (m_frame - 1));
         var elapsed = (continuous ? (entry.FarElapsedSeconds + m_context.FrameDeltaSeconds) : 0d);

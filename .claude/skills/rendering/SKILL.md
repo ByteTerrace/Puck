@@ -56,13 +56,24 @@ Pin exposure (`world.exposure pin`, which also stops local adaptation) for on/of
 
 For a motion burst, arm it inside a sustained pan and inspect its reported ticks:
 an eight-tick pan can finish before the first of eight asynchronous captures lands.
+Motion still runs publish an Operator attachment, as sweep and motion routes do.
+Use it to inspect a stalled run; for shadow-only diagnostics, disabling indirect
+lighting avoids an unrelated probe-convergence wait. Keep lighting enabled for
+normal frame measurements. `world.cull frustum` changes camera selection too;
+use `world.cull camera` to isolate cascade culling with camera occlusion unchanged.
+`world.wait residency` follows the latest render schedule through
+`SdfWorldPasses.PendingMeshesIn`: standing and deferred contributors that have
+submitted GPU work still owe their geometry, but unread or unproduced views do not.
+`RenderGraphRuntime.HasSubmittedFrame` shares the first-frame readiness boundary.
+Waiting on every allocated residency
+deadlocks on hidden routed scenes whose GPU work correctly never starts.
 
 ## Mesh pipeline limits
 
 Glass shadow extinction is authored by `SdfGlass.ShadowDensity` (zero by
-default; standard water opts in). Cascade selection's fourth indirect phase
+default; standard water opts in). Cascade selection's optical indirect phase
 routes glass to `SdfMeshRasterPass.ShadowGlassKey`; opaque entry/exit stay in
-their existing phases. Count glass vertices once, opaque vertices twice.
+their own phases. Count glass vertices once and each executed opaque phase.
 Only a program with a drawn positive-density glass shape adds optical storage
 through `WithGlassShadows`; the graph's ports govern its allocation, clear and
 surface reads. Each texel holds three words (signed depth and nearest entry).
@@ -160,6 +171,36 @@ Measure draw/vertex
 counts, actual transform rows, program/material bytes, region residency and
 bakes; the lead measures frame times and edit-to-running on a quiet machine.
 
+## Far-cascade caster selection
+
+`SdfMeshOcclusion` and `sdf-mesh-occlusion.comp.hlsl` are the one classification
+door for camera and cascade draws. The far cascade reads the current mesh target
+through a graph dependency. `sdf-caster-receivers.hlsli` reprojects every covered
+camera sample with its render grid and jitter into light-space occupancy cells;
+OR-reduced parents conservatively cover a query rectangle. Expand caster boxes
+by `SdfMeshCull.ShadowFilterTexels`, the complete search/filter and normal-offset
+reach, before querying. Keep unboxed draws. Camera invisibility of a caster is
+never evidence that it cannot cast a visible shadow.
+
+Entry depth uses the camera pass's two-phase mechanism in the light's orthographic
+projection: draw previous survivors at current transforms, build the maximum
+forward-depth pyramid with infinity for holes, then draw new survivors. Phase
+indices have one meaning: early entry, late entry, solid exit, thin exit, optical.
+Exit (and a future identity peel) and glass lists depend only on box/receiver
+selection, never entry visibility. They execute after entry depth is final.
+Never use an earlier exit/peel image to reject a caster.
+
+A receiver-conditioned cascade cannot use the far rate's motion tolerance or
+split refresh: newly exposed receivers were not in its mask. Occlusion mode
+refreshes both layers when the pass changes; only ordinary unchanged-pass
+signatures may retain it. `world.cull camera` disables cascade receiver and depth
+occlusion and retains the original far rate, providing the comparison path
+while leaving camera occlusion enabled.
+Compare counts beside time and shadow diagnostic captures on both backends;
+include a moving camera and reduced/temporal render grids. The receiver scratch
+shares the depth allocation and its existing slot-fence retirement; early
+compute samples camera depth, late compute samples light depth, in separate sets.
+
 ## Evidence-preserving diagnostics
 
 `world.debug-view colliders|contacts` uses the beauty path through temporal
@@ -240,9 +281,10 @@ Find the existing mechanism before adding one: `puck references`,
 
 ## Which dispatch owns the code
 
-A view is a chain of separate dispatches: `shadow-near`, `shadow-far`, `shadow-second` (graphics,
-the cascades) → `mesh` (graphics, in two occlusion phases with the occlusion
-kernel between them, `SdfMeshOcclusion`) → `pyramid` (the ambient occlusion's
+A view is a chain of separate dispatches: `mesh` (graphics, in two occlusion
+phases with the occlusion kernel between them, `SdfMeshOcclusion`) →
+`shadow-near`, `shadow-far`, `shadow-second` (graphics, the far cascade reading
+current camera receivers) → `pyramid` (the ambient occlusion's
 depth pyramid from the mesh target) → `surface` (each pixel's visibility record from the mesh
 target: normal, screen-space AO, the cascades' soft shadows into K;
 `passes/sdf-surface-stage.hlsli`) → `views` (materials and lighting) →
@@ -548,9 +590,9 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `SdfTemporalHistory.Prepare`); every other view settles it as a still frame,
   so a temporal view converges over the held renders. Settling motion history
   on a held upload makes every capture of the motion view read still. A frame
-  held for a settled capture also culls by box rather than by the occlusion
-  test and rates no work (`WorldFramePresenter.CullOf`/`RatesOf`), so the still
-  owes nothing to earlier frames' visible set or rated updates; under
+  held for a settled capture rates no work (`WorldFramePresenter.RatesOf`),
+  but preserves the selected culler: the second phase resolves disocclusion
+  in the same frame, and a capture must exercise the mode being diagnosed. Under
   `world.lockstep` every frame also presents the completed tick and advances
   presentation by the ticks completed, and its frames (`SdfFrame.TickLocked`)
   have the residency trace the irradiance window to the end before rendering
@@ -921,7 +963,7 @@ phases (simulate, begin, produce, present, wait) with their collections and the
 pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 
 - **The far cascade is the frame's largest variable pass; read whether it
-  holds.** It draws nearly every caster in a 280 m box out to 200 m toward the
+  holds.** With box-only selection it draws nearly every caster in a 280 m box out to 200 m toward the
   sun, at each mesh's coarsest level whose error fits a texel, in two layers,
   so a view facing the debug world's lawn, forest and studio draws many times
   the mesh pass's vertices there (`world.counters gpu pass sdf.world$shadow-far

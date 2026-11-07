@@ -392,9 +392,8 @@ small cost cut; it stays a separate pyramid from the AO one.
 
 **Puck builds:** shared classification across a residency's views (one read of
 instance data, per-view compact lists and per-view history, with no global
-barrier that serializes independent residencies); caster and receiver
-occlusion for cascades, either two-phase occlusion in light space through the
-same `SdfMeshOcclusion` or RedLynx's camera-depth receiver mask; and static
+barrier that serializes independent residencies); extending the far cascade's
+receiver and light-space occlusion to other cascades when measured worthwhile; and static
 cascade caching only where a measurement shows static redraw dominating with
 unchanged projections.
 
@@ -414,12 +413,13 @@ shifts every later view's state. Done when: from the forest facing the hall,
 `world.budget`'s live frame line shows no hall session rendered, and turning
 toward a painting in the hall shows it fresh on its first visible frame.
 
-R2 left two shapes V5 replaces: each pass classifies the whole draw list
-behind its own global barrier and allocates three argument phases
-(`SdfMeshOcclusion.cs:110-116`, `:276`), and phase and count slot 1 mean
-"late" in the opaque pass but "solid exit" in a cascade, with `Stage` refusing
-`occlude` beside `splitExit`. V5's shared classification and its two-phase
-light-space depth with a final peel give each phase one meaning.
+Each pass still classifies the whole draw list behind its own barrier; sharing
+that read across views remains V5 work. The far cascade now uses the existing
+`SdfMeshOcclusion` classification with a current camera-depth receiver mask and
+two-phase light-space entry depth. All phases have one meaning, and the final
+exit/optical lists are independent of entry visibility. The
+[rendering skill](../../.claude/skills/rendering/SKILL.md#far-cascade-caster-selection)
+owns the coverage and retention rules. The identity peel remains transmission work.
 
 **Why:** the gain grows with views (screens, windows, nested worlds,
 cascades), which is where authors go beyond the debug world. Main-camera
@@ -565,7 +565,7 @@ times are taken in the lead's settle windows, never by a lane under load.
 | V3c. Field-derived levels | rendering, bake experiment | Coarse levels contoured from the field for large static unions only | Bake thread-seconds and audit scores against V3b's on the hall's unions; kept only if both win |
 | V4a. Early-depth variant | rendering | The non-fading pipeline with `[earlydepthstencil]` | Mesh-pass GPU time and shaded fragments at the meadow on the 2060 and at the Deck's resolution; the faded avatar still reveals the room behind her at `debug.go stage` |
 | V4b. Packed visibility target | rendering | The `uint2` target and depth reconstruction | `surface` and `pyramid` GPU time against V4a's; AO and stills compared tolerantly at the gallery and meadow |
-| V5. Views and shadows | rendering | Shared classification, light-space caster occlusion, static caching only if measured | Cascade GPU time and vertices at the meadow and the gallery; `debug.go portals` with nested views: per-view counts, no stale child image |
+| V5. Views and shadows | rendering | Classification shared across views; extend far-cascade culling to other cascades if measured; static caching only with receiver coverage preserved | Cascade GPU time and vertices at the meadow and the gallery; `debug.go portals` with nested views: per-view counts, no stale child image |
 
 V2a, V3a and V4a share no files with V1 and run beside it once M1 and M2 are
 read. V1b waits on V1a; V2b on V1b, since retained updates write the instance
