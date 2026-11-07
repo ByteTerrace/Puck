@@ -22,9 +22,6 @@
 #include "../frame/sdf-mesh.hlsli"
 #include "../frame/sdf-mesh-selection.hlsli"
 
-static const uint SdfOcclusionEarly = 0u;
-static const uint SdfOcclusionDepth = 1u;
-static const uint SdfOcclusionLate = 2u;
 static const uint SdfOcclusionUncovered = 0x7F800000u;
 static const uint SdfOcclusionCommandWords = 5u;
 static const uint SdfOcclusionDrawnWords = 4u;
@@ -80,7 +77,7 @@ void sdfOcclusionCount(uint draws, uint vertices) {
     }
 }
 // Writes a candidate's command into a phase's list at the candidate's own record, so each phase draws in the order the
-// host staged its draws, as the box cull alone does: depth ties resolve alike. A candidate the phase does not draw gets
+// host staged its draws. Coplanar ties across phases can depend on the prior visible set. A candidate the phase does not draw gets
 // an empty command. The identity is the draw with the level the selection kernel chose for it from bit SDF_MESH_LEVEL_SHIFT up, which
 // the vertex stage reads its level's first triangle by.
 void sdfOcclusionEmit(uint phase, uint candidate, uint identity, uint vertices, bool emit) {
@@ -167,27 +164,27 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // One workgroup tests the consumer's portal slabs with exactly the draw test and the same pyramid.
     // Four rows per screen follow the selection controls; the first five count words are draw phases.
-    if (step == 3u) {
+    if (step == SDF_OCCLUSION_SIGHT_STEP) {
         uint rows;
         uint stride;
         sdfMeshOcclusionCandidates.GetDimensions(rows, stride);
-        uint screens = (rows - 15u) / 4u;
+        uint screens = (rows - SDF_SIGHT_ROW) / 4u;
         if (id.x < screens) {
-            uint row = 15u + id.x * 4u;
+            uint row = SDF_SIGHT_ROW + id.x * 4u;
             float4 center = asfloat(sdfMeshOcclusionCandidates[row]);
             bool visible = center.w == 0.0 || sdfOcclusionMaySee(center.xyz,
                 asfloat(sdfMeshOcclusionCandidates[row + 1u].xyz),
                 asfloat(sdfMeshOcclusionCandidates[row + 2u].xyz),
                 asfloat(sdfMeshOcclusionCandidates[row + 3u].xyz), sdfMeshOcclusionCandidates[0].y);
-            sdfMeshOcclusionCountsRW[5u + id.x] = visible ? 1u : 0u;
+            sdfMeshOcclusionCountsRW[SDF_SIGHT_COUNT_BASE + id.x] = visible ? 1u : 0u;
         }
         return;
     }
 
-    if (step == 4u) { sdfReceiverMark(id.x); return; }
-    if (step == 5u) { sdfReceiverReduce(id.x, pushedIndex.index & SdfMeshDrawMask); return; }
+    if (step == SDF_RECEIVER_STEP) { sdfReceiverMark(id.x); return; }
+    if (step == SDF_RECEIVER_REDUCE_STEP) { sdfReceiverReduce(id.x, pushedIndex.index & SdfMeshDrawMask); return; }
 
-    if (step == SdfOcclusionDepth) {
+    if (step == SDF_OCCLUSION_DEPTH_STEP) {
         ViewportData view = worldView();
         uint2 dims = worldViewDims(view);
         uint level = (pushedIndex.index & SdfMeshDrawMask);
@@ -218,11 +215,13 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint vertices = 0u;
     uint exitDraws = 0u;
     uint exitVertices = 0u;
+    uint receiverRejected = 0u;
+    uint entryRejected = 0u;
 
     // Each phase draws one command a candidate, empty or not.
     if (id.x == 0u) {
-        sdfMeshOcclusionCountsRW[((step == SdfOcclusionLate) ? 1u : 0u)] = header.x;
-        if (splitExit && step == SdfOcclusionEarly) {
+        sdfMeshOcclusionCountsRW[((step == SDF_OCCLUSION_LATE_STEP) ? 1u : 0u)] = header.x;
+        if (splitExit && step == SDF_OCCLUSION_EARLY_STEP) {
             sdfMeshOcclusionCountsRW[2] = header.x;
             sdfMeshOcclusionCountsRW[3] = header.x;
             if (optical) { sdfMeshOcclusionCountsRW[4] = header.x; }
@@ -243,10 +242,11 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         bool kept = state.w != 0u;
         // A culled draw can retain another mesh's level in history; its current table may have fewer levels.
         uint level = min(state.y, d.w);
-        if (step == SdfOcclusionEarly) {
+        if (step == SDF_OCCLUSION_EARLY_STEP) {
             kept = (splitExit || (((a.w >> 1u) & 1u) == (header.w & 1u))) &&(unboxed || sdfSelectionKeeps(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz)));
             if (kept && splitExit && occlude && !unboxed) {
                 kept = sdfReceiverMayShadow(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz));
+                receiverRejected = !kept && (a.w & 2u) == 0u ? 1u : 0u;
             }
             if (kept) {
                 level = sdfSelectionLevel(record, state, unboxed);
@@ -256,8 +256,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
         bool was = unboxed || state.x != 0u;
         bool emit = kept && (!occlude || was);
-        if (step == SdfOcclusionLate) {
+        if (step == SDF_OCCLUSION_LATE_STEP) {
             bool visible = kept && (unboxed || sdfOcclusionMaySee(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz), header.y));
+            entryRejected = splitExit && kept && !was && !visible && (a.w & 2u) == 0u ? 1u : 0u;
             emit = visible && !was;
             state.x = visible ? 1u : 0u;
         }
@@ -270,8 +271,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         // alone: the depth's entry and glass phases, or the exit phases.
         bool depthLayer = (header.w & 2u) == 0u;
         bool exitLayer = (header.w & 4u) == 0u;
-        sdfOcclusionEmit(((step == SdfOcclusionLate) ? 1u : 0u), id.x, (draw | (level << SDF_MESH_LEVEL_SHIFT)), count, opaqueEmit && depthLayer);
-        if (splitExit && step == SdfOcclusionEarly) {
+        sdfOcclusionEmit(((step == SDF_OCCLUSION_LATE_STEP) ? 1u : 0u), id.x, (draw | (level << SDF_MESH_LEVEL_SHIFT)), count, opaqueEmit && depthLayer);
+        if (splitExit && step == SDF_OCCLUSION_EARLY_STEP) {
             bool encloses = (a.w & 4u) != 0u;
             uint identity = draw | (level << SDF_MESH_LEVEL_SHIFT);
             // The final exit/peel and glass lists depend ONLY on receiver/box selection.
@@ -293,7 +294,13 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     }
 
     sdfOcclusionCount(draws, vertices);
-    if (splitExit && step == SdfOcclusionEarly) {
+    uint receiverSum = WaveActiveSum(receiverRejected);
+    uint entrySum = WaveActiveSum(entryRejected);
+    if (WaveIsFirstLane()) {
+        puckCountDetail(0u, receiverSum, 0u, 0u, 0u, 0u);
+        puckCountDetail(1u, entrySum, 0u, 0u, 0u, 0u);
+    }
+    if (splitExit && step == SDF_OCCLUSION_EARLY_STEP) {
         // Count entry and exit separately: 64 * (3 * MaxTriangles) fits a uint wave sum, twice that does not.
         // Each kept opaque draw emits exactly one exit command; glass emits once. puckAddWork carries into 64 bits.
         sdfOcclusionCount(exitDraws, exitVertices);

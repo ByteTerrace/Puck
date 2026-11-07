@@ -20,7 +20,7 @@ public sealed partial class ShaderPipelineRenderNode {
     private sealed class PassCadence(CadenceVersion[] inputs, CadenceWrite[] writes, bool canStand) {
         public readonly CadenceVersion[] Inputs = inputs;
         public readonly CadenceWrite[] Writes = writes;
-        public readonly long[] InputGenerations = new long[inputs.Length];
+        public readonly ulong?[] InputGenerations = new ulong?[inputs.Length];
         public readonly bool CanStand = canStand;
 
         public ulong? Signature;
@@ -91,7 +91,8 @@ public sealed partial class ShaderPipelineRenderNode {
         for (var index = 0; (index < cadence.Inputs.Length); index++) {
             var input = cadence.Inputs[index];
 
-            if (!input.Valid || (input.Generation != cadence.InputGenerations[index])) { return false; }
+            var identity = pass.Package!.InputSignature(input.Name, input.Generation);
+            if (!input.Valid || identity is null || (identity != cadence.InputGenerations[index])) { return false; }
         }
         foreach (var output in cadence.Writes) {
             if (!output.Resource.Cadence[output.Version].Valid || (output.Resource.Alias.Target is not null)) { return false; }
@@ -104,7 +105,8 @@ public sealed partial class ShaderPipelineRenderNode {
         cadence.Width = pass.Width;
         cadence.Height = pass.Height;
         for (var index = 0; (index < cadence.Inputs.Length); index++) {
-            cadence.InputGenerations[index] = cadence.Inputs[index].Generation;
+            var input = cadence.Inputs[index];
+            cadence.InputGenerations[index] = pass.Package!.InputSignature(input.Name, input.Generation);
         }
         foreach (var output in cadence.Writes) {
             var versions = output.Resource.Cadence;

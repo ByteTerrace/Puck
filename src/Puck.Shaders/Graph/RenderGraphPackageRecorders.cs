@@ -139,6 +139,15 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// that recorded, before any export handoff. Recording and submission failures, skipped passes and standing passes
     /// call nothing. The default has no metadata to commit.</summary>
     void Submitted() { }
+    /// <summary>Notifies a pass that its retained outputs stood for this frame. No work or barriers were recorded.</summary>
+    void Stood() { }
+    /// <summary>Returns the identity of the portion of an input this pass consumes. The default consumes every write.
+    /// A package may return a derived identity only when it covers every value it reads; null requires execution.
+    /// An input the current mode does not read may return a constant. Access barriers remain graph-owned.</summary>
+    /// <param name="input">The graph resource name.</param>
+    /// <param name="generation">The latest successful write's generation.</param>
+    /// <returns>The consumed content identity.</returns>
+    ulong? InputSignature(string input, long generation) => unchecked((ulong)generation);
     /// <summary>Returns whether the pass records nothing this frame: neither its work nor the planned barriers of its
     /// accesses, which the instance asks before it records them. Every storage the pass would have accessed stays in the
     /// state its last recorded access left it in, which the next access starts from, so a pass that skips must be one

@@ -230,11 +230,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// first frame. An instance that has not rendered and an external producer, which submits through its own device
     /// work, never hold it. Reading it allocates nothing.</summary>
     public bool FirstFramesCompleted => (FirstInFlight() < 0);
-    /// <summary>Returns whether a shader instance has submitted a frame. Scheduled but unproduced views do not
-    /// contribute GPU work to readiness, just as they do not delay <see cref="FirstFramesCompleted"/>.</summary>
-    /// <param name="instance">The instance's name in this graph.</param>
-    /// <returns>Whether its node has a submission.</returns>
-    public bool HasSubmittedFrame(string instance) => m_nodes[IndexOf(instance)]?.LatestSubmission is not null;
     /// <summary>Gets why <see cref="FirstFramesCompleted"/> is <see langword="false"/>, naming the first instance, in set
     /// order, whose first submission is still in flight, or <see langword="null"/> when it is
     /// <see langword="true"/>.</summary>

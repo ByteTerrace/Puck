@@ -19,7 +19,12 @@ namespace Puck.SdfVm;
 // in its attachment layout as the planner expects.
 internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     // Views attribute analytic sky lighting by layer.
-    public IReadOnlyList<string> WorkDetails(in FrameContext context) => ((m_part == SdfWorldPackage.Parts.Views) ? m_view.Residency.SkyDetails.Labels : []);
+    public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_part switch {
+        SdfWorldPackage.Parts.Views => m_view.Residency.SkyDetails.Labels,
+        SdfWorldPackage.Parts.ShadowFar => CasterDetails,
+        _ => [],
+    };
+    private static readonly string[] CasterDetails = ["receiver-rejected", "entry-rejected"];
 
     // The world interface's scratch buffer members, each bound to the dummy unless a port binds it.
     private static readonly string[] ScratchMembers = [
@@ -54,7 +59,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly bool m_temporal;
 
     private readonly bool m_resolved;
-    private readonly bool m_receiverAtRenderExtent;
     private bool HasShadowOptical => IsShadowCascade && m_outputs.Length == 3;
 
     // The view the pass records, followed in place when the instance resolves another its passes can record
@@ -141,8 +145,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         m_temporal = fragment.Resources.Any(predicate: static resource => resource.History);
         m_resolved = m_outputs.Contains(value: SdfWorldPackage.CurrentColor);
-        m_receiverAtRenderExtent = context.Inputs.Any(resource => LocalName(resource) == SdfWorldPackage.Parts.MeshTarget &&
-            resource.Dimensions?.Mode == ShaderPipelineDimensionMode.Render);
 
         DeclareScreens(residency: view.Residency);
 
@@ -429,6 +431,15 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     }
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) =>
         m_owner.SignatureOf(instance: m_context.Instance, part: m_part, temporal: m_temporal, context: in context);
+    public ulong? InputSignature(string input, long generation) => m_part == SdfWorldPackage.Parts.ShadowFar && m_context.Inputs.Count > 0 &&
+        input == m_context.Inputs[0].Name
+            ? m_owner.ReceiverSignatureOf(m_context.Instance)
+            : unchecked((ulong)generation);
+    public void Stood() {
+        if (m_part == SdfWorldPackage.Parts.ShadowFar) {
+            m_view.Residency.Frame?.RateCounts?.Count(SdfUpdateRateCounts.ShadowFarHeld);
+        }
+    }
     public void Submitted() {
         if (m_part == SdfWorldPackage.Parts.ShadowFar) {
             m_owner.SubmittedFar(instance: m_context.Instance);
@@ -743,7 +754,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var framebuffer = m_framebuffers[0];
         var lateFramebuffer = ((m_lateFramebuffers.Length > 0) ? m_lateFramebuffers[0] : null);
         var occlusion = ((count > 0) ? m_occlusion : null);
-        var twoPhase = (occlude && !IsGlass && (!IsShadowCascade || m_part == SdfWorldPackage.Parts.ShadowFar));
+        var twoPhase = (occlude && !IsGlass && (!IsShadowCascade || (m_part == SdfWorldPackage.Parts.ShadowFar && m_inputs.Length > 0)));
         var entryLateFramebuffer = m_entryLateFramebuffers.Length > 0 ? m_entryLateFramebuffers[0] : lateFramebuffer;
         var shadowGlassFramebuffer = HasShadowOptical ? m_shadowGlassFramebuffers[0] : null;
 
@@ -805,8 +816,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 var frame = m_view.Residency.Frame!;
                 occlusion.Stage(tables: tables, count: count, height: IsShadowCascade ? (uint)cascadeTexels : recording.RenderHeight, width: IsShadowCascade ? (uint)cascadeTexels : recording.RenderWidth, slot: slot, cull: in cull, detail: in detail, held: tables.HoldsFrame, glass: IsGlass, occlude: twoPhase, splitExit: IsShadowCascade, skipsDepth: !drawsDepth, skipsExit: (IsShadowCascade && !drawsExit),
                     camera: frame.Views[Math.Min(m_view.View, frame.Views.Count - 1)].Camera,
-                    receiverWidth: m_receiverAtRenderExtent ? recording.RenderWidth : recording.FrameWidth,
-                    receiverHeight: m_receiverAtRenderExtent ? recording.RenderHeight : recording.FrameHeight, jitter: jitter);
+                    receiverWidth: IsShadowCascade && twoPhase ? recording.Inputs[0].Image.Width : 0,
+                    receiverHeight: IsShadowCascade && twoPhase ? recording.Inputs[0].Image.Height : 0, jitter: jitter);
                 occlusion.BindDraws(tables: tables, set: set, bound: m_meshSetOcclusion[meshSet]);
                 for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
                     var index = ((meshSet * OcclusionSetsPerMesh) + phase);

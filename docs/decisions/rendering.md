@@ -195,7 +195,8 @@ each view's mesh pass draws what its previous frame found visible, builds a
 pyramid of the farthest depth it drew, tests every box the box cull keeps
 against it on the GPU and draws the newly visible in a second phase of the same
 frame, so the test is conservative and a disocclusion is never a frame late.
-Both phases keep the box cull's draw order, so depth ties resolve alike. Glass
+Each phase keeps staged draw order. Exact coplanar depth ties across the two phases
+can resolve according to the preceding visible set, including in a settled still. Glass
 never occludes, and each nested view tests
 against its own depth. On the debug world it removed a further 34% to 61% of
 the mesh pass's triangles where walls and slabs hide exhibits
