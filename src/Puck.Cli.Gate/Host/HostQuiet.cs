@@ -91,7 +91,7 @@ public static class HostQuiet {
             var remaining = timeout - clock.GetElapsedTime(started.Value, now);
             var idle = idleSince is { } since ? clock.GetElapsedTime(since, now) : TimeSpan.Zero;
 
-            if (remaining <= TimeSpan.Zero || remaining < settle - idle) { return $"the machine was not idle for {settle.TotalSeconds:0} seconds within {timeout.TotalSeconds:0}: {(why ?? "the idle window had not yet run")}."; }
+            if (remaining <= TimeSpan.Zero || remaining < settle - idle || (why is not null && remaining <= settle)) { return $"the machine was not idle for {settle.TotalSeconds:0} seconds within {timeout.TotalSeconds:0}: {(why ?? "the idle window had not yet run")}."; }
 
             await Task.Delay(delay: ((remaining < Interval) ? remaining : Interval), timeProvider: clock, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
         }

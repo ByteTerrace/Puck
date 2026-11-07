@@ -5,6 +5,22 @@ namespace Puck.Cli.Tests;
 
 public sealed class MeasureLawTests {
     [Fact]
+    public async Task QuietWithNoExtraWaitRefusesBusyLoadAfterOnlySamplerSetup() {
+        var clock = new Puck.Testing.VirtualClock();
+        using var output = new StringWriter();
+        var sample = new Puck.Cli.Host.HostSample(DateTimeOffset.UnixEpoch, 100, 16, 100, null, 0);
+        var settle = TimeSpan.FromSeconds(30);
+        var run = Puck.Cli.Host.HostQuiet.SettleAsync(settle, settle, output, clock, TestContext.Current.CancellationToken,
+            () => Task.FromResult(sample), new Puck.Cli.Host.HostLoadThresholds(60, 5, 2, 10));
+        for (var index = 0; index < 2; index++) {
+            await clock.WhenArmedAsync(count: 1, ct: TestContext.Current.CancellationToken, dueTime: TimeSpan.FromSeconds(2));
+            clock.Advance(TimeSpan.FromSeconds(2));
+        }
+        Assert.Contains("cpu mean=100.0%", await run.WaitAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(TimeSpan.FromSeconds(4), clock.Elapsed);
+    }
+
+    [Fact]
     public async Task QuietDefaultsAllowTheWholeIdleSettleAfterCpuSamplerSetup() {
         var clock = new Puck.Testing.VirtualClock();
         using var output = new StringWriter();
