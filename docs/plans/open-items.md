@@ -97,8 +97,9 @@ milestone. The owner requested its baseline and implementation plan, which
    bake grouping and detail derive from meaning rather than spelling, then
    narrow the closure and share one store across both backends.
 8. [Disclosure](disclosure.md#the-build-order) [high, the long pole before
-   `main`]: steps 1-6 behind the harness, step 0b's principals, and the
-   owner's search-output decision.
+   `main`]: steps 1-6 behind the harness and step 0b's principals; step 2
+   refuses a search output wider than its restricted inputs (the owner's
+   ruling).
 9. [Rule faults](rule-faults.md) [high, before `main`]: build the designed
    outcome type, single interpreter and journal-backed firing in its steps,
    each reviewed.
@@ -171,16 +172,6 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   ([input](#input-channels)).
 - Whether proof of possession is a product requirement for Entra bearer tokens
   and for initial binding issuance ([security](#security-review)).
-- Whether a `search` job whose public outputs are judged over restricted rows
-  is refused, linted or left to the author, as a binding to a restricted row on
-  the shared screen is. The evidence is in
-  ([disclosure](disclosure.md#open-items)): in the skirmish, blue's job scoring
-  over red's fogged positions writes a public best move whose destination
-  shows which side of the board the hidden unit stands on and whose score
-  gives its exact distance; the harness sees it at `world.state` and
-  `deliver.snapshot`. No engine check stands between the restricted read and
-  the public write today (transforms have `TransformWidensAudience`; search
-  outputs do not).
 - Looks in the transmission design ([transmission](transmission.md)), each
   with the design's choice first:
   - A body's own overhangs and hollows shadow its wrapped dark side (the
