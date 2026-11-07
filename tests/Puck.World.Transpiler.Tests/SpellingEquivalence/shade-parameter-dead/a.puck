@@ -1,0 +1,9 @@
+// Equivalent authored shading: shade-parameter-dead.
+schema: "puck.world.definition.v1"
+documentId: "shade-pair"
+shade template program(dead, seed) { surface { roughness: lattice(surface.position, seed) } }
+prototypes { prototype "p" { document {
+  schema: "puck.creation.v1"
+  palette [{ color: "#808080", shade: program(99, 7) }]
+  shape Box "box" { scale [1, 1, 1] }
+} } }

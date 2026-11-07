@@ -1344,36 +1344,13 @@ and the Water packet).
 
 ### Author shaders
 
-Owner: rendering · ordinary · Next: the step-0 review's findings below, then
+Owner: rendering · ordinary · Next:
 [step 2 of the design memo](author-shaders.md#6-implementation-steps) (the
 interpreter's cost and registers on the bar devices). Steps 0 and 1 have
 landed; step 1's GPU lifetimes (retained identity lists through fence
 retirement in `SdfWorldResidency`, the bounded `SdfShadeDispatch` records) owe
 an adversarial review.
 
-- [high] `SdfShadeHlsl.Emit` subscripts a scalar for `SdfShadeOp.Component` on
-  a width-1 operand (`clock.x` emits `asfloat(regs.r0).x[0u]`), which DXC
-  rejects, so tier 2 cannot specialize a program tier 1 admits.
-- [high] `WorldShadeLowering` types runtime parameters from one expected type:
-  `hash` never asks for `UInt3`, `select` arms and user `function` bodies drop
-  the expectation, and `ParameterType` rewrites a slot in place when one
-  parameter is used as float and uint, failing later as an internal mismatch.
-- [high] Canonical identity depends on spelling: `==` and `!=` are not ordered
-  as commutative, and `SdfShadeProgram.Compiler` fills its parameter slots in
-  declaration order, so dead parameters stay and two equivalent programs get
-  different `Identity`, layout and cost.
-- [high] `WrapSignatureOf` (`SdfWorldTables.ProgramUpload.cs`) ignores
-  `material.Shade.Demand`, so a palette-only edit that widens shadow demand
-  never re-runs the Surface pass. Check against step 1's upload changes first.
-- [medium] `shape(...)` in a shade program skips the document's member checks
-  and `TryValidateScaledPrimitive`, keeps uncanonicalized fields in the
-  program's definition, and drops an elliptic cylinder's rotation
-  (`CapturePaintShape` ignores `SdfOp.Rotate`).
-- [medium] `MaxOps` counts dispatch-scaled work as instructions, capping a
-  program near 63 instructions and refusing any multi-strand `Sweep` shape.
-- [medium] A `let` outside a phase block is not bound as a shade expression.
-- [low] Raw JSON shade definitions reach `Compile` without null or overflow
-  guards.
 The owner's ruling (AGENTS.md, "Authors rule"): authors may bring their own
 shaders, so a look is never limited to what the engine's shading offers.
 [The design memo](author-shaders.md) answers the owner's questions from
@@ -3404,6 +3381,16 @@ step's completion criteria; C1 to C7 are in.
 Owner: an independent reviewer (Argon) · unconfirmed · Next: the researcher
 brief's priorities ([security review](../development/security-review.md)).
 
+- [medium] The deployed debug world hands its whole document to every
+  authenticated authority: `worlds/debug/debug.puck`, `garden.puck` and
+  `night.puck` author a `FederatedAuthority` admission row with domain `"*"`
+  and `disclosure: Replica` (deliberate, so a returning traveller's windows
+  observe the world whole). With `azure.api-users` deployed, that is every
+  member of the configured Entra group, hidden draw secrets included
+  (inference; [Puck today](mmo-foundations/puck-today.md), the MMO round's
+  lane E). Decide whether a returning traveller's window needs `Replica` or
+  whether `Presentation` serves it, and narrow the row to the debug world's
+  own authorities if `Replica` stays.
 - [low, latent API hazard] The verified review's 1.4 is not a reproduced player
   escalation. `WorldRemoteAuthority.TryRouteCredential` still selects the lowest
   body's credential for an unbound, body-agnostic request. Production seat routes
@@ -3706,6 +3693,10 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
+- [medium] `world.decisions` reports 0 policies in the debug world's boot
+  instance, so the pond's decisions may not be running there (seen by the
+  rule-faults step 7 lane on a headless boot; unchecked). Read why before
+  treating it as a defect.
 - [high] Player-state defects found grounding the hub design. The design memo
   ([hub and saves](hub-and-saves.md)) decides the shape; these are defects
   whatever it decides:

@@ -41,7 +41,7 @@ public static class SdfShadeOps {
         D(SdfShadeOp.Abs, "abs", 1, 1, "abs(a)"),
         D(SdfShadeOp.Floor, "floor", 1, 1, "floor(a)"),
         D(SdfShadeOp.Ceil, "ceil", 1, 1, "ceil(a)"),
-        D(SdfShadeOp.Equal, "==", 2, 1, "(a == b)"),
+        D(SdfShadeOp.Equal, "==", 2, 1, "(a == b)", true),
         D(SdfShadeOp.Less, "<", 2, 1, "(a < b)"),
         D(SdfShadeOp.LessEqual, "<=", 2, 1, "(a <= b)"),
         D(SdfShadeOp.Select, "select", 3, 1, "(a.x != 0.0 ? b : c)"),

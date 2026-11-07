@@ -89,7 +89,7 @@ public sealed class ShadeLoweringTests {
                 });
                 types[op.Result.Index] = op.Result.Type;
                 if (op.Op is SdfShadeOp.Constant or SdfShadeOp.Shape) {
-                    Assert.True(condition: SdfShadeProgram.ContainsRange(length, op.Immediate, ((op.Op == SdfShadeOp.Shape) ? 6u : 1u)));
+                    Assert.True(condition: SdfShadeProgram.ContainsRange(length, op.Immediate, ((op.Op == SdfShadeOp.Shape) ? 7u : 1u)));
                 }
             }
         }
@@ -173,5 +173,72 @@ public sealed class ShadeLoweringTests {
 
         Assert.True(condition: (two > one));
         Assert.True(condition: (one >= ((Puck.SignedDistance.Queries.SdfFieldEvaluator.SweepSamples + 3u) + (2u * Puck.SignedDistance.Queries.SdfFieldEvaluator.SweepRounds))));
+    }
+
+    [Fact]
+    public void RuntimeParametersHaveStableTypedViewsThroughBindingsAndFunctions() {
+        var mixed = Compile(World("roughness = seed + lattice(surface.position, seed)", "seed", "7"));
+        Assert.Contains(SdfShadeType.Float, mixed.ParameterLayout);
+        Assert.Contains(SdfShadeType.UInt, mixed.ParameterLayout);
+        Assert.Equal(mixed.Identity, SdfShadeProgram.Compile(mixed.Definition).Identity);
+        var direct = Compile(World("roughness = lattice(surface.position, seed)", "seed", "7"));
+        foreach (var spelling in new[] { "select(clock, seed, seed)", "clock ? seed : seed", "identity(seed)" }) {
+            var through = Compile(World($"roughness = lattice(surface.position, {spelling})", "seed", "7", "function identity(x) = x"));
+            Assert.All(through.ParameterLayout, type => Assert.Equal(SdfShadeType.UInt, type));
+        }
+        var hash = Compile(World("roughness = select(hash(seed).x == uint(0), 0.2, 0.8)", "seed", "[1,2,3]"));
+        Assert.Equal([SdfShadeType.UInt3], hash.ParameterLayout);
+        Assert.Equal([1u, 2u, 3u, 0u], hash.ParameterWords.ToArray());
+        Assert.Equal([SdfShadeType.UInt], direct.ParameterLayout);
+        var shadowed = Compile(World("roughness = identity(seed)", "seed", "7", "function identity(seed) = seed"));
+        Assert.Equal([SdfShadeType.Float], shadowed.ParameterLayout);
+        var loop = Compile(World("let n = clock\n for i in range(0, 3) { let n = n + i }\n roughness = n"));
+        var unrolled = Compile(World("roughness = ((clock + 0) + 1) + 2"));
+        Assert.Equal(unrolled.Identity, loop.Identity);
+        var equalBits = Compile(World("roughness = uint(2143289344) == uint(2143289344)"));
+        var one = Compile(World("roughness = 1"));
+        Assert.Equal(one.Identity, equalBits.Identity);
+    }
+
+    [Fact]
+    public void RawDefinitionsRefuseMissingMembersAtAdmission() {
+        var definitions = new SdfShadeDefinition[] {
+            null!, new("null", null!, []), new("null", [], null!), new("null", [null!], []),
+            new("null", [new("p", SdfShadeType.Float, null!)], []),
+            new("null", [], [null!]), new("null", [], [], [null!]),
+            new("null", [], [new(SdfShadePhase.Surface, "roughness", null!)]),
+            new("null", [], [new(SdfShadePhase.Surface, "roughness", new("sin", [null!]))]),
+        };
+        foreach (var definition in definitions) {
+            Assert.Equal("PUCK127", Assert.Throws<SdfShadeException>(() => SdfShadeProgram.Compile(definition)).Code);
+        }
+    }
+
+    [InlineData("rounding: -1")]
+    [InlineData("rounding: 100")]
+    [InlineData("chamfer: -1")]
+    [Theory]
+    public void StructuralShapesUsePrimitiveAdmission(string controls) {
+        var result = WorldCompiler.Compile(World($"roughness = shape({{ type: Box, {controls} }}, surface.position)"), cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Contains(result.Diagnostics, d => d.Code == "PUCK127");
+    }
+
+    [Fact]
+    public void InstructionCapacityAndDispatchWorkAreIndependent() {
+        var chain = string.Join("\n", Enumerable.Range(0, 100).Select(i => $"let n{i} = sin({(i == 0 ? "clock" : $"n{i - 1}")})"));
+        var program = Compile(World(chain + "\nroughness = n99"));
+        Assert.True(program.Phases[0].Count > 63);
+        var curve = new SdfSweepParameters(new(0, 0, 0), new(0, 1, 0), new(1, 2, 0), 0.1f, 0.2f, 0.1f, SdfProgramBuilder.MaxSweepStrands, 1, 0.1f);
+        var sweep = SdfShadeProgram.Compile(new("sweep", [], [new(SdfShadePhase.Surface, "roughness", new("shape", [new("input", Name: "surface.position")], Shape: new(SdfSolidPrimitive.Sweep, Curve: curve)))]));
+        Assert.Equal(2, sweep.Phases[0].Count);
+        Assert.True(sweep.Costs[0] > SdfShadeProgram.MaxOps);
+        Assert.True(sweep.PixelWork(SdfShadeProgram.MaxLights) * 128UL <= SdfShadeProgram.MaxWork);
+        var shapes = Enumerable.Range(0, 4).Select(i => new SdfShadeExpression("shape", [new("+", [
+            new("input", Name: "light.position"), new("constant", Type: SdfShadeType.Float3, Bits: [BitConverter.SingleToUInt32Bits(i), 0, 0])])],
+            Shape: new(SdfSolidPrimitive.Sweep, Curve: curve))).ToArray();
+        var sum = shapes.Aggregate((left, right) => new("+", [left, right]));
+        var refused = Assert.Throws<SdfShadeException>(() => SdfShadeProgram.Compile(new("heavy light", [], [new(SdfShadePhase.Light, "attenuation", sum)])));
+        Assert.Equal("PUCK129", refused.Code);
+        Assert.Contains("dispatch bound", refused.Message);
     }
 }

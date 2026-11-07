@@ -1,0 +1,9 @@
+// Equivalent authored shading: shade-parameter-order.
+schema: "puck.world.definition.v1"
+documentId: "shade-pair"
+shade template program(seed, color) { surface { albedo: color * lattice(surface.position, seed) } }
+prototypes { prototype "p" { document {
+  schema: "puck.creation.v1"
+  palette [{ color: "#808080", shade: program(7, "#808080") }]
+  shape Box "box" { scale [1, 1, 1] }
+} } }

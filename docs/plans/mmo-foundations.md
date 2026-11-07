@@ -24,6 +24,10 @@ Only what the owner rules after the round is written into
   fit them.
 - The line between client and server is blurred in Puck because of federation.
   Direct player-to-player interaction, if implemented, is in effect raw PvP.
+- Azure and Entra are one provider, not the design: the round abstracts
+  identity, issuance, key lifetimes, revocation, storage and hosting properly,
+  so Puck could move off Azure, and asks its questions of those abstractions
+  rather than of one provider's configuration.
 - Fable takes a full pass to critique the design and find ways to attack it.
 - The design is done properly before anything is committed: a full session that
   reaches consensus, with the homework done.

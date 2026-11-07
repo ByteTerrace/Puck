@@ -21,16 +21,15 @@ public sealed partial class SdfShadeProgram {
         private int m_visits;
 
         public SdfShadeProgram Compile() {
-            ArgumentNullException.ThrowIfNull(source);
-            if ((source.Parameters.Count > MaxParameters) || (source.Outputs.Count > 32)) { Fail(code: "PUCK129", message: "Shade program exceeds its static capacity."); }
+            if (source is null || source.Name is null || source.Parameters is null || source.Outputs is null) { Fail("PUCK127", "A shade definition requires a name, parameters and outputs."); }
+            if (source.Outputs.Count > 32) { Fail(code: "PUCK129", message: "Shade program exceeds its static capacity."); }
+            if (source.Parameters.Any(p => p is null || string.IsNullOrEmpty(p.Name) || p.Bits is null)) { Fail("PUCK127", "A shade parameter requires a name, type and bits."); }
             if (source.Parameters.Select(selector: p => p.Name).Distinct(comparer: StringComparer.Ordinal).Count() != source.Parameters.Count) {
                 Fail(code: "PUCK127", message: "Duplicate shade parameter.");
             }
             foreach (var parameter in source.Parameters) { ValidateBits(parameter.Type, parameter.Bits); }
-            for (var i = 0; (i < source.Parameters.Count); i++) {
-                m_slots.Add(key: i, value: i); m_parameters.Add(item: source.Parameters[i]);
-            }
             foreach (var value in (source.Values ?? [])) {
+                if (value is null || string.IsNullOrEmpty(value.Name)) { Fail("PUCK127", "A shade value requires a name and expression."); }
                 if (((uint)value.Phase) >= 3) { Fail(code: "PUCK126", message: "Unknown shade phase."); }
                 var lowered = Lower(value.Value, value.Phase, 0);
 
@@ -39,6 +38,7 @@ public sealed partial class SdfShadeProgram {
             var outputs = new List<(SdfShadePhase Phase, string Name, Node Value)>();
 
             foreach (var output in source.Outputs) {
+                if (output is null || output.Name is null) { Fail("PUCK127", "A shade output requires a name and expression."); }
                 var type = OutputType(output.Phase, output.Name);
                 var node = Lower(output.Value, output.Phase, 0);
 
@@ -47,6 +47,7 @@ public sealed partial class SdfShadeProgram {
                 outputs.Add(item: (output.Phase, output.Name, node));
             }
             outputs.Sort(comparison: (a, b) => ((a.Phase != b.Phase) ? a.Phase.CompareTo(target: b.Phase) : StringComparer.Ordinal.Compare(x: a.Name, y: b.Name)));
+            CanonicalizeParameters(outputs);
             var phases = new SdfShadeInstruction[3][];
             var bindings = new List<SdfShadeBinding>();
             var costs = new uint[3];
@@ -84,6 +85,7 @@ public sealed partial class SdfShadeProgram {
 
                     if (node.Op == SdfShadeOp.Parameter) {
                         if (!m_slots.TryGetValue(key: ((int)immediate), value: out var slot)) {
+                            if (m_parameters.Count >= MaxParameters) { Fail("PUCK129", $"Shade program exceeds {MaxParameters} live runtime slots."); }
                             slot = m_parameters.Count; m_slots.Add(key: ((int)immediate), value: slot); m_parameters.Add(item: source.Parameters[((int)immediate)]);
                         }
                         immediate = ((uint)slot);
@@ -97,11 +99,12 @@ public sealed partial class SdfShadeProgram {
                         immediate = ((uint)(m_constants.Count / 4));
                         m_shapes.Add(item: (shape, ((int)immediate)));
                         m_constants.AddRange(collection: [((uint)shape.Type), ((uint)shape.Table.Count), (shape.Bound.IsUnbounded ? 1u : 0u), 0u]);
-                        AddVector(vector: shape.Data0At(tableVector: (((int)immediate) + 6)));
+                        AddVector(vector: shape.Data0At(tableVector: (((int)immediate) + 7)));
                         AddVector(vector: shape.Data1);
                         AddVector(vector: new(value: shape.Scale, w: MathF.Min(x: shape.Scale.X, y: MathF.Min(x: shape.Scale.Y, y: shape.Scale.Z))));
                         AddVector(vector: new(value: shape.Bound.Center, w: 0f));
                         AddVector(vector: new(value: shape.Bound.HalfExtents, w: 0f));
+                        AddVector(vector: new(shape.Rotation.X, shape.Rotation.Y, shape.Rotation.Z, shape.Rotation.W));
                         m_reads |= SdfShadeReads.Footprint;
                         m_constants.AddRange(collection: shape.Table.Select(selector: BitConverter.SingleToUInt32Bits));
                         while ((m_constants.Count % 4) != 0) { m_constants.Add(item: 0); }
@@ -112,7 +115,7 @@ public sealed partial class SdfShadeProgram {
                     instructions.Add(item: op); registers.Add(key: node.Key, value: result);
                     m_canonicalValues.Add(item: new(((SdfShadePhase)phase), $"r{result.Index}", Canonical(args: args, node: node)));
                     costs[phase] = checked(((costs[phase] + SdfShadeOps.Get(op: node.Op).Work) + ((node.Shape is { } costShape) ? SdfShadeCost.Shape(shape: costShape) : 0u)));
-                    if (checked(((costs[0] + costs[1]) + costs[2])) > MaxOps) { Fail(code: "PUCK129", message: $"Shade work exceeds {MaxOps}."); }
+                    if (checked(((costs[0] + costs[1]) + costs[2])) > MaxPhaseWork) { Fail(code: "PUCK129", message: $"Shade work exceeds {MaxPhaseWork}."); }
                     return result;
                 }
             }
@@ -126,7 +129,9 @@ public sealed partial class SdfShadeProgram {
                         ? SdfShadeCost.Shape(m_shapes.First(s => s.Relative == instruction.Immediate).Shape) : 0u));
                 }
             }
-            if (costs.Aggregate(0UL, static (sum, cost) => checked(sum + cost)) > MaxOps) { Fail("PUCK129", $"Shade work exceeds {MaxOps} after register allocation."); }
+            if (costs.Aggregate(0UL, static (sum, cost) => checked(sum + cost)) > MaxPhaseWork) { Fail("PUCK129", $"Shade work exceeds {MaxPhaseWork} after register allocation."); }
+            var pixelWork = checked(costs[0] + MaxLights * ((ulong)DefaultLightWork + costs[1]) + DefaultComposeWork + costs[2] + EngineWork);
+            if (checked(128UL * pixelWork) > MaxWork) { Fail("PUCK129", "Shade work exceeds the dispatch bound for a complete glass group at the maximum light walk."); }
             // Header: instruction ranges for each phase, constant and layout ranges. Every range is vector relative.
             const int HeaderVectors = 4;
             const int InstructionVectors = 3;
@@ -150,11 +155,11 @@ public sealed partial class SdfShadeProgram {
             words[12] = constantsOffset; words[13] = ((uint)(m_constants.Count / 4));
             words.AddRange(collection: m_constants);
             foreach (var (shape, relative) in m_shapes) {
-                var data0 = shape.Data0At(tableVector: checked(((((int)constantsOffset) + relative) + 6)));
+                var data0 = shape.Data0At(tableVector: checked(((((int)constantsOffset) + relative) + 7)));
                 var start = checked((((((int)constantsOffset) + relative) + 1) * 4));
 
                 words[start] = BitConverter.SingleToUInt32Bits(value: data0.X);
-                RequireRange(((uint)(words.Count / 4)), checked(((constantsOffset + ((uint)relative)) + 6)), ((uint)((shape.Table.Count + 3) / 4)));
+                RequireRange(((uint)(words.Count / 4)), checked(((constantsOffset + ((uint)relative)) + 7)), ((uint)((shape.Table.Count + 3) / 4)));
             }
             foreach (var (_, word) in m_relocations) { words[word] = checked((words[word] + constantsOffset)); }
             words[14] = ((uint)(words.Count / 4)); words[15] = ((uint)m_parameters.Count);
@@ -201,6 +206,48 @@ public sealed partial class SdfShadeProgram {
                 }, ((node.Op == SdfShadeOp.Constant) ? node.Type : SdfShadeType.Float),
                 ((node.Op == SdfShadeOp.Constant) ? Array.AsReadOnly(array: node.Bits.ToArray()) : null),
                 m_shapeDefinitions.GetValueOrDefault(key: node.Key));
+        }
+
+        // Parameter declarations are bindings, not code order. Label live slots by their uses in the output graph,
+        // treating commutative edges as unordered. Data breaks only structurally indistinguishable ties, so renaming,
+        // reordering or deleting an unused declaration cannot change executable code or misassociate its values.
+        private void CanonicalizeParameters(List<(SdfShadePhase Phase, string Name, Node Value)> outputs) {
+            var live = new HashSet<uint>();
+            var visited = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+            foreach (var output in outputs) { Visit(output.Value); }
+            void Visit(Node node) {
+                if (!visited.Add(node)) { return; }
+                if (node.Op == SdfShadeOp.Parameter) { live.Add(node.Immediate); }
+                foreach (var arg in node.Args) { Visit(arg); }
+            }
+            var order = live.Select(slot => {
+                var cache = new Dictionary<Node, string>(ReferenceEqualityComparer.Instance);
+                string Describe(Node node) {
+                    if (cache.TryGetValue(node, out var found)) { return found; }
+                    var args = node.Args.Select(Describe).ToArray();
+                    if (SdfShadeOps.Get(node.Op).Commutative) { Array.Sort(args, StringComparer.Ordinal); }
+                    var immediate = node.Op == SdfShadeOp.Parameter ? (node.Immediate == slot ? 1u : 0u) : node.Immediate;
+                    return cache[node] = Key(node.Op, node.Type, immediate, node.Bits, args);
+                }
+                return (Slot: slot, Context: string.Join(';', outputs.Select(o => $"{(int)o.Phase}:{o.Name}:{Describe(o.Value)}")),
+                    Data: string.Join(',', source.Parameters[(int)slot].Bits.Select(b => b.ToString("X8", CultureInfo.InvariantCulture))));
+            }).OrderBy(p => p.Context, StringComparer.Ordinal).ThenBy(p => p.Data, StringComparer.Ordinal)
+                .Select((p, i) => (p.Slot, Index: (uint)i)).ToDictionary(p => p.Slot, p => p.Index);
+            var rewritten = new Dictionary<Node, Node>(ReferenceEqualityComparer.Instance);
+            Node Rewrite(Node node) {
+                if (rewritten.TryGetValue(node, out var found)) { return found; }
+                var args = node.Args.Select(Rewrite).ToArray();
+                if (SdfShadeOps.Get(node.Op).Commutative && string.CompareOrdinal(args[0].Key, args[1].Key) > 0) { (args[0], args[1]) = (args[1], args[0]); }
+                var key = Key(node.Op, node.Type, node.Op == SdfShadeOp.Parameter ? order[node.Immediate] : node.Immediate, node.Bits, args.Select(a => a.Key));
+                if (m_shapeDefinitions.TryGetValue(node.Key, out var shape)) { m_shapeDefinitions[key] = shape; }
+                return rewritten[node] = node with { Args = args, Key = key };
+            }
+            for (var i = 0; i < outputs.Count; i++) { var output = outputs[i]; outputs[i] = (output.Phase, output.Name, Rewrite(output.Value)); }
+        }
+
+        private static string Key(SdfShadeOp op, SdfShadeType type, uint immediate, IEnumerable<uint> bits, IEnumerable<string> args) {
+            var content = $"{(int)op}:{(int)type}:{immediate}:{string.Join(',', bits.Select(b => b.ToString("X8", CultureInfo.InvariantCulture)))}({string.Join(';', args)})";
+            return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content)));
         }
 
         // Bounded named registers, with deterministic rematerialization instead of a GPU spill array. Canonical
@@ -252,6 +299,7 @@ public sealed partial class SdfShadeProgram {
                     slots[owners[slot]] = -1;
                 }
                 owners[slot] = index; slots[index] = slot; outputSlots[index] = slot;
+                if (allocated.Count >= MaxOps) { Fail("PUCK129", "Shade rematerialization exceeds its instruction capacity."); }
                 allocated.Add(new(instruction.Op, new(slot, instruction.Result.Type), operands, instruction.Immediate, masks[index]));
                 return slot;
             }
@@ -266,6 +314,7 @@ public sealed partial class SdfShadeProgram {
             BitConverter.SingleToUInt32Bits(value: vector.X), BitConverter.SingleToUInt32Bits(value: vector.Y),
             BitConverter.SingleToUInt32Bits(value: vector.Z), BitConverter.SingleToUInt32Bits(value: vector.W)]);
         private Node Lower(SdfShadeExpression expression, SdfShadePhase phase, int depth) {
+            if (expression is null || expression.Op is null) { Fail("PUCK127", "A shade expression requires an operation."); }
             if ((depth > 128) || (++m_visits > 100000)) { Fail(code: "PUCK129", message: "Shade expression expansion exceeds its capacity."); }
             if (m_expressionCache[((int)phase)].TryGetValue(key: expression, value: out var cached)) { return cached; }
             if (expression.Op == "value") {
@@ -303,10 +352,15 @@ public sealed partial class SdfShadeProgram {
                     type = (SdfShadeOps.IsUInt(type: args[0].Type) ? SdfShadeType.UInt : SdfShadeType.Float); break;
                 case SdfShadeOp.Shape:
                     type = TypeOf(info.Op, args.Select(selector: a => a.Type).ToArray());
-                    try { shape = (expression.Shape ?? throw new SdfShadeException(code: "PUCK127", message: "shape requires a structural descriptor.")).Capture(); } catch (ArgumentException error) { throw new SdfShadeException(code: "PUCK127", message: error.Message); }
+                    try {
+                        var descriptor = (expression.Shape ?? throw new SdfShadeException(code: "PUCK127", message: "shape requires a structural descriptor.")).Canonicalize();
+                        expression = expression with { Shape = descriptor };
+                        shape = descriptor.Capture();
+                    } catch (ArgumentException error) { throw new SdfShadeException(code: "PUCK127", message: error.Message); }
                     var shapeWords = new List<uint> { ((uint)shape.Type) };
                     foreach (var v in new[] { shape.Data0At(tableVector: 0), shape.Data1, new System.Numerics.Vector4(value: shape.Scale, w: 0),
-                        new System.Numerics.Vector4(value: shape.Bound.Center, w: (shape.Bound.IsUnbounded ? 1f : 0f)), new System.Numerics.Vector4(value: shape.Bound.HalfExtents, w: 0f) }) {
+                        new System.Numerics.Vector4(value: shape.Bound.Center, w: (shape.Bound.IsUnbounded ? 1f : 0f)), new System.Numerics.Vector4(value: shape.Bound.HalfExtents, w: 0f),
+                        new System.Numerics.Vector4(shape.Rotation.X, shape.Rotation.Y, shape.Rotation.Z, shape.Rotation.W) }) {
                         shapeWords.AddRange(collection: [BitConverter.SingleToUInt32Bits(value: v.X), BitConverter.SingleToUInt32Bits(value: v.Y), BitConverter.SingleToUInt32Bits(value: v.Z), BitConverter.SingleToUInt32Bits(value: v.W)]);
                     }
                     shapeWords.AddRange(collection: shape.Table.Select(selector: BitConverter.SingleToUInt32Bits)); bits = shapeWords.ToArray(); break;
@@ -319,8 +373,7 @@ public sealed partial class SdfShadeProgram {
             if (Fold(info.Op, type, args, out var folded)) {
                 info = SdfShadeOps.Get(op: SdfShadeOp.Constant); bits = folded; args = []; immediate = 0;
             }
-            var content = $"{((int)info.Op)}:{((int)type)}:{immediate}:{string.Join(separator: ',', values: bits.Select(selector: b => b.ToString(format: "X8", provider: CultureInfo.InvariantCulture)))}({string.Join(separator: ';', values: args.Select(selector: a => a.Key))})";
-            var key = Convert.ToHexStringLower(inArray: System.Security.Cryptography.SHA256.HashData(source: System.Text.Encoding.UTF8.GetBytes(s: content)));
+            var key = Key(info.Op, type, immediate, bits, args.Select(a => a.Key));
 
             if (expression.Shape is { } definition) {
                 m_shapeDefinitions.TryAdd(key: key, value: definition with {
@@ -356,7 +409,8 @@ public sealed partial class SdfShadeProgram {
         if (index < 0) { Fail(code: "PUCK126", message: $"Unknown {phase} output '{name}'."); }
         return ((uint)index);
     }
-    private static void ValidateBits(SdfShadeType type, IReadOnlyList<uint> bits) {
+    private static void ValidateBits(SdfShadeType type, IReadOnlyList<uint>? bits) {
+        if (bits is null) { Fail("PUCK127", "Literal or parameter bits are required."); }
         if (bits.Count != SdfShadeOps.Width(type: type)) { Fail(code: "PUCK127", message: "Literal or parameter has the wrong typed width."); }
         // Source constants and parameters are finite. IEEE exceptional results may arise inside arithmetic.
         if (!SdfShadeOps.IsUInt(type: type) && bits.Any(predicate: b => !float.IsFinite(f: BitConverter.UInt32BitsToSingle(value: b)))) {
