@@ -2626,6 +2626,10 @@ failing case is argued from source, not run):
   device-loss recovery, re-landing about 1.75 GB of meshes also outlasts the
   harness's 20 s residency wait (gpu-hang lane). Name what the residency still
   owes there before raising any wait.
+- [low] The Vulkan pipeline-statistics readout reads the logical device to
+  build `CapturesStatistics`'s argument before checking that naming is on
+  (`VulkanGpuPipelineFactory.cs:94`, guard at `:108`); move the guard first.
+  No native query runs on that path.
 - [low · unconfirmed] `SdfMeshProbeGpuWork.Scene.cs:129-149` fills a merged
   upload gap with the new export's view of the words, so words only the old
   published scene owns would be zeroed if that upload were cancelled; argued from
