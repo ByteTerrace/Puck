@@ -69,6 +69,17 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             : null
         );
     }
+    private ShaderPipelineRenderNode? FindInspectionNode(string name) {
+        if (renderProbe?.Root?.Runtime is { } runtime) {
+            var index = runtime.Instances.IndexOf(name: name);
+
+            if ((index >= 0) && (runtime.Producer(instance: index) is null)) {
+                return runtime.Node(instance: index);
+            }
+        }
+
+        return FindEntry(name: name)?.Node;
+    }
     private static CommandDefinition Immediate(string name, string description, Func<CommandContext, WireArgs, CommandResult> handler) =>
         CommandDefinition.WithWireArgs(
             name: name,
@@ -623,14 +634,14 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         );
         yield return Immediate(
             forms: PipelineInspectForms,
-            description: $"{PipelineInspectForms.Spelling} — show the bytes the instance owns beside the active graph's steady-state bytes, the peak a reload of it would reach and the budget, then its ordered passes, typed resources and named outputs, the GPU work each pass recorded in the newest completed submission, the device's memory profile, and the residency policy the selector chooses for the instance's parameter region.",
+            description: $"{PipelineInspectForms.Spelling} — inspect an authored pipeline or a rendered graph node named by world.counters gpu (including world and session views). Show the bytes the instance owns beside the active graph's steady-state bytes, the peak a reload of it would reach and the budget, then its ordered passes, typed resources and named outputs, the GPU work each pass recorded in the newest completed submission, the device's memory profile, and the residency policy the selector chooses for the instance's parameter region.",
             (_, args) => {
                 if (args.Count != 1) {
                     return PipelineInspectForms.Refuse();
                 }
                 var name = args[0].ToString();
 
-                if (FindEntry(name: name) is not { } entry) {
+                if (FindInspectionNode(name: name) is not { } node) {
                     return Missing(
                     name: name,
                     verb: "pipeline.inspect"
@@ -639,8 +650,8 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                 var result = new StringBuilder();
 
                 if (
-                    (entry.Node.Plan is not { } plan) ||
-                    !entry.Node.TryAppendInspection(
+                    (node.Plan is not { } plan) ||
+                    !node.TryAppendInspection(
                         builder: result,
                         name: name
                     )

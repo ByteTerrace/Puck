@@ -12,6 +12,8 @@ public sealed partial class SdfWorldPasses {
     // Each fragment with the glass passes added (SdfWorldPackage.WithGlass), made once for the same reason.
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment> GlassFragments = new();
 
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment> GlassShadowFragments = new();
+
     // The shapes a fragment's cascades take: each resolution with and without the second slot's cascade.
     private const int ShadowShapes = 6;
 
@@ -80,6 +82,8 @@ public sealed partial class SdfWorldPasses {
         // storages (SdfWorldPackage.WithGlass); a view of any other program pays nothing for them.
         private bool RequestsGlass => (View?.Residency.Frame?.Program.HasGlass ?? false);
 
+        private bool RequestsGlassShadows => RequestsShadows && (View?.Residency.Frame?.Program.HasGlassShadows ?? false);
+
         public RenderGraphPackageFragment Fragment => Shadowed(fragment: Glassed(fragment: (RequestsTemporal
             ? SdfWorldPackage.TemporalFragment
             : (Snapshot.Reconstructs ? SdfWorldPackage.Fragment : SdfWorldPackage.NativeFragment))));
@@ -89,7 +93,7 @@ public sealed partial class SdfWorldPasses {
         // their binary exponents share the two high bits shifted out here, and their mantissas' low bits, which the
         // shadow and glass bits land in, are zero.
         long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 2) |
-            (RequestsGlass ? 32L : 0L) | (RequestsSecondShadow ? 16L : 0L) | (((long)ShadowResolution) << 2) | (RequestsShadows ? 2L : 0L) | (RequestsTemporal ? 1L : 0L);
+            (RequestsGlassShadows ? 64L : 0L) | (RequestsGlass ? 32L : 0L) | (RequestsSecondShadow ? 16L : 0L) | (((long)ShadowResolution) << 2) | (RequestsShadows ? 2L : 0L) | (RequestsTemporal ? 1L : 0L);
 
         private RenderGraphPackageFragment Glassed(RenderGraphPackageFragment fragment) =>
             (RequestsGlass ? GlassFragments.GetValue(createValueCallback: SdfWorldPackage.WithGlass, key: fragment) : fragment);
@@ -98,6 +102,7 @@ public sealed partial class SdfWorldPasses {
                 return ShadowlessFragments.GetValue(createValueCallback: SdfWorldPackage.WithoutShadows, key: fragment);
             }
 
+            if (RequestsGlassShadows) { fragment = GlassShadowFragments.GetValue(fragment, SdfWorldPackage.WithGlassShadows); }
             var resolution = ShadowResolution;
             var second = RequestsSecondShadow;
             var shaped = ShadowedFragments.GetValue(createValueCallback: static _ => new RenderGraphPackageFragment[ShadowShapes], key: fragment);

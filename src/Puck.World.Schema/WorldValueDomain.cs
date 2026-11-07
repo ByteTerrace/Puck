@@ -27,6 +27,8 @@ public sealed record WorldValueField(Type Owner, string Member, WorldValueDomain
 /// its document is validated.
 /// </summary>
 public static class WorldValueFields {
+    /// <summary>Glass shadow extinction, refused at the creation palette door.</summary>
+    public static WorldValueField GlassShadowDensity { get; } = new(typeof(PaletteGlassDocument), nameof(PaletteGlassDocument.ShadowDensity), WorldValueDomain.NonNegative);
     /// <summary>A speaker feed's gain, sharing the audio gain ceiling.</summary>
     public static WorldValueField SpeakerGain { get; } = new(typeof(WorldSpeakerFeed), nameof(WorldSpeakerFeed.Gain), new WorldValueDomain(
         Maximum: CreationSoundDocument.MaxLevel,
@@ -402,6 +404,7 @@ public static class WorldValueFields {
         MarkerChipAlpha,
         MarkerRingAlpha,
         VolumeSoftness,
+        GlassShadowDensity,
         OrbitYaw,
         OrbitPitch,
         FirstPersonActive,

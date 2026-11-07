@@ -27,7 +27,6 @@ static const uint SdfOcclusionDepth = 1u;
 static const uint SdfOcclusionLate = 2u;
 static const uint SdfOcclusionUncovered = 0x7F800000u;
 static const uint SdfOcclusionCommandWords = 5u;
-static const uint SdfOcclusionPhases = 4u;
 static const uint SdfOcclusionDrawnWords = 4u;
 static const uint SdfOcclusionUnboxed = 1u;
 
@@ -85,7 +84,7 @@ void sdfOcclusionEmit(uint phase, uint candidate, uint identity, uint vertices, 
 
     sdfMeshOcclusionDrawsRW.GetDimensions(words, stride);
 
-    uint capacity = (words / (SdfOcclusionPhases * SdfOcclusionCommandWords));
+    uint capacity = (words / ((sdfMeshOcclusionCandidates[0].z >> 2u) * SdfOcclusionCommandWords));
 
     if (candidate < capacity) {
         uint word = (((phase * capacity) + candidate) * SdfOcclusionCommandWords);
@@ -205,6 +204,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     uint4 header = sdfMeshOcclusionCandidates[0];
     bool splitExit = (header.z & 2u) != 0u;
+    bool optical = (header.z >> 2u) == 4u;
     uint draws = 0u;
     uint vertices = 0u;
     uint exitDraws = 0u;
@@ -216,7 +216,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         if (splitExit && step == SdfOcclusionEarly) {
             sdfMeshOcclusionCountsRW[1] = header.x;
             sdfMeshOcclusionCountsRW[2] = header.x;
-            sdfMeshOcclusionCountsRW[3] = header.x;
+            if (optical) { sdfMeshOcclusionCountsRW[3] = header.x; }
         }
     }
     if (id.x < header.x) {
@@ -252,6 +252,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         sdfMeshOcclusionVisibleRW[draw] = state;
         uint count = sdfSelectionVertices(record, level);
         bool glass = (a.w & 2u) != 0u;
+        emit = emit && !(splitExit && glass && !optical);
         bool opaqueEmit = emit && !(splitExit && glass);
         sdfOcclusionEmit(((step == SdfOcclusionLate) ? 1u : 0u), id.x, (draw | (level << SDF_MESH_LEVEL_SHIFT)), count, opaqueEmit);
         if (splitExit && step == SdfOcclusionEarly) {
@@ -259,7 +260,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             uint identity = draw | (level << SDF_MESH_LEVEL_SHIFT);
             sdfOcclusionEmit(1u, id.x, identity, count, opaqueEmit && encloses);
             sdfOcclusionEmit(2u, id.x, identity, count, opaqueEmit && !encloses);
-            sdfOcclusionEmit(3u, id.x, identity, count, emit && glass);
+            if (optical) { sdfOcclusionEmit(3u, id.x, identity, count, emit && glass); }
             exitDraws = opaqueEmit ? 1u : 0u;
             exitVertices = opaqueEmit ? count : 0u;
         }
