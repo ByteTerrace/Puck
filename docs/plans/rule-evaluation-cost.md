@@ -63,7 +63,7 @@ The rule share is the largest phase of the tick. Inside it (17.0 % in
 
 | Mechanism | Share of the thread | Note |
 |---|---|---|
-| Gate (`GateOpen` → `RuleEvaluation.GateHolds`) | 2.8 % | authored |
+| Gate (`RuleEvaluator.Decide` → `RuleEvaluation.Decide`) | 2.8 % | authored |
 | Locals (`EvaluateBindings` → `RuleExpressions.Run`) | 2.0 % | authored |
 | Firing (`FireEffects`) | 2.3 % | authored |
 | Sweep key snapshot (`EachKeys`, of it `BodyKeys` 1.8 %, of it a string-keyed `TryResolve` per live body 1.6 %) | 2.3 % | machinery |
@@ -164,7 +164,7 @@ What Puck already has, and what each system adds to it:
    untouched.
 2. **A Rete network over cells.** Alpha memories per cell, beta joins per
    gate, matches stored. Rejected: it is a second evaluator beside
-   `RuleEvaluation.GateHolds`, it stores partial matches for gates that are a
+   `RuleEvaluation.Decide`, it stores partial matches for gates that are a
    few comparisons, and it has no answer for effects with refusal and rewind.
    Puck's rows are already the join keys; row versions give the delta without
    the memories.

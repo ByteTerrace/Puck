@@ -50,12 +50,14 @@ public sealed partial class WorldRuleHost {
     /// <returns>The same narration as the authority path, computed only from disclosed values.</returns>
     public static string DescribeDisclosedMatch(WorldStateReadView view, string patternName, string rowName, string? attribute, string? key, string? direction) {
         var definition = view.Definition;
+
         if (!CompiledPatterns.TryCompileAll(definition.Patterns, out var patterns, new List<string>())) {
             return "[world.match: disclosed patterns do not compile]";
         }
-        var reader = new ArenaEffectHost(WorldStateReader.Seed(definition), ticksPerSecond: definition.SimulationRateHz, dynamics: definition.Dynamics);
+        var reader = new ArenaEffectHost(WorldStateReader.Seed(definition: definition), ticksPerSecond: definition.SimulationRateHz, dynamics: definition.Dynamics);
+
         reader.Advance(view.CompletedTick, view.CompletedEngineTick);
-        return DescribeMatchCore(definition, reader, patterns, patternName, rowName, attribute, key, direction);
+        return DescribeMatchCore(attribute: attribute, definition: definition, direction: direction, key: key, patternName: patternName, patterns: patterns, reader: reader, rowName: rowName);
     }
 
     private static string DescribeMatchCore(WorldDefinition definition, IStateReader reader, CompiledPatterns patterns, string patternName, string rowName, string? attribute, string? key, string? direction) {
@@ -154,7 +156,8 @@ public sealed partial class WorldRuleHost {
                     return $"[world.match: {valueReason}]";
                 }
                 var needs = new RuleNeedsBuilder();
-                RuleDataflow.CollectExpressionSchedulingFacts(tokens: expression, into: needs);
+
+                RuleDataflow.CollectExpressionSchedulingFacts(into: needs, tokens: expression);
                 if (!RuleNeeds.Admit(needs: needs.Build(), reader: reader, refusal: out var refusal)) {
                     return $"[world.match: {refusal}]";
                 }
@@ -192,14 +195,12 @@ public sealed partial class WorldRuleHost {
             // The console's read decides what a token's fault means here: the word spells nothing, and says why.
             var scratch = reader.Scratch;
             var scope = scratch.EnterFaultScope();
-            ExpressionFault spelled;
-            int length;
+            Outcome spelled;
 
             try {
                 spelled = PatternOperand.ReadWord(
                     attributeOrdinal: attributeOrdinal,
                     kind: pattern.Source.Kind,
-                    length: out length,
                     reader: reader,
                     rowOrdinal: rowOrdinal,
                     start: start,
@@ -209,14 +210,14 @@ public sealed partial class WorldRuleHost {
             } finally {
                 _ = scratch.LeaveFaultScope(scope: scope);
             }
-            if (spelled != ExpressionFault.None) {
-                return $"[world.match: {patternName} over {rowName} | the word spells nothing, since a token's value expression did not answer: {RuleEvaluation.DescribeFault(fault: spelled)}]";
+            if (!spelled.TryFinite(raw: out var length)) {
+                return $"[world.match: {patternName} over {rowName} | the word spells nothing, since a token's value expression did not answer: {RuleEvaluation.DescribeOutcome(outcome: spelled)}]";
             }
 
             lines.Add(item: Narrate(
                 pattern: pattern,
                 values: word.AsSpan(
-                    length: length,
+                    length: ((int)length),
                     start: 0
                 )
             ));
@@ -227,7 +228,6 @@ public sealed partial class WorldRuleHost {
             values: lines
         )}]";
     }
-
     private static string Narrate(CompiledPattern pattern, ReadOnlySpan<long> values) {
         var steps = new List<string>();
         var state = 0;

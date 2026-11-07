@@ -30,8 +30,7 @@ public sealed class ForeverComparisonLawTests {
     [Theory]
     public void AGateComparingAForeverOperandAnswersUnderInfinityAndRecordsNoRefusal(ExpressionOp comparison, bool expected) {
         var (_, evaluator, _, _, _) = EvaluatorFixture.Arrange(rules: []);
-        var open = evaluator.GateOpen(
-            faulted: out var faulted,
+        var verdict = evaluator.Decide(
             gate: Gate(
                 comparison: comparison,
                 left: CompiledValueSource.FromOperand(operand: new ForeverOperand())
@@ -40,17 +39,17 @@ public sealed class ForeverComparisonLawTests {
         );
 
         Assert.Equal(
-            actual: open,
-            expected: expected
+            actual: verdict,
+            expected: (expected
+                ? Verdict.Open
+                : Verdict.Closed)
         );
-        Assert.False(condition: faulted);
         Assert.Empty(collection: evaluator.Diagnostics());
     }
     [Fact]
     public void ANumericExpressionReadingAForeverOperandRefusesAsArithmetic() {
         var (_, evaluator, _, _, _) = EvaluatorFixture.Arrange(rules: []);
-        var open = evaluator.GateOpen(
-            faulted: out var faulted,
+        var verdict = evaluator.Decide(
             gate: Gate(
                 comparison: ExpressionOp.Greater,
                 left: CompiledValueSource.FromExpression(expression: [new CompiledExpressionToken(
@@ -61,8 +60,10 @@ public sealed class ForeverComparisonLawTests {
             ruleName: "compute"
         );
 
-        Assert.False(condition: open);
-        Assert.True(condition: faulted);
+        Assert.Equal(
+            actual: verdict,
+            expected: Verdict.Faulted
+        );
 
         var refusal = Assert.Single(collection: evaluator.Diagnostics());
 

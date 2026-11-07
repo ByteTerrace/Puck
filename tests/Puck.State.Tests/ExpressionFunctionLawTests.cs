@@ -72,16 +72,14 @@ public sealed class ExpressionFunctionLawTests {
     }
     private static string Fixed(double value) => FixedQ4816.FromDouble(value: value).Value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture);
     private static bool TryEval(string text, out long value, CellKind kind = CellKind.Int) =>
-        Rules.RuleExpressions.TryEvaluateAlone(
-            fault: out _,
+        Rules.RuleExpressions.EvaluateDetached(
             kind: kind,
             program: Compile(
                 kind: kind,
                 text: text
             ),
-            reader: new StubReader(),
-            value: out value
-        );
+            reader: new StubReader()
+        ).TryFinite(raw: out value);
 
     [Fact]
     public void CenteredHexagonalLayersAreHexRings() {

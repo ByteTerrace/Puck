@@ -350,7 +350,7 @@ public static partial class BrowserExports {
             );
         }
 
-        var ok = session!.TryEvaluate(
+        var ok = session!.TryEvaluateText(
             error: out var error,
             expression: expression,
             kind: parsedKind,
