@@ -451,17 +451,17 @@ composition of existing verbs expresses. The debug world's `places.puck`
 bindability or audience of a C# verb owes `puck verbs` (regenerates the
 catalog `puck compile --validate` checks authored commands against).
 
-**A rule fault is in the value, and still raised.** `RuleExpressions.Evaluate(ref frame, ...)` answers an `Outcome`
-(a number, an absence, or a `Domain` or `Forever` fault) and also raises every fault into the reader's `ArenaScratch`
-register until step 4 of the [rule faults plan](../../../docs/plans/rule-faults.md) reads the outcome at every deciding
-place; the boundary that decides what the evaluation means still reads the register: a rule's gate holds its latch, a
-firing refuses whole, a decision keeps its choice, a search step lands nothing. `RuleEvaluation.Decide(ref frame, gate)`
-answers a `Verdict` (`Faulted`, `Closed`, `Open`) and `RuleEvaluator.Decide` reports the refusal. Local code may drop a
-value but never the fault. A new place that evaluates rule expressions builds an `EvaluationFrame` over its reader and
-opens a scope (`ArenaScratch.EnterFaultScope`/`LeaveFaultScope`), or calls `RuleExpressions.EvaluateDetached` (the
-constant folder, the search score, a flock's affinity, the console and browser read-backs); a fault raised outside every
-scope throws.
-`Absent` is a value each consumer answers, never raised
+**A rule fault is in the value.** `RuleExpressions.Evaluate(ref frame, ...)` answers an `Outcome` (a number, an
+absence, or a `Domain` or `Forever` fault) and nothing else carries it: `RuleEvaluation.Decide(ref frame, gate)` answers
+a `Verdict` (`Faulted`, `Closed`, `Open`), `RuleEvaluator.EvaluateBindings` a `BindingsResult`, `IArenaSearchJudge.Judge`
+a `JudgeOutcome` and `RuleEvaluator.Evaluate` a `RuleOutcome` (`Faulted` over `Refused` over `Fired` over `Idle`). The
+deciding place reads what it was handed: a rule's judgement holds its latch on a fault, a group trigger neither runs nor
+re-arms and a fixpoint pass counts no progress, a decision keeps its choice, a search step lands nothing and restarts. An
+effect that meets a fault refuses its firing by name, so a firing that proposes is one no fault touched. Local code may
+drop a value but never the fault: a new place that evaluates rule expressions builds an `EvaluationFrame` over its
+reader (or calls `RuleExpressions.EvaluateDetached`: the constant folder, a flock's affinity, the console and browser
+read-backs) and matches on every case of what it gets back.
+`Absent` is a value each consumer answers, never a fault
 ([expressions](../../../docs/reference/state/expressions.md#constant-folding-and-faults)).
 An operand read answers a `Fact` (an `Outcome`, a case of `Faulted`, `Finite`, `Absent` or `Forever`, beside its cell
 kind) and an address resolves to a `Resolved<T>`; both default to the faulted case and give their value only through
@@ -472,8 +472,8 @@ that `RuleCompiler`'s lowering puts in front of the operand's own, so an operand
 computed address is priced as the tokens it is; a pattern's per-token program is `IWordFoldOperand.WordProgram`, run
 once per token by `RuleExpressions.FoldWord`, which `world.match` spells its word through as well. A new operand that
 reads through a computed address declares it in `Addresses` and receives it in `keys`; it never calls
-`RuleExpressions.Evaluate`. `FiringDecision` and `RuleOutcome.Faulted` exist for the design in
-[rule faults](../../../docs/plans/rule-faults.md) and nothing produces them yet.
+`RuleExpressions.Evaluate`. `FiringDecision` exists for the design in
+[rule faults](../../../docs/plans/rule-faults.md) and nothing produces it yet.
 
 **Narrate through the hub.** Server never writes to `System.Console`; every line
 is a `WorldOutputHub.Narrate` call, bound to stderr (or stdout for answers) by

@@ -63,6 +63,14 @@ orders, verifying a change by building and running it, and fixing a defect at it
 
 ## Evidence
 
+- Paste, never retype. A code quote in a report, review or plan is copied from
+  the Read or search output that showed it, with the `file:line` that output
+  printed; a figure names the command or capture that produced it. A packet's or
+  brief's `file:line` is a lead that has often drifted: open it before relying on
+  it, and say so when it moved. A claim you reason toward but did not see is
+  labelled as an inference. Run `puck docs links` on what you write; its checks
+  are the floor, not proof that a quote is real.
+
 - Before writing code whose correctness rests on an invariant (a cache's invalidation, an oracle's
   coverage, a geometric assumption, a concurrency handoff, a guard every read or write must pass),
   write down the invariant and the one place that enforces it (the compiler, a type, one door, a

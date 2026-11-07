@@ -90,6 +90,9 @@ public sealed partial class ArenaSearch {
         public int Token;
     }
     private sealed class Job {
+        // Whether a judge rule or score faulted since the step began: the step then decides nothing and restarts.
+        public bool StepFaulted;
+
         public Job(ArenaSearchPlan plan, int tokenCapacity, int cellCount, int seatCount) {
             var scopes = ((2 * plan.Depth) + 4);
 
@@ -139,8 +142,10 @@ public sealed partial class ArenaSearch {
         }
 
         public int Active { get; set; }
+
         // Steps that faulted and landed nothing; a diagnostic, never part of the job's answer.
         public long Faults;
+
         public long Alpha { get => Root.Alpha; set => Root.Alpha = value; }
         public long BaseTurn { get => Root.BaseTurn; set => Root.BaseTurn = value; }
         public long Best { get => Root.Best; set => Root.Best = value; }
@@ -168,10 +173,10 @@ public sealed partial class ArenaSearch {
         // arena's own and never checkpointed, so it only says the fold may be reused; the stamp a job compares stays
         // the fold of the rows' content, which a restored arena reproduces.
         public ulong[] StampVersions { get; set; } = [];
+
         public bool StampFolded { get; set; }
         public ulong StampLedger { get; set; }
         public ulong StampValue { get; set; }
-
         // The judge reads the live clock directly, or one of its keyed rows has value-over-time traits. This is
         // derived once when the job is installed, keeping an idle untimed step to its existing row-version walk.
         public bool TimeSensitive { get; set; }
@@ -236,9 +241,9 @@ public sealed partial class ArenaSearch {
 
         public long[]? Wide { get; set; }
         public long Work { get; set; }
-
         // The job's index among the installed jobs, which selects its draw stream.
         public int Ordinal { get; init; }
+
         public Pcg32XshRr Stream;
 
         // PassDepth is the depth the current pass searches to; Active is which ply (0 = root) is being expanded.
@@ -507,6 +512,7 @@ public sealed partial class ArenaSearch {
 
         return false;
     }
+
     private bool StepJob(Job job, ulong jobStamp, Func<IReadOnlyList<ArenaSearchWrite>, bool> apply) {
         var work = job.Plan.Work;
         var spent = 0L;
@@ -523,9 +529,7 @@ public sealed partial class ArenaSearch {
         if (job.Running) {
             // A judge rule or score that faults anywhere in the step decides nothing: the step rewinds and restarts as
             // a thrown one does, and lands nothing, so the job's last answer stands.
-            var scratch = m_arena.Scratch;
-            var faults = scratch.EnterFaultScope();
-            var fault = ExpressionFault.None;
+            job.StepFaulted = false;
 
             try {
                 spent += work.Replay(scopes: job.ScopeCount);
@@ -551,16 +555,10 @@ public sealed partial class ArenaSearch {
                 );
 
                 throw;
-            } finally {
-                // The search owns its arena and never swaps it; the judge's transactional commit is the search host's,
-                // which installs nothing, so the scratch the scope opened on is still the arena's.
-#pragma warning disable STALE001
-                fault = scratch.LeaveFaultScope(scope: faults);
-#pragma warning restore STALE001
             }
 
             Suspend(job: job);
-            if (fault != ExpressionFault.None) {
+            if (job.StepFaulted) {
                 Restart(
                     job: job,
                     stamp: jobStamp
@@ -591,6 +589,7 @@ public sealed partial class ArenaSearch {
 
         return installed;
     }
+
     /// <summary>Returns the transposition key of the position the arena holds for one job.</summary>
     /// <param name="index">The job's index in the installed set.</param>
     /// <returns>The key.</returns>

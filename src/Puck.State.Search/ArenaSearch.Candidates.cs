@@ -32,7 +32,16 @@ public sealed partial class ArenaSearch {
         );
         job.Nodes++;
         m_candidates.Increment();
-        _ = job.Judge.Judge(view: View(ply: MovePly(job: job)));
+        JudgeCandidate(
+            job: job,
+            ply: MovePly(job: job)
+        );
+    }
+    // Judges the position a candidate reached; a judge that faulted leaves the step it met deciding nothing.
+    private void JudgeCandidate(Job job, int ply) {
+        var judged = job.Judge.Judge(view: View(ply: ply));
+
+        job.StepFaulted |= judged.Faulted;
     }
     // Opens one scope holding a chance draw's outcome instead of a candidate's move. The shape cursor is recorded
     // negative, which is how a replay and a checkpoint tell the two apart; the token cursor carries the outcome.
@@ -135,7 +144,10 @@ public sealed partial class ArenaSearch {
             );
             moves++;
             m_candidates.Increment();
-            _ = job.Judge.Judge(view: View(ply: moves));
+            JudgeCandidate(
+                job: job,
+                ply: moves
+            );
         }
 
         return true;

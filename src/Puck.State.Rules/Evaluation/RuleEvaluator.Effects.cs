@@ -5,6 +5,15 @@ namespace Puck.State.Rules;
 public sealed partial class RuleEvaluator {
     private readonly List<IRuleEffect> m_deferred = [];
 
+    // What firing one effect, or a sequence of them, answered. The zero value is a fault, so a step nothing set refuses
+    // the firing as a fault does: a faulted step decides nothing, and the firing it belongs to is Faulted rather than
+    // Refused.
+    private enum Step : byte {
+        Faulted = 0,
+        Refused,
+        Done,
+    }
+
     private static long ScheduleDueTick(ulong tick, long delayTicks, out ExpressionFault fault) {
         var failed = ((delayTicks < 0L) || (tick > ((ulong)(long.MaxValue - Math.Max(
             val1: 0L,
@@ -67,16 +76,11 @@ public sealed partial class RuleEvaluator {
         );
         var queued = m_deferred.Count;
         var mark = m_host.BeginStateTransaction();
-        var scratch = m_host.Scratch;
-        var serial = m_refusalSerial;
 
         applied = false;
 
-        bool proposed;
-        // A fault raised anywhere before the commit refuses the whole firing, whatever the effect that met it made of
-        // it: an effect can drop a value, never the fault the register already holds.
-        var faults = scratch.EnterFaultScope();
-        var fault = ExpressionFault.None;
+        // An effect that meets a fault answers Faulted and one that refuses answers Refused; either rewinds the firing.
+        Step proposed;
 
         try {
             proposed = Propose(
@@ -91,29 +95,16 @@ public sealed partial class RuleEvaluator {
             DiscardQueued(from: queued);
 
             throw;
-        } finally {
-            fault = scratch.LeaveFaultScope(scope: faults);
         }
 
-        if (proposed && (fault != ExpressionFault.None)) {
-            proposed = false;
-            if (m_refusalSerial == serial) {
-                ReportRefusal(
-                    detail: $"{RuleEvaluation.DescribeFault(fault: fault)}; the firing refused whole",
-                    effect: "the firing",
-                    refusal: RuleEffectRefusal.Arithmetic,
-                    ruleName: ruleName,
-                    tick: tick
-                );
-            }
-        }
-
-        if (!proposed) {
+        if (proposed != Step.Done) {
             m_host.RewindStateTransaction(mark: mark);
             DiscardQueued(from: queued);
             applied = false;
 
-            return RuleOutcome.Refused;
+            return ((proposed == Step.Faulted)
+                ? RuleOutcome.Faulted
+                : RuleOutcome.Refused);
         }
 
         m_host.CommitStateTransaction(mark: mark);
@@ -168,44 +159,26 @@ public sealed partial class RuleEvaluator {
         return RuleOutcome.Fired;
     }
 
-    // Delivers one irreversible arm after its firing's commit. A transactional install may have replaced the arena,
-    // and with it the scratch every read raises into, so the delivery's fault scope is opened on the scratch the host
-    // serves now, never on one taken before the commit. Past the commit nothing rewinds, so a delivery that faulted
-    // is refused.
-    private bool Deliver(IRuleEffect arm, in EffectFiring firing, out EffectRefusal refusal) {
-        var scratch = m_host.Scratch;
-        var scope = scratch.EnterFaultScope();
-        bool delivered;
-        ExpressionFault fault;
-
-        try {
-            delivered = arm.TryDeliverAfterCommit(
-                firing: in firing,
-                host: m_host,
-                refusal: out refusal
-            );
-        } finally {
-            fault = scratch.LeaveFaultScope(scope: scope);
-        }
-        if (delivered && (fault != ExpressionFault.None)) {
-            refusal = EffectRefusal.Of(code: RuleEffectRefusal.Arithmetic, reason: RuleEvaluation.DescribeFault(fault: fault));
-
-            return false;
-        }
-
-        return delivered;
-    }
+    // Delivers one irreversible arm after its firing's commit. Past the commit nothing rewinds, so an arm whose
+    // evaluation faulted refuses its own delivery.
+    private bool Deliver(IRuleEffect arm, in EffectFiring firing, out EffectRefusal refusal) => arm.TryDeliverAfterCommit(
+        firing: in firing,
+        host: m_host,
+        refusal: out refusal
+    );
     // Everything a firing does before its commit: the reversible effects, then each queued arm's preflight against
     // the state they propose, then the host's preparation of the transactional arms as one unit. False means
     // refused, already reported.
-    private bool Propose(IRuleEffect[] effects, string ruleName, in EffectFiring firing, int queued, ref bool applied) {
-        if (!FireSequence(
+    private Step Propose(IRuleEffect[] effects, string ruleName, in EffectFiring firing, int queued, ref bool applied) {
+        var sequence = FireSequence(
             applied: ref applied,
             effects: effects,
             firing: in firing,
             strict: false
-        )) {
-            return false;
+        );
+
+        if (sequence != Step.Done) {
+            return sequence;
         }
 
         var preflight = (firing with { Preflight = true });
@@ -230,7 +203,7 @@ public sealed partial class RuleEvaluator {
                     tick: firing.Tick
                 );
 
-                return false;
+                return Step.Refused;
             }
         }
 
@@ -249,15 +222,15 @@ public sealed partial class RuleEvaluator {
                 tick: firing.Tick
             );
 
-            return false;
+            return Step.Refused;
         }
 
         if (!m_host.PrepareStateCommit(refusal: out var stateRefusal)) {
             ReportRefusal(effect: "the firing's state transaction", fallback: RuleEffectRefusal.MutationRejected,
                 refusal: in stateRefusal, ruleName: ruleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
-        return true;
+        return Step.Done;
     }
     private bool QueuedTransactional(int from) {
         for (var index = from; (index < m_deferred.Count); index++) {
@@ -274,7 +247,7 @@ public sealed partial class RuleEvaluator {
     );
     // Fires one effect sequence in order, returning false on the first refusal. An arm that cannot be rewound is
     // queued rather than fired, at any depth.
-    private bool FireSequence(IRuleEffect[] effects, in EffectFiring firing, bool strict, ref bool applied) {
+    private Step FireSequence(IRuleEffect[] effects, in EffectFiring firing, bool strict, ref bool applied) {
         var trace = m_traceEntry;
 
         for (var index = 0; (index < effects.Length); index++) {
@@ -301,8 +274,8 @@ public sealed partial class RuleEvaluator {
                 effect: effect,
                 refused: (m_refusalSerial != serial)
             ));
-            if (!fired) {
-                return false;
+            if (fired != Step.Done) {
+                return fired;
             }
 
             // Every write a scope holds is a record the rewind needs, so the record is what a firing is bounded by:
@@ -316,15 +289,15 @@ public sealed partial class RuleEvaluator {
                     tick: firing.Tick
                 );
 
-                return false;
+                return Step.Refused;
             }
         }
 
-        return true;
+        return Step.Done;
     }
     // Returns false only when the effect refused, which rewinds the enclosing scope; an effect that fired without
     // moving the arena, or that could not move its destination, returns true with `moved` false.
-    private bool FireOne(IRuleEffect effect, in EffectFiring firing, bool strict, out bool moved) {
+    private Step FireOne(IRuleEffect effect, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
 
         switch (effect) {
@@ -405,17 +378,17 @@ public sealed partial class RuleEvaluator {
                 );
         }
     }
-    private bool FireClaim(ClaimEffect effect, in EffectFiring firing, bool strict, out bool moved) {
+    private Step FireClaim(ClaimEffect effect, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
         var bindings = m_host.InstanceBindings;
 
         if (((uint)effect.BindingSlot) >= ((uint)bindings.Length)) {
             ReportRefusal(detail: "this host exposes no pool-instance binding register", effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
         if (!m_host.Arena.TryClaim(poolOrdinal: effect.Pool.Ordinal, time: m_host.Time, handle: out var handle, reason: out var reason)) {
             ReportRefusal(detail: reason, effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
         var previous = bindings[effect.BindingSlot];
 
@@ -423,17 +396,19 @@ public sealed partial class RuleEvaluator {
         try {
             var bodyMoved = false;
 
-            if (!FireSequence(effects: effect.Effects, firing: in firing, strict: strict, applied: ref bodyMoved)) {
-                return false;
+            var sequence = FireSequence(effects: effect.Effects, firing: in firing, strict: strict, applied: ref bodyMoved);
+
+            if (sequence != Step.Done) {
+                return sequence;
             }
 
             moved = true;
-            return true;
+            return Step.Done;
         } finally {
             bindings[effect.BindingSlot] = previous;
         }
     }
-    private bool FireClaimPair(ClaimPairEffect effect, in EffectFiring firing, bool strict, out bool moved) {
+    private Step FireClaimPair(ClaimPairEffect effect, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
         var bindings = m_host.InstanceBindings;
 
@@ -445,7 +420,7 @@ public sealed partial class RuleEvaluator {
             (bindings[effect.RightBindingSlot].PoolOrdinal != effect.RightPool.Ordinal)
         ) {
             ReportRefusal(detail: "a pair endpoint binding is absent", effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
         if (!m_host.Arena.TryClaimPair(
             poolOrdinal: effect.Pool.Ordinal,
@@ -456,7 +431,7 @@ public sealed partial class RuleEvaluator {
             reason: out var reason
         )) {
             ReportRefusal(detail: reason, effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
 
         var previous = bindings[effect.BindingSlot];
@@ -465,37 +440,39 @@ public sealed partial class RuleEvaluator {
         try {
             var bodyMoved = false;
 
-            if (!FireSequence(effects: effect.Effects, firing: in firing, strict: strict, applied: ref bodyMoved)) {
-                return false;
+            var sequence = FireSequence(effects: effect.Effects, firing: in firing, strict: strict, applied: ref bodyMoved);
+
+            if (sequence != Step.Done) {
+                return sequence;
             }
             moved = true;
-            return true;
+            return Step.Done;
         } finally {
             bindings[effect.BindingSlot] = previous;
         }
     }
-    private bool FireRelease(ReleaseEffect effect, in EffectFiring firing, out bool moved) {
+    private Step FireRelease(ReleaseEffect effect, in EffectFiring firing, out bool moved) {
         moved = false;
         var bindings = m_host.InstanceBindings;
 
         if ((((uint)effect.BindingSlot) >= ((uint)bindings.Length)) || (bindings[effect.BindingSlot].PoolOrdinal != effect.Pool.Ordinal)) {
             ReportRefusal(detail: "the released pool binding is absent", effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
         if (!m_host.Arena.TryRelease(handle: bindings[effect.BindingSlot], reason: out var reason)) {
             ReportRefusal(detail: reason, effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
         moved = true;
-        return true;
+        return Step.Done;
     }
-    private bool FireForEachPool(ForEachPoolEffect effect, in EffectFiring firing, bool strict, out bool moved) {
+    private Step FireForEachPool(ForEachPoolEffect effect, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
         var bindings = m_host.InstanceBindings;
 
         if (((uint)effect.BindingSlot) >= ((uint)bindings.Length)) {
             ReportRefusal(detail: "this host exposes no pool-instance binding register", effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
         var snapshot = PoolHandles(pool: effect.Pool, bindingSlot: effect.BindingSlot);
         var previous = bindings[effect.BindingSlot];
@@ -507,77 +484,79 @@ public sealed partial class RuleEvaluator {
                 }
 
                 bindings[effect.BindingSlot] = handle;
-                if (!FireSequence(effects: effect.Effects, firing: in firing, strict: strict, applied: ref moved)) {
-                    return false;
+                var sequence = FireSequence(effects: effect.Effects, firing: in firing, strict: strict, applied: ref moved);
+
+                if (sequence != Step.Done) {
+                    return sequence;
                 }
             }
-            return true;
+            return Step.Done;
         } finally {
             bindings[effect.BindingSlot] = previous;
         }
     }
-    private bool FireInstanceFieldWrite(InstanceFieldWriteEffect effect, in EffectFiring firing, out bool moved) {
+    private Step FireInstanceFieldWrite(InstanceFieldWriteEffect effect, in EffectFiring firing, out bool moved) {
         moved = false;
         var bindings = m_host.InstanceBindings;
 
         if ((((uint)effect.BindingSlot) >= ((uint)bindings.Length)) || (bindings[effect.BindingSlot].PoolOrdinal != effect.Pool.Ordinal)) {
             ReportRefusal(detail: "the target pool binding is absent", effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
         var handle = bindings[effect.BindingSlot];
 
         if (effect.Field.Kind == CellKind.Text) {
             var text = effect.Text;
 
-            if ((text is null) && !TryReadText(effect: effect, firing: in firing, refused: out var textRefused, source: effect.Source.Operand, text: out text)) {
-                return !textRefused;
+            if ((text is null) && !TryReadText(effect: effect, firing: in firing, source: effect.Source.Operand, step: out var textStep, text: out text)) {
+                return textStep;
             }
             if (!m_host.Arena.TryWrite(handle: handle, fieldOrdinal: effect.Field.Ordinal, value: CellValue.Text(value: text), reason: out var textReason)) {
                 ReportRefusal(detail: textReason, effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-                return false;
+                return Step.Refused;
             }
         } else {
-            if (!TryReadValue(effect: effect, source: effect.Source, kind: effect.Field.Kind, firing: in firing, raw: out var raw, refused: out var refused)) {
-                return !refused;
+            if (!TryReadValue(effect: effect, source: effect.Source, kind: effect.Field.Kind, firing: in firing, raw: out var raw, step: out var read)) {
+                return read;
             }
 
             if (!m_host.Arena.TryWriteLive(handle: handle, fieldOrdinal: effect.Field.Ordinal, operand: raw, write: effect.Write, time: m_host.Time, reason: out var numericReason)) {
                 ReportRefusal(detail: numericReason, effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-                return false;
+                return Step.Refused;
             }
         }
         moved = true;
-        return true;
+        return Step.Done;
     }
-    private bool FireStaticInstanceFieldWrite(StaticInstanceFieldWriteEffect effect, in EffectFiring firing, out bool moved) {
+    private Step FireStaticInstanceFieldWrite(StaticInstanceFieldWriteEffect effect, in EffectFiring firing, out bool moved) {
         moved = false;
         if (!m_host.Arena.TryResolvePoolSlot(poolOrdinal: effect.Pool.Ordinal, slot: effect.Handle.Slot, handle: out var handle)) {
             ReportRefusal(detail: $"State pool '{effect.Pool.Name.Value}' slot {effect.Handle.Slot} is absent.", effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
         if (effect.Field.Kind == CellKind.Text) {
             var text = effect.Text;
 
-            if ((text is null) && !TryReadText(effect: effect, firing: in firing, refused: out var textRefused, source: effect.Source.Operand, text: out text)) {
-                return !textRefused;
+            if ((text is null) && !TryReadText(effect: effect, firing: in firing, source: effect.Source.Operand, step: out var textStep, text: out text)) {
+                return textStep;
             }
             if (!m_host.Arena.TryWrite(handle: handle, fieldOrdinal: effect.Field.Ordinal, value: CellValue.Text(value: text), reason: out var textReason)) {
                 ReportRefusal(detail: textReason, effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-                return false;
+                return Step.Refused;
             }
         } else {
-            if (!TryReadValue(effect: effect, source: effect.Source, kind: effect.Field.Kind, firing: in firing, raw: out var raw, refused: out var refused)) {
-                return !refused;
+            if (!TryReadValue(effect: effect, source: effect.Source, kind: effect.Field.Kind, firing: in firing, raw: out var raw, step: out var read)) {
+                return read;
             }
             if (!m_host.Arena.TryWriteLive(handle: handle, fieldOrdinal: effect.Field.Ordinal, operand: raw, write: effect.Write, time: m_host.Time, reason: out var reason)) {
                 ReportRefusal(detail: reason, effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-                return false;
+                return Step.Refused;
             }
         }
         moved = true;
-        return true;
+        return Step.Done;
     }
-    private bool FireInstanceFieldSchedule(InstanceFieldScheduleEffect effect, in EffectFiring firing, out bool moved) {
+    private Step FireInstanceFieldSchedule(InstanceFieldScheduleEffect effect, in EffectFiring firing, out bool moved) {
         moved = false;
         StateInstanceHandle handle;
 
@@ -586,33 +565,33 @@ public sealed partial class RuleEvaluator {
 
             if ((((uint)effect.BindingSlot) >= ((uint)bindings.Length)) || (bindings[effect.BindingSlot].PoolOrdinal != effect.Pool.Ordinal)) {
                 ReportRefusal(detail: "the target pool binding is absent", effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-                return false;
+                return Step.Refused;
             }
             handle = bindings[effect.BindingSlot];
         } else if (!m_host.Arena.TryResolvePoolSlot(poolOrdinal: effect.Pool.Ordinal, slot: effect.StaticSlot, handle: out handle)) {
             ReportRefusal(detail: $"State pool '{effect.Pool.Name.Value}' slot {effect.StaticSlot} is absent.", effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
         var raw = ScheduleDueTick(delayTicks: effect.DelayTicks, fault: out var fault, tick: firing.Tick);
 
         if (fault != ExpressionFault.None) {
             RefuseSource(effect: effect, fault: fault, firing: in firing);
-            return false;
+            return Step.Faulted;
         }
         if (!m_host.Arena.TryWriteLive(handle: handle, fieldOrdinal: effect.Field.Ordinal, operand: raw, write: StateWriteKind.Set, time: m_host.Time, reason: out var reason)) {
             ReportRefusal(detail: reason, effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
         moved = true;
-        return true;
+        return Step.Done;
     }
-    private bool FireInstanceFieldVectorWrite(InstanceFieldVectorWriteEffect effect, in EffectFiring firing, out bool moved) {
+    private Step FireInstanceFieldVectorWrite(InstanceFieldVectorWriteEffect effect, in EffectFiring firing, out bool moved) {
         moved = false;
         var bindings = m_host.InstanceBindings;
 
         if ((((uint)effect.BindingSlot) >= ((uint)bindings.Length)) || (bindings[effect.BindingSlot].PoolOrdinal != effect.Pool.Ordinal)) {
             ReportRefusal(detail: "the target pool binding is absent", effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
         ReadOnlySpan<sbyte> source;
 
@@ -621,21 +600,23 @@ public sealed partial class RuleEvaluator {
 
             if (naming != FaultCase.Finite) {
                 ReportRefusal(detail: ((naming == FaultCase.Faulted) ? RuleReads.KeyFaultReason : "the vector source is absent"), effect: effect.Describe, refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
-                return false;
+                return ((naming == FaultCase.Faulted)
+                    ? Step.Faulted
+                    : Step.Refused);
             }
         } else if ((effect.Source.Pool is { } pool) && (((uint)effect.Source.BindingSlot) < ((uint)bindings.Length)) && (bindings[effect.Source.BindingSlot].PoolOrdinal == pool.Ordinal) && m_host.Arena.TryReadVector(handle: bindings[effect.Source.BindingSlot], fieldOrdinal: effect.Source.Field.Ordinal, components: out source)) {
         } else {
             ReportRefusal(detail: "the bound vector source is absent or stale", effect: effect.Describe, refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
         if (!m_host.Arena.TryWriteVector(handle: bindings[effect.BindingSlot], fieldOrdinal: effect.Field.Ordinal, components: source, reason: out var reason)) {
             ReportRefusal(detail: reason, effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
         moved = true;
-        return true;
+        return Step.Done;
     }
-    private bool FireArm(IRuleEffect effect, in EffectFiring firing, out bool moved) {
+    private Step FireArm(IRuleEffect effect, in EffectFiring firing, out bool moved) {
         if (effect.TryFire(
             firing: in firing,
             host: m_host,
@@ -643,7 +624,7 @@ public sealed partial class RuleEvaluator {
         )) {
             moved = effect.SubmitsMutation;
 
-            return true;
+            return Step.Done;
         }
 
         moved = false;
@@ -655,11 +636,11 @@ public sealed partial class RuleEvaluator {
             tick: firing.Tick
         );
 
-        return false;
+        return Step.Refused;
     }
     // The condition reads what the firing has already written into its open scope, exactly as any other read would.
     // A faulted condition runs neither branch and is already reported; propagate its refusal to the scope.
-    private bool FireIf(IfEffect effect, in EffectFiring firing, bool strict, out bool moved) {
+    private Step FireIf(IfEffect effect, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
 
         var verdict = Decide(
@@ -673,7 +654,7 @@ public sealed partial class RuleEvaluator {
                 m_traceEffectValue = "condition failed";
             }
 
-            return false;
+            return Step.Faulted;
         }
 
         var branch = (open
@@ -702,21 +683,17 @@ public sealed partial class RuleEvaluator {
     }
     // A savepoint is a nested scope inside the firing. A refused step rewinds it, so earlier siblings survive;
     // onFailure then runs in the firing's own scope and later siblings continue. With no onFailure the refusal
-    // propagates, since the firing already rewinds as one. A fault raised in the body is the savepoint's refusal,
-    // whatever the step that met it made of it, and the savepoint answers it: the firing's scope never sees it, so
-    // onFailure runs and the firing can commit. A fault in onFailure is the firing's.
-    private bool FireSavepoint(TransactionEffect effect, in EffectFiring firing, out bool moved) {
+    // propagates, since the firing already rewinds as one. A step that meets a fault in the body refuses, which is the
+    // savepoint's refusal and which the savepoint answers: onFailure runs and the firing can commit. A fault in
+    // onFailure is the firing's.
+    private Step FireSavepoint(TransactionEffect effect, in EffectFiring firing, out bool moved) {
         var arena = m_host.Arena;
-        var scratch = m_host.Scratch;
         var queued = m_deferred.Count;
-        var serial = m_refusalSerial;
         var mark = arena.BeginScope();
-        var faults = scratch.EnterFaultScope();
-        var fault = ExpressionFault.None;
 
         moved = false;
 
-        bool held;
+        Step held;
 
         try {
             held = FireSequence(
@@ -731,27 +708,12 @@ public sealed partial class RuleEvaluator {
             DiscardQueued(from: queued);
 
             throw;
-        } finally {
-            fault = scratch.AnswerFaultScope(scope: faults);
         }
 
-        if (held && (fault != ExpressionFault.None)) {
-            held = false;
-            if (m_refusalSerial == serial) {
-                ReportRefusal(
-                    detail: $"{RuleEvaluation.DescribeFault(fault: fault)}; the transaction refused",
-                    effect: effect.Describe,
-                    refusal: RuleEffectRefusal.Arithmetic,
-                    ruleName: firing.RuleName,
-                    tick: firing.Tick
-                );
-            }
-        }
-
-        if (held) {
+        if (held == Step.Done) {
             arena.Commit(mark: mark);
 
-            return true;
+            return Step.Done;
         }
 
         arena.Rewind(mark: mark);
@@ -759,7 +721,7 @@ public sealed partial class RuleEvaluator {
         moved = false;
 
         if (effect.OnFailure.Length == 0) {
-            return false;
+            return held;
         }
 
         return FireSequence(
@@ -771,7 +733,7 @@ public sealed partial class RuleEvaluator {
     }
     // A push resolves its value the way a write does, then lands as one ring push so the cursor and the slot move
     // together.
-    private bool FirePush(PushStateEffect effect, in EffectFiring firing, out bool moved) {
+    private Step FirePush(PushStateEffect effect, in EffectFiring firing, out bool moved) {
         moved = false;
 
         if (!TryReadValue(
@@ -779,10 +741,10 @@ public sealed partial class RuleEvaluator {
             firing: in firing,
             kind: KindOf(rowOrdinal: effect.RowOrdinal),
             raw: out var raw,
-            refused: out var refused,
-            source: effect.Source
+            source: effect.Source,
+            step: out var read
         )) {
-            return !refused;
+            return read;
         }
 
         return Apply(
@@ -797,7 +759,7 @@ public sealed partial class RuleEvaluator {
     }
     // Under a savepoint a remove of an absent cell is submitted and refused by the door rather than skipped, so a
     // step that cannot do its work rolls its savepoint back.
-    private bool FireRemove(RemoveStateCellEffect effect, in EffectFiring firing, bool strict, out bool moved) {
+    private Step FireRemove(RemoveStateCellEffect effect, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
 
         var resolved = RuleReads.ResolveKey(
@@ -810,17 +772,17 @@ public sealed partial class RuleEvaluator {
         if (resolved.Case == FaultCase.Faulted) {
             ReportRefusal(detail: RuleReads.KeyFaultReason, effect: effect.Describe,
                 refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Faulted;
         }
 
         resolved.TryNamed(value: out var key);
         if (!key.IsValid) {
             if (!strict) {
-                return true;
+                return Step.Done;
             }
             ReportRefusal(detail: "the remove address names no held cell", effect: effect.Describe,
                 refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
         if (
             !strict &&
@@ -830,7 +792,7 @@ public sealed partial class RuleEvaluator {
             slot: out _
         )
         ) {
-            return true;
+            return Step.Done;
         }
 
         return Apply(
@@ -845,7 +807,7 @@ public sealed partial class RuleEvaluator {
     }
     // The transform's rows, keys, cells and values were resolved once at compile time; a firing substitutes only
     // the parts a rule resolves fresh, and it substitutes them as a value rather than by rebuilding the record.
-    private bool FireTransform(TransformStateEffect effect, in EffectFiring firing, out bool moved) {
+    private Step FireTransform(TransformStateEffect effect, in EffectFiring firing, out bool moved) {
         moved = false;
 
         var fromResolved = RowOrdinal(row: effect.FromRow);
@@ -864,7 +826,7 @@ public sealed partial class RuleEvaluator {
         ) {
             ReportRefusal(detail: RuleReads.KeyFaultReason, effect: effect.Describe,
                 refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Faulted;
         }
 
         // A live row that selected none substitutes no row, and a key that named nothing the invalid key.
@@ -892,7 +854,7 @@ public sealed partial class RuleEvaluator {
     }
     // A vector transform's own terms carry their own live keys, so its resolved form is built per firing rather
     // than once at compile time.
-    private bool FireVector(VectorEffect effect, in EffectFiring firing, out bool moved) {
+    private Step FireVector(VectorEffect effect, in EffectFiring firing, out bool moved) {
         moved = false;
 
         if (!ArenaTransforms.TryVectorTransform(
@@ -910,7 +872,7 @@ public sealed partial class RuleEvaluator {
                 tick: firing.Tick
             );
 
-            return false;
+            return Step.Refused;
         }
 
         return ApplyTransform(
@@ -921,7 +883,7 @@ public sealed partial class RuleEvaluator {
             transform: transform!
         );
     }
-    private bool ApplyTransform(IRuleEffect effect, ArenaTransform transform, in ArenaTransformBinding binding, in EffectFiring firing, out bool moved) {
+    private Step ApplyTransform(IRuleEffect effect, ArenaTransform transform, in ArenaTransformBinding binding, in EffectFiring firing, out bool moved) {
         if (m_host is not IArenaTransformHost host) {
             moved = false;
             ReportRefusal(
@@ -932,7 +894,7 @@ public sealed partial class RuleEvaluator {
                 tick: firing.Tick
             );
 
-            return false;
+            return Step.Refused;
         }
         if (host.TryTransform(
             binding: in binding,
@@ -940,7 +902,7 @@ public sealed partial class RuleEvaluator {
             refusal: out var refusal,
             transform: transform!
         )) {
-            return true;
+            return Step.Done;
         }
 
         ReportRefusal(
@@ -951,13 +913,13 @@ public sealed partial class RuleEvaluator {
             tick: firing.Tick
         );
 
-        return false;
+        return Step.Refused;
     }
     // A live row's selection, -1 when there is none to substitute (no live row, or an index selecting none).
     private Resolved<int> RowOrdinal(LiveRow? row) => ((row is { } live)
         ? live.Resolve(reader: m_host)
         : Resolved<int>.Nothing);
-    private bool FireWrite(IRuleEffect effect, IStateWriteEffect write, in EffectFiring firing, bool strict, out bool moved) {
+    private Step FireWrite(IRuleEffect effect, IStateWriteEffect write, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
 
         var ordinal = write.RowOrdinal;
@@ -979,11 +941,13 @@ public sealed partial class RuleEvaluator {
                     tick: firing.Tick
                 );
 
-                return false;
+                return ((selected.Case == FaultCase.Faulted)
+                    ? Step.Faulted
+                    : Step.Refused);
             }
         }
         if (ordinal < 0) {
-            return true;
+            return Step.Done;
         }
 
         if (!RuleReads.TryResolveKeyForWrite(
@@ -1001,16 +965,18 @@ public sealed partial class RuleEvaluator {
                 tick: firing.Tick
             );
 
-            return false;
+            return (RuleReads.IsKeyFault(reason: keyReason)
+                ? Step.Faulted
+                : Step.Refused);
         }
 
         if (!key.IsValid) {
             if (!strict) {
-                return true;
+                return Step.Done;
             }
             ReportRefusal(detail: "the write address names no cell", effect: effect.Describe,
                 refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
-            return false;
+            return Step.Refused;
         }
 
         var kind = KindOf(rowOrdinal: ordinal);
@@ -1041,7 +1007,7 @@ public sealed partial class RuleEvaluator {
                             firing: in firing
                         );
 
-                        return false;
+                        return Step.Faulted;
                     }
 
                     break;
@@ -1056,10 +1022,10 @@ public sealed partial class RuleEvaluator {
                             firing: in firing,
                             kind: kind,
                             raw: out raw,
-                            refused: out var refused,
-                            source: ((IValueSourcedEffect)write).Source
+                            source: ((IValueSourcedEffect)write).Source,
+                            step: out var read
                         )) {
-                            return !refused;
+                            return read;
                         }
                     } finally {
                         m_host.Scratch.WriteKey = previousWriteKey;
@@ -1089,7 +1055,7 @@ public sealed partial class RuleEvaluator {
             )
         );
     }
-    private bool FireWriteText(IRuleEffect effect, int rowOrdinal, CellKey key, in EffectFiring firing, out bool moved) {
+    private Step FireWriteText(IRuleEffect effect, int rowOrdinal, CellKey key, in EffectFiring firing, out bool moved) {
         moved = false;
 
         // A schedule row is refused at compile time unless it is kind=Int, so a text row here can only carry a plain
@@ -1097,8 +1063,8 @@ public sealed partial class RuleEvaluator {
         var write = ((WriteEffect)effect);
         var text = write.Text;
 
-        if ((text is null) && !TryReadText(effect: effect, firing: in firing, refused: out var refused, source: write.Source.Operand, text: out text)) {
-            return !refused;
+        if ((text is null) && !TryReadText(effect: effect, firing: in firing, source: write.Source.Operand, step: out var textStep, text: out text)) {
+            return textStep;
         }
 
         return Apply(
@@ -1112,14 +1078,14 @@ public sealed partial class RuleEvaluator {
             )
         );
     }
-    private bool Apply(IRuleEffect effect, in Mutation mutation, in EffectFiring firing, out bool moved) {
+    private Step Apply(IRuleEffect effect, in Mutation mutation, in EffectFiring firing, out bool moved) {
         moved = m_host.Apply(
             mutation: in mutation,
             refusal: out var refusal
         );
 
         if (!refusal.IsRefused) {
-            return true;
+            return Step.Done;
         }
 
         ReportRefusal(
@@ -1130,7 +1096,7 @@ public sealed partial class RuleEvaluator {
             tick: firing.Tick
         );
 
-        return false;
+        return Step.Refused;
     }
     private CellKind KindOf(int rowOrdinal) {
         var layout = m_host.Arena.Layout;
@@ -1140,9 +1106,9 @@ public sealed partial class RuleEvaluator {
             : CellKind.Int
         );
     }
-    // A Text source that answers no cell skips its effect, as an absent text always has; one whose address faulted
-    // refuses the firing, reported here.
-    private bool TryReadText(IRuleEffect effect, IRuleOperand? source, in EffectFiring firing, out string text, out bool refused) {
+    // A Text source that answers no cell skips its effect, as an absent text always has (step Done); one whose address
+    // faulted faults the firing, reported here.
+    private bool TryReadText(IRuleEffect effect, IRuleOperand? source, in EffectFiring firing, out string text, out Step step) {
         var resolved = RuleEvaluation.ReadText(
             reader: m_host,
             source: source
@@ -1150,8 +1116,10 @@ public sealed partial class RuleEvaluator {
         var named = resolved.TryNamed(value: out var read);
 
         text = (read ?? string.Empty);
-        refused = (resolved.Case == FaultCase.Faulted);
-        if (refused) {
+        step = ((resolved.Case == FaultCase.Faulted)
+            ? Step.Faulted
+            : Step.Done);
+        if (step == Step.Faulted) {
             ReportRefusal(detail: RuleReads.KeyFaultReason, effect: effect.Describe,
                 refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
         }
@@ -1165,11 +1133,12 @@ public sealed partial class RuleEvaluator {
         ruleName: firing.RuleName,
         tick: firing.Tick
     );
-    // One value read per effect. A forever fact is nothing to copy and skips the effect silently; an absence is a
-    // refusal naming the operations that answer it, so the firing rewinds rather than half-landing.
-    private bool TryReadValue(IRuleEffect effect, in CompiledValueSource source, CellKind kind, in EffectFiring firing, out long raw, out bool refused) {
+    // One value read per effect. A forever fact is nothing to copy and skips the effect silently (step Done); an
+    // absence is a refusal naming the operations that answer it, so the firing rewinds rather than half-landing; a
+    // fault faults the firing.
+    private bool TryReadValue(IRuleEffect effect, in CompiledValueSource source, CellKind kind, in EffectFiring firing, out long raw, out Step step) {
         raw = 0L;
-        refused = false;
+        step = Step.Done;
 
         var frame = new EvaluationFrame(reader: m_host);
         var fact = RuleEvaluation.ReadSource(
@@ -1180,7 +1149,9 @@ public sealed partial class RuleEvaluator {
 
         // A program that left no number refuses with its own fault; an operand's absence or fault is worded below.
         if (source.IsExpression && (fact.Outcome.Case is FaultCase.Absent or FaultCase.Faulted)) {
-            refused = true;
+            step = ((fact.Outcome.Case == FaultCase.Faulted)
+                ? Step.Faulted
+                : Step.Refused);
             RefuseSource(
                 effect: effect,
                 fault: ((fact.Outcome.Case == FaultCase.Absent)
@@ -1195,7 +1166,9 @@ public sealed partial class RuleEvaluator {
             return false;
         }
         if (fact.Outcome.Case is FaultCase.Absent or FaultCase.Faulted) {
-            refused = true;
+            step = ((fact.Outcome.Case == FaultCase.Faulted)
+                ? Step.Faulted
+                : Step.Refused);
             ReportRefusal(
                 detail: $"{RuleEvaluation.DescribeFault(fault: ((fact.Outcome.Case == FaultCase.Faulted) ? ExpressionFault.Domain : ExpressionFault.Absent))}; the effect did not fire",
                 effect: effect.Describe,

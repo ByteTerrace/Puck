@@ -578,8 +578,8 @@ program), and a rule that copies a hidden value into a public cell, or a
 `search` job whose outputs are public rows judged over private sites
 (`ArenaSearchEffectHost.cs:30-32`), is an authored disclosure, exactly like a
 binding on the shared screen. Step 2 confirms that a search's outputs carry the
-policy the author gave them; whether a public output over a restricted input is
-refused or linted is the owner's call ([open items](#open-items)).
+policy the author gave them, and a search output whose audience is wider than
+its restricted inputs is refused (the owner's ruling, [open items](#open-items)).
 
 **The games decide, and the harness is the definition of done.** Four authored
 games in `worlds/debug/`, played at the tables room's tables, are the fixtures
@@ -843,10 +843,19 @@ pool later declares enters through `ReadsWhole` alone.
 
 ## Open items
 
-- Whether a `search` job whose outputs are public while its token or code rows
-  are restricted is refused, linted or left to the author: the owner decides
-  with the skirmish's evidence in hand (`worlds/debug/skirmish-tests.puck`, the
-  two `search evidence` scenarios). Blue's `skirmishSharp` scores its move by
+- The owner's ruling: a `search` job whose outputs reach a wider audience than
+  the restricted rows its scoring reads is **refused**, at compile time for
+  declared audiences and at run time where an audience changes live (fog that
+  follows line of sight), exactly as a transform is refused with
+  `TransformWidensAudience`. A refused job lands nothing, as a faulted search
+  does. The author confines the output's audience (the authority, the side
+  that may read the input, an omniscient spectator tier) or discloses
+  deliberately through a rule's own write, which makes every reveal mechanic
+  (a sonar ping, hot-and-cold hints, an end-of-game reveal) an explicit line of
+  the document. A search over the side's own view or memory compiles as before.
+  Step 2 builds the check beside the transform's. The evidence:
+  `worlds/debug/skirmish-tests.puck`, the two `search evidence` scenarios.
+  Blue's `skirmishSharp` scores its move by
   red's real `skirmishPos`, which only `seat1` reads, and lands its best move in
   the public `skirmishSharpBest`, so the destination says which side of the
   board the hidden unit is on and the score gives its exact distance; its twin

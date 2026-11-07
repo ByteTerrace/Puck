@@ -68,13 +68,15 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
         }
     }
 
-    private bool EvaluateDecisionRule(CompiledWorldFactsRule rule, ulong stepTicks) {
+    private RuleOutcome EvaluateDecisionRule(CompiledWorldFactsRule rule, ulong stepTicks, out bool applied) {
+        applied = false;
+
         if (!m_decisionsByName.TryGetValue(
             key: rule.Name,
             value: out var runtime
-        )) { return false; }
+        )) { return RuleOutcome.Idle; }
 
-        var applied = false;
+        var aggregate = RuleOutcome.Idle;
 
         if (rule.ForEachOrdinal >= 0) {
             CarrierKeys(
@@ -105,18 +107,22 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
                     ? bound
                     : default
                 );
-                applied |= EvaluateDecisionBinding(
+                aggregate = RuleEvaluator.Aggregate(
+                    left: aggregate,
+                    right: EvaluateDecisionBinding(
+                    applied: out var moved,
                     key: key,
                     runtime: runtime,
                     stepTicks: stepTicks
-                );
+                ));
+                applied |= moved;
             }
         } finally {
             BoundEachKey = default;
         }
-        return applied;
+        return aggregate;
     }
-    private bool EvaluateDecisionBinding(DecisionRuntime runtime, int key, ulong stepTicks) {
+    private RuleOutcome EvaluateDecisionBinding(DecisionRuntime runtime, int key, ulong stepTicks, out bool applied) {
         var rule = runtime.Rule;
         var policy = rule.Decision!;
         var generation = ((((uint)key) < ((uint)Host.Population.Capacity))
@@ -158,43 +164,48 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
             step: stepTicks,
             value: state.CommitmentRemaining
         );
-        // Everything the decision reads (bindings, interrupt, gate, option gates, scores) faults into this scope, and a
-        // fault decides nothing: the decision keeps its choice and its interrupt edge, and runs no onNoChoice.
-        var scratch = Arena.Scratch;
-        var faults = scratch.EnterFaultScope();
-
-        try {
-            return DecideBinding(key: key, runtime: runtime, scratch: scratch, state: ref state, stepTicks: stepTicks);
-        } finally {
-            _ = scratch.LeaveFaultScope(scope: faults);
-        }
+        // Everything the decision reads (bindings, interrupt, gate, option gates, scores) answers a value, and a fault
+        // decides nothing: the decision keeps its choice and its interrupt edge, and runs no onNoChoice.
+        return DecideBinding(applied: out applied, key: key, runtime: runtime, state: ref state, stepTicks: stepTicks);
     }
-    private bool HoldDecision(CompiledWorldFactsRule rule, ExpressionFault fault) {
+    private RuleOutcome HoldDecision(CompiledWorldFactsRule rule) {
         m_evaluator.ReportRefusal(
-            detail: $"{RuleEvaluation.DescribeFault(fault: fault)}; the decision kept its choice",
+            detail: $"{RuleEvaluation.GateFaultReason}; the decision kept its choice",
             effect: "decision",
             refusal: RuleEffectRefusal.Arithmetic,
             ruleName: rule.Name,
             tick: Tick
         );
 
-        return false;
+        return RuleOutcome.Faulted;
     }
-    private bool DecideBinding(DecisionRuntime runtime, int key, ArenaScratch scratch, ref DecisionBinding state, ulong stepTicks) {
+    private RuleOutcome DecideBinding(DecisionRuntime runtime, int key, ref DecisionBinding state, ulong stepTicks, out bool applied) {
         var rule = runtime.Rule;
         var policy = rule.Decision!;
         var generation = state.Generation;
 
-        if (!m_evaluator.EvaluateBindings(rule: rule)) { return false; }
-        // A faulted gate decided nothing; the scope this binding runs in holds the fault for the checks below.
-        var interruptOpen = ((policy.Interrupt is { } interrupt) && (m_evaluator.Decide(
-            gate: interrupt,
-            ruleName: rule.Name
-        ) is Verdict.Open));
-        var open = (m_evaluator.Decide(
+        applied = false;
+
+        var bound = m_evaluator.EvaluateBindings(rule: rule);
+
+        if (bound != BindingsResult.Bound) {
+            return ((bound == BindingsResult.Faulted)
+                ? RuleOutcome.Faulted
+                : RuleOutcome.Idle);
+        }
+
+        var interruptVerdict = ((policy.Interrupt is { } interrupt)
+            ? m_evaluator.Decide(
+                gate: interrupt,
+                ruleName: rule.Name
+            )
+            : Verdict.Closed);
+        var gateVerdict = m_evaluator.Decide(
             gate: rule.Gate,
             ruleName: rule.Name
-        ) is Verdict.Open);
+        );
+        var open = (gateVerdict == Verdict.Open);
+        var faulted = ((interruptVerdict == Verdict.Faulted) || (gateVerdict == Verdict.Faulted));
         var lostEligibility = (open && (state.Selected >= 0) &&
             (((state.Candidate >= 0) && (!DecisionBodyLive(
             generation: state.Generation,
@@ -203,16 +214,20 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
             generation: state.CandidateGeneration,
             index: state.Candidate
         ))) ||
-             !DecisionOptionGate(
+             !Opens(
+            faulted: ref faulted,
+            verdict: DecisionOptionGate(
             candidate: state.Candidate,
             key: key,
             option: policy.Options[state.Selected],
             ruleName: rule.Name
-        )));
+        ))));
 
-        if (scratch.RaisedFault != ExpressionFault.None) {
-            return HoldDecision(fault: scratch.RaisedFault, rule: rule);
+        if (faulted) {
+            return HoldDecision(rule: rule);
         }
+
+        var interruptOpen = (interruptVerdict == Verdict.Open);
 
         var interruptWasHeld = state.InterruptHeld;
         var interrupted = (interruptOpen && !interruptWasHeld);
@@ -228,23 +243,24 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
             state.PeriodRemaining = 0;
             state.CommitmentRemaining = 0;
             state.LastScore = 0;
-            return (
-                hadChoice &&
-                FireDecisionEffects(
-                effects: policy.OnNoChoice,
-                ruleName: rule.Name,
-                stepTicks: stepTicks
-            )
-            );
+            return (hadChoice
+                ? FireDecisionEffects(
+                    applied: out applied,
+                    effects: policy.OnNoChoice,
+                    ruleName: rule.Name,
+                    stepTicks: stepTicks
+                )
+                : RuleOutcome.Idle);
         }
         if (
             state.Evaluated &&
             !interrupted &&
             !lostEligibility &&
             ((state.PeriodRemaining != 0) || (state.CommitmentRemaining != 0))
-        ) { return false; }
+        ) { return RuleOutcome.Idle; }
 
         var choiceCount = GatherDecisionChoices(
+            faulted: out var gatherFaulted,
             key: key,
             lostEligibility: lostEligibility,
             runtime: runtime,
@@ -253,9 +269,9 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
 
         // An option gate or score that faulted while gathering decides nothing either, so the interrupt edge read this
         // tick is put back too.
-        if (scratch.RaisedFault != ExpressionFault.None) {
+        if (gatherFaulted) {
             state.InterruptHeld = interruptWasHeld;
-            return HoldDecision(fault: scratch.RaisedFault, rule: rule);
+            return HoldDecision(rule: rule);
         }
 
         var winner = -1;
@@ -296,7 +312,7 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
             state.DrawCount = unchecked((state.DrawCount + ((ulong)consumed)));
             // A refused ticket keeps the words it consumed, so the next reconsideration draws fresh ones instead of
             // repeating the refusal, and leaves the standing choice as it was.
-            if (!drawn) { return false; }
+            if (!drawn) { return RuleOutcome.Idle; }
 
             for (var index = 0; (index < choiceCount); index++) {
                 var weight = ((ulong)runtime.Choices[index].Score);
@@ -323,7 +339,7 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
             ? 0
             : winnerScore
         );
-        if (!changed) { return false; }
+        if (!changed) { return RuleOutcome.Idle; }
         state.Selected = selected.Option;
         state.Candidate = selected.Candidate;
         state.CandidateGeneration = selected.Generation;
@@ -333,12 +349,15 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
         );
         if (winner < 0) {
             return FireDecisionEffects(
+            applied: out applied,
             effects: policy.OnNoChoice,
             ruleName: rule.Name,
             stepTicks: stepTicks
         );
         }
-        var applied = FireDecisionEffects(
+
+        var common = FireDecisionEffects(
+            applied: out applied,
             effects: rule.Effects,
             ruleName: rule.Name,
             stepTicks: stepTicks
@@ -353,7 +372,7 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
             selected.Candidate,
             selected.Generation
         ))
-        ) { return applied; }
+        ) { return common; }
         var left = m_boundLeft; var right = m_boundRight;
 
         m_boundLeft = ((selected.Candidate < 0)
@@ -361,28 +380,29 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
             : key
         ); m_boundRight = selected.Candidate;
         try {
-            return (
-            FireDecisionEffects(
-            effects: policy.Options[selected.Option].Effects,
-            ruleName: rule.Name,
-            stepTicks: stepTicks
-        ) ||
-            applied
-        );
+            var option = FireDecisionEffects(
+                applied: out var optionApplied,
+                effects: policy.Options[selected.Option].Effects,
+                ruleName: rule.Name,
+                stepTicks: stepTicks
+            );
+
+            applied |= optionApplied;
+
+            return RuleEvaluator.Aggregate(
+                left: common,
+                right: option
+            );
         } finally { m_boundLeft = left; m_boundRight = right; }
     }
     // A decision's own effect sequence is one firing, exactly as a rule's is.
-    private bool FireDecisionEffects(IRuleEffect[] effects, string ruleName, ulong stepTicks) {
-        _ = m_evaluator.FireEffects(
-            applied: out var applied,
-            effects: effects,
-            ruleName: ruleName,
-            stepTicks: stepTicks,
-            tick: Tick
-        );
-
-        return applied;
-    }
+    private RuleOutcome FireDecisionEffects(IRuleEffect[] effects, string ruleName, ulong stepTicks, out bool applied) => m_evaluator.FireEffects(
+        applied: out applied,
+        effects: effects,
+        ruleName: ruleName,
+        stepTicks: stepTicks,
+        tick: Tick
+    );
     private static ulong DrainDecisionTicks(ulong value, ulong step) => ((value > step)
         ? (value - step)
         : 0

@@ -6,9 +6,20 @@ namespace Puck.World.Server;
 public sealed partial class WorldRuleHost {
     // Every (left carrier, right carrier) pair within range, or every left carrier inside the region, fires the
     // interaction once with left/right bound — the chemistry is evaluated over all carriers, never one argmax pair.
-    private bool EvaluateInteraction(CompiledWorldFactsRule rule, CompiledInteraction interaction, RuleLatch latch, RuleLatch.RuleState bindings, ulong stepTicks) {
-        var applied = false;
+    private RuleOutcome EvaluateInteraction(CompiledWorldFactsRule rule, CompiledInteraction interaction, RuleLatch latch, RuleLatch.RuleState bindings, ulong stepTicks, out bool applied) {
+        var aggregate = RuleOutcome.Idle;
+        var moved = false;
         var lefts = m_carrierScratchLeft;
+
+        applied = false;
+
+        void Pair(int left, int right) {
+            aggregate = RuleEvaluator.Aggregate(
+                left: aggregate,
+                right: FireInteractionPair(applied: out var fired, bindings: bindings, interaction: interaction, latch: latch, left: left, right: right, rule: rule, stepTicks: stepTicks)
+            );
+            moved |= fired;
+        }
 
         InteractionCarriers(
             into: lefts,
@@ -31,7 +42,7 @@ public sealed partial class WorldRuleHost {
                     continue;
                 }
 
-                applied |= FireInteractionPair(bindings: bindings, interaction: interaction, latch: latch, left: left, right: -1, rule: rule, stepTicks: stepTicks);
+                Pair(left: left, right: -1);
             }
         } else {
             var rights = m_carrierScratchRight;
@@ -97,13 +108,13 @@ public sealed partial class WorldRuleHost {
                         continue;
                     }
 
-                    applied |= FireInteractionPair(bindings: bindings, interaction: interaction, latch: latch, left: left, right: right, rule: rule, stepTicks: stepTicks);
+                    Pair(left: left, right: right);
                 }
 
                 for (var index = 0; (index < kept); index++) {
                     var right = m_neighbourIndex[index];
 
-                    applied |= FireInteractionPair(bindings: bindings, interaction: interaction, latch: latch, left: left, right: right, rule: rule, stepTicks: stepTicks);
+                    Pair(left: left, right: right);
                 }
             }
         }
@@ -111,8 +122,9 @@ public sealed partial class WorldRuleHost {
         m_boundLeft = -1;
         m_boundRight = -1;
         latch.EndSweep(state: bindings);
+        applied = moved;
 
-        return applied;
+        return aggregate;
     }
 
     // Resolves a document row once through the catalog's name -> handle dictionary (StateCatalog.TryResolve) and the

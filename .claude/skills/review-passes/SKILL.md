@@ -22,7 +22,9 @@ overrides this skill and is written into it in that session.
   - **Area fix pass**, the default: a reader from another family takes an area
     as it is now, not a lane's diff, and fixes what is local and clear. Codex
     passes over Claude-written areas, a Claude `specialist` over Codex-written
-    ones, and Argon takes security, large-context and UI areas.
+    ones, and Argon reviews either family's areas, with security,
+    large-context and UI areas its strongest fit. A design memo's review can
+    take a second family as an independent critic.
   - **Adversarial review** of a change, required only when the change falls in
     a review-only class of
     [hazards](../../../docs/development/hazards.md#silent-invariants). The

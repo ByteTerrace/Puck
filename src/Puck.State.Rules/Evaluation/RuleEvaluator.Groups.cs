@@ -42,16 +42,16 @@ public sealed partial class RuleEvaluator {
             if ((m_host is IArenaUndoHost suppressingUndo) && suppressingUndo.UndoGroupSuppressed(group: group.Name, tick: m_host.Tick)) {
                 continue;
             }
-            var armed = Armed(faulted: out var faulted, group: group);
+            var armed = Armed(group: group);
 
             // A trigger that faulted decided nothing: the group neither runs nor re-arms this tick, and keeps its
             // progress for the tick its trigger decides again.
-            if (faulted) {
+            if (armed == Verdict.Faulted) {
                 continue;
             }
             // A trigger that reads false re-arms the group: a breached fixpoint group runs again only after its
             // trigger has gone false and holds once more.
-            if (!armed) {
+            if (armed != Verdict.Open) {
                 if ((group.Undo is not null) && (m_host is IArenaUndoHost inactiveUndo) && inactiveUndo.UndoTurnPending(group: group.Name)) {
                     inactiveUndo.CancelUndoTurn(group: group.Name);
                 }
@@ -84,26 +84,26 @@ public sealed partial class RuleEvaluator {
         return applied;
     }
 
-    private bool Armed(CompiledRuleGroup group, out bool faulted) {
-        faulted = false;
+    // What the group's trigger decided: its bindings first, then its gate. A binding that read an absence closes it.
+    private Verdict Armed(CompiledRuleGroup group) {
         if (group.Trigger.Length == 0) {
-            return true;
+            return Verdict.Open;
         }
 
-        var scratch = m_host.Scratch;
-        var scope = scratch.EnterFaultScope();
-
-        try {
-            return (TryEvaluateLocals(
-                declared: group.Locals,
-                owner: group.Name,
-                tick: m_host.Tick
-            ) && (Decide(
-                gate: group.Trigger,
-                ruleName: group.Name
-            ) is Verdict.Open));
-        } finally {
-            faulted = (scratch.LeaveFaultScope(scope: scope) != ExpressionFault.None);
+        switch (EvaluateTriggerLocals(
+            declared: group.Locals,
+            owner: group.Name,
+            tick: m_host.Tick
+        )) {
+            case BindingsResult.Faulted:
+                return Verdict.Faulted;
+            case BindingsResult.Absent:
+                return Verdict.Closed;
+            default:
+                return Decide(
+                    gate: group.Trigger,
+                    ruleName: group.Name
+                );
         }
     }
     // One pass per tick over every member, in authored order. The pass closes the group when no row of its write
@@ -128,17 +128,20 @@ public sealed partial class RuleEvaluator {
         }
 
         var applied = false;
+        var faulted = false;
 
         m_host.Arena.BeginChangeWindow();
         try {
             foreach (var member in group.Members) {
-                _ = EvaluateRule(
+                var outcome = EvaluateRule(
                     applied: out var moved,
                     latch: latch,
                     rule: rules[member],
                     stepTicks: stepTicks
                 );
+
                 applied |= moved;
+                faulted |= (outcome == RuleOutcome.Faulted);
             }
         } catch {
             _ = EndPassWindow(group: group, replaced: out _);
@@ -147,6 +150,17 @@ public sealed partial class RuleEvaluator {
         }
 
         var windowChanged = EndPassWindow(group: group, replaced: out var replaced);
+
+        // A member that faulted decided nothing, so the pass counts no progress and leaves the pass count where it was.
+        if (faulted) {
+            state.Set(
+                name: group.Name,
+                progress: progress
+            );
+
+            return applied;
+        }
+
         var versionMoved = false;
 
         for (var index = 0; (index < group.WriteRows.Length); index++) {
@@ -292,32 +306,21 @@ public sealed partial class RuleEvaluator {
     }
     // A group's trigger carries its own bindings, which its binding keys address. They are evaluated fresh every
     // tick: a trigger runs once per tick, so memoizing it would cost more than it saves.
-    private bool TryEvaluateLocals(CompiledRuleLocal[] declared, string owner, ulong tick) {
+    private BindingsResult EvaluateTriggerLocals(CompiledRuleLocal[] declared, string owner, ulong tick) {
         for (var ordinal = 0; (ordinal < declared.Length); ordinal++) {
-            var bound = declared[ordinal];
-
-            var frame = new EvaluationFrame(reader: m_host);
-            var evaluated = RuleExpressions.Evaluate(
-                frame: ref frame,
-                kind: bound.CarrierKind,
-                program: bound.Expression
+            var local = EvaluateLocal(
+                bound: declared[ordinal],
+                ordinal: ordinal,
+                ruleName: owner,
+                tick: tick,
+                value: out _
             );
 
-            if (!evaluated.TryFinite(raw: out var value)) {
-                ReportRefusal(
-                    detail: RuleEvaluation.DescribeOutcome(outcome: evaluated),
-                    effect: $"binding '{bound.Name}'",
-                    refusal: RuleEffectRefusal.Arithmetic,
-                    ruleName: owner,
-                    tick: tick
-                );
-
-                return false;
+            if (local != BindingsResult.Bound) {
+                return local;
             }
-
-            m_host.Locals[ordinal] = value;
         }
 
-        return true;
+        return BindingsResult.Bound;
     }
 }

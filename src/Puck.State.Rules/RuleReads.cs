@@ -200,6 +200,15 @@ public static class RuleReads {
     /// <summary>Why an address whose key computation faulted refused: the one sentence every read and write that
     /// meets a <see cref="FaultCase.Faulted"/> address reports.</summary>
     public const string KeyFaultReason = "the address's key faulted (overflow, a divide by zero, or a value with no number)";
+    /// <summary>Returns whether a refusal reason is the one a faulted address reports, as opposed to an address that
+    /// resolved but could not be admitted.</summary>
+    /// <param name="reason">The reason a write address refused.</param>
+    /// <returns><see langword="true"/> when the address's computation faulted.</returns>
+    public static bool IsKeyFault(string reason) => string.Equals(
+        a: reason,
+        b: KeyFaultReason,
+        comparisonType: StringComparison.Ordinal
+    );
 
     /// <summary>Attempts to resolve the key a state-writing effect addresses. Only a dynamic key family that must
     /// create a new runtime address admits one here; read resolution never changes the key table.</summary>
