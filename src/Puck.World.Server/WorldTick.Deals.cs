@@ -16,7 +16,7 @@ public sealed partial class WorldTick {
         public ulong WorldSeed;
     }
     // What one template projection moved this tick, narrated after installation.
-    private readonly record struct DealReport(string Template, string Row, int Cells, int Offsets, int Added, int Removed, int Replaced, int Overflow);
+    private readonly record struct DealReport(string Template, string Row, int Cells, int Offsets, int Added, int Removed, int Replaced, int Overflow, string? Refused = null);
 
     private readonly Dictionary<string, DealMemo> m_dealMemos = new(comparer: StringComparer.Ordinal);
     private readonly List<WorldPlacement> m_dealChildren = [];
@@ -26,6 +26,7 @@ public sealed partial class WorldTick {
     private readonly List<(string Id, WorldPlacement? Placement)> m_dealChanges = [];
     private readonly List<CellName> m_dealtKeys = [];
     private readonly List<DealReport> m_dealReports = [];
+    private readonly List<WorldPlacement> m_dealInstalled = [];
     private bool[] m_dealSlotTaken = [];
 
 
@@ -237,6 +238,9 @@ public sealed partial class WorldTick {
                 continue;
             }
 
+            var firstChange = m_dealChanges.Count;
+            var firstReport = m_dealReports.Count;
+
             Deal(
                 definition: Host.Document.Definition, arena: arena,
                 deal: deal,
@@ -245,6 +249,12 @@ public sealed partial class WorldTick {
                 template: template,
                 variantOrdinal: variantOrdinal,
                 worldSeed: worldSeed
+            );
+            RefuseInvalidDeal(
+                definition: Host.Document.Definition,
+                firstChange: firstChange,
+                firstReport: firstReport,
+                template: template
             );
             memo.Arena = arena; memo.RowVersion = rowVersion; memo.VariantVersion = variantVersion;
         }
@@ -260,25 +270,51 @@ public sealed partial class WorldTick {
             }
         }
 
-        var applied = true;
         Host.Document.InstallPlacementProjection(changes: m_dealChanges);
 
         if (Host.Output.HasNarrationSink) {
-            var total = m_dealChanges.Count;
-
             foreach (var report in m_dealReports) {
                 Host.Output.Narrate(
                     channel: "world.deal",
-                    text: (applied
-                    ? $"[world.deal: '{report.Template}' dealt {report.Row}: {report.Cells} cell(s) over {report.Offsets} offset(s) — {report.Added} added, {report.Removed} removed, {report.Replaced} replaced{((report.Overflow > 0)
+                    text: ((report.Refused is { } refusal)
+                    ? $"[world.deal: '{report.Template}' dealt {report.Row}: refused as one ({refusal}); its children stay as they were]"
+                    : $"[world.deal: '{report.Template}' dealt {report.Row}: {report.Cells} cell(s) over {report.Offsets} offset(s) — {report.Added} added, {report.Removed} removed, {report.Replaced} replaced{((report.Overflow > 0)
                         ? $", {report.Overflow} without a free offset"
-                        : string.Empty)}]"
-                    : $"[world.deal: '{report.Template}' dealt {report.Row}: the tick's {total} child mutation(s) were refused as one; the children stay as they were]")
+                        : string.Empty)}]")
                 );
             }
         }
+    }
+    // A template's deal is one install: when any child it would add or replace is one the document validator would
+    // refuse, none of its changes land, so the installed document keeps only rows validation admits. The memo already
+    // holds the inputs this deal read, so the refusal repeats only when they move.
+    private void RefuseInvalidDeal(WorldDefinition definition, WorldPlacement template, int firstChange, int firstReport) {
+        if (m_dealChanges.Count == firstChange) {
+            return;
+        }
 
+        m_dealInstalled.Clear();
 
+        for (var index = firstChange; (index < m_dealChanges.Count); index++) {
+            if (m_dealChanges[index].Placement is { } installed) {
+                m_dealInstalled.Add(item: installed);
+            }
+        }
+        if (WorldDefinitionValidator.TryValidateDealtChildren(
+            children: m_dealInstalled,
+            definition: definition,
+            reason: out var reason,
+            template: template
+        )) {
+            return;
+        }
+
+        m_dealChanges.RemoveRange(
+            count: (m_dealChanges.Count - firstChange),
+            index: firstChange
+        );
+        // Deal reports every template that changed a row, so the report for these changes is the one at firstReport.
+        m_dealReports[firstReport] = (m_dealReports[firstReport] with { Refused = reason });
     }
     private void Deal(WorldDefinition definition, StateArena arena, WorldPlacement template, WorldPlacementDeal deal, int rowOrdinal, int variantOrdinal, DealMemo memo, ulong worldSeed) {
         if (

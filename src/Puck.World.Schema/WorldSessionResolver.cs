@@ -490,6 +490,31 @@ public sealed class WorldSessionResolver {
 
         return rows;
     }
+    /// <summary>Reads the durability and scope key an instance name was minted for: a persisted instance's name is a pure
+    /// function of its destination and scope key, which is what makes a durable image findable by that name alone.</summary>
+    /// <param name="instanceName">The instance name.</param>
+    /// <param name="durability">The durability of the destination that minted it, on success.</param>
+    /// <param name="scopeKey">The scope key it was minted for (<see cref="GlobalScopeKey"/>, <c>user:&lt;id&gt;</c> or
+    /// <c>group:&lt;id&gt;</c>), on success.</param>
+    /// <returns><see langword="false"/> for a name this resolver did not mint or no longer holds.</returns>
+    public bool TryDescribeInstance(string instanceName, out WorldDestinationDurability durability, out string scopeKey) {
+        if (m_byInstanceName.TryGetValue(
+            key: instanceName,
+            value: out var keys
+        ) && (keys.Count > 0)) {
+            var key = keys.First();
+
+            durability = key.Durability;
+            scopeKey = key.ScopeKey;
+
+            return true;
+        }
+
+        durability = default;
+        scopeKey = string.Empty;
+
+        return false;
+    }
     /// <summary>Clears the cache entry an instance name resolved to, if any — called from
     /// <c>Puck.World.WorldInstanceHost.TryRetire</c> (which is also
     /// <c>Puck.World.WorldInstanceHost.ReapIfEmpty</c>'s own apply path) so the NEXT scoped resolution against the

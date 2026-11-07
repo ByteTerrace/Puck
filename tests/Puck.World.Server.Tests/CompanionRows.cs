@@ -119,16 +119,27 @@ internal sealed class CompanionRows : IDisposable {
     /// <summary>Makes every image an explicit stop writes the row's durable image, and records each write: the row and
     /// whether the image resumes the stop. <paramref name="refuse"/> names the rows whose final image the store
     /// refuses.</summary>
-    public void KeepDurableImages(Func<string, bool>? refuse = null) => Host.DurableImages = (WorldInstance row, WorldAuthorityCheckpoint checkpoint, out string reason) => {
-        if (!checkpoint.HostRow.Stopping && (refuse?.Invoke(arg: row.Name) == true)) {
-            reason = "the store refused the write";
+    public void KeepDurableImages(Func<string, bool>? refuse = null) => Host.DurableImages = new RecordingImages(rows: this, refuse: refuse);
+    // Keeps every row's image in memory and records each write; reads nothing back, since a law restarts a row itself.
+    private sealed class RecordingImages(CompanionRows rows, Func<string, bool>? refuse) : IWorldDurableImages {
+        public bool Keeps(string instanceName) => true;
+        public bool TryWrite(string instanceName, WorldAuthorityCheckpoint checkpoint, out string reason) {
+            if (!checkpoint.HostRow.Stopping && (refuse?.Invoke(arg: instanceName) == true)) {
+                reason = "the store refused the write";
+                return false;
+            }
+            rows.m_images[instanceName] = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+            rows.ImageWrites.Add(item: (instanceName, checkpoint.HostRow.Stopping));
+            reason = string.Empty;
+            return true;
+        }
+        public bool TryRead(string instanceName, string? documentDirectory, out WorldAuthorityCheckpoint? checkpoint, out string reason) {
+            checkpoint = null;
+            reason = string.Empty;
             return false;
         }
-        m_images[row.Name] = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
-        ImageWrites.Add(item: (row.Name, checkpoint.HostRow.Stopping));
-        reason = string.Empty;
-        return true;
-    };
+        public void SetAside(string instanceName) { }
+    }
     /// <summary>Every image a stop wrote durably, in order: the row and whether the image resumes the stop.</summary>
     public List<(string Row, bool Stopping)> ImageWrites { get; } = [];
     /// <summary>Starts a row no longer running from its latest durable image and its crossing log, as a later activation
