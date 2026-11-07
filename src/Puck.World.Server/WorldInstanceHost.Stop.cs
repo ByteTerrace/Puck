@@ -13,23 +13,24 @@ public enum WorldInstanceStop : byte {
     /// <summary>Nothing was stopped; the reason names why.</summary>
     Refused,
 }
+/// <summary>Writes a row's image where a later activation recovers it from, together with the row's crossing log.</summary>
+/// <param name="row">The row, still admitted and not yet disposed.</param>
+/// <param name="checkpoint">The row's image, its host slice included.</param>
+/// <param name="reason">Why the image is not durable, on failure.</param>
+/// <returns><see langword="true"/> once the image is durable.</returns>
+public delegate bool WorldDurableImageWriter(WorldInstance row, WorldAuthorityCheckpoint checkpoint, out string reason);
+
 public sealed partial class WorldInstanceHost {
     // Rows an explicit stop is retiring. Captured in each row's host slice, so a restart resumes the stop.
     private readonly HashSet<string> m_stopping = new(comparer: StringComparer.Ordinal);
     // The last wait or failure narrated for each stopping row, so a stop that waits across drains narrates once.
     private readonly Dictionary<string, string> m_stopNarrated = new(comparer: StringComparer.Ordinal);
-    // The last reason a row's cadence image was refused, so a refusal that repeats at every boundary narrates once.
-    private readonly Dictionary<string, string> m_imageRefusals = new(comparer: StringComparer.Ordinal);
 
-    /// <summary>Gets or sets where a row's image is written and read: by an explicit stop, once when the stop is
-    /// accepted, so a restart resumes it, and once more as the final image before the row retires; by a quit, as the
-    /// image of each row still running; and by an activation, which restores the image its name left.
-    /// <see langword="null"/> for a host whose rows keep no durable image, and a row the store does not keep
-    /// (<see cref="IWorldDurableImages.Keeps"/>) is treated the same: a stop never retires a row that still holds
-    /// custody. It refuses what only another authority ends and waits for what its drains settle.</summary>
-    public IWorldDurableImages? DurableImages { get; set; }
-    // Whether the row's state outlives its activation: the one test a stop, a quit and an activation share.
-    private bool KeepsImage(WorldInstance row) => (DurableImages?.Keeps(instanceName: row.Name) == true);
+    /// <summary>Gets or sets where an explicit stop writes a row's image: once when the stop is accepted, so a restart
+    /// resumes it, and once more as the final image before the row retires. <see langword="null"/> for a host whose rows
+    /// keep no durable image: a stop there never retires a row that still holds custody. It refuses what only another
+    /// authority ends and waits for what its drains settle.</summary>
+    public WorldDurableImageWriter? DurableImages { get; set; }
 
     // What keeps a row from retiring without a durable image of it: the titles it holds abroad, which only their
     // custodian's return, a recall or a hop's resolution ends; the custody steps its drains still owe, its own departures
@@ -117,7 +118,7 @@ public sealed partial class WorldInstanceHost {
 
         var hold = CustodyHeldBy(instance: instance);
 
-        if (!KeepsImage(row: instance) && (hold.Abroad.Count > 0)) {
+        if ((DurableImages is null) && (hold.Abroad.Count > 0)) {
             reason = $"'{name}' {hold.Describe()}, and this host keeps no durable image to carry a title abroad until its custodian returns it";
             return WorldInstanceStop.Refused;
         }
@@ -196,7 +197,7 @@ public sealed partial class WorldInstanceHost {
                 if ((hold.Visiting.Length > 0) || (hold.Arriving > 0)) {
                     return false;
                 }
-                if (!KeepsImage(row: instance)) {
+                if (DurableImages is null) {
                     abandon = (hold.Abroad.Count > 0);
                     return !hold.Holds;
                 }
@@ -225,67 +226,24 @@ public sealed partial class WorldInstanceHost {
     // Writes the row's image where the host keeps durable images; a host without them has nothing to write. A frozen row
     // is retiring, so its image is the final one, which a later activation starts from without resuming the stop.
     private bool TryWriteImage(WorldInstance instance, out string reason) {
-        if ((DurableImages is not { } images) || !images.Keeps(instanceName: instance.Name)) {
+        if (DurableImages is not { } writer) {
             reason = string.Empty;
             return true;
         }
 
         var final = instance.Server.IsRetiring;
-        var hostRow = (CaptureRow(row: instance) with { Stopping = (!final && m_stopping.Contains(item: instance.Name)) });
+        var hostRow = (CaptureRow(row: instance) with { Stopping = !final });
 
         if (!instance.Server.TryCaptureCheckpoint(checkpoint: out var checkpoint, hostRow: hostRow, reason: out var captured)) {
             reason = $"'{instance.Name}' could not capture its {(final ? "final " : string.Empty)}image ({captured})";
             return false;
         }
-        if (!images.TryWrite(checkpoint: checkpoint!, instanceName: instance.Name, reason: out var written)) {
+        if (!writer(checkpoint: checkpoint!, reason: out var written, row: instance)) {
             reason = $"'{instance.Name}''s {(final ? "final " : string.Empty)}image is not durable ({written})";
             return false;
         }
         reason = string.Empty;
         return true;
-    }
-    // Counts one step of a row that keeps an image toward its next cadence image.
-    private void NoteImageStep(WorldInstance row, ulong stepTicks) {
-        if (KeepsImage(row: row)) {
-            row.ImageCadence.NoteMasterStep(stepTicks: stepTicks);
-        }
-    }
-    // Writes the image its cadence armed, at the boundary after the row's steps. A refusal (a capture that must wait for
-    // the next boundary, a store that failed) leaves the request armed, and is narrated once per distinct reason.
-    private void WriteArmedImage(WorldInstance row) {
-        if (!row.ImageCadence.IsArmed || row.Server.IsRetiring) {
-            return;
-        }
-        if (TryWriteImage(instance: row, reason: out var reason)) {
-            row.ImageCadence.Clear();
-            _ = m_imageRefusals.Remove(key: row.Name);
-        } else if (!string.Equals(a: m_imageRefusals.GetValueOrDefault(key: row.Name), b: reason, comparisonType: StringComparison.Ordinal)) {
-            m_imageRefusals[row.Name] = reason;
-            NarrateStop(text: $"'{row.Name}' kept no cadence image ({reason})");
-        }
-    }
-    // A quit abandons every running row, so each row that keeps an image leaves its present state in it and the next
-    // activation of its name resumes there. A row already frozen for retirement wrote its final image when it froze.
-    // The boot row is the process's own and keeps none.
-    private void WriteImagesAtQuit() {
-        if (DurableImages is null) {
-            return;
-        }
-        foreach (var name in Names) {
-            if (
-                string.Equals(a: name, b: BootInstanceName, comparisonType: StringComparison.Ordinal) ||
-                !m_instances.TryGetValue(key: name, value: out var instance) ||
-                instance.Server.IsRetiring ||
-                !KeepsImage(row: instance)
-            ) {
-                continue;
-            }
-            if (TryWriteImage(instance: instance, reason: out var reason)) {
-                NarrateStop(text: $"'{name}' kept its image at quit");
-            } else {
-                NarrateStop(text: $"'{name}' kept no image at quit ({reason})");
-            }
-        }
     }
     // Advances every stopping row at the end of the drain, after the custody steps the drain makes.
     private void CompleteStops() {

@@ -146,10 +146,6 @@ public sealed class WorldInstance : IDisposable {
     /// the durable stop, 0) — nothing is banked toward a step that will not happen, and resuming continues on the
     /// identical schedule the instance would have kept had it never paused.</summary>
     public ulong ScheduleAccumulatorTicks { get; set; }
-    /// <summary>Gets the engine-time cadence at which the host writes this instance's durable image while it runs, so a
-    /// crash loses at most one cadence of what the instance did. Counted from the instance's own steps and never reset
-    /// by a pause; it arms a write and never decides whether one may proceed.</summary>
-    internal WorldAuthorityCheckpointCadenceCounter ImageCadence { get; } = new();
     /// <summary>This instance's own authoritative server — a distinct object graph per instance.</summary>
     public WorldServer Server { get; }
     /// <summary>The document path this instance currently answers for.</summary>

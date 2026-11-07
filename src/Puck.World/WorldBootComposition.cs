@@ -861,14 +861,7 @@ public static class WorldBootComposition {
                 pacing: sp.GetRequiredService<HostPacing>(),
                 presents: (sp.GetService<WorldHostSettings>() is not { Headless: true }),
                 jobs: sp.GetRequiredService<Puck.Hosting.Jobs.JobPool>()
-            ) {
-                // A persisted destination's row outlives the process: its image is written at stop and at quit, and an
-                // activation of the same name restores it.
-                DurableImages = new WorldDirectoryImages(
-                    resolver: sp.GetRequiredService<WorldSessionResolver>(),
-                    root: sp.GetRequiredService<WorldStateRoot>()
-                ),
-            };
+            );
             var bootOrigin = sp.GetRequiredService<WorldDefinitionSource>();
             var bootServer = sp.GetRequiredService<WorldServer>();
             var bootRow = new WorldInstance(

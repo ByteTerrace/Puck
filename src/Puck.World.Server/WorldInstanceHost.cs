@@ -425,7 +425,6 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <summary>Disposes every instance this host owns. The boot instance's own graph belongs to the container and
     /// is untouched.</summary>
     public void Dispose() {
-        WriteImagesAtQuit();
         foreach (var instance in m_instances.Values) {
             if (instance.Tape is { Mode: WorldReplayMode.Recording } tape) {
                 _ = tape.CancelRecording();
@@ -833,10 +832,6 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                     instance: instance,
                     stepped: true
                 );
-                NoteImageStep(
-                    row: instance,
-                    stepTicks: stepWidth
-                );
 
                 // Server.Step installs any pending definition swap (world.load/.reset/.reload) before
                 // advancing, so a mid-batch rate change makes the cached stepWidth stale for further
@@ -849,7 +844,6 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                     break;
                 }
             }
-            WriteArmedImage(row: instance);
         }
     }
     /// <summary>
@@ -1143,10 +1137,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // instance name and origin. It has not been published to a server or a remote observer.
     private sealed record PreparedInstanceDocument(string Name, string Path, WorldDefinitionAdmission Admission, bool Shared);
 
-    // An activation of a row that keeps an image resumes that image: the row starts from its document and the image's
-    // state is restored over it before the row steps, as a history seek restores a live server. An image that cannot be
-    // restored is set aside and the row starts from its document, so a stale or damaged image never closes a place.
-    private bool TryStartCore(string name, string path, out WorldInstance? instance, out string reason, PreparedInstanceDocument? prepared = null, bool restoreImage = true) {
+    private bool TryStartCore(string name, string path, out WorldInstance? instance, out string reason, PreparedInstanceDocument? prepared = null) {
         instance = null;
 
         if (!m_admitsSpawn) {
@@ -1262,21 +1253,6 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         m_documentShared[name] = documentShared;
 
-        WorldAuthorityCheckpoint? image = null;
-
-        if (restoreImage && (DurableImages is { } durable) && durable.Keeps(instanceName: name)) {
-            if (!durable.TryRead(
-                checkpoint: out image,
-                documentDirectory: definition.DocumentDirectory,
-                instanceName: name,
-                reason: out var unreadable
-            ) && (unreadable.Length > 0)) {
-                durable.SetAside(instanceName: name);
-                m_narration.Narrate(channel: "world.instance", text: $"[world.instance: '{name}' kept an image it cannot read ({unreadable}); starting from its document]");
-                image = null;
-            }
-        }
-
         // A cabinet's content is authored relative to the document that declares it, and the file load gave the
         // definition that document's directory, so a neighbour started here reads its cartridges from beside its
         // document, as the booted world does.
@@ -1294,18 +1270,33 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         // exception kills the pump and takes every world in the process down with it, the boot world included. An IO
         // failure here is a refusal like any other; nothing about it is worth the whole session.
         try {
-            var profiles = new WorldOwnedWorlds(
-                template: definition!,
-                directory: ownedWorlds,
-                machineId: m_machineId,
-                neighbours: new WorldFileNeighbourResolver(
-                    baseDirectory: () => ownedWorlds,
-                    catalog: m_machineCatalog,
+            var server = new WorldServer(
+                definition: definition!,
+                population: new WorldPopulation(definition: definition!),
+                profiles: new WorldOwnedWorlds(
+                    template: definition!,
+                    directory: ownedWorlds,
+                    machineId: m_machineId,
+                    neighbours: new WorldFileNeighbourResolver(
+                        baseDirectory: () => ownedWorlds,
+                        catalog: m_machineCatalog,
+                        catalogFingerprint: m_catalogFingerprint
+                    ),
+                    narrationHub: m_narration,
+                    machineCatalog: m_machineCatalog,
                     catalogFingerprint: m_catalogFingerprint
                 ),
-                narrationHub: m_narration,
-                machineCatalog: m_machineCatalog,
-                catalogFingerprint: m_catalogFingerprint
+                envelope: new WorldRenderEnvelope(),
+                machines: machines,
+                instanceIdentity: name,
+                authorityIdentity: LifetimeAuthority(name: name),
+                // The receipt travels when it names this exact document and the catalog this host validates
+                // against; a loader that deferred provider admission to a different catalog leaves construction
+                // to prove it.
+                admission: (admission!.AppliesTo(definition: definition!, machines: machines.ValidationCatalog)
+                    ? admission
+                    : null),
+                jobs: m_jobs
             );
 
             adjacencies = new WorldAdjacencyFields(
@@ -1313,62 +1304,12 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 sourceInstanceName: name
             );
 
-            WorldServer server;
-
-            if (image is null) {
-                server = new WorldServer(
-                    definition: definition!,
-                    population: new WorldPopulation(definition: definition!),
-                    profiles: profiles,
-                    envelope: new WorldRenderEnvelope(),
-                    machines: machines,
-                    instanceIdentity: name,
-                    authorityIdentity: LifetimeAuthority(name: name),
-                    // The receipt travels when it names this exact document and the catalog this host validates
-                    // against; a loader that deferred provider admission to a different catalog leaves construction
-                    // to prove it.
-                    admission: (admission!.AppliesTo(definition: definition!, machines: machines.ValidationCatalog)
-                        ? admission
-                        : null),
-                    jobs: m_jobs
-                );
-                server.Adjacencies = adjacencies;
-            } else {
-                try {
-                    (server, _) = WorldPersistence.FromCheckpoint(
-                        adjacencies: adjacencies,
-                        authorityIdentity: LifetimeAuthority(name: name),
-                        checkpoint: image,
-                        documentDirectory: definition.DocumentDirectory,
-                        instanceIdentity: name,
-                        jobs: m_jobs,
-                        machines: machines,
-                        profiles: profiles
-                    );
-                } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException or FormatException or NotSupportedException or System.Text.Json.JsonException)) {
-                    adjacencies.Dispose();
-                    machines.Dispose();
-                    DurableImages!.SetAside(instanceName: name);
-                    m_narration.Narrate(channel: "world.instance", text: $"[world.instance: '{name}' could not restore its image ({exception.Message}); starting from its document]");
-
-                    return TryStartCore(
-                        instance: out instance,
-                        name: name,
-                        path: path,
-                        reason: out reason,
-                        restoreImage: false
-                    );
-                }
-                // The checkpoint's sessions were observed from the activation that captured it; their screens observe
-                // this one afresh.
-                server.EndUnobservedSessions();
-            }
-
             server.Neighbours = instanceNeighbours;
+            server.Adjacencies = adjacencies;
             if (m_addonHostFactory is { } addonFactory) {
-                addons = addonFactory(server.Definition, server);
+                addons = addonFactory(definition, server);
                 server.AttachAddons(runtime: addons);
-            } else if (server.Definition.Addons.Any(predicate: row => row.Enabled)) {
+            } else if (definition.Addons.Any(predicate: row => row.Enabled)) {
                 throw new InvalidOperationException(message: "Enabled addons require the host's addon factory.");
             }
 
@@ -1402,29 +1343,6 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         }
 
         Admit(row: started);
-
-        if (image is not null) {
-            try {
-                RestoreRow(
-                    row: started,
-                    slice: image.HostRow
-                );
-            } catch (ArgumentException exception) {
-                Retire(instance: started);
-                DurableImages!.SetAside(instanceName: name);
-                m_narration.Narrate(channel: "world.instance", text: $"[world.instance: '{name}' could not restore its image's host slice ({exception.Message}); starting from its document]");
-
-                return TryStartCore(
-                    instance: out instance,
-                    name: name,
-                    path: path,
-                    reason: out reason,
-                    restoreImage: false
-                );
-            }
-            m_narration.Narrate(channel: "world.instance", text: $"[world.instance: '{name}' restored its image at tick {started.CompletedTicks}]");
-        }
-
         instance = started;
         reason = string.Empty;
 
@@ -1502,7 +1420,6 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         _ = m_deferredReaps.Remove(item: name);
         _ = m_stopping.Remove(item: name);
         _ = m_stopNarrated.Remove(key: name);
-        _ = m_imageRefusals.Remove(key: name);
         ForgetResolvedDocuments();
         _ = m_documentShared.Remove(key: name);
         // A stopped row answers for no transfer. An in-doubt transfer addressed to it waits, by authority, for the
