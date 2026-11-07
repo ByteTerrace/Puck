@@ -328,7 +328,7 @@ written out with the arguments substituted.
 
 **G7 — Totals summed by hand across documents.** `bodies.capacity`
 (`worlds/debug/debug.puck:180`, summing counts `shapes.puck` restates from each
-game) and `placements.policy.derivedFaceScreens` (`debug.puck:191`,
+game) and `placements.policy.derivedFaceScreens` (`worlds/debug/debug.puck:191`,
 `garden.puck:83`, `night.puck:78`) are summed by hand from what imports
 declare, and drift when an import changes.
 
