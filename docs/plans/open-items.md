@@ -1361,7 +1361,7 @@ specializes in the background as an input-identified cache; materials binned by
 program; pipeline state engine-owned; a hard per-dispatch work bound; a
 device-loss quarantine; and the engine's layers (paints, inset, weathering,
 flow, cel banding) rewritten as the standard package's first programs. The
-design review's twelve findings are resolved in the memo's section 8 (the
+two design reviews (Codex, Argon) are resolved in the memo's section 8 (the
 shadow-demand envelope, the light and compose phases, one invocation for opaque
 and glass, IR semantics for tier equivalence, slice-relative operands, cost
 closed over helpers, the planner's jobs on both paths, runtime parameter slots,

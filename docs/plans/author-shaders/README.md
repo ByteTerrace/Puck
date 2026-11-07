@@ -16,7 +16,8 @@ check's S1 to S29) are the rows of these tables.
 | [gpu.md](gpu.md) | Ubershaders against specialization on the bar devices, visibility buffers and material binning, pipeline caches on both backends, specialization constants and linking, and what the views pass's code shows. |
 | [cite-check-claude.md](cite-check-claude.md) | The citation check of the first two files, claim by claim, with the verdicts that change a conclusion. |
 | [cite-check-gpu.md](cite-check-gpu.md) | The citation check of the GPU file, including its claims about Puck's code at the cited lines. |
-| [memo-review.md](memo-review.md) | The design review of the memo's first draft: twelve findings against the code, each resolved in [the memo's section 8](../author-shaders.md#8-the-design-reviews-findings-resolved). |
+| [memo-review.md](memo-review.md) | Codex's design review of the memo's first draft: twelve findings against the code, each resolved in [the memo's section 8](../author-shaders.md#8-the-design-reviews-findings-resolved). |
+| [memo-review-argon.md](memo-review-argon.md) | Argon's independent design review of the same draft: ten findings and two proposals, about half overlapping Codex's; the rest resolved in the same section. Several of its code quotations do not match the tree, which the memo notes; its links were made repository-relative when it was copied here. |
 
 The line citations into Puck's code in these files were true when the round
 ran; the memo names symbols instead, and a reader checks the current source.
