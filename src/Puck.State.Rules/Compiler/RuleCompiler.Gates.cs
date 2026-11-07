@@ -21,7 +21,7 @@ public static partial class RuleCompiler {
             ruleName: ruleName
         );
 
-        gate = ShortCircuitGate(gate);
+        gate = ShortCircuitGate(tokens: gate);
         if (gate.Count > RuleCapacity.MaxPredicateTokens) {
             throw new RuleException(
                 detail: $"gate compiles to {gate.Count} tokens, exceeding the {RuleCapacity.MaxPredicateTokens}-token ceiling",
@@ -32,28 +32,33 @@ public static partial class RuleCompiler {
 
         return [.. gate];
     }
+
     private static List<GateToken> ShortCircuitGate(List<GateToken> tokens) {
         var stack = new Stack<List<GateToken>>();
+
         foreach (var token in tokens) {
-            var arity = token.Op == GateOp.Compare ? 0 : token.Op == GateOp.Not ? 1 : token.Arity;
+            var arity = ((token.Op == GateOp.Compare) ? 0 : ((token.Op == GateOp.Not) ? 1 : token.Arity));
             var children = new List<GateToken>[arity];
-            for (var index = arity - 1; index >= 0; index--) { children[index] = stack.Pop(); }
+
+            for (var index = (arity - 1); (index >= 0); index--) { children[index] = stack.Pop(); }
             var result = new List<GateToken>();
             var jumps = new List<int>();
-            for (var index = 0; index < arity; index++) {
-                result.AddRange(children[index]);
-                if (index + 1 < arity && token.Op is GateOp.All or GateOp.Any) {
-                    jumps.Add(result.Count);
-                    result.Add(new GateToken(default, default, default, default, token.Describe,
-                        Op: GateOp.ShortCircuit, Arity: index, SkipWhen: token.Op == GateOp.Any));
+
+            for (var index = 0; (index < arity); index++) {
+                result.AddRange(collection: children[index]);
+                if (((index + 1) < arity) && (token.Op is GateOp.All or GateOp.Any)) {
+                    jumps.Add(item: result.Count);
+                    result.Add(item: new GateToken(default, default, default, default, token.Describe,
+                        Op: GateOp.ShortCircuit, Arity: index, SkipWhen: (token.Op == GateOp.Any)));
                 }
             }
-            result.Add(token);
-            foreach (var jump in jumps) { result[jump] = result[jump] with { Skip = result.Count - jump - 1 }; }
-            stack.Push(result);
+            result.Add(item: token);
+            foreach (var jump in jumps) { result[jump] = result[jump] with { Skip = ((result.Count - jump) - 1) }; }
+            stack.Push(item: result);
         }
-        return stack.Count == 0 ? [] : stack.Pop();
+        return ((stack.Count == 0) ? [] : stack.Pop());
     }
+
     /// <summary>Compiles an expression key evaluated where it is read or written. Repeated spellings
     /// in the same binding scope share compiled code, never a pre-gate value.</summary>
     /// <param name="text">The expression's canonical infix spelling.</param>
@@ -92,13 +97,15 @@ public static partial class RuleCompiler {
         );
 
         var reference = new CompiledCellRef(
-            Custom: new EffectKeyFact(source: program),
             Key: default,
+            Program: program,
             RowOrdinal: -1
         );
+
         context.KeyExpressions.Add(key: cacheKey, value: reference);
         return reference;
     }
+
     // Both sides of a compareValue share one domain. A declared kind is that domain; an undeclared one is inferred
     // the way a local's carrier is: Int, unless both sides are constants alone and one holds a fraction, and the
     // other domain when the first reading refuses either side. A refusal under both readings reports the first.
@@ -110,12 +117,12 @@ public static partial class RuleCompiler {
         ));
 
         try {
-            return CompileComparisonCarrier(expression, kind, ruleName, context, out left, out right);
+            return CompileComparisonCarrier(carrier: kind, context: context, expression: expression, left: out left, right: out right, ruleName: ruleName);
         } catch (RuleException first) when ((expression.Kind is null)) {
             var other = ((kind == CellKind.Int) ? CellKind.Fixed : CellKind.Int);
 
             try {
-                return CompileComparisonCarrier(expression, other, ruleName, context, out left, out right);
+                return CompileComparisonCarrier(carrier: other, context: context, expression: expression, left: out left, right: out right, ruleName: ruleName);
             } catch (RuleException) {
                 throw first;
             }
@@ -130,12 +137,13 @@ public static partial class RuleCompiler {
             resultKind: expression.Kind, result: out var rightKind);
         var leftCarrier = carrier;
         var rightCarrier = carrier;
-        if (leftKind != rightKind && expression.Kind is null) {
-            if (IsConstantExpression(expression.Right)) {
+
+        if ((leftKind != rightKind) && (expression.Kind is null)) {
+            if (IsConstantExpression(expression: expression.Right)) {
                 rightCarrier = leftKind;
                 right = CompileExpression(expression.Right, leftKind, ruleName, "compareValue right", context);
                 rightKind = leftKind;
-            } else if (IsConstantExpression(expression.Left)) {
+            } else if (IsConstantExpression(expression: expression.Left)) {
                 leftCarrier = rightKind;
                 left = CompileExpression(expression.Left, rightKind, ruleName, "compareValue left", context);
                 leftKind = rightKind;
@@ -741,8 +749,8 @@ public static partial class RuleCompiler {
                 gate.Add(item: new GateToken(
                     Comparison: comparison,
                     Describe: $"compareValue {valueKind} {comparison.Symbol()}",
-                    LeftSource: CompiledValueSource.FromExpression(expression: left, carrierKind: leftCarrier),
-                    RightSource: CompiledValueSource.FromExpression(expression: right, carrierKind: rightCarrier),
+                    LeftSource: CompiledValueSource.FromExpression(carrierKind: leftCarrier, expression: left),
+                    RightSource: CompiledValueSource.FromExpression(carrierKind: rightCarrier, expression: right),
                     ValueKind: valueKind
                 ));
 
@@ -786,7 +794,7 @@ public static partial class RuleCompiler {
     private static GateToken ResolvePredicate(ActionPredicate.CompareState compare, string ruleName, RuleCompileContext context) {
         var comparison = compare.Comparison;
         var hasComparand = (compare.ComparandState is not null);
-        var hasValue = (compare.Value is not null || compare.Text is not null);
+        var hasValue = ((compare.Value is not null) || (compare.Text is not null));
         var name = compare.State.Spelling;
 
         if (!comparison.IsComparison()) {
@@ -809,13 +817,13 @@ public static partial class RuleCompiler {
                 ruleName: ruleName
             );
         }
-        if ((compare.Value is not null && compare.Text is not null) || hasValue == hasComparand) {
+        if (((compare.Value is not null) && (compare.Text is not null)) || (hasValue == hasComparand)) {
             throw new RuleException(
-                detail: (compare.Text is not null
+                detail: ((compare.Text is not null)
                 ? "compareState requires exactly one of 'value', 'text' and 'comparandState'"
-                : hasValue
+                : (hasValue
                 ? "names both 'value' and 'comparandState' — a compareState spells exactly one comparand, never both"
-                : "names neither 'value' nor 'comparandState' — a compareState must spell exactly one comparand"),
+                : "names neither 'value' nor 'comparandState' — a compareState must spell exactly one comparand")),
                 refusal: RuleRefusal.ComparandAmbiguous,
                 ruleName: ruleName
             );
@@ -826,11 +834,11 @@ public static partial class RuleCompiler {
             cell: compare.Key,
             operand: compare.State,
             site: new OperandSite(
+                AllowText: true,
                 FieldLabel: "state",
                 KeyFieldLabel: "key",
                 RuleName: ruleName,
-                Verb: "compareState",
-                AllowText: true
+                Verb: "compareState"
             )
         );
 
@@ -840,8 +848,8 @@ public static partial class RuleCompiler {
                     throw new RuleException(RuleRefusal.ComparandKindMismatch, ruleName,
                         $"'{name}' is kind={lhs.ValueKind} but its comparand is Text");
                 }
-                ValidateTextComparison(comparison, text.Length, ruleName);
-                return new GateToken(CompiledValueSource.FromOperand(lhs.Operand), comparison,
+                ValidateTextComparison(comparison: comparison, length: text.Length, ruleName: ruleName);
+                return new GateToken(CompiledValueSource.FromOperand(operand: lhs.Operand), comparison,
                     new CompiledValueSource(Text: text), CellKind.Text, $"{lhs.Describe} {comparison.Symbol()} \"{text}\"");
             }
             if (lhs.ValueKind == CellKind.Text) {
@@ -869,11 +877,11 @@ public static partial class RuleCompiler {
             cell: compare.ComparandKey,
             operand: compare.ComparandState!,
             site: new OperandSite(
+                AllowText: true,
                 FieldLabel: "comparandState",
                 KeyFieldLabel: "comparandKey",
                 RuleName: ruleName,
-                Verb: "compareState",
-                AllowText: true
+                Verb: "compareState"
             )
         );
 
@@ -886,7 +894,7 @@ public static partial class RuleCompiler {
                 ruleName: ruleName
             );
         }
-        if (lhs.ValueKind == CellKind.Text) { ValidateTextComparison(comparison, 0, ruleName); }
+        if (lhs.ValueKind == CellKind.Text) { ValidateTextComparison(comparison: comparison, length: 0, ruleName: ruleName); }
 
         return new GateToken(
             Comparison: comparison,
@@ -897,7 +905,7 @@ public static partial class RuleCompiler {
         );
     }
     private static void ValidateTextComparison(ExpressionOp comparison, int length, string ruleName) {
-        if (comparison is not (ExpressionOp.Equal or ExpressionOp.NotEqual) || length > StateCapacity.MaxTextValueLength) {
+        if ((comparison is not (ExpressionOp.Equal or ExpressionOp.NotEqual)) || (length > StateCapacity.MaxTextValueLength)) {
             throw new RuleException(RuleRefusal.PredicateKindInadmissible, ruleName,
                 $"Text comparisons require == or != and at most {StateCapacity.MaxTextValueLength} characters");
         }

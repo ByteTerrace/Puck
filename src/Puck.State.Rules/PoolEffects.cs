@@ -329,7 +329,7 @@ public sealed class InstanceFieldOperand : RuleOperand {
         right: PoolEffectWork.FieldJournalWidth(field: Field)
     ));
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
         ArgumentNullException.ThrowIfNull(argument: reader);
         var bindings = reader.InstanceBindings;
 
@@ -364,7 +364,7 @@ public sealed class StaticInstanceFieldOperand : RuleOperand {
         right: PoolEffectWork.FieldJournalWidth(field: Field)
     ));
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
         return ((reader.Arena.TryResolvePoolSlot(poolOrdinal: Pool.Ordinal, slot: Handle.Slot, handle: out var handle) &&
             reader.Arena.TryReadLiveRaw(fieldOrdinal: Field.Ordinal, handle: handle, raw: out var raw, time: reader.Time))
             ? Fact.Finite(kind: ValueKind, value: raw)

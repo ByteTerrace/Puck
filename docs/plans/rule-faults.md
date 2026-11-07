@@ -203,18 +203,32 @@ is the one loop. Inside it:
   `RuleExpressions.cs:97-103`); the mark widens from `bool` to `FaultCase`
   and holds only `Finite`/`Absent`.
 - **Addresses are program.** The compiler lowers `cards[expr]` to
-  `[expr…, Operand(cards, keyFromStack)]`, `hist[age]` to
-  `[age…, HistoryOperand(popAge)]`, `$zones[idx]` to `[idx…, Operand(rowFromStack)]`,
-  and a pattern's `value:` token expression to a `Word` fold whose body runs
-  once per token with `$token`/`$previous` bound and whose accumulator is the
-  pattern word. `EffectKeyFact.ResolveIndex` (`ZoneTable.cs:302-318`),
-  `HistoryOperand.Read`'s nested evaluation (`Operands.cs:421-435`) and
-  `PatternOperand.ReadTupleWord` (`Operands.Patterns.cs:306-351`) are deleted:
-  the expression they ran is tokens of the enclosing program, and its poison
-  propagates on the stack. The `Word` fold is also what `world.match` reads
-  through (`WorldRuleHost.Patterns.cs:192-222` calls `PatternOperand.ReadWord`
-  today), as a detached evaluation over the caller's disclosed reader
-  (`:51-58`); that boundary is kept as it is.
+  `[expr…, Operand(cards)]`, `hist[age]` to `[age…, Operand(hist)]` and
+  `$zones[idx]` to `[idx…, Operand(zone cell)]`: an operand declares each
+  address it reads through (`IRuleOperand.Addresses`, an `OperandAddress` of a
+  `CompiledCellRef` and whether it reads a key or an index), a `CompiledCellRef`
+  whose `FeedProgram` is set is a computed address, and `RuleCompiler`'s
+  `ShortCircuit` walk puts each such program's tokens in front of the operand
+  token, which consumes the values they left (`RuleExpressions.Arity`). The
+  interpreter resolves every declared address into a `ResolvedKey`
+  (`RuleExpressions.ReadOperand`), a fed one from the stack, so a computed
+  address's absence reaches the operand as `Nothing` and its fault ends the
+  token. A pattern's `value:` token expression is the operand's
+  `IWordFoldOperand.WordProgram`: the interpreter runs it once per token with
+  `$token`/`$previous` bound (`RuleExpressions.FoldWord`) before the operand
+  matches the word, so a faulting letter faults the read. `world.match` spells
+  its word through the same `FoldWord` over the caller's disclosed reader
+  (`WorldRuleHost.Patterns.cs`, `PatternOperand.ReadWord`), a detached
+  evaluation whose boundary is kept as it is. The operands no longer evaluate
+  an expression of their own: `EffectKeyFact`, `HistoryOperand`'s age
+  evaluation and `PatternOperand`'s tuple read are gone.
+  The two evaluations left outside a program's tokens are the ones step 3
+  folds into `Decide` and step 6 into declared effect `Sources`: an operand that
+  is a gate side or an effect's source (`RuleOperandReads.Read`) runs its
+  computed addresses' programs where it reads, and an effect's destination key
+  or a rule's live-row selection (`RuleReads.TryFeed`) runs its program where
+  the evaluator resolves it; each is one evaluation of a whole program, never
+  nested inside an operand's read.
 - **Operands read through resolved addresses.** `IRuleOperand` declares its
   addresses (`ReadOnlySpan<CompiledCellRef?> Addresses`, with `RowFrom` an
   address) and reads through `Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) : Fact`.
@@ -474,10 +488,12 @@ operand through `operand.Cost`, `RuleWorkBudget.cs:95-96`), so a computed key
 such as `cards[sum(values, x -> x)]` is undercharged today. A history age's
 expression is charged inside `HistoryOperand.Cost` (`Operands.cs:405-412`),
 and a tuple pattern's token expression inside `PatternOperand.Cost`
-(`Operands.Patterns.cs:411-417`). After lowering, every one of these is tokens
-of the enclosing program and `ExpressionCost` prices it once; `HistoryOperand`
-and `PatternOperand` drop their internal expression charge so nothing is
-counted twice. The price of a computed key **rises** to its real work, which
+(`Operands.Patterns.cs:411-417`). After lowering, a computed key and a ring age
+are tokens of the enclosing program and `ExpressionCost` prices them once, and
+an operand that is a source of its own prices the same programs beside its own
+cost (`CompiledValueSource.Cost`); `HistoryOperand` no longer charges its age.
+`PatternOperand` still charges its per-token program, which is the fold it runs
+rather than tokens of the enclosing program, once. The price of a computed key **rises** to its real work, which
 is the correction, and a document near its limit may stop admitting with
 unchanged source; that document was over its limit. Ergonomic-is-optimal is
 checked by spelling equivalence (`let k = …; cards[k]` and `cards[…]` compile
@@ -498,9 +514,9 @@ specified there.
   (`src/Puck.Cli.Bench/StateKernelBenchmarks.cs:223`) shows it.
 - **The stack mark** widens from `bool` to a byte of the same width; the
   branch on it gains one case. Not zero; small.
-- **Addresses as program.** A computed key today runs a nested `TryEvaluate`
-  with its own `Run` frame, two `Rent` leases and a `stackalloc`
-  (`RuleExpressions.cs:95-105`); a bound-key or cell-pointer indirection
+- **Addresses as program.** A computed key is tokens of the enclosing program,
+  so it runs no nested `Run` frame of its own, no second pair of `Rent` leases
+  and no second `stackalloc` (`RuleExpressions.Run`); a bound-key or cell-pointer indirection
   (`RuleReads.cs:281-371`) runs no VM and gains nothing. The saving is per
   *computed* key read, not per dynamic key.
 - **Journal participants.** One 24-byte entry per latch bit, decision state
@@ -563,7 +579,7 @@ read: `FlockLawTests.AFaultingAffinityIsACountedFailureThatWeighsNothing`) and L
 
 ## Implementation steps
 
-Steps 2 to 9 remain (step 1, the representation, has landed: `Outcome`, `Fact`, `Resolved<T>`, `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` are in `Puck.State`, `Fact` and `Resolved<T>` carry every operand read and key resolution, and the witnesses exist). Each is a vertically coherent slice: one producer and every consumer
+Steps 3 to 9 remain (steps 1 and 2 have landed. Step 1, the representation: `Outcome`, `Fact`, `Resolved<T>`, `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` are in `Puck.State`, `Fact` and `Resolved<T>` carry every operand read and key resolution, and the witnesses exist. Step 2, addresses as program: the lowering above, `IRuleOperand.Addresses` and `Read(reader, keys)`, and the pricing below). Each is a vertically coherent slice: one producer and every consumer
 it affects land together, every bridge is named with the step that removes
 it, and the check proves what the step establishes. Each step builds what it
 touches (`dotnet build <project> -c Release -m:2 -nodeReuse:false`) and lands
@@ -578,19 +594,6 @@ since a test block cannot read the counters they need. A name check uses a
 word-boundary form, which `puck search` spells
 `(^|[^A-Za-z])(Name)([^A-Za-z]|$)` (it rejects `\b`).
 
-2. **Addresses are program.** Lowering of computed keys, live row indices,
-   ring ages and token expressions; `IRuleOperand`'s `Addresses` and `Read(reader, keys)`;
-   `world.match` reads through the detached `Word` fold; pricing corrected
-   (the lowered tokens priced once, `HistoryOperand`/`PatternOperand` internal
-   charges removed). The interpreter still has its `out` parameters and still
-   raises into the register. Check: W2, W3 and W6 stay green (they already are,
-   so the step's own checks are the ones below); `puck search
-   "ReadTupleWord|AgeExpression|EffectKeyFact.ResolveIndex" src` returns no
-   line; a spelling-equivalence check that `let k = <expr>; cards[k]` and
-   `cards[<expr>]` compile to equal tokens and equal `world.budget` units;
-   the debug and standard packages compile and `world.budget` is re-recorded
-   where a computed key's price rose; the `ComputedKey` kernel (below) shows
-   the nested frame and its leases gone.
 3. **The interpreter returns `Outcome`; the gate decides a `Verdict`.**
    `Evaluate(ref frame)` and `EvaluateDetached`; `Run` with no `out`;
    `Decide` replacing `GateHolds`/`TryReadSource`/`GateOpen`, text conjuncts
@@ -653,20 +656,17 @@ word-boundary form, which `puck search` spells
    the register's paragraphs go. Check: `puck docs citations` passes, and the
    W1 to W13 blocks are cited from the reference as the behaviour's examples.
 
-**Benchmarks.** The existing `Indirect` kernel reads through a cell pointer
-(`StateKernelFixture.cs:123-137`) and never runs the nested VM this plan
-removes, so it cannot show the saving. Step 2 adds a `ComputedKey` kernel read:
-before, a `StateCellOperand` whose `KeyFrom.Custom` is an `EffectKeyFact`
-over a small program; after, the lowered tokens; the same authored work on
-both sides, consumed so a failure cannot read as a speedup. Steps 2 and 3
-measure `StateExpressionKernels` on `Literal`, `Direct` and `ComputedKey` for
+**Benchmarks.** The `Indirect` kernel reads through a cell pointer
+(`StateKernelFixture.cs`) and never ran the nested VM step 2 removed, so it
+cannot show the saving; the `ComputedKey` kernel reads through a program that
+computes the key, its tokens standing in front of the read. Step 3
+measures `StateExpressionKernels` on `Literal`, `Direct` and `ComputedKey` for
 `DependentChain` and `IndependentEvaluations` at the token breakpoints, with
 successful, absent, faulted and short-circuited variants, allocations and the
 disassembly's return convention recorded, on Windows and Linux. Step 5
 measures an effects-and-decision-heavy headless debug run's `host.frames`
 simulate time with firings that succeed, refuse and fault. No step lands
-slower than the tip on `DependentChain`/`Literal`; the `ComputedKey` kernel
-after step 2 shows no nested `Run` and no nested leases.
+slower than the tip on `DependentChain`/`Literal`.
 
 Determinism (AGENTS.md rule 4): every previously lost fault now closes a gate,
 holds a latch or refuses a firing that used to proceed, so a recorded replay

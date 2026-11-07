@@ -3,7 +3,9 @@ namespace Puck.State.Rules;
 /// <summary>A pattern-language match over a row's word (<see cref="RuleFacts.MatchPrefix"/>). The word is read at
 /// this tick off the arena, so an advancing attribute cell reads its live value. A board origin that names no cell
 /// reads the empty word, which the pattern decides like any other.</summary>
-public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
+public sealed class PatternOperand : RuleOperand, IStateAddressedOperand, IWordFoldOperand {
+    private readonly OperandAddress[] m_addresses;
+
     /// <summary>Initializes the operand.</summary>
     /// <param name="rowOrdinal">The source row's catalog ordinal, or <c>-1</c> when <paramref name="rowFrom"/>
     /// applies.</param>
@@ -29,6 +31,12 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
         RowFrom = rowFrom;
         RowOrdinal = rowOrdinal;
         TokenExpression = tokenExpression;
+        m_addresses = OperandAddress.List(
+            first: rowFrom?.Index,
+            second: keyFrom,
+            secondUse: AddressUse.Key,
+            use: AddressUse.Index
+        );
     }
 
     /// <summary>Returns the position a word starts reading at: the position of <paramref name="start"/> among
@@ -56,6 +64,8 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
         return cells.Count;
     }
 
+    /// <inheritdoc/>
+    public override ReadOnlySpan<OperandAddress> Addresses => m_addresses;
     /// <summary>Gets the zone's attribute row's catalog ordinal, or <c>-1</c>.</summary>
     public int AttributeOrdinal { get; }
     /// <summary>Gets the board ray descriptor, for a board source; <see langword="null"/> otherwise. Only its
@@ -78,6 +88,12 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
     public int RowOrdinal { get; }
     /// <summary>Gets the zone's per-token value expression, when the pattern carries one.</summary>
     public CompiledExpressionToken[]? TokenExpression { get; }
+    /// <inheritdoc/>
+    public CompiledExpressionToken[]? WordProgram => ((Board is null)
+        ? TokenExpression
+        : null);
+    /// <inheritdoc/>
+    public CellKind WordKind => Pattern.Source.Kind;
 
     private long ReadBoardMatch(IStateReader reader, int rowOrdinal, BoardNeighbourQuery query, CellKey key) {
         var arena = reader.Arena;
@@ -196,37 +212,11 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
             : mask
         );
     }
-    private Fact ReadWordMatch(IStateReader reader, int rowOrdinal, CellKey startKey) {
-        var arena = reader.Arena;
+
+    /// <inheritdoc/>
+    public Fact MatchWord(IStateReader reader, int length) {
         var word = reader.PatternWord;
-        var start = 0;
 
-        if (
-            (Key.IsValid || (KeyFrom is not null))
-        ) {
-            start = StartPosition(
-                arena: arena,
-                key: startKey,
-                rowOrdinal: rowOrdinal
-            );
-        }
-
-        var spelled = ReadWord(
-            attributeOrdinal: AttributeOrdinal,
-            kind: Pattern.Source.Kind,
-            length: out var length,
-            reader: reader,
-            rowOrdinal: rowOrdinal,
-            start: start,
-            tokenExpression: TokenExpression,
-            word: word
-        );
-
-        if (spelled != ExpressionFault.None) {
-            return ((spelled == ExpressionFault.Absent)
-                ? Fact.Absent(kind: CellKind.Int)
-                : Fact.Faulted(kind: CellKind.Int));
-        }
         if (MatchFacet is MatchFacet.At or MatchFacet.Length) {
             return Fact.Finite(kind: CellKind.Int, value: (Pattern.TryFindOccurrence(
                 length: out var matchLength,
@@ -244,10 +234,53 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
             : Pattern.Match(values: word[..length])
         ));
     }
+    /// <inheritdoc/>
+    public bool TryLocateWord(IStateReader reader, ReadOnlySpan<ResolvedKey> keys, out int rowOrdinal, out int start, out Fact answer) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
 
+        var next = 0;
+
+        answer = default;
+        rowOrdinal = RowOrdinal;
+        start = 0;
+
+        if (RowFrom is { } live) {
+            if (!live.Select(index: in keys[next++]).TryNamed(value: out rowOrdinal)) {
+                answer = Fact.Absent(kind: CellKind.Int);
+
+                return false;
+            }
+        }
+
+        var key = ((KeyFrom is null)
+            ? Key
+            : keys[next].Key);
+
+        if (Board is { } query) {
+            answer = Fact.Finite(
+                kind: CellKind.Int,
+                value: ReadBoardMatch(
+                    key: key,
+                    query: query,
+                    reader: reader,
+                    rowOrdinal: rowOrdinal
+                ));
+
+            return false;
+        }
+        if (Key.IsValid || (KeyFrom is not null)) {
+            start = StartPosition(
+                arena: reader.Arena,
+                key: key,
+                rowOrdinal: rowOrdinal
+            );
+        }
+
+        return true;
+    }
     /// <summary>Reads the word a zone, keyed, pool, or history source spells at the reader's
     /// <see cref="IStateReader.Time"/>: each token through <paramref name="tokenExpression"/> when the pattern
-    /// carries one (<see cref="ReadTupleWord"/>), else each member's live value in
+    /// carries one (<see cref="RuleExpressions.FoldWord"/>), else each member's live value in
     /// <paramref name="attributeOrdinal"/>, else the row's own live values
     /// (<see cref="StateArena.ReadWord(int, int, in ArenaTime, Span{long}, int)"/>).</summary>
     /// <param name="reader">The evaluation in flight.</param>
@@ -260,14 +293,14 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
     /// <param name="length">The word's length, when it spelled one.</param>
     /// <param name="start">The position the word starts at.</param>
     /// <returns><see cref="ExpressionFault.None"/> when the word spelled, else what its token letters met — see
-    /// <see cref="ReadTupleWord"/>.</returns>
+    /// <see cref="RuleExpressions.FoldWord"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
     public static ExpressionFault ReadWord(IStateReader reader, int rowOrdinal, int attributeOrdinal, CompiledExpressionToken[]? tokenExpression, CellKind kind, Span<long> word, out int length, int start = 0) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         if (tokenExpression is not null) {
-            return ReadTupleWord(
-                expression: tokenExpression,
+            return RuleExpressions.FoldWord(
+                body: tokenExpression,
                 kind: kind,
                 length: out length,
                 reader: reader,
@@ -290,65 +323,6 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
 
         return ExpressionFault.None;
     }
-    /// <summary>Reads a zone's tokens in pile order, each through the pattern's value expression with
-    /// <c>$token</c> bound to it. A letter is a number or the word spells nothing: the read stops at the first token
-    /// whose expression is absent or faults and answers why, the fault already raised into the evaluation's
-    /// scope.</summary>
-    /// <param name="reader">The evaluation in flight.</param>
-    /// <param name="rowOrdinal">The zone row's catalog ordinal.</param>
-    /// <param name="expression">The compiled value expression.</param>
-    /// <param name="kind">The pattern's kind.</param>
-    /// <param name="word">The word buffer.</param>
-    /// <param name="length">The word's length, when every token spelled a letter.</param>
-    /// <param name="start">The position the word starts at.</param>
-    /// <returns><see cref="ExpressionFault.None"/> when every token spelled a letter;
-    /// <see cref="ExpressionFault.Absent"/> when a token's letter is absent; otherwise the token's fault.</returns>
-    public static ExpressionFault ReadTupleWord(IStateReader reader, int rowOrdinal, CompiledExpressionToken[] expression, CellKind kind, Span<long> word, out int length, int start = 0) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
-        var arena = reader.Arena;
-        var cursor = start;
-
-        length = 0;
-
-        try {
-            while (arena.TryNextCell(
-                cursor: ref cursor,
-                key: out var key,
-                rowOrdinal: rowOrdinal
-            )) {
-                var position = (cursor - 1);
-                var previousCursor = (position - 1);
-
-                reader.BoundTokenKey = key;
-                reader.BoundPreviousKey = (((position > 0) && arena.TryNextCell(
-                    cursor: ref previousCursor,
-                    key: out var previous,
-                    rowOrdinal: rowOrdinal
-                ) && (previousCursor == position))
-                    ? previous
-                    : default
-                );
-                if (!RuleExpressions.TryEvaluate(
-                    fault: out var fault,
-                    kind: kind,
-                    program: expression,
-                    reader: reader,
-                    value: out var raw
-                )) {
-                    length = 0;
-
-                    return fault;
-                }
-                word[length++] = raw;
-            }
-        } finally {
-            reader.BoundPreviousKey = default;
-            reader.BoundTokenKey = default;
-        }
-
-        return ExpressionFault.None;
-    }
     /// <summary>Returns the position the word starts at: 0 for an invalid key, the named token's physical position,
     /// or <see cref="int.MaxValue"/> (an empty word) when the row does not hold the token.</summary>
     /// <param name="arena">The arena.</param>
@@ -362,7 +336,7 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
             return 0;
         }
 
-        if (arena.TryPositionOf(rowOrdinal: rowOrdinal, key: key, position: out var position)) { return position; }
+        if (arena.TryPositionOf(key: key, position: out var position, rowOrdinal: rowOrdinal)) { return position; }
 
         return int.MaxValue;
     }
@@ -417,47 +391,34 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
         return ((capacity * expression) * (occurrenceSearch ? capacity : 1L));
     }
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        var ordinal = RowOrdinal;
-
-        if (RowFrom is { } live) {
-            var selected = live.Resolve(reader: reader);
-
-            if (!selected.TryNamed(value: out ordinal)) {
-                return Fact.Unnamed(
-                    kind: CellKind.Int,
-                    resolved: selected
-                );
-            }
+        if (!TryLocateWord(
+            answer: out var answer,
+            keys: keys,
+            reader: reader,
+            rowOrdinal: out var ordinal,
+            start: out var start
+        )) {
+            return answer;
+        }
+        if (WordProgram is not null) {
+            throw new InvalidOperationException(message: "A pattern over a per-token program is read through RuleExpressions.ReadOperand, which spells its word first.");
         }
 
-        var resolved = RuleReads.ResolveKey(
-            keyFrom: KeyFrom,
-            literal: Key,
+        return MatchWord(
+            length: reader.Arena.ReadWord(
+                attributeOrdinal: ((AttributeOrdinal >= 0)
+                    ? AttributeOrdinal
+                    : ordinal
+                ),
+                rowOrdinal: ordinal,
+                start: start,
+                time: reader.Time,
+                word: reader.PatternWord
+            ).Length,
             reader: reader
         );
-
-        if (resolved.Case == FaultCase.Faulted) {
-            return Fact.Faulted(kind: CellKind.Int);
-        }
-
-        resolved.TryNamed(value: out var key);
-
-        return ((Board is { } query)
-            ? Fact.Finite(
-                kind: CellKind.Int,
-                value: ReadBoardMatch(
-                    key: key,
-                    query: query,
-                    reader: reader,
-                    rowOrdinal: ordinal
-                ))
-            : ReadWordMatch(
-                reader: reader,
-                rowOrdinal: ordinal,
-                startKey: key
-            ));
     }
 }
