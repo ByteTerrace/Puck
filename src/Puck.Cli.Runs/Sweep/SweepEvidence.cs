@@ -110,6 +110,35 @@ public static class SweepEvidence {
     public static string? ExposureNote(string? before, string? after) => (((before is null) || (after is null))
         ? null
         : ((before == after) ? $"exposure unchanged ({after}): the difference is in the scene" : $"exposure differs: {before} against {after}"));
+    /// <summary>Says whether every expected tick and command has an outcome in a world.at log. A line pinned to a tick
+    /// runs in the drain after that tick completes, and a simulation line answers only when its own tick applies, so a
+    /// wait that releases on the tick can read the line still pending; a reader asks again until this holds.</summary>
+    /// <param name="log">The world.at --json answer.</param>
+    /// <param name="expected">The ticks and commands the stop pinned.</param>
+    /// <returns><see langword="false"/> while any expected line is armed or ran without an answer yet; <see langword="true"/>
+    /// otherwise, including for a log that is not JSON, which <see cref="Scheduled"/> then reports.</returns>
+    public static bool Settled(string log, IReadOnlyList<(ulong Tick, string Command)> expected) {
+        try {
+            using var document = JsonDocument.Parse(log);
+            var root = document.RootElement;
+
+            if (root.ValueKind != JsonValueKind.Object) { return true; }
+            foreach (var group in new[] { "pending", "ran" }) {
+                if (!root.TryGetProperty(propertyName: group, value: out var rows) || (rows.ValueKind != JsonValueKind.Array)) { continue; }
+                foreach (var row in rows.EnumerateArray()) {
+                    if (row.TryGetProperty(propertyName: "status", value: out var status) && (status.GetString() == "pending")
+                        && row.TryGetProperty(propertyName: "tick", value: out var tick) && tick.TryGetUInt64(value: out var value)
+                        && row.TryGetProperty(propertyName: "command", value: out var command)
+                        && expected.Contains(value: (value, command.GetString()!))) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        } catch (JsonException) {
+            return true;
+        }
+    }
     /// <summary>Matches each expected tick and command against its eventual world.at result, never its arm receipt.</summary>
     public static SweepAnswer Scheduled(SweepAnswer read, IReadOnlyList<(ulong Tick, string Command)> expected) {
         var initial = Check(read);
