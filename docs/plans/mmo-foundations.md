@@ -112,6 +112,8 @@ settled. The owner then rules on the open calls.
 
 - [Synthesis](mmo-foundations/synthesis.md): the decisions, the classes of
   value, the abstractions, the order of work and the owner calls.
+- [Attacks on the synthesis](mmo-foundations/synthesis-attacks.md): the second
+  attack pass, on the favoured composition as if it were built.
 - [Persistence and live ops](mmo-foundations/persistence.md) (lane A).
 - [Distributed custody and trust](mmo-foundations/custody.md) (lane B).
 - [World seams](mmo-foundations/seams.md) (lane C).
