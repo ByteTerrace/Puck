@@ -42,11 +42,14 @@ the proving ground, shows of each step.
 - **Pause is derived, never latched:** every instance this host runs holds
   while a menu asks for it and the session is solo, and the hold lifts the
   frame either condition fails.
-- **Durable images make places last.** The desktop host writes the image of
-  every persisted instance through `WorldInstanceHost.DurableImages`, at a
-  location keyed by the destination's scope. A machine's battery RAM lives in
-  the image of the world that owns the machine, and machine cores stop doing
-  file I/O.
+- **Durable images make places last.** A persisted world's durable identity
+  is its resolved scope key and its referenced document, never a door's name
+  or a process-local instance name. The desktop host writes one image per
+  identity at a location that is a pure function of it, restores it onto the
+  current source through one door, and keeps what still fits when the source
+  changed ([durable images](#durable-images)). A machine's battery RAM lives
+  in the image of the world that owns the machine, and machine cores stop
+  doing file I/O.
 
 ## Invariants
 
@@ -65,7 +68,10 @@ stops. Where nothing enforces one yet, the build step that adds it is named.
 | I8 | Start opens the menu unless an engaged overlay declares Start. | The existing overlay resolution ([an overlay replaces only what it declares](../decisions/input-channels.md#an-overlay-replaces-only-what-it-declares)); no new routing code (H4). | An overlay that declares Start and offers no way out still leaves the host escape. |
 | I9 | Only a solo session holds; a hold never outlives solo or the menu that asked for it. | One derived value per frame in `WorldInstanceHost`: held exactly when a local seat's menu requests a hold and `Solo` holds; no latched flag (H6). | A solo player's own in-process services that count wall time (none in simulation) are not held. |
 | I10 | A hold never changes simulation state. | The hold acts only on each instance's accumulator, through the lever `world.rate pause` already uses; ticks are counted in steps, so a held span inserts none (H6). | Presentation clocks are held by policy, not by this invariant. |
-| I11 | A durable image is written only by the authority that runs the world, at the one location its scope key names. | `WorldInstanceHost.DurableImages` is the one writer; its location is a function of (reference, durability, scope key) (H7). | A crash loses the world state since the last cadence image; identity writes are immediate and are not lost. |
+| I11 | A durable image is written only by the authority that runs the world, at the one location its durable identity names, independent of activation order, of the door it was reached through and of the filesystem's case rules. | The row carries its `WorldDurableIdentity` (scope key, referenced document identity), assigned once at `TryStartCore` or `AdmitBoot`; the store derives the path from the identity's content hash alone and refuses an image whose header names another identity (H7a). | A crash loses the world state since the last cadence image; identity writes are immediate and are not lost. |
+| I15 | Restoring an image never replaces the current source's definition: the row runs the document its source composes, and the image supplies state. | The image's embedded documents reach no install path: `RestoreContinuation` takes the row's live definition and compilation and verifies the continuation key before it applies anything (H7b); H7e removes the embedded documents from the codec, so nothing can install them. | A source whose edit changes the compiled layout drops the exact continuation to durable rows; the durable rows are what survives any source change. |
+| I16 | A restore that cannot apply leaves the row as its source built it, sets the image aside and starts the row through the same door every activation uses. | One private ladder, `RestoreImage` on `WorldInstanceHost`, whose only callers are `TryStartCore` and `AdmitBoot`; its tiers cannot half-apply because the restore core is two-phase, preparing everything that can refuse before it applies anything (H7b). | A refusal the core throws after its apply point is a defect the fault-injection law catches, never a silent half-restore. |
+| I17 | Saved state reaches a changed source only through the arena's own admission door, row by row, never by coercion. | `StateArena.TryValidateLoad` and `TryLoad` decide every carried row; a row the current catalog does not declare, or whose declaration refuses a carried cell, is dropped and named (H7c). | A row the source still declares with an unchanged declaration keeps its saved cells, including over an author's re-tuned default value; `world.image.discard` is the author's reset. |
 | I12 | Battery RAM enters a machine only at power-on, as a configuration input pinned in the image a run starts from; machine cores do no file I/O. | `MachineCreationRequest` carries the battery image as bytes in place of `SavePath`, so a core has no path to open (H8). | `.sav` import from a real cartridge is an operator verb, outside simulation. |
 | I13 | A visitor's claimed avatar enters a world only through that world's admit policy, installed by a taped mutation at arrival. | The arrival handler is the one door; kit and look tables change only through `WorldMutation` (H10). | Taste is not checked: a look within every envelope can still be unwelcome; moderation is a platform policy outside this memo. |
 | I14 | The account is an identity's only truth: restoring a world's image, seeking its history or replaying it never writes or rolls back a character. | Today every checkpoint embeds the instance's owned-world documents and restores them (`WorldAuthorityCheckpointCodec.EncodeOwnedWorlds`; `Host.Profiles.Restore`, `WorldPersistence.Checkpoint.cs:975`). H2 removes that section from world images, so no image holds a character to restore; a replay or history host binds identities pinned from the tape and holds no account to write. | A world's own rows that mirror a fact (a gate opened by it) rewind with the world, as any world state does. |
@@ -281,25 +287,27 @@ H14.
 ### 6. What a player save holds beyond the identity
 
 **Design.** The desktop host assigns `WorldInstanceHost.DurableImages`
-(`WorldInstanceHost.Stop.cs:33`, unassigned anywhere in `src/` today). One
-writer places each image by its destination's scope key:
-- `user`: under the account, keyed by the identity, since the identity is the
-  user ([scope](../architecture/worlds.md#durability-scope-and-generation));
+(unassigned anywhere in `src/` today). One writer places each image by the
+world's durable identity, under a root its scope key chooses:
+- `user`: under the account, beside the identity's document, since the
+  identity is the user ([scope](../architecture/worlds.md#durability-scope-and-generation));
 - `global` and `group`: under the state root's image store, the host's;
 - `ephemeral`: no image.
 
 Images are written when a row stops (the existing stop path,
-`WorldInstanceHost.Stop.cs:227-247`), when the session quits (which stops every
-row), and on the engine-time cadence the silo already uses
+`WorldInstanceHost.AdvanceStop`), when the session quits, and on the
+engine-time cadence the silo already uses
 (`WorldAuthorityCheckpointCadenceCounter`), so a crash loses at most one
-cadence. Resolving a persisted destination restores its image through
-`WorldPersistence.RestoreCheckpoint` when one exists. The hub is resolved the
-same way (gap 9), so its persistence is whatever its manifest declares.
+cadence. Activating a persisted destination restores its image onto the row
+its current source built. The identity, the location, what an image holds,
+the restore and the writes are designed in [durable images](#durable-images),
+which a builder reads before H7. The hub is resolved the same way (gap 9), so
+its persistence is whatever its manifest declares.
 
 So a player save is the account directory: the identities and the images of
 the player's own places. On a desktop the player is also the host, and the
 host's images of global worlds sit beside it. Nothing here rewrites a source:
-`world.save` (`WorldMutationCommandModule.cs:364`) stays the author's save.
+`world.save` (`WorldMutationCommandModule`) stays the author's save.
 
 A character's progress in a world lives on the character, in that world's
 package namespace. The template's visitor policy lets each package write only
@@ -310,10 +318,11 @@ overworld and levels, `experimental/worlds/rulepush/rulepush.puck:47`) share
 one namespace, which is what lets an overworld gate read its levels' wins.
 
 The checkpoint today carries the whole compiled definition
-(`WorldAuthorityCheckpoint`'s `DefinitionJson`), which the package re-derives.
-An image should carry only what cannot be derived: the package's content
-identity, the journal's mutations and the state. Whether that format change is
-needed before H7 is measurement M1's answer.
+(`WorldServerCheckpoint.DefinitionJson`) and its undo base, which the source
+re-derives. An image carries what cannot be derived: the source's content
+identity, the journal's mutations, the continuation and the durable rows.
+Measurement M1 settled that the format change is needed and in which step
+([what an image holds](#what-an-image-holds)).
 
 **Rejected.** A separate "save game" snapshot of chosen rows is a second
 persistence mechanism beside the checkpoint. Persisting through `world.save`
@@ -335,10 +344,13 @@ id; it is not on your machine.
 ### 7. Machine save RAM
 
 **Design.** A machine's battery RAM is part of the machine's state, and the
-checkpoint already captures machine cores (`WorldPersistence.Checkpoint.cs:543`,
-`:644`), so it persists in the image of the world that owns the machine (gap
-6). Each machine row authors a persistence mode, with the default in the
-standard's cabinet module:
+checkpoint already captures machine cores (`WorldPersistence.TryCaptureCheckpoint`,
+`IWorldMachineCheckpointHost`), so it persists in the image of the world that
+owns the machine (gap 6): the whole core in the image's exact continuation,
+and the battery alone in its durable layer, keyed by machine name, so a save
+outlives an edit to the world around the cabinet
+([batteries](#batteries-h8)). Each machine row authors a persistence mode,
+with the default in the standard's cabinet module:
 - `resume` restores the whole machine from the image (a save state);
 - `battery` restores the image, then power-cycles the machine keeping only its
   battery RAM and persistent clock, as a real cartridge does;
@@ -603,6 +615,355 @@ federated transfers with taped departures and arrivals.
 **Authority.** The owner's host is the authority of the owner's hub. Visiting
 grants no Mutate; building in someone else's hub is a grant its owner issues.
 
+## Durable images
+
+This section decides what a durable image is, where it lives, what it holds,
+how it is restored onto a source that may have changed, and when it is
+written. It replaces the image half of gap 6, settles measurement M1 and
+expands H7 into the steps at the end. The first build keyed images by instance
+name and installed the image's own definition; its review found five highs,
+answered one by one [below](#the-first-builds-review-answered). A builder
+reads this section and the code it names, and builds the steps without
+re-deciding anything here.
+
+### The decision in one page
+
+- **A persisted world's durable identity is `WorldDurableIdentity(scopeKey,
+  document)`**: the resolved scope key (`WorldSessionResolver.GlobalScopeKey`,
+  `user:<id>` or `group:<id>`) and the referenced document's canonical
+  identity, the same string the host already threads into the resolver
+  (`WorldInstanceHost.CanonicalDocumentIdentity`). A door's name is the source
+  document's name for the door, not the world's identity: two doors to one
+  document in one scope reach one world, whether it is running (adoption) or
+  not (one image). Durability is implied; an ephemeral or raw-started row has
+  no durable identity.
+- **The image's location is a pure function of the identity**: the store root
+  the scope kind chooses, then a directory named by the content hash of the
+  identity's key (`sha256-64`, sixteen lowercase hex digits). No author-spelled
+  name reaches the filesystem, so case folding cannot collide two worlds, and
+  the header inside the image repeats the identity, so a read refuses an image
+  that names another world.
+- **An image holds a header, a continuation and durable rows**, never a
+  definition to install. The continuation is the authority checkpoint, exact
+  against the source and the build it was captured under. The durable rows
+  are the arena's own section form, the shape `world.save` folds and a boot
+  seeds from, and they are what survives a changed source.
+- **Restore is one ladder behind one door.** The row is built from its
+  current source; then the exact continuation applies when its key matches,
+  else the durable rows apply through the arena's admission door, else
+  nothing. Every refusal sets the image aside and continues down; nothing
+  half-applies, because the restore core prepares everything that can refuse
+  before it applies anything.
+- **Images are written** when a stop is accepted and when it completes, at
+  quit for every row whose final image has not landed, and on the engine-time
+  cadence. Only the authority writes.
+- **The boot row carries its identity from `AdmitBoot`** and keeps no image
+  until H3 makes boot a travel into `hub` and the manifest declares the entry
+  world's durability.
+
+### Identity and location
+
+The row's `Durable` property on `WorldInstance` is its `WorldDurableIdentity`,
+or `null` for a row no persisted destination reaches. `TryStartCore` assigns it
+from the resolution that starts the row, `AdmitBoot` assigns the boot row's
+(the boot document's identity, `GlobalScopeKey`), and nothing reassigns it.
+The identity's key is netstring-composed, as `WorldSessionResolver.MintInstanceName`
+composes an instance name, so two identities never spell one key.
+
+The row's identity, not the resolver's cache, is what the store and the host
+read:
+
+- **Adoption generalizes "return means home".** The origin scan
+  (`WorldInstanceHost.TryFindRunningInstanceByOrigin`) matches a running row by
+  document path alone, so a global door and a user-scoped door to one document
+  adopt each other's row today. It becomes a lookup by durable identity over
+  each row's `Durable` identity: a persisted resolution whose identity a running row
+  already carries adopts that row (`WorldSessionResolver.TryAdopt` installs the
+  door's cache entry as now), and otherwise starts one. The resolver keeps its
+  per-door cache and generations; the host keeps the one map from identity to
+  row.
+- **Retirement touches the resolver only.** `Retire` still calls
+  `NotifyInstanceRetired` for the door's cache; the store never asks the
+  resolver whether a row keeps an image, so a failed activation that retires
+  and restarts under the same identity keeps writing.
+- **The seed ladder's instance rung is the identity's key** for a persisted
+  row (`WorldDefinitionLoader.TryLoadFileForAdmission`'s `instanceIdentity`),
+  so the document's draws are a function of (document, durable identity, draw
+  history) and the same world drawn through the boot row and through a minted
+  row is one document.
+
+Store roots, by scope kind:
+
+- `global` and `group`: `<state root>/images/<hash>/`, the host's.
+- `user`: `<account>/<identity-id>.images/<hash>/`, beside the identity's own
+  `<identity-id>.world.json` in the account directory (`WorldDocumentName.For`;
+  the suffix is within `SafeName.MaxSuffixLength`), outside the catalog's
+  `*.world.json` glob, so an identity's places travel, sync and are disposed
+  with it. The disposal and quarantine paths of `WorldOwnedWorlds` move the
+  images directory with the document (H7a).
+- `ephemeral`: no store.
+
+Each directory holds `image`, written to a sibling and moved into place whole
+(`File.Move` with overwrite, as the first build did; a crash mid-write leaves
+the previous image), and at most one `image.refused`, the last image a
+restore set aside, kept as evidence and overwritten by the next set-aside.
+`world.instance.status` echoes a row's identity, hash and path, and
+`world.image.discard <instance>` sets a row's image aside by hand, so an
+author who wants a clean start has a door that is not deleting files.
+
+The document identity in the key is the canonical absolute path the resolver
+already uses. It is deliberately machine-local during development: two
+worktrees sharing the per-user state root keep separate images of their own
+gardens. Account sync (H15) maps the package root when it pushes and pulls,
+and the header carries the components it needs for that.
+
+### What an image holds
+
+The file is one envelope, versioned by `WorldAuthorityCheckpointCodec.SupportedVersion`
+as the checkpoint is, with three parts:
+
+- **The header**: the durable identity; the source hash, which is the chain
+  content hash the loader computes for the composed source
+  (`TryLoadFileForAdmission`'s `contentHash`, which `TryStartCore` discards
+  today); the continuation key; the authority identity the row ran under; the
+  completed tick and engine ticks; whether an explicit stop was in progress;
+  and the row counts, so a listing needs no decode.
+- **The continuation**: the `WorldAuthorityCheckpoint` the codec encodes,
+  with the row's host slice (`WorldInstanceHost.CaptureRow`) and without the
+  owned-worlds section (I14; H2 lands first). In H7a to H7d the embedded
+  `DefinitionJson` and `BaseDefinitionJson` remain in the bytes as witnesses
+  of what the continuation was captured against, and no restore path installs
+  them (I15); H7e removes them from the codec for every consumer.
+- **The durable rows**: a `WorldStateSection` made by the fold `world.save`
+  already uses (`WorldSessionCapture.CaptureState`: `StateArena.ToRows`,
+  `ToPools`, `ToPairPools`), with every cell's clock cleared so a timed cell
+  restarts at the activation it is loaded into rather than at a tick of the
+  run that wrote it, plus each machine's battery image keyed by machine name
+  ([batteries](#batteries-h8)).
+
+The continuation key is (source hash, the module version id of the assembly
+that owns the checkpoint codec, the machine catalog fingerprint). Under the
+SDK's deterministic compilation the module version id is a pure function of
+the build's inputs, so "the same build" needs no list of which engine changes
+alter a compiled layout; a rebuilt engine drops to the durable rows, which is
+the loss a development loop can afford, and a shipped build matches itself
+run after run.
+
+**Measurement M1, settled.** A probe over the lane's Release assemblies (a
+scratch project, not committed; its method, command and output are in the
+commit message that lands this section) booted each world
+in-process, stepped it 120 ticks, captured and encoded its checkpoint, and
+measured the parts by encoding the same checkpoint with a part emptied:
+
+| World | Image | Embedded definition | Undo base identical | Arena section | Population entries | Addon bytes |
+|---|---|---|---|---|---|---|
+| `worlds/debug/garden.puck` | 886,298 | 353,491 | yes | 14,115 | 32 | 0 |
+| `worlds/debug/night.puck` | 323,333 | 310,314 | yes | 10,186 | 0 | 0 |
+| `worlds/debug/debug.puck` | 35,106,108 | 13,017,151 | no (a second 13 MB) | 706,342 | 557 | 1,360,199 |
+
+The derived documents are 40% of the garden's image, 96% of the night's and
+74% of the debug world's, which is also the boot row's cadence write once H3
+makes it a persisted row. The probe also showed that the live definition's
+compact bytes equal the loaded source's for the garden and the night field
+but not for the debug world, with an empty journal in every case: the live
+document is rewritten by state-derived projections outside the journal
+(`WorldDocument.InstallPlacementProjection`, `WorldServer.BindArenaDocument`,
+`WorldServer.MachineOperation`'s candidate definition), so the live bytes are
+not a derivable pin and the continuation key pins the source and the build
+instead. Capture time is a timing question for the lead's quiet window; it
+does not decide the format.
+
+The durable-row carrier was checked the same way. The garden's 131 stored
+cells across 25 rows, the night field's 110 across 15 and the debug world's
+14,025 across 469 all loaded into a fresh server of their own source through
+`StateArena.TryLoad` with zero cell, cursor or phase differences, clocks
+stripped or kept. Loaded into a fresh garden, the night field's 15 rows (the
+standard's shared rows) were all admitted, and the debug world's 469 rows
+were partitioned by the same door into 15 kept and 454 dropped, each dropped
+row named by the arena's own refusal ("row 'solitaireKlondikeCards' is not a
+document row this arena's catalog declares"). A whole-list load refuses on
+the first such row, which is why the ladder admits row by row.
+
+### The restore ladder
+
+`RestoreImage(row)` on `WorldInstanceHost` is one private method with two callers,
+`TryStartCore` after `Admit` and `AdmitBoot`, over a row its source has just
+built and nothing has stepped. Its tiers, in order:
+
+0. **Read.** No image: the row starts clean. An image that does not decode,
+   whose header names another identity, or whose envelope version is not the
+   codec's: set aside, clean start, one narrated line naming the reason.
+1. **Exact continuation**, when the header's continuation key equals the
+   row's (the source hash the load just computed, this build, this catalog).
+   The journal's mutations re-apply in order through
+   `WorldPersistence.TryApplyJournalTailMutation`, the door the silo's tail
+   recovery already uses; a refusal names the entry and falls to tier 2. Then
+   `RestoreContinuation(checkpoint)` restores every section over the row's
+   live definition and compilation, with the source's definition as the undo
+   base, and `RestoreRow` installs the host slice. The deal memos are reset
+   (`WorldTick.ResetPlacementDeals`) so the first sweep re-derives every
+   projection from the restored rows, and `EndUnobservedSessions` lets this
+   activation's screens observe afresh. The row resumes the authority
+   identity the header names, as the silo's activation does
+   (`WorldPersistence.FromCheckpoint` with no override), so its forwarding and
+   in-doubt records still name their authority and its incarnations stay
+   unique through the restored population generations.
+2. **Durable rows**, when tier 1 does not apply or refused. Each row of the
+   section is offered alone to `StateArena.TryValidateLoad`; the admitted set
+   loads once through `TryLoad`, and every dropped row is narrated with the
+   arena's reason. Batteries apply by machine name ([H8](#batteries-h8)). The
+   journal, population, escrow, grants and host slice do not apply: they are
+   keyed by body index, kit index and generation, which a changed source does
+   not preserve. Custody the image holds (titles abroad, in-doubt transfers,
+   forwarding records) is narrated as lost, by incarnation and custodian; the
+   custody protocol's recall is the recovery
+   ([recall and release](companion-redesign.md#55-recall-and-release), H14).
+   The row takes a fresh `LifetimeAuthority` name, since the earlier lifetime's
+   incarnations may still be abroad.
+3. **Clean.** Nothing applies; the row runs its source.
+
+Every refusal inside tier 1 or 2 sets the image aside and continues to the
+next tier through the same code path; there is no second fallback door and no
+recursion into `TryStartCore`. The one exception filter lists the refusals
+the restore doors document, `InvalidDataException` included, because
+`WorldDefinitionSerialization.DeserializeForAdmission` wraps admission
+refusals in it and it is an `IOException`, which the first build's filter
+missed. Addon attachment and machine restore sit inside the same tier, so
+their refusals take the same path.
+
+What makes a refused tier harmless is the restore core. Today
+`WorldPersistence.RestoreCheckpointCore` validates most sections before it
+mutates and still throws after `AdoptDefinition` for a retained-turn, replay
+scope or search refusal, which would leave a live row half-restored. H7b
+splits it into a prepare phase that returns every refusal by name and an
+apply phase that cannot fail, the shape `StateArena.TryLoad` already has
+("every refusal is decided before one byte moves"). A history seek
+(`WorldHistory.Seek`) inherits the same atomicity.
+
+### Writes
+
+- **Stop**: unchanged in shape. The accepted stop writes an image whose host
+  slice says `Stopping`, so a restart resumes the stop; the final image is
+  written once the row is frozen for retirement, and `AdvanceStop` marks the
+  row's final image as landed immediately before `Retire`. That mark has one
+  writer.
+- **Quit**: every row that keeps an image and whose final image has not
+  landed writes, frozen or not. A frozen row whose final write failed
+  transiently therefore gets its final image at quit instead of being skipped
+  for being retired.
+- **Cadence**: each row that keeps an image counts its own steps on a
+  `WorldAuthorityCheckpointCadenceCounter`, as the silo's rows do; an armed
+  request is honoured at the next boundary and stays armed across a refusal,
+  which narrates once per distinct reason.
+- A write captures under the authority gate: `TryCaptureCheckpoint` for the
+  continuation, the `world.save` fold for the rows, the battery export for
+  each machine; then encodes and moves the file into place. The boot row's
+  write path is the same method; only the identity's `KeepsImage` flag gates it until H3.
+
+### User scope
+
+A `user`-scoped image belongs to the identity named in its scope key and
+lives beside that identity's document, so the account directory is the
+player's whole save: characters and their places. Two characters hold two
+images of one `user`-scoped destination because their identities differ in
+the key. A second process on the same account takes it read-only (I2) and
+writes no image under it.
+
+### Batteries (H8)
+
+The machine host captures each named machine's battery bytes beside its
+runtime image, and the durable rows carry them keyed by machine name, engine
+identity and content hash of the cartridge. `MachineCreationRequest` takes
+the battery as bytes in place of `SavePath`; `HumbleGamingBrickCore.LoadBatterySave`
+and `FlushSave` and their counterparts in the other engines go, with the wall
+clock `FlushSave` stamps. The modes of gap 7 then read: `resume` applies the
+whole core from the exact continuation when tier 1 applies and the battery
+alone otherwise; `battery` applies the battery alone in either tier and
+power-cycles; `none` applies nothing. A battery whose machine name, engine or
+cartridge hash no longer matches is dropped and narrated like a row.
+
+### Rejected
+
+- **Keying by instance name** (the first build): the name depends on which
+  door minted it and on adoption, and it is an author's spelling, so a
+  case-folding filesystem collides two of them.
+- **Keying by destination name**: two doors to one document would be two
+  worlds while stopped and one while running, since adoption already resolves
+  by document.
+- **Installing the image's definition**: a retargeted destination or an
+  edited source is silently replaced by the saved document, and a derived
+  product becomes the truth ([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
+- **Pinning the live definition's bytes** for exactness: measured not
+  reproducible from the source and journal (projections rewrite the live
+  document outside the journal).
+- **A layout key enumerating the compiled shapes** (arena descriptors, kit
+  order, field regions, machine inventory) in place of the build identity: a
+  list every layout-affecting change must remember to extend, which is an
+  invariant kept by convention ([hazards](../development/hazards.md#an-invariant-kept-by-convention)).
+- **Rebasing the index-keyed sections** (population by kit index and slot,
+  escrow and forwarding by body index) onto a changed source: they have no
+  stable identities to rebase by, and a wrong rebase seats a body in the
+  wrong kit silently.
+- **Carrying cells with their clocks** across a source change: a clock names
+  a tick of the run that wrote it, and a fresh activation starts at zero.
+- **A separate save-game format**: a second persistence mechanism beside the
+  checkpoint and the arena's section form.
+
+### The first build's review, answered
+
+The adversarial review of the first build (kept in the lead's scratch as
+`durability-review.md`) raised seven findings. Each is closed by a named
+mechanism above; the deal-gate finding is outside this design and stays in
+the open items.
+
+1. *Distinct destinations overwrite one image on Windows.* The directory is
+   the identity's content hash in lowercase hex, never an author-spelled
+   name, and the header repeats the identity for the read to check (H7a).
+2. *Adoption makes the durable path depend on activation order; the boot
+   instance is skipped.* The location is a function of the row's `Durable` identity,
+   assigned once and carried by the row whichever door reached it; the boot
+   row carries its identity from `AdmitBoot` and the same write path, gated
+   by a declared durability rather than by its name (H7a, H3).
+3. *An image is not bound to its source.* The continuation applies only under
+   a key of the source's content hash and the build; the row always runs the
+   document its source composes; a changed source keeps the durable rows
+   through the arena's own door, row by row, with every drop named (H7b,
+   H7c).
+4. *The deal gate admits a solid variant the load validator refuses.* Not an
+   image defect; it stays filed beside the deal gate in the open items.
+5. *Reactivating a stopped forwarding row rejects its image and drops
+   persistence.* Tier 1 resumes the authority identity the header names, so
+   the forwarding records' `SourceAuthority` matches; the store reads the
+   row's identity, not the resolver's cache, so retiring a failed activation
+   cannot stop later writes (H7a, H7b).
+6. *Some restore refusals bypass set-aside and clean fallback.* One ladder
+   with one filter that includes `InvalidDataException`, and a two-phase
+   restore core, so every refusal lands in the same place and leaves the row
+   as its source built it (H7b).
+7. *Quit skips a frozen row whose final image failed.* Quit writes every row
+   whose final image has not landed; the mark has one writer, set immediately
+   before `Retire` (H7d).
+
+### Steps
+
+Each step lands with the mechanical check named, headless, on a fresh
+`--state-dir` unless the check is about reusing one. H2 precedes H7a (the
+owned-worlds section leaves the checkpoint first).
+
+| Step | Delivers | Check |
+|---|---|---|
+| H7a | `WorldDurableIdentity`, the row's `Durable` identity, adoption by identity, the seed rung, the store (`IWorldImageStore`, the directory store, header, set-aside, `world.image.discard`), the status echo, the images directory moving with an identity | A test document authoring persisted global `room` and `ROOM` to two documents writes two image directories on Windows; a law over the host starts the garden's document as `manual`, resolves persisted `garden` (adopted), quits, and on a second host resolves `garden` first: `world.instance.status` names the same hash both times; a global and a user-scoped door to one document start two rows; the same document loaded under two instance names of one identity hashes to one definition |
+| H7b | The two-phase restore core; `RestoreImage` with tiers 0, 1 and 3; `RestoreContinuation` over the live definition with the source as base; authority resume; journal re-application; deal-memo reset | A fault-injection law makes each named refusal fire (decode, header, admission `InvalidDataException`, `RestoreCheckpointCore` prepare, `RestoreRow`, addon attachment): the row's state hash equals a clean boot's and `image.refused` exists; the garden set at tick N, quit, relaunched on the same root and travelled to reads N; a stopped forwarding row reactivates with its record intact and `KeepsImage` still true; a world with dealt children lists the same placements after a restore as before quit |
+| H7c | Tier 2: the rows fold at capture, row-by-row admission, clock stripping, loss narration | The garden's source gains a placement between two runs on one root: the row set in run one reads back in run two and the narration names zero dropped rows; a unit law loads the debug document's rows into a garden arena and reports 15 kept and 454 dropped by name; a cell with a clock restarts at the activation tick |
+| H7d | Cadence per row; quit writes for unlanded final images | A World killed after its first cadence image restores the garden at that cadence tick; a store fault refuses a frozen row's final image, the fault is removed, and quit lands it (`ImageWrites` shows the final write) |
+| H7e | The embedded documents leave the checkpoint codec; the tape, the history, the silo and the release transition each supply their definition | `puck test --reproduce` over a recorded tape; a history seek across a live edit; the silo's activation law; the release metadata transition law; the garden's image is under 540,000 bytes (532,809 measured without the documents) |
+| H8 | Batteries in the durable rows; `MachineCreationRequest` takes bytes; the cores' file I/O deleted; the three modes | As in the build order: a committed homebrew cartridge with battery RAM on a debug-world device writes its RAM; after quit and reboot it reads it back in `battery` and resumes in `resume`; a search finds no file I/O in the four engines' hosting; `puck test --reproduce` over a run that starts from saved RAM; an edited source around the cabinet keeps the battery |
+
+A World a tool or a scenario starts passes its own `--state-dir`
+(`WorldTestBatch`, `WorldLaunch`'s state directory, the live World's start), so
+no image crosses from one lane's build to another's, and every check above
+that reuses a root says so.
+
 ## What is the player's and what is the world's
 
 | State | Owner | Lives in | Crosses a seam |
@@ -630,9 +991,8 @@ plan's tree; "tree" means it waits for the UI plan's steps 3 and 4.
 | H4 | Start opens the menu wheel; the engagement family and the `machine` overlay move into the standard | 11, 13 | Injected `gamepad.start` on the resting page opens the `menu` ring (wheel read-back); engaged at a device, the same press reaches the machine's start and no ring opens; an unmapped pad's Start joins | Start at a device starts the game; Start elsewhere opens the menu | interim |
 | H5 | The host escape and its reserved gestures | 12 | With the board overlay engaged and a test overlay binding every pad source, View and Menu held one second opens the escape (read-back) and its Exit to hub lands in the boot world; Control, Alt and Escape does the same; a document naming the reserved pair as a chord is refused at the vocabulary gate | Exit to the hub from a seated board game | interim |
 | H6 | `Solo` and the derived hold | 10 | Solo: the menu open holds every instance (`world.instance.status`); `player.join 2` lifts it with the menu still open; a second World joined over `host.listen` never holds; a scenario with a mid-run menu pause gives the same state hash as without (`puck test --reproduce`) | The debug world freezes behind the menu alone, never in company | none |
-| M1 | Measurement for H7: checkpoint size and capture time of the debug world and the garden | 6 | The readings, and whether the image needs the derived-definition format change first | none | none |
-| H7 | Durable images on the desktop: the writer, scope-keyed locations, the cadence, restore on resolve | 6 | Set a row in the garden, quit, reboot on the same root, travel to the garden: the row is restored; two characters hold two images of a `user`-scoped test place; an ephemeral row writes none; killed after a cadence image, the garden restores to it | The garden as you left it | none |
-| H8 | Battery RAM in images; machine modes; cores without file I/O | 7 | A committed homebrew cartridge with battery RAM on a debug-world device writes its RAM; after quit and reboot it reads it back in `battery` and resumes in `resume`; a search finds no file I/O in the four engines' hosting; `puck test --reproduce` over a run that starts from saved RAM | A handheld game's save surviving a restart | none |
+| H7 | Durable images on the desktop, in five steps H7a to H7e ([durable images](#steps)): identity and store, the restore ladder over a two-phase restore core, durable rows across a changed source, cadence and quit, the embedded documents out of the codec | 6 | The checks of each step, and together: set a row in the garden, quit, reboot on the same root, travel to the garden: the row is restored; edit the garden's source between the runs and it still is; two characters hold two images of a `user`-scoped test place; an ephemeral row writes none; killed after a cadence image, the garden restores to it | The garden as you left it, through an edit | none |
+| H8 | Battery RAM in images; machine modes; cores without file I/O ([batteries](#batteries-h8)) | 7 | A committed homebrew cartridge with battery RAM on a debug-world device writes its RAM; after quit and reboot it reads it back in `battery` and resumes in `resume`; a search finds no file I/O in the four engines' hosting; `puck test --reproduce` over a run that starts from saved RAM; an edited source around the cabinet keeps the battery | A handheld game's save surviving a restart | none |
 | H9 | Package namespaces for facts and durable slots in `Decide` | 6 | The night field's rule writes its namespaced fact and the hall door opens on return; a garden rule writing the night field's namespace is refused by name | The port row's fact-gated door | none |
 | H10 | The avatar claim, admit policies and the arrival install | 4 | A character claiming the Moth arrives in the garden (standard `accept`) as the Moth; a test world with `substitute` seats its walker; a claimed speed above the envelope reads clamped in `identity.show`'s `moveEffective`; the garden visit's replay reproduces with the account directory removed | The Moth as a character's own avatar, carried by claim | none |
 | H11 | The character place: `identity.new`, `identity.avatar`, `identity.rename`, the pavilion's plinth, pedestals and picker ring | 2, 3 | Headless: pose at the plinth and press the context button, and `identity.list` grows; at a pedestal the claim changes (`identity.show`); in the ring the stick cycles and `world.players` shows the confirmed choice | Making and choosing characters in the studio pavilion | interim (names wait for text fields) |
@@ -642,16 +1002,14 @@ plan's tree; "tree" means it waits for the UI plan's steps 3 and 4.
 | H15 | Automatic account sync | 5 | Two state roots on one test container: progress made on one appears on the other after quit and launch; a stale push is refused by name | none | none |
 
 H1 precedes H2, and H2 precedes every step after it. H3 precedes H4, H5 and
-H11. H7 precedes H8. H10 precedes H11. H13 waits for the UI plan's steps 3 and
-4, and H14 for the custody protocol's step 7
-([build plan](companion-redesign.md#9-build-plan)).
+H11. H7a to H7d land in order; H7e follows H7d, and H8 follows H7c. H10
+precedes H11. H13 waits for the UI plan's steps 3 and 4, and H14 for the
+custody protocol's step 7 ([build plan](companion-redesign.md#9-build-plan)).
 
 ## Questions for other lanes
 
 These need more than a bounded prototype or measurement, so they go to other
 lanes before the steps that need them:
-- **M1** (above): how large and slow a debug-world checkpoint is, which decides
-  whether images drop the derived definition before H7.
 - **P1**, before H11: a prototype of the reach-box register, the input-mode
   family on it and the overlay keyed on that family, showing that a static
   context-button command fires only inside the box and releases on leaving.
@@ -670,10 +1028,22 @@ lanes before the steps that need them:
   is to require creation before the first world.
 - **The reserved gestures.** View and Menu held one second on a pad, and
   Control, Alt and Escape on a keyboard, are the memo's choice of feel.
+- **Saved state over an edited source.** The memo carries a saved row over an
+  edit that keeps the row's declaration, so a player's score survives an
+  author re-tuning the row's default, and the author resets with
+  `world.image.discard`. The alternative is a clean start on any source
+  change, with the image set aside.
+- **Custody an inexact image holds.** When the exact continuation cannot
+  apply and the image holds titles abroad or transfers in doubt, the memo
+  starts the row from its durable rows and narrates the loss by name, leaving
+  recovery to the custody protocol's recall. The alternative is to refuse the
+  activation until the author discards the image or restores the source.
 
 ## Review dispositions
 
 Fable's review findings are answered here, one by one, when the review lands.
+The durability review of the first image build is answered in
+[the first build's review, answered](#the-first-builds-review-answered).
 
 ---
 
