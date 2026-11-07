@@ -82,6 +82,27 @@ public sealed partial class WorldCreationInstances {
 
         return live.Reach;
     }
+    // Each shape's reach about its own slot, in creation units, or -1 for a cutter, measured once (PartSpheres says why).
+    private static float[] ShapeReachesOf(Registration live) {
+        if (live.ShapeReaches is { } known) {
+            return known;
+        }
+
+        var shapes = (live.Creation.EngineDocument.Shapes ?? []);
+        var reaches = new float[shapes.Count];
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            var shape = shapes[index];
+
+            reaches[index] = (((shape.Blend is { } blend) && (SdfBoundAlgebra.IsIntersection(blend: blend) || SdfBoundAlgebra.IsSubtraction(blend: blend)))
+                ? -1f
+                : (CreationStampEmitter.ShapeReach(shape: shape) - ((shape.Domain is { Count: > 0 }) ? 0f : shape.Position.Length())));
+        }
+
+        live.ShapeReaches = reaches;
+
+        return reaches;
+    }
     // The spheres holding a registration's geometry as posed this frame, one a shape: its slot and its reach about that
     // slot, in metres. A domain-bearing shape's slot holds only its parent chain's delta and its rest offset is baked
     // after it, so its whole reach counts. An intersecting or subtracting shape only removes (SdfBoundAlgebra.Compose),
@@ -89,22 +110,7 @@ public sealed partial class WorldCreationInstances {
     // one sphere about the root charging every offset and cutter, metres wide on a rigged body: a door straddle tested
     // against it clips a body standing clear of the glass out of sight.
     private int PartSpheres(Registration live, ReadOnlySpan<DynamicTransform> transforms, int rootSlot, int shapeCount, float placementScale) {
-        if (live.ShapeReaches is not { } reaches) {
-            var shapes = (live.Creation.EngineDocument.Shapes ?? []);
-
-            reaches = new float[shapes.Count];
-
-            for (var index = 0; (index < shapes.Count); index++) {
-                var shape = shapes[index];
-
-                reaches[index] = (((shape.Blend is { } blend) && (SdfBoundAlgebra.IsIntersection(blend: blend) || SdfBoundAlgebra.IsSubtraction(blend: blend)))
-                    ? -1f
-                    : (CreationStampEmitter.ShapeReach(shape: shape) - ((shape.Domain is { Count: > 0 }) ? 0f : shape.Position.Length())));
-            }
-
-            live.ShapeReaches = reaches;
-        }
-
+        var reaches = ShapeReachesOf(live: live);
         var count = 0;
 
         for (var index = 0; (index < shapeCount); index++) {
@@ -252,7 +258,7 @@ public sealed partial class WorldCreationInstances {
                     ForgetPhase(live: live);
                 }
 
-                var holds = (mayHold && HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, radius: RateReach(live: live, placementScale: placementScale)));
+                var holds = (mayHold && HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, placementScale: placementScale, radius: RateReach(live: live, placementScale: placementScale)));
                 // A held pose whose root has not moved moves no slot, so nothing is copied, carried or compared.
                 var (heldPosition, heldRotation) = (rootPosition, rootRotation);
                 var still = false;
@@ -282,7 +288,7 @@ public sealed partial class WorldCreationInstances {
                     }
                     live.RateSeconds += deltaSeconds;
                     live.RateOwed = true;
-                    if (live.BodyIndex is not null) { m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesHeld); }
+                    m_rateCounts?.Count(kind: ((live.BodyIndex is not null) ? SdfUpdateRateCounts.BodiesHeld : SdfUpdateRateCounts.PlacementsHeld));
                     WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.RateHeld);
                     WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsRetained);
                 } else {
@@ -297,7 +303,7 @@ public sealed partial class WorldCreationInstances {
 
                     WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Posed);
                     WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsPosed);
-                    if (live.BodyIndex is null) { WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.PlacementsPosed); }
+                    var elapsedSeconds = (live.RateSeconds + deltaSeconds);
                     PackRegistration(
                         client: client,
                         deltaSeconds: (unseen ? deltaSeconds : (live.RateSeconds + deltaSeconds)),
@@ -313,10 +319,11 @@ public sealed partial class WorldCreationInstances {
                     );
                     RecordPose(deltaSeconds: deltaSeconds, live: live);
                     WidenMotionReach(live: live, placementScale: placementScale, rootPosition: transforms[rootSlot].Position, shapeCount: shapeCount, transforms: transforms, rootSlot: rootSlot);
-                    if (live.BodyIndex is not null) {
-                        m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesPosed);
-                        posed = true;
-                    }
+                    // A pack that may not hold (a new owner, a reseat, a scale change, the whole table owed) or that
+                    // resumes an unseen hold is a cut the part speed is not measured across.
+                    MeasurePartSpeed(continuous: (mayHold && !unseen), elapsedSeconds: elapsedSeconds, live: live, root: in transforms[rootSlot], shapeCount: shapeCount);
+                    m_rateCounts?.Count(kind: ((live.BodyIndex is not null) ? SdfUpdateRateCounts.BodiesPosed : SdfUpdateRateCounts.PlacementsPosed));
+                    posed = true;
                     live.RateSeconds = 0f;
                     live.RateOwed = false;
                 }
@@ -335,7 +342,7 @@ public sealed partial class WorldCreationInstances {
                 WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsRetained);
             }
 
-            NoteRate(center: rootPosition, live: live, packedSlots: packedSlots, posed: posed, radius: RateReach(live: live, placementScale: placementScale), rootSlot: rootSlot);
+            NoteRate(center: rootPosition, live: live, packedSlots: packedSlots, placementScale: placementScale, posed: posed, radius: RateReach(live: live, placementScale: placementScale), rootSlot: rootSlot);
             live.PackedRoot = transforms[rootSlot];
             placementScale = transforms[rootSlot].Scale;
             AppendVolumes(

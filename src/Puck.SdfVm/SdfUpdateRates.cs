@@ -15,9 +15,9 @@ namespace Puck.SdfVm;
 public enum SdfUpdateRates : byte {
     /// <summary>Every lever off: everything updates every frame.</summary>
     None = 0,
-    /// <summary>A body's pose evaluation and skinned pose (its drivers, effectors and part slots) at least 30, 15, 10 or 5
-    /// times a second as its pixels per metre fall (<see cref="SdfUpdateRateTiers.BodyTiers"/>), and held while nothing may
-    /// show or read its pose, its root still followed every frame.</summary>
+    /// <summary>A body's or an animated placed creation's pose evaluation (its drivers, effectors and part slots) at
+    /// least 30, 15, 10 or 5 times a second as its pixels per metre fall (<see cref="SdfUpdateRateTiers.BodyHertz"/>),
+    /// and held while nothing may show or read its pose, its root still followed every frame.</summary>
     Bodies = 1,
     /// <summary>A nested portal or session view at least 30 or 15 times a second as the share of the display it covers
     /// shrinks.</summary>
@@ -42,7 +42,8 @@ public static class SdfUpdateRateTiers {
     /// <summary>The on-screen step, in pixels, a held update may jump by and stay barely perceptible.</summary>
     public const float PerceptibleStepPixels = 2f;
     /// <summary>The fastest a body's parts move relative to its root, in metres a second, that the body tiers are sized
-    /// for: a stride's swing.</summary>
+    /// for: a stride's swing. A placed creation's tiers are sized for its own measured part speed instead
+    /// (<see cref="BodyHertz"/>).</summary>
     public const float BodyPartSpeed = 2f;
     /// <summary>Gets the rates a body's pose takes, in hertz, fastest first: every frame, then each reduced tier. Each
     /// divides 30 and 60, so its floor lands on an even cadence on either grid.</summary>
@@ -81,30 +82,40 @@ public static class SdfUpdateRateTiers {
     /// <summary>The camera move, in metres, past which a held far cascade refreshes at once.</summary>
     public const float ShadowFarMoveMetres = 0.5f;
 
-    /// <summary>Returns the pixels per metre at and below which a body may update at a tier: a part moving
-    /// <see cref="BodyPartSpeed"/> steps <see cref="PerceptibleStepPixels"/> in one period of the tier.</summary>
-    /// <param name="hertz">The tier, in hertz.</param>
-    /// <returns>The threshold, in pixels per metre.</returns>
-    public static float BodyTierPixelsPerMetre(int hertz) => ((PerceptibleStepPixels * hertz) / BodyPartSpeed);
-    /// <summary>Returns the rate a body updates at for its largest pixels per metre over the views that may see it.</summary>
-    /// <param name="pixelsPerMetre">The body's pixels per metre in the view that shows it largest, or zero when no view
-    /// may see it.</param>
-    /// <param name="shownElsewhere">Whether anything but a displayed view's image may show or read the body's pose: a
-    /// shadow a cascade may draw, a camera whose view the display showed none of yet, or a consumer of its parts (a light,
-    /// a camera anchor, an audio emitter). A body no displayed view may see but that is shown elsewhere takes the
-    /// slowest tier, its pose still moving.</param>
-    /// <returns>The slowest of <see cref="BodyTiers"/> whose threshold (<see cref="BodyTierPixelsPerMetre"/>) the body is
-    /// at or below, where 60 means every frame; 15 for a body only shown elsewhere, whose size in what shows it is not
-    /// measured; or <see cref="HeldHertz"/> when nothing may show or read its pose.</returns>
-    public static int BodyHertz(float pixelsPerMetre, bool shownElsewhere) {
+    /// <summary>Returns the rate a posed creation (a body, or a placed creation) updates at for its largest pixels per
+    /// metre over the views that may see it and the fastest its parts move relative to its root: the slowest tier at
+    /// which a part moving <paramref name="partSpeed"/> steps at most <see cref="PerceptibleStepPixels"/> on screen in
+    /// one period (pixels per metre times metres a second at most <see cref="PerceptibleStepPixels"/> times the tier).
+    /// Between updates the root still follows every frame and the parts ride it rigidly, so the held pose differs from
+    /// the full-rate pose only by the parts' own motion.</summary>
+    /// <param name="pixelsPerMetre">The creation's pixels per metre in the view that shows it largest, or zero when no
+    /// view may see it; infinity for a view holding it at or inside its near plane.</param>
+    /// <param name="shownElsewhere">Whether anything but a displayed view's image may show or read the pose: a shadow a
+    /// cascade may draw, a camera whose view the display showed none of yet, or a consumer of its parts (a light, a camera
+    /// anchor, an audio emitter). A creation no displayed view may see but that is shown elsewhere takes the 15 Hz tier,
+    /// its pose still moving.</param>
+    /// <param name="partSpeed">The fastest the creation's parts move relative to its root, in metres a second: a body's
+    /// assumed <see cref="BodyPartSpeed"/>, a placed creation's measured bound; infinity for motion no bound covers,
+    /// which updates every frame wherever anything may show it.</param>
+    /// <returns>The slowest of <see cref="BodyTiers"/> that bound allows, where 60 means every frame; 15 for a creation
+    /// only shown elsewhere, whose size in what shows it is not measured, when its motion has a bound; or
+    /// <see cref="HeldHertz"/> when nothing may show or read its pose.</returns>
+    public static int BodyHertz(float pixelsPerMetre, bool shownElsewhere, float partSpeed = BodyPartSpeed) {
+        var bounded = float.IsFinite(f: partSpeed);
+
         if (!(pixelsPerMetre > 0f)) {
-            return (shownElsewhere ? 15 : HeldHertz);
+            return (shownElsewhere ? (bounded ? 15 : EveryFrameHertz) : HeldHertz);
+        }
+        if (!bounded || float.IsPositiveInfinity(f: pixelsPerMetre)) {
+            return EveryFrameHertz;
         }
 
+        // The on-screen speed of the fastest part, in pixels a second.
+        var screenSpeed = (pixelsPerMetre * MathF.Max(x: partSpeed, y: 0f));
         var hertz = EveryFrameHertz;
 
         foreach (var tier in BodyTiers[1..]) {
-            if (pixelsPerMetre > BodyTierPixelsPerMetre(hertz: tier)) {
+            if (screenSpeed > (PerceptibleStepPixels * tier)) {
                 break;
             }
 
@@ -307,6 +318,10 @@ public static class SdfUpdateRateCounts {
     public static readonly WorkKind BodiesPosed = new(name: "sdf.rates.bodies.posed", unit: "bodies", workClass: WorkClass.Pacing);
     /// <summary>Counts each body pose a frame held, carrying its last pose rigidly with its root.</summary>
     public static readonly WorkKind BodiesHeld = new(name: "sdf.rates.bodies.held", unit: "bodies", workClass: WorkClass.Pacing);
+    /// <summary>Counts each animated placed creation's pose a frame evaluated in full.</summary>
+    public static readonly WorkKind PlacementsPosed = new(name: "sdf.rates.placements.posed", unit: "placements", workClass: WorkClass.Pacing);
+    /// <summary>Counts each animated placed creation's pose a frame held.</summary>
+    public static readonly WorkKind PlacementsHeld = new(name: "sdf.rates.placements.held", unit: "placements", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a view rendered its far cascade.</summary>
     public static readonly WorkKind ShadowFarRendered = new(name: "sdf.rates.shadow-far.rendered", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a view held its far cascade.</summary>
@@ -319,7 +334,7 @@ public static class SdfUpdateRateCounts {
     /// <summary>Counts each frame a screen's source was shown at a reduced rate.</summary>
     public static readonly WorkKind ScreensRated = new(name: "sdf.rates.screens.rated", unit: "footprints", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, ShadowFarRendered, ShadowFarHeld, ViewsRated, ViewsHeld, ScreensRated];
+    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, PlacementsPosed, PlacementsHeld, ShadowFarRendered, ShadowFarHeld, ViewsRated, ViewsHeld, ScreensRated];
 
     /// <summary>Creates the counters a host's frames count into.</summary>
     /// <returns>A set over every kind this class declares, in report order, every count zero.</returns>

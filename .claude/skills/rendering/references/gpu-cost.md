@@ -377,7 +377,10 @@ large blocks.
   rate for what is visible is the author's to allow (the owner's ruling):
   distant scenery may animate at a reduced tier only where its creation opts
   in (`behavior.reducedRateAtDistance`, which a package's template can expose),
-  and the engine default is full rate for anything visible.
+  and the engine default is full rate for anything visible. An opted-in
+  placement's tiers are sized for its measured part speed
+  (`WorldCreationInstances.MeasurePartSpeed`, one `SdfUpdateRateTiers.BodyHertz`
+  for bodies and placements), so slow wind reduces nearer than a body would.
   New rated work decides through the same floor rather than a schedule of its
   own, reads the frame's flags before it runs (the stamp pool takes them in
   `PresentAt`), and a new reader of a body's parts goes through the pool's part

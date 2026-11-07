@@ -340,6 +340,12 @@ public sealed class WorldCreationInstancesRateLawTests {
         Assert.Equal(expected: 5, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 0.5f, shownElsewhere: false));
         Assert.Equal(expected: 15, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 0f, shownElsewhere: true));
         Assert.Equal(expected: SdfUpdateRateTiers.HeldHertz, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 0f, shownElsewhere: false));
+        // A measured part speed sizes the ladder: 40 px/m at 0.5 m/s is 20 px/s, a 2-pixel step at 10 Hz; motion no bound
+        // covers updates every frame wherever anything shows it, and still holds where nothing does.
+        Assert.Equal(expected: 10, actual: SdfUpdateRateTiers.BodyHertz(partSpeed: 0.5f, pixelsPerMetre: 40f, shownElsewhere: false));
+        Assert.Equal(expected: 60, actual: SdfUpdateRateTiers.BodyHertz(partSpeed: float.PositiveInfinity, pixelsPerMetre: 0.5f, shownElsewhere: false));
+        Assert.Equal(expected: 60, actual: SdfUpdateRateTiers.BodyHertz(partSpeed: float.PositiveInfinity, pixelsPerMetre: 0f, shownElsewhere: true));
+        Assert.Equal(expected: SdfUpdateRateTiers.HeldHertz, actual: SdfUpdateRateTiers.BodyHertz(partSpeed: float.PositiveInfinity, pixelsPerMetre: 0f, shownElsewhere: false));
         Assert.Equal(expected: 60, actual: SdfUpdateRateTiers.ViewHertz(pixels: 121d));
         Assert.Equal(expected: 30, actual: SdfUpdateRateTiers.ViewHertz(pixels: 120d));
         Assert.Equal(expected: 15, actual: SdfUpdateRateTiers.ViewHertz(pixels: 60d));
