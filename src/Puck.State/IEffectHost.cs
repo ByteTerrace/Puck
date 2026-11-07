@@ -271,6 +271,14 @@ public readonly record struct EffectFiring(string RuleName, ulong Tick, ulong En
 /// candidate, because the firing's journal scope already is one.</para>
 /// </remarks>
 public interface IEffectHost : IStateReader {
+    /// <summary>Captures the bindings the host's arms read when they run (the participants a decision or an interaction
+    /// binds), so an arm queued under one set preflights and delivers under the same set, whatever the host has bound
+    /// by then.</summary>
+    /// <returns>An opaque capture <see cref="ApplyBinding"/> restores; zero for a host with no bindings.</returns>
+    long CaptureBinding() => 0L;
+    /// <summary>Binds what <see cref="CaptureBinding"/> captured.</summary>
+    /// <param name="binding">The capture.</param>
+    void ApplyBinding(long binding) { }
     /// <summary>Begins one bound gate-and-fire evaluation, including its predicate reads.</summary>
     void BeginRuleEvaluation() { }
     /// <summary>Ends that evaluation on success, refusal or a closed gate.</summary>

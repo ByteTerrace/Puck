@@ -62,7 +62,7 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
             engineTick: view.EngineTick,
             tick: view.Tick
         );
-        m_latch.Reset();
+        m_latch.Reset(journal: m_host.Arena.Journal);
 
         // Whatever the candidate queued is dropped however the evaluation ends, so nothing it queued is counted
         // against the next candidate.

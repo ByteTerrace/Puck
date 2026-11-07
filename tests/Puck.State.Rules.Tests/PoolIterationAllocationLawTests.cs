@@ -25,7 +25,7 @@ public sealed class PoolIterationAllocationLawTests {
         void Candidate() {
             var mark = arena.BeginScope();
 
-            latch.Reset();
+            latch.Reset(journal: arena.Journal);
             _ = evaluator.Evaluate(latch: latch, rules: rules, stepTicks: 1UL);
             arena.Rewind(mark: mark);
         }

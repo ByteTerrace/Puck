@@ -7,9 +7,10 @@
 // false at a gate and skips an effect, so its negation fires and its increment commits: the gates are evaluated, and
 // only the fault keeps the others shut.
 //
-// Each block is one finding of the rule-faults design, named W1 to W13 (L1, its nested-scope law, is a C# law beside
+// Each block is one finding of the rule-faults design, named W1 to W15 (L1, its nested-scope law, is a C# law beside
 // the latch laws). Every block is green: W1 to W9, W12 and W13 pin what the interpreter and the gate's verdict provide,
-// and W10 and W11 pin that a firing's latch bit and decision state rewind with its scope.
+// W10 and W11 pin that a firing's latch bit and decision state rewind with its scope, and W14 and W15 that a decision's
+// common and option effects are one firing.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -270,6 +271,29 @@ state {
     }
     row {
       name: "choiceLanded"
+      kind: "Int"
+      value: 0
+    }
+
+    // W14 and W15: decisions whose common effects and option effects are one firing, each with one half that faults until
+    // tick 3 (`choiceDivisor`), and how often the half that does not fault landed.
+    row {
+      name: "pairCommonLanded"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "pairOptionSink"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "pairCommonSink"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "pairOptionLanded"
       kind: "Int"
       value: 0
     }
@@ -605,6 +629,38 @@ rule "choice-effect-fault" {
   }
 }
 
+// W14: the common effects and the option effects are one firing. The option effect faults on tick 0 to 2, so the common
+// increment that precedes it is rewound with it and the choice stands for no tick; both land together on tick 3.
+rule "common-lands-option-faults" {
+  mode: Level
+  pairCommonLanded += 1
+  decision {
+    periodSeconds: 1s
+    mode: HighestScore
+    scoreKind: Fixed
+    option "only" {
+      score: 1
+      pairOptionSink = 1 / choiceDivisor
+    }
+  }
+}
+
+// W15: the common effect faults on tick 0 to 2, so the option's increment does not land beside it and the choice is not
+// installed; both land together on tick 3.
+rule "common-faults-option-lands" {
+  mode: Level
+  pairCommonSink = 1 / choiceDivisor
+  decision {
+    periodSeconds: 1s
+    mode: HighestScore
+    scoreKind: Fixed
+    option "only" {
+      score: 1
+      pairOptionLanded += 1
+    }
+  }
+}
+
 // W12: the judge accepts every relocation, then faults while the window holds. A candidate whose judge faults is a
 // faulted candidate and not a scored one, so the step restarts and no answer lands until the window closes.
 rule "search-accept" {
@@ -768,6 +824,24 @@ test "W11 an option effect that faults leaves no choice installed" {
   }
   expect {
     choiceLanded == 1
+  }
+}
+
+test "W14 an option effect that faults rewinds the common effects with it" {
+  when {
+    ticks 10
+  }
+  expect {
+    pairCommonLanded == 1
+  }
+}
+
+test "W15 a common effect that faults lands no option effect" {
+  when {
+    ticks 10
+  }
+  expect {
+    pairOptionLanded == 1
   }
 }
 

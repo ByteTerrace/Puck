@@ -598,7 +598,7 @@ public sealed partial class WorldRuleHost {
             if (!values[WorldBodyStateEffect.ValueSource].TryFinite(raw: out value)) {
                 return Refuse(
                     code: WorldRuleEffectRefusal.BodyStateFaulted,
-                    reason: "the value expression faulted",
+                    reason: "the value expression names no number",
                     refusal: out refusal
                 );
             }
@@ -653,7 +653,7 @@ public sealed partial class WorldRuleHost {
             if (!values[WorldIdentityFactEffect.ValueSource].TryFinite(raw: out value)) {
                 return Refuse(
                     code: WorldRuleEffectRefusal.IdentityFactUnwritable,
-                    reason: "the value expression faulted",
+                    reason: "the value expression names no number",
                     refusal: out refusal
                 );
             }

@@ -7,6 +7,8 @@ public sealed partial class RuleEvaluator {
     // What each queued arm's declared sources read, in one buffer: the slot a queued arm owns starts at its entry in
     // m_deferredValues, and the same values answer its preflight and its delivery.
     private readonly List<int> m_deferredValues = [];
+    // The host's bindings each queued arm was queued under, which its preflight and delivery run under again.
+    private readonly List<long> m_deferredBindings = [];
     private Outcome[] m_armOutcomes = new Outcome[16];
 
     private int m_armOutcomeCount;
@@ -60,12 +62,15 @@ public sealed partial class RuleEvaluator {
     /// <param name="applied">Whether the firing moved the arena.</param>
     /// <param name="prelude">What the host records into the scope the moment it opens, or <see langword="null"/>: the
     /// state its firing decided beside the cells, which then rewinds with them.</param>
+    /// <param name="continuation">What the host proposes into the same scope after <paramref name="effects"/> proposed
+    /// cleanly, or <see langword="null"/>: the whole is one firing, committed or rewound together with the prelude's
+    /// state.</param>
     /// <returns><see cref="RuleOutcome.Fired"/> when the scope committed, <see cref="RuleOutcome.Refused"/> when an
     /// effect refused and <see cref="RuleOutcome.Faulted"/> when one faulted; either rewinds the scope.</returns>
     /// <remarks>A host evaluating a rule kind of its own — a decision's option or its no-choice arm — fires through
     /// here so its effects are one scope, exactly as a rule's own are.</remarks>
     [Replaces(root: typeof(StateArena))]
-    public RuleOutcome FireEffects(IRuleEffect[] effects, string ruleName, ulong tick, ulong stepTicks, out bool applied, IFiringPrelude? prelude = null) {
+    public RuleOutcome FireEffects(IRuleEffect[] effects, string ruleName, ulong tick, ulong stepTicks, out bool applied, IFiringPrelude? prelude = null, IFiringContinuation? continuation = null) {
         ArgumentNullException.ThrowIfNull(argument: effects);
 
         if (effects is [RewindGroupEffect rewind]) {
@@ -97,6 +102,7 @@ public sealed partial class RuleEvaluator {
             prelude?.Record(journal: m_host.Arena.Journal);
             proposed = ProposeEffects(
                 applied: ref applied,
+                continuation: continuation,
                 effects: effects,
                 firing: in firing,
                 queued: queued,
@@ -187,11 +193,24 @@ public sealed partial class RuleEvaluator {
                     continue;
                 }
 
-                if (Deliver(
-                    arm: arm,
-                    firing: (firing with { Values = ValuesOf(index: index) }),
-                    refusal: out var refusal
-                )) {
+                var current = m_host.CaptureBinding();
+
+                m_host.ApplyBinding(binding: m_deferredBindings[index]);
+
+                bool delivered;
+                EffectRefusal refusal;
+
+                try {
+                    delivered = Deliver(
+                        arm: arm,
+                        firing: (firing with { Values = ValuesOf(index: index) }),
+                        refusal: out refusal
+                    );
+                } finally {
+                    m_host.ApplyBinding(binding: current);
+                }
+
+                if (delivered) {
                     applied |= arm.SubmitsMutation;
                 } else {
                     ReportRefusal(
@@ -222,7 +241,7 @@ public sealed partial class RuleEvaluator {
     // Everything a firing does before its commit: the reversible effects, then each queued arm's preflight against
     // the state they propose, then the host's preparation of the transactional arms as one unit. False means
     // refused, already reported.
-    private Step ProposeEffects(IRuleEffect[] effects, string ruleName, in EffectFiring firing, int queued, ref bool applied) {
+    private Step ProposeEffects(IRuleEffect[] effects, string ruleName, in EffectFiring firing, int queued, ref bool applied, IFiringContinuation? continuation = null) {
         var sequence = FireSequence(
             applied: ref applied,
             effects: effects,
@@ -234,6 +253,23 @@ public sealed partial class RuleEvaluator {
             return sequence;
         }
 
+        if ((continuation is not null) && (continuation.Next() is { } next)) {
+            try {
+                sequence = FireSequence(
+                    applied: ref applied,
+                    effects: next,
+                    firing: in firing,
+                    strict: false
+                );
+            } finally {
+                continuation.End();
+            }
+
+            if (sequence != Step.Done) {
+                return sequence;
+            }
+        }
+
         var preflight = (firing with { Preflight = true });
 
         if (m_deferred.Count > queued) {
@@ -242,21 +278,35 @@ public sealed partial class RuleEvaluator {
 
         for (var index = queued; (index < m_deferred.Count); index++) {
             var arm = m_deferred[index];
-            var read = ReadSources(
-                arm: arm,
-                firing: in firing,
-                start: m_deferredValues[index]
-            );
+            var current = m_host.CaptureBinding();
+
+            m_host.ApplyBinding(binding: m_deferredBindings[index]);
+
+            Step read;
+            bool fired;
+            EffectRefusal refusal;
+
+            try {
+                read = ReadSources(
+                    arm: arm,
+                    firing: in firing,
+                    start: m_deferredValues[index]
+                );
+                refusal = EffectRefusal.None;
+                fired = ((read == Step.Done) && arm.TryFire(
+                    firing: (preflight with { Values = ValuesOf(index: index) }),
+                    host: m_host,
+                    refusal: out refusal
+                ));
+            } finally {
+                m_host.ApplyBinding(binding: current);
+            }
 
             if (read != Step.Done) {
                 return read;
             }
 
-            if (!arm.TryFire(
-                firing: (preflight with { Values = ValuesOf(index: index) }),
-                host: m_host,
-                refusal: out var refusal
-            )) {
+            if (!fired) {
                 ReportRefusal(
                     effect: arm.Describe,
                     fallback: RuleEffectRefusal.MutationRejected,
@@ -314,6 +364,10 @@ public sealed partial class RuleEvaluator {
         );
         m_deferredValues.RemoveRange(
             count: (m_deferredValues.Count - from),
+            index: from
+        );
+        m_deferredBindings.RemoveRange(
+            count: (m_deferredBindings.Count - from),
             index: from
         );
     }
@@ -434,6 +488,7 @@ public sealed partial class RuleEvaluator {
             if ((effect.Needs & EffectNeeds.Irreversible) != EffectNeeds.None) {
                 m_deferred.Add(item: effect);
                 m_deferredValues.Add(item: ReserveValues(count: effect.Sources.Length));
+                m_deferredBindings.Add(item: m_host.CaptureBinding());
                 trace?.Effects.Add(item: $"{effect.Describe}: queued");
 
                 continue;
