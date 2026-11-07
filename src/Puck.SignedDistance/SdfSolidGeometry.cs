@@ -998,6 +998,71 @@ public static class SdfSolidGeometry {
             vector2: (canonical * effectiveScale)
         ));
     }
+    /// <summary>A primitive's local box at its scale: the centre and half-extent its <see cref="Support"/> spans along each
+    /// principal axis, about the primitive's own origin, in its scaled local units. Support is symmetric in X and Z for
+    /// every primitive (only a Capsule's and a RoundCone's reach differ up and down Y), so the box is too, and a mirror
+    /// across local X keeps it. This is the one rule for a shape's extent that a collider stand-in, a contact reach and a
+    /// stamp's cull box read, where the canonical table (<see cref="GetLocalBounds"/>) knows neither a revolve's radial
+    /// offset nor a baked capsule's segment.</summary>
+    /// <param name="type">The primitive.</param>
+    /// <param name="scale">The authored per-axis scale.</param>
+    /// <param name="lift">Prism only: extrude or revolve.</param>
+    /// <returns>The box, or <see cref="SdfSolidBounds.Unbounded"/> for a <see cref="SdfSolidPrimitive.Plane"/>.</returns>
+    public static SdfSolidBounds LocalBox(SdfSolidPrimitive type, Vector3 scale, SdfLift lift) {
+        if (type == SdfSolidPrimitive.Plane) {
+            return SdfSolidBounds.Unbounded;
+        }
+
+        var up = Support(axis: Vector3.UnitY, lift: lift, scale: scale, type: type);
+        var down = Support(axis: -Vector3.UnitY, lift: lift, scale: scale, type: type);
+        // A Prism's support reads its profile's canonical unit extent; the ellipse profile's builder nudges a unit
+        // circle's radius by 1e-4 past it (GetLocalBounds and Reach carry the same factor), which a box must hold.
+        var nudge = ((type == SdfSolidPrimitive.Prism) ? 1.0001f : 1f);
+
+        return new SdfSolidBounds(
+            Center: new Vector3(x: 0f, y: (0.5f * (up - down)), z: 0f),
+            HalfExtents: (new Vector3(
+                x: Support(axis: Vector3.UnitX, lift: lift, scale: scale, type: type),
+                y: (0.5f * (up + down)),
+                z: Support(axis: Vector3.UnitZ, lift: lift, scale: scale, type: type)
+            ) * nudge)
+        );
+    }
+    /// <summary>A primitive's dilation gain per local axis: how far, per unit of <c>d</c>, the zero set of its emitted field
+    /// less <c>d</c> (a contact margin's <c>Dilate</c>, a blend's or relief's sag) reaches past its
+    /// <see cref="Support"/> along each principal axis. One where the field <see cref="AppendScaledPrimitive"/> emits is a
+    /// true distance outside the solid; past one where it reads under the distance: the exponent-2 or authored
+    /// superellipsoid gauge (a Sphere, Ellipsoid or Superellipsoid; <c>(gauge − 1)·min r</c>) reaches <c>rᵢ / min r</c>,
+    /// and the generic Scale arm (<c>f(S⁻¹p)·min s</c>, a Capsule, Torus or Cone scaled unlike in X and Z, a non-uniform
+    /// RoundCone) reaches <c>sᵢ / min s</c>.</summary>
+    /// <param name="type">The primitive.</param>
+    /// <param name="scale">The authored per-axis scale.</param>
+    /// <returns>The gain along local X, Y and Z, each at least one.</returns>
+    /// <remarks>KEEP IN SYNC with <see cref="AppendScaledPrimitive"/>'s arms. A primitive whose own unit field reads
+    /// under its distance (the cone family) is charged nothing more here.</remarks>
+    public static Vector3 DilationGain(SdfSolidPrimitive type, Vector3 scale) {
+        var effectiveScale = EffectiveScale(scale: scale);
+
+        if (type is SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid or SdfSolidPrimitive.Superellipsoid) {
+            var radii = (((type == SdfSolidPrimitive.Sphere) ? new Vector3(value: SphereRadius) : EllipsoidRadii) * effectiveScale);
+
+            return Gain(extents: radii);
+        }
+
+        var stretched = (!IsUniform(scale: effectiveScale) && (type switch {
+            SdfSolidPrimitive.Capsule or SdfSolidPrimitive.Torus or SdfSolidPrimitive.Cone => (effectiveScale.X != effectiveScale.Z),
+            SdfSolidPrimitive.RoundCone => true,
+            _ => false,
+        }));
+
+        return (stretched ? Gain(extents: effectiveScale) : Vector3.One);
+
+        static Vector3 Gain(Vector3 extents) {
+            var least = MathF.Max(x: MinimumScale, y: MathF.Min(x: extents.X, y: MathF.Min(x: extents.Y, y: extents.Z)));
+
+            return Vector3.Max(value1: Vector3.One, value2: (extents / least));
+        }
+    }
     /// <summary>Returns the largest 45-degree edge-chamfer radius a primitive can carry at a scale, in world units.</summary>
     /// <param name="type">The primitive.</param>
     /// <param name="scale">The authored per-axis scale.</param>
