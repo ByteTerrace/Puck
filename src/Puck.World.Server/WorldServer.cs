@@ -677,14 +677,10 @@ public sealed partial class WorldServer : IWorldServerHost {
         var admittedAtBoot = new List<WorldPeerEventEntry>();
         var disconnectedAtBoot = new List<WorldPeerEventEntry>();
 
-        m_population.ReconcileInhabitants(
-            admitted: admittedAtBoot,
-            definition: definition,
-            disconnected: disconnectedAtBoot
-        );
         // A cell-driven inhabit count starts from its cell's authored value, not from zero waiting for a write.
-        m_population.ReconcileInhabitCounts(arena: m_arena,
+        m_population.ReconcileInstall(
             admitted: admittedAtBoot,
+            arena: m_arena,
             definition: definition,
             disconnected: disconnectedAtBoot,
             tick: NextInputTick

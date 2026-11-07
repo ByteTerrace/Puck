@@ -1182,14 +1182,9 @@ public sealed partial class WorldDocument {
         var admitted = new List<WorldPeerEventEntry>();
         var disconnected = new List<WorldPeerEventEntry>();
 
-        Host.Population.ReconcileInhabitants(
+        Host.Population.ReconcileInstall(
             admitted: admitted,
-            definition: definition,
-            disconnected: disconnected
-        );
-        // The rebuild re-seeds every cell-driven count to zero; resolve them from their cells before anything reads.
-        Host.Population.ReconcileInhabitCounts(arena: Host.Arena,
-            admitted: admitted,
+            arena: Host.Arena,
             definition: definition,
             disconnected: disconnected,
             tick: Host.NextInputTick
