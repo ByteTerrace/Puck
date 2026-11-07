@@ -632,6 +632,12 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   for the quiet wall-time comparison. The stage log's `cpu` fields sum worker
   elapsed intervals, including descheduling and GC/profiler suspension; they
   are diagnostics, not measured processor time or a quiet-wall-time result.
+- [medium] `SdfMeshLibrary.Store` now publishes a baked mesh by decoding its
+  store entry back (`TryLoad`), so a cold bake draws what a warm boot loads and
+  every stored mesh is restorable; the decode raised the cold bake's store stage
+  from about 22 to 63 summed CPU-seconds. Publish the encoded mesh's own native
+  form (renumbered, restorable) without the round trip, keeping the one
+  publication door.
 - [medium] Every view still renders every frame while a bake is pending
   (`SdfWorldResidency.IsUnchanged` returns false on `MeshPathBake.Pending`),
   which the frame-paced bake needed to dispatch and the background GPU work
@@ -1402,6 +1408,10 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [low] `HeapAllocator` is copied three times in the Vulkan tests
+  (`tests/Puck.Vulkan.Tests/VulkanGroupedBindingLawTests.cs:206`,
+  `VulkanGroupedPipelineLayoutLawTests.cs:233`, `VulkanIndirectCountLawTests.cs:155`);
+  move it to `tests/Shared`.
 - [medium · addons] `WasmModuleDeclarations.WithCheckpointExports`
   (`src/Puck.Assets/WasmModuleDeclarations.Checkpoint.cs:17`) refuses every
   table and every element/data-count section, and the World mount gate
@@ -2526,6 +2536,11 @@ failing case is argued from source, not run):
 
 ### Vulkan regressions and GPU robustness
 
+- [medium · unconfirmed] Vulkan's world GI trace fell behind on a running
+  debug World (`[sdf.mesh-gi] behind … relit-per-second=252 needed=2496`) and
+  printed no `done` after more than five minutes (seen by the mesh-twice lane;
+  not compared against a base Vulkan run). Compare base and tip on Vulkan before
+  calling it a regression.
 - [low · unchecked] `SdfWorldPickReadback.Dispose` returns its readback's
   arena range (`DirectXGpuReadbackBuffer.Dispose` now reports the release), but
   whether every retirement path of the pick readback runs after its fence
