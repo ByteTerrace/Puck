@@ -437,6 +437,17 @@ The custom no-GC runtime port stays later work, on the
 
 #### Other frame-time findings
 
+- [medium] The temporal resolve is now DRAM-bound: its 40-word window is
+  rewritten every frame because it lives in the per-frame history buffers.
+  Keeping the window in one buffer each pixel reads and writes only for itself
+  saves about 140 bytes a pixel, but needs one frame's writes visible to the
+  next (a cross-frame barrier on that buffer): design and review it before
+  building. `sdf-composite` also keeps local arrays at high register allocation
+  (0.5-0.9 ms); the bloom passes, `Graph/place`, `sdf-mesh-bake` and the sky
+  passes keep smaller ones. Confirm whether the bench's default
+  `world.indirect medium` is the bar's highest quality; if not, every frame
+  reading has been taken below the bar's setting.
+
 - [high] With box-only selection, the far shadow cascade draws nearly every caster in its box at the
   coarsest level whose error fits its texel (`world.counters gpu pass
   sdf.world$shadow-far counter vertices` against the mesh pass's), in two
