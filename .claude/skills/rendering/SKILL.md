@@ -196,6 +196,11 @@ refreshes both layers when the pass changes; only ordinary unchanged-pass
 signatures may retain it. `world.cull camera` disables cascade receiver and depth
 occlusion and retains the original far rate, providing the comparison path
 while leaving camera occlusion enabled.
+For a complete-refresh cost comparison, set `world.rates shadow-far off` on
+both sides. Also measure ordinary cadence: replacing a split refresh with two
+culled layers can cost more in a view with little rejection even when a whole
+refresh costs less. Report those separately and read `sdf.rates` beside the
+draw/vertex counters; a split frame's counts cover only its submitted layer.
 Compare counts beside time and shadow diagnostic captures on both backends;
 include a moving camera and reduced/temporal render grids. The receiver scratch
 shares the depth allocation and its existing slot-fence retirement; early
