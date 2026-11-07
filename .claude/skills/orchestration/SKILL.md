@@ -127,9 +127,10 @@ direction:
   judged by what it measures and what it makes possible, never by its isolated
   delta alone (AGENTS.md, "Changes pay dividends";
   [measured changes](../dotnet-performance/references/measured-changes.md)).
-- **An Antigravity lane is bounded, its claims are checked against the code
-  before it merges, and its review starts first**: its output has carried
-  fabricated claims and high findings.
+- **Every lane's claims are checked against the code before it merges,
+  whatever its family**: each family has shipped wrong claims and regressions
+  that a check caught. A lane's brief fits the work to its environment
+  ([the roster](#select-models-and-route-findings)), not to a past verdict.
 
 - **Batch, including unrelated areas.** Several lanes work independent areas at
   once, and the integration lane verifies them together in one sweep of the
@@ -972,34 +973,34 @@ thread talk through the owner, or through a file both read.
 Antigravity is the third family, running Gemini 4 Argon (Google's flagship;
 an Antigravity lane launches as above). It
 is strong at repository issue fixing, app and UI generation, security
-remediation and large-context analysis, and weaker on long terminal-driven and
-long-horizon work. Route it accordingly:
+remediation and large-context analysis.
 
-| Give Argon | Keep from Argon |
-|---|---|
-| Independent review and audit passes (a third family's blind spots differ from Claude's and Codex's) | Long implementation lanes with many build/test/World steps |
-| Security review of a change or an area | Lanes that need network or GPU legs from inside its sandbox |
-| Portal, dashboard and other TypeScript/UI work | Anything that must push or mutate shared Git state |
-| Research synthesis, as one voice beside a family that opens its sources | Finding where time or memory goes: a cost claim read from code without a measurement |
-| | A code-reading pass whose claims nobody will measure before acting |
+**No model is punished for a few failures (the owner's ruling).** Every family
+makes mistakes, Claude's and Codex's lanes included; a failure is first read as
+a prompt, setup or assignment problem and fixed there, and a family is kept from
+a kind of work only after a long, established record of failing at it. Lessons
+from incidents are setup fixes and verification habits, never standing verdicts,
+and they are re-tested: give the family a fair, well-briefed assignment of the
+same kind and compare it with the others on the same task before concluding
+anything. Several models augmenting one idea is valuable even when one of them
+writes poor code: divergent proposals, a third critic on a design, a
+large-context read of a whole subsystem, a second synthesis voice.
 
-A produce-path read it wrote ranked ten per-frame costs from the code; a
-measuring lane confirmed most of the code it quoted and found every cost wrong
-(none above 3.6% of the frame's samples), while the real hot spot, which no
-reading named, took 58%. Its value there was zero beside a trace; give a cost
-question to a lane that measures.
+What the Antigravity sandbox cannot do is an environment fact, not a judgement:
+a headless `agy -p` run has no network, no GPU and refuses pushes and
+shared-state Git. So a brief puts every source it needs in its workspace, asks
+it to cite only what it opened and quoted, labels hypotheses as hypotheses, and
+sends cost questions with a measurement attached or to a lane that can measure.
 
-An `agy -p` lane cannot open web pages directly. Its search tool returns
-summaries, and in one research round it labelled those summaries "Opened URL"
-until a cross-family consensus round made it retract them. Treat its citations,
-figures and quotes as leads for a Claude or Codex lane to open and verify.
-Never take them as sources, and never let them carry a verdict alone. A
-research round therefore always runs a consensus step in which other families
-check its citations. The same holds for its reading of Puck's own code: in the
-culling round it cited six shader and C# names that do not exist, a constant
-absent from the file it named, and wrong level-of-detail facts, and built a
-ranked technique on a problem Puck does not have. A Claude or Codex reader
-checks each `file:line` it gives before the plan uses it.
+Lessons the setup now answers: in one research round, with no way to open web
+pages, it labelled search summaries "Opened URL"; in a culling round it cited
+code names that did not exist; a produce-path read ranked per-frame costs from
+code alone, and a trace placed the real hot spot elsewhere. Each is why a
+brief now gives it the files and asks for quoted lines, and why every family's
+citations, `file:line` claims and cost claims are checked by another reader
+before a plan relies on them (the rule applies to all families alike: this
+project's Claude and Codex lanes have shipped regressions and wrong claims
+that review caught too).
 
 Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden
