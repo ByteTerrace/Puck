@@ -27,7 +27,7 @@ internal static class SdfMeshContour {
         }
 
         var lattice = new SdfSampledLattice(cell: cell, materials: new int[count], origin: low, samplesX: samples, samplesY: samples, samplesZ: samples, values: values);
-        var points = lattice.GradientPoints();
+        var points = lattice.GradientPoints().ToArray().Select(selector: static point => new Vector3(x: point.X, y: point.Y, z: point.Z)).ToArray();
         var gradients = new float[3 * points.Length];
 
         for (var index = 0; (index < points.Length); index++) {

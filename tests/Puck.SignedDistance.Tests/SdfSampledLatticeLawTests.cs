@@ -32,6 +32,8 @@ public sealed class SdfSampledLatticeLawTests {
     }
     // The turned box with a sphere carved from one corner: concave creases where the carve meets the faces.
     private static float Carved(Vector3 point) => MathF.Max(Box(point: point, turn: 0.3f), -(Vector3.Distance(value1: point, value2: new Vector3(value: 0.03f)) - 0.05f));
+    // A round of the lattice's points as positions, copied out before the lattice's next round rewrites its block.
+    private static Vector3[] Xyz(ReadOnlyMemory<Vector4> points) => [.. points.ToArray().Select(selector: static point => new Vector3(x: point.X, y: point.Y, z: point.Z))];
     private static Vector3 Position(SdfContour contour, int vertex) =>
         new(x: contour.Positions[(3 * vertex)], y: contour.Positions[((3 * vertex) + 1)], z: contour.Positions[((3 * vertex) + 2)]);
     // The bake kernel's gradient (sdf-mesh-bake.comp.hlsl): four tetrahedral taps a sixty-fourth of a cell out, summed
@@ -65,17 +67,17 @@ public sealed class SdfSampledLatticeLawTests {
         var lattice = new SdfSampledLattice(cell: new Vector3(value: Cell), materials: materials, origin: Origin, samplesX: Samples, samplesY: Samples, samplesZ: Samples, values: values);
 
         if (refine) {
-            var fine = lattice.Refine(factor: Factor, regions: regions);
+            var fine = Xyz(lattice.Refine(factor: Factor, regions: regions));
 
             Assert.NotEmpty(collection: fine);
             lattice.AnswerRefinement(first: 0, materials: [.. fine.Select(selector: point => (material?.Invoke(arg: point) ?? 0))], values: [.. fine.Select(selector: field)]);
         }
 
-        for (var crossings = lattice.CrossingPoints(); (crossings.Length > 0); crossings = lattice.CrossingPoints()) {
+        for (var crossings = Xyz(lattice.CrossingPoints()); (crossings.Length > 0); crossings = Xyz(lattice.CrossingPoints())) {
             lattice.AnswerCrossings(first: 0, values: [.. crossings.Select(selector: field)]);
         }
 
-        var points = lattice.GradientPoints();
+        var points = Xyz(lattice.GradientPoints());
         var gradients = new float[(3 * points.Length)];
 
         for (var index = 0; (index < points.Length); index++) {
@@ -277,7 +279,7 @@ public sealed class SdfSampledLatticeLawTests {
 
         var lattice = new SdfSampledLattice(cell: new Vector3(value: Cell), materials: materials, origin: Origin, samplesX: Samples, samplesY: Samples, samplesZ: Samples, values: values);
 
-        Assert.Empty(collection: lattice.Refine(factor: Factor));
+        Assert.Empty(collection: Xyz(lattice.Refine(factor: Factor)));
     }
 
     // Two boxes whose faces touch (a stair's treads, a board on its table) are one solid: the union's field falls to the
@@ -303,7 +305,7 @@ public sealed class SdfSampledLatticeLawTests {
 
         var lattice = new SdfSampledLattice(cell: new Vector3(value: Cell), materials: new int[count], origin: Origin, samplesX: Samples, samplesY: Samples, samplesZ: Samples, values: values);
 
-        Assert.Equal(expected: refines, actual: (lattice.Refine(factor: Factor).Length > 0));
+        Assert.Equal(expected: refines, actual: (Xyz(lattice.Refine(factor: Factor)).Length > 0));
     }
 
     // A tilted disc thinner than the fine cell, which the fine samples alone catch in places and step over in others,
@@ -384,7 +386,7 @@ public sealed class SdfSampledLatticeLawTests {
         var refined = Lattice();
 
         _ = plain.Refine(factor: Factor);
-        Assert.NotEmpty(collection: refined.Refine(factor: Factor, regions: [new SdfLatticeRegion(High: new Vector3(value: 0.2f), Low: new Vector3(x: 0.1f, y: -0.2f, z: -0.2f))]));
+        Assert.NotEmpty(collection: Xyz(refined.Refine(factor: Factor, regions: [new SdfLatticeRegion(High: new Vector3(value: 0.2f), Low: new Vector3(x: 0.1f, y: -0.2f, z: -0.2f))])));
         Assert.True(condition: (refined.MeasuredCells > (plain.MeasuredCells + 50)), userMessage: $"{refined.MeasuredCells} cells measured with the region, {plain.MeasuredCells} without");
     }
 
@@ -401,11 +403,11 @@ public sealed class SdfSampledLatticeLawTests {
         static SdfLatticeRegion[] Whole(int samples) => [new SdfLatticeRegion(High: (Origin + new Vector3(value: (samples * Cell))), Low: Origin)];
 
         var fits = OnTheSurface(samples: Samples);
-        var fine = fits.Refine(factor: 8, regions: Whole(samples: Samples));
+        var fine = Xyz(fits.Refine(factor: 8, regions: Whole(samples: Samples)));
 
         Assert.Equal(expected: 4, actual: fits.Refinement);
         Assert.Equal(expected: ((129 * 129 * 129) - (Samples * Samples * Samples)), actual: fine.Length);
-        Assert.Empty(collection: OnTheSurface(samples: 90).Refine(factor: 3, regions: Whole(samples: 90)));
+        Assert.Empty(collection: Xyz(OnTheSurface(samples: 90).Refine(factor: 3, regions: Whole(samples: 90))));
     }
     // A speck apart from the surface, as a sheet thinning to a knife edge leaves, is dropped; a surface that small on its
     // own is the whole part and stays.
@@ -472,7 +474,7 @@ public sealed class SdfSampledLatticeLawTests {
         var samples = 0;
         var rounds = 0;
 
-        for (var crossings = lattice.CrossingPoints(); (crossings.Length > 0); crossings = lattice.CrossingPoints()) {
+        for (var crossings = Xyz(lattice.CrossingPoints()); (crossings.Length > 0); crossings = Xyz(lattice.CrossingPoints())) {
             rounds++;
             roots = Math.Max(val1: roots, val2: (crossings.Length / 2));
             samples += crossings.Length;
@@ -481,7 +483,7 @@ public sealed class SdfSampledLatticeLawTests {
 
         var checkedCrossings = 0;
 
-        foreach (var point in lattice.GradientPoints()) {
+        foreach (var point in Xyz(lattice.GradientPoints())) {
             var at = ((point - Origin) / Cell);
 
             // A lattice sample a gradient is read at, not a crossing.

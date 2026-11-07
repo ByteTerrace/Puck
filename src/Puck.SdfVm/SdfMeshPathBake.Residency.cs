@@ -177,9 +177,12 @@ public sealed partial class SdfMeshPathBake {
             // Renumbering the mesh for the follower's materials copies arrays as large as the mesh, so it runs on the
             // workers, outside the gate the frame takes.
             group.Contouring = true;
-            Schedule(group: group, work: () => TakeFollowed(group: group));
+            ScheduleFollowed(group: group);
         }
     }
+    // The closure lives here so that Follow's scan of every group allocates none: a lambda capturing the loop variable
+    // allocates its closure on entering each iteration, before the skip checks.
+    private void ScheduleFollowed(Group group) => Schedule(group: group, work: () => TakeFollowed(group: group));
     // Takes the mesh a follower's leader landed, renumbered for the follower's materials; a follower whose mesh the library
     // no longer holds bakes it itself.
     private void TakeFollowed(Group group) {
