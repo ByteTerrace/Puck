@@ -200,15 +200,24 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             if (result.Mesh is null) { StoreEmpty(geometry: geometry, identity: identity); return true; }
             if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh)) { return true; }
             // The decode takes the group's ids before the native copy, so the published storage holds one set of triangle
-            // materials rather than the store's canonical set beside a renumbered variant. The copy runs outside the gate
-            // the frame thread takes; the first copy held wins, and a later one is released.
-            var source = (result.Materials.AsSpan().SequenceEqual(other: materials) ? result.Mesh : RenumberManaged(from: result.Materials, mesh: result.Mesh, to: materials));
+            // materials rather than the store's canonical set beside a renumbered variant. The held mesh is what later
+            // groups renumber from, so it keeps the canonical ids when the group's would make that ambiguous: an id no
+            // shape owns equal to one of the group's, or two places with one id (SdfMeshMaterials.Reversible). The copy
+            // runs outside the gate the frame thread takes; the first copy held wins, and a later one is released.
+            var pieces = ((result.Mesh.Chunks.Count == 0) ? (IReadOnlyList<SdfMesh>)[result.Mesh] : result.Mesh.Chunks);
+            var heldIds = ((result.Materials.AsSpan().SequenceEqual(other: materials) || !SdfMeshMaterials.Reversible(from: result.Materials, pieces: pieces, to: materials)) ? result.Materials : materials);
+            var source = (ReferenceEquals(objA: heldIds, objB: result.Materials) ? result.Mesh : RenumberManaged(from: result.Materials, mesh: result.Mesh, to: materials));
+            // Its parts are let go and restored from this set, so the set stays while this process runs.
+            if (Allocator is not null) { _ = Disk.Hold(identity: identity); }
             var copy = source.NativeCopy(Allocator, Account, restore: (this, identity, geometry));
 
-            if (Hold(geometry, identity, copy, materials, form)) { mesh = copy; return true; }
-            if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh)) { copy.Release(); return true; }
-            mesh = copy;
-            return true;
+            try {
+                _ = Hold(geometry, identity, copy, heldIds, form);
+                if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh)) { return true; }
+                // The library let go of the geometry between the hold and the take (a trim): the copy is the mesh.
+                mesh = (ReferenceEquals(objA: heldIds, objB: materials) ? copy.Acquire() : Renumber(from: heldIds, mesh: copy, to: materials));
+                return true;
+            } finally { copy.Release(); }
         } finally { _ = m_reads.TryRemove(item: new KeyValuePair<(UInt128, SdfMeshGeometry), Lazy<StoredMesh>>(key: key, value: pending)); }
     }
     /// <summary>Takes the mesh of a geometry for a group whose shapes carry <paramref name="materials"/>: the stored mesh
@@ -322,13 +331,14 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// next group of it misses the library and the store and bakes, and moves <see cref="LostRevision"/>.</summary>
     /// <param name="geometry">The geometry.</param>
     /// <param name="identity">The bake identity it was held under.</param>
-    internal void Lose(SdfMeshGeometry geometry, UInt128 identity) {
+    /// <param name="reason">Why the restore failed, for the log.</param>
+    internal void Lose(SdfMeshGeometry geometry, UInt128 identity, string reason) {
         lock (m_gate) { Evict(key: (identity, geometry)); }
         var lost = Interlocked.Increment(location: ref m_lostRevision);
 
         // An evicted set loses every geometry it held at once: the first and each doubling are named.
         if ((lost & (lost - 1)) == 0) {
-            Console.Error.WriteLine(value: $"[sdf.mesh-bake] lost identity={identity:x32} geometry={geometry.Hash:x32} lost={lost}: the store no longer restores its normals and levels; its groups bake again");
+            Console.Error.WriteLine(value: $"[sdf.mesh-bake] lost identity={identity:x32} geometry={geometry.Hash:x32} lost={lost}: the store could not restore its normals and levels ({reason}); its groups bake again");
         }
     }
 

@@ -2401,35 +2401,6 @@ first:
 | CLR loader heaps, precode and JIT code | native | ClrMD native heaps |
 | Upload and readback heaps | host-visible | ledger host-visible held |
 
-The mesh release/restore's review findings (owner: the lane that wrote it;
-`.claude/scratch/mesh-twice-review.md` in the main checkout holds the full
-argument, every finding read from source, none reproduced):
-
-- [medium, first] A coarsened region upload reads a released mesh: the region
-  asks its word source for every range it holds at flush
-  (`SdfWorldTables.MeshRegion.cs:590`), and once its 256 pending ranges fill,
-  `GpuUploadRuns.Coarsen` (`GpuUploadRuns.cs:79-83, 184`) merges neighbours so a
-  range spans a landed, released mesh; `MeshWordsOf` then reads its freed
-  normals and throws on the frame thread, or reads memory a restore is
-  freeing. Read only owed meshes' words, or take a need for every mesh a
-  merged range covers.
-- [medium] The shared per-user store's 8 GiB bound evicts least recently used
-  sets on any write (`SdfMeshStore.cs:252`), so another World or worktree's
-  bake can evict a running World's set, and its next re-landing loses those
-  meshes and rebakes them with holes meanwhile. The lead's ruling: a set a live
-  World published from is pinned against eviction while that World runs (a
-  miss is still derived again when it happens, AGENTS.md); no second in-memory
-  copy.
-- [low] `SdfMesh.Restore.cs:143` catches IO, access, data and argument errors
-  but not an allocation failure, which terminates the process from the pool
-  and would leave the mesh `Restoring` if caught; a placed-then-dropped mesh
-  keeps its need until the region relocates (`SdfWorldTables.MeshRegion.cs:286`);
-  a warm boot holds its first variant in the first group's palette, so a
-  material id no baking shape owns could renumber wrongly
-  (`SdfMeshLibrary.cs:205`, unconfirmed); one pool item per restore with
-  blocking IO, about 1,556 at once after a tables rebuild, under a lock the
-  frame thread's need take and release wait on (`SdfMesh.Restore.cs:118`).
-
 Grounded causes and leads, largest first:
 
 - The baked meshes keep part of their CPU payload beside the region's GPU copy.
@@ -2442,7 +2413,10 @@ Grounded causes and leads, largest first:
   variants read the materials. Next cuts: dynamic and glass meshes, which the
   scene leaves out, can let positions and level-0 indices go through the same
   door; the static ones follow once placement and classification move to the
-  GPU trace. Owner: rendering/bake.
+  GPU trace. A restore decodes the whole store entry (`SdfMeshStoreCodec.TryDecode`)
+  when it needs only the normals and level-index planes; a codec read of
+  those planes alone would cut a rebuilt region's restore work. Owner:
+  rendering/bake.
 - The mesh region keeps meshes no draw names until their words outweigh the
   named ones (`SdfMeshRegionArena.Plan`'s relocation rule, past
   `RetainedSlackWords`), so a running debug world whose bodies change form and
