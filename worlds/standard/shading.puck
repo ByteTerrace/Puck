@@ -1,0 +1,131 @@
+// Presentation programs. The measurement lever selects these beside the earlier layers.
+function shadeFrac(x) = x - floor(x)
+function shadeClamp(x, lo, hi) = min(max(x, lo), hi)
+function shadeFade(rate) = 1 - smoothstep(0.35, 0.9, rate)
+function shadeLane(index) = index == 0 ? lanes.slot0 : index == 1 ? lanes.slot1 : index == 2 ? lanes.slot2 : index == 3 ? lanes.slot3 : index == 4 ? lanes.world0 : index == 5 ? lanes.world1 : index == 6 ? lanes.world2 : index == 7 ? lanes.world3 : 1
+
+shade template plain() { surface { albedo = material.albedo } }
+shade template paint(color) { surface { albedo = mix(material.albedo, color, paint.coverage) } }
+
+function celStep(value, threshold, softness) = smoothstep(threshold - max(softness * 0.5, 0.0005), threshold + max(softness * 0.5, 0.0005), saturate(value))
+function celBand(cosine, visibility, threshold, softness, combined) = combined ? celStep(saturate(cosine) * saturate(visibility), threshold, softness) : celStep(cosine, threshold, softness) * saturate(visibility)
+shade template cel(threshold, softness, shadowTint, specularSize, exposureStops, shoulder, structural combined = 0) {
+  light {
+    let point = light.kind == uint(2)
+    let direct = (light.kind == uint(0)) + point
+    let cosine = max((light.cosine + surface.wrap) / (1 + surface.wrap), 0)
+    let visibility = point ? light.occlusion : light.visibility
+    let reach = point ? light.reach * light.probeShare : 1
+    let band = celBand(cosine, visibility, threshold, softness, combined)
+    diffuse = direct ? light.color * (light.weight * reach * band) : (light.kind == uint(256) ? light.color * (light.weight * light.reach * max(light.cosine, 0)) : [0,0,0])
+    let halfway = light.direction - surface.rayDirection
+    let halfway = halfway / sqrt(max(dot(halfway, halfway), 0.00000001))
+    let size = specularSize * mix(0.5, 1.5, surface.roughness)
+    let highlight = smoothstep(1 - size, 1 - size + min(size * 0.15, 0.003), dot(surface.normal, halfway))
+    let reflectance = mix([surface.specular, surface.specular, surface.specular], surface.albedo, surface.metal)
+    specular = direct ? light.color * reflectance * (highlight * (1 - 0.75 * surface.roughness) * 2 * light.weight * reach * celBand(light.cosine, visibility, threshold, softness, combined)) : [0,0,0]
+  }
+  compose {
+    let reflected = (surface.albedo * (compose.radiance + compose.indirect * shadowTint) + compose.environment + compose.rim + compose.specular) * compose.attenuation * compose.adaptation
+    let exposed = max(reflected, 0) * (compose.exposure * pow(2, exposureStops))
+    let peak = max(exposed.x, max(exposed.y, exposed.z))
+    color = exposed / ((1 + peak * shoulder) * max(compose.exposure, 0.000000000001)) + surface.albedo * surface.emissive
+  }
+}
+
+shade template inset(origin, rotation, depth, ior, softness, amplitude, frequency, phase,
+  color0, color1, color2, color3, radius0, radius1, radius2, radius3) {
+  surface {
+    let p = inverseRotate(surface.layerPosition - origin, rotation)
+    let n = inverseRotate(toLayer(surface.normal), rotation)
+    let ray = inverseRotate(toLayer(surface.rayDirection), rotation)
+    let n = dot(n, ray) > 0 ? -n : n
+    let d = refract(ray, n, 1 / ior)
+    let t = (-depth - p.z) / d.z
+    let hit = p + t * d
+    let radius = length([hit.x, hit.y]) * (1 + amplitude * sin(atan2(hit.y, hit.x) * frequency + phase))
+    let c = mix(color0, color1, smoothstep(radius1 - max((radius1 - radius0) * softness, 0.000001), radius1, radius))
+    let c = mix(c, color2, smoothstep(radius2 - max((radius2 - radius1) * softness, 0.000001), radius2, radius))
+    let c = mix(c, color3, smoothstep(radius3 - max((radius3 - radius2) * softness, 0.000001), radius3, radius))
+    albedo = (dot(d,d) < 0.000000000001) ? material.albedo : (abs(d.z) < 0.000001 ? material.albedo : (t < 0 ? material.albedo : c))
+  }
+}
+
+shade template flow(velocity, scale, stretch, cycles, tiltAmount, coverage, softness, color, roughness, metal, seed,
+  structural world = 1, structural velocityLane = -1, structural coverageLane = -1, structural glass = 0) {
+  surface {
+    let point = world ? surface.position : surface.layerPosition
+    let normal = world ? surface.normal : toLayer(surface.normal)
+    let authoredVelocity = world ? velocity : drawDirection(velocity)
+    let rateLane = shadeLane(velocityLane)
+    let coverLane = shadeLane(coverageLane)
+    let moving = authoredVelocity * rateLane
+    let cover = saturate(coverage * saturate(coverLane) + surface.contact)
+    let tangent = moving - normal * dot(normal, moving)
+    let speed = length(tangent)
+    let along = tangent / max(speed, 0.000001)
+    let squeeze = 1 - 1 / max(stretch, 1)
+    let offset = 0.5 + 0.5 * lattice(point * (0.125 * scale), xor(seed, uint(1759714724)))
+    let c0 = shadeFrac(clock * cycles + offset)
+    let c1 = shadeFrac(c0 + 0.5)
+    let w0 = 1 - abs(2 * c0 - 1)
+    let w1 = 1 - w0
+    let travel = tangent * (4096 / cycles)
+    let q0 = (point - travel * (c0 - 0.5)) * scale
+    let q1 = (point - travel * (c1 - 0.5)) * scale + [5.3, 2.9, 7.1]
+    let q0 = q0 - along * (dot(q0, along) * squeeze)
+    let q1 = q1 - along * (dot(q1, along) * squeeze)
+    let pattern = (w0 * latticeGradient(q0, seed) + w1 * latticeGradient(q1, seed)) / sqrt(max(w0 * w0 + w1 * w1, 0.000001))
+    let fade = shadeFade(surface.footprint * scale)
+    let threshold = 1 - cover
+    let soft = max(softness, 0.001)
+    let revealed = mix(cover, smoothstep(threshold - soft, threshold + soft, 0.5 + 0.5 * shadeClamp(pattern.x, -1, 1)), fade)
+    let revealed = cover > 0 ? revealed : 0
+    albedo = mix(material.albedo, color, revealed)
+    roughness = glass ? material.roughness : mix(material.roughness, roughness, revealed)
+    metal = glass ? material.metal : mix(material.metal, metal, revealed)
+    coat = glass ? material.coat : material.coat * (1 - revealed)
+    reveal = revealed
+    let slope = [pattern.y, pattern.z, pattern.w] * fade
+    let slope = slope - along * (dot(slope, along) * squeeze)
+    let slope = slope - normal * dot(normal, slope)
+    let share = saturate(speed / max(length(authoredVelocity), 0.000001))
+    let tilted = normalize(normal - slope * (tiltAmount * share))
+    normal = world ? tilted : toWorld(tilted)
+  }
+}
+
+function flowed(base, layer, world = 1, velocityLane = -1, coverageLane = -1, glass = 0) = base with {
+  flow: layer
+  shade: flow(layer.velocity, layer.scale, layer.stretch, floor(4096 / layer.cycle + 0.5), layer.tilt, layer.coverage,
+    layer.softness, layer.surface.color, layer.surface.roughness, layer.surface.metal, layer.seed,
+    world: world, velocityLane: velocityLane, coverageLane: coverageLane, glass: glass)
+}
+
+shade template weathered(under, deposit, seed, scale, linesAmount, settle, edgeAmount, reach, threshold,
+  noiseAmount, patternScale, softness, octaveRatio, octaveGain, turn, structural octaves = 2) {
+  surface {
+    let frequency = scale * patternScale
+    let p = surface.layerPosition * frequency
+    let rate = surface.footprint * max(frequency.x, max(frequency.y, frequency.z))
+    let q = rotate(p, turn)
+    let coarse = lattice(q, seed) * shadeFade(rate)
+    let fine = lattice(q * octaveRatio + 17, xor(seed, uint(2654435769))) * shadeFade(rate * octaveRatio)
+    let noise = octaves > 1 ? 0.5 + 0.5 * shadeClamp((coarse + octaveGain * fine) / sqrt(1 + octaveGain * octaveGain), -1, 1) : 0.5 + 0.5 * coarse
+    let edge = saturate(max(surface.curvature, 0) * reach) * noise
+    let n = toLayer(surface.normal)
+    let weights = pow(abs(n), 4)
+    let weights = weights / max(dot(weights, [1, 1, 1]), 0.000001)
+    let line = dot(weights, [lines([p.y, p.z], seed, surface.footprint * max(frequency.y, frequency.z)),
+      lines([p.x, p.z], seed + uint(1), surface.footprint * max(frequency.x, frequency.z)),
+      lines([p.x, p.y], seed + uint(2), surface.footprint * max(frequency.x, frequency.y))])
+    let coverage = saturate(max(max(edgeAmount * edge, linesAmount * line), noiseAmount * noise))
+    let aa = max(softness, max(min(rate, 0.25), 0.001))
+    let reveal = smoothstep(max(threshold - aa, 0), threshold, coverage)
+    let deposition = saturate(surface.normal.y) * settle * noise
+    albedo = mix(mix(material.albedo, under, reveal), deposit, deposition)
+    roughness = mix(mix(material.roughness, 0.98, reveal), 0.98, deposition)
+    metal = material.metal * (1 - reveal) * (1 - deposition)
+    coat = material.coat * (1 - reveal) * (1 - deposition)
+  }
+}

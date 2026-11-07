@@ -941,7 +941,7 @@ closes this:
   (then "every side"); the three fold into one demand per material, a cosine
   below which no slot needs querying;
 - the demand is packed in the material row the surface pass reads in place of
-  the bare wrap (`sdfMaterialWrap` becomes the demand), enters the wrap
+  the bare wrap (`sdfMaterialShadowDemand` becomes the demand), enters the wrap
   signature so an edit to a program refreshes the surface pass's decisions,
   and is listed in `world.budget` since a program that demands every side costs
   the cascades' taps on every pixel;
@@ -1101,33 +1101,6 @@ final set:
   is a quality-versus-bar trade the memo does not make: it goes to the owner
   with the readings.
 
-1. **The interpreter, all three phases, both kernels, the standard's programs
-   beside the old layers** (GPU). The rolled loops in `sdf-light-stage.hlsli`
-   and `sdf-glass.comp.hlsl` through one generated entry; the light and
-   compose phases replacing the toon branches; the stamp's frame ops and
-   contact; the shadow-demand envelope in the surface pass and its signature;
-   the read flags driving `SdfFrameBlock` and the cadence; the standard's five
-   templates authored and the debug world's palettes calling them, behind a
-   measurement lever `world.shade programs|layers` that selects the authored
-   programs or today's HLSL layers in one build; the world default program
-   (`render.shade`, `world.shade default`); the planner `SdfShadeDispatch` on
-   the unsplit path and the glass pass with a provisional `MaxWork` and the
-   in-flight identity lists, so no authored program ever dispatches outside a
-   job; executed shade ops counted into the views pass's work counters
-   (`sdfWorkSteps`, which views leaves at zero today) and two debug views,
-   `world.debug-view shade-cost` (each pixel's static cost over the cap, as
-   `sky-cost` shows the sky's) and `shade-tier` (interpreted, specialized or
-   quarantined). Check: settled stills of the
-   meadow, the forest road, the water and a cel-styled stop on both backends,
-   programs against layers, within the still tolerance (fresh base and head
-   processes under lockstep, pinned camera, tick and exposure); a shadowed
-   back-facing surface under a wrap-raising program and a lane-animated
-   normal and wrap show no unmeasured lit band; a clock-driven program, a
-   world-lane program and a program reading neither change the frame's clock
-   and lanes exactly as the flags say (`world.counters gpu` shows the still
-   program's views held); contact foam and a transformed static copy's flow
-   render through the glass invocation; `puck mesh identity --against` shows
-   the bake identity unmoved.
 2. **Measure the interpreter on the bar devices** (GPU leg). The decision
    matrix's tier 1 unsplit column against base, on every row the step reaches
    (zero programs, one program, the whole standard set through the lever, the
@@ -1294,7 +1267,7 @@ or the finding is answered with the code that shows why.
    member with parameters by name replaces the deleted layer records in the
    schema (section 3.10).
 9. **Inputs lacked read metadata for upload and cadence.** True:
-   `SdfAppearance.HasFlow` and `ReadsWorldLanes` inspect the layer records, and
+   `SdfAppearance.ResolveShadeReads` and `ReadsWorldLanes` inspect the layer records, and
    `SdfFrameBlock.FlowClockOf` and `WorldLanesOf` write zero from them.
    Resolved by read flags the lowering derives from the ops and the appearance
    aggregates (section 3.2), replacing those members; step 1 checks the three

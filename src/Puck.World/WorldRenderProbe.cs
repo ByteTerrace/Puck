@@ -79,9 +79,9 @@ public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineRea
     /// over a completed world output or a rendered instance's first frame is still in flight on the GPU, then the frame
     /// readiness owes once they all hold.</remarks>
     public string? NotReadyReason => (((Residency is { } residency) && (Root is { } root))
-        ? (residency.NotReadyReason ?? (root.Runtime.UnservedCaptureReason ?? (root.Runtime.InFlightReason ?? (IsReady
+        ? (residency.NotReadyReason ?? (root.Runtime.Render.Reason ?? (root.Runtime.UnservedCaptureReason ?? (root.Runtime.InFlightReason ?? (IsReady
             ? null
-            : "the root has produced no frame since every readiness condition held"))))
+            : "the root has produced no frame since every readiness condition held")))))
         : "the renderer has not been composed: no frame has been produced"
     );
 
@@ -89,7 +89,7 @@ public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineRea
 
     private bool ConditionsHold => (
         (Residency?.IsReady ?? false) &&
-        (Root?.Runtime is { UnservedCaptureReason: null, FirstFramesCompleted: true })
+        (Root?.Runtime is { Render.IsRendered: true, UnservedCaptureReason: null, FirstFramesCompleted: true })
     );
 
     /// <summary>The presentation's render settings, or <see langword="null"/> until the render factory has run.</summary>

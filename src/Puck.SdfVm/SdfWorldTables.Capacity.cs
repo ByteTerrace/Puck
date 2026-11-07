@@ -73,12 +73,13 @@ public sealed partial class SdfWorldTables {
     // reads it, and the instance capacity the bake's masks are sized by; a new region starts owing every word, so the
     // program write that follows sends it whole. A new region writes the copy sets reserved for its table, so growth takes no descriptor range.
     // No per-frame allocations.
-    private void EnsureProgramCapacity(SdfProgram program) {
-        if ((program.Words.Length <= m_programWordCapacity) && (program.Instances.Count <= m_instanceCapacity)) {
+    private void EnsureProgramCapacity(SdfProgram program, int extraWords = 0) {
+        var requiredWords = checked(program.Words.Length + extraWords);
+        if ((requiredWords <= m_programWordCapacity) && (program.Instances.Count <= m_instanceCapacity)) {
             return;
         }
 
-        var words = GrowCapacity(m_programWordCapacity, program.Words.Length, (int.MaxValue / sizeof(uint)));
+        var words = GrowCapacity(m_programWordCapacity, requiredWords, (int.MaxValue / sizeof(uint)));
         var instances = GrowCapacity(m_instanceCapacity, program.Instances.Count, SdfProgramBuilder.MaxInstances);
         var growProgram = (words != m_programWordCapacity);
         var growInstances = (instances != m_instanceCapacity);

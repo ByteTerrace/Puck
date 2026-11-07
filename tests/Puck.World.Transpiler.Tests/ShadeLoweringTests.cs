@@ -101,7 +101,7 @@ public sealed class ShadeLoweringTests {
         Assert.Equal("PUCK127", Assert.Throws<SdfShadeException>(testCode: () => SdfShadeProgram.Compile(definition: invalid)).Code);
     }
     [Fact]
-    public void RegistersAreAllocatedByLivenessAndExcessPressureIsRefused() {
+    public void RegistersAreAllocatedByLivenessAndRematerializedWithoutChangingValues() {
         var chain = "clock";
 
         for (var i = 0; (i < 40); i++) { chain = $"sin({chain})"; }
@@ -110,11 +110,30 @@ public sealed class ShadeLoweringTests {
         Assert.True(condition: (admitted.Phases[0].Count > SdfShadeProgram.MaxRegisters));
         Assert.All(admitted.Phases[0], instruction => Assert.InRange(instruction.Result.Index, 0, (SdfShadeProgram.MaxRegisters - 1)));
         Assert.Equal(admitted.Identity, SdfShadeProgram.Compile(definition: admitted.Definition).Identity);
-        var values = string.Join(separator: "\n", values: Enumerable.Range(count: 9, start: 0).Select(selector: i => $"let a{i} = sin(clock + {i})"));
-        var outputs = ("\nalbedo [a0,a1,a2]\nfill [a3,a4,a5]\nnormal [a6,a7,a8]\nroughness = " + string.Join(separator: " + ", values: Enumerable.Range(count: 9, start: 0).Select(selector: i => $"a{i}")));
-        var refused = WorldCompiler.Compile(World((values + outputs)), cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.Contains(collection: refused.Diagnostics, filter: diagnostic => ((diagnostic.Code == "PUCK129") && diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "live registers")));
+        var values = string.Join(separator: "\n", values: Enumerable.Range(count: 24, start: 0).Select(selector: i => $"let a{i} = sin(clock + {i})"));
+        var outputs = ("\nalbedo [a0,a1,a2]\nfill [a3,a4,a5]\nnormal [a6,a7,a8]\nroughness = " + string.Join(separator: " + ", values: Enumerable.Range(count: 24, start: 0).Select(selector: i => $"a{i}")));
+        var rematerialized = Compile(World(values + outputs));
+        Assert.Equal(rematerialized.Identity, SdfShadeProgram.Compile(rematerialized.Definition).Identity);
+        var registers = new System.Numerics.Vector4[SdfShadeProgram.MaxRegisters];
+        var actual = new Dictionary<uint, System.Numerics.Vector4>();
+        var clock = 0.37f;
+        foreach (var instruction in rematerialized.Phases[0]) {
+            var operands = instruction.Operands.Select(o => registers[o.Index]).ToArray();
+            var value = instruction.Op switch {
+                SdfShadeOp.Constant => new System.Numerics.Vector4(BitConverter.UInt32BitsToSingle(rematerialized.ReadWord(instruction.Immediate * 4))),
+                SdfShadeOp.Input => new System.Numerics.Vector4(clock),
+                SdfShadeOp.Add => operands[0] + operands[1],
+                SdfShadeOp.Sin => new System.Numerics.Vector4(MathF.Sin(operands[0].X)),
+                SdfShadeOp.Vector3 => new System.Numerics.Vector4(operands[0].X, operands[1].X, operands[2].X, 0),
+                _ => throw new InvalidOperationException(instruction.Op.ToString()),
+            };
+            registers[instruction.Result.Index] = value;
+            for (uint output = 0; output < 11; output++) {
+                if ((instruction.OutputMask & (1u << (int)output)) != 0) { actual[output] = value; }
+            }
+        }
+        Assert.Equal(Enumerable.Range(0, 24).Sum(i => MathF.Sin(clock + i)), actual[1].X, 4);
+        Assert.Equal(new System.Numerics.Vector4(MathF.Sin(clock), MathF.Sin(clock + 1), MathF.Sin(clock + 2), 0), actual[0]);
         var gradient = Compile(text: World("roughness = latticeGradient(surface.position, seed).x", "seed", "7"));
 
         Assert.Contains(collection: gradient.Phases[0], filter: instruction => (instruction.Op == SdfShadeOp.LatticeGradient));
@@ -145,7 +164,7 @@ public sealed class ShadeLoweringTests {
     [Fact]
     public void CapChargesHelperWorkAndSweepStrands() {
         var compiled = WorldCompiler.Compile(World(
-            "let n = surface.position\n for i in range(0, 40) { let n = n * lattice(n, uint(7)) }\n albedo = n"), cancellationToken: TestContext.Current.CancellationToken);
+            "let n = surface.position\n for i in range(0, 200) { let n = n * lattice(n, uint(7)) }\n albedo = n"), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains(collection: compiled.Diagnostics, filter: d => (d.Code == "PUCK129"));
         var curve = new SdfSweepParameters(new(x: 0, y: 0, z: 0), new(x: 0, y: 1, z: 0), new(x: 1, y: 2, z: 0), 0.1f, 0.2f, 0.1f, 1, 1, 0.1f);

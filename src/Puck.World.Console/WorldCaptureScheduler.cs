@@ -323,7 +323,7 @@ public sealed class WorldCaptureScheduler {
     /// <summary><see cref="HoldBudgetSeconds"/> in engine ticks, the unit a holding host withholds time in.</summary>
     public const ulong HoldBudgetTicks = (HoldBudgetSeconds * FixedTickConversion.TicksPerSecond);
     /// <summary>The host time, in seconds, one capture may hold the clock while the engine is not ready:
-    /// the engine's pipeline set building on a cold driver cache, or rebuilding after a device loss.
+    /// pipelines building, geometry uploading, or probe lighting converging.
     /// The calling gate separately bounds the whole run.</summary>
     public const int BuildHoldBudgetSeconds = 180;
     /// <summary><see cref="BuildHoldBudgetSeconds"/> in engine ticks.</summary>
@@ -335,8 +335,8 @@ public sealed class WorldCaptureScheduler {
     /// bounded, and counts from readiness: time withheld while the engine is not ready is spent from
     /// <see cref="BuildHoldBudgetSeconds"/>, and time withheld while it is ready from <see cref="HoldBudgetSeconds"/>, each
     /// summed for this request. Once the budget the current hold draws on is spent, the capture is refused as
-    /// <see cref="WorldCaptureRefusal.Unserved"/>, naming the engine's pipeline build when it was the build that held
-    /// it, and withdrawn from the chain, so the host steps on and a later capture can arm; a capture armed outside the
+    /// <see cref="WorldCaptureRefusal.Unserved"/>, naming the current readiness blocker, and withdrawn from the chain,
+    /// so the host steps on and a later capture can arm; a capture armed outside the
     /// schedule is refused through its request, with the same detail. A capture that cannot be served after its budget
     /// is spent is refused the same way at once. Each later accepted request receives its own budgets.</summary>
     /// <param name="withheldTicks">The host time withheld when the answer is <see langword="true"/>, counted under
@@ -360,7 +360,7 @@ public sealed class WorldCaptureScheduler {
 
         if (m_readiness is { IsReady: false } readiness) {
             if (m_buildHeldTicks >= BuildHoldBudgetTicks) {
-                WithdrawAwaited(detail: $"{(readiness.NotReadyReason ?? "the engine was not ready")} (the host held its clock at tick {TickText(tick: tick)} while the engine's pipeline set built, until its {BuildHoldBudgetSeconds}-second pipeline-build hold budget was spent)");
+                WithdrawAwaited(detail: $"{(readiness.NotReadyReason ?? "the engine was not ready")} (the host held its clock at tick {TickText(tick: tick)} while waiting for renderer readiness, until its {BuildHoldBudgetSeconds}-second readiness hold budget was spent)");
 
                 return false;
             }

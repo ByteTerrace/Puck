@@ -90,11 +90,21 @@ bool sdfMaterialBase(int material, out uint materialBase) {
 }
 // A material's wrap share alone (row 2's y), zero for a material the table does not hold: the surface pass reads it to
 // know how far past the terminator the material's diffuse response reaches.
-float sdfMaterialWrap(int material) {
+#ifdef SDF_SURFACE_PASS
+float sdfMaterialShadowDemand(int material) {
     uint materialBase;
 
-    return (sdfMaterialBase(material, materialBase) ? asfloat(sdfWords[materialBase + 2u]).y : 0.0);
+    if (!sdfMaterialBase(material, materialBase)) return 0.0;
+    float demand = -asfloat(sdfWords[materialBase + 2u]).y;
+    if (passGroup.shadePrograms != 0u && asuint(sdfWords[materialBase + 32u]).y != 0u)
+        demand = asfloat(sdfWords[materialBase + 33u]).x;
+    else if (passGroup.shadePrograms != 0u && passGroup.shadeDefault.y != 0u) {
+        float4 envelope = passGroup.shadeDemand;
+        demand = envelope.z != 0.0 ? -1.0 : -sin(min(1.5707963267948966, asin(saturate(max(-demand, envelope.x))) + envelope.y));
+    }
+    return demand;
 }
+#endif
 
 // The shadow raster needs only density, before any fragment side effect or receiver fetch.
 float sdfMaterialShadowDensity(int material) {

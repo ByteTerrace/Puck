@@ -125,6 +125,12 @@ internal sealed class WorldShadeLowering {
                 }
                 return new("parameter", Name: parameter.Parameter);
             case IdentifierExpressionNode id:
+                if (id.Name.Length > 2 && id.Name[^2] == '.' && "xyzw".IndexOf(id.Name[^1]) is var channel && channel >= 0) {
+                    var parent = id.Name[..^2];
+                    var target = scope.TryGetExpression(parent, out var selected, out var selectedScope)
+                        ? Expression(selected!, selectedScope) : Read(parent);
+                    return new("component", [target], Name: channel.ToString(CultureInfo.InvariantCulture));
+                }
                 if (scope.Locals.TryGetValue(key: id.Name, value: out var local)) { return Literal(expected: expected, node: local); }
                 if (scope.TryGetExpression(id.Name, out var declared, out var lexical)) {
                     if (!m_resolving.Add(item: id.Name)) { throw new SdfShadeException(code: "PUCK128", message: $"Shade binding '{id.Name}' reads itself before definition."); }
@@ -179,7 +185,7 @@ internal sealed class WorldShadeLowering {
                 return new("shape", [Expression(shape.Arguments[1].Value, scope)], Shape: parsed);
             case CallExpressionNode call:
                 return new(call.Name, call.Arguments.Select(selector: (a, i) => Expression(a.Value, scope,
-                    (((call.Name is "lattice" or "latticeGradient" or "lines") && (i == 1)) ? SdfShadeType.UInt : null))).ToArray());
+                    ((((call.Name is "lattice" or "latticeGradient" or "lines") && (i == 1)) || call.Name == "xor") ? SdfShadeType.UInt : null))).ToArray());
             default: throw new SdfShadeException(code: "PUCK126", message: "Expression is outside the shade vocabulary.");
         }
     }

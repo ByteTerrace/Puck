@@ -5010,6 +5010,7 @@ public static partial class WorldModelShape {
                 M("bloom", typeof(global::System.Nullable<global::Puck.Hosting.CameraBloom>), typeof(global::Puck.World.WorldRenderDefaults), "Bloom", Read | Write, static value => ((global::Puck.World.WorldRenderDefaults)value).Bloom),
                 M("shadowCoverage", typeof(global::Puck.World.WorldRenderShadowCoverage), typeof(global::Puck.World.WorldRenderDefaults), "ShadowCoverage", Read | Write, static value => ((global::Puck.World.WorldRenderDefaults)value).ShadowCoverage),
                 M("lanes", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.BindableScalar>), typeof(global::Puck.World.WorldRenderDefaults), "Lanes", Read | Write, static value => ((global::Puck.World.WorldRenderDefaults)value).Lanes),
+                M("shade", typeof(global::Puck.SignedDistance.SdfShadeDefinition), typeof(global::Puck.World.WorldRenderDefaults), "Shade", Read | Write, static value => ((global::Puck.World.WorldRenderDefaults)value).Shade),
             ],
             []),
         T(typeof(global::Puck.World.WorldRenderEnvironment), true, JsonTypeInfoKind.Object, null,

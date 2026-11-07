@@ -98,6 +98,7 @@ struct SdfShadeSurface {
     SdfToonStyle toon;
     float ambientOcclusion;
     float4 shadowVisibility;
+    float4 shadowMeasured;
     bool cascaded;
     bool probed;
     SdfMeshProbes probes;
@@ -107,7 +108,7 @@ struct SdfShadeSurface {
 // light's own occlusion deficit, which the slot's cascades still render, fades out with the handoff's weight, and the
 // incoming light, which no cascade renders until it holds the slot, shades unshadowed. Unslotted directionals retain
 // ambient occlusion.
-float sdfLightVisibility(int lightIndex, float4 stable, float ambientOcclusion) {
+float sdfLightVisibility(int lightIndex, float4 stable, float ambientOcclusion, float4 measured) {
     if (lightIndex < 0) {
         return ambientOcclusion;
     }
@@ -117,20 +118,24 @@ float sdfLightVisibility(int lightIndex, float4 stable, float ambientOcclusion) 
         SdfShadowHandoff handoff = sdfShadowHandoffs[fade];
         if (handoff.Slot < 0 || (uint)handoff.Slot >= SDF_MAX_SHADOW_SLOTS) { continue; }
         if (lightIndex == handoff.Outgoing) {
+            if (sdfComponent(measured, (uint)handoff.Slot) == 0.0) { return 0.0; }
             return (1.0 - ((1.0 - sdfComponent(stable, (uint)handoff.Slot)) * (1.0 - handoff.Weight)));
         }
         if (lightIndex == handoff.Incoming) {
-            return 1.0;
+            return sdfComponent(measured, (uint)handoff.Slot);
         }
     }
     [loop]
     for (uint shadowSlot = 0u; shadowSlot < SDF_MAX_SHADOW_SLOTS; shadowSlot++) {
         if (shadowSlot >= worldShadowStableCount()) { break; }
         if (lightIndex == sdfComponent(passGroup.shadowSlots, shadowSlot)) {
-            return sdfComponent(stable, shadowSlot);
+            return sdfComponent(stable, shadowSlot) * sdfComponent(measured, shadowSlot);
         }
     }
     return ambientOcclusion;
+}
+float sdfLightVisibility(int lightIndex, float4 stable, float ambientOcclusion) {
+    return sdfLightVisibility(lightIndex, stable, ambientOcclusion, float4(1.0, 1.0, 1.0, 1.0));
 }
 
 // What one light adds at a surface: its diffuse term, its specular lobe and its rim brighten, and the factor it scales
@@ -268,7 +273,7 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface)
         float lambert = sdfWrapDiffuse(dot(normal, light.position), surface.material.wrap);
         float occlusion = ((!surface.cascaded && surface.probed && (light.record.Shadows != 0u) && (light.index >= 0))
             ? sdfMeshLightVisibility(surface.probes, (uint)light.index)
-            : sdfLightVisibility(light.index, surface.shadowVisibility, surface.ambientOcclusion));
+            : sdfLightVisibility(light.index, surface.shadowVisibility, surface.ambientOcclusion, surface.shadowMeasured));
 
         if (sdfToonEnabled(surface.toon)) {
             response.diffuse = light.color * light.weight * sdfToonBand(surface.toon, lambert, occlusion);

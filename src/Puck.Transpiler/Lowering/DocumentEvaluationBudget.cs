@@ -13,7 +13,7 @@ public sealed class DocumentEvaluationBudget {
     /// <summary>The maximum source or generated string length in characters.</summary>
     public const int TextLimit = 4_000_000;
     /// <summary>The maximum evaluated nodes and generated collection elements in one compilation.</summary>
-    public const int WorkLimit = 4_000_000;
+    public const int WorkLimit = 16_000_000;
 
     private int m_depth;
     private int m_work;

@@ -218,7 +218,7 @@
 #define SDF_AIR_STEEP_LIMIT                  (-20.0)
 
 // The debug view modes (DebugViewModes): the count, and each mode's index, the value the pass block's debug mode carries.
-#define SDF_DEBUG_VIEW_COUNT       16
+#define SDF_DEBUG_VIEW_COUNT       18
 #define SDF_DEBUG_VIEW_OFF         0
 #define SDF_DEBUG_VIEW_DEPTH       1
 #define SDF_DEBUG_VIEW_NORMALS     2
@@ -235,5 +235,7 @@
 #define SDF_DEBUG_VIEW_COLLIDERS   13
 #define SDF_DEBUG_VIEW_CONTACTS    14
 #define SDF_DEBUG_VIEW_BLOOM       15
+#define SDF_DEBUG_VIEW_SHADE_COST  16
+#define SDF_DEBUG_VIEW_SHADE_TIER  17
 
 #endif // SDF_RENDER_HLSLI

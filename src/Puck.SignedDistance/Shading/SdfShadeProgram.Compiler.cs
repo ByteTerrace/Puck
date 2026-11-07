@@ -118,7 +118,15 @@ public sealed partial class SdfShadeProgram {
             }
             var canonicalOutputs = bindings.Select(selector: o => new SdfShadeOutput(o.Phase, o.Name, new("value", Name: $"r{o.Value.Index}"))).ToArray();
 
-            for (var phase = 0; (phase < phases.Length); phase++) { phases[phase] = Allocate(phases[phase], ((SdfShadePhase)phase), bindings); }
+            for (var phase = 0; (phase < phases.Length); phase++) {
+                phases[phase] = Allocate(phases[phase], ((SdfShadePhase)phase), bindings);
+                costs[phase] = 0;
+                foreach (var instruction in phases[phase]) {
+                    costs[phase] = checked(costs[phase] + SdfShadeOps.Get(instruction.Op).Work + (instruction.Op == SdfShadeOp.Shape
+                        ? SdfShadeCost.Shape(m_shapes.First(s => s.Relative == instruction.Immediate).Shape) : 0u));
+                }
+            }
+            if (costs.Aggregate(0UL, static (sum, cost) => checked(sum + cost)) > MaxOps) { Fail("PUCK129", $"Shade work exceeds {MaxOps} after register allocation."); }
             // Header: instruction ranges for each phase, constant and layout ranges. Every range is vector relative.
             const int HeaderVectors = 4;
             const int InstructionVectors = 3;
@@ -137,6 +145,7 @@ public sealed partial class SdfShadeProgram {
                 }
             }
             var constantsOffset = ((uint)(words.Count / 4));
+            words[3] = (uint)m_reads;
 
             words[12] = constantsOffset; words[13] = ((uint)(m_constants.Count / 4));
             words.AddRange(collection: m_constants);
@@ -194,45 +203,64 @@ public sealed partial class SdfShadeProgram {
                 m_shapeDefinitions.GetValueOrDefault(key: node.Key));
         }
 
-        // Linear scan over the canonical SSA order. Outputs are written at their defining instruction, so they
-        // never pin a temporary until phase exit. Source operands are read before a dying slot becomes the result.
+        // Bounded named registers, with deterministic rematerialization instead of a GPU spill array. Canonical
+        // values remain immutable: an evicted value is recomputed from its pure dependencies. The final stream,
+        // including recomputation, is priced before admission. Outputs are written at every defining instruction.
         private static SdfShadeInstruction[] Allocate(SdfShadeInstruction[] instructions, SdfShadePhase phase, List<SdfShadeBinding> bindings) {
             var last = Enumerable.Range(0, instructions.Length).ToArray();
 
             for (var i = 0; (i < instructions.Length); i++) {
                 foreach (var operand in instructions[i].Operands) { last[operand.Index] = i; }
             }
-            var slots = new int[instructions.Length];
-            var available = ((1u << MaxRegisters) - 1u);
-            var allocated = new SdfShadeInstruction[instructions.Length];
-
-            for (var i = 0; (i < instructions.Length); i++) {
-                var instruction = instructions[i];
-                var operands = instruction.Operands.Select(selector: a => new SdfShadeOperand(index: slots[a.Index], type: a.Type)).ToArray();
-
-                foreach (var operand in instruction.Operands) {
-                    if (last[operand.Index] == i) { available |= (1u << slots[operand.Index]); }
+            var slots = Enumerable.Repeat(-1, instructions.Length).ToArray();
+            var owners = Enumerable.Repeat(-1, MaxRegisters).ToArray();
+            var masks = new uint[instructions.Length];
+            var outputSlots = new int[instructions.Length];
+            var pressure = new int[instructions.Length];
+            for (var i = 0; i < instructions.Length; i++) {
+                pressure[i] = Math.Max(1, instructions[i].Operands.Select(a => pressure[a.Index]).OrderDescending().Select((need, held) => need + held).DefaultIfEmpty(1).Max());
+            }
+            foreach (var output in bindings.Where(b => b.Phase == phase)) { masks[output.Value.Index] |= 1u << (int)OutputIndex(phase, output.Name); }
+            var allocated = new List<SdfShadeInstruction>();
+            var protectedValues = new HashSet<int>();
+            var cursor = 0;
+            for (; cursor < instructions.Length; cursor++) {
+                _ = Ensure(cursor);
+                for (var slot = 0; slot < owners.Length; slot++) {
+                    if (owners[slot] is var owner && owner >= 0 && last[owner] <= cursor) { slots[owner] = -1; owners[slot] = -1; }
                 }
-                if (available == 0) { Fail(code: "PUCK129", message: $"Shade program needs more than {MaxRegisters} live registers."); }
-                var slot = System.Numerics.BitOperations.TrailingZeroCount(value: available);
+            }
 
-                available &= ~(1u << slot); slots[i] = slot;
-                var outputMask = 0U;
-
-                for (var binding = 0; (binding < bindings.Count); binding++) {
-                    var output = bindings[binding];
-
-                    if ((output.Phase == phase) && (output.Value.Index == i)) { outputMask |= (1u << ((int)OutputIndex(phase, output.Name))); }
+            int Ensure(int index) {
+                if (slots[index] >= 0) { return slots[index]; }
+                if (allocated.Count >= MaxOps) { Fail("PUCK129", "Shade rematerialization exceeds its instruction capacity."); }
+                var instruction = instructions[index];
+                var newlyProtected = new List<int>();
+                var operands = new SdfShadeOperand[instruction.Operands.Count];
+                foreach (var a in Enumerable.Range(0, operands.Length).OrderByDescending(a => pressure[instruction.Operands[a].Index])) {
+                    var operand = instruction.Operands[a];
+                    operands[a] = new(Ensure(operand.Index), operand.Type);
+                    if (protectedValues.Add(operand.Index)) { newlyProtected.Add(operand.Index); }
                 }
-                allocated[i] = new(instruction.Op, new(index: slot, type: instruction.Result.Type), operands, instruction.Immediate, outputMask);
-                if (last[i] == i) { available |= (1u << slot); }
+                // A source can become the destination: the interpreter reads all operands before writing it.
+                foreach (var item in newlyProtected) { protectedValues.Remove(item); }
+                var slot = Array.IndexOf(owners, -1);
+                if (slot < 0) {
+                    slot = Enumerable.Range(0, MaxRegisters).Where(s => !protectedValues.Contains(owners[s]))
+                        .OrderBy(s => instructions[owners[s]].Operands.Count).ThenByDescending(s => last[owners[s]]).DefaultIfEmpty(-1).First();
+                    if (slot < 0) { Fail("PUCK129", $"Shade expression needs more than {MaxRegisters} simultaneously held operands."); }
+                    slots[owners[slot]] = -1;
+                }
+                owners[slot] = index; slots[index] = slot; outputSlots[index] = slot;
+                allocated.Add(new(instruction.Op, new(slot, instruction.Result.Type), operands, instruction.Immediate, masks[index]));
+                return slot;
             }
             for (var binding = 0; (binding < bindings.Count); binding++) {
                 var output = bindings[binding];
 
-                if (output.Phase == phase) { bindings[binding] = output with { Value = new(index: slots[output.Value.Index], type: output.Value.Type) }; }
+                if (output.Phase == phase) { bindings[binding] = output with { Value = new(index: outputSlots[output.Value.Index], type: output.Value.Type) }; }
             }
-            return allocated;
+            return allocated.ToArray();
         }
         private void AddVector(System.Numerics.Vector4 vector) => m_constants.AddRange(collection: [
             BitConverter.SingleToUInt32Bits(value: vector.X), BitConverter.SingleToUInt32Bits(value: vector.Y),

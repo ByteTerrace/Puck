@@ -351,14 +351,14 @@ void sdfSurfaceStage(SdfPixel p) {
             // (a negative visibility, SDF_SHADOW_UNQUERIED in the record): it measured nothing, so the views filter
             // keeps it out of its neighbours' averages.
             float4 parameters = passGroup.meshShadowParameters;
-            float wrap = sdfMaterialWrap(value.visibility.material);
+            float demand = sdfMaterialShadowDemand(value.visibility.material);
             float key = dot(normal, -sdfMeshCascadeAt(0u).forward);
             value.shadows = float4(-1.0, -1.0, -1.0, -1.0);
-            value.shadows.x = ((key > -wrap) ? sdfMeshShadow(p, surfacePoint, face, 0u, passGroup.meshShadowCount, parameters.x) : -1.0);
+            value.shadows.x = (((demand <= -1.0) || (key > demand)) ? sdfMeshShadow(p, surfacePoint, face, 0u, passGroup.meshShadowCount, parameters.x) : -1.0);
             // The second shadow slot's light, from its one cascade.
             if (parameters.w > 0.0) {
                 float fill = dot(normal, -sdfMeshCascadeAt(2u).forward);
-                value.shadows.y = ((fill > -wrap) ? sdfMeshShadow(p, surfacePoint, face, 2u, 3u, parameters.w) : -1.0);
+                value.shadows.y = (((demand <= -1.0) || (fill > demand)) ? sdfMeshShadow(p, surfacePoint, face, 2u, 3u, parameters.w) : -1.0);
             }
         }
     }

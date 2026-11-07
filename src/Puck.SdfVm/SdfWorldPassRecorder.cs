@@ -126,9 +126,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
     private readonly SdfWorldPickReadback? m_pick;
     private readonly SdfWorldPickReadback? m_diagnosticPick;
+    private SdfShadeDispatch? m_shadePlan;
+    private readonly IGpuSubmissionFence?[] m_shadeFences;
 
     public SdfWorldPassRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
         m_context = context;
+        m_shadeFences = new IGpuSubmissionFence?[context.InFlightFrames];
         m_owner = owner;
         m_view = view;
         m_part = (context.Part ?? throw new ArgumentException(message: $"Pass '{context.Pass}' runs no part of '{RenderGraphPackageCatalog.SdfWorld}'.", paramName: nameof(context)));
@@ -587,6 +590,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     public ulong ReadbackBytes => ((m_pick?.ReadbackBytes ?? 0UL) + (m_diagnosticPick?.ReadbackBytes ?? 0UL));
 
     public void Submitted(int slot, IGpuSubmissionFence fence) {
+        m_shadeFences[slot] = fence;
+        if (m_shadePlan is { } shade) { m_view.Residency.SubmittedShade(shade, fence); }
         m_pick?.Submitted(fence: fence, slot: slot);
         m_diagnosticPick?.Submitted(fence: fence, slot: slot);
         m_occlusion?.Submitted(slot, fence);
@@ -672,6 +677,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // Binds the pass set and dispatches the part's kernel: the pyramid one invocation a texel of its first level, and the
     // surface and views passes one invocation a pixel of the render extent.
     private void RecordCompute(in RenderGraphPackageRecording recording, SdfWorldTables tables) {
+        m_view.Residency.RetireShade(m_shadeFences[recording.Slot]);
         var slot = recording.Slot;
         var set = m_sets!.PassSet(slot: slot);
         var recorder = recording.Recorder;
@@ -723,6 +729,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             _ => (recording.Width.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels), recording.Height.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels)),
         };
 
+        if (m_part == SdfWorldPackage.Parts.Views) {
+            m_shadePlan = SdfShadeDispatch.For(m_shadePlan, m_view.Residency.Frame!, recording.Width, recording.Height,
+                tables.PassValues.ScreenCount, glass: false);
+            m_shadePlan.Record(in recording, pipeline);
+            return;
+        }
         recorder.Dispatch(
             commandBufferHandle: commandBuffer,
             groupCountX: x,

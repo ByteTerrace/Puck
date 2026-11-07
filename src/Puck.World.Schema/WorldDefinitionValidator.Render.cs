@@ -8,6 +8,10 @@ namespace Puck.World;
 public static partial class WorldDefinitionValidator {
     private static void ValidateRenderResolution(WorldDefinition definition, List<string> errors) {
         ValidateToon(definition.Render.Toon, errors);
+        if (definition.Render.Shade is { } shade) {
+            try { _ = SdfShadeProgram.Compile(shade); }
+            catch (SdfShadeException error) { errors.Add($"render.shade: {error.Code}: {error.Message}"); }
+        }
         ValidateShadowCoverage(definition.Render.ShadowCoverage, errors);
         ValidateBloom(definition.Render.Bloom, "render.bloom", errors);
         ValidateIndirect(definition: definition, errors: errors);

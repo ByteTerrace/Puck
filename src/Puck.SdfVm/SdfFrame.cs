@@ -268,6 +268,13 @@ public sealed record SdfFrame(
     /// <summary>The world's default cel style, which every material without a style of its own shades with, applied
     /// before temporal reconstruction; the default is off.</summary>
     public SdfToon Toon { get; init; }
+    /// <summary>Measures authored programs beside the material layers, until their migration removes the lever.</summary>
+    public bool ShadePrograms { get; init; }
+    /// <summary>The authored default for materials that omit a program. Runtime overrides upload only presentation data.</summary>
+    public SdfShadeProgram? ShadeDefault { get; init; }
+    /// <summary>All programs the frame's shading jobs may invoke.</summary>
+    public IEnumerable<SdfShadeProgram> ShadingPrograms => ShadeDefault is { } fallback
+        ? Program.Appearance.ShadingPrograms.Append(fallback) : Program.Appearance.ShadingPrograms;
 
     /// <summary>Engine-bench lever: skips the per-screen area-light loop (the diegetic screens stop spilling colored light
     /// into the room). Default <see langword="false"/> = screen lights on. Directly measures the lit screens' cost for the

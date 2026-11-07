@@ -14,6 +14,8 @@ public sealed partial class SdfShadeProgram {
         var allFloat = args.All(predicate: t => !SdfShadeOps.IsUInt(type: t));
 
         switch (op) {
+            case SdfShadeOp.Xor or SdfShadeOp.Add when (a == SdfShadeType.UInt && b == a): return a;
+            case SdfShadeOp.Equal when (a == SdfShadeType.UInt && b == a): return SdfShadeType.Float;
             case SdfShadeOp.Quantize when (a is SdfShadeType.Float or SdfShadeType.Float3):
                 return ((a == SdfShadeType.Float) ? SdfShadeType.UInt : SdfShadeType.UInt3);
             case SdfShadeOp.Hash when (a == SdfShadeType.UInt3): return SdfShadeType.UInt3;
@@ -35,7 +37,7 @@ public sealed partial class SdfShadeProgram {
                 ((c == SdfShadeType.Float) || (c == ((SdfShadeType)Math.Max(val1: ((int)a), val2: ((int)b)))))):
                 return ((SdfShadeType)Math.Max(val1: ((int)a), val2: ((int)b)));
             case SdfShadeOp.Add or SdfShadeOp.Subtract or SdfShadeOp.Multiply or SdfShadeOp.Divide or
-                SdfShadeOp.Min or SdfShadeOp.Max or SdfShadeOp.Pow or SdfShadeOp.Step when (allFloat && ((a == b) || (a == SdfShadeType.Float) || (b == SdfShadeType.Float))):
+                SdfShadeOp.Min or SdfShadeOp.Max or SdfShadeOp.Pow or SdfShadeOp.Step or SdfShadeOp.Atan2 when (allFloat && ((a == b) || (a == SdfShadeType.Float) || (b == SdfShadeType.Float))):
                 return ((SdfShadeType)Math.Max(val1: ((int)a), val2: ((int)b)));
             case SdfShadeOp.Negate or SdfShadeOp.Abs or SdfShadeOp.Floor or SdfShadeOp.Ceil or SdfShadeOp.Saturate or
                 SdfShadeOp.Exp2 or SdfShadeOp.Log2 or SdfShadeOp.Sin or SdfShadeOp.Cos or SdfShadeOp.Tan or SdfShadeOp.Asin or

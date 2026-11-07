@@ -509,8 +509,8 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         Assert.False(condition: run.View.IsReady);
         Assert.Equal(
             expected: [
-                "first:10:Unserved:the engine's pipeline set is building (0 of 14 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-mesh-pyramid, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-glass, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission, sdf-bloom-down, sdf-bloom-up, sdf-bloom-apply) (the host held its clock at tick 10 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
-                "second:30:Unserved:the engine's pipeline set is building (0 of 14 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-mesh-pyramid, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-glass, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission, sdf-bloom-down, sdf-bloom-up, sdf-bloom-apply) (the host held its clock at tick 30 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
+                $"first:10:Unserved:{run.View.NotReadyReason} (the host held its clock at tick 10 while waiting for renderer readiness, until its 180-second readiness hold budget was spent)",
+                $"second:30:Unserved:{run.View.NotReadyReason} (the host held its clock at tick 30 while waiting for renderer readiness, until its 180-second readiness hold budget was spent)",
             ],
             actual: run.Scheduler.Entries.Select(selector: static entry => $"{entry.Station}:{entry.Tick}:{entry.Refusal}:{entry.Detail}")
         );
@@ -781,7 +781,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         var error = Assert.IsType<OperationCanceledException>(@object: (await request.Completion).Error);
 
         Assert.Equal(
-            expected: $"{BuildHeldRoot.HeldReason} (the host held its clock at tick 1 while the engine's pipeline set built, until its {WorldCaptureScheduler.BuildHoldBudgetSeconds}-second pipeline-build hold budget was spent)",
+            expected: $"{BuildHeldRoot.HeldReason} (the host held its clock at tick 1 while waiting for renderer readiness, until its {WorldCaptureScheduler.BuildHoldBudgetSeconds}-second readiness hold budget was spent)",
             actual: error.Message
         );
         Assert.True(condition: root.RefusedWhileHeld);

@@ -53,6 +53,15 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
     float3 viewColor = color;
 
     switch (p.viewMode) {
+        case SDF_DEBUG_VIEW_SHADE_COST: {
+            viewColor = s.hit ? sdfShadeDiagnostic(s.material, p.viewMode) : 0.0;
+            break;
+        }
+        case SDF_DEBUG_VIEW_SHADE_TIER: {
+            // Cyan is interpreted; no program is neutral grey. Specialization and quarantine add their actual states later.
+            viewColor = s.hit ? sdfShadeDiagnostic(s.material, p.viewMode) : 0.0;
+            break;
+        }
         case 1: { // depth, logarithmic from the near to the far distance: a linear ramp to a valley-wide far distance
                   // draws every room in the first few levels of black
             float near = max(passGroup.nearDistance, 1.0e-3);

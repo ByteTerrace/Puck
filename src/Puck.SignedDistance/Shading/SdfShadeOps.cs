@@ -10,7 +10,7 @@ public enum SdfShadeOp {
     Equal, Less, LessEqual, Select, Saturate, Mix, Smoothstep, Step,
     Pow, Exp2, Log2, Sin, Cos, Tan, Asin, Acos, Atan, Sqrt,
     Dot, Cross, Normalize, Length, Rotate, InverseRotate, Quantize, Hash,
-    Lattice, LatticeGradient, Lines, Reflect, Refract, Tilt, ToLayer, ToWorld, DrawDirection, Shape,
+    Lattice, LatticeGradient, Lines, Reflect, Refract, Tilt, ToLayer, ToWorld, DrawDirection, Shape, Xor, Atan2,
 }
 /// <summary>One op's complete description. Template placeholders are a, b, c and result, never author text.</summary>
 public sealed record SdfShadeOpInfo(SdfShadeOp Op, string Name, int Arity, uint Work, string Template, bool Commutative = false);
@@ -77,6 +77,8 @@ public static class SdfShadeOps {
         D(SdfShadeOp.ToWorld, "toWorld", 1, 30, "sdfShadeToWorld(stamp, a)"),
         D(SdfShadeOp.DrawDirection, "drawDirection", 1, 48, "sdfShadeDrawDirection(stamp, a)"),
         D(SdfShadeOp.Shape, "shape", 1, 0, "sdfShadeShape(slice, immediate, a, asfloat(sdfShadeInput(stamp, SDF_SHADE_INPUT_SURFACE_FOOTPRINT)).x)"),
+        D(SdfShadeOp.Xor, "xor", 2, 1, "(a ^ b)", true),
+        D(SdfShadeOp.Atan2, "atan2", 2, 16, "atan2(a, b)"),
     });
     /// <summary>The fixed stamp. Indices are generated from this table, never supplied as author addresses.</summary>
     public static IReadOnlyList<SdfShadeInput> Inputs { get; } = Array.AsReadOnly(array: new[] {
@@ -84,7 +86,7 @@ public static class SdfShadeOps {
         I("surface.geometricNormal", SdfShadeType.Float3), I("surface.normal", SdfShadeType.Float3),
         I("surface.curvature"), I("surface.footprint", reads: SdfShadeReads.Footprint),
         I("surface.rayDirection", SdfShadeType.Float3), I("surface.contact", reads: SdfShadeReads.Contact),
-        I("surface.thickness"), I("paint.coverage"), I("clock", reads: SdfShadeReads.Clock),
+        I("surface.thickness"), I("paint.coverage", reads: SdfShadeReads.PaintCoverage), I("clock", reads: SdfShadeReads.Clock),
         I("material.albedo", SdfShadeType.Float3), I("material.roughness"), I("material.metal"),
         I("material.specular"), I("material.coat"), I("material.sheen"), I("material.wrap"),
         I("material.fill", SdfShadeType.Float3), I("material.emissive"),

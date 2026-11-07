@@ -41,6 +41,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
     private static readonly CommandForms WorldSkyQualityForms = CommandForms.Of(verb: "world.sky-quality", "[low|medium|high]");
     private static readonly CommandForms WorldQualityForms = CommandForms.Of(verb: "world.quality", $"[{string.Join(separator: "|", values: QualityTiers.Names)}|next]");
     private static readonly CommandForms WorldToonForms = CommandForms.Of(verb: "world.toon", "[on|off|toggle]");
+    private static readonly CommandForms WorldShadeForms = CommandForms.Of(verb: "world.shade", "[programs|layers]", "default <program|document>");
     private static readonly CommandForms WorldIndirectForms = CommandForms.Of(verb: "world.indirect", "[off|medium|high]");
     private static readonly CommandForms WorldExposureForms = CommandForms.Of(verb: "world.exposure", "[pin [<ev100>|off]]");
     private static readonly CommandForms WorldResidencyForms = CommandForms.Of(verb: "world.residency", "[radius]");
@@ -414,6 +415,24 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                     a: (resolved ? 1d : 0d), formatEcho: Echo);
             }
         );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable, name: "world.shade", forms: WorldShadeForms,
+            description: $"Selects authored shading programs or the material layers in one build for measurement: {WorldShadeForms.Spelling}.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.shade: {(settings.ShadePrograms ? "programs" : "layers")}]");
+                if (args.Count == 0) { return Echo(); }
+                if (args.Count == 2 && args.Is(0, "default")) {
+                    var name = args[1].ToString();
+                    var program = settings.NamedShade(name);
+                    if (name != "document" && program is null) { return CommandResult.Error(output: $"[world.shade: no admitted program named '{name}' in this scene]"); }
+                    var payload = program is null ? null : System.Text.Json.JsonSerializer.Serialize(program.Definition, WorldJsonContext.Default.SdfShadeDefinition);
+                    link.SubmitSessionLever(new WorldSessionLever(WorldSection.Render, WorldSessionLevers.ShadeDefault, 0, View: payload), context.Principal);
+                    return new(Output: $"[world.shade default: {name}]");
+                }
+                if (args.Count != 1 || (!args.Is(0, "programs") && !args.Is(0, "layers"))) { return WorldShadeForms.Refuse(); }
+                return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.ShadePrograms,
+                    a: args.Is(0, "programs") ? 1d : 0d, formatEcho: Echo);
+            });
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.cadence",

@@ -57,6 +57,7 @@ public sealed partial class SdfWorldTables {
 
     private static readonly (int Offset, int Length)[] CompositeValues = Members(members: [SdfWorldPackage.GeometryOnly]);
     private static readonly (int Offset, int Length)[] LightingValues = Members(members: [
+        SdfWorldPackage.ShadePrograms, SdfWorldPackage.ShadeDefault, SdfWorldPackage.ShadeIdentity, SdfWorldPackage.ShadeDemand,
         SdfWorldPackage.ToonBands, SdfWorldPackage.ToonShadow, SdfWorldPackage.ToonOutline, SdfWorldPackage.ToonInk,
         SdfWorldPackage.LightCount, SdfWorldPackage.LightMask, SdfWorldPackage.Exposure, SdfWorldPackage.ExposeShare, SdfWorldPackage.AirLight, SdfWorldPackage.MeterLuminance, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance, SdfWorldPackage.FlowClock, SdfWorldPackage.WorldLanes, SdfWorldPackage.DisableScreenLights, SdfWorldPackage.IndirectSources,
         SdfWorldPackage.IndirectSourceGains, SdfWorldPackage.IndirectApply, SdfWorldPackage.IndirectContact,
@@ -118,7 +119,15 @@ public sealed partial class SdfWorldTables {
                 hash.Add(value: shadow.Value);
                 // The surface pass queries the cascades wherever a material's wrap carries its light, so a palette's wraps
                 // decide which pixels it measures.
-                if (part == SdfWorldPackage.Parts.Surface) { hash.Add(value: m_wrapSignature); }
+                if (part == SdfWorldPackage.Parts.Surface) {
+                    hash.Add(value: m_wrapSignature);
+                    hash.Add(value: frame.ShadePrograms ? 1u : 0u);
+                    if (frame.ShadePrograms && frame.ShadeDefault is { } shade) {
+                        hash.Add(value: BitConverter.SingleToUInt32Bits(shade.Demand.MaxWrap));
+                        hash.Add(value: BitConverter.SingleToUInt32Bits(shade.Demand.MaxTiltRadians));
+                        hash.Add(value: shade.Demand.EverySide ? 1u : 0u);
+                    }
+                }
                 break;
             // The glass shading pass lights the glass and reads the lit image; the clear and the glass raster are
             // geometry alone, one signature, so a standing raster never accumulates onto a clear it did not see.

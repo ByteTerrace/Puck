@@ -2484,6 +2484,518 @@
       "additionalProperties": false,
       "title": "CameraBloom"
     },
+    "SdfShadeType": {
+      "description": "The scalar kind and width of a shade register; there are no implicit integer conversions.",
+      "enum": [
+        "Float",
+        "Float2",
+        "Float3",
+        "Float4",
+        "UInt",
+        "UInt3"
+      ],
+      "title": "SdfShadeType"
+    },
+    "SdfShadePhase": {
+      "description": "The three entry points of a material\u0027s presentation program.",
+      "enum": [
+        "Surface",
+        "Light",
+        "Compose"
+      ],
+      "title": "SdfShadePhase"
+    },
+    "SdfSolidPrimitive": {
+      "description": "The solid primitive vocabulary \u2014 the shapes carrying a unit-size law (SdfSolidGeometry), a finite local bound, and one rigid-copy spelling every consumer reads the same way: the renderer emitting a program, the contact field evaluating one, and an analytic collider compiler reading world-axis extents off it.",
+      "enum": [
+        "Sphere",
+        "Box",
+        "Torus",
+        "Cylinder",
+        "Capsule",
+        "Ellipsoid",
+        "RoundCone",
+        "Plane",
+        "Cone",
+        "Prism",
+        "Superellipsoid",
+        "Sweep"
+      ],
+      "title": "SdfSolidPrimitive"
+    },
+    "SdfPrismProfileKind": {
+      "description": "The cross-section of a prism, in its local XY plane.",
+      "enum": [
+        "Trapezoid",
+        "RoundedRectangle",
+        "Polygon",
+        "Ellipse",
+        "ChamferedRectangle",
+        "Convex",
+        "Path"
+      ],
+      "title": "SdfPrismProfileKind"
+    },
+    "SdfPathSegment": {
+      "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "end": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "control": {
+          "default": null,
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "control2": {
+          "default": null,
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "arcCenter": {
+          "default": null,
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "clockwise": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "end"
+      ],
+      "additionalProperties": false,
+      "title": "SdfPathSegment"
+    },
+    "SdfPathContour": {
+      "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "start": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SdfPathSegment"
+          }
+        },
+        "closed": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "start",
+        "segments"
+      ],
+      "additionalProperties": false,
+      "title": "SdfPathContour"
+    },
+    "SdfPathStroke": {
+      "description": "Round-ended stroke radii. Smooth interpolates with smoothstep over [From, To]; otherwise interpolation is linear over that interval. Parameterization gives every authored segment an equal part of [0, 1].",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "radiusStart": {
+          "type": "number"
+        },
+        "radiusEnd": {
+          "type": "number"
+        },
+        "smooth": {
+          "type": "boolean",
+          "default": false
+        },
+        "from": {
+          "type": "number",
+          "default": 0
+        },
+        "to": {
+          "type": "number",
+          "default": 1
+        }
+      },
+      "required": [
+        "radiusStart",
+        "radiusEnd"
+      ],
+      "additionalProperties": false,
+      "title": "SdfPathStroke"
+    },
+    "SdfPathShear": {
+      "description": "Boundary deformation: target \u002B= Offset \u002B Linear*d \u002B Quadratic*d\u00B2 \u002B Cubic*d\u00B3, with the other coordinate clamped to [From, To] as d. Target is 0 (X) or 1 (Y). Filled paths only; included in the subdivision error bound, so clamped polynomial bends can shape an outline without a runtime warp.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "linear": {
+          "type": "number"
+        },
+        "quadratic": {
+          "type": "number",
+          "default": 0
+        },
+        "cubic": {
+          "type": "number",
+          "default": 0
+        },
+        "offset": {
+          "type": "number",
+          "default": 0
+        },
+        "from": {
+          "type": "number",
+          "default": -1
+        },
+        "to": {
+          "type": "number",
+          "default": 1
+        },
+        "target": {
+          "type": "integer",
+          "default": 0
+        }
+      },
+      "required": [
+        "linear"
+      ],
+      "additionalProperties": false,
+      "title": "SdfPathShear"
+    },
+    "SdfPathProfile": {
+      "description": "A bounded presentation profile. Filled contours use even/odd fill, including holes. Curves are flattened once at composition, with a local-space geometric error at most Tolerance (apart from floating-point rounding). Strokes approximate the union of disks along the curve, including their varying radius, to the same tolerance. The emitted polygon/rounded-segment field is 1-Lipschitz; no margin moves its zero surface. At most 128 edges are emitted; exceeding that budget refuses instead of silently relaxing the requested tolerance.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "contours": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SdfPathContour"
+          }
+        },
+        "tolerance": {
+          "type": "number",
+          "default": 0.001
+        },
+        "stroke": {
+          "$ref": "#/$defs/SdfPathStroke",
+          "default": null
+        },
+        "shear": {
+          "$ref": "#/$defs/SdfPathShear",
+          "default": null
+        }
+      },
+      "required": [
+        "contours"
+      ],
+      "additionalProperties": false,
+      "title": "SdfPathProfile"
+    },
+    "SdfPrismProfile": {
+      "description": "Authored profile controls for a solid prism. The profile is extruded along local Z.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/SdfPrismProfileKind",
+          "description": "The profile family."
+        },
+        "cornerRadius": {
+          "description": "A fraction in [0, 1]: the profile\u0027s smaller half-extent for RoundedRectangle\u0027s corner radius or ChamferedRectangle\u0027s chamfer radius; the scaled polygon\u0027s conservative inradius (ConvexPolygonInradius) for Convex\u0027s uniform corner rounding, also clamped to the extrusion half-depth when extruded.",
+          "type": "number",
+          "default": 0.15
+        },
+        "sides": {
+          "description": "Polygon side count, from 3 through 32.",
+          "type": "integer",
+          "default": 6
+        },
+        "vertices": {
+          "description": "Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "path": {
+          "$ref": "#/$defs/SdfPathProfile",
+          "description": "Required only for Path; its points are normalized profile coordinates.",
+          "default": null
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "title": "SdfPrismProfile"
+    },
+    "SdfSweepParameters": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "a": {
+          "description": "The curve\u0027s first control point, in creation units.",
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "b": {
+          "description": "The curve\u0027s middle control point.",
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "c": {
+          "description": "The curve\u0027s last control point.",
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "radiusStart": {
+          "description": "The sweep radius at t = 0.",
+          "type": "number"
+        },
+        "radiusEnd": {
+          "description": "The sweep radius at t = 1.",
+          "type": "number"
+        },
+        "bulge": {
+          "description": "The mid-span radius bulge amplitude.",
+          "type": "number"
+        },
+        "strands": {
+          "description": "The strand count, 1..MaxSweepStrands.",
+          "type": "integer"
+        },
+        "twist": {
+          "description": "The strand orbit rate, in turns along the curve.",
+          "type": "number"
+        },
+        "strandOffset": {
+          "description": "The strand orbit radius, in creation units.",
+          "type": "number"
+        }
+      },
+      "additionalProperties": false,
+      "title": "SdfSweepParameters"
+    },
+    "SdfShadeShape": {
+      "description": "A structural shape descriptor. Compilation uses the existing solid/paint emission and admission.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/SdfSolidPrimitive"
+        },
+        "x": {
+          "type": "number",
+          "default": 1
+        },
+        "y": {
+          "type": "number",
+          "default": 1
+        },
+        "z": {
+          "type": "number",
+          "default": 1
+        },
+        "taper": {
+          "type": "number",
+          "default": 0.5
+        },
+        "profile": {
+          "$ref": "#/$defs/SdfPrismProfile",
+          "default": null
+        },
+        "lift": {
+          "enum": [
+            "Revolve",
+            "Extrude"
+          ],
+          "default": "Extrude",
+          "title": "SdfLift"
+        },
+        "rounding": {
+          "type": "number",
+          "default": 0
+        },
+        "chamfer": {
+          "type": "number",
+          "default": 0
+        },
+        "exponent": {
+          "type": "number",
+          "default": 2
+        },
+        "curve": {
+          "$ref": "#/$defs/SdfSweepParameters",
+          "default": null
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "title": "SdfShadeShape"
+    },
+    "SdfShadeExpression": {
+      "description": "An expression supplied to shade admission, never executable words. The compiler validates every field.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "op": {
+          "description": "An op-table spelling, or constant, parameter, or input.",
+          "type": "string"
+        },
+        "arguments": {
+          "$ref": "#/$defs/SdfShadeExpressionList",
+          "default": null
+        },
+        "name": {
+          "description": "A stamp member or runtime parameter name.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "type": {
+          "$ref": "#/$defs/SdfShadeType",
+          "description": "The type of a literal, validated against its bits.",
+          "default": "Float"
+        },
+        "bits": {
+          "$ref": "#/$defs/Int32List",
+          "description": "32-bit literal components; integer components are never float converted.",
+          "default": null
+        },
+        "shape": {
+          "$ref": "#/$defs/SdfShadeShape",
+          "description": "The structural descriptor of a shape operation.",
+          "default": null
+        }
+      },
+      "required": [
+        "op"
+      ],
+      "additionalProperties": false,
+      "title": "SdfShadeExpression"
+    },
+    "SdfShadeExpressionList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/SdfShadeExpression"
+      }
+    },
+    "SdfShadeExpressionNonNullable": {
+      "description": "An expression supplied to shade admission, never executable words. The compiler validates every field.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "description": "An op-table spelling, or constant, parameter, or input.",
+          "type": "string"
+        },
+        "arguments": {
+          "$ref": "#/$defs/SdfShadeExpressionList",
+          "description": "The expression\u0027s operands.",
+          "default": null
+        },
+        "name": {
+          "description": "A stamp member or runtime parameter name.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "type": {
+          "$ref": "#/$defs/SdfShadeType",
+          "description": "The type of a literal, validated against its bits.",
+          "default": "Float"
+        },
+        "bits": {
+          "$ref": "#/$defs/Int32List",
+          "description": "32-bit literal components; integer components are never float converted.",
+          "default": null
+        },
+        "shape": {
+          "$ref": "#/$defs/SdfShadeShape",
+          "description": "The structural descriptor of a shape operation.",
+          "default": null
+        }
+      },
+      "required": [
+        "op"
+      ],
+      "additionalProperties": false,
+      "title": "SdfShadeExpression"
+    },
     "WorldScreenSourceNone": {
       "description": "No provider is bound \u2014 the engine shades the slot as dark glass, lit faintly by the sun.",
       "properties": {
@@ -10759,37 +11271,6 @@
       "additionalProperties": false,
       "title": "PaletteSurfaceDocument"
     },
-    "SdfSolidPrimitive": {
-      "description": "The solid primitive vocabulary \u2014 the shapes carrying a unit-size law (SdfSolidGeometry), a finite local bound, and one rigid-copy spelling every consumer reads the same way: the renderer emitting a program, the contact field evaluating one, and an analytic collider compiler reading world-axis extents off it.",
-      "enum": [
-        "Sphere",
-        "Box",
-        "Torus",
-        "Cylinder",
-        "Capsule",
-        "Ellipsoid",
-        "RoundCone",
-        "Plane",
-        "Cone",
-        "Prism",
-        "Superellipsoid",
-        "Sweep"
-      ],
-      "title": "SdfSolidPrimitive"
-    },
-    "SdfPrismProfileKind": {
-      "description": "The cross-section of a prism, in its local XY plane.",
-      "enum": [
-        "Trapezoid",
-        "RoundedRectangle",
-        "Polygon",
-        "Ellipse",
-        "ChamferedRectangle",
-        "Convex",
-        "Path"
-      ],
-      "title": "SdfPrismProfileKind"
-    },
     "Vector2List": {
       "type": [
         "array",
@@ -10804,7 +11285,7 @@
         "maxItems": 2
       }
     },
-    "SdfPathSegment": {
+    "SdfPathSegmentNonNullable": {
       "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame.",
       "type": "object",
       "properties": {
@@ -10854,7 +11335,7 @@
       "additionalProperties": false,
       "title": "SdfPathSegment"
     },
-    "SdfPathContour": {
+    "SdfPathContourNonNullable": {
       "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.",
       "type": "object",
       "properties": {
@@ -10869,7 +11350,7 @@
         "segments": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/SdfPathSegment"
+            "$ref": "#/$defs/SdfPathSegmentNonNullable"
           }
         },
         "closed": {
@@ -10884,81 +11365,7 @@
       "additionalProperties": false,
       "title": "SdfPathContour"
     },
-    "SdfPathStroke": {
-      "description": "Round-ended stroke radii. Smooth interpolates with smoothstep over [From, To]; otherwise interpolation is linear over that interval. Parameterization gives every authored segment an equal part of [0, 1].",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "radiusStart": {
-          "type": "number"
-        },
-        "radiusEnd": {
-          "type": "number"
-        },
-        "smooth": {
-          "type": "boolean",
-          "default": false
-        },
-        "from": {
-          "type": "number",
-          "default": 0
-        },
-        "to": {
-          "type": "number",
-          "default": 1
-        }
-      },
-      "required": [
-        "radiusStart",
-        "radiusEnd"
-      ],
-      "additionalProperties": false,
-      "title": "SdfPathStroke"
-    },
-    "SdfPathShear": {
-      "description": "Boundary deformation: target \u002B= Offset \u002B Linear*d \u002B Quadratic*d\u00B2 \u002B Cubic*d\u00B3, with the other coordinate clamped to [From, To] as d. Target is 0 (X) or 1 (Y). Filled paths only; included in the subdivision error bound, so clamped polynomial bends can shape an outline without a runtime warp.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "linear": {
-          "type": "number"
-        },
-        "quadratic": {
-          "type": "number",
-          "default": 0
-        },
-        "cubic": {
-          "type": "number",
-          "default": 0
-        },
-        "offset": {
-          "type": "number",
-          "default": 0
-        },
-        "from": {
-          "type": "number",
-          "default": -1
-        },
-        "to": {
-          "type": "number",
-          "default": 1
-        },
-        "target": {
-          "type": "integer",
-          "default": 0
-        }
-      },
-      "required": [
-        "linear"
-      ],
-      "additionalProperties": false,
-      "title": "SdfPathShear"
-    },
-    "SdfPathProfile": {
+    "SdfPathProfileNullable": {
       "description": "A bounded presentation profile. Filled contours use even/odd fill, including holes. Curves are flattened once at composition, with a local-space geometric error at most Tolerance (apart from floating-point rounding). Strokes approximate the union of disks along the curve, including their varying radius, to the same tolerance. The emitted polygon/rounded-segment field is 1-Lipschitz; no margin moves its zero surface. At most 128 edges are emitted; exceeding that budget refuses instead of silently relaxing the requested tolerance.",
       "type": [
         "object",
@@ -10968,7 +11375,7 @@
         "contours": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/SdfPathContour"
+            "$ref": "#/$defs/SdfPathContourNonNullable"
           }
         },
         "tolerance": {
@@ -10990,7 +11397,7 @@
       "additionalProperties": false,
       "title": "SdfPathProfile"
     },
-    "SdfPrismProfile": {
+    "SdfPrismProfileNullable": {
       "description": "Authored profile controls for a solid prism. The profile is extruded along local Z.",
       "type": [
         "object",
@@ -11017,7 +11424,7 @@
           "default": null
         },
         "path": {
-          "$ref": "#/$defs/SdfPathProfile",
+          "$ref": "#/$defs/SdfPathProfileNullable",
           "description": "Required only for Path; its points are normalized profile coordinates.",
           "default": null
         }
@@ -11028,89 +11435,7 @@
       "additionalProperties": false,
       "title": "SdfPrismProfile"
     },
-    "SdfShadeType": {
-      "description": "The scalar kind and width of a shade register; there are no implicit integer conversions.",
-      "enum": [
-        "Float",
-        "Float2",
-        "Float3",
-        "Float4",
-        "UInt",
-        "UInt3"
-      ],
-      "title": "SdfShadeType"
-    },
-    "SdfShadePhase": {
-      "description": "The three entry points of a material\u0027s presentation program.",
-      "enum": [
-        "Surface",
-        "Light",
-        "Compose"
-      ],
-      "title": "SdfShadePhase"
-    },
-    "SdfSweepParameters": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "a": {
-          "description": "The curve\u0027s first control point, in creation units.",
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 3,
-          "maxItems": 3
-        },
-        "b": {
-          "description": "The curve\u0027s middle control point.",
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 3,
-          "maxItems": 3
-        },
-        "c": {
-          "description": "The curve\u0027s last control point.",
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 3,
-          "maxItems": 3
-        },
-        "radiusStart": {
-          "description": "The sweep radius at t = 0.",
-          "type": "number"
-        },
-        "radiusEnd": {
-          "description": "The sweep radius at t = 1.",
-          "type": "number"
-        },
-        "bulge": {
-          "description": "The mid-span radius bulge amplitude.",
-          "type": "number"
-        },
-        "strands": {
-          "description": "The strand count, 1..MaxSweepStrands.",
-          "type": "integer"
-        },
-        "twist": {
-          "description": "The strand orbit rate, in turns along the curve.",
-          "type": "number"
-        },
-        "strandOffset": {
-          "description": "The strand orbit radius, in creation units.",
-          "type": "number"
-        }
-      },
-      "additionalProperties": false,
-      "title": "SdfSweepParameters"
-    },
-    "SdfShadeShape": {
+    "SdfShadeShapeNullable": {
       "description": "A structural shape descriptor. Compilation uses the existing solid/paint emission and admission.",
       "type": [
         "object",
@@ -11137,7 +11462,7 @@
           "default": 0.5
         },
         "profile": {
-          "$ref": "#/$defs/SdfPrismProfile",
+          "$ref": "#/$defs/SdfPrismProfileNullable",
           "default": null
         },
         "lift": {
@@ -11171,7 +11496,7 @@
       "additionalProperties": false,
       "title": "SdfShadeShape"
     },
-    "SdfShadeExpression": {
+    "SdfShadeExpressionNonNullable2": {
       "description": "An expression supplied to shade admission, never executable words. The compiler validates every field.",
       "type": "object",
       "properties": {
@@ -11180,7 +11505,7 @@
           "type": "string"
         },
         "arguments": {
-          "$ref": "#/$defs/SdfShadeExpressionList",
+          "$ref": "#/$defs/SdfShadeExpressionListNullable",
           "default": null
         },
         "name": {
@@ -11202,7 +11527,7 @@
           "default": null
         },
         "shape": {
-          "$ref": "#/$defs/SdfShadeShape",
+          "$ref": "#/$defs/SdfShadeShapeNullable",
           "description": "The structural descriptor of a shape operation.",
           "default": null
         }
@@ -11213,57 +11538,14 @@
       "additionalProperties": false,
       "title": "SdfShadeExpression"
     },
-    "SdfShadeExpressionList": {
+    "SdfShadeExpressionListNullable": {
       "type": [
         "array",
         "null"
       ],
       "items": {
-        "$ref": "#/$defs/SdfShadeExpression"
+        "$ref": "#/$defs/SdfShadeExpressionNonNullable2"
       }
-    },
-    "SdfShadeExpressionNonNullable": {
-      "description": "An expression supplied to shade admission, never executable words. The compiler validates every field.",
-      "type": "object",
-      "properties": {
-        "op": {
-          "description": "An op-table spelling, or constant, parameter, or input.",
-          "type": "string"
-        },
-        "arguments": {
-          "$ref": "#/$defs/SdfShadeExpressionList",
-          "description": "The expression\u0027s operands.",
-          "default": null
-        },
-        "name": {
-          "description": "A stamp member or runtime parameter name.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "type": {
-          "$ref": "#/$defs/SdfShadeType",
-          "description": "The type of a literal, validated against its bits.",
-          "default": "Float"
-        },
-        "bits": {
-          "$ref": "#/$defs/Int32List",
-          "description": "32-bit literal components; integer components are never float converted.",
-          "default": null
-        },
-        "shape": {
-          "$ref": "#/$defs/SdfShadeShape",
-          "description": "The structural descriptor of a shape operation.",
-          "default": null
-        }
-      },
-      "required": [
-        "op"
-      ],
-      "additionalProperties": false,
-      "title": "SdfShadeExpression"
     },
     "ActionFactNullable": {
       "enum": [

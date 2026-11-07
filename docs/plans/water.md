@@ -460,7 +460,7 @@ which `SdfFrameBlock` integrates from `SdfFrame.Clock` with
 `PresentedTick.Integrate`, as `SdfVolumeMotion.At` does for volumes, reduced by
 `SdfFlow.ClockPeriodSeconds`; the material carries a whole number of cycles a
 clock period (`SdfFlow.CyclesPerClock`), so the layer joins where the clock
-wraps. A program with no flow (`SdfAppearance.HasFlow`) writes zero, so a still
+wraps. A program with no flow (`SdfAppearance.ResolveShadeReads`) writes zero, so a still
 world's views stand; the clock is a lighting member of the cadence signature
 (`SdfWorldTables.Cadence.cs`), so the shading passes rerun as the flow moves
 and the geometry, the cascades and the surface pass stand. No `sdf-*` kernel

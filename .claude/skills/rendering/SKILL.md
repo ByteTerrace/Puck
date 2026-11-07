@@ -19,8 +19,9 @@ query evaluator (`SdfFieldEvaluator`) and `maths-usage`.
 
 Read [authored shading](references/authored-shading.md) for `SdfShadeProgram`,
 the op table, CPU admission, slice ownership, helper-closed cost, shadow demand
-and generated interpreter/emitter semantics. The GPU phase calls and bounded
-dispatch planner remain in the author-shader plan; CPU admission proves neither.
+and generated interpreter/emitter semantics, shared GPU phase invocation, and
+bounded dispatch planner. CPU admission proves neither driver spill behavior nor
+the measured dispatch margin; those remain in the author-shader plan.
 
 ## Camera bloom
 
@@ -335,7 +336,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   acne) is the estimate's, so an edit to the views lighting code changes
   nothing; the window and the pattern's tile are a pair. A side is queried
   wherever the light's diffuse response is non-zero, which for a wrapped
-  material reaches past the terminator to `n·l > -wrap` (`sdfMaterialWrap`);
+  material reaches past the terminator to `n·l > -wrap` (`sdfMaterialShadowDemand`);
   such a side reads the cascade's exit layer (below), or the wrap would shadow
   itself away in the open. A side the response does not reach is never queried: its slot holds `SDF_SHADOW_UNQUERIED`
   (`frame/sdf-shadow-visibility.hlsli`), which decodes as fully visible, and
@@ -586,7 +587,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   tangential part, revealing a surface and tilting the shading normal. Its
   phase enters only through the pass block's `flowClock`, which
   `SdfFrameBlock` integrates from `SdfFrame.Clock` and writes zero for a program
-  without flow (`SdfAppearance.HasFlow`), so a still world's views keep standing;
+  without flow (`SdfAppearance.ResolveShadeReads`), so a still world's views keep standing;
   the clock is a lighting value of the cadence signature, so only the shading
   passes rerun as the flow moves. No `sdf-*` kernel reads the Frame group's
   `time` or `timeDelta`: `puck search -M 0 "frameGroup\.(time|timeDelta)"

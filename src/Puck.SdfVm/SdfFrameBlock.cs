@@ -13,7 +13,8 @@ namespace Puck.SdfVm;
 /// <param name="MeshDraws">The frame's mesh draws.</param>
 /// <param name="DebugMode">The debug view mode; zero renders the final image.</param>
 /// <param name="Exposures">The views' exposures, or <see langword="null"/> to expose every view by one.</param>
-public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode, SdfViewExposures? Exposures = null);
+/// <param name="ShadeDefaultFirst">The default program's first vector in the appearance allocation.</param>
+public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode, SdfViewExposures? Exposures = null, uint ShadeDefaultFirst = 0);
 /// <summary>
 /// Writes what one view's passes read of a frame into an <c>sdf.world</c> pass block: the world values, the view's camera,
 /// the frame's levers, its light count and shadow slots, and its curvature shading, each at the offset the generated
@@ -200,6 +201,8 @@ public static partial class SdfFrameBlock {
 
         frame.Toon.WriteRows(inkW: ((float)snapshot.RenderGrid), mode: frame.Toon.Mode, rows: toonRows);
         WriteVector4(block: block, offset: ToonBands, value: toonRows[0]);
+        WriteFlag(block, Offset(SdfWorldPackage.ShadePrograms), frame.ShadePrograms);
+        WriteShadeDefault(block, tables.ShadeDefaultFirst, frame.ShadeDefault);
         WriteVector4(block: block, offset: ToonShadow, value: toonRows[1]);
         WriteVector4(block: block, offset: ToonOutline, value: toonRows[2]);
         WriteVector4(block: block, offset: ToonInk, value: toonRows[3]);
@@ -251,11 +254,11 @@ public static partial class SdfFrameBlock {
     // The flow layer's clock at the frame's presented tick (SdfFlow.Clock): the one value the flow layer's phase enters the
     // kernels through. Zero for a program with no flow, so its views stand while nothing else changes.
     private static float FlowClockOf(SdfFrame frame) =>
-        (frame.Program.Appearance.HasFlow ? SdfFlow.Clock(seconds: frame.Clock.Integrate(modulus: SdfFlow.ClockPeriodSeconds, ratePerSecond: 1d)) : 0f);
+        (((frame.Program.Appearance.ResolveShadeReads(frame.ShadePrograms, frame.ShadeDefault) & SdfShadeReads.Clock) != 0) ? SdfFlow.Clock(seconds: frame.Clock.Integrate(modulus: SdfFlow.ClockPeriodSeconds, ratePerSecond: 1d)) : 0f);
     // The world's render lanes (SdfFrame.WorldLanes): the one value a world lane enters the kernels through. Zero for a
     // frame whose program materials and volumes read none, so its views stand while the world's state moves.
     private static Vector4 WorldLanesOf(SdfFrame frame) {
-        if (frame.Program.Appearance.ReadsWorldLanes) { return frame.WorldLanes; }
+        if ((frame.Program.Appearance.ResolveShadeReads(frame.ShadePrograms, frame.ShadeDefault) & SdfShadeReads.WorldLanes) != 0) { return frame.WorldLanes; }
         foreach (var volume in frame.Volumes) {
             if (volume.IntensityLane >= SdfLanes.FirstWorld) { return frame.WorldLanes; }
         }

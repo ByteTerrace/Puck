@@ -53,6 +53,10 @@
 #include "../shade/sdf-sky-reflection.hlsli"
 #include "../shade/sdf-light.hlsli"
 #include "../shade/shade-flow.hlsli"
+#include "../field/sdf-point.hlsli"
+#include "../field/sdf-shapes.hlsli"
+#include "../shade/shade-layers.hlsli"
+#include "../isa/sdf-shade.hlsli"
 #include "../shade/sdf-transport.hlsli"
 
 // The frost's taps and the most render pixels their disc spans.
@@ -100,7 +104,8 @@ float sdfGlassContact(SdfMaterialData material, float behind) {
 // replace it, and the volume's indirect light as a surface receives it. `incoming` is that light's luminance before the
 // indirect gains, what the local adaptation meters (sdfLocalAdaptationGain).
 float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal, float3 rayDirection, bool probed, SdfMeshProbes probes,
-    out float3 highlights, out float incoming) {
+    uint4 shadeBinding, SdfShadeStamp shadeStamp, out float3 highlights, out float incoming,
+    out float3 radiance, out float3 indirect, out float3 rim, out float attenuation) {
     SdfShadeSurface surface;
 
     surface.position = position;
@@ -110,25 +115,29 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
     surface.toon = (SdfToonStyle)0;
     surface.ambientOcclusion = 1.0;
     surface.shadowVisibility = float4(1.0, 1.0, 1.0, 1.0);
+    surface.shadowMeasured = float4(1.0, 1.0, 1.0, 1.0);
     surface.cascaded = false;
     surface.probed = (probed && sdfMeshAnswers(probes));
     surface.probes = probes;
 
     bool indirectSky = (probed && ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u));
-    float3 radiance = (indirectSky ? float3(0.0, 0.0, 0.0) : worldSkyIrradiance(normal));
+    radiance = (indirectSky ? float3(0.0, 0.0, 0.0) : worldSkyIrradiance(normal));
     SdfLightWalk walk = sdfLightWalkStart();
     SdfLightSource light;
 
     highlights = float3(0.0, 0.0, 0.0);
+    rim = 0.0;
+    attenuation = 1.0;
     [loop]
     while (sdfLightNext(walk, light)) {
-        SdfLightResponse response = sdfLightResponse(light, surface);
+        SdfLightResponse response = sdfShadeLightPhase(shadeBinding, shadeStamp, light, surface);
 
         radiance += response.diffuse;
         highlights += response.specular;
+        if (shadeBinding.y != 0u) { rim += response.rim; attenuation *= response.attenuation; }
     }
 
-    float3 indirect = (probed ? sdfMeshIndirectSeen(probes, normal) : float3(0.0, 0.0, 0.0));
+    indirect = (probed ? sdfMeshIndirectSeen(probes, normal) : float3(0.0, 0.0, 0.0));
 
     incoming = dot((radiance + indirect), SDF_LUMINANCE);
 
@@ -186,6 +195,9 @@ bool sdfGlassSecondInterface(uint word, uint nearDraw, uint nearTriangle, float3
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
+    uint across = (passGroup.extent.x + 7u) / 8u;
+    uint group = pushedIndex.index + id.x / 8u;
+    id.xy = uint2(group % across, group / across) * 8u + uint2(id.x % 8u, id.y);
     if (any(id.xy >= passGroup.extent)) {
         return;
     }
@@ -198,6 +210,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, extent));
     float opaque = (sdfVisibilityHit(visibility) ? visibility.t : worldFarDistance(view));
     bool glass = (sdfDebugComposesFinal(passGroup.debugMode) && (front.y >= 1.0) && (front.x < opaque));
+    if ((passGroup.debugMode == SDF_DEBUG_VIEW_SHADE_COST || passGroup.debugMode == SDF_DEBUG_VIEW_SHADE_TIER) && front.y >= 1.0 && front.x < opaque) {
+        color = float4(sdfShadeDiagnostic(sdfMeshMaterial((uint)front.y - 1u, (uint)front.z), passGroup.debugMode), 1.0);
+    }
     float reactive = 0.0;
 
     if (glass) {
@@ -251,8 +266,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             float curvature;
             int frameSlot;
             float3 normal = sdfMeshSurfaceNormal(draw, triangleIndex, surfacePoint, rayDirection, face, curvature, frameSlot);
-            SdfMaterialData material = sdfMaterialLoad(sdfMeshMaterial(draw, triangleIndex));
+            int materialId = sdfMeshMaterial(draw, triangleIndex);
+            SdfMaterialData material = sdfMaterialLoad(materialId);
+            uint4 shadeBinding = sdfShadeBinding(materialId);
             float ior = max(material.ior, 1.0);
+            float ratio = (ior - 1.0) / (ior + 1.0);
+            float f0 = ratio * ratio;
+            float3 baseAlbedo = material.albedo;
+            if (shadeBinding.y != 0u) { material.specular = f0; material.metal = 0.0; material.coat = 0.0; }
             float roughness = material.roughness;
 
             // The flow moves the surface's shading: its tilt bends the normal the glass reflects and refracts by, and its
@@ -264,8 +285,24 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             float revealed;
 
             sdfLayerFrame(frameSlot, surfacePoint, normal, rayDirection, layerPoint, layerNormal, layerRay, layerRotation);
-            normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, layerRotation, frameSlot, draw, (footprint * t), sdfFrameLanes(frameSlot),
-                sdfGlassContact(material, (opaque - t)), material, revealed);
+            uint paintFirst;
+            uint paintCount;
+            float3 painted = sdfMaterialPaints(materialId, paintFirst, paintCount);
+            float paintCoverage;
+            sdfApplyPaints(surfacePoint, layerPoint, footprint * t, paintFirst, paintCount,
+                (sdfShadeRead(shadeBinding.xy, 0u).w & SDF_SHADE_READ_PAINT) != 0u, painted, paintCoverage);
+            material.albedo = painted;
+            SdfShadeStamp shadeStamp = sdfShadeStamp(material, surfacePoint, layerPoint, normal, rayDirection,
+                curvature, footprint * t, sdfFrameLanes(frameSlot), sdfGlassContact(material, opaque - t), share, layerRotation, frameSlot, draw);
+            sdfShadeSet_surface_geometricNormal(shadeStamp, face);
+            sdfShadeSet_paint_coverage(shadeStamp, paintCoverage);
+            if (shadeBinding.y != 0u) {
+                sdfShadeSurfacePhase(shadeBinding, shadeStamp, material, normal, revealed);
+                roughness = material.roughness;
+            } else {
+                normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, layerRotation, frameSlot, draw, (footprint * t), sdfFrameLanes(frameSlot),
+                    sdfGlassContact(material, (opaque - t)), material, revealed);
+            }
 
             // The medium's share of what the interface shows over its glass, the rest what lies behind. A lone
             // interface absorbs the whole optical depth; of two, the near absorbs its own material over its share and
@@ -280,23 +317,29 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             spread += (roughness * max(((opaque - t) - share), 0.0));
 
             float cosine = saturate(dot(normal, -rayDirection));
-            float ratio = ((ior - 1.0) / (ior + 1.0));
-            float f0 = (ratio * ratio);
             float fresnel = (f0 + ((1.0 - f0) * pow((1.0 - cosine), 5.0)));
             float air = sdfAirTransmittance(origin, rayDirection, t);
 
             // The GGX lobe reads the glass's own reflectance and nothing of a metal or a coat; the flow's revealed surface
             // covers the glass rather than roughening it.
-            material.specular = f0;
-            material.metal = 0.0;
-            material.coat = 0.0;
-            material.roughness = roughness;
+            if (shadeBinding.y == 0u) {
+                material.specular = f0;
+                material.metal = 0.0;
+                material.coat = 0.0;
+                material.roughness = roughness;
+            }
 
             bool probed = sdfMeshIrradianceEnabled();
             SdfMeshProbes probes = sdfMeshProbesAt(surfacePoint, normal);
             float3 highlights;
             float incoming;
-            float3 received = sdfGlassReceived(material, surfacePoint, normal, rayDirection, probed, probes, highlights, incoming);
+            float3 radiance;
+            float3 indirect;
+            float3 rim;
+            float attenuation;
+            sdfShadeSurfaceInputs(shadeStamp, material, normal, revealed);
+            float3 received = sdfGlassReceived(material, surfacePoint, normal, rayDirection, probed, probes, shadeBinding, shadeStamp, highlights, incoming,
+                radiance, indirect, rim, attenuation);
             float3 reflectDirection = reflect(rayDirection, normal);
             float3 environment = worldEnvironmentReflection(reflectDirection, roughness);
 
@@ -310,9 +353,12 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
             received *= localGain;
 
-            float3 shown = (((((environment * fresnel) + highlights) * localGain) + (((1.0 - fresnel) * medium) * received)) * air);
+            float3 shown = (((((environment * fresnel) + highlights + rim) * localGain) + (((1.0 - fresnel) * medium) * received)) * air * attenuation);
             float3 passed = ((1.0 - fresnel) * transmittance);
-            float3 cover = ((material.flowColor.rgb * received) * air);
+            float3 revealedAlbedo = max((material.albedo - baseAlbedo * (1.0 - revealed)) / max(revealed, 1.0e-6), 0.0);
+            float3 cover = (((shadeBinding.y != 0u ? revealedAlbedo : material.flowColor.rgb) * received) * air * attenuation);
+            shown = sdfShadeComposePhase(shadeBinding, shadeStamp, radiance, rim, highlights, attenuation,
+                indirect, environment, environment * fresnel, localGain, shown / max(air, 1.0e-12)) * air;
             float luminous = ((1.0 - fresnel) * dot(transmittance, SDF_LUMINANCE));
 
             if (isNear) {
@@ -329,7 +375,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
                 farLuminous = luminous;
             }
         }
-        sdfWorkSteps = layers;
+        sdfWorkSteps += layers;
 
         // The bent ray reaches the opaque hit's depth displaced by each interface's refraction over its share of the
         // glass: where that lands on the render grid is where the light through the glass is read.
