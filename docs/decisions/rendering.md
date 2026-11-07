@@ -196,11 +196,14 @@ pyramid of the farthest depth it drew, tests every box the box cull keeps
 against it on the GPU and draws the newly visible in a second phase of the same
 frame, so the test is conservative and a disocclusion is never a frame late.
 Both phases keep the box cull's draw order, so depth ties resolve alike. Glass
-never occludes, the shadow cascades keep the box cull, and each nested view tests
+never occludes, and each nested view tests
 against its own depth. On the debug world it removed a further 34% to 61% of
 the mesh pass's triangles where walls and slabs hide exhibits
 ([P20](../plans/rendering.md#p20--visibility-areas-and-residency)).
-`world.cull frustum` keeps the box cull alone for comparison.
+The far cascade also uses current camera-depth receiver coverage and two-phase
+light-space entry depth; exit and optical lists remain independent of entry
+visibility. `world.cull camera` isolates cascade culling while keeping camera
+occlusion, and `world.cull frustum` keeps the box cull alone for comparison.
 
 Anything that trades a visible change for cost, such as a level of detail, an
 unloaded residency ring or a culled small object, switches only beyond the

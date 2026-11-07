@@ -142,7 +142,10 @@ tests each box the box cull kept against it, keeps the verdict as the next
 frame's visible set and writes the second phase's draws, the visible ones the
 first phase missed, which draw over the first's target and depth. Together the
 phases draw everything a pixel shows in the frame it shows it. Each phase keeps
-the staged draw order, glass never occludes, and the cascades keep the box cull.
+the staged draw order and glass never occludes. The far cascade uses the same
+entry-depth phases in light space, after camera-depth receiver selection;
+its exit and optical lists never use entry-depth occlusion.
+`world.cull camera` keeps camera occlusion and box-only cascades,
 `world.cull frustum` keeps the box cull alone, `world.cull off` draws every
 draw, and `gpu.vertices` counts the vertices each pass's draws ask for, the
 GPU's indirect draws included.

@@ -32,7 +32,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
     private static readonly CommandForms WorldShadowsForms = CommandForms.Of(verb: "world.shadows", "[off|low|medium|high]");
     private static readonly CommandForms WorldAoForms = CommandForms.Of(verb: "world.ao", "[on|off]");
     private static readonly CommandForms WorldCadenceForms = CommandForms.Of(verb: "world.cadence", "[on|off|status]");
-    private static readonly CommandForms WorldCullForms = CommandForms.Of(verb: "world.cull", "[occlusion|frustum|off|status]");
+    private static readonly CommandForms WorldCullForms = CommandForms.Of(verb: "world.cull", "[occlusion|camera|frustum|off|status]");
     private static readonly CommandForms WorldDetailForms = CommandForms.Of(verb: "world.detail", "[auto|0|1|2|status]");
     private static readonly CommandForms WorldRatesForms = CommandForms.Of(verb: "world.rates", "[status|on|off|toggle]", "<bodies|views|screens|shadow-far> on|off");
     private static readonly CommandForms WorldRenderScaleForms = CommandForms.Of(verb: "world.render-scale", "[<view>]", "[<view>] <tier|fraction|percent>", "[<view>] floor <tier>", "[<view>] pin <scale>", "[<view>] auto [on|off]");
@@ -449,7 +449,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             bindability: CommandBindability.Bindable,
             name: "world.cull",
             forms: WorldCullForms,
-            description: $"Selects how much of the mesh draws the raster passes skip, live (no rebuild): {WorldCullForms.Spelling} (on is occlusion). occlusion, the default, draws each view's mesh pass in two phases, what the previous frame found visible and then what the GPU finds newly visible against the first phase's depth, on top of the box cull; frustum keeps the box cull alone: each view's mesh and glass passes draw only the draws whose box may lie in the view's frustum before the far distance, and each shadow cascade only those in its light's box; off draws every draw everywhere. world.counters gpu measures what each level saves (draws, vertices, fragments); the image is the same at every level. A device without counted indirect draws keeps frustum under occlusion.",
+            description: $"Selects how much of the mesh draws the raster passes skip, live (no rebuild): {WorldCullForms.Spelling} (on is occlusion). occlusion, the default, draws each view's mesh pass in two phases, what the previous frame found visible and then what the GPU finds newly visible against the first phase's depth, on top of the box cull. The far cascade additionally rejects casters outside current receiver coverage and occludes entry depth in light space; exit and glass lists remain independent of entry visibility. Receiver-conditioned far layers refresh together. camera keeps camera occlusion but uses box-only cascades, isolating caster culling. frustum keeps the box cull alone: each view's mesh and glass passes draw only the draws whose box may lie in the view's frustum before the far distance, and each shadow cascade only those in its light's box; off draws every draw everywhere. world.counters gpu measures what each level saves (draws, vertices, fragments); the image is the same at every level.",
             handler: (context, args) => {
                 CommandResult Echo() => new(Output: $"[world.cull: {settings.Cull.ToString().ToLowerInvariant()}]");
 
@@ -459,6 +459,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
 
                 var level = ((args.Count != 1) ? ((SdfMeshCullLevel?)null) : args[0] switch {
                     "on" or "occlusion" => SdfMeshCullLevel.Occlusion,
+                    "camera" => SdfMeshCullLevel.Camera,
                     "frustum" => SdfMeshCullLevel.Frustum,
                     "off" => SdfMeshCullLevel.Off,
                     _ => ((SdfMeshCullLevel?)null),

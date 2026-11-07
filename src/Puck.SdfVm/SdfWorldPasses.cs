@@ -79,6 +79,25 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
     }
 
+    /// <summary>Names geometry still owed by a displayed contributor that has submitted GPU work.
+    /// Unread or unproduced views owe no geometry to the displayed frame.</summary>
+    /// <param name="runtime">The render graph, including standing and deferred contributors.</param>
+    /// <returns>A pending residency's reason, or null when all required geometry is resident.</returns>
+    public string? PendingMeshesIn(RenderGraphRuntime runtime) {
+        ArgumentNullException.ThrowIfNull(runtime);
+        if (runtime.Latest is not { } schedule) { return "the render graph has no schedule"; }
+        lock (m_gate) {
+            foreach (var row in schedule.Instances) {
+                if (row.Status is RenderGraphInstanceStatus.Unread or RenderGraphInstanceStatus.Unnamed) { continue; }
+                if (!runtime.HasSubmittedFrame(row.Instance)) { continue; }
+                if (m_entries.TryGetValue(row.Instance, out var entry) && entry.Residency is { MeshesResident: false } residency) {
+                    return $"residency '{residency.Name}' through '{row.Instance}' still owes mesh landing or its GPU upload completion";
+                }
+            }
+            return null;
+        }
+    }
+
     /// <inheritdoc/>
     public string? WaitingOf(string instance) {
         lock (m_gate) {

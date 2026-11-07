@@ -68,21 +68,24 @@ public sealed class SdfKernelInterfaces {
     public const uint MeshSelectionGroupSize = 64u;
     /// <summary>The selection dispatch's groups per row, within both backends' per-axis limit.</summary>
     public const uint MeshSelectionGroupsPerRow = 65535u;
-    /// <summary>The raster pass's GPU selection controls: one header, three level-choice rows and ten cull rows.
+    /// <summary>The raster pass's GPU selection controls: one header, three level-choice rows, ten cull rows and the
+    /// receiver camera's sample grid/jitter row, followed by portal sight queries.
     /// Draw bounds and mesh level metadata are retained in the shared mesh region.</summary>
     public const string MeshOcclusionCandidates = "sdfMeshOcclusionCandidates";
     /// <summary>The raster pass's per-draw retained state: visibility, previous level, mesh reference identity and
-    /// whether this frame's box cull kept the draw. The level survives buffer growth and resets on a mesh change.</summary>
+    /// whether this frame's box/receiver classification kept the draw. The level survives buffer growth and resets on a mesh change.</summary>
     public const string MeshOcclusionVisibleWritten = "sdfMeshOcclusionVisibleRW";
     /// <summary>The mesh pass occlusion's indirect draws: the first phase's records, then the second's, each
     /// <c>GpuDrawIndirectCommand</c> records long.</summary>
     public const string MeshOcclusionDrawsWritten = "sdfMeshOcclusionDrawsRW";
     /// <summary>The indirect commands read by Vulkan vertex stages through their draw index, including the fixed-count fallback.</summary>
     public const string MeshIndirectCommands = "sdfMeshIndirectCommands";
-    /// <summary>The mesh pass occlusion's draw counts: the first phase's, then the second's.</summary>
+    /// <summary>The raster selection's counts: early entry, late entry, solid exit, thin exit and optical,
+    /// followed by portal sight verdicts.</summary>
     public const string MeshOcclusionCountsWritten = "sdfMeshOcclusionCountsRW";
     /// <summary>The mesh pass occlusion's depth pyramid: from level one up, each texel the farthest forward depth of its
-    /// block of the first phase's target, positive infinity where any pixel of it is uncovered.</summary>
+    /// block of the first phase's target, positive infinity where any pixel of it is uncovered. A far cascade appends
+    /// the current receiver occupancy hierarchy, whose parents OR their children.</summary>
     public const string MeshOcclusionDepthWritten = "sdfMeshOcclusionDepthRW";
     /// <summary>The name of the mesh bake's interface (<see cref="MeshBake"/>).</summary>
     public const string MeshBakeInterfaceName = "sdf-mesh-bake";

@@ -168,13 +168,16 @@ and recording. The remaining GPU and routed-world investigations are:
 
 R2 extends `SdfMeshOcclusion`'s existing indirect mechanism to opaque, every
 shadow cascade and glass. Its compute kernel selects bounds and mesh levels
-from the shared retained mesh records; a pass uploads only 224 bytes of
-controls. Each pass retains visibility, level and mesh identity per draw on
+from the shared retained mesh records; a pass uploads constant-sized controls
+and bounded portal sight queries. Each pass retains visibility, level and mesh identity per draw on
 the GPU, preserving the 1/1.1 display-pixel band and resetting level history
 when the mesh changes or a settled capture holds the frame. Buffer growth
 copies that history. Opaque occlusion keeps its early/late phases; glass uses
-one. A cascade selects once into entry, solid-exit and thin-exit argument
-phases, recording one counted call per phase. CPU `Choose` and per-draw recording
+one. Cascades reserve early/late entry, solid-exit, thin-exit and optional optical
+argument phases. The far cascade's receiver mask and two-phase light-space depth
+share this selector; exit and optical lists never use entry-depth visibility
+([contract](../../.claude/skills/rendering/SKILL.md#far-cascade-caster-selection)).
+CPU `Choose` and per-draw recording
 are removed. Vulkan's native-count fallback reads the same initialized
 argument slots through `vkCmdDrawIndirect`; `DrawIndex` reads their identities
 without the optional first-instance feature. Hardware observations are

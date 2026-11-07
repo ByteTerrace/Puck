@@ -50,7 +50,8 @@ public static class MotionRun {
 
         try {
             using var launch = WorldLaunch.Admit(request: new WorldLaunchRequest(Artifact: request.Artifact, Step: "motion") {
-                Arguments = ((request.CacheDirectory is { } cacheDirectory) ? ["--cache-dir", cacheDirectory] : []),
+                // Keep a long capture run inspectable through the same local Operator door as sweep and routes.
+                Arguments = ["--control", .. ((request.CacheDirectory is { } cacheDirectory) ? new[] { "--cache-dir", cacheDirectory } : [])],
                 Backend = request.Backend,
                 ExitAfterSeconds = WorldLaunch.Backstop(deadline: request.Deadline),
                 Shape = WorldShape.Document,

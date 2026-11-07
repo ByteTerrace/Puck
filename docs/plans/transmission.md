@@ -565,8 +565,9 @@ and the Deck. The plan:
 
 ### V5 caster culling and the two-phase update
 
-([visibility](visibility.md#v5-multi-view-and-shadow-work).) The L1 and B1
-pass may run in two phases as the mesh pass does: phase one draws the
+([visibility](visibility.md#v5-multi-view-and-shadow-work).) The far cascade's
+entry already runs in two phases through `SdfMeshOcclusion`; carry B1 through
+that same path when implementing transmission. Phase one draws the
 previous frame's visible set, the light-space occlusion kernel builds a
 pyramid of L1 and tests the kept boxes, phase two draws the newly visible.
 The peel runs **once, after L1 and B1 are final, over every box-kept draw**.

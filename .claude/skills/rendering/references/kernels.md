@@ -181,8 +181,12 @@ compiles only its own stage over the pixel the entry gathers
 (`sdfSurfaceStage`, `sdfViewsStage`). Every raster pass first dispatches
 `sdf-mesh-occlusion.comp` for box culling and level choice from retained mesh
 metadata. Opaque occlusion retains its two phases; glass uses one. Each shadow
-cascade selects once into entry and solid/thin exit phases, with one counted
-call per phase. Per-pass GPU state retains level and mesh identity across frames and
+cascade selects into entry and solid/thin exit phases, with one counted
+call per phase. The far cascade first reprojects current camera receivers into
+an occupancy hierarchy, then uses two entry phases and the light-space depth
+pyramid. Exit and optical phases read only box/receiver classification and run
+after entry is final; see [caster selection](../SKILL.md#far-cascade-caster-selection).
+Per-pass GPU state retains level and mesh identity across frames and
 buffer growth. The raster passes draw with their own
 `sdf-mesh` interface, one set per frame slot from a pool of their own, push the
 indirect command identity (`SdfKernelInterfaces.MeshPushedIndex`), and skip a frame with no mesh
