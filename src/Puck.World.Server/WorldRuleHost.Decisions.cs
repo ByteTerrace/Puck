@@ -488,11 +488,14 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
 
     private readonly List<WorldMutation> m_proposedRows = [];
 
-    // Whether an option's pair is still the same two live bodies in the population the firing's commit installs. Until
-    // the commit no arm has run, and the only queued arm that retires a body when it lands is a document row, so the
-    // rows the firing queued so far are composed against the document it proposes, as its preflight composes them, and
-    // the population's structural reconcile is asked whether it keeps each body. A composition that refuses keeps
-    // nothing: the preflight composes the same rows and refuses the firing.
+    // Whether an option's pair is still the same two live bodies in the population a reconcile of what the firing
+    // proposes produces. Until the commit no arm has run, and the only queued arm that changes the population when it
+    // lands is a document row, so the rows the firing queued so far are composed against the document it proposes, as
+    // its preflight composes them. The population then forecasts the reconcile the install of that unit runs (the
+    // structural pass when the unit rebuilds the population, then the cell-driven counts read from the arena the scope
+    // holds open), through the same code the install runs. With no row queued, the counts settle from the firing's
+    // writes at the tick's publication, and the forecast answers as if they settled at the commit. A composition that
+    // refuses keeps nothing: the preflight composes the same rows and refuses the firing.
     private bool ProposedPairLive(in EffectFiring firing, ReadOnlySpan<IRuleEffect> queued, int key, int keyGeneration, int candidate, int candidateGeneration) {
         if (
             !DecisionBodyLive(generation: keyGeneration, index: key) ||
@@ -508,23 +511,41 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
             }
         }
 
-        if (m_proposedRows.Count == 0) {
-            return true;
-        }
-
         try {
-            return (WorldDocument.TryCompose(
-                candidate: out var proposed,
-                current: Host.MaterializeArena(),
-                engineTick: firing.EngineTick,
-                evictedKey: out _,
-                instanceIdentity: Host.InstanceIdentity,
-                mutation: DocumentUnit(rows: m_proposedRows),
-                reason: out _,
-                tick: firing.Tick
-            ) &&
-                Host.Population.KeepsInhabitant(definition: proposed, index: key) &&
-                Host.Population.KeepsInhabitant(definition: proposed, index: candidate));
+            var proposed = Host.Document.Definition;
+            var structural = false;
+
+            if (m_proposedRows.Count != 0) {
+                var current = Host.MaterializeArena();
+                var unit = DocumentUnit(rows: m_proposedRows);
+
+                if (!WorldDocument.TryCompose(
+                    candidate: out proposed,
+                    current: current,
+                    engineTick: firing.EngineTick,
+                    evictedKey: out _,
+                    instanceIdentity: Host.InstanceIdentity,
+                    mutation: unit,
+                    reason: out _,
+                    tick: firing.Tick
+                )) {
+                    return false;
+                }
+
+                structural = Host.Document.RebuildsPopulation(
+                    candidate: proposed,
+                    mutation: unit,
+                    previous: current
+                );
+            }
+
+            return Host.Population.ReconcileKeeps(
+                arena: Host.Arena,
+                bodies: [key, candidate],
+                definition: proposed,
+                structural: structural,
+                tick: Host.NextInputTick
+            );
         } finally {
             m_proposedRows.Clear();
         }

@@ -416,16 +416,47 @@ transfer runs between ticks, when no proposal exists and no scope is open.
 
 A decision's liveness recheck between its common and option effects is the
 `IFiringContinuation`'s `Next`, handed the arms the common effects queued
-(only the branches they took), and it reads the **proposed** population:
-`WorldRuleHost`'s `ProposedPairLive` composes the queued document rows against
-the proposed document, as the preflight does, and asks
-`WorldPopulation.KeepsInhabitant`, which shares its retire rules
-(`TryFindBindable`, `LiteralInhabitants`, `LowestRetirableInhabitant`) with
-`ReconcileInhabitants`, whether the install keeps each body of the pair. When
-it fails, the option effects are not fired and the common effects stand; the
-firing is not refused for it. It stops at what the install's structural
-reconcile decides: an inhabitant whose count is bound to a cell follows that
-cell, which the cell-driven reconcile reads, so it is kept here.
+(only the branches they took), and it reads the **proposed** population.
+
+**The invariant.** The option runs only when its pair is the same two active
+bodies in the population that the install's reconcile produces from the
+firing's proposal: the document the queued rows compose to, and the arena as
+the common effects leave it.
+
+**What enforces it.** The reconcile has one implementation
+(`WorldPopulation.Reconcile`): the structural pass (retire the unbindable,
+grow or shrink the literal counts), the cell-driven counts and the census
+re-clamp (`SetSimulatedCount`) are generic over a slot table. Every install
+runs them over the live table (boot and `RebuildPopulation` through
+`ReconcileInstall`, a state write through `ReconcileInhabitCounts`, the
+`world.population` verb through `SetSimulatedCount`). `ReconcileKeeps` runs the
+same code over a scratch copy that records each retire and admit and changes
+nothing else. Whether the structural pass runs is `WorldDocument.RebuildsPopulation`,
+the predicate `InstallPrepared` uses too. `ProposedPairLive` composes the queued
+document rows against the proposed document, as the preflight does, and asks
+`ReconcileKeeps` about the pair, reading the cell-driven counts from the arena
+with the firing's scope open. A retire rule added to the reconcile is a rule
+the forecast answers from. Inhabitant kits resolve against the reconciled
+document's own kit rows, which an install compiles its kit table from, so a
+proposed kit edit is forecast as installed. When the check fails, the option
+effects are not fired and the common effects stand; the firing is not refused
+for it. The witnesses are W11's `liveness-*` blocks and
+`ReconcileForecastLawTests` for the census re-clamp, which a test block cannot
+set up because no admitted scheduled verb seats census bodies.
+
+**Where it stops.** The forecast reads the proposal before the option's own
+effects, so an option whose own write zeroes a count cell or whose own row
+removes a placement retires its pair as its own consequence. It answers as
+if the cell-driven counts settled at the firing's commit. A unit that rebuilds
+the population settles them there, and a value write settles them at its install. A
+firing with no row, or a full install that does not rebuild the population,
+settles them at the tick's publication: a later firing in the same tick that
+restores the cell keeps a body this firing judged retired. The decision
+judges by its own proposal and no later firing changes that. Custody holds
+(`WorldPopulation.Holds`) are read as they stand; no firing arm changes them.
+The forecast reads no queued arm's declared sources: document rows carry
+literal identities. So the late read of arm sources (see "Differs from the
+design" under step 7) does not reach this path.
 
 ### Aggregation to the step
 
@@ -583,7 +614,7 @@ read: `FlockLawTests.AFaultingAffinityIsACountedFailureThatWeighsNothing`) and L
 
 ## Implementation steps
 
-Steps 8 and 9 remain (steps 1 to 7 have landed. Step 1, the representation: `Outcome`, `Fact`, `Resolved<T>`, `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` are in `Puck.State`, `Fact` and `Resolved<T>` carry every operand read and key resolution, and the witnesses exist. Step 2, addresses as program: the lowering above, `IRuleOperand.Addresses` and `Read(reader, keys)`, and the pricing below. Step 3, the interpreter and the gate: `Run` answers an `Outcome`; `RuleExpressions.Evaluate(ref EvaluationFrame, ...)` and `EvaluateDetached` are the entries; `RuleEvaluation.Decide` answers a `Verdict`, folding the text conjuncts in, with `RuleEvaluation.ReadSource` beside it. Step 4, verdicts at every deciding place: the register is gone, and a rule's judgement, a group trigger and its fixpoint pass, a decision, an interaction and a search step each read the `Outcome`, `Verdict`, `BindingsResult`, `RuleOutcome` or `JudgeOutcome` they were handed; every evaluator-side effect answers a `Step` of `Faulted`, `Refused` or `Done`. Step 5, journal participants: `IJournalParticipant` and the journal's participant records, which `StateArena.Rewind` dispatches; `RuleLatch` and a decision binding write through them, and a firing closes only through `RuleEvaluator.Commit`, switching on `FiringDecision`. Step 6, arms read once: an arm declares `IRuleEffect.Sources` (a key as an index, an expression program, an operand), the evaluator reads them with the firing and hands the values through `EffectFiring.Values`, the same at the preflight and at the delivery; a source that faults is a faulted firing; `IRuleKey.ResolveForWrite` answers a typed `WriteKey`; the input resynchronisation is `TryPrepareBodies`/`TryPrepareAll` before the arena commit and `ApplyPreparedBodies`/`ApplyPreparedAll` after it. Step 6b, from the step 5 review: a decision's common and option effects are one firing under one scope with the binding, a group rewind writes its edge bit only when it landed, every latch lifecycle writer takes the journal and refuses a scope, and a pruned rule gives its ordinal back. Step 7, the decision's remaining faults: a decision reads every gate, option gate and score before it writes its binding, so a fault while gathering leaves the binding untouched, interrupt edge included; its no-choice effects are one firing with the binding they clear (W11's no-choice cases); and the liveness step between the common and option effects reads the population the commit installs, as [Prepared arms and their targets](#prepared-arms-and-their-targets) describes. Not built: arms carrying the population generation of a body target, and the host scratch inside the evaluator's proposal. Differs from the design: a queued arm's declared sources are read in the preflight loop (`RuleEvaluator.Effects.cs`, the loop over the firing's queue), after every reversible effect of the firing has run, where the design reads each source just before its arm, so `emitCue(key: x); x = 5` reads 5; choose which the contract is and make the other match. Unmeasured: `WorldRuleHost.ProposedPairLive` materializes the arena when the common effects queued a document row and the option has a neighbour candidate; an effects-heavy headless run's allocations decide whether that matters). Each is a vertically coherent slice: one producer and every consumer
+Steps 8 and 9 remain (steps 1 to 7 have landed. Step 1, the representation: `Outcome`, `Fact`, `Resolved<T>`, `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` are in `Puck.State`, `Fact` and `Resolved<T>` carry every operand read and key resolution, and the witnesses exist. Step 2, addresses as program: the lowering above, `IRuleOperand.Addresses` and `Read(reader, keys)`, and the pricing below. Step 3, the interpreter and the gate: `Run` answers an `Outcome`; `RuleExpressions.Evaluate(ref EvaluationFrame, ...)` and `EvaluateDetached` are the entries; `RuleEvaluation.Decide` answers a `Verdict`, folding the text conjuncts in, with `RuleEvaluation.ReadSource` beside it. Step 4, verdicts at every deciding place: the register is gone, and a rule's judgement, a group trigger and its fixpoint pass, a decision, an interaction and a search step each read the `Outcome`, `Verdict`, `BindingsResult`, `RuleOutcome` or `JudgeOutcome` they were handed; every evaluator-side effect answers a `Step` of `Faulted`, `Refused` or `Done`. Step 5, journal participants: `IJournalParticipant` and the journal's participant records, which `StateArena.Rewind` dispatches; `RuleLatch` and a decision binding write through them, and a firing closes only through `RuleEvaluator.Commit`, switching on `FiringDecision`. Step 6, arms read once: an arm declares `IRuleEffect.Sources` (a key as an index, an expression program, an operand), the evaluator reads them with the firing and hands the values through `EffectFiring.Values`, the same at the preflight and at the delivery; a source that faults is a faulted firing; `IRuleKey.ResolveForWrite` answers a typed `WriteKey`; the input resynchronisation is `TryPrepareBodies`/`TryPrepareAll` before the arena commit and `ApplyPreparedBodies`/`ApplyPreparedAll` after it. Step 6b, from the step 5 review: a decision's common and option effects are one firing under one scope with the binding, a group rewind writes its edge bit only when it landed, every latch lifecycle writer takes the journal and refuses a scope, and a pruned rule gives its ordinal back. Step 7, the decision's remaining faults: a decision reads every gate, option gate and score before it writes its binding, so a fault while gathering leaves the binding untouched, interrupt edge included; its no-choice effects are one firing with the binding they clear (W11's no-choice cases); and the liveness step between the common and option effects reads the population the commit installs, as [Prepared arms and their targets](#prepared-arms-and-their-targets) describes. Not built: arms carrying the population generation of a body target, and the host scratch inside the evaluator's proposal. Differs from the design: a queued arm's declared sources are read in the preflight loop (`RuleEvaluator.Effects.cs`, the loop over the firing's queue), after every reversible effect of the firing has run, where the design reads each source just before its arm, so `emitCue(key: x); x = 5` reads 5; choose which the contract is and make the other match. Unmeasured: `WorldRuleHost.ProposedPairLive` materializes the arena when the common effects queued a document row and the option has a neighbour candidate, and every option with a candidate walks the placements once for the cell-driven forecast (the scratch slot table is copied only when the forecast retires or admits a body); an effects-heavy headless run's allocations and decision work decide whether that matters). Each is a vertically coherent slice: one producer and every consumer
 it affects land together, every bridge is named with the step that removes
 it, and the check proves what the step establishes. Each step builds what it
 touches (`dotnet build <project> -c Release -m:2 -nodeReuse:false`) and lands
