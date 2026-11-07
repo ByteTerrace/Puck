@@ -15,6 +15,13 @@ and the live semantics fingerprint determine identity. Author names are reportin
 metadata. Canonical documents retain a flat dependency-ordered value graph, so
 common expressions do not expand exponentially when serialized.
 
+`WorldShadeLowering` binds each runtime argument through an immutable typed view;
+integer expectations cross `let`, `select`, conditional and function bindings.
+One source argument may supply float and uint views without changing either slot.
+Admission labels live parameters by their output uses, ignoring declaration order
+and dead slots; symmetric uses order their data consistently. Raw definitions
+cross the same null, type, shape and checked-arithmetic guards in `Compile`.
+
 The canonical SSA receives deterministic register allocation into the named
 set bounded by `MaxRegisters`. Evicted pure values are rematerialized from their
 dependencies; admission prices that final instruction stream. Operands held by
@@ -64,8 +71,9 @@ Costs are checked sums over allocated instructions. `SdfShadeCost.Shape` charges
 convex vertices, ellipse bisection, and every sweep strand/sample/refinement;
 the ellipse and sweep loop bounds are generated from the evaluator constants.
 `PixelWork` includes the bounded light walk, default phases and fixed stage work.
-The compile-time proof beside `MaxWork` covers `MaxOps` and a whole maximum-cost
-8x8 group, including both glass interfaces. This admission bound is provisional;
+`MaxOps` bounds allocated instructions separately from weighted work. Admission
+checks the allocated phases' `PixelWork` at `MaxLights` for a complete 8x8 group,
+including both glass interfaces, against `MaxWork`. This admission bound is provisional;
 it is not a measured timeout margin. `SdfShadeDispatch.Plan` partitions the full
 padded extent into whole groups under that bound and the backend group-count
 limit. Its `Record` door pushes each job's first group; both recorders use it.
@@ -85,10 +93,10 @@ demands every side. `sdfMaterialShadowDemand` drives cascade queries, including
 the exactly opposite face for every-side demand. `sdfLightVisibility` keeps an
 unqueried authored slot at zero even during a shadow handoff. `world.budget` reports admitted program identities,
 author names, static cost and demand. `shade-cost` displays the sum of explicit
-phase work over `MaxOps`; `shade-tier` distinguishes interpreted pixels from
+phase work over `MaxPhaseWork`; `shade-tier` distinguishes interpreted pixels from
 the engine path. There are no specialized or quarantined kernels yet.
 
-Check changes with the ten `shade-*` spelling pairs and `ShadeLoweringTests` in
+Check changes with the `shade-*` spelling pairs and `ShadeLoweringTests` in
 `Puck.World.Transpiler.Tests`, plus `puck test` of those authored admission worlds.
 The pairs compare canonical documents, program words, identities and costs.
 `puck shaders generate --check` checks generated-table drift. CPU shader
@@ -136,3 +144,7 @@ evaluates the admitted primitive, and outside its bounding box it returns the
 positive box lower bound, as the paint path skips that exterior. It is not an
 exact outside-distance query. Its op records a footprint read, packs the bounds
 with the descriptor, and charges the full helper even when the early-out wins.
+`SdfPaintShape.Of` enforces primitive admission for both paints and shade shapes;
+captured scale and primitive rotation both reach their point evaluation. Shade
+definitions normalize through `SdfShadeShape.Canonicalize`, including convex
+profile start and unused controls, before their canonical document is written.

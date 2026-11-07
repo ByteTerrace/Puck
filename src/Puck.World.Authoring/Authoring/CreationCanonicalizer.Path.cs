@@ -6,12 +6,7 @@ namespace Puck.World.Authoring;
 public static partial class CreationCanonicalizer {
     // A convex profile lists its vertices from SdfPrismProfile.CanonicalStart: the same polygon from another start
     // vertex is one profile and one identity.
-    private static SdfPrismProfile? NormalizeProfile(SdfPrismProfile? profile) {
-        if ((profile is not { Kind: SdfPrismProfileKind.Convex, Vertices: { Count: > 0 } vertices }) || (SdfPrismProfile.CanonicalStart(vertices: vertices) is not (> 0 and var start))) {
-            return profile;
-        }
-        return profile with { Vertices = [.. vertices.Skip(count: start), .. vertices.Take(count: start)] };
-    }
+    private static SdfPrismProfile? NormalizeProfile(SdfPrismProfile? profile) => profile?.Canonicalize();
     private static void ValidatePathProfile(ShapeDocument shape, int index, List<DocumentValidationError> errors) {
         if (shape.Profile?.Kind != SdfPrismProfileKind.Path) { return; }
         if (((shape.Lift ?? SdfLift.Extrude) != SdfLift.Extrude) || ((shape.Rounding ?? 0f) != 0f) ||

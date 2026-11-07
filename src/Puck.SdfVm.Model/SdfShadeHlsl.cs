@@ -16,6 +16,7 @@ public static partial class SdfShadeHlsl {
         text.Append(value: "// Op semantics and helper content: ").Append(value: SdfShadeOps.Fingerprint).Append(value: '\n');
         text.Append(value: "#define SDF_SHADE_MAX_REGISTERS ").Append(value: SdfShadeProgram.MaxRegisters).Append(value: "u\n");
         text.Append(value: "#define SDF_SHADE_MAX_OPS ").Append(value: SdfShadeProgram.MaxOps).Append(value: "u\n");
+        text.Append("#define SDF_SHADE_MAX_PHASE_WORK ").Append(SdfShadeProgram.MaxPhaseWork).Append("u\n");
         text.Append("#define SDF_SHADE_READ_PAINT ").Append((uint)SdfShadeReads.PaintCoverage).Append("u\n");
         foreach (var op in SdfShadeOps.Table) { text.Append(value: "#define SDF_SHADE_").Append(value: op.Op.ToString().ToUpperInvariant()).Append(value: ' ').Append(value: ((uint)op.Op)).Append(value: "u\n"); }
         text.Append(value: "struct SdfShadeStamp { ");
@@ -114,7 +115,7 @@ void sdfShadeInterpret(uint2 slice, uint2 parameters, uint phase, SdfShadeStamp 
                 SdfShadeOp.Constant => Decode($"sdfShadeRead(slice, {instruction.Immediate}u)", result.Type),
                 SdfShadeOp.Parameter => Decode($"sdfShadeRead(parameters, {instruction.Immediate}u)", result.Type),
                 SdfShadeOp.Input => Decode($"stamp.i{instruction.Immediate}", result.Type),
-                SdfShadeOp.Component => $"{args[0]}[{instruction.Immediate}u]",
+                SdfShadeOp.Component => SdfShadeOps.Width(instruction.Operands[0].Type) == 1 ? args[0] : $"{args[0]}[{instruction.Immediate}u]",
                 _ => $"{Function(op: instruction.Op, types: instruction.Operands.Select(selector: a => a.Type).ToArray())}(slice, stamp, {instruction.Immediate}u, {string.Join(", ", args)})",
             };
 
@@ -159,19 +160,20 @@ precise float3 sdfShadeTilt(float3 normal, float3 slope, float angle) {
     return magnitude > 0.0 ? normalize(normal * cos(theta) + (tangent / magnitude) * sin(theta)) : normal;
 }
 precise float sdfShadeShape(uint2 slice, uint relative, float3 position, float footprint) {
-    if (relative > slice.y || slice.y - relative < 6u) return 0.0;
+    if (relative > slice.y || slice.y - relative < 7u) return 0.0;
     uint4 header = sdfShadeRead(slice, relative);
     precise float4 data0 = asfloat(sdfShadeRead(slice, relative + 1u));
     precise float4 data1 = asfloat(sdfShadeRead(slice, relative + 2u));
     precise float4 scale = asfloat(sdfShadeRead(slice, relative + 3u));
     precise float3 center = asfloat(sdfShadeRead(slice, relative + 4u)).xyz;
     precise float3 extent = asfloat(sdfShadeRead(slice, relative + 5u)).xyz;
+    precise float4 rotation = asfloat(sdfShadeRead(slice, relative + 6u));
     // Like paints, only the footprint neighbourhood needs the expensive exact field. Outside the bound the
     // positive box lower bound preserves coverage; shape is a coverage-distance op, not a geometry query.
     precise float3 outside = abs(position - center) - extent;
     precise float bound = max(outside.x, max(outside.y, outside.z));
     if (header.z == 0u && bound > max(footprint, 0.0)) return bound;
-    uint table = relative + 6u;
+    uint table = relative + 7u;
     uint vectors = (header.y + 3u) / 4u;
     if (header.y > SDF_MAX_CONVEX_VERTICES * 2u || table > slice.y || vectors > slice.y - table || !sdfProgramRange(slice.x, slice.y, 1u)) return 0.0;
     // The existing helpers receive an absolute address only after the complete owned side table passes this door.
@@ -180,7 +182,7 @@ precise float sdfShadeShape(uint2 slice, uint relative, float3 position, float f
         uint reference = asuint(data0.x);
         data0.x = asfloat(((slice.x + table) << SDF_CONVEX_COUNT_BITS) | (reference & ((1u << SDF_CONVEX_COUNT_BITS) - 1u)));
     }
-    return evaluateShape(header.x, position / scale.xyz, data0, data1) * scale.w;
+    return evaluateShape(header.x, rotatePointByInverseQuaternion(position / scale.xyz, rotation), data0, data1) * scale.w;
 }
 // Called by the stage for every assigned output, using its base/default value and declared domain.
 precise float4 sdfShadeSanitize(float4 value, float4 fallback, float4 low, float4 high) {

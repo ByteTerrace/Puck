@@ -1,0 +1,9 @@
+// Equivalent authored shading: shade-parameter-context.
+schema: "puck.world.definition.v1"
+documentId: "shade-pair"
+shade template program(a, b) { surface { roughness: a * (b + clock) } }
+prototypes { prototype "p" { document {
+  schema: "puck.creation.v1"
+  palette [{ color: "#808080", shade: program(2, 3) }]
+  shape Box "box" { scale [1, 1, 1] }
+} } }

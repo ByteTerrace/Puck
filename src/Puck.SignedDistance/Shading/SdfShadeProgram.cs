@@ -6,8 +6,10 @@ namespace Puck.SignedDistance;
 /// <summary>A canonical, admitted shade program. Only its expression compiler can construct one; callers cannot
 /// supply op words, cost, flags, identity or unchecked addresses. Values are presentation-only.</summary>
 public sealed partial class SdfShadeProgram {
-    /// <summary>The maximum weighted instruction work across the three explicit phases.</summary>
-    public const uint MaxOps = 131072;
+    /// <summary>The maximum allocated instruction count in one phase, including rematerialization.</summary>
+    public const uint MaxOps = 4096;
+    /// <summary>The maximum weighted work across explicit phases. Dispatch overhead and helper loops are work, not instructions.</summary>
+    public const uint MaxPhaseWork = (uint)(MaxWork / 128UL);
     /// <summary>The static register-file capacity per phase.</summary>
     public const int MaxRegisters = 16;
     /// <summary>The maximum number of runtime slots; slots are data, not simultaneously live registers.</summary>
@@ -23,9 +25,8 @@ public sealed partial class SdfShadeProgram {
     /// <summary>A provisional CPU admission bound. Step 5 measures the dispatch throughput and sets its margin.</summary>
     public const ulong MaxWork = (1UL << 32);
 
-    // Compile-time proof: even a whole 8x8 group at the largest admitted light walk fits. A false inequality divides by zero.
-    private const int WorkBoundProof = (1 / (((MaxRegisters > 0) && ((MaxRegisters & (MaxRegisters - 1)) == 0) && (MaxOps <= MaxWork) &&
-        ((128UL * ((((MaxOps * (MaxLights + 2UL)) + (MaxLights * DefaultLightWork)) + DefaultComposeWork) + EngineWork)) <= MaxWork)) ? 1 : 0));
+    // Register selectors use a mask. Work admission prices the actual phases at the maximum light walk.
+    private const int RegisterBoundProof = 1 / ((MaxRegisters > 0 && (MaxRegisters & (MaxRegisters - 1)) == 0) ? 1 : 0);
 
     private readonly uint[] m_words;
     private readonly uint[] m_parameters;
@@ -33,7 +34,7 @@ public sealed partial class SdfShadeProgram {
 
     private SdfShadeProgram(SdfShadeDefinition definition, uint[] words, uint[] parameters, SdfShadeType[] layout,
         SdfShadeInstruction[][] phases, SdfShadeBinding[] outputs, uint[] costs, SdfShadeReads reads, SdfShadeDemand demand) {
-        _ = WorkBoundProof;
+        _ = RegisterBoundProof;
         Name = definition.Name; Definition = definition; m_words = words; m_parameters = parameters;
         ParameterLayout = Array.AsReadOnly(array: layout);
         Phases = Array.AsReadOnly(array: phases.Select(selector: p => Array.AsReadOnly(array: p)).ToArray());
@@ -89,7 +90,10 @@ public sealed partial class SdfShadeProgram {
     public uint ReadWord(uint relativeWord) => ((relativeWord < m_words.Length) ? m_words[relativeWord] : 0u);
     /// <summary>Compiles expressions to canonical typed SSA, eliminates dead expressions, folds exact constants,
     /// interns common expressions and prices every live instruction before exposing a program.</summary>
-    public static SdfShadeProgram Compile(SdfShadeDefinition definition) => new Compiler(source: definition).Compile();
+    public static SdfShadeProgram Compile(SdfShadeDefinition definition) {
+        try { return new Compiler(source: definition).Compile(); }
+        catch (OverflowException) { throw new SdfShadeException("PUCK129", "Shade cost or structural arithmetic overflowed."); }
+    }
 }
 /// <summary>A typed output assignment to one phase.</summary>
 public sealed record SdfShadeBinding(SdfShadePhase Phase, string Name, SdfShadeOperand Value);

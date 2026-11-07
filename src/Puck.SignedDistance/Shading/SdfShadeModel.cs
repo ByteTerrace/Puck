@@ -32,6 +32,17 @@ public sealed record SdfShadeShape(SdfSolidPrimitive Type, float X = 1f, float Y
     float Rounding = 0f, float Chamfer = 0f, float Exponent = SdfProgramBuilder.MinSuperellipsoidExponent,
     SdfSweepParameters? Curve = null) {
     internal SdfPaintShape Capture() => SdfPaintShape.Of(Type, new(x: X, y: Y, z: Z), Taper, Profile, Lift, Rounding, Chamfer, Exponent, Curve);
+    internal SdfShadeShape Canonicalize() {
+        // Validate authored controls before discarding fields the selected primitive does not read.
+        _ = Capture();
+        var scale = SdfSolidGeometry.EffectiveScale(new(X, Y, Z));
+        return this with {
+            X = scale.X, Y = scale.Y, Z = scale.Z,
+            Taper = Type == SdfSolidPrimitive.Prism && Profile is null or { Kind: SdfPrismProfileKind.Trapezoid } ? Taper : 0.5f,
+            Exponent = Type == SdfSolidPrimitive.Superellipsoid ? Exponent : SdfProgramBuilder.MinSuperellipsoidExponent,
+            Profile = Profile?.Canonicalize(),
+        };
+    }
 }
 /// <summary>A runtime slot's type and initial data. Names bind source references and do not enter program identity.</summary>
 public sealed record SdfShadeParameter(string Name, SdfShadeType Type, IReadOnlyList<uint> Bits);

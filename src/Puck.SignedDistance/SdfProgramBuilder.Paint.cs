@@ -12,6 +12,10 @@ public sealed partial class SdfProgramBuilder {
             .Where(predicate: static instruction => (instruction.Op == SdfOp.Scale))
             .Aggregate(seed: Vector3.One, func: static (product, instruction) => (product * new Vector3(x: instruction.Data0.X, y: instruction.Data0.Y, z: instruction.Data0.Z)));
         var table = new List<float>();
+        var rotation = Quaternion.Identity;
+        foreach (var instruction in m_instructions.Where(static instruction => instruction.Op == SdfOp.Rotate)) {
+            rotation = Quaternion.Concatenate(new(instruction.Data0.X, instruction.Data0.Y, instruction.Data0.Z, instruction.Data0.W), rotation);
+        }
 
         foreach (var (_, vertices) in m_convexPolygonProfiles) {
             foreach (var vertex in vertices) {
@@ -33,6 +37,6 @@ public sealed partial class SdfProgramBuilder {
             Scale: scale,
             Table: table.AsReadOnly(),
             Type: (SdfShapeType)shape.Shape
-        );
+        ) { Rotation = rotation };
     }
 }
