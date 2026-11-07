@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <AssemblyName>Puck.Confinement</AssemblyName>
-        <Description>Directory confinement by handle: every name below a held directory resolves relative to it, one component at a time, refusing links instead of following them, and reads, writes, renames, removals, locks and holds act on handles rather than on a path checked earlier. Depends on the base class library alone. Windows and Linux x64; other platforms refuse.</Description>
+        <Description>Directory confinement by handle: every name below a held directory resolves relative to it, one component at a time, refusing links instead of following them, and reads, writes, renames, removals, locks and holds act on handles rather than on a path checked earlier. AtomicFile provides flushed temp-then-rename replacement for both the launcher stub and updater. Depends on the base class library alone. Windows and Linux x64; other platforms refuse.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.Confinement</PackageId>
         <PackageTags>confinement;file-system;handles;security;symbolic-links</PackageTags>

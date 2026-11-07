@@ -12,7 +12,7 @@ public static class WasmBuildCommand {
         foreach (var build in builds) {
             var bytes = build.GetImage(workspace);
             foreach (var output in build.Outputs) {
-                Puck.Abstractions.AtomicFile.WriteAllBytes(bytes: bytes, path: Path.Combine(root, output));
+                Puck.Confinement.AtomicFile.WriteAllBytes(bytes: bytes, path: Path.Combine(root, output));
                 Console.WriteLine($"{output} {Puck.Assets.ContentPin.Compute(bytes)}");
             }
         }

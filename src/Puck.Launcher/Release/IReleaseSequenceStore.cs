@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using Puck.Abstractions;
 using Puck.Assets;
 using Puck.Attestation;
@@ -18,14 +19,14 @@ namespace Puck.Launcher.Release;
 public interface IReleaseSequenceStore {
     /// <summary>Atomically reserves an install, or resumes the same epoch, sequence and full manifest pin.
     /// An ordinary committed mark or a different manifest never grants recovery.</summary>
-    bool TryReserve(ReplayCommitRequirement requirement, ContentPin manifestPin);
+    ReleaseDecision TryReserve(ReplayCommitRequirement requirement, ContentPin manifestPin);
     /// <summary>Whether this exact install reservation is still the current mark for its identity.</summary>
     bool IsReserved(ReplayCommitRequirement requirement, ContentPin manifestPin);
     /// <summary>Atomically compares and advances the stored mark to <paramref name="requirement"/>. A preceding
     /// <see cref="IsAcceptable"/> is only a preview: another verifier may have committed since then.</summary>
     /// <param name="requirement">The replay-commit requirement to record.</param>
-    /// <returns>True only when this call advanced the mark; false for a stale requirement or malformed stored state.</returns>
-    bool TryAdvance(ReplayCommitRequirement requirement);
+    /// <returns>Accepted only when this call advanced the mark; terminal for stale or malformed state, transient for lease contention.</returns>
+    ReleaseDecision TryAdvance(ReplayCommitRequirement requirement);
     /// <summary>Compares <paramref name="requirement"/> against the stored mark for its <c>(domain, subject)</c>
     /// pair without writing anything.</summary>
     /// <param name="requirement">The replay-commit requirement to check.</param>
@@ -48,24 +49,24 @@ public sealed class InMemoryReleaseSequenceStore : IReleaseSequenceStore {
     }
 
     /// <inheritdoc/>
-    public bool TryReserve(ReplayCommitRequirement requirement, ContentPin manifestPin) {
+    public ReleaseDecision TryReserve(ReplayCommitRequirement requirement, ContentPin manifestPin) {
         lock (m_gate) {
-            if (IsReserved(requirement: requirement, manifestPin: manifestPin)) { return true; }
-            if (!IsAcceptable(requirement: requirement)) { return false; }
+            if (IsReserved(requirement: requirement, manifestPin: manifestPin)) { return ReleaseDecision.Accepted; }
+            if (!IsAcceptable(requirement: requirement)) { return ReleaseDecision.TerminalRefusal; }
             m_marks[(requirement.Domain, requirement.Subject)] = (requirement.EpochStartUnixSeconds, requirement.Sequence, manifestPin);
-            return true;
+            return ReleaseDecision.Accepted;
         }
     }
 
     /// <inheritdoc/>
-    public bool TryAdvance(ReplayCommitRequirement requirement) {
+    public ReleaseDecision TryAdvance(ReplayCommitRequirement requirement) {
         lock (m_gate) {
             if (!IsAcceptable(requirement: requirement)) {
-                return false;
+                return ReleaseDecision.TerminalRefusal;
             }
 
             m_marks[(requirement.Domain, requirement.Subject)] = (requirement.EpochStartUnixSeconds, requirement.Sequence, null);
-            return true;
+            return ReleaseDecision.Accepted;
         }
     }
     /// <inheritdoc/>
@@ -143,10 +144,10 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
     }
 
     /// <inheritdoc/>
-    public bool TryAdvance(ReplayCommitRequirement requirement) => TryWrite(requirement: requirement, manifestPin: null);
+    public ReleaseDecision TryAdvance(ReplayCommitRequirement requirement) => TryWrite(requirement: requirement, manifestPin: null);
 
     /// <inheritdoc/>
-    public bool TryReserve(ReplayCommitRequirement requirement, ContentPin manifestPin) => TryWrite(requirement: requirement, manifestPin: manifestPin);
+    public ReleaseDecision TryReserve(ReplayCommitRequirement requirement, ContentPin manifestPin) => TryWrite(requirement: requirement, manifestPin: manifestPin);
 
     /// <inheritdoc/>
     public bool IsReserved(ReplayCommitRequirement requirement, ContentPin manifestPin) {
@@ -160,24 +161,25 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
         }
     }
 
-    private bool TryWrite(ReplayCommitRequirement requirement, ContentPin? manifestPin) {
+    private ReleaseDecision TryWrite(ReplayCommitRequirement requirement, ContentPin? manifestPin) {
         lock (m_gate) {
             Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)> marks;
 
             // Keep the lease file in place: deleting it could give two processes locks on different inodes.
             using var lease = FileLock.TryAcquire(path: (m_filePath + ".lock"));
-            if (lease is null) { return false; }
+            if (lease is null) { return ReleaseDecision.TransientRefusal; }
 
             try {
                 marks = ReadMarks();
             } catch (InvalidDataException) {
-                return false;
+                return ReleaseDecision.TerminalRefusal;
             }
 
             if (marks.TryGetValue(key: (requirement.Domain, requirement.Subject), value: out var stored) &&
                 !ReleaseSequenceComparison.IsAcceptable(requirement: requirement, storedEpochStart: stored.EpochStart, storedSequence: stored.Sequence)) {
                 return manifestPin is not null && stored.ManifestPin == manifestPin &&
-                    stored.EpochStart == requirement.EpochStartUnixSeconds && stored.Sequence == requirement.Sequence;
+                    stored.EpochStart == requirement.EpochStartUnixSeconds && stored.Sequence == requirement.Sequence
+                    ? ReleaseDecision.Accepted : ReleaseDecision.TerminalRefusal;
             }
 
             marks[(requirement.Domain, requirement.Subject)] = (requirement.EpochStartUnixSeconds, requirement.Sequence, manifestPin);
@@ -197,7 +199,7 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
                 contents: text.ToString(),
                 path: m_filePath
             );
-            return true;
+            return ReleaseDecision.Accepted;
         }
     }
     /// <inheritdoc/>

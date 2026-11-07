@@ -14,6 +14,63 @@ namespace Puck.World.Presentation.Tests;
 /// <summary>Laws for what a federated traveler is handed of its destination's hidden state: every federation egress
 /// that knows the traveler composes the document for it, through the one disclosure door.</summary>
 public sealed partial class FederationTransferLawTests {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public async Task OpenLaneRetiersReservationAndRouteRepliesAfterArrivalPolicyReplacement(bool wildcard) {
+        using var oracle = LocalOracle(subject: DisclosureSource);
+        var arrival = new WorldAdmissionEntry(Domain: DisclosureSource, Mode: WorldAdmissionTrustMode.FederatedAuthority,
+            Grants: [new(WorldCapability.Observe, Budget: 64), new(WorldCapability.Drive, Budget: 64)], Disclosure: WorldDisclosureTier.Replica);
+        var document = Fixtures.PeerPopulationDocument(networkPlayers: 2) with { Admission = [TrustEntryFor(oracle: oracle), arrival] };
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var security = Authenticator(oracle: oracle, trustEntries: () => fixture.Server.Definition.Admission!);
+        using var host = new WorldPeerHost(server: fixture.Server, authenticator: security, timeProvider: new VirtualClock(),
+            transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
+        PeerTestClient.StartOrSkip(host: host);
+        using var client = new PeerTestClient();
+        var ct = TestContext.Current.CancellationToken;
+        var lane = await AuthenticatedLaneAsync(client, IPEndPoint.Parse(s: host.ListenEndpoint!), security, ct);
+        var request = Reservation(sourceAuthority: DisclosureSource, transferId: 41, border: "east") with {
+            PeerAdmission = true,
+            Members = [new(Principal: Principal.Console, PreferredSlot: 4, Identity: null, Source: IntentSource.Live,
+                BodyColor: default, CatalogRig: 0, Mobility: Mobility(index: 4))],
+        };
+        async Task<WireFrameRead> Reserve() {
+            await WorldFederationCodec.WriteRequestAsync(body: WorldFederationCodec.EncodeReservation(request: request),
+                ct: ct, kind: WorldFederationRequest.Reserve, stream: lane);
+            var response = await RequireFrameAsync(ct: ct, stream: lane);
+            Assert.Equal(expected: (byte)WorldFederationResponse.Reservation, actual: response.Kind);
+            Assert.True(condition: WorldFederationCodec.TryDecodeReservationReply(body: response.Body.Span, reply: out var reply, failure: out var failure), userMessage: failure.ToString());
+            Assert.True(condition: reply!.Accepted, userMessage: reply.Reason);
+            return response;
+        }
+        Assert.Contains(expectedSubstring: "puck.world.definition.v1", actualString: System.Text.Encoding.UTF8.GetString(bytes: (await Reserve()).Body.Span));
+        Assert.Equal(expected: WorldTransferStatus.Committed, actual: fixture.Server.CommitTransfer(sourceAuthority: DisclosureSource, transferId: 41,
+            members: [new(Profile: null, Arrival: WorldTransferArrival.Spawn, BodyMotionProgramName: "grounded", Position: default,
+                YawRadians: default, PlanarVelocity: default, VerticalVelocity: default)], reason: out _));
+        var mobility = request.Members[0].Mobility!.Value.Advance();
+        async Task<WireFrameRead> Route() {
+            await WorldFederationCodec.WriteRequestAsync(body: WorldFederationCodec.EncodeRouteCredential(sourceAuthority: DisclosureSource, mobility: in mobility),
+                ct: ct, kind: WorldFederationRequest.Route, stream: lane);
+            var response = await RequireFrameAsync(ct: ct, stream: lane);
+            Assert.Equal(expected: (byte)WorldFederationResponse.Route, actual: response.Kind);
+            return response;
+        }
+        Assert.Contains(expectedSubstring: "puck.world.definition.v1", actualString: System.Text.Encoding.UTF8.GetString(bytes: (await Route()).Body.Span));
+        var candidate = fixture.Server.Definition with { Admission = [TrustEntryFor(oracle: oracle), arrival with {
+            Domain = wildcard ? WorldAdmissionEntry.AnyAuthority : DisclosureSource, Disclosure = WorldDisclosureTier.Presentation,
+        }] };
+        fixture.Server.EnqueueRebuild(request: new WorldRebuildRequest(Kind: WorldRebuildKind.Reload, Definition: candidate,
+            Origin: new WorldRebuildOrigin.File(Path: "disclosure.world.json"), Force: true,
+            ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: candidate))), principal: Principal.Console);
+        fixture.Step();
+        var routed = await Route();
+        Assert.Contains(expectedSubstring: "puck.world.projection.v1", actualString: System.Text.Encoding.UTF8.GetString(bytes: routed.Body.Span));
+        request = request with { TransferId = 42, Members = [request.Members[0] with { PreferredSlot = 5, Mobility = Mobility(index: 5) }] };
+        var reserved = await Reserve();
+        Assert.Contains(expectedSubstring: "puck.world.projection.v1", actualString: System.Text.Encoding.UTF8.GetString(bytes: reserved.Body.Span));
+    }
+
     [Fact]
     public async Task PublicObservationRequiresExplicitFederationDisclosure() {
         using var oracle = LocalOracle(subject: DisclosureSource);
@@ -327,6 +384,7 @@ public sealed partial class FederationTransferLawTests {
                 failure: out var failure,
                 route: out var route
             ), userMessage: failure.ToString());
+            Assert.Equal(expected: host.ListenEndpoint, actual: route.Endpoint);
             Assert.Equal(expected: GateOpen, actual: PrototypeOf(body: body, placements: route.Definition.Placements));
             Assert.Equal(expected: GateShut, actual: PrototypeOf(body: other, placements: route.Definition.Placements));
             Assert.Equal(expected: 1L, actual: HydratedSlot(body: body, definition: route.Definition));
@@ -346,6 +404,11 @@ public sealed partial class FederationTransferLawTests {
             kind: WorldFederationRequest.ObserveTraveler,
             stream: lane
         );
+
+        var primed = await RequireFrameAsync(ct: ct, stream: lane);
+        Assert.Equal(expected: (byte)WorldFederationResponse.Route, actual: primed.Kind);
+        Assert.True(condition: WorldFederationCodec.TryDecodeRoute(body: primed.Body.Span, route: out var primedRoute, failure: out _));
+        Assert.Equal(expected: host.ListenEndpoint, actual: primedRoute.Endpoint);
 
         var observed = await FirstProjectionAsync(
             ct: ct,

@@ -1795,15 +1795,13 @@ velocity and correctness first; paths are under `src/`). `puck scan --only
 clones` finds few syntactic copies worth merging (91 clusters at 60 tokens,
 mostly short emulator `TransferState` bodies); the duplicates that matter are
 second implementations of one mechanism under other names (group 1, the
-file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
-`FileLock` and `Retry`; its remainder is filed here):
+file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
+`Puck.Abstractions.FileLock`/`Retry`; its remainder is filed here):
 
 1. File-system primitives, remainder (S, implementer). Temp-and-rename writes
    `AtomicFile` cannot serve yet `[low]`: `ShaderCompiler.Entries.cs:49` publishes
    a cache entry only if the name is absent (`File.Move` with no overwrite) and
-   wants an `AtomicFile` write that refuses to replace; `Puck.Launcher.Stub/StubHealth.cs:88`
-   and `StubInstall.cs:132` write beside the destination and rename, in a project
-   that references only `Puck.Confinement` and `Puck.Maths`; and
+   wants an `AtomicFile` write that refuses to replace; and
    `Puck.Storage/DirectoryObjectBlobStoreBackend.cs:189` stages through a
    confined directory handle. A lock file `FileLock` opens can be pending delete
    on Windows when a stale-lock sweep (`WorldArtifactStore.PruneLocked`) removes

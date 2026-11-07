@@ -1,5 +1,5 @@
+using Puck.Confinement;
 using System.Globalization;
-using Puck.Abstractions;
 using Puck.Assets;
 
 namespace Puck.Launcher.Release;

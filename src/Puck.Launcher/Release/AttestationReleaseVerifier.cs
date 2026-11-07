@@ -138,10 +138,16 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
             return ReleaseVerifyOutcome.Refuse(reason: $"version '{manifest.Version}' is not strictly greater than the installed version '{installedVersion}'");
         }
 
-        if (advanceSequence && !(reserveInstall
-            ? m_sequenceStore.TryReserve(manifestPin: manifestPin, requirement: requirement)
-            : m_sequenceStore.TryAdvance(requirement: requirement))) {
-            return ReleaseVerifyOutcome.Refuse(reason: "the sequence was already committed by another verification or the stored mark is invalid");
+        if (advanceSequence) {
+            var written = reserveInstall
+                ? m_sequenceStore.TryReserve(manifestPin: manifestPin, requirement: requirement)
+                : m_sequenceStore.TryAdvance(requirement: requirement);
+            if (written == ReleaseDecision.TransientRefusal) {
+                return ReleaseVerifyOutcome.Retry(reason: "the release sequence store is busy");
+            }
+            if (written == ReleaseDecision.TerminalRefusal) {
+                return ReleaseVerifyOutcome.Refuse(reason: "the sequence was already committed by another verification or the stored mark is invalid");
+            }
         }
 
         return ReleaseVerifyOutcome.Accept();

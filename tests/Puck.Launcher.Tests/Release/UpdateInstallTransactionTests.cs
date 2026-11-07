@@ -7,6 +7,42 @@ namespace Puck.Launcher.Tests.Release;
 
 /// <summary>Exercises persisted restart boundaries with real signatures, replay files, payload hashes and pointers.</summary>
 public sealed partial class UpdateInstallTransactionTests : IDisposable {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public async Task RecoveryRetainsIntentAcrossSequenceContentionAndBackwardsClock(bool backwardsClock) {
+        Publish(manifest: Manifest());
+        Assert.False(condition: (await Service(applier: new InterruptedApplier(boundary: "before-pointer"))
+            .ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken)).Applied);
+        var original = File.ReadAllBytes(path: Intent);
+        using (var lease = backwardsClock ? null : Puck.Abstractions.FileLock.TryAcquire(path: Path.Combine(Install, "sequence.lock"))) {
+            if (!backwardsClock) { Assert.NotNull(@object: lease); }
+            var refused = await Service().ApplyAsync(now: backwardsClock ? Now.AddSeconds(seconds: -1) : Now,
+                cancellationToken: TestContext.Current.CancellationToken);
+            Assert.False(condition: refused.Applied);
+            Assert.Contains(expectedSubstring: backwardsClock ? "clock" : "busy", actualString: refused.Detail);
+            Assert.Equal(expected: original, actual: File.ReadAllBytes(path: Intent));
+        }
+        var resumed = await Service().ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(condition: resumed.Applied, userMessage: resumed.Detail);
+        Assert.False(condition: File.Exists(path: Intent));
+    }
+
+    [Fact]
+    public async Task TerminalApplierRefusalRetiresIntentAndAllowsTheNextRelease() {
+        Publish(manifest: Manifest());
+        Assert.False(condition: (await Service(applier: new InterruptedApplier(boundary: "after-pointer"))
+            .ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken)).Applied);
+        File.WriteAllText(path: Path.Combine(Install, "versions", "1.0.1", "state-generation"), contents: "2");
+        var refused = await Service().ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.False(condition: refused.Applied);
+        Assert.Contains(expectedSubstring: "state generation", actualString: refused.Detail);
+        Assert.False(condition: File.Exists(path: Intent));
+        Publish(manifest: Manifest(version: "1.0.2", sequence: 2));
+        var next = await Service().ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(condition: next.Applied, userMessage: next.Detail);
+    }
+
     private readonly ReleaseChainFixture m_fixture = new();
     private readonly TempStagingRoot m_root = new();
 
@@ -161,7 +197,7 @@ public sealed partial class UpdateInstallTransactionTests : IDisposable {
         Assert.False(condition: recovered.Applied);
         Assert.Contains(expectedSubstring: "hash", actualString: recovered.Detail);
         Assert.Equal(expected: new byte[] { 9 }, actual: File.ReadAllBytes(path: PayloadPath));
-        Assert.True(condition: File.Exists(path: Intent));
+        Assert.False(condition: File.Exists(path: Intent));
     }
     [InlineData("newer-mark")]
     [InlineData("newer-pointer")]

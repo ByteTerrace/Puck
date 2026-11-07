@@ -17,25 +17,25 @@ public sealed class ReleaseSequenceStoreTests : IDisposable {
         var requirement = new ReplayCommitRequirement(Domain: "domain", Subject: "subject", EpochStartUnixSeconds: 0, RetainThroughUnixSeconds: 100, Sequence: 5);
         var pin = ContentPin.Compute(content: new byte[] { 1 });
         var other = ContentPin.Compute(content: new byte[] { 2 });
-        Assert.True(condition: store.TryReserve(requirement: requirement, manifestPin: pin));
+        Assert.Equal(expected: ReleaseDecision.Accepted, actual: store.TryReserve(requirement: requirement, manifestPin: pin));
         if (persistent) { store = new FileReleaseSequenceStore(filePath: StorePath); }
         Assert.True(condition: store.IsReserved(requirement: requirement, manifestPin: pin));
-        Assert.True(condition: store.TryReserve(requirement: requirement, manifestPin: pin));
-        Assert.False(condition: store.TryAdvance(requirement: requirement));
-        Assert.False(condition: store.TryReserve(requirement: requirement, manifestPin: other));
+        Assert.Equal(expected: ReleaseDecision.Accepted, actual: store.TryReserve(requirement: requirement, manifestPin: pin));
+        Assert.Equal(expected: ReleaseDecision.TerminalRefusal, actual: store.TryAdvance(requirement: requirement));
+        Assert.Equal(expected: ReleaseDecision.TerminalRefusal, actual: store.TryReserve(requirement: requirement, manifestPin: other));
         Assert.False(condition: store.IsAcceptable(requirement: requirement));
-        Assert.True(condition: store.TryAdvance(requirement: requirement with { EpochStartUnixSeconds = 1, Sequence = 0 }));
+        Assert.Equal(expected: ReleaseDecision.Accepted, actual: store.TryAdvance(requirement: requirement with { EpochStartUnixSeconds = 1, Sequence = 0 }));
         Assert.False(condition: store.IsReserved(requirement: requirement, manifestPin: pin));
-        Assert.False(condition: store.TryReserve(requirement: requirement, manifestPin: pin));
+        Assert.Equal(expected: ReleaseDecision.TerminalRefusal, actual: store.TryReserve(requirement: requirement, manifestPin: pin));
     }
 
     [Fact]
     public void SeparateFileStoreInstances_CannotBothCommitTheSameSequence() {
         var requirement = new ReplayCommitRequirement(Domain: "domain", Subject: "subject", EpochStartUnixSeconds: 0, RetainThroughUnixSeconds: 100, Sequence: 5);
-        var outcomes = new bool[16];
+        var outcomes = new ReleaseDecision[16];
         Parallel.For(fromInclusive: 0, toExclusive: outcomes.Length,
             body: index => outcomes[index] = new FileReleaseSequenceStore(filePath: StorePath).TryAdvance(requirement: requirement));
-        Assert.Single(collection: outcomes, predicate: accepted => accepted);
+        Assert.Single(collection: outcomes, predicate: accepted => accepted == ReleaseDecision.Accepted);
         Assert.False(condition: new FileReleaseSequenceStore(filePath: StorePath).IsAcceptable(requirement: requirement));
     }
 
@@ -46,9 +46,9 @@ public sealed class ReleaseSequenceStoreTests : IDisposable {
         var third = first with { Domain = "domain-b", Sequence = 1 };
         var store = new FileReleaseSequenceStore(filePath: StorePath);
 
-        Assert.True(condition: store.TryAdvance(requirement: first));
-        Assert.True(condition: store.TryAdvance(requirement: second));
-        Assert.True(condition: store.TryAdvance(requirement: third));
+        Assert.Equal(expected: ReleaseDecision.Accepted, actual: store.TryAdvance(requirement: first));
+        Assert.Equal(expected: ReleaseDecision.Accepted, actual: store.TryAdvance(requirement: second));
+        Assert.Equal(expected: ReleaseDecision.Accepted, actual: store.TryAdvance(requirement: third));
         store = new FileReleaseSequenceStore(filePath: StorePath);
 
         Assert.False(condition: store.IsAcceptable(requirement: first));
@@ -59,7 +59,7 @@ public sealed class ReleaseSequenceStoreTests : IDisposable {
 
         var nextEpoch = first with { EpochStartUnixSeconds = 101, Sequence = 0 };
         Assert.True(condition: store.IsAcceptable(requirement: nextEpoch));
-        Assert.True(condition: store.TryAdvance(requirement: nextEpoch));
+        Assert.Equal(expected: ReleaseDecision.Accepted, actual: store.TryAdvance(requirement: nextEpoch));
         store = new FileReleaseSequenceStore(filePath: StorePath);
         Assert.False(condition: store.IsAcceptable(requirement: first with { Sequence = ulong.MaxValue }));
         Assert.False(condition: store.IsAcceptable(requirement: nextEpoch));
@@ -78,7 +78,7 @@ public sealed class ReleaseSequenceStoreTests : IDisposable {
         var requirement = new ReplayCommitRequirement(Domain: "domain", Subject: "subject", EpochStartUnixSeconds: 0, RetainThroughUnixSeconds: 100, Sequence: 1);
 
         Assert.False(condition: store.IsAcceptable(requirement: requirement));
-        Assert.False(condition: store.TryAdvance(requirement: requirement));
+        Assert.Equal(expected: ReleaseDecision.TerminalRefusal, actual: store.TryAdvance(requirement: requirement));
         Assert.Equal(expected: text, actual: File.ReadAllText(path: StorePath));
     }
 
@@ -88,12 +88,12 @@ public sealed class ReleaseSequenceStoreTests : IDisposable {
     public void ConcurrentCommits_HaveOneWinnerAndCannotLowerTheMark(bool persistent) {
         IReleaseSequenceStore store = persistent ? new FileReleaseSequenceStore(filePath: StorePath) : new InMemoryReleaseSequenceStore();
         var requirement = new ReplayCommitRequirement(Domain: "domain", Subject: "subject", EpochStartUnixSeconds: 0, RetainThroughUnixSeconds: 100, Sequence: 5);
-        var outcomes = new bool[32];
+        var outcomes = new ReleaseDecision[32];
         Parallel.For(fromInclusive: 0, toExclusive: outcomes.Length, body: index => outcomes[index] = store.TryAdvance(requirement: requirement));
 
-        Assert.Single(collection: outcomes, predicate: accepted => accepted);
-        Assert.True(condition: store.TryAdvance(requirement: requirement with { Sequence = 10 }));
-        Assert.False(condition: store.TryAdvance(requirement: requirement with { Sequence = 9 }));
+        Assert.Single(collection: outcomes, predicate: accepted => accepted == ReleaseDecision.Accepted);
+        Assert.Equal(expected: ReleaseDecision.Accepted, actual: store.TryAdvance(requirement: requirement with { Sequence = 10 }));
+        Assert.Equal(expected: ReleaseDecision.TerminalRefusal, actual: store.TryAdvance(requirement: requirement with { Sequence = 9 }));
         Assert.False(condition: store.IsAcceptable(requirement: requirement with { Sequence = 10 }));
     }
 

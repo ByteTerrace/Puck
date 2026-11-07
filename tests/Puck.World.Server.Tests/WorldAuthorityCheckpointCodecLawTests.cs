@@ -1,8 +1,6 @@
 using Puck.Commands;
 using System.Numerics;
-
 using Xunit;
-
 using Puck.Assets.Documents;
 using Puck.Physics.Fields;
 using Puck.Maths;
@@ -820,6 +818,17 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
             actual: reason,
             expected: string.Empty
         );
+    }
+    [Fact]
+    public void ReplayBeforeAdmissionTrustLayoutIsRefusedByVersionBeforeItsBody() {
+        var bytes = new byte[8];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes, value: 0x5052_4c57u);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes.AsSpan(start: 4), value: 13u);
+        using var stream = new MemoryStream(buffer: bytes);
+        var refusal = Assert.Throws<InvalidDataException>(testCode: () => WorldReplaySnapshot.Read(stream: stream));
+        Assert.StartsWith(expectedStartString: "ShapeMismatch:", actualString: refusal.Message);
+        Assert.Contains(expectedSubstring: "version 13", actualString: refusal.Message);
+        Assert.Contains(expectedSubstring: "version 14 only", actualString: refusal.Message);
     }
     // Every older layout lacks a section the current reader requires, and a newer one is unknown to it; the envelope
     // refuses both by version before any payload is read with the wrong layout.

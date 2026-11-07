@@ -1,4 +1,4 @@
-using Puck.Abstractions;
+using Puck.Confinement;
 
 namespace Puck.AdvancedGamingBrick;
 

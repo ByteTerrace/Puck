@@ -82,7 +82,7 @@ graph TD
 Three file-system primitives sit at the bottom of the graph so every project
 reaches them; a second implementation of any of them is a defect.
 
-`AtomicFile` replaces one file so that a reader, or a process that crashes
+`Puck.Confinement.AtomicFile` replaces one file so that a reader, or a process that crashes
 mid-write, never finds half of it behind the real name. `WriteAllBytes` and
 `WriteAllText` take the whole content; `Write` hands a stream to a writer that
 produces it incrementally. Each writes a uniquely named temporary file beside the

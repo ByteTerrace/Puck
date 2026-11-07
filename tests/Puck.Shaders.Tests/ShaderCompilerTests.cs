@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using System.Collections.Concurrent;
 using Puck.Abstractions;
 using Puck.Testing;

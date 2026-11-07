@@ -1,7 +1,6 @@
 using Puck.Commands;
 using Puck.Testing;
 using Xunit;
-
 using Puck.World.Protocol;
 
 namespace Puck.World.Server.Tests;
@@ -304,6 +303,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
         Assert.True(condition: restoredB.Server.Population.TryResumeParkedPeer(
             identityDomain: destinationEntry.IdentityDomain,
             identitySubject: destinationEntry.IdentitySubject,
+            admissionTrust: destinationEntry.AdmissionTrust,
             admitted: out var resumedEntry
         ));
         Assert.False(condition: restoredB.Server.Population.IsParked(index: peerSlot));

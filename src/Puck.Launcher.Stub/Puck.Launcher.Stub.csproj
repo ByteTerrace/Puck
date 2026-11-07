@@ -11,6 +11,5 @@
         <!-- The update lease and the launched version's registration are the same handle-held directories the
              launcher's pruner and registration use; AtomicFile supplies the same durable writer as the updater. -->
         <ProjectReference Include="../Puck.Confinement/Puck.Confinement.csproj" />
-        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
     </ItemGroup>
 </Project>

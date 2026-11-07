@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <AssemblyName>Puck.Abstractions</AssemblyName>
-        <Description>The engine's neutral contract layer: backend- and platform-agnostic interfaces and value types that every backend, host, and content module implements against. Surfaces and presentation, native windowing, screen-machines and their linking, GPU compute services, frame capture and video recording, RGB lamp arrays, allocators, frame pacing, and deterministic work counters. File-system primitives (atomic file replacement, exclusive lock files, retry). Depends on Puck.Maths alone within the engine.</Description>
+        <Description>The engine's neutral contract layer: backend- and platform-agnostic interfaces and value types that every backend, host, and content module implements against. Surfaces and presentation, native windowing, screen-machines and their linking, GPU compute services, frame capture and video recording, RGB lamp arrays, allocators, frame pacing, and deterministic work counters. File-system lock and retry primitives; atomic replacement comes from the BCL-only Puck.Confinement leaf. Depends on Puck.Maths and Puck.Confinement within the engine.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.Abstractions</PackageId>
         <PackageTags>abstractions;contracts;determinism;presentation;screen-machine;windowing</PackageTags>
@@ -10,6 +10,7 @@
         <RootNamespace>Puck.Abstractions</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
+        <ProjectReference Include="../Puck.Confinement/Puck.Confinement.csproj" />
         <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>
 </Project>

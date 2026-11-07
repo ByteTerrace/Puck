@@ -1,5 +1,5 @@
+using Puck.Confinement;
 using System.Text.Json;
-using Puck.Abstractions;
 
 namespace Puck.Launcher.Stub;
 
@@ -12,7 +12,8 @@ public sealed record StubHealthRecord(string Version, int Attempts);
 /// <summary>Read/write access to the health attempt counter — flushed by the stub BEFORE it launches a candidate
 /// (so a hang or an early kill still counts), and cleared by the running app once it reports healthy
 /// (<c>Puck.Launcher.Release.HealthGateFile</c>, an independent writer of this same file — see
-/// <see cref="StubInstall"/>'s own remarks on why the two sides share no code).</summary>
+/// <see cref="StubInstall"/>). Both writers use the leaf <see cref="AtomicFile"/> primitive; the stub carries
+/// no updater or engine dependency.</summary>
 public static class StubHealth {
     /// <summary>Reads a record's attempt count for a specific version — a record naming a different version (or an
     /// absent/corrupt file) carries no history for the version asked about.</summary>
