@@ -2586,6 +2586,17 @@ failing case is argued from source, not run):
 
 ### Vulkan regressions and GPU robustness
 
+- [medium] Residency never settles at the teal room: `bench frames --backend
+  vulkan` was refused twice there (`world.wait residency` unsettled 20 s and
+  110 s after `[bakes: settled]`), and a live Direct3D 12 World on the base build
+  showed it once at the same pose (seen by the frame-attrib lane). After a real
+  device-loss recovery, re-landing about 1.75 GB of meshes also outlasts the
+  harness's 20 s residency wait (gpu-hang lane). Name what the residency still
+  owes there before raising any wait.
+- [low · unconfirmed] `SdfMeshProbeGpuWork.Scene.cs:129-149` fills a merged
+  upload gap with the new export's view of the words, so words only the old
+  published scene owns would be zeroed if that upload were cancelled; argued from
+  source, no traversal fault in five tours.
 - [medium · unconfirmed] Vulkan's world GI trace fell behind on a running
   debug World (`[sdf.mesh-gi] behind … relit-per-second=252 needed=2496`) and
   printed no `done` after more than five minutes (seen by the mesh-twice lane;
