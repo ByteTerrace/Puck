@@ -19,8 +19,9 @@ query evaluator (`SdfFieldEvaluator`) and `maths-usage`.
 
 Read [authored shading](references/authored-shading.md) for `SdfShadeProgram`,
 the op table, CPU admission, slice ownership, helper-closed cost, shadow demand
-and generated interpreter/emitter semantics. The GPU phase calls and bounded
-dispatch planner remain in the author-shader plan; CPU admission proves neither.
+and generated interpreter/emitter semantics, shared GPU phase invocation, and
+bounded dispatch planner. CPU admission proves neither driver spill behavior nor
+the measured dispatch margin; those remain in the author-shader plan.
 
 ## Camera bloom
 

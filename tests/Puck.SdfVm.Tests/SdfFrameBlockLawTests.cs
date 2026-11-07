@@ -61,8 +61,8 @@ public sealed class SdfFrameBlockLawTests {
     // base, since each instance renders its one view at row zero, and the mesh path's values, which the pass recorder
     // writes per pass after it.
     private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase, SdfWorldPackage.PreviousView,
-        // This fixture has no clock-reading appearance; the targeted read-flag law covers its nonzero case.
-        SdfWorldPackage.FlowClock,
+        // This fixture reads neither clock nor lanes; the targeted read-flag law covers their nonzero cases.
+        SdfWorldPackage.FlowClock, SdfWorldPackage.WorldLanes,
         SdfWorldPackage.ShadePrograms, SdfWorldPackage.ShadeDefault, SdfWorldPackage.ShadeIdentity, SdfWorldPackage.ShadeDemand,
         SdfWorldPackage.MeshShadowCascades, SdfWorldPackage.MeshShadowCount, SdfWorldPackage.MeshShadowParameters, SdfWorldPackage.MeshShadowTexels,
         SdfWorldPackage.MeshIrradianceVolume, SdfWorldPackage.MeshIrradianceLevels, SdfWorldPackage.MeshIrradianceSpacings,

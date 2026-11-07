@@ -39,7 +39,7 @@ used by both the views and glass kernels. Glass supplies contact and thickness;
 authored roughness drives both its light response and its optical frost and
 environment. The standard water program keeps the underlying glass smooth while
 its reveal supplies foam, selected by the `flow` template's structural glass argument.
-the frame operations share the old layers' slot and transformed-static-draw
+The frame operations share the old layers' slot and transformed-static-draw
 conventions. Each executed instruction increments `sdfWorkSteps`.
 
 The standard programs live in `worlds/standard/shading.puck`, called by the

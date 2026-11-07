@@ -9,7 +9,7 @@ shade template paint(color) { surface { albedo = mix(material.albedo, color, pai
 
 function celStep(value, threshold, softness) = smoothstep(threshold - max(softness * 0.5, 0.0005), threshold + max(softness * 0.5, 0.0005), saturate(value))
 function celBand(cosine, visibility, threshold, softness, combined) = combined ? celStep(saturate(cosine) * saturate(visibility), threshold, softness) : celStep(cosine, threshold, softness) * saturate(visibility)
-shade template cel(threshold, softness, shadowTint, specularSize, exposureGain, shoulder, structural combined = 0) {
+shade template cel(threshold, softness, shadowTint, specularSize, exposureStops, shoulder, structural combined = 0) {
   light {
     let point = light.kind == uint(2)
     let direct = (light.kind == uint(0)) + point
@@ -27,7 +27,7 @@ shade template cel(threshold, softness, shadowTint, specularSize, exposureGain, 
   }
   compose {
     let reflected = (surface.albedo * (compose.radiance + compose.indirect * shadowTint) + compose.environment + compose.rim + compose.specular) * compose.attenuation * compose.adaptation
-    let exposed = max(reflected, 0) * (compose.exposure * exposureGain)
+    let exposed = max(reflected, 0) * (compose.exposure * pow(2, exposureStops))
     let peak = max(exposed.x, max(exposed.y, exposed.z))
     color = exposed / ((1 + peak * shoulder) * max(compose.exposure, 0.000000000001)) + surface.albedo * surface.emissive
   }

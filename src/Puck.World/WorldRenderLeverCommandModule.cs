@@ -424,10 +424,10 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                 if (args.Count == 2 && args.Is(0, "default")) {
                     var name = args[1].ToString();
                     var program = settings.NamedShade(name);
-                    if (name != "document" && program is null) { return new(Output: $"[world.shade: no admitted program named '{name}' in this scene]"); }
+                    if (name != "document" && program is null) { return CommandResult.Error(output: $"[world.shade: no admitted program named '{name}' in this scene]"); }
                     var payload = program is null ? null : System.Text.Json.JsonSerializer.Serialize(program.Definition, WorldJsonContext.Default.SdfShadeDefinition);
                     link.SubmitSessionLever(new WorldSessionLever(WorldSection.Render, WorldSessionLevers.ShadeDefault, 0, View: payload), context.Principal);
-                    return new(Output: $"[world.shade default: {settings.ShadeOverride?.Name ?? "document"}]");
+                    return new(Output: $"[world.shade default: {name}]");
                 }
                 if (args.Count != 1 || (!args.Is(0, "programs") && !args.Is(0, "layers"))) { return WorldShadeForms.Refuse(); }
                 return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.ShadePrograms,

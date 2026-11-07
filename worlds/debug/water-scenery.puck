@@ -33,7 +33,7 @@ let glacierLumps = map(range(0, 6), i => {
 // The river runs from the plunge basin's east wall to the pool's north bank (water-site.puck's course) in a channel cut in
 // the ground (`riverChannel`). Its water is one lattice body over the cut ground that the chain's `riverDepth` raises and
 // lowers, flowing along the course's mean heading at the stream's pace.
-let riverSurface = flowed(streamMaterial, streamFlowLayer with { velocity [riverHeading[0] * 1.2, 0, riverHeading[1] * 1.2] })
+let riverSurface = flowed(streamMaterial, streamFlowLayer with { velocity [riverHeading[0] * 1.2, 0, riverHeading[1] * 1.2] }, glass: 1)
 
 // A point `along` leg k of the course and `across` it (positive to its right), at height y: a stone's place.
 function riverPlace(leg, along, across, y) = [
