@@ -55,7 +55,15 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
 - **Reuse a collapse's source fan until commit.** `SdfMeshCollapse.Collapser.PrepareFrom`
   lays out the unchanged source triangles once for all attempted neighbours.
   A refused neighbour mutates no source geometry; the first accepted neighbour
-  ends that fan's attempts. Keep that lifetime explicit when changing `Pass`.
+  ends that fan's attempts. Its reverse edge witnesses share that lifetime:
+  a midpoint's nearest old surface and inherited error depend only on its two
+  places, material and the prepared fan. `PrepareFrom` clears the witness map,
+  and `Pass` stops at its first commit; never retain those answers across it.
+  The triangle's edge vectors and Gram products are prepared once for all of
+  its point queries. A retained original vertex is an exact forward witness;
+  other samples may keep a measured witness no farther than their previous
+  bound instead of searching for the nearest. Every accepted witness still
+  satisfies the material, distance and interpolated-normal limits.
 - **One contouring.** `SdfSampledLattice` contours a GPU-sampled lattice through
   `SdfDualContouring` over `ISdfContourLattice`; never write a second mesher.
   A final lattice refines the cells its samples cannot resolve
@@ -543,10 +551,12 @@ laws exercise that boundary.
   triangle through a thin rod the samples straddle. On the debug world's stored
   set it keeps 11% of the triangles at the first level and 6% at the second, for
   9% more stored and region bytes. Conservative triangle-box distance bounds
-  skip exact measurements that cannot improve the result, and the old fan's
-  coordinates are cached per proposal: the same 1,406 meshes take 206.1 CPU
-  seconds instead of 215.7 with identical indices, materials and recorded errors,
-  spread across `Land`'s tasks. Glass skips collapse because its pass uses only
+  skip exact measurements that cannot improve the result; they never certify
+  acceptance. Reverse edge measurements are shared across targets of an
+  unchanged source fan, and forward witnesses need not be globally nearest
+  when they already meet their previous bound. Judge a changed collapse by
+  the field audit at each rendered level, not by equality with earlier meshes.
+  Glass skips collapse because its pass uses only
   level zero. The done line counts `levelled=` pieces and
   the triangles every mesh draws at `level1=` and `level2=`;
   `SdfMeshCollapseLawTests` measures each level's contract by brute force.
@@ -952,6 +962,12 @@ definition carries prepared font assets. Keep this offline scene path aligned wi
   crossings and open edges; a cutter that is only a lower bound (a stretched
   ellipsoid, a non-uniform `Scale`, a flare) as a slope deficit, attributed to
   the shape whose own field is loosest there.
+- **Audit changed collapse levels explicitly.** `--level 1` and `--level 2`
+  select the triangles those forced render levels draw, clamped per chunk to
+  its last level. Only referenced vertices count. The field coverage lattice
+  and error thresholds retain level zero's bounds and cell; a coarser mesh
+  must not buy a cleaner report by enlarging its error budget. `--images`
+  draws the selected level too. The default still audits level zero.
 - **What it cannot read.** The render reading interprets every warp, fold and
   relief the renderer draws, a non-uniform scale, a sweep of any strand count
   and a path's edge table, each a sync pair with its `mapCore` case

@@ -3433,6 +3433,10 @@ never writes the store, so it reads a store a running World owns.
 - `--prototype <id>` keeps the groups of bodies wearing that creation;
   `--group <text>` keeps the groups whose label holds the text, such as a
   shape's name.
+- `--level <n>` audits the surface that forced render level draws (zero by
+  default), clamped to each chunk's last available level. Only referenced
+  vertices count. The error threshold and coverage lattice retain level zero's
+  cell and bounds, so simplifying cannot make the audit more lenient.
 - `--top <n>` clusters a group reports, `--worst <n>` clusters the closing list
   reports across every group, and `--images <dir>` writes a PNG of each of
   those: the mesh around the cluster's worst sample from three sides, shading
