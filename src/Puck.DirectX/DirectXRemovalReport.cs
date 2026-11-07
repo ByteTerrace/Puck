@@ -77,10 +77,11 @@ public static partial class DirectXRemovalReport {
     private static void WriteUnfinished(List<string> lines, DirectXBreadcrumbTrail trail) {
         var completed = trail.Completed;
         // DRED does not promise one label per operation index, and the report runs inside the host's device-loss
-        // recovery, where a throw ends the host: every label at an index is kept, in the order DRED gave them.
+        // recovery, where a throw ends the host: every distinct label at an index is kept, in the order DRED gave them
+        // (the runtime repeats one label at its operation's index).
         var contexts = trail.Contexts
             .GroupBy(keySelector: static context => context.Index, elementSelector: static context => context.Text)
-            .ToDictionary(keySelector: static group => group.Key, elementSelector: static group => string.Join(separator: " | ", values: group));
+            .ToDictionary(keySelector: static group => group.Key, elementSelector: static group => string.Join(separator: " | ", values: group.Distinct(comparer: StringComparer.Ordinal)));
         var open = new Stack<string>();
 
         for (var index = 0; (index < completed); index++) {

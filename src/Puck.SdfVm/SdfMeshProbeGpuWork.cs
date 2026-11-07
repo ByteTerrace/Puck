@@ -411,6 +411,13 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         query.Answer.TrySetCanceled();
     }
     public GpuQueueCategory Category => GpuQueueCategory.Probe;
+    public string Describe(object job) {
+        if (job is SceneChunk chunk) { return FormattableString.Invariant($"scene-chunk word={chunk.Word} words={chunk.Count}"); }
+        var query = (Job)job;
+        var kind = (query.CommitSource is not null) ? "commit" : query.Meter ? "meter" : query.Selection ? "select" : (query.Lighting is not null) ? "relight" : "trace";
+        var lights = ((query.Lighting is { Length: > 0 } rows) ? FormattableString.Invariant($" lights={rows[0].Y} points={rows[0].Z}") : string.Empty);
+        return FormattableString.Invariant($"{kind} origins={query.Origins.Length} destinations={query.Destinations.Length} hit-capacity={query.HitCapacity}{lights}");
+    }
     private static GpuObjectName Name(string part, int index = GpuObjectName.NoIndex) =>
         new(index: index, owner: SdfWorldTables.ObjectOwner, part: $"probe-trace {part}");
     public GpuMemoryBytes OwnedBytes {
