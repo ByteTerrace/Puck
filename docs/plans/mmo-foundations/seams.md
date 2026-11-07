@@ -358,6 +358,13 @@ In Puck's current codebase, "running without a frame" is already supported at tw
 
 #### Option C3 (Brief's (c)): Transactional cross-authority proposal protocol and clamped/taped seam contact
 
+Implementation status: `WorldPopulation.BoundAdjacencyCorrection` now bounds
+the sum of neighbour-body correction lengths by the local body's collider
+reach per tick, and each request by the overlap depth minus spent budget.
+The design below is the round's proposal: preventing a correction from crossing
+the ownership deadband is not part of this cap, and tick-addressed input tapes
+remain in the [neighbour replay packet](../open-items.md#transfers-federation-and-server).
+
 - **Mechanism:**
   1. **Fix `WorldAdjacencyContactField` (Attack A10 and the Track 3 replay hole):**
      - Today, `src/Puck.World.Server/WorldAdjacencyContactField.cs:25-29` **[opened]** warns that neighbour poses arrive as presentation floats (`FixedVector3.FromVector3(value: neighbour.CurrentPosition(index: entity))`, line 119 **[opened]**) and applies whatever displacement `FixedDynamicBodyContacts.TryCorrection` returns when `WorldCrossAuthoritySettlement.LocalResponds` selects the local side (`lines 106-134` **[opened]**).

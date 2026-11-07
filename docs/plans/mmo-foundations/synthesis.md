@@ -572,8 +572,10 @@ as outside replay determinism **[opened]** (`src/Puck.World.Server/WorldAdjacenc
 /// replay-deterministic across network schedules.
 ```
 
-Lane E confirmed the correction has no per-tick cap
-([puck-today, premise verdicts](puck-today.md#premise-verdicts)) **[record]**.
+Lane E found the missing per-tick cap. The seam-clamp fix now enforces a
+local collider-reach budget through `WorldPopulation.BoundAdjacencyCorrection`
+([puck-today, premise verdicts](puck-today.md#premise-verdicts)); tick-addressed
+neighbour records remain the [replay packet](../open-items.md#transfers-federation-and-server).
 
 **Options** ([seams, options](seams.md#3-options-for-puck)).
 
@@ -848,9 +850,11 @@ unblocks. Steps marked "new" are not in any plan today.
    `WorldDeliveryCursor`. Unblocks I1, the trusted-dealer check and any claim
    that a silo keeps hidden state from a visitor
    ([disclosure, build order](../disclosure.md#the-build-order)).
-2. **C3's clamp and taped neighbour records** (new; a defect fix). Closes A10
-   and the named replay boundary. Unblocks any adjacency the debug world
-   authors. Independent of everything else.
+2. **C3's taped neighbour records** (a defect fix; the dynamic correction cap
+   is implemented). Build the [neighbour replay packet](../open-items.md#transfers-federation-and-server).
+   The cap bounds A10's displacement but does not prove reported bodies exist
+   or prevent repeated bounded shoves; tapes close the named replay boundary.
+   Independent of everything else.
 3. **H1 and H2** unchanged: the standard's identity template and one account
    per process ([hub-and-saves, build order](../hub-and-saves.md#build-order)).
    H2 unblocks every later step.
