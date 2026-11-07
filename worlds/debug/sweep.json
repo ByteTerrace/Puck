@@ -153,6 +153,7 @@
       { "name": "camera-course", "group": "outdoor", "lines": ["debug.go camera-course"] },
       { "name": "camera-bays", "group": "outdoor", "lines": ["debug.go camera-bays"] },
       { "name": "stage", "group": "outdoor", "lines": ["debug.go stage"] },
+      { "name": "meadow", "group": "outdoor", "note": "The wind meadow from its low inspection camera (meadow.md), fixed so the tiles' rate tiers repeat.", "lines": ["debug.go meadow", "view.override camera look 124 2 -60 119.5 0.3 -55.3 55"] },
       { "name": "jump", "group": "motion", "note": "The jump press lands 30 ticks after the start tick and the still is taken 9 ticks later, on the tick it names whatever the bakes cost.", "lines": ["debug.go stage"], "steps": [{ "at": 30, "run": "body.press jump 1 0.6" }], "settle": 39 },
       { "name": "flight", "group": "motion", "lines": ["debug.go stage"], "steps": [{ "at": 30, "run": "body.press flight 1 0.2" }, { "at": 40, "run": "body.fly 0 0 1 0 0 0 1.5" }], "settle": 90, "after": ["body.press flight 1 0.2", "world.wait 120"] },
       { "name": "noclip", "group": "motion", "lines": ["debug.go stage"], "steps": [{ "at": 30, "run": "body.press noclip 1 0.2 0" }, { "at": 40, "run": "body.press rise 1 1 0" }], "settle": 65, "after": ["body.press noclip 1 0.2 0", "world.wait 60"] },
