@@ -1250,7 +1250,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
             }
         }
     }
-    /// <summary>Cycles a device to the next slot (wrapping player 1→2→3→4→1) — the pad-Start gesture. An unmapped
+    /// <summary>Cycles a device to the next slot (wrapping player 1→2→3→4→1) — what a binding of <c>player.cycle</c> asks for. An unmapped
     /// device is joined instead. A slot under an exclusive <see cref="TryClaimSlot"/> hold is skipped rather than
     /// halting the ring: <see cref="AssignDevice"/> refuses a claimed target outright, so stepping past it (rather
     /// than stopping on the first claimed neighbor) is what keeps the gesture usable on a table where some slot is

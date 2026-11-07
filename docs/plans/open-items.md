@@ -2917,13 +2917,6 @@ Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
 ordinary, the owner's direction · Next: the windowed look at the Klondike and FreeCell tables
 (`worlds/debug/cardtable.md`), then Spider (step 1).
 
-- [medium] The deal sweep never validates what it installs: `WorldTick.Deals.cs`
-  sets `var applied = true;`, so its "refused as one" branch is dead, and a
-  template that deals an invalid child poisons the whole document; every
-  validated transaction is then refused (the shedding racks did this to the
-  granaries until dealt children carried their template's scale). Validate a
-  deal's children as one install and refuse the deal, not the document.
-
 The owner wants proper card tables in the gallery: physical cards on a table,
 played by sitting at it like the chess, Go, Reversi and Alchemy tables. The
 Klondike table stands north of the Go table in the board game room
@@ -3649,19 +3642,21 @@ ordinary · Next: new content and art on the owner's call.
 
 - [high] Player-state defects found grounding the hub design. The design memo
   ([hub and saves](hub-and-saves.md)) decides the shape; these are defects
-  whatever it decides:
-  - `WorldInstanceHost.DurableImages` is never assigned, so a persisted
-    destination loses its state when the process quits;
+  whatever it decides (the desktop's durable images are built: a persisted
+  destination's row writes `durable.image` at stop, at quit and every engine
+  minute, and its next activation restores it; the memo's H7 remainder is
+  user-scoped images under the account, which waits for H2's one account):
   - `MachineCreationRequest.SavePath` is never set, so a cartridge's battery
-    save dies with the process;
+    save dies with the process. The memo's H8 (battery bytes in the request,
+    cores without file I/O) needs the image of the world that owns the machine,
+    and the debug world's devices are on the boot row, which keeps no image
+    until boot is a travel into `hub` (H3);
   - `WorldOwnedWorlds.IdentityBase` copies the whole host world into every
     identity (30 MB in the debug world);
   - `world.save` refuses on the debug world: it names the loop-generated
     `sheddingRack1` as a parent, which `shedding.puck` does not export. Note
     that `world.save` writes the world's source when it succeeds, so never run
-    it as a read against a working tree;
-  - the `player.cycle` documentation calls it "the pad-Start gesture"
-    (`PlayerRoster.cs:1253`), but nothing under `worlds/` binds it.
+    it as a read against a working tree.
 - [high] The trees read as inflatable toys (owner's walkthrough, the lawn).
   - Canopies are a few smooth, drooping blended lobes, with no branch
     structure, leaf clumps, gaps or silhouette breakup.
