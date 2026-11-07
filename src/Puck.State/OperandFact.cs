@@ -34,7 +34,7 @@ public abstract class OperandFact<TFacet> : IFacetFact, ICompiledFact where TFac
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="facet">The facet the evaluator resolved from the host.</param>
     /// <returns>The fact.</returns>
-    public abstract RuleFact Read(IStateReader reader, TFacet facet);
+    public abstract Fact Read(IStateReader reader, TFacet facet);
 }
 /// <summary>A cell key whose resolution needs a host facet, handed to <see cref="Resolve"/> as the type argument
 /// names it. The key is interned (<see cref="CellKey"/>), never a string.</summary>

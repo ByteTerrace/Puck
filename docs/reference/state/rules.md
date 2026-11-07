@@ -707,7 +707,7 @@ write through it is refused.
 `zone(hand, last)` reads the key of the last card in `hand` from the arena,
 including a transfer made earlier in the same firing. An empty pile has no
 endpoint. A read through one produces an **absent** fact
-(`RuleFact.IsAbsent`), which is different from zero: a read of a cell the row
+(`FaultCase.Absent`), which is different from zero: a read of a cell the row
 doesn't hold reads zero, while a read that names no cell at all is absent. You
 decide what an absence means with `isAbsent(operand)` or `operand ?? fallback`
 ([Reads and expressions](expressions.md)):

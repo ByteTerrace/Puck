@@ -196,7 +196,7 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
             : mask
         );
     }
-    private RuleFact ReadWordMatch(IStateReader reader, int rowOrdinal, CellKey startKey) {
+    private Fact ReadWordMatch(IStateReader reader, int rowOrdinal, CellKey startKey) {
         var arena = reader.Arena;
         var word = reader.PatternWord;
         var start = 0;
@@ -224,11 +224,11 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
 
         if (spelled != ExpressionFault.None) {
             return ((spelled == ExpressionFault.Absent)
-                ? RuleFact.Absent(kind: CellKind.Int)
-                : RuleFact.Faulted(kind: CellKind.Int));
+                ? Fact.Absent(kind: CellKind.Int)
+                : Fact.Faulted(kind: CellKind.Int));
         }
         if (MatchFacet is MatchFacet.At or MatchFacet.Length) {
-            return RuleFact.Finite(kind: CellKind.Int, value: (Pattern.TryFindOccurrence(
+            return Fact.Finite(kind: CellKind.Int, value: (Pattern.TryFindOccurrence(
                 length: out var matchLength,
                 occurrence: Occurrence,
                 start: out var matchStart,
@@ -239,7 +239,7 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
             ));
         }
 
-        return RuleFact.Finite(kind: CellKind.Int, value: ((MatchFacet == MatchFacet.Prefix)
+        return Fact.Finite(kind: CellKind.Int, value: ((MatchFacet == MatchFacet.Prefix)
             ? Pattern.LongestAcceptedPrefix(values: word[..length])
             : Pattern.Match(values: word[..length])
         ));
@@ -417,37 +417,36 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
         return ((capacity * expression) * (occurrenceSearch ? capacity : 1L));
     }
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         var ordinal = RowOrdinal;
 
         if (RowFrom is { } live) {
-            var selected = live.Resolve(
-                reader: reader,
-                rowOrdinal: out ordinal
-            );
+            var selected = live.Resolve(reader: reader);
 
-            if (selected != KeyNaming.Cell) {
-                return ((selected == KeyNaming.Fault)
-                    ? RuleFact.Faulted(kind: CellKind.Int)
-                    : RuleFact.Absent(kind: CellKind.Int));
+            if (!selected.TryNamed(value: out ordinal)) {
+                return Fact.Unnamed(
+                    kind: CellKind.Int,
+                    resolved: selected
+                );
             }
         }
 
-        var key = RuleReads.ResolveKey(
+        var resolved = RuleReads.ResolveKey(
             keyFrom: KeyFrom,
             literal: Key,
-            naming: out var naming,
             reader: reader
         );
 
-        if (naming == KeyNaming.Fault) {
-            return RuleFact.Faulted(kind: CellKind.Int);
+        if (resolved.Case == FaultCase.Faulted) {
+            return Fact.Faulted(kind: CellKind.Int);
         }
 
+        resolved.TryNamed(value: out var key);
+
         return ((Board is { } query)
-            ? RuleFact.Finite(
+            ? Fact.Finite(
                 kind: CellKind.Int,
                 value: ReadBoardMatch(
                     key: key,

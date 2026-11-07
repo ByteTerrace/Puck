@@ -31,27 +31,22 @@ public sealed class ZoneEndKey : RuleKeyFact {
         }
     }
     /// <inheritdoc/>
-    public override CellKey Resolve(IStateReader reader, out KeyNaming naming) {
+    public override Resolved<CellKey> Resolve(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
-
-        naming = KeyNaming.Nothing;
 
         var ordinal = m_rowOrdinal;
 
         if (m_rowFrom is { } live) {
-            var selected = live.Resolve(
-                reader: reader,
-                rowOrdinal: out ordinal
-            );
+            var selected = live.Resolve(reader: reader);
 
-            if (selected != KeyNaming.Cell) {
-                naming = selected;
-
-                return default;
+            if (!selected.TryNamed(value: out ordinal)) {
+                return ((selected.Case == FaultCase.Faulted)
+                    ? Resolved<CellKey>.Faulted
+                    : Resolved<CellKey>.Nothing);
             }
         }
         if (ordinal < 0) {
-            return default;
+            return Resolved<CellKey>.Nothing;
         }
 
         var arena = reader.Arena;
@@ -67,11 +62,9 @@ public sealed class ZoneEndKey : RuleKeyFact {
             rowOrdinal: ordinal
         )
         ) {
-            return default;
+            return Resolved<CellKey>.Nothing;
         }
 
-        naming = KeyNaming.Cell;
-
-        return key;
+        return Resolved<CellKey>.Named(value: key);
     }
 }

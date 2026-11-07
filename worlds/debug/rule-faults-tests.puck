@@ -1,8 +1,16 @@
-// What a rule fault does at the edges of a firing:
-// `puck test worlds/debug/rule-faults-tests.puck`. A delivery runs after its firing's commit, and a firing whose rows
-// change the document installs that document before any delivery. Here the firing removes an inhabited placement, so
-// the install leaves the active population one smaller, and the cue key that divided by one when the firing checked
-// it divides by zero when the cue is delivered: the delivery is refused and counted, and the committed firing stands.
+// What a rule fault does at every deciding place: `puck test worlds/debug/rule-faults-tests.puck --reproduce`.
+// A fault in an evaluated gate conjunct closes the whole gate, under negation and disjunction too; a fault is not a
+// false, so anything that remembers a verdict keeps the last one it read successfully; an effect that faults refuses
+// the whole firing and everything the firing decided with it. With `a` at zero, `1 / a` divides by zero, so each
+// faulting rule's gate closes on the arithmetic and each faulting effect refuses its firing. The control beside each
+// reads or writes through an address that names no cell (`b` keys nothing the rows hold), an absence that converts to
+// false at a gate and skips an effect, so its negation fires and its increment commits: the gates are evaluated, and
+// only the fault keeps the others shut.
+//
+// Each block is one finding of the rule-faults design, named W1 to W13 (L1, its nested-scope law, is a C# law beside
+// the latch laws). W1 to W7, W9, W12 and W13 pin behavior the fault register already provides and are green; W8, W10
+// and W11 each state a finding still open, so they are red until the fault travels in the value and the firing's
+// latch and decision state rewind with its scope.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -10,9 +18,285 @@ documentId: "rule-faults-tests"
 
 import "stand-in"
 
+let faultAlphabet = [
+  { name: "one", min: 1, max: 1 }
+]
+let zeroAlphabet = [
+  { name: "zero", min: 0, max: 0 }
+]
+
+// A token pattern spells each token's letter through its value expression: a faulting letter faults the match, an
+// absent letter leaves the match absent, and a genuine zero is a letter like any other.
+patterns [
+  { name: "faultRun", kind: Int, symbols: faultAlphabet, pattern: star(item: symbol(name: "one")) }
+  { name: "tokenFault", kind: Int, value: cards[1 / a], symbols: zeroAlphabet, pattern: symbol(name: "zero") }
+  { name: "tokenZero", kind: Int, value: cards[1] - 3, symbols: zeroAlphabet, pattern: symbol(name: "zero") }
+  {
+    name: "tokenAbsent"
+    kind: Int
+    value: tokens[zone(emptyDeck, last)]
+    symbols: zeroAlphabet
+    pattern: symbol(name: "zero")
+  }
+]
+
 state {
+  lattices [
+    grid(name: "faultGrid", origin: [0, 0, 0], cellSize: 1, width: 2, depth: 2, wrap: None, directions: [
+      { name: "N", x: 0, y: -1 }
+      { name: "E", x: 1, y: 0 }
+      { name: "S", x: 0, y: 1 }
+      { name: "W", x: -1, y: 0 }
+    ])
+    grid(name: "searchGrid", origin: [0, 0, 0], cellSize: 1, width: 4, depth: 1, wrap: None)
+  ]
+  spaces {
+    space faultSpace {
+      model: "gate-fault-fixture"
+      revision: "1"
+      dimensions: 8
+    }
+  }
   world {
-    // The active population as the tick's rules began reading it, until tick 6, and how far tick 6 lowered it.
+    row {
+      name: "a"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "b"
+      kind: "Int"
+      value: 5
+    }
+    row {
+      name: "cards"
+      kind: "Int"
+      cells [{ key: "1", value: 3 }]
+    }
+    row {
+      name: "nodes"
+      kind: "Int"
+      cells [{ key: "1", value: 5 }]
+    }
+    row {
+      name: "labels"
+      kind: "Text"
+      cells [{ key: "1", value: "yes" }]
+    }
+    row {
+      name: "hist"
+      kind: "Int"
+      domain: ring(capacity: 4, empty: -1)
+    }
+    row {
+      name: "tiles"
+      kind: "Int"
+      capacity: 4
+      domain: cellsOf(topology: faultGrid)
+    }
+    table vecs capacity(4) space(faultSpace)
+    row {
+      name: "keyFired"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "ageFired"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "vectorFired"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "originFired"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "offsetFired"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "symmetryFired"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "boardPatternFired"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "wordPatternFired"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "textFired"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "removeFired"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "keyControl"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "ageControl"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "vectorControl"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "originControl"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "offsetControl"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "symmetryControl"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "boardPatternControl"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "wordPatternControl"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "textControl"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "removeControl"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "tokens"
+      kind: "Int"
+      capacity: 4
+      cells [{ key: "1", value: 7 }]
+    }
+    pile deck of tokens capacity(4) {
+      "1"
+    }
+    pile emptyDeck of tokens capacity(4)
+    // One on every tick but tick 4, where every `1 / divisor` faults for that tick alone.
+    row {
+      name: "divisor"
+      kind: "Int"
+      value: 1
+    }
+    table fired {
+      cue = 0
+      token = 0
+      absentLeft = 0
+      edge = 0
+      decisionPicked = 0
+      decisionEmpty = 0
+    }
+    table control {
+      cue = 0
+      token = 0
+      tokenAbsent = 0
+      absentLeft = 0
+      edge = 0
+      decisionPicked = 0
+      decisionEmpty = 0
+    }
+
+    // W8: the gate folds a sum over `cards` and then divides it by zero; the control divides it by a live row.
+    row {
+      name: "nestedFired"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "nestedControl"
+      kind: "Int"
+      value: 0
+    }
+
+    // W10: an Edge rule whose effect divides by `crossingDivisor`, zero until tick 3, and how often it landed.
+    row {
+      name: "crossingDivisor"
+      kind: "Int"
+      value: 1
+    }
+    row {
+      name: "crossingSink"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "crossingLanded"
+      kind: "Int"
+      value: 0
+    }
+
+    // W11: a decision whose option effect divides by `choiceDivisor`, zero until tick 3, and how often it landed.
+    row {
+      name: "choiceDivisor"
+      kind: "Int"
+      value: 1
+    }
+    row {
+      name: "choiceSink"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "choiceLanded"
+      kind: "Int"
+      value: 0
+    }
+
+    // W12: a one-token search whose judge faults while `searchFault` holds (before tick 30). `searchBest.score`
+    // stays -1 until the job lands an answer, and `searchAtTwenty` is what it held at tick 20.
+    row {
+      name: "searchBoard"
+      kind: "Int"
+      domain: cellsOf(topology: searchGrid)
+    }
+    table searchPieces bounds(-1..3) {
+      first = 0
+      second = 3
+    }
+    slot searchTurn = 0 bounds(0..1)
+    slot searchVerdict = 0 bounds(0..1)
+    slot searchFault = 1 bounds(0..1)
+    slot searchAtTwenty = -1
+    table searchBest {
+      token = -1
+      to = -1
+      score = -1
+    }
+
+    // W9: the active population as the tick's rules began reading it, until tick 12, and how far tick 12 lowered it.
     row {
       name: "populationSeen"
       kind: "Int"
@@ -52,31 +336,447 @@ placements {
   }
 }
 
-// Rules run in document order, so the install rule reads the population the tick began with.
+search {
+  jobs [
+    {
+      name: "searchOne"
+      tokens: searchPieces
+      board: searchBoard
+      turn: searchTurn
+      verdict: searchVerdict
+      depth: 1
+      nodes: 64
+      best: searchBest
+      score: searchPieces.first + searchPieces.second
+    }
+  ]
+}
+
+// Rules run in document order, so every rule below reads this tick's divisors.
+rule "divisor-pulse" {
+  mode: Level
+  divisor = 1 - ($tick == 4)
+}
+rule "crossing-divisor" {
+  mode: Level
+  crossingDivisor = ($tick >= 3)
+}
+rule "choice-divisor" {
+  mode: Level
+  choiceDivisor = ($tick >= 3)
+}
+rule "search-fault-window" {
+  mode: Level
+  searchFault = ($tick < 30)
+}
+rule "search-at-twenty" {
+  when $tick == 20
+  mode: Level
+  searchAtTwenty = searchBest.score
+}
+
+// W3: a faulting dynamic key or ring age closes its gate; an absent one converts to false.
+rule "dynamic-key-fault" {
+  when not cards[1 / a] == 3
+  mode: Level
+  keyFired += 1
+}
+rule "ring-age-fault" {
+  when not history(hist, 1 / a) > 5
+  mode: Level
+  ageFired += 1
+}
+rule "dynamic-key-absent" {
+  when not cards[b] == 3
+  mode: Level
+  keyControl += 1
+}
+rule "ring-age-absent" {
+  when not history(hist, b) > 5
+  mode: Level
+  ageControl += 1
+}
+
+// W2: a faulting vector, board-origin, symmetry, pattern or text address closes its gate.
+rule "vector-key-fault" {
+  when not identical(vecs[1 / a], vector("fwAAAAAAAAA")) == 1
+  mode: Level
+  vectorFired += 1
+}
+rule "board-origin-fault" {
+  when not board(neighbour, tiles, E)[1 / a] == 99
+  mode: Level
+  originFired += 1
+}
+rule "board-offset-fault" {
+  when not board(offset, tiles, 1, 0)[1 / a] == 99
+  mode: Level
+  offsetFired += 1
+}
+rule "symmetry-key-fault" {
+  when not symmetry(ring, nodes)[1 / a] == 99
+  mode: Level
+  symmetryFired += 1
+}
+rule "board-pattern-fault" {
+  when not match(faultRun, tiles, E)[1 / a] == 99
+  mode: Level
+  boardPatternFired += 1
+}
+rule "word-pattern-fault" {
+  when not match(faultRun, cards)[1 / a] == 99
+  mode: Level
+  wordPatternFired += 1
+}
+rule "text-key-fault" {
+  when not labels[1 / a] == "yes"
+  mode: Level
+  textFired += 1
+}
+rule "vector-key-absent" {
+  when not identical(vecs[b], vector("fwAAAAAAAAA")) == 1
+  mode: Level
+  vectorControl += 1
+}
+rule "board-origin-absent" {
+  when not board(neighbour, tiles, E)[b] == 99
+  mode: Level
+  originControl += 1
+}
+rule "board-offset-absent" {
+  when not board(offset, tiles, 1, 0)[b] == 99
+  mode: Level
+  offsetControl += 1
+}
+rule "symmetry-key-absent" {
+  when not symmetry(ring, nodes)[b] == 99
+  mode: Level
+  symmetryControl += 1
+}
+rule "board-pattern-absent" {
+  when not match(faultRun, tiles, E)[b] == 99
+  mode: Level
+  boardPatternControl += 1
+}
+rule "word-pattern-absent" {
+  when not match(faultRun, cards)[b] == 99
+  mode: Level
+  wordPatternControl += 1
+}
+rule "text-key-absent" {
+  when not labels[b] == "yes"
+  mode: Level
+  textControl += 1
+}
+
+// W1: a faulting remove key refuses its whole firing, so the increment before it never lands.
+rule "remove-key-fault" {
+  mode: Level
+  removeFired += 1
+  remove cards[1 / a]
+}
+rule "remove-key-absent" {
+  mode: Level
+  removeControl += 1
+  remove cards[b]
+}
+
+// W5: a computed body key is resolved like a literal one: faulting, it refuses the firing; naming body 0, it fires.
+rule "cue-key-fault" {
+  mode: Level
+  fired.cue += 1
+  emitCue(name: "gateFaultProbe", key: 1 / a)
+}
+rule "cue-key-computed" {
+  mode: Level
+  control.cue += 1
+  emitCue(name: "gateFaultProbe", key: b - 5)
+}
+
+// W6: a faulting token letter faults the match; an absent letter names none; a genuine zero is a letter.
+rule "token-fault" {
+  when match(tokenFault, deck) == 1
+  mode: Level
+  fired.token += 1
+}
+rule "token-zero" {
+  when match(tokenZero, deck) == 1
+  mode: Level
+  control.token += 1
+}
+rule "token-absent" {
+  when not match(tokenAbsent, deck) == 1
+  mode: Level
+  control.tokenAbsent += 1
+}
+
+// W7: the left side reads an empty pile's endpoint, absent; the right side is still read, and its fault wins.
+rule "absent-left-fault" {
+  when not (tokens[zone(emptyDeck, last)] + 0) == cards[1 / a]
+  mode: Level
+  fired.absentLeft += 1
+}
+rule "absent-left-absent" {
+  when not (tokens[zone(emptyDeck, last)] + 0) == cards[b]
+  mode: Level
+  control.absentLeft += 1
+}
+
+// W4: a fault holds the last decided gate. The faulting Edge rule fires once and the faulting decision keeps its
+// choice and runs no onNoChoice, while the controls, whose gates truly close on tick 4 (labels holds no cell "2"),
+// re-arm and fire again, clear the choice, run onNoChoice and pick again when the gate reopens.
+rule "edge-fault" {
+  when labels[1 / divisor] == "yes"
+  mode: Edge
+  fired.edge += 1
+}
+rule "edge-closed" {
+  when labels[2 - divisor] == "yes"
+  mode: Edge
+  control.edge += 1
+}
+rule "decision-fault" {
+  when labels[1 / divisor] == "yes"
+  mode: Level
+  decision {
+    periodSeconds: 1s
+    mode: HighestScore
+    scoreKind: Fixed
+    option "only" {
+      score: 1
+      fired.decisionPicked += 1
+    }
+    onNoChoice {
+      fired.decisionEmpty += 1
+    }
+  }
+}
+rule "decision-closed" {
+  when labels[2 - divisor] == "yes"
+  mode: Level
+  decision {
+    periodSeconds: 1s
+    mode: HighestScore
+    scoreKind: Fixed
+    option "only" {
+      score: 1
+      control.decisionPicked += 1
+    }
+    onNoChoice {
+      control.decisionEmpty += 1
+    }
+  }
+}
+
+// W8: a fold that succeeds before the arithmetic that fails after it. The failure is the gate's fault, whatever the
+// fold before it answered.
+rule "nested-success-fault" {
+  when not (sum(cards, c -> c) / a) == 3
+  mode: Level
+  nestedFired += 1
+}
+rule "nested-success-control" {
+  when not (sum(cards, c -> c) / b) == 3
+  mode: Level
+  nestedControl += 1
+}
+
+// W10: the crossing is consumed only by a firing that lands. The effect faults on tick 2, the tick the gate first
+// opens, so the Edge rule has not fired; it fires on tick 3, when the effect no longer faults.
+rule "crossing-effect-fault" {
+  when $tick >= 2
+  mode: Edge
+  crossingLanded += 1
+  crossingSink = 1 / crossingDivisor
+}
+
+// W11: a decision's choice is installed only by a firing that lands. The option effect faults on tick 1 and 2, so no
+// choice stands and the decision picks again on tick 3, when the effect no longer faults.
+rule "choice-effect-fault" {
+  mode: Level
+  decision {
+    periodSeconds: 1s
+    mode: HighestScore
+    scoreKind: Fixed
+    option "only" {
+      score: 1
+      choiceLanded += 1
+      choiceSink = 1 / choiceDivisor
+    }
+  }
+}
+
+// W12: the judge accepts every relocation, then faults while the window holds. A candidate whose judge faults is a
+// faulted candidate and not a scored one, so the step restarts and no answer lands until the window closes.
+rule "search-accept" {
+  when search(ply) >= 1
+  mode: Level
+  searchVerdict = 1
+  searchTurn = 1 - searchTurn
+}
+rule "search-judge-fault" {
+  when search(ply) >= 1 and searchFault == 1
+  mode: Level
+  searchVerdict = 1 / a
+}
+
+// W9: a delivery runs after its firing's commit, and a firing whose rows change the document installs that document
+// before any delivery. Here the firing removes an inhabited placement, so the install leaves the active population one
+// smaller, and the cue key that divided by one when the firing checked it divides by zero when the cue is delivered:
+// the delivery is refused and counted, and the committed firing stands. The install rule reads the population the
+// tick began with because rules run in document order.
 rule "population-drop" {
-  when $tick == 8
+  when $tick == 14
   mode: Level
   populationDrop = populationSeen - $population
 }
 rule "population-seen" {
-  when $tick < 7
+  when $tick < 13
   mode: Level
   populationSeen = $population
 }
 rule "install-delivery-fault" {
-  when $tick == 6
+  when $tick == 12
   mode: Level
   afterInstall += 1
   removePlacement(id: `rule-faults-inhabited`)
   emitCue(name: "ruleFaultProbe", key: 1 / ($population - populationSeen + 1))
 }
 
-test "a delivery that faults after its firing installs a document is refused, not thrown" {
+test "W1 a faulting remove key refuses its whole firing and the write before it" {
   when {
     ticks 10
   }
   expect {
+    removeFired == 0
+    cards[1] == 3
+    removeControl > 0
+  }
+}
+
+test "W2 a faulting vector, board, symmetry, pattern or text address closes its gate" {
+  when {
+    ticks 10
+  }
+  expect {
+    vectorFired == 0
+    originFired == 0
+    offsetFired == 0
+    symmetryFired == 0
+    boardPatternFired == 0
+    wordPatternFired == 0
+    textFired == 0
+    vectorControl > 0
+    originControl > 0
+    offsetControl > 0
+    symmetryControl > 0
+    boardPatternControl > 0
+    wordPatternControl > 0
+    textControl > 0
+  }
+}
+
+test "W3 a faulting dynamic key or ring age closes its gate" {
+  when {
+    ticks 10
+  }
+  expect {
+    keyFired == 0
+    ageFired == 0
+    keyControl > 0
+    ageControl > 0
+  }
+}
+
+test "W4 a fault holds the last decided gate" {
+  when {
+    ticks 10
+  }
+  expect {
+    fired.edge == 1
+    control.edge == 2
+    fired.decisionPicked == 1
+    fired.decisionEmpty == 0
+    control.decisionPicked == 2
+    control.decisionEmpty == 1
+  }
+}
+
+test "W5 a faulting effect key refuses its firing and a valid computed key keeps its body" {
+  when {
+    ticks 10
+  }
+  expect {
+    fired.cue == 0
+    control.cue > 0
+  }
+}
+
+test "W6 a faulting token letter faults its match, and an absent one names none" {
+  when {
+    ticks 10
+  }
+  expect {
+    fired.token == 0
+    control.token > 0
+    control.tokenAbsent > 0
+  }
+}
+
+test "W7 an absent left side never hides a faulting right side" {
+  when {
+    ticks 10
+  }
+  expect {
+    fired.absentLeft == 0
+    control.absentLeft > 0
+  }
+}
+
+test "W8 a failure after a nested success is still the gate's fault" {
+  when {
+    ticks 10
+  }
+  expect {
+    nestedFired == 0
+    nestedControl > 0
+  }
+}
+
+test "W9 a delivery that faults after its firing installs a document is refused, not thrown" {
+  when {
+    ticks 16
+  }
+  expect {
     afterInstall == 1
     populationDrop == 1
+  }
+}
+
+test "W10 an effect that faults leaves the Edge crossing unconsumed" {
+  when {
+    ticks 10
+  }
+  expect {
+    crossingLanded == 1
+  }
+}
+
+test "W11 an option effect that faults leaves no choice installed" {
+  when {
+    ticks 10
+  }
+  expect {
+    choiceLanded == 1
+  }
+}
+
+test "W12 a candidate whose judge faults lands no answer" {
+  when {
+    ticks 90
+  }
+  expect {
+    searchAtTwenty == -1
+    searchBest.score >= 0
   }
 }

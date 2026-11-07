@@ -10,18 +10,17 @@ public static class RuleReads {
     /// value otherwise.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="rowOrdinal">The row's catalog ordinal, or <c>-1</c> for no row.</param>
-    /// <param name="key">The interned cell key, or the invalid default for a cell no row holds.</param>
+    /// <param name="resolved">What the address named — see
+    /// <see cref="ResolveKey(IStateReader, CellKey, CompiledCellRef?)"/>. A named invalid key is a cell no row holds.</param>
     /// <param name="kind">The encoding the fact carries.</param>
-    /// <param name="naming">What the address named — see
-    /// <see cref="ResolveKey(IStateReader, CellKey, CompiledCellRef?, out KeyNaming)"/>.</param>
     /// <returns>The fact.</returns>
-    public static RuleFact ReadCell(IStateReader reader, int rowOrdinal, CellKey key, CellKind kind, KeyNaming naming) {
+    public static Fact ReadCell(IStateReader reader, int rowOrdinal, Resolved<CellKey> resolved, CellKind kind) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        if (naming != KeyNaming.Cell) {
-            return ((naming == KeyNaming.Fault)
-                ? RuleFact.Faulted(kind: kind)
-                : RuleFact.Absent(kind: kind));
+        if (!resolved.TryNamed(value: out var key)) {
+            return ((resolved.Case == FaultCase.Faulted)
+                ? Fact.Faulted(kind: kind)
+                : Fact.Absent(kind: kind));
         }
         if (
             (rowOrdinal < 0) ||
@@ -29,7 +28,7 @@ public static class RuleReads {
         ) {
             // A name no key table interns is a cell no row in this world holds, which reads zero like any other
             // unheld cell — never the absent fact, which would fault every arithmetic spelled around it.
-            return RuleFact.Finite(
+            return Fact.Finite(
                 kind: kind,
                 value: 0L
             );
@@ -37,7 +36,7 @@ public static class RuleReads {
 
         var time = reader.Time;
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: kind,
             value: (reader.Arena.TryReadLiveNumber(
                 key: key,
@@ -198,7 +197,7 @@ public static class RuleReads {
         );
     }
     /// <summary>Why an address whose key computation faulted refused: the one sentence every read and write that
-    /// meets <see cref="KeyNaming.Fault"/> reports.</summary>
+    /// meets a <see cref="FaultCase.Faulted"/> address reports.</summary>
     public const string KeyFaultReason = "the address's key faulted (overflow, a divide by zero, or a value with no number)";
     /// <summary>Attempts to resolve the key a state-writing effect addresses. Only a dynamic key family that must
     /// create a new runtime address admits one here; read resolution never changes the key table.</summary>
@@ -226,30 +225,27 @@ public static class RuleReads {
         );
     }
     /// <summary>Resolves the interned key a compiled address names for the evaluation in flight (a literal key, a
-    /// bound key token, another cell's value read as a key, or a compiled key fact), and what it named. No form
-    /// discards <paramref name="naming"/>: each caller decides what a faulted key means where it sits, a read raising
-    /// it as arithmetic and a write or remove refusing the firing.</summary>
+    /// bound key token, another cell's value read as a key, or a compiled key fact), and what it named. Each caller
+    /// decides what a faulted key means where it sits, a read raising it as arithmetic and a write or remove
+    /// refusing the firing.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="literal">The compile-time key, used when <paramref name="keyFrom"/> is
     /// <see langword="null"/>.</param>
     /// <param name="keyFrom">The live indirection, or <see langword="null"/>.</param>
-    /// <param name="naming">What the address named. An address naming a cell no key table interns answers
-    /// <see cref="KeyNaming.Cell"/> beside the invalid key: no row holds that cell, and it reads zero. An address
-    /// naming nothing (an empty zone's endpoint, a pointer spelling no cell name) answers
-    /// <see cref="KeyNaming.Nothing"/>, and reads absent. One whose computation faulted answers
-    /// <see cref="KeyNaming.Fault"/>.</param>
-    /// <returns>The key, or the invalid default.</returns>
-    public static CellKey ResolveKey(IStateReader reader, CellKey literal, CompiledCellRef? keyFrom, out KeyNaming naming) {
+    /// <returns>What the address named. An address naming a cell no key table interns is named with the invalid key: no
+    /// row holds that cell, and it reads zero. An address naming nothing (an empty zone's endpoint, a pointer spelling
+    /// no cell name) is <see cref="FaultCase.Absent"/>, and reads absent. One whose computation faulted is
+    /// <see cref="FaultCase.Faulted"/>.</returns>
+    public static Resolved<CellKey> ResolveKey(IStateReader reader, CellKey literal, CompiledCellRef? keyFrom) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         if (keyFrom is not { } reference) {
-            naming = Named(named: literal.IsValid);
-
-            return literal;
+            return (literal.IsValid
+                ? Resolved<CellKey>.Named(value: literal)
+                : Resolved<CellKey>.Nothing);
         }
 
         return ResolveReference(
-            naming: out naming,
             reader: reader,
             reference: in reference
         );
@@ -257,26 +253,24 @@ public static class RuleReads {
     /// <summary>Resolves one live key indirection, and what it named.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="reference">The indirection.</param>
-    /// <param name="naming">What the indirection named — see
-    /// <see cref="ResolveKey(IStateReader, CellKey, CompiledCellRef?, out KeyNaming)"/>.</param>
-    /// <returns>The key, or the invalid default.</returns>
-    public static CellKey ResolveReference(IStateReader reader, in CompiledCellRef reference, out KeyNaming naming) {
+    /// <returns>What the indirection named — see <see cref="ResolveKey(IStateReader, CellKey, CompiledCellRef?)"/>.</returns>
+    public static Resolved<CellKey> ResolveReference(IStateReader reader, in CompiledCellRef reference) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         if (reference.Custom is { } custom) {
-            return custom.Resolve(
-                naming: out naming,
-                reader: reader
-            );
+            return custom.Resolve(reader: reader);
         }
+
         var key = ResolveBuiltIn(named: out var named, reader: reader, reference: in reference);
 
-        naming = Named(named: named);
-
-        return key;
+        return (named
+            ? Resolved<CellKey>.Named(value: key)
+            : Resolved<CellKey>.Nothing);
     }
 
-    private static KeyNaming Named(bool named) => (named ? KeyNaming.Cell : KeyNaming.Nothing);
+    private static Resolved<long> NamedIndex(bool named, long index) => (named
+        ? Resolved<long>.Named(value: index)
+        : Resolved<long>.Nothing);
     // The engine's own indirections: none computes arithmetic, so none faults.
     private static CellKey ResolveBuiltIn(IStateReader reader, in CompiledCellRef reference, out bool named) {
         if (reference.Binding is BoundKey.Each or BoundKey.Token or BoundKey.Previous or BoundKey.Write) {
@@ -393,17 +387,13 @@ public static class RuleReads {
     /// An indirection that spells no integer names nothing.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="reference">The indirection.</param>
-    /// <param name="index">The index when the indirection spells an integer.</param>
-    /// <returns><see cref="KeyNaming.Cell"/> when the indirection spells an integer, <see cref="KeyNaming.Fault"/>
-    /// when computing it faulted, and <see cref="KeyNaming.Nothing"/> otherwise.</returns>
-    public static KeyNaming ResolveIndex(IStateReader reader, in CompiledCellRef reference, out long index) {
+    /// <returns>The index when the indirection spells an integer, <see cref="FaultCase.Faulted"/> when computing it
+    /// faulted, and <see cref="FaultCase.Absent"/> otherwise.</returns>
+    public static Resolved<long> ResolveIndex(IStateReader reader, in CompiledCellRef reference) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         if (reference.Custom is { } custom) {
-            return custom.ResolveIndex(
-                index: out index,
-                reader: reader
-            );
+            return custom.ResolveIndex(reader: reader);
         }
         if (
             (reference.Binding == BoundKey.None) &&
@@ -419,20 +409,16 @@ public static class RuleReads {
             );
 
             if (!inner.IsValid) {
-                index = 0L;
-
-                return KeyNaming.Nothing;
+                return Resolved<long>.Nothing;
             }
 
             // A pointer answers the integer its cell carries; routing it through the key table would lose every
             // index no name is interned for.
-            index = ReadPointer(
+            return Resolved<long>.Named(value: ReadPointer(
                 inner: inner,
                 reader: reader,
                 reference: in reference
-            );
-
-            return KeyNaming.Cell;
+            ));
         }
 
         var key = ResolveBuiltIn(
@@ -440,12 +426,16 @@ public static class RuleReads {
             reader: reader,
             reference: in reference
         );
-
-        return Named(named: TryKeyIndex(
+        var spelled = TryKeyIndex(
             keys: reader.Arena.Keys,
-            index: out index,
+            index: out var keyIndex,
             key: key
-        ));
+        );
+
+        return NamedIndex(
+            index: keyIndex,
+            named: spelled
+        );
     }
     /// <summary>Returns the interned key whose name is an integer's decimal spelling, without minting one the
     /// arena does not already hold.</summary>

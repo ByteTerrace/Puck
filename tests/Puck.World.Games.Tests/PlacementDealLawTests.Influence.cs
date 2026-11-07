@@ -61,17 +61,17 @@ public sealed partial class PlacementDealLawTests {
 
         Assert.Equal(
             1,
-            fixture.Server.RuleHost.Read(operand: first).Value
+            fixture.Server.RuleHost.Read(operand: first).ToRaw(kind: CellKind.Int)
         );
         Assert.Equal(
             0,
-            fixture.Server.RuleHost.Read(operand: second).Value
+            fixture.Server.RuleHost.Read(operand: second).ToRaw(kind: CellKind.Int)
         );
-        Assert.True(condition: fixture.Server.RuleHost.Read(operand: new PlacementInfluenceOperand(
+        Assert.Equal(expected: FaultCase.Absent, actual: fixture.Server.RuleHost.Read(operand: new PlacementInfluenceOperand(
             channel: "water",
             key: "missing",
             placementId: TemplateId
-        )).IsAbsent);
+        )).Outcome.Case);
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
             Principal.Console,
@@ -85,7 +85,7 @@ public sealed partial class PlacementDealLawTests {
         fixture.Step();
         Assert.Equal(
             1,
-            fixture.Server.RuleHost.Read(operand: second).Value
+            fixture.Server.RuleHost.Read(operand: second).ToRaw(kind: CellKind.Int)
         );
         Assert.Equal(
             0,
@@ -93,7 +93,7 @@ public sealed partial class PlacementDealLawTests {
                 channel: "power",
                 key: "b",
                 placementId: TemplateId
-            )).Value
+            )).ToRaw(kind: CellKind.Int)
         );
 
         Assert.Equal(

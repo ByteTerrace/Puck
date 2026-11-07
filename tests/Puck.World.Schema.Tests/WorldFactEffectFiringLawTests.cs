@@ -89,8 +89,8 @@ public sealed class WorldFactEffectFiringLawTests {
         ));
         var before = host.Arena.Keys.Count;
 
-        Assert.False(condition: pair.Resolve(naming: out var naming, reader: host).IsValid);
-        Assert.Equal(expected: KeyNaming.Cell, actual: naming);
+        Assert.True(condition: pair.Resolve(reader: host).TryNamed(value: out var unseen));
+        Assert.False(condition: unseen.IsValid);
         Assert.Equal(
             actual: host.Arena.Keys.Count,
             expected: before
@@ -115,29 +115,29 @@ public sealed class WorldFactEffectFiringLawTests {
         public ICompiledFact? Fired { get; private set; }
 
         public CellKey PairKey(PairKeyFact key) => default;
-        public RuleFact Read(PopulationOperand operand) => throw Unserved();
-        public RuleFact Read(PhysicsQuiescentOperand operand) => throw Unserved();
-        public RuleFact Read(ClockOperand operand) => throw Unserved();
-        public RuleFact Read(RegionOccupancyOperand operand) => throw Unserved();
-        public RuleFact Read(PlacementInfluenceOperand operand) => throw Unserved();
-        public RuleFact Read(MachineMemoryOperand operand) => throw Unserved();
-        public RuleFact Read(ArgBodyOperand operand) => throw Unserved();
-        public RuleFact Read(BodyDistanceOperand operand) => throw Unserved();
-        public RuleFact Read(LineOfSightOperand operand) => throw Unserved();
-        public RuleFact Read(ParkedOperand operand) => throw Unserved();
-        public RuleFact Read(UprightOperand operand) => throw Unserved();
-        public RuleFact Read(BodyFactOperand operand) => throw Unserved();
-        public RuleFact Read(BodyPositionOperand operand) => throw Unserved();
-        public RuleFact Read(EngagedOperand operand) => throw Unserved();
-        public RuleFact Read(BodyStateOperand operand) => throw Unserved();
-        public RuleFact Read(LinkStalenessOperand operand) => throw Unserved();
-        public RuleFact Read(ChannelOperand operand) => throw Unserved();
-        public RuleFact Read(WorldInputOperand operand) => throw Unserved();
-        public RuleFact Read(PointerOperand operand) => throw Unserved();
-        public RuleFact Read(NearestOperand operand) => throw Unserved();
-        public RuleFact Read(NavigationOperand operand) => throw Unserved();
-        public RuleFact Read(BoardCellOfOperand operand) => throw Unserved();
-        public RuleFact Read(BoardSeatOperand operand) => throw Unserved();
+        public Fact Read(PopulationOperand operand) => throw Unserved();
+        public Fact Read(PhysicsQuiescentOperand operand) => throw Unserved();
+        public Fact Read(ClockOperand operand) => throw Unserved();
+        public Fact Read(RegionOccupancyOperand operand) => throw Unserved();
+        public Fact Read(PlacementInfluenceOperand operand) => throw Unserved();
+        public Fact Read(MachineMemoryOperand operand) => throw Unserved();
+        public Fact Read(ArgBodyOperand operand) => throw Unserved();
+        public Fact Read(BodyDistanceOperand operand) => throw Unserved();
+        public Fact Read(LineOfSightOperand operand) => throw Unserved();
+        public Fact Read(ParkedOperand operand) => throw Unserved();
+        public Fact Read(UprightOperand operand) => throw Unserved();
+        public Fact Read(BodyFactOperand operand) => throw Unserved();
+        public Fact Read(BodyPositionOperand operand) => throw Unserved();
+        public Fact Read(EngagedOperand operand) => throw Unserved();
+        public Fact Read(BodyStateOperand operand) => throw Unserved();
+        public Fact Read(LinkStalenessOperand operand) => throw Unserved();
+        public Fact Read(ChannelOperand operand) => throw Unserved();
+        public Fact Read(WorldInputOperand operand) => throw Unserved();
+        public Fact Read(PointerOperand operand) => throw Unserved();
+        public Fact Read(NearestOperand operand) => throw Unserved();
+        public Fact Read(NavigationOperand operand) => throw Unserved();
+        public Fact Read(BoardCellOfOperand operand) => throw Unserved();
+        public Fact Read(BoardSeatOperand operand) => throw Unserved();
         public int ResolveBody(in CompiledBodyRef bodyRef) => bodyRef.Index;
         public bool TryReadHostOwnedCell(int rowOrdinal, int cell, out long value) => throw Unserved();
         public bool TryReadHostOwnedSlot(int rowOrdinal, out CellValue value) => throw Unserved();

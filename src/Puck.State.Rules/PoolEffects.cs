@@ -329,19 +329,19 @@ public sealed class InstanceFieldOperand : RuleOperand {
         right: PoolEffectWork.FieldJournalWidth(field: Field)
     ));
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
         var bindings = reader.InstanceBindings;
 
         if (((uint)BindingSlot) >= ((uint)bindings.Length)) {
-            return RuleFact.Absent(kind: ValueKind);
+            return Fact.Absent(kind: ValueKind);
         }
 
         var handle = bindings[BindingSlot];
 
         return (((handle.PoolOrdinal == Pool.Ordinal) && reader.Arena.TryReadLiveRaw(fieldOrdinal: Field.Ordinal, handle: handle, raw: out var raw, time: reader.Time))
-            ? RuleFact.Finite(kind: ValueKind, value: raw)
-            : RuleFact.Absent(kind: ValueKind));
+            ? Fact.Finite(kind: ValueKind, value: raw)
+            : Fact.Absent(kind: ValueKind));
     }
 }
 /// <summary>Reads the currently live lifetime in one declared pool slot.</summary>
@@ -364,11 +364,11 @@ public sealed class StaticInstanceFieldOperand : RuleOperand {
         right: PoolEffectWork.FieldJournalWidth(field: Field)
     ));
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader) {
         return ((reader.Arena.TryResolvePoolSlot(poolOrdinal: Pool.Ordinal, slot: Handle.Slot, handle: out var handle) &&
             reader.Arena.TryReadLiveRaw(fieldOrdinal: Field.Ordinal, handle: handle, raw: out var raw, time: reader.Time))
-            ? RuleFact.Finite(kind: ValueKind, value: raw)
-            : RuleFact.Absent(kind: ValueKind));
+            ? Fact.Finite(kind: ValueKind, value: raw)
+            : Fact.Absent(kind: ValueKind));
     }
 }
 /// <summary>Writes the currently live lifetime in one declared pool slot.</summary>

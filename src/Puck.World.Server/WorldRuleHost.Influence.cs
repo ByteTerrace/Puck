@@ -7,7 +7,7 @@ public sealed partial class WorldRuleHost {
     private readonly HashSet<string> m_incompleteInfluenceChannels = new(comparer: StringComparer.Ordinal);
 
     /// <inheritdoc/>
-    public RuleFact Read(PlacementInfluenceOperand operand) {
+    public Fact Read(PlacementInfluenceOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
         var index = Host.Definition.SpatialQueryIndex;
@@ -53,22 +53,22 @@ public sealed partial class WorldRuleHost {
                 key: (target, childKey),
                 value: out target!
             )) {
-                return RuleFact.Absent(kind: CellKind.Int);
+                return Fact.Absent(kind: CellKind.Int);
             }
         }
         // An unrepresented influence provider makes a zero count unknowable. Never report a falsely safe value.
         if (m_incompleteInfluenceChannels.Contains(item: operand.Channel)) {
-            return RuleFact.Absent(kind: CellKind.Int);
+            return Fact.Absent(kind: CellKind.Int);
         }
         return (index.HasOccupationTarget(placementId: target)
-            ? RuleFact.Finite(
+            ? Fact.Finite(
                 index.CountInfluences(
                     channel: operand.Channel,
                     placementId: target
                 ),
                 CellKind.Int
             )
-            : RuleFact.Absent(kind: CellKind.Int)
+            : Fact.Absent(kind: CellKind.Int)
         );
     }
 }

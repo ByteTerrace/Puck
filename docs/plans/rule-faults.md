@@ -541,7 +541,9 @@ specified there.
 Each row says what closes the finding and by which of the three
 enforcements; "structure" is claimed only where the invalid state has no
 representation. The witnesses are `test` blocks of
-`worlds/debug/rule-faults-tests.puck`.
+`worlds/debug/rule-faults-tests.puck`, except W13 (a flock needs the population's counters, which a test block cannot
+read: `FlockLawTests.AFaultingAffinityIsACountedFailureThatWeighsNothing`) and L1 (a nested-scope law,
+`LatchAndTriggerLawTests.ARewoundScopeRestoresTheEdgeCrossingAChildFiringConsumed`).
 
 | Round | Finding | What closes it | Enforcement | Witness |
 |---|---|---|---|---|
@@ -561,26 +563,16 @@ representation. The witnesses are `test` blocks of
 
 ## Implementation steps
 
-Nine steps, each a vertically coherent slice: one producer and every consumer
+Steps 2 to 9 remain (step 1, the representation, has landed: `Outcome`, `Fact`, `Resolved<T>`, `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` are in `Puck.State`, `Fact` and `Resolved<T>` carry every operand read and key resolution, and the witnesses exist). Each is a vertically coherent slice: one producer and every consumer
 it affects land together, every bridge is named with the step that removes
 it, and the check proves what the step establishes. Each step builds what it
 touches (`dotnet build <project> -c Release -m:2 -nodeReuse:false`) and lands
 on a working integration branch. The witness file is
 `worlds/debug/rule-faults-tests.puck`, run with
-`puck test worlds/debug/rule-faults-tests.puck --jobs 1`; it is written in
-step 1 with each block's expected verdict, and a block for a still-open
-finding is red until its step.
+`puck test worlds/debug/rule-faults-tests.puck --jobs 1`; its header states
+each block's expected verdict, and W8, W10, W11 and L1, the blocks for findings
+still open, are red until their steps.
 
-1. **Representation, no semantics.** Add `Outcome`, `Fact`, `Resolved<T>`,
-   `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome`'s `Faulted`
-   (unused yet) to `Puck.State`; replace `RuleFact` with `Fact` and
-   `KeyNaming` with `Resolved<T>` at every caller, mechanically, keeping
-   today's behaviour (a faulted fact still raises into the register where it
-   does today). Write W1 to W13 and L1. Check: the solution builds;
-   `puck search "RuleFact|KeyNaming" src` returns no line; `puck test
-   --reproduce` over `worlds/debug` reports hashes identical to the tip (a
-   representation change moves nothing); the witness file runs, with the
-   open findings red.
 2. **Addresses are program.** Lowering of computed keys, live row indices,
    ring ages and token expressions; `IRuleOperand`'s `Addresses` and `Read(reader, keys)`;
    `world.match` reads through the detached `Word` fold; pricing corrected
@@ -671,4 +663,4 @@ after step 2 shows no nested `Run` and no nested leases.
 Determinism (AGENTS.md rule 4): every previously lost fault now closes a gate,
 holds a latch or refuses a firing that used to proceed, so a recorded replay
 or hash that reached one of those paths moves; each step re-records what it
-invalidates. Step 1 is the exception and the control: it moves nothing.
+invalidates.

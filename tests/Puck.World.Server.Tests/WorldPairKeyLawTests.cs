@@ -38,11 +38,8 @@ public sealed class WorldPairKeyLawTests {
         ));
         var before = fixture.Server.Arena.Keys.Count;
 
-        Assert.False(condition: pair.Resolve(
-            reader: fixture.Server.RuleHost,
-            naming: out var naming
-        ).IsValid);
-        Assert.Equal(expected: KeyNaming.Cell, actual: naming);
+        Assert.True(condition: pair.Resolve(reader: fixture.Server.RuleHost).TryNamed(value: out var unseen));
+        Assert.False(condition: unseen.IsValid);
         Assert.Equal(expected: before, actual: fixture.Server.Arena.Keys.Count);
 
         var scope = fixture.Server.Arena.BeginScope();

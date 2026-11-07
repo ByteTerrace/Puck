@@ -173,7 +173,7 @@ public sealed class WorldFactOperandLawTests {
         var fact = ((IRuleOperand)operand).Read(reader: reader);
 
         Assert.Null(@object: reader.Influence);
-        Assert.True(condition: fact.IsAbsent);
+        Assert.Equal(expected: FaultCase.Absent, actual: fact.Outcome.Case);
     }
     [Fact]
     public void AnIdentityFactReadsItsLaneCellLiveAtTheEvaluationsTime() {
@@ -206,7 +206,7 @@ public sealed class WorldFactOperandLawTests {
             actual: operand.Read(
                 facet: reader,
                 reader: reader
-            ).Value,
+            ).ToRaw(kind: CellKind.Int),
             expected: 3L
         );
 
@@ -216,7 +216,7 @@ public sealed class WorldFactOperandLawTests {
             actual: operand.Read(
                 facet: reader,
                 reader: reader
-            ).Value,
+            ).ToRaw(kind: CellKind.Int),
             expected: 5L
         );
     }
@@ -259,61 +259,61 @@ public sealed class RecordingWorldFacts : IStateReader, IWorldFacts {
     /// <inheritdoc/>
     public ulong Tick { get; set; }
 
-    private static RuleFact Unserved() => throw new NotSupportedException(message: "this host serves the influence read alone");
+    private static Fact Unserved() => throw new NotSupportedException(message: "this host serves the influence read alone");
 
     /// <inheritdoc/>
     public int BoundIndex(BoundKey key) => -1;
     /// <inheritdoc/>
     public CellKey PairKey(PairKeyFact key) => default;
     /// <inheritdoc/>
-    public RuleFact Read(PlacementInfluenceOperand operand) {
+    public Fact Read(PlacementInfluenceOperand operand) {
         Influence = operand;
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Int,
             value: 1L
         );
     }
     /// <inheritdoc/>
-    public RuleFact Read(PopulationOperand operand) => Unserved();
+    public Fact Read(PopulationOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(PhysicsQuiescentOperand operand) => Unserved();
+    public Fact Read(PhysicsQuiescentOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(ClockOperand operand) => Unserved();
+    public Fact Read(ClockOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(RegionOccupancyOperand operand) => Unserved();
+    public Fact Read(RegionOccupancyOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(MachineMemoryOperand operand) => Unserved();
+    public Fact Read(MachineMemoryOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(ArgBodyOperand operand) => Unserved();
+    public Fact Read(ArgBodyOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(BodyDistanceOperand operand) => Unserved();
+    public Fact Read(BodyDistanceOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(LineOfSightOperand operand) => Unserved();
+    public Fact Read(LineOfSightOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(ParkedOperand operand) => Unserved();
+    public Fact Read(ParkedOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(UprightOperand operand) => Unserved();
+    public Fact Read(UprightOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(BodyFactOperand operand) => Unserved();
+    public Fact Read(BodyFactOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(BodyPositionOperand operand) => Unserved();
+    public Fact Read(BodyPositionOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(EngagedOperand operand) => Unserved();
-    public RuleFact Read(BodyStateOperand operand) => Unserved();
+    public Fact Read(EngagedOperand operand) => Unserved();
+    public Fact Read(BodyStateOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(LinkStalenessOperand operand) => Unserved();
+    public Fact Read(LinkStalenessOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(ChannelOperand operand) => Unserved();
-    public RuleFact Read(WorldInputOperand operand) => Unserved();
-    public RuleFact Read(PointerOperand operand) => Unserved();
+    public Fact Read(ChannelOperand operand) => Unserved();
+    public Fact Read(WorldInputOperand operand) => Unserved();
+    public Fact Read(PointerOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(NearestOperand operand) => Unserved();
+    public Fact Read(NearestOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(NavigationOperand operand) => Unserved();
+    public Fact Read(NavigationOperand operand) => Unserved();
     /// <inheritdoc/>
-    public RuleFact Read(BoardCellOfOperand operand) => Unserved();
-    public RuleFact Read(BoardSeatOperand operand) => Unserved();
+    public Fact Read(BoardCellOfOperand operand) => Unserved();
+    public Fact Read(BoardSeatOperand operand) => Unserved();
 
     /// <summary>Gets or sets the body index every body reference resolves to; <c>-1</c> resolves none.</summary>
     public int ResolvedBody { get; set; } = -1;

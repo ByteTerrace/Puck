@@ -74,36 +74,35 @@ public sealed class CompiledVector {
     /// <summary>Reads the component span for this operand during evaluation.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="span">The components when a vector was read, or empty.</param>
-    /// <returns><see cref="KeyNaming.Cell"/> when a vector was read, <see cref="KeyNaming.Fault"/> when computing the
-    /// cell's key faulted, and <see cref="KeyNaming.Nothing"/> when the address holds no vector.</returns>
-    public KeyNaming ReadSpan(IStateReader reader, out ReadOnlySpan<sbyte> span) {
+    /// <returns><see cref="FaultCase.Finite"/> when a vector was read, <see cref="FaultCase.Faulted"/> when computing
+    /// the cell's key faulted, and <see cref="FaultCase.Absent"/> when the address holds no vector.</returns>
+    public FaultCase ReadSpan(IStateReader reader, out ReadOnlySpan<sbyte> span) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         span = default;
         if (Constant is { } constant) {
             span = constant.Components;
 
-            return KeyNaming.Cell;
+            return FaultCase.Finite;
         }
 
-        var key = RuleReads.ResolveKey(
+        var resolved = RuleReads.ResolveKey(
             keyFrom: KeyFrom,
             literal: Key,
-            naming: out var naming,
             reader: reader
         );
 
-        if (naming == KeyNaming.Fault) {
-            return KeyNaming.Fault;
+        if (resolved.Case == FaultCase.Faulted) {
+            return FaultCase.Faulted;
         }
 
-        return ((key.IsValid && reader.Arena.TryReadVector(
+        return ((resolved.TryNamed(value: out var key) && key.IsValid && reader.Arena.TryReadVector(
             components: out span,
             key: key,
             rowOrdinal: RowOrdinal
         ))
-            ? KeyNaming.Cell
-            : KeyNaming.Nothing);
+            ? FaultCase.Finite
+            : FaultCase.Absent);
     }
 }
 /// <summary>An operand that evaluates a vector function (dot, cosine, identical) over two vector operands.</summary>
@@ -143,7 +142,7 @@ public sealed class VectorCallOperand : RuleOperand {
         _ => (2L + Dimensions),
     });
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader) {
         // Both sides are read before either answers: an absence beside a faulted key is still the fault, which a
         // negation must not turn into truth.
         var leftNaming = Left.ReadSpan(
@@ -156,40 +155,40 @@ public sealed class VectorCallOperand : RuleOperand {
         );
 
         if (
-            (leftNaming == KeyNaming.Fault) ||
-            (rightNaming == KeyNaming.Fault)
+            (leftNaming == FaultCase.Faulted) ||
+            (rightNaming == FaultCase.Faulted)
         ) {
-            return RuleFact.Faulted(kind: ValueKind);
+            return Fact.Faulted(kind: ValueKind);
         }
         if (
-            (leftNaming != KeyNaming.Cell) ||
-            (rightNaming != KeyNaming.Cell)
+            (leftNaming != FaultCase.Finite) ||
+            (rightNaming != FaultCase.Finite)
         ) {
-            return RuleFact.Absent(kind: ValueKind);
+            return Fact.Absent(kind: ValueKind);
         }
 
         return (Operation switch {
-            ExpressionOp.Dot => RuleFact.Finite(
+            ExpressionOp.Dot => Fact.Finite(
             kind: CellKind.Int,
             value: SignedByteVectorFunctions.Dot(
                 left: left,
                 right: right
             )
         ),
-            ExpressionOp.Similarity => RuleFact.Finite(
+            ExpressionOp.Similarity => Fact.Finite(
             kind: CellKind.Fixed,
             value: SignedByteVectorFunctions.CosineQ16(
                 left: left,
                 right: right
             )
         ),
-            ExpressionOp.Identical => RuleFact.Finite(
+            ExpressionOp.Identical => Fact.Finite(
             kind: CellKind.Int,
             value: (left.SequenceEqual(other: right)
                 ? 1L
                 : 0L)
         ),
-            _ => RuleFact.Absent(kind: ValueKind),
+            _ => Fact.Absent(kind: ValueKind),
         });
     }
 }
