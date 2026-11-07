@@ -50,8 +50,8 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     // What a transform's slot lane hashes as: the group's own slot, or any other, whose pose is hashed beside it.
     private const float OwnSlot = -1f;
     private const float OtherSlot = -2f;
-    // What a glass group's geometry appends (AppendGlass).
-    private const uint GlassMarker = 0x47_4C_41_53u;
+    // The bytes before each fact's payload: its kind, then the payload's length in bytes.
+    private const int FactHeaderBytes = (sizeof(byte) + sizeof(int));
     // The most hashers sealed builders keep for later ones: every group of a plan takes two, and a program restart plans
     // thousands.
     private const int MaxSpareHashers = 8192;
@@ -99,7 +99,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
         var steps = new Vector2(x: positionSteps, y: orientationSteps);
 
-        Hashing().Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector2>(reference: in steps)));
+        HashGeometry(fact: Fact.Snap, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector2>(reference: in steps)));
     }
     /// <summary>Fixes the geometry and form appended so far, which <see cref="Geometry"/> and <see cref="Form"/> then
     /// answer, and hands the hashers they were taken with to the builders made after it. Nothing is appended after it;
@@ -138,6 +138,19 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     }
     // The geometry's hasher, which only an unsealed builder holds.
     private XxHash128 Hashing() => (m_hash ?? throw new InvalidOperationException(message: "A sealed geometry takes no more appends."));
+    // Appends one fact to a hasher as its kind, its payload's length and the payload: every append into the geometry
+    // goes through here, so the stream is prefix-free and no two different sequences of facts hash alike (a reach whose
+    // bits spell another fact's payload included).
+    private static void AppendFact(XxHash128 hasher, Fact fact, ReadOnlySpan<byte> source) {
+        Span<byte> header = stackalloc byte[FactHeaderBytes];
+
+        header[0] = ((byte)fact);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(destination: header[1..], value: source.Length);
+        hasher.Append(source: header);
+        hasher.Append(source: source);
+    }
+    // Appends a fact to the geometry alone: another slot's pose and the steps it rounds to, which the form leaves out.
+    private void HashGeometry(Fact fact, ReadOnlySpan<byte> source) => AppendFact(fact: fact, hasher: Hashing(), source: source);
 
     /// <summary>Gets the materials the appended instances' shapes carry, in the order the geometry numbers them.</summary>
     public IReadOnlyList<int> Materials => m_materials;
@@ -230,21 +243,21 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         var count = (range.End - range.First);
         var ownSlot = (range.IsDynamic ? range.Slot : -1);
 
-        Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector4>(reference: in bound)));
-        Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in count)));
+        Hash(fact: Fact.Bound, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector4>(reference: in bound)));
+        Hash(fact: Fact.Count, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in count)));
         // A declared detail refines the lattice, so the mesh depends on it.
         if (range.Detail > 0f) {
             var detail = range.Detail;
 
-            Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in detail)));
+            Hash(fact: Fact.Detail, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in detail)));
         }
         // So does the box a static union refines for the instance.
         if (!range.IsDynamic && (range.Box is { } box)) {
             var low = box.Low;
             var high = box.High;
 
-            Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in low)));
-            Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in high)));
+            Hash(fact: Fact.BoxLow, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in low)));
+            Hash(fact: Fact.BoxHigh, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in high)));
         }
         m_chainSlot = -1;
         // The bake carries each sample into the group's frame through its own slot, which is that frame.
@@ -273,15 +286,11 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// group of the segments no instance owns, bakes over a box that reach wide, so the same instructions under another
     /// reach mesh another surface.</summary>
     /// <param name="reach">The reach, in world units.</param>
-    public void AppendReach(float reach) => Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in reach)));
+    public void AppendReach(float reach) => Hash(fact: Fact.Reach, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in reach)));
     /// <summary>Appends that the group bakes as glass: its shapes all carry glass materials, so its mesh lands whole and
     /// uncollapsed (<see cref="SdfMeshBakeGroup.Glass"/>), and the same shapes opaque key another geometry. Which
     /// materials are glass is the one material fact beside their places that shapes a mesh.</summary>
-    public void AppendGlass() {
-        var glass = GlassMarker;
-
-        Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<uint>(reference: in glass)));
-    }
+    public void AppendGlass() => Hash(fact: Fact.Glass, source: []);
     /// <summary>Appends one instruction of a program as it stands, its material included, with the world-space pose of a
     /// slot it reads.</summary>
     /// <param name="program">The program.</param>
@@ -321,8 +330,8 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
                         var offset = ((ownSlot >= 0) ? (slot - ownSlot) : 0);
 
                         instruction = (instruction with { Data0 = (instruction.Data0 with { X = OtherSlot }) });
-                        Hashing().Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Pose>(reference: in pose)));
-                        Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in offset)));
+                        HashGeometry(fact: Fact.OtherPose, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Pose>(reference: in pose)));
+                        Hash(fact: Fact.MemberOffset, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in offset)));
                         Keep(orientationSteps: m_orientationSteps, pose: pose, positionSteps: m_positionSteps, slot: slot, transforms: transforms);
                     }
                     break;
@@ -344,8 +353,8 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
             (m_sampled ??= [])[handle] = snapshot;
             instruction = instruction with { Data1 = instruction.Data1 with { Z = 0f } };
-            Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in count)));
-            Hash(source: MemoryMarshal.AsBytes(span: snapshot.Values));
+            Hash(fact: Fact.SampledCount, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in count)));
+            Hash(fact: Fact.SampledValues, source: MemoryMarshal.AsBytes(span: snapshot.Values));
         }
 
         var table = (((instruction.Op == SdfOp.ShapeBlend) && (((SdfShapeType)instruction.Shape) is SdfShapeType.ConvexPolygon or SdfShapeType.Sweep or SdfShapeType.Path))
@@ -354,23 +363,23 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
         if (!table.IsEmpty) {
             instruction = instruction with { Data0 = instruction.Data0 with { X = 0f } };
-            Hash(source: MemoryMarshal.AsBytes(span: table));
+            Hash(fact: Fact.SideTable, source: MemoryMarshal.AsBytes(span: table));
         }
 
         var words = new InstructionWords(instruction: instruction);
 
-        Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<InstructionWords>(reference: in words)));
+        Hash(fact: Fact.Instruction, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<InstructionWords>(reference: in words)));
     }
-    // Hashes bytes into the geometry and its form.
-    private void Hash(ReadOnlySpan<byte> source) {
-        Hashing().Append(source: source);
-        m_form!.Append(source: source);
+    // Appends a fact to the geometry and its form.
+    private void Hash(Fact fact, ReadOnlySpan<byte> source) {
+        AppendFact(fact: fact, hasher: Hashing(), source: source);
+        AppendFact(fact: fact, hasher: m_form!, source: source);
     }
     // Appends the lanes of the slot the chain rides, which a lane erosion or a morph reads; zero under none.
     private void AppendLanes(IReadOnlyList<DynamicTransform> transforms) {
         var lanes = new Rounded4(steps: PositionSteps, value: (((m_chainSlot >= 0) && (m_chainSlot < transforms.Count)) ? transforms[m_chainSlot].Lanes : Vector4.Zero));
 
-        Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Rounded4>(reference: in lanes)));
+        Hash(fact: Fact.Lanes, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Rounded4>(reference: in lanes)));
     }
     // Keeps a slot's rounded pose as the bake reads it: its position, its orientation, renormalized in double precision
     // so the same rounded components always turn alike, and its lanes rounded as AppendLanes rounds them; the steps are
@@ -421,6 +430,24 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// <returns>The scale.</returns>
     public static float UnitsOf(DynamicTransform transform) => ((float.IsFinite(f: transform.Scale) && (transform.Scale > 0f)) ? transform.Scale : 1f);
 
+    // What each fact appended to the geometry hash is; its tag leads its payload (AppendFact).
+    private enum Fact : byte {
+        Snap = 1,
+        Bound,
+        Count,
+        Detail,
+        BoxLow,
+        BoxHigh,
+        Reach,
+        Glass,
+        OtherPose,
+        MemberOffset,
+        Lanes,
+        SampledCount,
+        SampledValues,
+        SideTable,
+        Instruction,
+    }
     // A vector's components rounded to steps a unit; a component no int holds rounds to int.MinValue.
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct Rounded4(Vector4 value, float steps) {

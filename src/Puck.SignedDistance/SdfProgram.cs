@@ -420,9 +420,11 @@ public sealed partial class SdfProgram {
     /// after <see cref="FieldWords"/>.</summary>
     public Range ShadingWords => new(start: FieldWordCount, end: m_words.Length);
     /// <summary>Gets the stream's field prefix: every word the field interpreter reads (the header, the instruction
-    /// headers and data, the bound tables, the directories, the rigid plan, the side tables and the part programs), and no
-    /// appearance word. Its offsets and contents follow the field's inputs alone, so a palette or paint change leaves it
-    /// as it was; the bake's field fingerprint describes the encoding over it.</summary>
+    /// headers and data, the bound tables, the directories, the rigid plan, the side tables and the part programs). Its
+    /// only appearance-derived words are the header's material count and material offset (lanes 1 and 3), which only the
+    /// shading kernels read; the offset follows the field's size. No material, paint or screen value is in it, so a
+    /// change to a material's values or its paints leaves it as it was, and a palette's size moves lane 1 alone; the
+    /// bake's field fingerprint describes the encoding over it.</summary>
     public ReadOnlySpan<uint> FieldWords => m_words.AsSpan(start: 0, length: FieldWordCount);
     // The words before the appearance section: its first vector, the header's material offset, in words.
     private int FieldWordCount => (((int)m_words[ProgramMaterialOffsetLane]) * WordsPerVector);

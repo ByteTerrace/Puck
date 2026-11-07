@@ -701,6 +701,21 @@ payload. Pausing after attachment does not reproduce the initial poses; see
     always collide.
   Design them with the static-copy fix above: grouping and detail are derived
   from what the document means, never from how it splits or orders rows.
+- [low · unconfirmed] `SdfWorldTables.SameProgramGeometry`
+  (`SdfWorldTables.ProgramUpload.cs`) compares the stream outside the shading
+  words, so a material flipping between glass and opaque reads as the same
+  geometry there, though it moves the draw between the mesh and glass passes
+  and changes the group's mesh (whole and uncollapsed). The mesh path's product
+  revision is believed to cover the draws; confirm with a glass flip under a
+  live World, and key the geometry revision on the glass set if it does not.
+- [low · unconfirmed] A group's material place list
+  (`SdfMeshGeometryBuilder.Materials`) holds only the base material each shape
+  names, not the ids a positional recolor reaches (`CellJitter` variants,
+  `RepeatPolar`/`WallpaperFold` strides: base + k·stride), so
+  `SdfMeshLibrary.Renumber` maps only the listed ids when a shared mesh is
+  taken into a program whose palette moved. Check whether a recolored group
+  taken from the library draws another palette's rows, and list the reachable
+  ids if it does.
 
 ### Certified field contact
 
