@@ -421,25 +421,27 @@ The custom no-GC runtime port stays later work, on the
   a bit-still one. The gradient's six taps are not the marched point and are
   shared with physics (bit-identical per point), so batching them is a design
   step.
-- [high] The meadow (`debug.go meadow`) is a forcing workload in the real debug
-  world: its two-part blades add thousands of dynamic slots and retained mesh
-  draws, and its frame and cold bake are far past both bars. Animated
-  placement registrations cannot use the existing pose-rate holds:
-  `WorldCreationInstances.Pack.cs:247` requires `BodyIndex`, and
-  `WorldCreationInstances.Rates.cs:193` omits them from readings. Owner:
-  rendering lane. Extend the same projection- and consumer-based rate mechanism
-  to placement roots, measure pose packing and draw recording, and preserve
-  planted roots, continuous world-phased gusts and independent tip flutter (the
+- [high] The meadow (`debug.go meadow`, the sweep tour's `meadow` stop) is a
+  forcing workload in the real debug world: its two-part blades add thousands
+  of dynamic slots and retained mesh draws, and its frame and cold bake are far
+  past both bars. Placed creations rate through the bodies' one decision
+  (`WorldCreationInstances.RateOf`), sized for their measured part speed
+  (`MeasurePartSpeed`, about 0.4 m/s for a wind tile against a body's assumed
+  2 m/s), and `world.rates` lists and counts them. What remains of the
   [visibility plan](visibility.md#v2-instance-updates-proportional-to-change-and-authored-motion-on-the-gpu)'s
-  step V2a). A registration is a whole tile and takes the tier of its nearest
-  point, so with the camera inside the patch most tiles stay every-frame; read
-  `world.rates` at the stop before promising frame time. V2a pays on the lawn's
-  far tiles and wherever the camera stands off the patch, and a tile that is too
-  coarse is an authoring lever (`windMeadowTile`), never an engine special
-  case. Draw count is the other cost, one draw per blade part over a few
-  hundred unique geometries; its cause fix is the visibility plan's V1. The
-  meadow is also R1's forcing workload: measure produce's draw-recording share
-  before and after.
+  step V2a: under lockstep the debug world's ticks are 30 Hz, so the 30 Hz tier
+  holds nothing there and the inspection camera's tiles (114 to 217 px/m, 30
+  and 60 Hz) pose about as often as before; from 20 m every tile takes 10 Hz.
+  A registration is a whole tile and takes the tier of its nearest point, and a
+  tile that is too coarse is an authoring lever (`windMeadowTile`), never an
+  engine special case. The measured bound is the fastest speed any pair of
+  consecutive full packs showed: motion faster than any yet seen (a gust
+  stronger than before, a flutter quicker than the tier's period) shows one
+  step past the two-pixel rule before the bound follows, and nothing proves
+  the first measurement saw the peak. Draw count is the other cost, one draw
+  per blade part over a few hundred unique geometries; its cause fix is the
+  visibility plan's V1. The meadow is also R1's forcing workload: measure
+  produce's draw-recording share before and after.
 - [high] Measure the meadow before ordering the visibility work, on a quiet
   machine (the [visibility plan](visibility.md#measure-first)). M1:
   `debug.go meadow` on Direct3D 12 and a windowed Vulkan leg with

@@ -16,8 +16,6 @@ public static class WorldCreationWork {
     public static WorkKind Retained { get; } = new(name: "sdf.creations.registrations.retained", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Registrations whose pose evaluation was held by the existing rate mechanism.</summary>
     public static WorkKind RateHeld { get; } = new(name: "sdf.creations.registrations.rate-held", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Placed registrations, rather than body-rooted registrations, whose pose programs ran.</summary>
-    public static WorkKind PlacementsPosed { get; } = new(name: "sdf.creations.placements.posed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Transform slots owned by evaluated registrations.</summary>
     public static WorkKind SlotsPosed { get; } = new(name: "sdf.creations.slots.posed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Transform slots retained without authored pose evaluation.</summary>
@@ -36,6 +34,7 @@ public static class WorldCreationWork {
     public static WorkKind StaticTemplates { get; } = new(name: "sdf.creations.static.templates", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Retained static occurrences published during a visual program build.</summary>
     public static WorkKind StaticCopies { get; } = new(name: "sdf.creations.static.copies", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Process totals; read twice to measure a window. Posed, retained and rate-held partition visited registrations.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, PlacementsPosed, SlotsPosed, SlotsRetained, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, StaticTemplates, StaticCopies, PreviousPoseBytes, Packs]);
+    /// <summary>Process totals; read twice to measure a window. Posed, retained and rate-held partition visited registrations;
+    /// the bodies and placements among the posed and held count in <see cref="Puck.SdfVm.SdfUpdateRateCounts"/>.</summary>
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, SlotsPosed, SlotsRetained, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, StaticTemplates, StaticCopies, PreviousPoseBytes, Packs]);
 }
