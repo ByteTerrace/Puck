@@ -442,6 +442,13 @@ The custom no-GC runtime port stays later work, on the
   per blade part over a few hundred unique geometries; its cause fix is the
   visibility plan's V1. The meadow is also R1's forcing workload: measure
   produce's draw-recording share before and after.
+- [medium] Bodies still tier on an assumed 2 m/s part speed
+  (`BodyPartSpeed`), so a sprinting body's planted foot, sliding faster than
+  that relative to its root, can step more than two pixels at a far tier. Pass
+  `max(BodyPartSpeed, measured)` through the same `MeasurePartSpeed` placements
+  use. `sdf.creations.registrations.rate-held` counts `HoldsPose` on every
+  rendered frame, tickless ones included, so it scales with frames rather than
+  ticks; read posed counts, or count it once per tick.
 - [high] Measure the meadow before ordering the visibility work, on a quiet
   machine (the [visibility plan](visibility.md#measure-first)). M1:
   `debug.go meadow` on Direct3D 12 and a windowed Vulkan leg with
