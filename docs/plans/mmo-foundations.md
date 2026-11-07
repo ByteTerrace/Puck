@@ -86,7 +86,8 @@ hold at MMO scale.
 | D. Economy and table integrity | Claude or Codex | Dupe history, escrow, provable fairness, hidden information, loot-box and gambling regulation. |
 | E. Puck as it is | Claude specialist, code only | Identity worlds, write-back, attestation, adjacency and crossing, federation, the custody protocol, disclosure, durable images: what exists, cited by symbol and `file:line`. |
 
-An attack pass (Fable) runs before the synthesis and again on it: it treats
+An attack pass (Fable; its first pass is
+[the attack catalogue](mmo-foundations/attacks.md)) runs before the synthesis and again on it: it treats
 every world as possibly hostile, including a peer that is both client and server
 under federation and two player-hosted authorities interacting directly, and
 names each way the model can be broken (duplication, forged or replayed claims,
