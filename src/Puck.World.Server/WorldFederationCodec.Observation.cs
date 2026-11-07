@@ -77,7 +77,7 @@ public static class WorldProjectionPrototypeFetch {
         var bytes = server.ExecuteAuthorityOperation(operation: () => {
             var liveTier = ((WorldAdmissionDoor.TryAdmitArrival(entries: server.Definition.Admission,
                 sourceAuthority: sourceAuthority, verdict: out var publicAdmission) is null)
-                    ? publicAdmission!.Tier : WorldDisclosureTier.Presentation);
+                    ? publicAdmission!.Tier : WorldDisclosureTier.Frames);
 
             ceiling = ((WorldDisclosureTier)Math.Min(val1: ((byte)ceiling), val2: ((byte)liveTier)));
             if (ceiling == WorldDisclosureTier.Frames) { return null; }

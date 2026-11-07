@@ -320,6 +320,11 @@ already-verified identity re-matched against a rebuild candidate), and
 `TryAdmitArrival` (an authenticated federation authority's namespace). No
 verdict means a named refusal, never a default seed.
 
+`AttestationVerifyResult.TrustEntry` supplies the exact selected mode and pinned
+identity. `WorldAdmissionVerdict.TrustIdentity` carries that provenance through
+peer events and checkpoints; rebuilds match it, including the key, instead of
+rematching domain/subject across proof modes.
+
 `WorldPeerHost` retains each interactive and federation session's proof and
 rechecks its signed validity and the live `server.Definition.Admission`.
 Requests are checked again at authority dispatch; an idle host-clock sweep
@@ -351,8 +356,14 @@ connecting peer, and `TryAdmit` answers `NoAdmissionEntries` there.
 `WorldAdmissionRefusal.NoArrivalAuthority` names the arrival-side miss. Every
 shipped world authors a `*` arrivals row, because the authenticated namespace
 is `WorldAttestedAuthenticator`'s own verified claim subject — the document's
-own `host.authority` when authored, else the boot instance identity — never a
+own `host.authorityNamespace` when authored, else the boot instance identity — never a
 label a connecting peer merely claimed.
+
+Remote destination documents name that expected subject separately from their
+`host.authority` transport endpoint. `WorldRemoteAuthority` requires the pin at
+construction and checks it on every connection. Public federation observation
+and prototype fetch require an explicit arrival disclosure row; a public stream
+invalidates when its admission policy changes.
 
 A template's `Subject` is NULLABLE and means "the body this admission assigns"
 when absent — `WorldAdmissionGrant.SubjectFor(bodyIndex)` is the one resolution

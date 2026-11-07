@@ -147,6 +147,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         DefaultValueFactory = static _ => null,
         Description = "The threads that run the engine's parallel partitions, the frame thread included: 1 runs every partition on the frame thread, and 0 (the default) uses the machine's logical processor count. State is identical at every count; puck test --workers compares counts.",
     };
+
     workersOption.Validators.Add(item: static result => {
         if (result.GetValueOrDefault<int?>() is < 0) {
             result.AddError(errorMessage: "--workers must be 0 (the machine's logical processor count) or a positive thread count.");
@@ -294,7 +295,8 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     // The device caches are per user rather than under the state root, since each holds a pure function of its inputs and
     // the build, never of a run's state. Their per-user defaults are named here and nowhere else, like the state root's.
     var cacheRoot = parseResult.GetValue(option: cacheDirOption);
-    Puck.Assets.DerivedBytes.DefaultDirectory = cacheRoot is null ? null : Path.Join(cacheRoot, "derived");
+
+    Puck.Assets.DerivedBytes.DefaultDirectory = ((cacheRoot is null) ? null : Path.Join(path1: cacheRoot, path2: "derived"));
     var caches = new WorldCacheRoots(
         compilations: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "compilations") : Path.Join(path1: cacheRoot, path2: "compilations")),
         compiledWorlds: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "compiled-worlds") : Path.Join(path1: cacheRoot, path2: "compiled-worlds")),
@@ -415,10 +417,10 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         return 1;
     }
     if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFile) {
-        // The exact fallback WorldServer.AuthorityIdentity itself applies for the boot instance (host.authority absent
+        // The exact fallback WorldServer.AuthorityIdentity itself applies for the boot instance (host.authorityNamespace absent
         // means "colocated with the resolver", per its own doc comment) — reusing it here means authoring a signing key
         // never has to also change what every LOCAL entity in this world is addressed under.
-        var federationSubject = ((worldSource.Definition.Host.Authority is { Length: > 0 } authored)
+        var federationSubject = ((worldSource.Definition.Host.AuthorityNamespace is { Length: > 0 } authored)
             ? authored
             : Puck.World.WorldDefinitionLoader.BootInstanceName
         );
@@ -677,6 +679,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         return 1;
     }
     var pacing = host.Services.GetRequiredService<PresentPacingControl>();
+
     if (parseResult.GetValue(option: lockstepOption)) { pacing.SetTickLocked(locked: true); }
     if (parseResult.GetValue(option: budgetedLightingOption)) { pacing.SetLightingConvergence(enabled: false); }
     if (parseResult.GetValue(option: pausedOption) && !host.Services.GetRequiredService<WorldInstanceHost>().TryPause(name: WorldInstanceHost.BootInstanceName, reason: out var pauseReason)) {

@@ -2,7 +2,16 @@
   "version": 1,
   "dependencies": {
     "net11.0": {
+      "ByteTerrace.Puck.Abstractions": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
+      },
       "ByteTerrace.Puck.Confinement": {
+        "type": "Project"
+      },
+      "ByteTerrace.Puck.Maths": {
         "type": "Project"
       }
     }

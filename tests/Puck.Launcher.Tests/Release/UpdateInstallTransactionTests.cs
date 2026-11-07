@@ -182,8 +182,12 @@ public sealed partial class UpdateInstallTransactionTests : IDisposable {
             .ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: recovered.Applied);
-        Assert.True(condition: File.Exists(path: Intent));
+        Assert.False(condition: File.Exists(path: Intent));
         Assert.Equal(expected: ((changed == "newer-pointer") ? "1.0.2" : null), actual: (File.Exists(path: Current) ? File.ReadAllText(path: Current) : null));
+        Publish(manifest: Manifest(version: "1.0.3", sequence: 3));
+        var fresh = await Service().ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(condition: fresh.Applied, userMessage: fresh.Detail);
     }
     [Fact]
     public async Task SeparateServices_CannotWriteOneInstallRootConcurrently() {
@@ -345,6 +349,11 @@ public sealed partial class UpdateInstallTransactionTests : IDisposable {
         Assert.False(condition: recovered.Applied);
         Assert.Contains(expectedSubstring: "minimumSupported", actualString: recovered.Detail);
         Assert.Equal(expected: "0.8.0", actual: File.ReadAllText(path: Current));
+        Assert.False(condition: File.Exists(path: Intent));
+        Publish(manifest: Manifest(version: "1.0.3", sequence: 2));
+        var bridge = await Service(installedVersion: "0.8.0").ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(condition: bridge.Applied, userMessage: bridge.Detail);
     }
     [Fact]
     public async Task Apply_RefusesCaseInsensitiveVersionCollisionWithActiveInstall() {

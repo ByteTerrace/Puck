@@ -8095,6 +8095,10 @@ export type WorldHostDefaults = {
    */
   authority?: string | null;
   /**
+   * The authenticated federation subject expected at Authority. Authored independently of its transport endpoint; required when resolving a remote destination.
+   */
+  authorityNamespace?: string | null;
+  /**
    * The preferred graphics backend (Auto is OS-portable), or null when BackendRow reads it from a row — omitting both reads as Auto.
    */
   backend?: WorldBackendPreference | null;

@@ -23,7 +23,8 @@ namespace Puck.World.Protocol;
 /// <param name="RemoteHuman">Whether a remote human occupies the body, as opposed to a census or inhabitant body that
 /// merely reads <see cref="IntentSource.Live"/> (the default peer source). Carried explicitly because
 /// <paramref name="Source"/> cannot tell the two apart, and every occupancy rule keys on it.</param>
-public readonly record struct WorldPeerEventEntry(int BodyIndex, int Generation, IntentSource Source, Principal Identity, string IdentityDomain, string IdentitySubject, bool AuthorityTransferred, string? PlacementId, byte CatalogRig, Puck.Maths.FixedQ4816 TravelTurn, bool RemoteHuman);
+/// <param name="AdmissionTrust">The exact trust policy identity that authenticated the peer.</param>
+public readonly record struct WorldPeerEventEntry(int BodyIndex, int Generation, IntentSource Source, Principal Identity, string IdentityDomain, string IdentitySubject, bool AuthorityTransferred, string? PlacementId, byte CatalogRig, Puck.Maths.FixedQ4816 TravelTurn, bool RemoteHuman, WorldAdmissionTrustIdentity? AdmissionTrust = null);
 /// <summary>Server-authored entries in the same ordered domain as submissions. They are not submission payloads and
 /// can never arrive from a client.</summary>
 public abstract record WorldServerEvent {

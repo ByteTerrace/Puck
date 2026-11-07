@@ -1685,6 +1685,11 @@ cannot carry—the `Peer` principal, and a `body:<n>` subject for a template
 that authored none (`WorldAdmissionGrant.SubjectFor`)—and passes every other
 field through, so an authored template states exactly what the peer holds.
 
+Verification returns its selected `TrustListEntry`; admission retains its mode
+and complete pinned identity as `WorldAdmissionTrustIdentity`. Reauthorization
+matches that identity, including the key, rather than trying other proof modes
+with the same domain and subject. Peer events and checkpoints retain it.
+
 A federated or colocated transfer crosses the same door. `WorldTransferEscrow`
 runs `TryAdmitArrival` once at reserve against `request.SourceAuthority` (the
 namespace `Puck.Networking.IAuthenticator`'s signed-claim handshake derived from the
@@ -1700,7 +1705,7 @@ carried profile—`world.peers`'s `arrivals:` group echoes them.
 An `admission` row in `federatedAuthority` mode carries no key: its `domain` is
 the authenticated authority namespace, or `*` for any authority that completes
 the handshake. That namespace is `Puck.World.Protocol.WorldAttestedAuthenticator`'s own verified
-claim subject—`host.authority` when the document authors one, else the
+claim subject—`host.authorityNamespace` when the document authors one, else the
 boot instance identity (`Puck.World.WorldDefinitionLoader.BootInstanceName`)
 —never a label the connecting peer merely asserted, so `*` is what a
 document authors when it cannot know its neighbours' identities in advance.
@@ -1708,6 +1713,12 @@ Such a row is skipped
 when the door builds its attestation trust list—it can never verify a claim—
 and a document authoring arrivals alone still admits no connecting peer.
 ## Federation transport (`WorldFederationCodec.cs`)
+
+Outbound `WorldRemoteAuthority` construction requires the intended namespace.
+Destination documents author `host.authorityNamespace` independently of the
+`host.authority` endpoint; the peer must prove that namespace on every connection.
+Public observation and prototype fetch require an explicit federated-authority
+disclosure row. A public observation stream ends when that admission policy changes.
 
 The same listener routes a second dialect off the first eight bytes:
 `WorldFederationCodec.WireKey` opens an authority-to-authority connection

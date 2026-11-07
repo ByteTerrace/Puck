@@ -15,6 +15,25 @@ namespace Puck.World.Server;
 /// is trusted local state while a federation peer's bytes are not: the one shared reader applies the untrusted-input
 /// discipline everywhere. Public so a law can read and write exactly the leaf a tape or checkpoint carries.</summary>
 public static class WorldWireLeaves {
+    /// <summary>Writes the authentication provenance retained by an admission.</summary>
+    public static void WriteAdmissionTrust(WireWriter writer, WorldAdmissionTrustIdentity? trust) {
+        writer.WriteBoolean(value: (trust is not null));
+        if (trust is null) { return; }
+        writer.WriteByte(value: ((byte)trust.Mode));
+        writer.WriteString(value: trust.Domain);
+        writer.WriteNullableString(value: trust.Subject);
+        writer.WriteNullableString(value: trust.Algorithm);
+        writer.WriteNullableString(value: trust.KeyHash);
+    }
+    /// <summary>Reads the authentication provenance retained by an admission.</summary>
+    public static WorldAdmissionTrustIdentity? ReadAdmissionTrust(ref WireReader reader) {
+        if (!reader.ReadBoolean()) { return null; }
+        var mode = ((WorldAdmissionTrustMode)reader.ReadByte());
+
+        if (!Enum.IsDefined(value: mode)) { reader.Fail(detail: "unknown admission trust mode", refusal: WireRefusal.EnumValueUnknown); }
+        return new(mode, reader.ReadString(field: "trust domain"), reader.ReadNullableString(field: "trust subject"),
+            reader.ReadNullableString(field: "trust algorithm"), reader.ReadNullableString(field: "trust key"));
+    }
     /// <summary>Writes a federation owner's accepted hold and pending ordered ingress through the shared input leaf.</summary>
     public static void WriteFederatedInput(WireWriter writer, WorldFederatedIntentCheckpoint input) {
         writer.WriteInt32(value: input.Index);
@@ -162,6 +181,7 @@ public static class WorldWireLeaves {
         var identity = WorldWireCodec.ReadPrincipal(reader: ref reader);
         var identityDomain = reader.ReadString(field: "peer identity domain");
         var identitySubject = reader.ReadString(field: "peer identity subject");
+        var admissionTrust = ReadAdmissionTrust(reader: ref reader);
         var authorityTransferred = reader.ReadBoolean();
         var placementId = reader.ReadNullableString(field: "peer placement id");
         var catalogRig = reader.ReadByte();
@@ -188,6 +208,7 @@ public static class WorldWireLeaves {
         }
 
         return new WorldPeerEventEntry(
+            AdmissionTrust: admissionTrust,
             AuthorityTransferred: authorityTransferred,
             BodyIndex: bodyIndex,
             CatalogRig: catalogRig,
@@ -223,6 +244,7 @@ public static class WorldWireLeaves {
 
         writer.WriteString(value: peer.IdentityDomain);
         writer.WriteString(value: peer.IdentitySubject);
+        WriteAdmissionTrust(writer: writer, trust: peer.AdmissionTrust);
         writer.WriteBoolean(value: peer.AuthorityTransferred);
         writer.WriteNullableString(value: peer.PlacementId);
         writer.WriteByte(value: peer.CatalogRig);
@@ -340,7 +362,7 @@ public static class WorldWireLeaves {
     /// each carrier records in its own form (a checkpoint and a federation commit its identity projection, a tape its
     /// pinned rates). It is the one encoding of a member's motion every carrier uses.</summary>
     public static void WriteCommitMemberMotion(WireWriter writer, WorldTransferCommitMember member) {
-        writer.WriteByte(value: (byte)member.Arrival);
+        writer.WriteByte(value: ((byte)member.Arrival));
         writer.WriteString(value: member.BodyMotionProgramName);
         writer.WriteFixedVector(value: member.Position);
         writer.WriteFixed(value: member.YawRadians);
@@ -365,7 +387,7 @@ public static class WorldWireLeaves {
             !Enum.IsDefined(value: arrival)
         ) {
             reader.Fail(
-                detail: $"commit member carries unknown arrival kind {(byte)arrival}",
+                detail: $"commit member carries unknown arrival kind {((byte)arrival)}",
                 refusal: WireRefusal.PayloadMalformed
             );
         }

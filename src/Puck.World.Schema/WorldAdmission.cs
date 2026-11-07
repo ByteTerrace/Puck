@@ -79,11 +79,12 @@ public readonly record struct WorldAdmissionGrant(WorldCapability Capability, Gr
 /// authenticated federation authority's namespace — so no ingress can mint authority by assembling grant rows of its
 /// own.</summary>
 public sealed record WorldAdmissionVerdict {
-    internal WorldAdmissionVerdict(string identityDomain, string identitySubject, IReadOnlyList<WorldAdmissionGrant> templates, WorldDisclosureTier tier) {
+    internal WorldAdmissionVerdict(string identityDomain, string identitySubject, IReadOnlyList<WorldAdmissionGrant> templates, WorldDisclosureTier tier, WorldAdmissionTrustIdentity? trustIdentity) {
         IdentityDomain = identityDomain;
         IdentitySubject = identitySubject;
         Templates = templates;
         Tier = tier;
+        TrustIdentity = trustIdentity;
     }
 
     /// <summary>Gets the verified identity's domain.</summary>
@@ -94,6 +95,8 @@ public sealed record WorldAdmissionVerdict {
     public IReadOnlyList<WorldAdmissionGrant> Templates { get; }
     /// <summary>Gets how much of this authority's document the admitted peer receives.</summary>
     public WorldDisclosureTier Tier { get; }
+    /// <summary>The exact policy identity that authenticated this admission.</summary>
+    public WorldAdmissionTrustIdentity? TrustIdentity { get; }
 
     /// <summary>Reconstructs a verdict from its own public fields — a checkpoint restore's one door onto an
     /// otherwise assembly-internal constructor, since the value it restores travelled through a wire codec rather
@@ -102,11 +105,13 @@ public sealed record WorldAdmissionVerdict {
     /// <param name="identitySubject">The verified identity's subject.</param>
     /// <param name="templates">The admitting entry's own authored grant templates.</param>
     /// <param name="tier">How much of the authority's document the admitted peer receives.</param>
-    public static WorldAdmissionVerdict Restore(string identityDomain, string identitySubject, IReadOnlyList<WorldAdmissionGrant> templates, WorldDisclosureTier tier) => new(
+    /// <param name="trustIdentity">The retained authentication provenance.</param>
+    public static WorldAdmissionVerdict Restore(string identityDomain, string identitySubject, IReadOnlyList<WorldAdmissionGrant> templates, WorldDisclosureTier tier, WorldAdmissionTrustIdentity? trustIdentity) => new(
         identityDomain: identityDomain,
         identitySubject: identitySubject,
         templates: templates,
-        tier: tier
+        tier: tier,
+        trustIdentity: trustIdentity
     );
 }
 /// <summary>One row of the <c>admission</c> section — durable configuration naming one identity or issuer this world

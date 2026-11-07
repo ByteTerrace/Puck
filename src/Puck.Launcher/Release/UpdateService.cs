@@ -141,7 +141,7 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
     /// <summary>Under an exclusive install-root lease, resumes a pending local install or checks the tracked
     /// channel. Rollout and staging precede replay reservation, then a durable exact-manifest intent; the pointer
     /// changes only after reservation. Process interruption resumes that intent, even after signature expiry,
-    /// using the current trust policy at its original authorization instant. No network response can replace a
+    /// using the current trust policy at its original authorization instant. Terminal refusal retires an intent without lowering replay marks. No network response can replace a resumable
     /// pending intent. The filesystem must protect the install root from untrusted local writers.</summary>
     /// <param name="now">The check instant, captured once by the caller.</param>
     /// <param name="cancellationToken">Cancels the fetch/stage.</param>
@@ -163,19 +163,29 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
         var rid = CurrentRid();
         InstallIntent intent;
 
+        UpdateApplyOutcome TerminalRefusal(string detail) {
+            // Retirement affects only the intent. The verifier's durable replay watermark is never rewound.
+            if (recovering) { File.Delete(path: intentPath); }
+            return new UpdateApplyOutcome(Applied: false, Detail: detail);
+        }
+
         if (recovering) {
-            intent = (JsonSerializer.Deserialize<InstallIntent>(json: File.ReadAllText(path: intentPath), options: DocumentJsonOptions.Shared)
-                ?? throw new JsonException(message: "install intent deserialized to null"));
+            try {
+                intent = (JsonSerializer.Deserialize<InstallIntent>(json: File.ReadAllText(path: intentPath), options: DocumentJsonOptions.Shared)
+                    ?? throw new JsonException(message: "install intent deserialized to null"));
+            } catch (JsonException error) {
+                return TerminalRefusal(detail: $"invalid pending install intent: {error.Message}");
+            }
             if ((intent.Manifest is null) || string.IsNullOrWhiteSpace(value: intent.InstalledVersion) ||
                 (intent.Rid != rid) || (intent.Manifest.App != m_options.App) || (intent.Manifest.Channel != m_options.Channel) || (intent.VerifiedAt > now)) {
-                return new UpdateApplyOutcome(Applied: false, Detail: "pending install intent does not match this app, channel, runtime or authorization time");
+                return TerminalRefusal(detail: "pending install intent does not match this app, channel, runtime or authorization time");
             }
             // A changed current trust policy still refuses the intent. Time alone does not revoke local work
             // already authorized while its signature was valid; no fresh network verification uses this instant.
             var resumed = m_verifier.ReserveInstall(manifest: intent.Manifest, verifiedAt: intent.VerifiedAt, installedVersion: intent.InstalledVersion);
 
             if (!resumed.Accepted) {
-                return new UpdateApplyOutcome(Applied: false, Detail: $"pending install refused: {resumed.RefusalReason}");
+                return TerminalRefusal(detail: $"pending install refused: {resumed.RefusalReason}");
             }
         } else {
             var check = await FetchAndVerifyAsync(cancellationToken: cancellationToken, now: now).ConfigureAwait(continueOnCapturedContext: false);
@@ -196,15 +206,15 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
         if (!alreadyCurrent && !string.IsNullOrEmpty(value: current)) {
             if ((manifest.MinimumSupported is { } minimumSupported) &&
                 ReleaseVersion.IsStrictlyGreaterThan(left: minimumSupported, right: current)) {
-                return new UpdateApplyOutcome(Applied: false, Detail: $"current install '{current}' is below this release's minimumSupported floor '{minimumSupported}'");
+                return TerminalRefusal(detail: $"current install '{current}' is below this release's minimumSupported floor '{minimumSupported}'");
             }
             if (!ReleaseVersion.IsStrictlyGreaterThan(left: manifest.Version, right: current)) {
-                return new UpdateApplyOutcome(Applied: false, Detail: $"version '{manifest.Version}' does not exceed the current install '{current}'");
+                return TerminalRefusal(detail: $"version '{manifest.Version}' does not exceed the current install '{current}'");
             }
         }
         if ((!alreadyCurrent && !string.IsNullOrEmpty(value: current) && string.Equals(a: manifest.Version, b: current, comparisonType: StringComparison.OrdinalIgnoreCase)) ||
             (!string.IsNullOrEmpty(value: lastGood) && string.Equals(a: manifest.Version, b: lastGood, comparisonType: StringComparison.OrdinalIgnoreCase))) {
-            return new UpdateApplyOutcome(Applied: false, Detail: $"version '{manifest.Version}' collides case-insensitively with an active install directory");
+            return TerminalRefusal(detail: $"version '{manifest.Version}' collides case-insensitively with an active install directory");
         }
 
         // Never restage the running directory, including when an interrupted apply already swapped current.

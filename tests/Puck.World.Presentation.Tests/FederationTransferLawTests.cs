@@ -1444,7 +1444,7 @@ public sealed partial class FederationTransferLawTests {
                 actual: status.Kind
             );
             Assert.True(condition: WorldFederationCodec.TryDecodeStatus(body: status.Body.Span, landed: out var landed, status: out var answered));
-            Assert.Equal(expected: WorldTransferStatus.Missing, actual: answered);
+            Assert.Equal(actual: answered, expected: WorldTransferStatus.Missing);
             Assert.Null(@object: landed);
 
             await WorldFederationCodec.WriteRequestAsync(
@@ -1905,6 +1905,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
         using var remote = new WorldRemoteAuthority(
+            expectedAuthority: fixture.Server.AuthorityIdentity,
             endpoint: host.ListenEndpoint!,
             network: network,
             placeholder: fixture.Server.Definition,
@@ -2133,15 +2134,8 @@ public sealed partial class FederationTransferLawTests {
         writer.WriteUInt64(value: 0UL);
         writer.WriteInt32(value: 1);
         writer.WriteInt32(value: 0);
-        writer.WriteString(value: "origin/world");
-        writer.WriteInt32(value: 0);
-        writer.WriteInt32(value: 7);
-        writer.WriteUInt64(value: 0UL);
-        // The slot the traveler departs from rides the mobility identity, after the epoch.
-        writer.WriteString(value: "origin/world");
-        writer.WriteInt32(value: 0);
-        writer.WriteInt32(value: 7);
-        writer.WriteByte(value: 1);
+        WorldWireLeaves.WriteMobility(writer: writer, mobility: Mobility(index: 4));
+        Assert.True(condition: WorldWireCodec.TryWriteIntentSource(writer: writer, source: IntentSource.Idle));
         writer.WriteVector(value: Vector3.Zero);
         writer.WriteByte(value: 0);
         // The traveler declares an identity and then supplies no id for it.

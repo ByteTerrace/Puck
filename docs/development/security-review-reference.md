@@ -91,6 +91,49 @@ the receiving effect must commit durably.
 
 ## Local findings and regression cases
 
+The verified federation/update follow-up closes findings 1.1–1.3 and 2.3–2.5.
+`AttestationVerifyResult.TrustEntry` carries the selected key identity and mode;
+`WorldAdmissionDoor.TryMatchEntry` requires that provenance, which peer events and
+checkpoints retain for `WorldGrants.RemintPeerAdmissionGrants`. A direct pin cannot
+inherit a vouching row's grants or disclosure, including after policy replacement.
+`AdmissionSecurityLawTests.DirectSignerNeverReceivesAnotherTrustModesPolicy`
+exercises both row orders, reauthorization, removal, and replacement of the key.
+
+`WorldRemoteAuthority` requires an intended namespace and keeps it immutable.
+Remote destination resolution reads `WorldHostDefaults.AuthorityNamespace` from
+the local destination document separately from `WorldHostDefaults.Authority`'s
+transport endpoint; routed observations and recovery retain the upstream pin.
+The document must come from a trusted authoring/resolution source: a pin learned
+from the answering peer would not establish the intended destination.
+`FederationTransferLawTests.RemoteAuthorityCannotDialWithoutAnIntendedNamespace`
+and `FederationTransferLawTests.RemoteAuthority_RequiresTheDestinationToProveItsNamespace`
+cover missing pins and a trusted substitute proving its own namespace.
+
+Public federation disclosure requires an explicit federated-authority admission
+row. `WorldPeerHost.StreamProjectionAsync` invalidates a public stream when its
+admission policy changes; `WorldProjectionPrototypeFetch.Fetch` refuses unmatched
+authorities. `FederationTransferLawTests.PublicObservationRequiresExplicitFederationDisclosure`
+and `FederationTransferLawTests.PublicReplicaObservationEndsWhenItsAdmissionTierChanges`
+exercise the public wire paths. Invalidation itself remains observable; the
+[disclosure plan](../plans/disclosure.md) owns that separate information-flow work.
+
+`UpdateService.ApplyUnderLeaseAsync` retires terminally refused intents without
+rewinding replay marks, while staging and I/O failures retain resumable work.
+`UpdateInstallTransactionTests` covers subsequent signed releases and a bridge
+release after rollback. `HealthGateFile.MarkPending` preserves the still-selected
+version's attempts until the stub reads committed `current`; `StubHealth.Write`
+and `StubInstall.WritePointerAtomic` use the shared flushed `AtomicFile` writer.
+`SelfUpdateHealthGateHostedService` awaits startup and retries transient clearing
+failures until selection is decided or the host stops. `UpdateRecoveryHardeningTests`
+exercises interrupted publication and install-lease contention. File flushing
+does not establish directory durability or power-loss ordering on every filesystem.
+
+Findings 2.1 and 2.2 remain open in the [security packet](../plans/open-items.md#security-review):
+fresh signed authorization can retry a rejected payload, and rollback does not
+apply retained revocation policy. They require shared persisted install-selection
+state across the updater, stub and retention pass; these repairs do not claim to
+close them.
+
 These are source-confirmed defects corrected by the preflight. The conditions
 matter: malformed input, a trusted but hostile authority, and an attacker with
 someone else's private key are different threat models.
@@ -142,8 +185,9 @@ did not demonstrate a bypass of that pin. See the scoped questions in
 Install recovery treats a protected local intent as already-authorized work.
 It checks the current trust policy at the original verification instant; expiry
 alone does not cancel that work. The complete signed manifest is pinned with
-SHA-256, a network response cannot replace a pending intent, and a newer replay
-mark prevents the older intent from resuming. Fresh network checks always use
+SHA-256, a network response cannot replace a resumable pending intent, and a newer replay
+mark prevents the older intent from resuming. Terminal refusal retires that intent
+without lowering the mark, permitting the next call to fetch a new release. Fresh network checks always use
 the current verification instant. The stub shares the updater's writer lease
 and cancels a matching rejected-version intent before rolling back, while
 preserving unrelated newer pending work. These are explicit policy choices for the

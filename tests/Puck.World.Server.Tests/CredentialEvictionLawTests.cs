@@ -218,6 +218,8 @@ public sealed class CredentialEvictionLawTests {
         var server = fixture.Server;
 
         Assert.True(condition: WorldAdmissionDoor.TryMatchEntry(entries: server.Definition.Admission,
+            trustIdentity: new(WorldAdmissionTrustMode.SignsDirectly, identity.Domain, identity.Subject,
+                Puck.Attestation.AttestationAlgorithms.EcdsaP256Sha256, identity.Domain),
             domain: identity.Domain, subject: identity.Subject, verdict: out var verdict));
         Assert.True(condition: server.TryAdmitPeerConnection(verdict: verdict, expectedAdmissionEntries: server.Definition.Admission,
             admitted: out var oldConnection, refusal: out var refusal), userMessage: refusal);

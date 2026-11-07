@@ -180,7 +180,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     private readonly ConcurrentDictionary<(string SourceAuthority, WorldFederationLane Lane), PersistentRequestLane<WorldFederationRequest, WorldFederationResponse>> m_requestLanes = new();
     private readonly ConcurrentDictionary<TransferStepKey, Task<WorldFederationAnswer>> m_transferSteps = new();
     private string m_authority = string.Empty;
-    private string m_peerAuthority = string.Empty;
+
+    private readonly string m_peerAuthority;
+
     // Frames is the "nothing observed yet" value, so the first delivered document always narrates its tier once.
     private WorldDisclosureTier m_observedTier = WorldDisclosureTier.Frames;
 
@@ -214,7 +216,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     // caller with no local server (leaves this lane's narration undelivered, never a fallback to Console.Error).
     private readonly WorldOutputHub? m_narrationHub;
 
-    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, IAuthenticator security, string observerAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default, string? expectedAuthority = null, WorldPeerNetwork? network = null, WorldOutputHub? narrationHub = null) {
+    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, IAuthenticator security, string observerAuthority, string expectedAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default, WorldPeerNetwork? network = null, WorldOutputHub? narrationHub = null) {
+        if (string.IsNullOrWhiteSpace(value: expectedAuthority)) { throw new ArgumentException(message: "an outbound authority requires its intended namespace", paramName: nameof(expectedAuthority)); }
         m_narrationHub = (narrationHub ?? submissionAuthority?.m_narrationHub);
         if (!PeerEndpoint.TryParse(
             endpoint: out var parsed,
@@ -231,7 +234,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         m_network = (submissionAuthority?.m_network ?? (network ?? throw new InvalidOperationException(message: $"federation to '{endpoint}' needs its host's peer network, and this instance is local-only")));
         m_clock = m_network.Clock;
         m_observerAuthority = observerAuthority;
-        m_peerAuthority = (expectedAuthority ?? string.Empty);
+        m_peerAuthority = expectedAuthority;
         m_submissionAuthority = submissionAuthority;
         m_submissionCredential = submissionCredential;
         if ((submissionAuthority is null) != (submissionCredential is null)) {
@@ -258,9 +261,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         ? observed
         : PeerAuthority
     );
-    /// <summary>Gets the pinned first-hop transaction namespace, or an empty string before the first handshake.
+    /// <summary>Gets the intended first-hop transaction namespace supplied at construction.
     /// Reconnection checks this namespace before sending a request. It is distinct from a traveler's onward route.</summary>
-    public string PeerAuthority => Volatile.Read(location: ref m_peerAuthority);
+    public string PeerAuthority => m_peerAuthority;
     /// <summary>Gets a value indicating whether every established lane is outside its unreachable-peer backoff
     /// window. WALL-CLOCK transport lifecycle state (<see cref="PersistentRequestLane{TRequestKind,TResponseKind}.IsAvailable"/>),
     /// legitimate for a read-back to print and never for simulation to read — link liveness the sim acts on is
@@ -1244,23 +1247,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         }
         // Routed observations use their transaction authority's authenticated entry connection too, so private
         // onward world names never become socket endpoints or weaken the original peer namespace pin.
-        if (m_submissionAuthority is null) {
-            var expected = Interlocked.CompareExchange(
-                comparand: string.Empty,
-                location1: ref m_peerAuthority,
-                value: peerAuthority
-            );
-
-            if (
-                (expected.Length != 0) &&
-                !string.Equals(
-                a: expected,
-                b: peerAuthority,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                throw new IOException(message: $"federation destination authority mismatch: expected '{expected}', received '{peerAuthority}'");
-            }
+        if (!string.Equals(a: m_peerAuthority, b: peerAuthority, comparisonType: StringComparison.Ordinal)) {
+            throw new IOException(message: $"federation destination authority mismatch: expected '{m_peerAuthority}', received '{peerAuthority}'");
         }
     }
     /// <summary>Resolves this transfer's commit step.</summary>
@@ -1357,11 +1345,11 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             answer: out var answer
         );
 
-        return (answer.Kind == WorldFederationResponse.Status) && WorldFederationCodec.TryDecodeStatus(
+        return ((answer.Kind == WorldFederationResponse.Status) && WorldFederationCodec.TryDecodeStatus(
             body: answer.Body.Span,
             landed: out _,
             status: out status
-        );
+        ));
     }
     /// <summary>Reads the request-local ids a committed transfer landed at this peer.</summary>
     /// <param name="sourceAuthority">The authenticated source namespace.</param>
@@ -1400,7 +1388,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     /// <param name="destination">The asking destination: this lane's authenticated namespace.</param>
     /// <param name="phase">The decision the question belongs to; it correlates the answer to this question alone.</param>
     public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) {
-        var question = WorldFederationCodec.EncodeHopQuery(key: key, incarnations: incarnations, phase: phase);
+        var question = WorldFederationCodec.EncodeHopQuery(incarnations: incarnations, key: key, phase: phase);
 
         _ = TryResolveTransferStep(
             sourceAuthority: destination,
@@ -1426,7 +1414,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     /// <param name="asker">The asking title authority: this lane's authenticated namespace.</param>
     /// <returns>The answer; <see cref="WorldCustodyAnswer.Uncertain"/> when the peer gave no usable answer.</returns>
     public WorldCustodyAnswer QueryCustody(WorldTransferKey key, WorldEntityAddress incarnation, string asker) {
-        var question = WorldFederationCodec.EncodeCompanionHop(key: key, incarnation: incarnation);
+        var question = WorldFederationCodec.EncodeCompanionHop(incarnation: incarnation, key: key);
 
         _ = TryResolveTransferStep(
             sourceAuthority: asker,
@@ -1437,7 +1425,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             correlation: Convert.ToHexString(inArray: question)
         );
 
-        return (((answer.Kind == WorldFederationResponse.CustodyReply) && (answer.Body.Length == 1) && Enum.IsDefined(value: (WorldCustodyAnswer)answer.Body.Span[0]))
+        return (((answer.Kind == WorldFederationResponse.CustodyReply) && (answer.Body.Length == 1) && Enum.IsDefined(value: ((WorldCustodyAnswer)answer.Body.Span[0])))
             ? (WorldCustodyAnswer)answer.Body.Span[0]
             : WorldCustodyAnswer.Uncertain);
     }
@@ -1448,7 +1436,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     /// <param name="source">The settling custodian: this lane's authenticated namespace.</param>
     /// <returns><see langword="true"/> once the peer acknowledged the notice.</returns>
     public bool SettleHop(WorldTransferKey key, WorldEntityAddress incarnation, string source) {
-        var question = WorldFederationCodec.EncodeCompanionHop(key: key, incarnation: incarnation);
+        var question = WorldFederationCodec.EncodeCompanionHop(incarnation: incarnation, key: key);
 
         _ = TryResolveTransferStep(
             sourceAuthority: source,
@@ -1470,7 +1458,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     /// <returns>One answer per companion; each <see cref="WorldHopVerdict.Unavailable"/> when the peer gave no usable
     /// answer.</returns>
     public IReadOnlyList<WorldHopAnswer> RequestHop(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) {
-        var question = WorldFederationCodec.EncodeHopRequest(key: key, destination: destination, members: members);
+        var question = WorldFederationCodec.EncodeHopRequest(destination: destination, key: key, members: members);
 
         _ = TryResolveTransferStep(
             sourceAuthority: source,

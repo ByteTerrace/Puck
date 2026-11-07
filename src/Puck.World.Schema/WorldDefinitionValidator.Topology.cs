@@ -262,6 +262,9 @@ public static partial class WorldDefinitionValidator {
             minimumPort: 1,
             errors: errors
         );
+        if ((host.AuthorityNamespace is { } authorityNamespace) && string.IsNullOrWhiteSpace(value: authorityNamespace)) {
+            errors.Add(item: "host.authorityNamespace must be non-whitespace or null.");
+        }
 
         RequireIntRange(
             value: host.JournalDepth,
@@ -752,7 +755,8 @@ public static partial class WorldDefinitionValidator {
             }
             if (row.Material is { } material) {
                 var materialErrors = new List<Puck.Assets.Documents.DocumentValidationError>();
-                CreationCanonicalizer.ValidatePalette(palette: [material], shapes: [], errors: materialErrors);
+
+                CreationCanonicalizer.ValidatePalette(errors: materialErrors, palette: [material], shapes: []);
                 foreach (var error in materialErrors) {
                     errors.Add(item: $"{path}.material: {error.Path}: {error.Message}");
                 }

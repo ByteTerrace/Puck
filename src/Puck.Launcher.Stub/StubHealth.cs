@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Puck.Abstractions;
 
 namespace Puck.Launcher.Stub;
 
@@ -81,24 +82,9 @@ public static class StubHealth {
     /// <param name="installRoot">The install root.</param>
     /// <param name="record">The record to write.</param>
     public static void Write(string installRoot, StubHealthRecord record) {
-        var directory = Path.Combine(
-            path1: installRoot,
-            path2: StubInstall.HealthDirectoryName
-        );
-        var tmpPath = Path.Combine(
-            path1: directory,
-            path2: $"{Guid.NewGuid():n}.tmp"
-        );
-
-        Directory.CreateDirectory(path: directory);
-        File.WriteAllText(
-            path: tmpPath,
+        AtomicFile.WriteAllText(
+            path: FilePath(installRoot: installRoot),
             contents: JsonSerializer.Serialize(value: record)
-        );
-        File.Move(
-            sourceFileName: tmpPath,
-            destFileName: FilePath(installRoot: installRoot),
-            overwrite: true
         );
     }
 }

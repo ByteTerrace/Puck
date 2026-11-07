@@ -721,10 +721,11 @@ public sealed partial class WorldInstanceHost {
                         a: remote.Endpoint,
                         b: endpoint,
                         comparisonType: StringComparison.Ordinal
-                    )
+                    ) || (remote.PeerAuthority != definition.Host.AuthorityNamespace)
                     ) {
                         remote?.Dispose();
                         remote = new WorldRemoteAuthority(
+                            expectedAuthority: (definition.Host.AuthorityNamespace ?? throw new InvalidOperationException(message: "remote destination requires host.authorityNamespace")),
                             endpoint: endpoint,
                             placeholder: definition,
                             security: source.Federation.Authenticator,
@@ -1043,6 +1044,7 @@ public sealed partial class WorldInstanceHost {
         if (loaded.Host.Authority is { Length: > 0 } endpoint) {
             try {
                 var remote = new WorldRemoteAuthority(
+                    expectedAuthority: (loaded.Host.AuthorityNamespace ?? throw new InvalidOperationException(message: "remote destination requires host.authorityNamespace")),
                     endpoint: endpoint,
                     placeholder: loaded,
                     security: source.Federation.Authenticator,

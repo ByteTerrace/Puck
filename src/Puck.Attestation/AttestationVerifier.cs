@@ -97,8 +97,8 @@ public static class AttestationVerifier {
         }
 
         return AttestationVerifyResult.Accept(
-            reach: entry.Reach,
-            replayCommit: replayCommit
+            replayCommit: replayCommit,
+            trustEntry: entry
         );
     }
     /// <summary>
@@ -736,15 +736,16 @@ public static class AttestationVerifier {
         ArgumentNullException.ThrowIfNull(argument: profile);
 
         return profile.VerifyChain(
-            codec: codec,
-            claim: claim,
             chain: chain,
-            trustList: trustList,
-            now: now,
+            claim: claim,
+            codec: codec,
+            expectedAudience: expectedAudience,
             expectedPurpose: expectedPurpose,
-            expectedAudience: expectedAudience
+            now: now,
+            trustList: trustList
         );
     }
+
     /// <summary>Walks the chain after the receiver-selected profile has checked every outer envelope.
     /// Both public entry points pass through those checks before reaching this implementation.</summary>
     internal static AttestationVerifyResult VerifyChainCore(

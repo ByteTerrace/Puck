@@ -63,13 +63,13 @@ public sealed partial class WorldGrants {
     /// count against the <c>networkPlayers</c> cap, whatever its control source.</param>
     internal SessionReply AdmitTransferredPeer(int slot, WorldAdmissionVerdict? verdict, WorldTransferredOccupant occupant, IntentSource source) {
         if (!TryAdmitVerifiedParticipant(
-            verdict: verdict,
-            reservedSlot: slot,
-            source: source,
+            admitted: out _,
             authorityTransferred: true,
             occupant: occupant,
-            admitted: out _,
-            refusal: out var refusal
+            refusal: out var refusal,
+            reservedSlot: slot,
+            source: source,
+            verdict: verdict
         )) {
             return new SessionReply(
                 Accepted: false,
@@ -199,6 +199,7 @@ public sealed partial class WorldGrants {
             admitted: out admitted
         )
         ) {
+            admitted = admitted with { AdmissionTrust = decision.TrustIdentity };
             ApplyLifecycleEvents(
                 admitted: [admitted],
                 disconnected: [],
@@ -241,6 +242,7 @@ public sealed partial class WorldGrants {
             return false;
         }
 
+        admitted = admitted with { AdmissionTrust = decision.TrustIdentity };
         // A transfer commit's admission is its landing's consequence: the tape's arrival entry lands it again.
         ApplyLifecycleEvents(
             admitted: [admitted],
@@ -371,10 +373,9 @@ public sealed partial class WorldGrants {
     // against a peer, or an operator narrowing/removing its admission entry, is honored across a
     // world.reset/load/reload rather than silently undone:
     //
-    //  1. Re-match the peer's verified (Domain, Subject) — WorldPopulation.PeerIdentity, stored at
-    //     TryAdmitRemotePeer, never recomputed here — against the CANDIDATE document's OWN admission entries,
-    //     through WorldAdmissionDoor.TryMatchEntry: the SAME (domain, subject, mode) rule a fresh connection would
-    //     be judged by. No match at all (the identity's entry was removed, or never existed in this candidate)
+    //  1. Re-match the peer's verified claim names AND retained PeerAdmissionTrust (mode and pinned key identity)
+    //     against the candidate's admission entries through WorldAdmissionDoor.TryMatchEntry. A different proof
+    //     mode or key cannot inherit the connection. No match (the verifying entry was removed or replaced)
     //     ends transferred embodiments; connection owners evict their own live sessions and disconnect once.
     //  2. A match's CURRENT Grants list governs, not the stored connection-time templates — narrower or wider than
     //     what was minted at connection, exactly as if this peer connected fresh right now.
@@ -427,6 +428,7 @@ public sealed partial class WorldGrants {
                     entries: candidate.Admission,
                     domain: domain,
                     subject: subject,
+                    trustIdentity: Host.Population.PeerAdmissionTrust(bodyIndex: index),
                     verdict: out var matchedVerdict
                 )
                     ? matchedVerdict

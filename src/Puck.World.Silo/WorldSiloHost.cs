@@ -811,7 +811,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
             // Match WorldServer.AuthorityIdentity for a colocated row: it signs as its stable instance name
             // and has no remote endpoint. The configured row inventory keeps names unique in this host.
-            var subject = (definition.Host.Authority ?? worldRow.World.Value);
+            var subject = (definition.Host.AuthorityNamespace ?? worldRow.World.Value);
 
             if (ClosedGroupRewind) {
                 lock (m_rewindAuthoritiesGate) { m_rewindAuthorities.Add(item: subject); }

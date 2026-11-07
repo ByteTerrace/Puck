@@ -6,6 +6,40 @@ using Xunit;
 namespace Puck.Launcher.Tests.Release;
 
 public sealed class UpdateRecoveryHardeningTests : IDisposable {
+    [Fact]
+    public void InterruptedPublicationPreservesTheStillSelectedVersionsAttempts() {
+        Directory.CreateDirectory(path: m_root.RootPath);
+        File.WriteAllText(path: Current, contents: "1.0.1");
+        StubHealth.Write(installRoot: m_root.RootPath, record: new(Attempts: 2, Version: "1.0.1"));
+        // Stop at the real applier's last health mutation, before its current-pointer publication.
+        HealthGateFile.MarkPending(cacheRoot: m_root.RootPath, version: "1.0.2");
+        StubHealth.IncrementAndFlush(installRoot: m_root.RootPath, version: File.ReadAllText(path: Current));
+        Assert.Equal(expected: 3, actual: StubHealth.AttemptsFor(record: StubHealth.Read(installRoot: m_root.RootPath), version: "1.0.1"));
+        File.WriteAllText(path: Current, contents: "1.0.2");
+        StubHealth.IncrementAndFlush(installRoot: m_root.RootPath, version: "1.0.2");
+        Assert.Equal(expected: 1, actual: StubHealth.AttemptsFor(record: StubHealth.Read(installRoot: m_root.RootPath), version: "1.0.2"));
+    }
+    [Fact]
+    public async Task HealthyStartupRetriesAfterInstallLeaseContention() {
+        Directory.CreateDirectory(path: Version(version: "1.0.1"));
+        var path = Path.Combine(path1: Version(version: "1.0.1"), path2: "app.dll");
+
+        File.WriteAllText(contents: "selected", path: path);
+        PendingHealth();
+        using var image = new MappedImage(path: path);
+        using var registration = image.Register(installRoot: m_root.RootPath);
+        Task<HealthClearResult> clearing;
+
+        using (StubInstall.AcquireUpdateLease(installRoot: m_root.RootPath)) {
+            clearing = HealthGateFile.ClearHealthyAsync(cacheRoot: m_root.RootPath, version: "1.0.1",
+                registration: registration, cancellationToken: TestContext.Current.CancellationToken);
+            Assert.False(condition: clearing.IsCompleted);
+            Assert.True(condition: File.Exists(path: Marker));
+        }
+        Assert.True(condition: (await clearing).Cleared);
+        Assert.False(condition: File.Exists(path: Marker));
+    }
+
     private readonly TempStagingRoot m_root = new();
 
     private string Current => Path.Combine(path1: m_root.RootPath, path2: "current");

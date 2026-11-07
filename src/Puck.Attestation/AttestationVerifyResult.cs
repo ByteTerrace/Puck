@@ -23,12 +23,14 @@ public sealed class AttestationVerifyResult {
         bool verified,
         string? refusalReason,
         IReadOnlySet<string>? reach,
-        ReplayCommitRequirement? replayCommit
+        ReplayCommitRequirement? replayCommit,
+        TrustListEntry? trustEntry
     ) {
         Verified = verified;
         RefusalReason = refusalReason;
         Reach = reach;
         ReplayCommit = replayCommit;
+        TrustEntry = trustEntry;
     }
 
     /// <summary>The admitting trust entry's authored reach, or <see langword="null"/> after refusal.</summary>
@@ -41,12 +43,15 @@ public sealed class AttestationVerifyResult {
     public bool RequiresReplayCommit => (ReplayCommit is not null);
     /// <summary>Whether cryptographic verification and verifier policy succeeded. This is not an admission decision.</summary>
     public bool Verified { get; }
+    /// <summary>The exact trust entry selected by verification, including its pinned identity and mode.</summary>
+    public TrustListEntry? TrustEntry { get; }
 
     /// <summary>Builds a verified result carrying the admitting entry's authored slot reach.</summary>
-    /// <param name="reach">The slot names the admitting trust entry reaches. Empty means the claim verified but reaches nothing.</param>
+    /// <param name="trustEntry">The entry that verified the claim.</param>
     /// <param name="replayCommit">The replay-mark commit to transact with the claim's effect, or <see langword="null"/> for an unsequenced claim.</param>
-    internal static AttestationVerifyResult Accept(IReadOnlySet<string> reach, ReplayCommitRequirement? replayCommit) => new(
-        reach: reach,
+    internal static AttestationVerifyResult Accept(TrustListEntry trustEntry, ReplayCommitRequirement? replayCommit) => new(
+        reach: trustEntry.Reach,
+        trustEntry: trustEntry,
         refusalReason: null,
         replayCommit: replayCommit,
         verified: true
@@ -58,6 +63,7 @@ public sealed class AttestationVerifyResult {
         reach: null,
         refusalReason: reason,
         replayCommit: null,
+        trustEntry: null,
         verified: false
     );
     /// <summary>

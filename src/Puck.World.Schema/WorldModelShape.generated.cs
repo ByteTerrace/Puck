@@ -3795,6 +3795,7 @@ public static partial class WorldModelShape {
                 M("genlock", typeof(global::System.String), typeof(global::Puck.World.WorldHostDefaults), "Genlock", Read | Write, static value => ((global::Puck.World.WorldHostDefaults)value).Genlock),
                 M("listen", typeof(global::System.String), typeof(global::Puck.World.WorldHostDefaults), "Listen", Read | Write, static value => ((global::Puck.World.WorldHostDefaults)value).Listen),
                 M("authority", typeof(global::System.String), typeof(global::Puck.World.WorldHostDefaults), "Authority", Read | Write, static value => ((global::Puck.World.WorldHostDefaults)value).Authority),
+                M("authorityNamespace", typeof(global::System.String), typeof(global::Puck.World.WorldHostDefaults), "AuthorityNamespace", Read | Write, static value => ((global::Puck.World.WorldHostDefaults)value).AuthorityNamespace),
                 M("backend", typeof(global::System.Nullable<global::Puck.World.WorldBackendPreference>), typeof(global::Puck.World.WorldHostDefaults), "Backend", Read | Write, static value => ((global::Puck.World.WorldHostDefaults)value).Backend),
                 M("backendRow", typeof(global::System.String), typeof(global::Puck.World.WorldHostDefaults), "BackendRow", Read | Write, static value => ((global::Puck.World.WorldHostDefaults)value).BackendRow),
                 M("journalDepth", typeof(global::System.Int32), typeof(global::Puck.World.WorldHostDefaults), "JournalDepth", Read | Write, static value => ((global::Puck.World.WorldHostDefaults)value).JournalDepth),
