@@ -116,9 +116,26 @@ public sealed partial class WorldColliderSet {
         }
 
         var gain = FixedVector3.FromVector3(value: SdfSolidGeometry.DilationGain(scale: copy.Shape.Scale, type: copy.Shape.Type));
+        var half = (FixedVector3.Abs(value: copy.LocalHalfExtents) + (gain * FixedQ4816.Max(x: dilation, y: FixedQ4816.Zero)));
+        var reach = FixedFieldReach.Oriented(center: copy.Center, halfExtent: half, rotation: copy.Rotation);
 
-        return FixedFieldReach.Oriented(center: copy.Center, rotation: copy.Rotation,
-            halfExtent: (FixedVector3.Abs(value: copy.LocalHalfExtents) + (gain * FixedQ4816.Max(x: dilation, y: FixedQ4816.Zero))));
+        if (copy.Shape.Type is not (SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid or SdfSolidPrimitive.Superellipsoid)) {
+            return reach;
+        }
+
+        // A gauge-lowered shape's grown zero set is the Lp ball of the grown radii (exponent two for a sphere or an
+        // ellipsoid), whose support along each world axis is its exact world box, far tighter than its turned box's.
+        var ball = FixedStaticCollider.Superellipsoid(center: copy.Center, exponent: FixedQ4816.FromDouble(value: ((copy.Shape.Type == SdfSolidPrimitive.Superellipsoid)
+            ? (copy.Shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent)
+            : SdfProgramBuilder.MinSuperellipsoidExponent)), radii: half, rotation: copy.Rotation);
+        var padding = new FixedVector3(X: FixedFieldReach.Padding, Y: FixedFieldReach.Padding, Z: FixedFieldReach.Padding);
+        var world = (new FixedVector3(
+            X: (ball.SupportPoint(direction: FixedVector3.UnitX).X - ball.Center.X),
+            Y: (ball.SupportPoint(direction: FixedVector3.UnitY).Y - ball.Center.Y),
+            Z: (ball.SupportPoint(direction: FixedVector3.UnitZ).Z - ball.Center.Z)
+        ) + padding);
+
+        return (reach with { Box = new FixedColliderBox(Center: copy.Center, Extent: -FixedVector3.Max(left: -reach.Box.Extent, right: -world)) });
     }
     // A copy's analytic collider when its surface is the copy's own surface in the contact field: a sphere, a Box's
     // rounded or chamfered box, a round capsule and a half-space are the drawn primitive dilated by the margin, as the

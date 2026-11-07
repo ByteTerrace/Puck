@@ -420,6 +420,12 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
 
         return region;
     }
+    /// <summary>Returns whether a query against this collider can answer with a collider: this one, or one of the exact
+    /// pieces its field's partition narrows to (<see cref="Narrow"/>), as a support witness names.</summary>
+    /// <param name="effective">The collider a solve answered with.</param>
+    /// <returns><see langword="true"/> when <paramref name="effective"/> is this collider or one of its pieces.</returns>
+    public bool AnswersWith(in FixedStaticCollider effective) =>
+        ((effective == this) || ((Kind == FixedStaticColliderKind.Field) && (Field?.Partition is { } partition) && partition.Holds(collider: in effective)));
     private bool TryGetAnalyticPush(
         FixedVector3 position,
         in FixedQuaternion orientation,

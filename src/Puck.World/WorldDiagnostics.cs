@@ -287,7 +287,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                 var row = (((support.Source == FixedSurfaceColliderSource.Static) && (support.ColliderIndex < server.Population.DiagnosticColliders.Count))
                     ? server.Population.DiagnosticColliders[support.ColliderIndex] : null);
 
-                if ((row is null) || (row.Collider != support.Collider)) {
+                if ((row is null) || !row.Collider.AnswersWith(effective: support.Collider)) {
                     Skip(reason: $"body:{index}: retained support collider predates the current collision revision");
                     continue;
                 }
