@@ -66,6 +66,11 @@ their existing phases. Count glass vertices once, opaque vertices twice.
 Only a program with a drawn positive-density glass shape adds optical storage
 through `WithGlassShadows`; the graph's ports govern its allocation, clear and
 surface reads. Each texel holds three words (signed depth and nearest entry).
+`pipeline.inspect world` (or a session node named by `world.counters gpu`)
+reads the installed graph's named allocations and actual bytes. Read it beside
+`world.residency` and `host.memory`; those broader reports alone do not identify
+an optical buffer. A document reload clears the exposure pin, so pin the same
+EV again before comparing density-only reload stills.
 The glass vertex variant clips zero-density triangles before rasterization;
 opaque vertices export only position and clip distance. Density has its own
 cadence signature, shared by cascades and surface, including palette-only uploads.
