@@ -390,7 +390,16 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         else { readback.Release(); }
         // A reused array is answered whole, its fault word at words - 1; any other answer drops the fault word's slot.
         var result = ((query.CommitSource is not null) || (query.Reuse is not null)) ? readWords : readWords[..^1];
-        if (query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.TraversalFaults, readWords[words - 1]); }
+        if (query.CommitSource is null) {
+            var faults = readWords[words - 1];
+
+            m_volume.Counters.Add(SdfMeshIrradiance.TraversalFaults, faults);
+            // A walk stopped at its step or stack bound is a scene the hierarchy cannot answer; each costs a ray its whole
+            // bound, which is what makes one probe's thread group long enough to hang the device.
+            if (faults != 0) {
+                Console.Error.WriteLine(FormattableString.Invariant($"[sdf.mesh-gi] traversal faults={faults} {Describe(job: query)} gpu={((readback.GpuSeconds ?? 0.0) * 1000.0):0.0}ms"));
+            }
+        }
         if (query.Lighting is null && query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.GpuRays, query.Origins.Length * SdfMeshProbeDepth.HitCount); }
         if (readback.GpuSeconds is { } seconds) { m_volume.Counters.Add(query.Meter ? SdfMeshIrradiance.GpuMeterNanoseconds : query.Selection ? SdfMeshIrradiance.GpuSelectNanoseconds : query.Lighting is null && query.CommitSource is null ? SdfMeshIrradiance.GpuTraceNanoseconds : SdfMeshIrradiance.GpuRelightNanoseconds, (long)(seconds * 1e9)); }
         if (query.Meter) {
