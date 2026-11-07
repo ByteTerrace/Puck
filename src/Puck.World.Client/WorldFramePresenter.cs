@@ -2199,8 +2199,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // A frame whose render inputs match the previous one re-composites the retained image instead of
             // re-marching it; any camera, program, pose, lever or twinkle change renders.
             EnableCadenceGate = m_settings.CadenceGate,
-            // A frame held for a settled capture renders free of earlier frames' visible set and rated updates, so a
-            // still of a tick is the same image whatever frames preceded it.
+            // A settled capture disables rated updates but keeps two-phase occlusion. Each phase preserves staged
+            // order; an exact coplanar depth tie across phases can still depend on the preceding visible set.
             MeshCull = m_settings.Cull,
             MeshDetail = m_settings.Detail,
             UpdateRates = RatesOf(rates: m_settings.UpdateRates, settles: SettlesCapture),

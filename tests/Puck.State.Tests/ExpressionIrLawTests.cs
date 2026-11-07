@@ -753,23 +753,23 @@ public sealed class ExpressionIrLawTests {
         var program = reader.Compile(text: "count(scores, s -> s > 1) + minimum(scores[0], 4)");
 
         for (var warm = 0; (warm < 64); warm++) {
-            _ = Rules.RuleExpressions.TryEvaluate(
-                fault: out _,
+            var frame = new Rules.EvaluationFrame(reader: reader);
+
+            _ = Rules.RuleExpressions.Evaluate(
+                frame: ref frame,
                 kind: CellKind.Int,
-                program: program,
-                reader: reader,
-                value: out _
+                program: program
             );
         }
 
         var before = AllocationWindow.Least(window: () => {
             for (var run = 0; (run < 256); run++) {
-                _ = Rules.RuleExpressions.TryEvaluate(
-                    fault: out _,
+                var frame = new Rules.EvaluationFrame(reader: reader);
+
+                _ = Rules.RuleExpressions.Evaluate(
+                    frame: ref frame,
                     kind: CellKind.Int,
-                    program: program,
-                    reader: reader,
-                    value: out _
+                    program: program
                 );
             }
         });
@@ -837,16 +837,16 @@ public sealed class ExpressionIrLawTests {
                 program: ExpressionProgram.Parse(text: text)
             );
         public long Evaluate(ExpressionProgram program, CellKind kind = CellKind.Int) {
-            Assert.True(condition: Rules.RuleExpressions.TryEvaluateAlone(
-                fault: out var fault,
+            var outcome = Rules.RuleExpressions.EvaluateDetached(
                 kind: kind,
                 program: Compile(
                     kind: kind,
                     program: program
                 ),
-                reader: this,
-                value: out var value
-            ), userMessage: fault.ToString());
+                reader: this
+            );
+
+            Assert.True(condition: outcome.TryFinite(raw: out var value), userMessage: outcome.ToString());
             return value;
         }
     }

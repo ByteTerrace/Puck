@@ -52,6 +52,12 @@ collided runs, while the same expensive work ran eight times).
   several lanes' requests, timing goes through `puck measure` or a direct
   `bench frames` under `puck lease quiet`, and a red result goes back to the
   lane that owns it. A landing never waits for the window.
+- **One GPU-measuring lane at a time.** A lane whose work is measuring
+  windowed frames or GPU passes holds the GPU for long stretches; two such lanes
+  run together starve each other (a caster-culling fix round sat blocked behind a
+  views-resolve lane's GPU legs and handed back with its verification undone).
+  Run them one after another, or give the second only its code and return its
+  GPU legs as verification requests for the lead's window.
 - **Fix the scheduler before working around it.** An admission, lease or
   harness defect that stalls a lane is a top fix, filed and briefed the day it
   is found, never a wait every lane absorbs.

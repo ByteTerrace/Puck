@@ -62,9 +62,11 @@ lighting avoids an unrelated probe-convergence wait. Keep lighting enabled for
 normal frame measurements. `world.cull frustum` changes camera selection too;
 use `world.cull camera` to isolate cascade culling with camera occlusion unchanged.
 `world.wait residency` follows the latest render schedule through
-`SdfWorldPasses.PendingMeshesIn`: standing and deferred contributors that have
-submitted GPU work still owe their geometry, but unread or unproduced views do not.
-`RenderGraphRuntime.HasSubmittedFrame` shares the first-frame readiness boundary.
+`SdfWorldPasses.PendingMeshesIn`: newly scheduled renders, standing and deferred
+contributors owe their geometry, including before the first submission. The host
+residency is checked directly. Unread views and waiting views with no produced image
+do not contribute. Readiness reads the schedule on the host pump, without looking
+its names up in a potentially replaced node set.
 Waiting on every allocated residency
 deadlocks on hidden routed scenes whose GPU work correctly never starts.
 
@@ -190,12 +192,16 @@ Exit (and a future identity peel) and glass lists depend only on box/receiver
 selection, never entry visibility. They execute after entry depth is final.
 Never use an earlier exit/peel image to reject a caster.
 
-A receiver-conditioned cascade cannot use the far rate's motion tolerance or
-split refresh: newly exposed receivers were not in its mask. Occlusion mode
-refreshes both layers when the pass changes; only ordinary unchanged-pass
-signatures may retain it. `world.cull camera` disables cascade receiver and depth
-occlusion and retains the original far rate, providing the comparison path
-while leaving camera occlusion enabled.
+A receiver-conditioned cascade retains a coverage identity with each submitted
+layer: geometry, camera, sample grid and jitter, excluding the light. The far rate
+can hold or split while both layers cover those same receiver inputs; a changed
+coverage identity refreshes both. This is conservative equality, not a proof that
+different receiver sets are spatially contained. Readers use each layer's committed
+light camera. The graph keeps the sampling barrier, while the package projects its
+cadence dependency onto the consumed receiver inputs, so unrelated mesh writes do
+not invalidate it. `world.cull camera` removes the receiver input and disables cascade
+depth occlusion, retaining the original far rate and camera occlusion. Count held
+only when the pass stands, and rendered/split only on successful submission.
 For a complete-refresh cost comparison, set `world.rates shadow-far off` on
 both sides. Also measure ordinary cadence: replacing a split refresh with two
 culled layers can cost more in a view with little rejection even when a whole
@@ -959,9 +965,9 @@ past `WorldCountersCommandModule.GpuTextBudget` characters prints the summary
 under a note. A pass label is not a node name: `node sdf.world$mesh` is refused
 with a hint to use `pass`. The counts are read back a few frames late: the first
 reading after a camera pose or a lever change can still show the previous
-frames' work, so read twice and keep the second. A settled capture's held frame
-culls by box alone, so a reading taken just after one shows the mesh pass
-without the occlusion test.
+frames' work, so read twice and keep the second. A settled capture disables rated
+updates but retains two-phase occlusion. Staged order is preserved within each
+phase; an exact coplanar depth tie across phases can depend on prior visibility.
 
 Attribute shading cost by toggling the live levers (`world.shadows`, `world.ao`,
 `world.indirect`, `world.render-scale`) and isolate the raster with

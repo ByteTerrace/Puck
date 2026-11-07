@@ -1,10 +1,9 @@
 // Receiver occupancy shares the selection kernel's scratch allocation with its depth pyramid.
 // A cell covers 16x16 cascade texels. Higher levels OR their children; a positive
 // answer is deliberately conservative. Only current camera samples populate it.
-static const uint SdfReceiverShift = 4u;
 
 uint2 sdfReceiverDims() {
-    return sdfOcclusionExtent(worldViewDims(worldView()), SdfReceiverShift);
+    return sdfOcclusionExtent(worldViewDims(worldView()), SDF_RECEIVER_SHIFT);
 }
 uint sdfReceiverBase() {
     uint levels = sdfMeshOcclusionCandidates[0].y;
@@ -30,7 +29,7 @@ ViewportData sdfReceiverView() {
     view.right = asfloat(sdfMeshOcclusionCandidates[6]);
     view.up = asfloat(sdfMeshOcclusionCandidates[7]);
     view.forward = asfloat(sdfMeshOcclusionCandidates[8]);
-    float4 sample = asfloat(sdfMeshOcclusionCandidates[14]);
+    float4 sample = asfloat(sdfMeshOcclusionCandidates[SDF_RECEIVER_ROW]);
     view.extent = float4(sample.xy, 0.0, 0.0);
     float2 jitter = sample.zw / sample.xy * float2(2.0, -2.0);
     float2 offset = asfloat(sdfMeshOcclusionCandidates[9]).xy;

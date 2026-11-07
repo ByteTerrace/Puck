@@ -13,6 +13,7 @@ public sealed partial class SdfWorldPasses {
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment> GlassFragments = new();
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment> GlassShadowFragments = new();
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment> BoxCasterFragments = new();
 
     // The shapes a fragment's cascades take: each resolution with and without the second slot's cascade.
     private const int ShadowShapes = 6;
@@ -31,7 +32,11 @@ public sealed partial class SdfWorldPasses {
     public RenderGraphPackageFragment? FragmentOf(string instance) {
         var entry = Refresh(instance: instance);
 
-        var fragment = WithEnvironment(fragment: entry.Fragment, residency: entry.View?.Residency);
+        var fragment = entry.Fragment;
+        if (entry.View?.Residency.Frame?.MeshCull != SdfMeshCullLevel.Occlusion) {
+            fragment = BoxCasterFragments.GetValue(fragment, SdfWorldPackage.WithoutCasterReceivers);
+        }
+        fragment = WithEnvironment(fragment: fragment, residency: entry.View?.Residency);
         var quality = entry.OpticalBloom;
 
         return ((quality == BloomQuality.Off) ? fragment : BloomFragments.GetValue(fragment, static source => [

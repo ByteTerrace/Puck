@@ -144,6 +144,16 @@
 #define SDF_MESH_LEVEL_SHIFT              24u
 #define SDF_MESH_SELECTION_GROUP_SIZE     64u
 #define SDF_MESH_SELECTION_GROUPS_PER_ROW 65535u
+#define SDF_OCCLUSION_EARLY_STEP          0u
+#define SDF_OCCLUSION_DEPTH_STEP          1u
+#define SDF_OCCLUSION_LATE_STEP           2u
+#define SDF_OCCLUSION_SIGHT_STEP          3u
+#define SDF_RECEIVER_STEP                 4u
+#define SDF_RECEIVER_REDUCE_STEP          5u
+#define SDF_RECEIVER_SHIFT                4u
+#define SDF_RECEIVER_ROW                  14u
+#define SDF_SIGHT_ROW                     15u
+#define SDF_SIGHT_COUNT_BASE              5u
 
 // The irradiance volume's probe record and read (SdfMeshIrradianceProbe).
 #define SDF_MESH_IRRADIANCE_PROBE_WORDS                235u

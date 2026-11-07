@@ -248,14 +248,15 @@ is the one loop. Inside it:
   operand read at `WorldRuleHost.Arms.cs:431` (`effect.Magnitude.Read`),
   become declared `Sources` on the effect that the evaluator reads before
   the arm runs. The inventory of host reads is the `puck references` list for
-  `RuleExpressions.TryEvaluate`, `IRuleOperand.Read` and
+  `RuleExpressions.Evaluate`, `IRuleOperand.Read` and
   `RuleReads.ResolveKey` outside `Puck.State.Rules` at the time of the step,
   not these five lines.
 - **The capability frame.** `EvaluationFrame` is a `ref struct` holding the
-  reader, the bound keys and the scratch lease; `RuleEvaluator` constructs it
-  at the start of an evaluation and nothing else can. It is forgeable as
-  `default`, which `Evaluate` refuses at runtime; the frame's job is to make a
-  stray evaluation a visible call, not to be cryptographically unforgeable.
+  reader. `RuleEvaluator` and the host sites above construct it where they
+  evaluate; step 6 leaves the evaluator as the one constructor. It is
+  forgeable as `default`, which `Evaluate` refuses at runtime; the frame's job
+  is to make a stray evaluation a visible call, not to be cryptographically
+  unforgeable.
 
 ### The detached consumers
 
@@ -274,10 +275,9 @@ caller outside the list (`OUTCOME003`):
 
 ### The gate
 
-`RuleEvaluation.Decide(ref frame, GateToken[] gate) : Verdict` replaces
-`GateHolds`, `TryReadSource` and `RuleEvaluator.GateOpen(out bool faulted)`;
-the separate text branch with its register poll (`RuleEvaluation.cs:123-136`)
-is folded in. A `Verdict` is three-valued, so `verdict == Verdict.Open` is
+`RuleEvaluation.Decide(ref frame, GateToken[] gate) : Verdict` replaced
+`GateHolds`, `TryReadSource` and the evaluator's `GateOpen(out bool faulted)`;
+the separate text branch's register poll is folded in. A `Verdict` is three-valued, so `verdict == Verdict.Open` is
 legal C# and reads a fault as closed; what prevents that is that no deciding
 place compares a verdict: each hands it to the proposal, and the one door
 switches on it. The analyzer (`OUTCOME002`) refuses an equality comparison of
@@ -579,14 +579,14 @@ read: `FlockLawTests.AFaultingAffinityIsACountedFailureThatWeighsNothing`) and L
 
 ## Implementation steps
 
-Steps 3 to 9 remain (steps 1 and 2 have landed. Step 1, the representation: `Outcome`, `Fact`, `Resolved<T>`, `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` are in `Puck.State`, `Fact` and `Resolved<T>` carry every operand read and key resolution, and the witnesses exist. Step 2, addresses as program: the lowering above, `IRuleOperand.Addresses` and `Read(reader, keys)`, and the pricing below). Each is a vertically coherent slice: one producer and every consumer
+Steps 4 to 9 remain (steps 1 to 3 have landed. Step 1, the representation: `Outcome`, `Fact`, `Resolved<T>`, `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` are in `Puck.State`, `Fact` and `Resolved<T>` carry every operand read and key resolution, and the witnesses exist. Step 2, addresses as program: the lowering above, `IRuleOperand.Addresses` and `Read(reader, keys)`, and the pricing below. Step 3, the interpreter and the gate: `Run` answers an `Outcome`; `RuleExpressions.Evaluate(ref EvaluationFrame, ...)` and `EvaluateDetached` are the entries; `RuleEvaluation.Decide` answers a `Verdict`, folding the text conjuncts in, with `RuleEvaluation.ReadSource` beside it). Each is a vertically coherent slice: one producer and every consumer
 it affects land together, every bridge is named with the step that removes
 it, and the check proves what the step establishes. Each step builds what it
 touches (`dotnet build <project> -c Release -m:2 -nodeReuse:false`) and lands
 on a working integration branch. The witness file is
 `worlds/debug/rule-faults-tests.puck`, run with
 `puck test worlds/debug/rule-faults-tests.puck --jobs 1`; its header states
-each block's expected verdict, and W8, W10, W11 and L1, the blocks for findings
+each block's expected verdict, and W10, W11 and L1, the blocks for findings
 still open, are red until their steps. W13 and L1 are C# laws
 (`FlockLawTests.AFaultingAffinityIsACountedFailureThatWeighsNothing`,
 `LatchAndTriggerLawTests.ARewoundScopeRestoresTheEdgeCrossingAChildFiringConsumed`),
@@ -594,24 +594,15 @@ since a test block cannot read the counters they need. A name check uses a
 word-boundary form, which `puck search` spells
 `(^|[^A-Za-z])(Name)([^A-Za-z]|$)` (it rejects `\b`).
 
-3. **The interpreter returns `Outcome`; the gate decides a `Verdict`.**
-   `Evaluate(ref frame)` and `EvaluateDetached`; `Run` with no `out`;
-   `Decide` replacing `GateHolds`/`TryReadSource`/`GateOpen`, text conjuncts
-   included; every caller of the old entries migrated (bindings, effect
-   sources, decisions, groups, search score, arms, browser, constant folder).
-   **Bridge:** `Evaluate` and `Decide` still raise a `Faulted` result into the
-   register, so the deciding places that poll it keep working unchanged until
-   step 4 removes both. Check: W8 turns green (W7 already is; the fold's nested
-   runs stop sharing the caller's `fault`, `RuleExpressions.cs` call and fold
-   branches); `puck search "TryEvaluate\(|TryEvaluateAlone\(|GateHolds\(|TryReadSource\(" src`
-   returns no line; the kernels in the cost section within their stated
-   bounds.
 4. **Verdicts at every deciding place; the register goes.** `RuleOutcome`'s `Faulted`
    produced by `EvaluateOnce` and aggregated by `Evaluate`; `JudgeOutcome`
    through `PushScope`, the replay and `StepJob`; group policies on the
    three-way outcome; decisions and interactions returning `RuleOutcome`;
    every `RaisedFault` poll replaced by the value in hand; the bridge of step
-   3, `ArenaScratch`'s fault members and `FaultScope` deleted. Check: W12,
+   3 (`Evaluate` and `Decide` raising a faulted answer into the register, and
+   `RuleEvaluation.Decide`'s `out ExpressionFault`, which `RuleEvaluator.Decide`
+   words its refusal from), `ArenaScratch`'s fault members and `FaultScope`
+   deleted. Check: W12,
    W13 green; `puck search "EnterFaultScope|RaisedFault|RaiseFault|LeaveFaultScope|FaultScope" src`
    returns no line; the solution builds.
 5. **Journal participants.** `IJournalParticipant`, the `Participant` entry,

@@ -154,7 +154,7 @@ public static class WorldGaitDrivers {
             var driver = rows[index];
             var previousPhase = phases[index];
             var previousWeight = weights[index];
-            var holds = GateHolds(
+            var holds = HoldsGate(
                 facts: facts,
                 gate: driver.When,
                 moving: moving,
@@ -505,7 +505,7 @@ public static class WorldGaitDrivers {
     /// <param name="reads">The holder's reads of the state mirror, bound to the reading body, or
     /// <see langword="null"/> (a state token then fails).</param>
     /// <returns><see langword="true"/> when every token holds.</returns>
-    public static bool GateHolds(IReadOnlyList<string>? gate, BodyFacts facts, bool moving, WorldStateLease? reads = null) {
+    public static bool HoldsGate(IReadOnlyList<string>? gate, BodyFacts facts, bool moving, WorldStateLease? reads = null) {
         if (gate is not { Count: > 0 } tokens) {
             return true;
         }

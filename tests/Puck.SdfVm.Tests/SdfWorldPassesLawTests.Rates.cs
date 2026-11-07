@@ -13,11 +13,12 @@ public sealed partial class SdfWorldPassesLawTests {
     // Produces `frames` frames, applying `change` to the frame source before each, and returns how many drew both far
     // layers, how many drew one and how many held. The cadence gate is off, so every pass is forced and only the hold can
     // stand the far pass.
-    private static (long Rendered, long Split, long Held) FarCascadeCounts(SdfUpdateRates rates, int frames, Func<SdfFrame, int, SdfFrame> change, SdfUpdateRateIntervals? intervals = null, int displayHertz = 60) {
+    private static (long Rendered, long Split, long Held) FarCascadeCounts(SdfUpdateRates rates, int frames, Func<SdfFrame, int, SdfFrame> change, SdfUpdateRateIntervals? intervals = null, int displayHertz = 60, SdfMeshCullLevel? cull = null) {
         var counts = SdfUpdateRateCounts.Counters();
         using var rig = new TemporalRig(displayHertz: displayHertz, views: 1);
 
         rig.SourceFrame = (DrawnFrame() with { RateCounts = counts, RateIntervals = intervals, UpdateRates = rates });
+        if (cull is { } mode) { rig.SourceFrame = rig.SourceFrame with { MeshCull = mode }; }
         // The first frames fit and render the far cascade whatever the lever holds.
         for (var frame = 0; (frame < 2); frame++) { rig.Produce(); }
 
@@ -53,6 +54,29 @@ public sealed partial class SdfWorldPassesLawTests {
         frame.Lights.Set(index: 0, light: frame.Lights[0] with { Direction = Vector3.Normalize(value: direction) });
 
         return (frame with { });
+    }
+
+    [Theory]
+    [InlineData(SdfMeshCullLevel.Camera)]
+    [InlineData(SdfMeshCullLevel.Occlusion)]
+    public void AStillReceiverSetRetainsFarHoldsAndSplitsUnderATurningLight(SdfMeshCullLevel cull) {
+        var (rendered, split, held) = FarCascadeCounts(rates: SdfUpdateRates.ShadowFar, frames: RateFrames,
+            displayHertz: 120, cull: cull,
+            change: static (frame, index) => WithLight(frame, TurnedLight(frame, 0.01f * (index + 1))));
+        Assert.Equal(0L, rendered);
+        Assert.True(split > 0);
+        Assert.True(held > 0);
+        Assert.Equal(RateFrames, rendered + split + held);
+    }
+
+    [Fact]
+    public void AChangedReceiverCameraRefreshesBothOcclusionLayers() {
+        var (rendered, split, held) = FarCascadeCounts(rates: SdfUpdateRates.ShadowFar, frames: RateFrames,
+            displayHertz: 120, cull: SdfMeshCullLevel.Occlusion,
+            change: static (frame, index) => WithCamera(frame, new Vector3(0.001f * (index + 1), 0f, -5f), Vector3.Zero));
+        Assert.Equal(RateFrames, rendered);
+        Assert.Equal(0L, split);
+        Assert.Equal(0L, held);
     }
 
     // A view that stands still on a 60 Hz display splits each 30 Hz refresh: one frame draws the depth, the next the exit

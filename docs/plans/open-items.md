@@ -3550,6 +3550,40 @@ duration fields' schema migration.
   checked against a deterministic Miller-Rabin oracle; Intel (Alder Lake) and
   Zen 2 timings are unmeasured.
 
+### Machines as authored logic
+
+Owner: machines lane (gaming-bricks, puck-world, the job-system owner for
+scheduling) · ordinary · Next: measure a brick fleet inside a running World,
+then design step-until-change wiring and its pricing.
+
+The owner's question: an author discovers the hosted brick machines and uses
+many of them as programmable logic, the way builders use redstone. How many can
+a World run, and what makes that a feature rather than a stunt? The
+`Puck.HumbleGamingBrick.Post --bench` fleet benchmark (`MachineFleetStepper`,
+`MachineBenchmark`) answers the bare emulator side and its determinism guards
+hold serial against parallel; the World side is unmeasured. The design follows
+"Puck code over engine code": the circuit is the author's, the engine supplies
+scheduling, wiring, dormancy and cost.
+
+- Measure: brick machines running inside a running debug World on the lead
+  machine and on the Steam Deck, all at full speed and as mostly-dormant
+  circuits, in a quiet window, reading the World's frame and tick alongside the
+  fleet's throughput. The bare benchmark's figures (in the commit that filed
+  this packet) assumed the whole CPU and no World.
+- Price machine work in `world.budget`: confirm whether stepped machine cycles
+  reach it today (addons price their fuel; machines were not found to), and
+  attribute a circuit's cycles to what the author placed.
+- Step until change: logic wants "run until an output changes, then stop", not
+  whole frames. The bench's mailbox check (restore, run 15 frames, read, snapshot)
+  is far too coarse for wiring; design a quiescence-driven step with a bounded
+  cycle budget per tick, built on the existing snapshot, restore, fork and
+  simulate-on-demand dormancy.
+- Wiring: one machine's output to another's input as authored data (link cables
+  already connect bricks, `LinkSession`), deterministic within the tick, with
+  the cycle order defined so serial and parallel agree.
+- Scheduling: run independent machines in parallel through the engine job
+  system rather than on the frame thread, keeping the tick deterministic.
+
 ### Panes: split screens the player drives
 
 Owner: specialist lane (puck-world views, rendering graphs, input) · ordinary · Next: a machine-screen source for a pane. The owner's direction: a player can run as the Moth in one pane with the desktop in another, the HGD in a third and a fourth camera angle in another.

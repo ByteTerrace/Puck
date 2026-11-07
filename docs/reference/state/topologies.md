@@ -387,7 +387,7 @@ maps a body's position to a cell. Those are listed in [State in Puck.World](worl
 `Puck.State.Topology` holds the query library. `BoardQuery` is the abstract base
 with one sealed case per `BoardQueryKind`, each carrying only its own arguments.
 `BoardQueries.Evaluate` runs a query over a caller-owned span of cell values;
-`ArenaBoards.TryEvaluate` fills that span from an arena row and then calls the
+`ArenaBoards.TryQuery` fills that span from an arena row and then calls the
 same kernel, so a query answers the same over an arena as over a document row.
 `ArenaBoards` refuses a query compiled from a different authored topology than
 the row's. `ArenaBoards.TryReadRay` reads the cells of one ray as a word for

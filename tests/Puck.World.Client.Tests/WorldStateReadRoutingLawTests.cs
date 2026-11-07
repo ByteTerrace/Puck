@@ -374,7 +374,7 @@ public sealed class WorldStateReadRoutingLawTests {
                     reads: reads,
                     scaleRow: ScaleRow
                 );
-                sink += (WorldGaitDrivers.GateHolds(
+                sink += (WorldGaitDrivers.HoldsGate(
                     facts: BodyFacts.Grounded,
                     gate: gate,
                     moving: false,

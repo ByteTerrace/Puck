@@ -88,13 +88,13 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
             tick: view.Tick
         );
 
-        return (RuleExpressions.TryEvaluate(
-            fault: out _,
+        var frame = new EvaluationFrame(reader: m_host);
+
+        return (RuleExpressions.Evaluate(
+            frame: ref frame,
             kind: CellKind.Int,
-            program: program,
-            reader: m_host,
-            value: out var value
-        )
+            program: program
+        ).TryFinite(raw: out var value)
             ? value
             : 0L
         );

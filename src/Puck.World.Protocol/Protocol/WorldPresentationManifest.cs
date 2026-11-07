@@ -478,7 +478,7 @@ public sealed class WorldPresentationManifest {
                 AddBody(binding: (binding with { Target = (truth || binding.Target) }));
             }
         }
-        // A driver's or an effector's gate reads each state token's truth (WorldGaitDrivers.GateHolds).
+        // A driver's or an effector's gate reads each state token's truth (WorldGaitDrivers.HoldsGate).
         public void AddGate(IReadOnlyList<string>? gate) {
             foreach (var token in (gate ?? [])) {
                 if (CreationDriverDocument.IsStateSignal(signal: token)) {

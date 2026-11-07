@@ -140,8 +140,8 @@ public static class DocumentBuiltins {
         if (lowered is JsonArray nested) {
             foreach (var item in nested.ToList()) {
                 arr.AppendNode(item: scope.Budget.Copy(
-                    item,
-                    span
+                    span: span,
+                    value: item
                 ));
             }
 
@@ -149,8 +149,8 @@ public static class DocumentBuiltins {
         }
 
         arr.AppendNode(item: scope.Budget.Copy(
-            lowered,
-            span
+            span: span,
+            value: lowered
         ));
     }
     private static JsonNode Concat(IReadOnlyList<ArgumentNode> args, DocumentScope scope, string? fieldKey) {
@@ -174,7 +174,7 @@ public static class DocumentBuiltins {
     // `flatMap(array, lambda)` is `reduce(array, [], (all, item) => concat(all, lambda(item)))` without recopying the
     // running array each step: an array the lambda yields is spliced in, anything else is one item.
     private static JsonNode? FlatMap(CallExpressionNode call, IReadOnlyList<ArgumentNode> args, DocumentScope scope, string? fieldKey) {
-        if (!TryReadSource(
+        if (!TryReadOperand(
             args: args,
             call: call,
             expected: 2,
@@ -258,7 +258,7 @@ public static class DocumentBuiltins {
         return arr;
     }
     private static JsonNode? Filter(CallExpressionNode call, IReadOnlyList<ArgumentNode> args, DocumentScope scope, string? fieldKey) {
-        if (!TryReadSource(
+        if (!TryReadOperand(
             args: args,
             call: call,
             expected: 2,
@@ -302,7 +302,7 @@ public static class DocumentBuiltins {
     // `groupBy(array, lambda)` yields an object keyed by the lambda's result, each value the array of items that
     // produced it. Keys keep first-seen order, so the object reads the way the source does.
     private static JsonNode? GroupBy(CallExpressionNode call, IReadOnlyList<ArgumentNode> args, DocumentScope scope, string? fieldKey) {
-        if (!TryReadSource(
+        if (!TryReadOperand(
             args: args,
             call: call,
             expected: 2,
@@ -380,7 +380,7 @@ public static class DocumentBuiltins {
         };
     }
     private static JsonNode? Map(CallExpressionNode call, IReadOnlyList<ArgumentNode> args, DocumentScope scope, string? fieldKey) {
-        if (!TryReadSource(
+        if (!TryReadOperand(
             args: args,
             call: call,
             expected: 2,
@@ -630,7 +630,7 @@ public static class DocumentBuiltins {
 
         return arr;
     }
-    private static bool TryReadSource(
+    private static bool TryReadOperand(
         CallExpressionNode call,
         IReadOnlyList<ArgumentNode> args,
         int expected,
@@ -699,7 +699,7 @@ public static class DocumentBuiltins {
     /// <param name="result">The evaluated node.</param>
     /// <returns><see langword="true"/> when <paramref name="call"/> names a builtin; refusals are reported into the
     /// scope's diagnostics and yield a null <paramref name="result"/>.</returns>
-    public static bool TryEvaluate(CallExpressionNode call, DocumentScope scope, string? fieldKey, out JsonNode? result) {
+    public static bool TryFold(CallExpressionNode call, DocumentScope scope, string? fieldKey, out JsonNode? result) {
         ArgumentNullException.ThrowIfNull(call);
         ArgumentNullException.ThrowIfNull(scope);
 
@@ -720,7 +720,6 @@ public static class DocumentBuiltins {
         return true;
     }
 }
-
 /// <summary>One collection builtin of <see cref="DocumentBuiltins.Collections"/>: how a call to it is written, what
 /// it produces, and the evaluation the lowering runs for that call.</summary>
 /// <param name="signature">The call as an author writes it, its lambda's parameters named.</param>
@@ -732,5 +731,6 @@ public sealed class DocumentCollectionBuiltin(string signature, string descripti
     public string Signature { get; } = signature;
     /// <summary>Gets what the call produces.</summary>
     public string Description { get; } = description;
+
     internal Func<CallExpressionNode, DocumentScope, string?, JsonNode?> Evaluate { get; } = evaluate;
 }

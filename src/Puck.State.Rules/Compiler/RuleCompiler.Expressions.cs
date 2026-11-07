@@ -144,16 +144,14 @@ public static partial class RuleCompiler {
                 constant &&
                 (arity != 0)
             ) {
-                constant = RuleExpressions.TryEvaluate(
-                    fault: out _,
+                constant = RuleExpressions.EvaluateDetached(
                     kind: kind,
                     program: output.AsSpan(
                         length: (count - start),
                         start: start
                     ),
-                    reader: null,
-                    value: out var value
-                );
+                    reader: null
+                ).TryFinite(raw: out var value);
                 if (constant) {
                     count = start;
                     output[count++] = new CompiledExpressionToken(

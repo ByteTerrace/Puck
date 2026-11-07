@@ -224,7 +224,8 @@ public class StateExpressionKernels {
     private CompiledExpressionToken[] m_program = [];
     private StateKernelReader? m_reader;
 
-    /// <summary>Gets or sets the token count the compiled program carries.</summary>
+    /// <summary>Gets or sets the token count the compiled program carries; for <see cref="KernelRead.ComputedKey"/>,
+    /// the count of operand sites, each of which also carries the tokens that compute its key.</summary>
     [Params(0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129, 255, 256)]
     public int Tokens { get; set; }
     /// <summary>Gets or sets how the program reaches its operand values.</summary>
@@ -248,13 +249,13 @@ public class StateExpressionKernels {
     /// <summary>Evaluates the compiled program once.</summary>
     [Benchmark]
     public long Evaluate() {
-        _ = RuleExpressions.TryEvaluate(
-            fault: out _,
+        var frame = new Puck.State.Rules.EvaluationFrame(reader: m_reader!);
+
+        _ = RuleExpressions.Evaluate(
+            frame: ref frame,
             kind: CellKind.Int,
-            program: m_program,
-            reader: m_reader,
-            value: out var value
-        );
+            program: m_program
+        ).TryFinite(raw: out var value);
 
         return value;
     }

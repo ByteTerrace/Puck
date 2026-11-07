@@ -14,24 +14,17 @@ namespace Puck.SdfVm;
 /// Level and surface generation persist per draw within
 /// one table owner, including across buffer growth;
 /// changing owners clears selection history, and a capture ignores prior levels.
-/// Each phase preserves staged draw order with empty commands for rejected records, so depth ties resolve alike.
+/// Each phase preserves staged draw order. A coplanar tie across phases can depend on the prior visible set.
 /// No host draw walk or readback is involved. KEEP IN SYNC with sdf-mesh-selection.hlsli and the occlusion kernel.
 /// </summary>
 internal sealed class SdfMeshOcclusion : IDisposable {
     // The kernel's steps, pushed from SdfKernelInterfaces.MeshLevelShift up.
-    private const uint EarlyStep = 0u;
-    private const uint DepthStep = 1u;
-    private const uint LateStep = 2u;
-    private const uint SightStep = 3u;
-    private const uint ReceiverStep = 4u;
-    private const uint ReceiverReduceStep = 5u;
-    private const int ReceiverShift = 4;
     // Controls only; bounds and level metadata live in the shared mesh region. Paired with sdf-mesh-selection.hlsli:
     // one header row, three detail rows, ten cull rows, one receiver sample row.
-    private const int HeaderWords = (15 * 4);
+    private const int HeaderWords = (SdfKernelInterfaces.MeshSightRow * 4);
     // Every pass reserves early/late entry; cascades add solid exit, thin exit and optional extinction.
     private readonly uint m_argumentPhases;
-    private const ulong CountsBytes = ((5 + SdfPortalSight.Capacity) * sizeof(uint));
+    private const ulong CountsBytes = ((SdfKernelInterfaces.MeshSightCountBase + SdfPortalSight.Capacity) * sizeof(uint));
 
     private readonly IGpuBufferFactory m_buffers;
     private readonly string m_owner;
@@ -98,7 +91,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             if (slot.Fence is not { IsSignaled: true }) { continue; }
             slot.Fence = null;
             slot.Buffer!.Read(bytes);
-            m_sight.Complete(slot.Epoch, slot.Queries, System.Runtime.InteropServices.MemoryMarshal.Cast<byte, uint>(bytes)[5..]);
+            m_sight.Complete(slot.Epoch, slot.Queries, System.Runtime.InteropServices.MemoryMarshal.Cast<byte, uint>(bytes)[SdfKernelInterfaces.MeshSightCountBase..]);
         }
     }
 
@@ -123,9 +116,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         var sightSlot = m_sightSlots[slot];
         sightSlot.Recorded = false;
         sightSlot.Fence = null;
-        Span<System.Numerics.Vector4> rows = stackalloc System.Numerics.Vector4[15 + (4 * SdfPortalSight.Capacity)];
+        Span<System.Numerics.Vector4> rows = stackalloc System.Numerics.Vector4[SdfKernelInterfaces.MeshSightRow + (4 * SdfPortalSight.Capacity)];
         rows.Clear();
-        if (occlude && m_sight is not null) { sightSlot.Epoch = m_sight.Capture(rows[15..], sightSlot.Queries, in camera); }
+        if (occlude && m_sight is not null) { sightSlot.Epoch = m_sight.Capture(rows[SdfKernelInterfaces.MeshSightRow..], sightSlot.Queries, in camera); }
         var words = System.Runtime.InteropServices.MemoryMarshal.Cast<System.Numerics.Vector4, uint>(span: rows);
 
         words[0] = count;
@@ -134,7 +127,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         words[3] = (glass ? 1u : 0u) | (skipsDepth ? 2u : 0u) | (skipsExit ? 4u : 0u);
         detail.WriteGpu(rows: rows[1..4], held: held);
         cull.WriteGpu(rows: rows[4..]);
-        rows[14] = new(receiverWidth, receiverHeight, jitter.X, jitter.Y);
+        rows[SdfKernelInterfaces.MeshReceiverRow] = new(receiverWidth, receiverHeight, jitter.X, jitter.Y);
         EnsureBuffers(depth: occlude, draws: count);
         // Generations are table-local. Follow can preserve this pass while changing its tables, whose first cells
         // can carry the same tokens as the previous owner. Reset after growth so its seed cannot restore old history.
@@ -205,16 +198,16 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             // The receiver set samples current camera depth before any cascade attachment is drawn.
             recorder.ClearStorageBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_depth!.BufferHandle, sizeBytes: m_depth.SizeBytes);
             Ready(buffer: m_depth, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.TransferWrite, sourceStage: GpuStage.Transfer);
-            Dispatch(commandBuffer: commandBuffer, invocations: m_receiverWidth * m_receiverHeight, level: 0, pipeline: pipeline, recorder: recorder, step: ReceiverStep);
+            Dispatch(commandBuffer: commandBuffer, invocations: m_receiverWidth * m_receiverHeight, level: 0, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshReceiverStep);
             Ready(buffer: m_depth, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
-            var width = Extent(m_width, ReceiverShift);
-            var height = Extent(m_height, ReceiverShift);
+            var width = Extent(m_width, SdfKernelInterfaces.MeshReceiverShift);
+            var height = Extent(m_height, SdfKernelInterfaces.MeshReceiverShift);
             for (var level = 1u; level <= LevelsOf(width, height); level++) {
-                Dispatch(commandBuffer: commandBuffer, invocations: Extent(width, level) * Extent(height, level), level: level, pipeline: pipeline, recorder: recorder, step: ReceiverReduceStep);
+                Dispatch(commandBuffer: commandBuffer, invocations: Extent(width, level) * Extent(height, level), level: level, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshReceiverReduceStep);
                 Ready(buffer: m_depth, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
             }
         }
-        Dispatch(commandBuffer: commandBuffer, invocations: m_count, level: 0u, pipeline: pipeline, recorder: recorder, step: EarlyStep);
+        Dispatch(commandBuffer: commandBuffer, invocations: m_count, level: 0u, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionEarlyStep);
         ToIndirect(commandBuffer: commandBuffer, recorder: recorder);
     }
     // Records one phase's counted indirect draw inside the mesh pass's render pass, its graphics pipeline and set bound.
@@ -264,7 +257,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             var width = Extent(level: level, size: m_width);
             var height = Extent(level: level, size: m_height);
 
-            Dispatch(commandBuffer: commandBuffer, invocations: (width * height), level: level, pipeline: pipeline, recorder: recorder, step: DepthStep);
+            Dispatch(commandBuffer: commandBuffer, invocations: (width * height), level: level, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionDepthStep);
             Ready(buffer: m_depth!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
         }
 
@@ -273,10 +266,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         Ready(buffer: m_draws!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.IndirectCommandRead | GpuAccess.ShaderRead, sourceStage: GpuStage.DrawIndirect | GpuStage.VertexShader);
         Ready(buffer: m_counts!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.IndirectCommandRead, sourceStage: GpuStage.DrawIndirect);
         recorder.EndBarriers(commandBufferHandle: commandBuffer);
-        Dispatch(commandBuffer: commandBuffer, invocations: m_count, level: 0u, pipeline: pipeline, recorder: recorder, step: LateStep);
+        Dispatch(commandBuffer: commandBuffer, invocations: m_count, level: 0u, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionLateStep);
         if (m_sight is not null) {
             Ready(buffer: m_counts!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
-            Dispatch(commandBuffer: commandBuffer, invocations: SdfPortalSight.Capacity, level: 0u, pipeline: pipeline, recorder: recorder, step: SightStep);
+            Dispatch(commandBuffer: commandBuffer, invocations: SdfPortalSight.Capacity, level: 0u, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionSightStep);
             var slot = m_sightSlots[m_slot];
             slot.Buffer ??= m_buffers.CreateReadback(sizeBytes: CountsBytes, name: Name("portal sight", m_slot));
             recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_counts!.BufferHandle,
@@ -384,8 +377,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         if (!depth) { return; }
         var depthBytes = (DepthWords(height: m_height, levels: m_levels, width: m_width) * sizeof(uint));
         if (m_receivers) {
-            var width = Extent(m_width, ReceiverShift);
-            var height = Extent(m_height, ReceiverShift);
+            var width = Extent(m_width, SdfKernelInterfaces.MeshReceiverShift);
+            var height = Extent(m_height, SdfKernelInterfaces.MeshReceiverShift);
             depthBytes += ((ulong)width * height + DepthWords(width, height, LevelsOf(width, height))) * sizeof(uint);
         }
 

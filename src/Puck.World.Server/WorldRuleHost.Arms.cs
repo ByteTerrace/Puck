@@ -541,8 +541,11 @@ public sealed partial class WorldRuleHost {
         if (topology is null) {
             return Refuse(code: WorldRuleEffectRefusal.BodyTargetInvalid, reason: "poseCell target is outside its topology", refusal: out refusal);
         }
-        if (!RuleExpressions.TryEvaluate(fault: out var fault, kind: CellKind.Int, program: effect.Expression, reader: this, value: out var cell)) {
-            return Refuse(code: RuleEffectRefusal.Arithmetic, reason: $"the poseCell cell did not evaluate: {RuleEvaluation.DescribeFault(fault: fault)}", refusal: out refusal);
+        var cellFrame = new EvaluationFrame(reader: this);
+        var evaluatedCell = RuleExpressions.Evaluate(frame: ref cellFrame, kind: CellKind.Int, program: effect.Expression);
+
+        if (!evaluatedCell.TryFinite(raw: out var cell)) {
+            return Refuse(code: RuleEffectRefusal.Arithmetic, reason: $"the poseCell cell did not evaluate: {RuleEvaluation.DescribeOutcome(outcome: evaluatedCell)}", refusal: out refusal);
         }
         if ((cell < 0) || (cell >= topology.CellCount)) {
             return Refuse(code: WorldRuleEffectRefusal.BodyTargetInvalid, reason: "poseCell target is outside its topology", refusal: out refusal);
@@ -651,13 +654,13 @@ public sealed partial class WorldRuleHost {
         long value;
 
         if (effect.Source.Expression is { } program) {
-            if (!RuleExpressions.TryEvaluate(
-                fault: out _,
+            var frame = new EvaluationFrame(reader: this);
+
+            if (!RuleExpressions.Evaluate(
+                frame: ref frame,
                 kind: CellKind.Fixed,
-                program: program,
-                reader: this,
-                value: out value
-            )) {
+                program: program
+            ).TryFinite(raw: out value)) {
                 return Refuse(
                     code: WorldRuleEffectRefusal.BodyStateFaulted,
                     reason: "the value expression faulted",
@@ -718,13 +721,13 @@ public sealed partial class WorldRuleHost {
         long value;
 
         if (effect.Expression is { } program) {
-            if (!RuleExpressions.TryEvaluate(
-                fault: out _,
+            var frame = new EvaluationFrame(reader: this);
+
+            if (!RuleExpressions.Evaluate(
+                frame: ref frame,
                 kind: CellKind.Int,
-                program: program,
-                reader: this,
-                value: out value
-            )) {
+                program: program
+            ).TryFinite(raw: out value)) {
                 return Refuse(
                     code: WorldRuleEffectRefusal.IdentityFactUnwritable,
                     reason: "the value expression faulted",

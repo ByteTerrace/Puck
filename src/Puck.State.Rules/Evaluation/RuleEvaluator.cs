@@ -55,15 +55,14 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     private Puck.Abstractions.Counting.WorkCount m_evaluations;
     private Puck.Abstractions.Counting.WorkCount m_firings;
     private Puck.Abstractions.Counting.WorkCount m_skips;
-
     // Whether the evaluation EvaluateOnceCore last ran must be judged again next tick whatever moves: a volatile
     // schedule, a Level gate that held, a refusal, or a trace. A due list keeps such a binding due.
     private bool m_rerun;
     // Whether any evaluation since a due list's visit began must be judged again next tick.
     private bool m_anyRerun;
+
     // The earliest deadline any verdict a due list's visit kept or captured must be judged again at.
     private ulong m_minWake = ulong.MaxValue;
-
     private readonly List<int> m_bodyIndexScratch = [];
     private readonly List<CellKey> m_eachKeyScratch = [];
     private readonly List<StateInstanceHandle>?[] m_poolHandleScratch = new List<StateInstanceHandle>[StateCapacity.MaxInstanceBindings];
@@ -455,6 +454,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             stepTicks: stepTicks
         );
     }
+
     [Replaces(root: typeof(StateArena))]
     private RuleOutcome EvaluateRule(CompiledRule rule, RuleLatch latch, RuleLatch.RuleState bindings, ulong stepTicks, out bool applied) {
         applied = false;
@@ -480,9 +480,9 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             return EvaluateOnce(
                 applied: out applied,
                 binding: LatchKey.None,
-                state: bindings,
                 latch: latch,
                 rule: rule,
+                state: bindings,
                 stepTicks: stepTicks
             );
         }
@@ -507,11 +507,11 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
                 var poolBinding = new LatchKey(Left: slotKey.Ordinal, Right: -1, LeftGeneration: handle.Generation);
 
                 if ((rule.MaxFirings > 0) && (poolFirings >= rule.MaxFirings)) {
-                    latch.Touch(state: bindings, binding: poolBinding);
+                    latch.Touch(binding: poolBinding, state: bindings);
                     continue;
                 }
                 bindingsSpan[rule.PoolBindingSlot] = handle;
-                var outcome = EvaluateOnce(applied: out var moved, binding: poolBinding, state: bindings, latch: latch, rule: rule, stepTicks: stepTicks);
+                var outcome = EvaluateOnce(applied: out var moved, binding: poolBinding, latch: latch, rule: rule, state: bindings, stepTicks: stepTicks);
 
                 applied |= moved;
                 if (outcome != RuleOutcome.Idle) {
@@ -544,7 +544,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             // A sweep that has spent its firings leaves its remaining bindings as they stand, so an open edge waits for
             // the tick that reaches it instead of being closed by the sweep's end.
             if ((rule.MaxFirings > 0) && (firings >= rule.MaxFirings)) {
-                latch.Touch(state: bindings, binding: eachBinding);
+                latch.Touch(binding: eachBinding, state: bindings);
                 continue;
             }
             m_host.BoundEachKey = key;
@@ -552,9 +552,9 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             var outcome = EvaluateOnce(
                 applied: out var moved,
                 binding: eachBinding,
-                state: bindings,
                 latch: latch,
                 rule: rule,
+                state: bindings,
                 stepTicks: stepTicks
             );
 
@@ -575,6 +575,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         return aggregate;
     }
+
     /// <summary>Runs one gate-and-fire under the bindings already in place, inside a fault scope of its own. Edge fires
     /// on the crossing alone and re-arms only when the gate closes again; Level fires every tick the gate holds. The
     /// latch entry is per binding, never per rule alone; an entry the enclosing sweep does not touch is closed by the
@@ -590,7 +591,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     [Replaces(root: typeof(StateArena))]
     public RuleOutcome EvaluateOnce(CompiledRule rule, RuleLatch latch, RuleLatch.RuleState state, LatchKey binding, ulong stepTicks, out bool applied) {
         m_host.BeginRuleEvaluation();
-        try { return EvaluateOnceCore(applied: out applied, binding: binding, state: state, latch: latch, rule: rule, stepTicks: stepTicks); } finally {
+        try { return EvaluateOnceCore(applied: out applied, binding: binding, latch: latch, rule: rule, state: state, stepTicks: stepTicks); } finally {
             m_host.EndRuleEvaluation();
             m_anyRerun |= m_rerun;
         }
@@ -620,15 +621,15 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
             // Every live row the rule spells must select a row, or this evaluation is simply not for these indices: the
             // gate reads closed, nothing is refused, and the trace names what each spelling selected.
+            // A faulted gate decided nothing; the fault scope this judging runs in holds it for the caller below.
             var open = (RowsSelected(
                 rule: rule,
                 trace: trace?.Zones
-            ) && GateOpen(
-                faulted: out _,
+            ) && (Decide(
                 gate: rule.Gate,
                 ruleName: rule.Name,
                 trace: trace?.Conjuncts
-            ));
+            ) is Verdict.Open));
             var faulted = (scratch.RaisedFault != ExpressionFault.None);
 
             return new Judgement(
@@ -653,15 +654,17 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         Fact now;
 
         try {
-            _ = RuleEvaluation.TryReadSource(fact: out x, fault: out _, kind: token.ValueKind, reader: m_host, source: (deadline.TickOnLeft ? token.RightSource : token.LeftSource));
-            _ = RuleEvaluation.TryReadSource(fact: out now, fault: out _, kind: token.ValueKind, reader: m_host, source: (deadline.TickOnLeft ? token.LeftSource : token.RightSource));
+            var frame = new EvaluationFrame(reader: m_host);
+
+            x = RuleEvaluation.ReadSource(frame: ref frame, kind: token.ValueKind, source: (deadline.TickOnLeft ? token.RightSource : token.LeftSource));
+            now = RuleEvaluation.ReadSource(frame: ref frame, kind: token.ValueKind, source: (deadline.TickOnLeft ? token.LeftSource : token.RightSource));
         } finally {
             if (scratch.AnswerFaultScope(scope: scope) != ExpressionFault.None) {
                 x = Fact.Faulted(kind: token.ValueKind);
             }
         }
         now.Outcome.TryFinite(raw: out var nowRaw);
-        if ((x.Outcome.Case == FaultCase.Faulted) || (nowRaw != unchecked(((long)tick) * deadline.Scale))) {
+        if ((x.Outcome.Case == FaultCase.Faulted) || (nowRaw != unchecked((((long)tick) * deadline.Scale)))) {
             return 0UL;
         }
 
@@ -669,7 +672,6 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         return ((tick >= first) ? ulong.MaxValue : first);
     }
-
     private RuleOutcome EvaluateOnceCore(CompiledRule rule, RuleLatch latch, RuleLatch.RuleState state, LatchKey binding, ulong stepTicks, out bool applied) {
         ArgumentNullException.ThrowIfNull(argument: state);
         ArgumentNullException.ThrowIfNull(argument: latch);
@@ -800,7 +802,6 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         return outcome;
     }
-
     // A fault decided nothing. A binding that merely could not evaluate (an absence) leaves its entry for the sweep to
     // close, as a closed gate would; one that faulted touches it, so the sweep keeps the verdict the entry last held.
     private RuleOutcome HoldOnFault(bool faulted, RuleLatch latch, RuleLatch.BindingSchedule scheduling, RuleTraceEvaluation? trace) {
@@ -811,26 +812,25 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         return RuleOutcome.Idle;
     }
-    /// <summary>Evaluates a compiled gate for the evaluation in flight, reporting whether it faulted — a conjunct's
-    /// expression overflowed, left a function's domain, or read a fact with no number. A faulted gate decided
-    /// nothing: a rule keeps its last verdict, a decision its choice, and an <c>if</c> effect's condition runs
-    /// neither branch and refuses its firing.</summary>
+
+    /// <summary>Decides a compiled gate for the evaluation in flight. A conjunct that overflows, leaves a function's
+    /// domain or reads a fact with no number leaves the gate <see cref="Verdict.Faulted"/>: it decided nothing, so a
+    /// rule keeps its last verdict, a decision its choice, and an <c>if</c> effect's condition runs neither branch and
+    /// refuses its firing. The fault is reported against the rule in flight.</summary>
     /// <param name="gate">The compiled gate.</param>
     /// <param name="ruleName">The rule the gate belongs to, for the refusal ledger.</param>
-    /// <param name="faulted">Whether some conjunct could not evaluate; already reported against the rule in
-    /// flight.</param>
     /// <param name="trace">An optional per-conjunct narration sink.</param>
-    /// <returns><see langword="true"/> when the gate holds.</returns>
-    public bool GateOpen(GateToken[] gate, string ruleName, out bool faulted, List<string>? trace = null) {
-        var open = RuleEvaluation.GateHolds(
+    /// <returns>What the gate decided.</returns>
+    public Verdict Decide(GateToken[] gate, string ruleName, List<string>? trace = null) {
+        var frame = new EvaluationFrame(reader: m_host);
+        var verdict = RuleEvaluation.Decide(
             fault: out var fault,
+            frame: ref frame,
             gate: gate,
-            reader: m_host,
             trace: trace
         );
 
-        faulted = (fault != ExpressionFault.None);
-        if (faulted) {
+        if (verdict == Verdict.Faulted) {
             ReportRefusal(
                 detail: $"{RuleEvaluation.DescribeFault(fault: fault)}; the gate decided nothing",
                 effect: "gate",
@@ -840,7 +840,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             );
         }
 
-        return open;
+        return verdict;
     }
     /// <summary>Populates locals for a host-owned evaluation under its current binding before any gate or score
     /// reads them. Each value is evaluated afresh so timers cannot retain another binding's locals.</summary>
@@ -858,7 +858,6 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         return memos;
     }
-
     // Bound values first, in declared order, each visible to the ones after it and to the gate and effects. A
     // binding that cannot evaluate closes the gate for this evaluation and is reported once per category like any
     // effect's arithmetic refusal. With memos, localSchedules holds each local's read schedule.
@@ -898,16 +897,17 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
                 }
             }
 
-            if (!RuleExpressions.TryEvaluate(
-                fault: out var fault,
+            var frame = new EvaluationFrame(reader: m_host);
+            var evaluated = RuleExpressions.Evaluate(
+                frame: ref frame,
                 kind: bound.CarrierKind,
-                program: bound.Expression,
-                reader: m_host,
-                value: out var value
-            )) {
+                program: bound.Expression
+            );
+
+            if (!evaluated.TryFinite(raw: out var value)) {
                 trace?.Locals.Add(item: $"{bound.Name}=refused");
                 ReportRefusal(
-                    detail: RuleEvaluation.DescribeFault(fault: fault),
+                    detail: RuleEvaluation.DescribeOutcome(outcome: evaluated),
                     effect: $"binding '{bound.Name}'",
                     refusal: RuleEffectRefusal.Arithmetic,
                     ruleName: rule.Name,

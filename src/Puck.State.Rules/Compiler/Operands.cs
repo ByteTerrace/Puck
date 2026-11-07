@@ -604,7 +604,7 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
 
         return Fact.Finite(
             kind: CellKind.Int,
-            value: (ArenaBoards.TryEvaluate(
+            value: (ArenaBoards.TryQuery(
                 arena: reader.Arena,
                 dynamicTarget: dynamicTarget,
                 query: Board,
