@@ -1,6 +1,5 @@
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
-using Puck.Maths;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -12,7 +11,7 @@ namespace Puck.SdfVm;
 // target as sampled images, the visibility records and the glass sums as buffers, the reactivity a temporal view's
 // resolve reads (the tables' dummy in any other view) and the image it writes. Its block holds the frame's common
 // values, copied by name from the world layout, the temporal ones every part of a frame writes alike among them.
-internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder {
+internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     private static readonly (int Source, int Destination, int Length)[] FrameCopies = [.. SdfWorldPackage.Values.Select(selector: static member => (
         Source: ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member.Name)),
         Destination: ((int)SdfWorldInterfaces.GlassParameters.BlockOffsetOf(member: member.Name)),
@@ -34,9 +33,12 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder {
 
     private SdfWorldView m_view;
     private bool m_disposed;
+    private SdfShadeDispatch? m_shadePlan;
+    private readonly IGpuSubmissionFence?[] m_shadeFences;
 
     internal SdfGlassRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
         m_context = context;
+        m_shadeFences = new IGpuSubmissionFence?[context.InFlightFrames];
         m_owner = owner;
         m_view = view;
         m_temporal = owner.FragmentOf(instance: context.Instance)!.Resources.Any(predicate: static resource => resource.History);
@@ -66,6 +68,7 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder {
             m_view = current;
         }
         var residency = m_view.Residency;
+        residency.RetireShade(m_shadeFences[recording.Slot]);
 
         m_owner.Begin(residency: residency);
         var tables = residency.Staged(context: recording.Context);
@@ -97,10 +100,18 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder {
             group: ((uint)ShaderInterfaceGroup.World),
             pipelineLayoutHandle: pipeline.LayoutHandle
         );
-        recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: recording.Width.CeilingDivide(divisor: 8u), groupCountY: recording.Height.CeilingDivide(divisor: 8u), groupCountZ: 1);
+        m_shadePlan = SdfShadeDispatch.For(m_shadePlan, frame, recording.Width, recording.Height,
+            tables.PassValues.ScreenCount, glass: true);
+        m_shadePlan.Record(in recording, pipeline);
         return RenderGraphPackageOutcome.Drew;
     }
     public void Submitted() {
+    }
+    public ulong ReadbackBytes => 0;
+    public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) { readback = default; return false; }
+    public void Submitted(int slot, IGpuSubmissionFence fence) {
+        m_shadeFences[slot] = fence;
+        if (m_shadePlan is { } shade) { m_view.Residency.SubmittedShade(shade, fence); }
     }
 
     // Writes, once per slot and tables, each port at the member its version reads or writes it through, and the tables'

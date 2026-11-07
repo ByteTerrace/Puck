@@ -5,7 +5,7 @@ namespace Puck.SdfVm;
 
 /// <summary>Generates the shade interpreter and specializes admitted instructions through the same typed template.
 /// This CPU generator defines the ABI; phase invocation in the shading stages is a later implementation step.</summary>
-public static class SdfShadeHlsl {
+public static partial class SdfShadeHlsl {
     /// <summary>The generated include alongside the field ISA.</summary>
     public const string FileName = "sdf-shade.hlsli";
 
@@ -16,6 +16,7 @@ public static class SdfShadeHlsl {
         text.Append(value: "// Op semantics and helper content: ").Append(value: SdfShadeOps.Fingerprint).Append(value: '\n');
         text.Append(value: "#define SDF_SHADE_MAX_REGISTERS ").Append(value: SdfShadeProgram.MaxRegisters).Append(value: "u\n");
         text.Append(value: "#define SDF_SHADE_MAX_OPS ").Append(value: SdfShadeProgram.MaxOps).Append(value: "u\n");
+        text.Append("#define SDF_SHADE_READ_PAINT ").Append((uint)SdfShadeReads.PaintCoverage).Append("u\n");
         foreach (var op in SdfShadeOps.Table) { text.Append(value: "#define SDF_SHADE_").Append(value: op.Op.ToString().ToUpperInvariant()).Append(value: ' ').Append(value: ((uint)op.Op)).Append(value: "u\n"); }
         text.Append(value: "struct SdfShadeStamp { ");
         for (var i = 0; (i < SdfShadeOps.Inputs.Count); i++) { text.Append(value: "uint4 i").Append(value: i).Append(value: "; "); }
@@ -35,6 +36,9 @@ public static class SdfShadeHlsl {
         text.Append(value: "}\n");
         for (var i = 0; (i < SdfShadeOps.Inputs.Count); i++) {
             text.Append(value: "#define SDF_SHADE_INPUT_").Append(value: SdfShadeOps.Inputs[i].Name.Replace(newChar: '_', oldChar: '.').ToUpperInvariant()).Append(value: ' ').Append(value: i).Append(value: "u\n");
+            var input = SdfShadeOps.Inputs[i];
+            text.Append("void sdfShadeSet_").Append(input.Name.Replace('.', '_')).Append("(inout SdfShadeStamp stamp, ")
+                .Append(Type(input.Type)).Append(" value) { stamp.i").Append(i).Append(" = ").Append(Encode("value", input.Type)).Append("; }\n");
         }
         text.Append(value: Helpers);
         var signatures = new Dictionary<SdfShadeOp, List<(SdfShadeType[] Args, SdfShadeType Result)>>();
@@ -91,7 +95,8 @@ void sdfShadeInterpret(uint2 slice, uint2 parameters, uint phase, SdfShadeStamp 
             }
             text.Append(value: "        } break;\n");
         }
-        text.Append(value: "        }\n        sdfShadeWriteRegister(regs, op.y, value);\n        sdfShadeWriteOutputs(outputs, op.z >> 8u, value);\n    }\n}\n#endif\n");
+        text.Append(value: "        }\n        sdfShadeWriteRegister(regs, op.y, value);\n        sdfShadeWriteOutputs(outputs, op.z >> 8u, value);\n        sdfWorkSteps++;\n    }\n}\n");
+        text.Append(Invocation).Append("\n#endif\n");
         return text.ToString();
     }
     /// <summary>Emits one admitted phase as precise locals using exactly the interpreter's generated op functions.</summary>

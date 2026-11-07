@@ -52,8 +52,29 @@ public sealed class SdfAppearance {
     private readonly SdfScreenSurface[] m_screenSurfaces;
     private readonly uint[] m_screenSurfaceWords;
 
-    private bool? m_hasFlow;
-    private bool? m_readsWorldLanes;
+    private (SdfShadeReads Layers, SdfShadeReads Authored, SdfShadeReads Unshaded, SdfShadeReads Emission, bool Inherits)? m_shadeReads;
+
+    /// <summary>The reads of the selected shading path. A default replaces the old layers only on unprogrammed materials.</summary>
+    public SdfShadeReads ResolveShadeReads(bool programs, SdfShadeProgram? fallback) {
+        if (m_shadeReads is null) {
+            var layers = SdfShadeReads.None;
+            var authored = SdfShadeReads.None;
+            var unshaded = SdfShadeReads.None;
+            var emission = SdfShadeReads.None;
+            var inherits = false;
+            foreach (var material in m_materials) {
+                var reads = material.Flow is null ? SdfShadeReads.None : SdfShadeReads.Clock;
+                if (IsWorldLane(material.Weathering?.Lane) || IsWorldLane(material.Flow?.Lane) || IsWorldLane(material.Flow?.CoverageLane)) { reads |= SdfShadeReads.WorldLanes; }
+                if (IsWorldLane(material.EmissiveLane)) { emission |= SdfShadeReads.WorldLanes; }
+                layers |= reads;
+                if (material.Shade is { } shade) { authored |= shade.Reads; }
+                else { inherits = true; unshaded |= reads; }
+            }
+            m_shadeReads = (layers, authored, unshaded, emission, inherits);
+        }
+        var cached = m_shadeReads.Value;
+        return cached.Emission | (programs ? cached.Authored | (cached.Inherits ? fallback?.Reads ?? cached.Unshaded : SdfShadeReads.None) : cached.Layers);
+    }
 
     /// <summary>Initializes a new instance of the <see cref="SdfAppearance"/> class from a palette and its screen
     /// surfaces, snapshotted and validated before anything reads them.</summary>
@@ -118,20 +139,6 @@ public sealed class SdfAppearance {
     public SdfShadeReads ShadeReads => m_materials.Aggregate(SdfShadeReads.None, static (reads, material) => reads | (material.Shade?.Reads ?? SdfShadeReads.None));
     /// <summary>Gets the authored programs carried by this appearance, including different runtime data for one identity.</summary>
     public IEnumerable<SdfShadeProgram> ShadingPrograms => m_materials.Where(predicate: static m => (m.Shade is not null)).Select(selector: static m => m.Shade!);
-    /// <summary>Gets whether any material reads a world lane (<see cref="SdfLanes.FirstWorld"/> and above) through its
-    /// emission, weathering or flow: a frame of such a program carries the world's lanes in its pass block, and a frame
-    /// of any other carries zero for its materials, so its views stand while the world's state moves. Measured once, on
-    /// first read.</summary>
-    public bool ReadsWorldLanes => (m_readsWorldLanes ??= m_materials.Any(predicate: static material =>
-        ((((material.Shade?.Reads & SdfShadeReads.WorldLanes) is { } reads) && (reads != SdfShadeReads.None)) || IsWorldLane(lane: material.EmissiveLane) ||
-        ((material.Weathering is { } weathering) && IsWorldLane(lane: weathering.Lane)) ||
-        ((material.Flow is { } flow) && (IsWorldLane(lane: flow.Lane) || IsWorldLane(lane: flow.CoverageLane))))));
-    /// <summary>Gets whether any material carries a flow layer (<see cref="SdfMaterial.Flow"/>): a frame of such a program
-    /// carries the flow clock in its pass block, and a frame of any other carries zero, so its views stand while nothing
-    /// else changes. Measured once, on first read.</summary>
-    public bool HasFlow => (m_hasFlow ??= m_materials.Any(predicate: static material => ((material.Flow is not null) ||
-        ((material.Shade?.Reads & SdfShadeReads.Clock) == SdfShadeReads.Clock))));
-
     /// <summary>Returns the vectors a palette's packed tables span: each material's <see cref="MaterialVectorsPerEntry"/>,
     /// then each paint's <see cref="PaintVectorsPerEntry"/>. The one statement of the appearance section's size, which a
     /// capacity probe (<see cref="SdfProgramBuilder.MeasureCapacity"/>) reads without packing.</summary>

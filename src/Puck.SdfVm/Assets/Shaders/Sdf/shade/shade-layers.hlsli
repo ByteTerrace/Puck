@@ -11,7 +11,8 @@
 // and writes the albedo alone (sdfMaterialPaints), so the caller loads the rest of the material after it: a material
 // live across the shape dispatch held the views pass at 168 registers on Direct3D 12. KEEP IN SYNC with
 // SdfAppearance.PackPaint.
-void sdfApplyPaints(float3 worldPoint, float3 layerPoint, float footprint, uint paintFirst, uint paintCount, inout float3 albedo) {
+void sdfApplyPaints(float3 worldPoint, float3 layerPoint, float footprint, uint paintFirst, uint paintCount, bool deferLast, inout float3 albedo, out float coverage) {
+    coverage = 0.0;
     uint count = min(paintCount, SDF_MAX_PAINTS_PER_MATERIAL);
     if ((count == 0u) || !sdfProgramRange(paintFirst, count, SDF_PAINT_VECTORS_PER_ENTRY)) return;
     float edge = max((0.5 * footprint), 1.0e-6);
@@ -35,7 +36,9 @@ void sdfApplyPaints(float3 worldPoint, float3 layerPoint, float footprint, uint 
         float4 scale = asfloat(sdfWords[base + 2u]);
         float d = (evaluateShape(asuint(frame.w), (local / scale.xyz), asfloat(sdfWords[base + 3u]), asfloat(sdfWords[base + 4u])) * scale.w);
         if (colorStroke.w > 0.0) d = (abs(d) - colorStroke.w);
-        albedo = lerp(albedo, colorStroke.rgb, (1.0 - smoothstep(-edge, edge, d)));
+        float reveal = 1.0 - smoothstep(-edge, edge, d);
+        if (deferLast && i + 1u == count) coverage = reveal;
+        else albedo = lerp(albedo, colorStroke.rgb, reveal);
     }
 }
 // Refract into the authored local plane, then sample its radial ramp. No view-facing frame is synthesized.

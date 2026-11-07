@@ -249,7 +249,8 @@ public sealed partial class SdfWorldTables {
         Exposures: ViewExposures,
         InstanceMaskWordCount: InstanceMaskWordCount,
         MeshDraws: MeshDrawCount,
-        ScreenCount: BoundScreenCount()
+        ScreenCount: BoundScreenCount(),
+        ShadeDefaultFirst: m_shadeDefaultFirst
     );
     /// <summary>Gets the live program's instance-mask width, which every pass block carries.</summary>
     public uint InstanceMaskWordCount => ((uint)m_liveInstanceMaskWordCount);
@@ -277,6 +278,7 @@ public sealed partial class SdfWorldTables {
                 paramName: nameof(frame)
             );
         }
+        PackShadeDefault(frame);
 
         if (frame.DynamicTransforms.Count < m_requiredDynamicTransformCapacity) {
             throw new ArgumentException(

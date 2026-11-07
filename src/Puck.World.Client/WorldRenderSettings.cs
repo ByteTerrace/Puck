@@ -30,6 +30,9 @@ public sealed partial class WorldRenderSettings {
     private bool m_toonDefault;
     private bool m_toonStyled;
     private bool? m_toonOverride;
+    private bool m_shadePrograms;
+    /// <summary>The temporary programs-versus-layers measurement lever.</summary>
+    public bool ShadePrograms { get => m_shadePrograms; set { m_shadePrograms = value; m_revision++; } }
     private float m_upscaleSharpness;
     private WorldSkyTier m_skyQuality;
 

@@ -46,6 +46,7 @@ namespace Puck.World;
 /// document-authored grant reads the same compact <c>world.grant</c> tokens rather than a raw field object.
 /// </summary>
 [JsonSerializable(typeof(WorldDefinition))]
+[JsonSerializable(typeof(Puck.SignedDistance.SdfShadeDefinition))]
 [JsonSerializable(typeof(CellValueJsonConverter.IntShape))]
 [JsonSerializable(typeof(CellValueJsonConverter.FixedShape))]
 [JsonSerializable(typeof(CellValueJsonConverter.BoolShape))]
@@ -435,6 +436,8 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<WorldCurveRow> WorldCurveRow => For<WorldCurveRow>();
     /// <summary>Gets the type info for <see cref="WorldDefinition"/>.</summary>
     public JsonTypeInfo<WorldDefinition> WorldDefinition => For<WorldDefinition>();
+    /// <summary>The canonical presentation-program payload used by the default-program lever.</summary>
+    public JsonTypeInfo<Puck.SignedDistance.SdfShadeDefinition> SdfShadeDefinition => For<Puck.SignedDistance.SdfShadeDefinition>();
     /// <summary>Gets the source-generated type info for a complete state declaration and continuation.</summary>
     public JsonTypeInfo<WorldStateSection> WorldStateSection => For<WorldStateSection>();
     /// <summary>Gets the type info for <see cref="WorldFrameSource"/>.</summary>

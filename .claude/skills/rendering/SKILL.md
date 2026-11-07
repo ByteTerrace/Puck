@@ -335,7 +335,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   acne) is the estimate's, so an edit to the views lighting code changes
   nothing; the window and the pattern's tile are a pair. A side is queried
   wherever the light's diffuse response is non-zero, which for a wrapped
-  material reaches past the terminator to `n·l > -wrap` (`sdfMaterialWrap`);
+  material reaches past the terminator to `n·l > -wrap` (`sdfMaterialShadowDemand`);
   such a side reads the cascade's exit layer (below), or the wrap would shadow
   itself away in the open. A side the response does not reach is never queried: its slot holds `SDF_SHADOW_UNQUERIED`
   (`frame/sdf-shadow-visibility.hlsli`), which decodes as fully visible, and
@@ -586,7 +586,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   tangential part, revealing a surface and tilting the shading normal. Its
   phase enters only through the pass block's `flowClock`, which
   `SdfFrameBlock` integrates from `SdfFrame.Clock` and writes zero for a program
-  without flow (`SdfAppearance.HasFlow`), so a still world's views keep standing;
+  without flow (`SdfAppearance.ResolveShadeReads`), so a still world's views keep standing;
   the clock is a lighting value of the cadence signature, so only the shading
   passes rerun as the flow moves. No `sdf-*` kernel reads the Frame group's
   `time` or `timeDelta`: `puck search -M 0 "frameGroup\.(time|timeDelta)"

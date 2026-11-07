@@ -6,6 +6,11 @@
 
 [numthreads(SDF_VISIBILITY_GROUP_EDGE, SDF_VISIBILITY_GROUP_EDGE, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
+#ifndef SDF_SURFACE_PASS
+    uint across = (passGroup.extent.x + 7u) / 8u;
+    uint group = pushedIndex.index + id.x / 8u;
+    id.xy = uint2(group % across, group / across) * 8u + uint2(id.x % 8u, id.y);
+#endif
     uint viewIndex = worldViewOf(id.z);
 
     if (viewIndex >= passGroup.viewportCount) {

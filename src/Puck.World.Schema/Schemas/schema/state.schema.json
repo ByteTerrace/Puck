@@ -810,7 +810,7 @@
                           "default": null
                         },
                         "profile": {
-                          "$ref": "./common.schema.json#/$defs/SdfPrismProfile",
+                          "$ref": "./common.schema.json#/$defs/SdfPrismProfileNullable",
                           "description": "Prism only: the cross-section; a path profile is refused.",
                           "default": null
                         },

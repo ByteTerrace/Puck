@@ -1450,7 +1450,7 @@ template surfacePrototypes() {
       exhibit(
         label: "CEL STYLE",
         extra: [
-          { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35, toon: celStyle }
+          celMaterial({ color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }, celStyle)
           { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }
         ],
         note: "left: its own cel style, the shadow kept under the band; right: continuous"
@@ -1472,7 +1472,7 @@ template surfacePrototypes() {
       exhibit(
         label: "CEL HARD",
         extra: [
-          { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35, toon: celHardStyle }
+          celMaterial({ color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }, celHardStyle, combined: 1)
           { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }
         ],
         note: "left: the band over light and shadow together; right: continuous"
@@ -1628,6 +1628,7 @@ template surfacePrototypes() {
                 color: "#1F4E79"
               }
             ]
+            shade: paint("#1F4E79")
           }
         ]
       )
@@ -2207,6 +2208,8 @@ template motionPrototypesB() {
                 modulationFrequency: 40
               }
             }
+            shade: inset([0,0,-0.25], [0,1,0,0], 0.05, 1.336, 0.15, 0.04, 40, 3.82113123,
+              "#0B0B0B", "#3A7BD5", "#1A2A40", "#F5F3EE", 0.03, 0.075, 0.085, 0.095)
           }
         ]
       )

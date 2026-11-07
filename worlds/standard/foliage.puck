@@ -1,5 +1,6 @@
 // Reusable foliage and scenery. These templates emit rows only when expanded by a world.
 // World positions in scatter tables are translated by origin; creation shapes keep the author frame.
+import "shading"
 let landscapeExponent = 2.05
 let meadowSpacing = 0.075
 let meadowHeight = 0.55
@@ -28,6 +29,7 @@ let landscapeTurn = [0.2, -0.4, -0.4, 0.8]
 function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, settle = 0.3, edge = 0, reach = 0.35, threshold = 0.16, noise = 0, patternScale = [
   1, 1, 1
 ], softness = 0, octaves = 2, octaveRatio = 2.03, octaveGain = 0.534, turn = landscapeTurn) = base with {
+  shade: weathered(under, deposit, seed, scale, lines, settle, edge, reach, threshold, noise, patternScale, softness, octaveRatio, octaveGain, turn, octaves)
   weathering {
     floor: 1
     noise: noise
@@ -491,6 +493,7 @@ template grassTuft(id) {
 // The meadow's wind as a world-space flow layer: paler gust patches run across every tile and blade together, along the
 // way the gust swings travel. Features are about eight metres; one cycle's travel stays under a third of one along the flow.
 let meadowWind = {
+  tilt: 0
   velocity [-2.5, 0, -1.6]
   scale: 0.12
   stretch: 2
@@ -514,50 +517,14 @@ template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.9, 3
       behavior {
         reducedRateAtDistance: reducedRateAtDistance
       }
-      palette [
-        {
-          color: "#698B3E",
-          roughness: 0.9,
-          specular: 0.025,
-          wrap: 0.45,
-          flow: wind
-        }
-        {
-          color: "#79964A",
-          roughness: 0.9,
-          specular: 0.025,
-          wrap: 0.45,
-          flow: wind
-        }
-        {
-          color: "#849C4F",
-          roughness: 0.9,
-          specular: 0.025,
-          wrap: 0.45,
-          flow: wind
-        }
-        {
-          color: "#9EB75C",
-          roughness: 0.85,
-          specular: 0.035,
-          wrap: 0.55,
-          flow: wind
-        }
-        {
-          color: "#A5BA63",
-          roughness: 0.85,
-          specular: 0.035,
-          wrap: 0.55,
-          flow: wind
-        }
-        {
-          color: "#91AB50",
-          roughness: 0.85,
-          specular: 0.035,
-          wrap: 0.55,
-          flow: wind
-        }
-      ]
+      palette: map([
+        { color: "#698B3E", roughness: 0.9, specular: 0.025, wrap: 0.45 }
+        { color: "#79964A", roughness: 0.9, specular: 0.025, wrap: 0.45 }
+        { color: "#849C4F", roughness: 0.9, specular: 0.025, wrap: 0.45 }
+        { color: "#9EB75C", roughness: 0.85, specular: 0.035, wrap: 0.55 }
+        { color: "#A5BA63", roughness: 0.85, specular: 0.035, wrap: 0.55 }
+        { color: "#91AB50", roughness: 0.85, specular: 0.035, wrap: 0.55 }
+      ], base => flowed(base, wind))
       drivers [
         {
           name: "gust",

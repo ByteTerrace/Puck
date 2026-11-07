@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-glass' (sha256/718c72f8a820e7e4e0f775788303a55ea14482deacab1f6420cdad28bd9f7881). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-glass' (sha256/6045754efa25c74e4a5deb768552a5ecb517595a45e80e84baf549f827e84ad1). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_GLASS
 #define PUCK_SHADER_INTERFACE_SDF_GLASS
 
@@ -200,43 +200,50 @@ struct SdfGlassPass {
     [[vk::offset(752)]] float4 previousView[6];
     [[vk::offset(848)]] uint screenCount;
     [[vk::offset(852)]] float screenFidelity;
-    [[vk::offset(856)]] uint shadowFadeCount;
-    [[vk::offset(860)]] uint shadowSlotCount;
-    [[vk::offset(864)]] int4 shadowSlots;
-    [[vk::offset(880)]] float skyPeakLuminance;
-    [[vk::offset(884)]] uint _pad884;
-    [[vk::offset(888)]] uint _pad888;
-    [[vk::offset(892)]] uint _pad892;
-    [[vk::offset(896)]] float3 stampFade;
-    [[vk::offset(908)]] float tanHalfFieldOfView;
-    [[vk::offset(912)]] uint temporal;
-    [[vk::offset(916)]] uint _pad916;
-    [[vk::offset(920)]] uint _pad920;
-    [[vk::offset(924)]] uint _pad924;
-    [[vk::offset(928)]] float4 toonBands;
-    [[vk::offset(944)]] float4 toonInk;
-    [[vk::offset(960)]] float4 toonOutline;
-    [[vk::offset(976)]] float4 toonShadow;
-    [[vk::offset(992)]] uint viewBase;
+    [[vk::offset(856)]] uint _pad856;
+    [[vk::offset(860)]] uint _pad860;
+    [[vk::offset(864)]] uint4 shadeDefault;
+    [[vk::offset(880)]] float4 shadeDemand;
+    [[vk::offset(896)]] uint4 shadeIdentity[2];
+    [[vk::offset(928)]] uint shadePrograms;
+    [[vk::offset(932)]] uint shadowFadeCount;
+    [[vk::offset(936)]] uint shadowSlotCount;
+    [[vk::offset(940)]] uint _pad940;
+    [[vk::offset(944)]] int4 shadowSlots;
+    [[vk::offset(960)]] float skyPeakLuminance;
+    [[vk::offset(964)]] uint _pad964;
+    [[vk::offset(968)]] uint _pad968;
+    [[vk::offset(972)]] uint _pad972;
+    [[vk::offset(976)]] float3 stampFade;
+    [[vk::offset(988)]] float tanHalfFieldOfView;
+    [[vk::offset(992)]] uint temporal;
     [[vk::offset(996)]] uint _pad996;
     [[vk::offset(1000)]] uint _pad1000;
     [[vk::offset(1004)]] uint _pad1004;
-    [[vk::offset(1008)]] float3 viewForward;
-    [[vk::offset(1020)]] uint _pad1020;
-    [[vk::offset(1024)]] float3 viewPosition;
-    [[vk::offset(1036)]] uint _pad1036;
-    [[vk::offset(1040)]] float3 viewRight;
-    [[vk::offset(1052)]] uint _pad1052;
-    [[vk::offset(1056)]] float3 viewUp;
-    [[vk::offset(1068)]] uint viewportCount;
-    [[vk::offset(1072)]] uint workCounterRow;
-    [[vk::offset(1076)]] uint workCounterRowDetail;
+    [[vk::offset(1008)]] float4 toonBands;
+    [[vk::offset(1024)]] float4 toonInk;
+    [[vk::offset(1040)]] float4 toonOutline;
+    [[vk::offset(1056)]] float4 toonShadow;
+    [[vk::offset(1072)]] uint viewBase;
+    [[vk::offset(1076)]] uint _pad1076;
     [[vk::offset(1080)]] uint _pad1080;
     [[vk::offset(1084)]] uint _pad1084;
-    [[vk::offset(1088)]] float4 worldLanes;
+    [[vk::offset(1088)]] float3 viewForward;
+    [[vk::offset(1100)]] uint _pad1100;
+    [[vk::offset(1104)]] float3 viewPosition;
+    [[vk::offset(1116)]] uint _pad1116;
+    [[vk::offset(1120)]] float3 viewRight;
+    [[vk::offset(1132)]] uint _pad1132;
+    [[vk::offset(1136)]] float3 viewUp;
+    [[vk::offset(1148)]] uint viewportCount;
+    [[vk::offset(1152)]] uint workCounterRow;
+    [[vk::offset(1156)]] uint workCounterRowDetail;
+    [[vk::offset(1160)]] uint _pad1160;
+    [[vk::offset(1164)]] uint _pad1164;
+    [[vk::offset(1168)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfGlassPass> passGroupIsa45287E75 : register(b0, space3);
-#define passGroup passGroupIsa45287E75
+[[vk::binding(0, 3)]] ConstantBuffer<SdfGlassPass> passGroupIsa16DA0C5E : register(b0, space3);
+#define passGroup passGroupIsa16DA0C5E
 [[vk::binding(1, 3)]] Texture2D<float4> lit : register(t1, space3);
 [[vk::binding(2, 3)]] Texture2D<float4> glassVisibility : register(t2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);
@@ -244,6 +251,12 @@ struct SdfGlassPass {
 [[vk::binding(5, 3)]] RWStructuredBuffer<float> reactivityRW : register(u5, space3);
 [[vk::binding(6, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u6, space3);
 [[vk::binding(7, 3)]] RWStructuredBuffer<uint> workCounters : register(u7, space3);
+
+// The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
+struct SdfGlassPushedIndex {
+    [[vk::offset(0)]] uint index;
+};
+[[vk::push_constant]] ConstantBuffer<SdfGlassPushedIndex> pushedIndex : register(b0, space4);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,

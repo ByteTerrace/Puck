@@ -941,7 +941,7 @@ closes this:
   (then "every side"); the three fold into one demand per material, a cosine
   below which no slot needs querying;
 - the demand is packed in the material row the surface pass reads in place of
-  the bare wrap (`sdfMaterialWrap` becomes the demand), enters the wrap
+  the bare wrap (`sdfMaterialShadowDemand` becomes the demand), enters the wrap
   signature so an edit to a program refreshes the surface pass's decisions,
   and is listed in `world.budget` since a program that demands every side costs
   the cascades' taps on every pixel;
@@ -1294,7 +1294,7 @@ or the finding is answered with the code that shows why.
    member with parameters by name replaces the deleted layer records in the
    schema (section 3.10).
 9. **Inputs lacked read metadata for upload and cadence.** True:
-   `SdfAppearance.HasFlow` and `ReadsWorldLanes` inspect the layer records, and
+   `SdfAppearance.ResolveShadeReads` and `ReadsWorldLanes` inspect the layer records, and
    `SdfFrameBlock.FlowClockOf` and `WorldLanesOf` write zero from them.
    Resolved by read flags the lowering derives from the ops and the appearance
    aggregates (section 3.2), replacing those members; step 1 checks the three

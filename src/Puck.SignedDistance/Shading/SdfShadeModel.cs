@@ -15,6 +15,7 @@ public enum SdfShadeReads : uint {
     Slot0 = 8, Slot1 = 16, Slot2 = 32, Slot3 = 64,
     World0 = 128, World1 = 256, World2 = 512, World3 = 1024,
     WorldLanes = World0 | World1 | World2 | World3,
+    PaintCoverage = 2048,
 }
 /// <summary>An expression supplied to shade admission, never executable words. The compiler validates every field.</summary>
 /// <param name="Op">An op-table spelling, or constant, parameter, or input.</param>

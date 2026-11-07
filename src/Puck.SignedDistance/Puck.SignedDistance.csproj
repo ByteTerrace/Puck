@@ -20,6 +20,7 @@
         <EmbeddedResource Include="../Puck.SdfVm/Assets/Shaders/Sdf/field/*.hlsli" LogicalName="ShadeHelper.field.%(Filename)%(Extension)" />
         <EmbeddedResource Include="../Puck.SdfVm/Assets/Shaders/Sdf/shade/shade-weathering.hlsli" LogicalName="ShadeHelper.lines" />
         <EmbeddedResource Include="../Puck.SdfVm.Model/SdfShadeHlsl.cs" LogicalName="ShadeHelper.generator" />
+        <EmbeddedResource Include="../Puck.SdfVm.Model/SdfShadeHlsl.Invocation.cs" LogicalName="ShadeHelper.invocation" />
         <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
         <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
         <ProjectReference Include="../Puck.Text/Puck.Text.csproj" />

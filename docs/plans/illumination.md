@@ -62,7 +62,7 @@ The research round read the code, and the plan rests on these facts:
   by `world.budget` with each cascade's texel. The surface pass queries them
   wherever a light's diffuse response is non-zero, a wrapped material's side
   past the terminator included (`passes/sdf-surface-stage.hlsli`,
-  `sdfMaterialWrap`); a triangle turned from the light reads the cascade's exit
+  `sdfMaterialShadowDemand`); a triangle turned from the light reads the cascade's exit
   layer, so only its own body lets the wrap's light through
   ([decision](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
 

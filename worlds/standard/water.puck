@@ -12,6 +12,7 @@
 // what a depth d shows, so a shallow margin stays clear and the deep water turns turquoise; its `contact` gathers foam,
 // in its flow's pattern and colour, where the bed or a wall comes within `reach` of the surface along the view. The pool,
 // the basins and the lake hold metres of water; the stream and the falls are thin sheets and scatter more per metre.
+import "shading"
 let waterGlass = {
   depth: 4
   ior: 1.333
@@ -31,19 +32,19 @@ let stillFlowLayer = {
   stretch: 1.5
   cycle: 3
   tilt: 0.06
+  coverage: 0
   softness: 0.1
   surface: waterFoam
   seed: 9
 }
 // The standard's surface material, shared with field rows through the ordinary palette vocabulary.
-let waterMaterial = {
+let waterMaterial = flowed({
   color: "#3FB8C4"
   roughness: 0.16
   specular: 0.5
   coat: 0.3
   glass: waterGlass
-  flow: stillFlowLayer
-}
+}, stillFlowLayer)
 
 // A spatial view of a scalar store. The authoritative store remains the caller's row; these cells supply the
 // ordinary surface and medium queries at the place where visitors meet it. The drawn surface follows the full value as
@@ -120,7 +121,7 @@ let streamFlowLayer = {
 // banks and round the stones, not over the whole bed.
 let streamGlass = waterGlass with { scattering: 0.9, contact { reach: 0.25, coverage: 0.7 } }
 // The stream's surface material: the standard's water wearing the stream's glass and flow.
-let streamMaterial = waterMaterial with { glass: streamGlass, flow: streamFlowLayer }
+let streamMaterial = flowed(waterMaterial with { glass: streamGlass }, streamFlowLayer)
 // A falls runs down every sheet at the sheet's own slope: only the velocity's part along a surface moves it. Its velocity
 // and pattern are in world space, so the flow runs down a sheet however the sheet turns. A world that binds a render lane
 // to its discharge thins the foam with it (`coverageLane`, a world lane from 4 to 7: `fallsFlowLayer with { coverageLane:
@@ -148,6 +149,8 @@ let lakeFlowLayer = {
   stretch: 1.5
   cycle: 3
   tilt: 0.12
+  coverage: 0
+  softness: 0.1
   frame: World
   surface: waterFoam
   seed: 5
@@ -237,12 +240,12 @@ template riverChannel(id, region, points, ground, top = 0, bed = -0.9, bedHalf =
 // chain's own, never the clock. The sheets are glass (`glass`):
 // the rock shows through them and the authored glass density shades it. A sheet's `thickness` is what a view along the wall
 // crosses many times over, so a thick sheet's medium covers the rock behind it.
-template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gauge = "fallsFlow", visible = "fallsVisible", palette = waterPalette, flow = fallsFlowLayer, glass = fallsGlass) {
+template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gauge = "fallsFlow", visible = "fallsVisible", palette = waterPalette, flow = fallsFlowLayer, glass = fallsGlass, coverageLane = -1) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
-      palette [palette[0] with { flow: flow, glass: glass }]
+      palette [flowed(palette[0] with { glass: glass }, flow, coverageLane: coverageLane)]
       sizeBy: "visible"
       drivers [
         { name: "fold", signal: $"state.{gauge}", cadence: -1, blendInSeconds: 0, blendOutSeconds: 0 }
@@ -305,7 +308,7 @@ template lakeSurface(id, radius, gauge = "lakeLevel", rest = 0.4, rise = 4, pale
     document {
       schema: "puck.creation.v1"
       name: id
-      palette [palette[0] with { flow: flow, glass: glass }]
+      palette [flowed(palette[0] with { glass: glass }, flow)]
       drivers [
         { name: "level", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0 }
       ]

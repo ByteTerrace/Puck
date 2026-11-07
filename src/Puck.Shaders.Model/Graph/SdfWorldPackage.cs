@@ -84,6 +84,14 @@ public static partial class SdfWorldPackage {
     /// off, one banding the cosine under its visibility, two banding both together), diffuse threshold, terminator width and
     /// specular size (<c>float4</c>).</summary>
     public const string ToonBands = "toonBands";
+    /// <summary>The measurement lever selecting admitted shading programs rather than legacy material layers.</summary>
+    public const string ShadePrograms = "shadePrograms";
+    /// <summary>The world default's owned code and runtime-parameter ranges in the appearance words.</summary>
+    public const string ShadeDefault = "shadeDefault";
+    /// <summary>The world default's canonical 256-bit identity, carried as two uint4 rows.</summary>
+    public const string ShadeIdentity = "shadeIdentity";
+    /// <summary>The default's conservative shadow demand, including unassigned base wrap.</summary>
+    public const string ShadeDemand = "shadeDemand";
     /// <summary>Cel shadow tint and reflected-light exposure gain (<c>float4</c>).</summary>
     public const string ToonShadow = "toonShadow";
     /// <summary>Cel outline radius in output pixels, half-width distance, normal threshold and colour shoulder (<c>float4</c>).</summary>
@@ -312,6 +320,10 @@ public static partial class SdfWorldPackage {
         Value(name: LightMask, type: ShaderValueType.Uint4),
         Value(name: Exposure, type: ShaderValueType.Float),
         Value(name: ToonBands, type: ShaderValueType.Float4),
+        Value(name: ShadePrograms, type: ShaderValueType.Uint),
+        Value(name: ShadeDefault, type: ShaderValueType.Uint4),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: ShadeIdentity, type: ShaderValueType.Uint4, length: 2),
+        Value(name: ShadeDemand, type: ShaderValueType.Float4),
         Value(name: ToonShadow, type: ShaderValueType.Float4),
         Value(name: ToonOutline, type: ShaderValueType.Float4),
         Value(name: ToonInk, type: ShaderValueType.Float4),

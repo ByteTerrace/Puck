@@ -77,12 +77,13 @@ public sealed partial class SdfWorldTables {
     }
 
     // The hash of every material's wrap in table order: the surface pass reads it to decide which
-    // pixels past a light's terminator query its cascades (sdfMaterialWrap in passes/sdf-surface-stage.hlsli).
+    // pixels past a light's terminator query its cascades (sdfMaterialShadowDemand in passes/sdf-surface-stage.hlsli).
     private static ulong WrapSignatureOf(SdfProgram program) {
         var hash = Fnv1aHash.Create();
 
         foreach (var material in program.Appearance.Materials) {
             hash.Add(value: BitConverter.SingleToUInt32Bits(value: material.Wrap));
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: material.Shade?.Demand.Cosine(material.Wrap) ?? -material.Wrap));
         }
 
         return hash.Value;

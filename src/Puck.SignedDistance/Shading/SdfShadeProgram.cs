@@ -7,9 +7,9 @@ namespace Puck.SignedDistance;
 /// supply op words, cost, flags, identity or unchecked addresses. Values are presentation-only.</summary>
 public sealed partial class SdfShadeProgram {
     /// <summary>The maximum weighted instruction work across the three explicit phases.</summary>
-    public const uint MaxOps = 16384;
+    public const uint MaxOps = 131072;
     /// <summary>The static register-file capacity per phase.</summary>
-    public const int MaxRegisters = 8;
+    public const int MaxRegisters = 16;
     /// <summary>The maximum number of runtime slots; slots are data, not simultaneously live registers.</summary>
     public const int MaxParameters = 256;
     /// <summary>The maximum light walk, including bound screens, admitted by the work model.</summary>
@@ -21,14 +21,15 @@ public sealed partial class SdfShadeProgram {
     /// <summary>Work of the default post-light composition.</summary>
     public const uint DefaultComposeWork = 256;
     /// <summary>A provisional CPU admission bound. Step 5 measures the dispatch throughput and sets its margin.</summary>
-    public const ulong MaxWork = (1UL << 32);
+    public const ulong MaxWork = (1UL << 40);
 
     // Compile-time proof: even a whole 8x8 group at the largest admitted light walk fits. A false inequality divides by zero.
     private const int WorkBoundProof = (1 / (((MaxRegisters > 0) && ((MaxRegisters & (MaxRegisters - 1)) == 0) && (MaxOps <= MaxWork) &&
-        ((64UL * ((((MaxOps * (MaxLights + 2UL)) + (MaxLights * DefaultLightWork)) + DefaultComposeWork) + EngineWork)) <= MaxWork)) ? 1 : 0));
+        ((128UL * ((((MaxOps * (MaxLights + 2UL)) + (MaxLights * DefaultLightWork)) + DefaultComposeWork) + EngineWork)) <= MaxWork)) ? 1 : 0));
 
     private readonly uint[] m_words;
     private readonly uint[] m_parameters;
+    private readonly byte[] m_identityBytes;
 
     private SdfShadeProgram(SdfShadeDefinition definition, uint[] words, uint[] parameters, SdfShadeType[] layout,
         SdfShadeInstruction[][] phases, SdfShadeBinding[] outputs, uint[] costs, SdfShadeReads reads, SdfShadeDemand demand) {
@@ -47,7 +48,8 @@ public sealed partial class SdfShadeProgram {
             System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes, value: word);
             hash.AppendData(data: bytes);
         }
-        Identity = Convert.ToHexStringLower(inArray: hash.GetHashAndReset());
+        m_identityBytes = hash.GetHashAndReset();
+        Identity = Convert.ToHexStringLower(inArray: m_identityBytes);
     }
 
     /// <summary>Gets the author name for cost attribution, excluded from identity.</summary>
@@ -56,6 +58,8 @@ public sealed partial class SdfShadeProgram {
     public SdfShadeDefinition Definition { get; }
     /// <summary>Gets the identity of canonical code, layout and current op semantics.</summary>
     public string Identity { get; }
+    /// <summary>The canonical identity bytes for the generated pass block.</summary>
+    public ReadOnlySpan<byte> IdentityBytes => m_identityBytes;
     /// <summary>Gets the immutable parameter types in canonical slot order.</summary>
     public ReadOnlyCollection<SdfShadeType> ParameterLayout { get; }
     /// <summary>Gets the immutable instructions per phase.</summary>
@@ -76,8 +80,8 @@ public sealed partial class SdfShadeProgram {
     /// <summary>Returns logical work per pixel with checked arithmetic, including default phases and engine work.</summary>
     public ulong PixelWork(uint lights) {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(lights, MaxLights);
-        return checked((((Costs[0] + (lights * ((ulong)((Phases[1].Count == 0) ? DefaultLightWork : Costs[1])))) +
-            ((Phases[2].Count == 0) ? DefaultComposeWork : Costs[2])) + EngineWork));
+        // The stage computes fallback outputs for unassigned and non-finite authored outputs too.
+        return checked(Costs[0] + lights * ((ulong)DefaultLightWork + Costs[1]) + DefaultComposeWork + Costs[2] + EngineWork);
     }
     /// <summary>Checks a relative vector range without addition overflow. The allocation's outer boundary is separate.</summary>
     public static bool ContainsRange(uint sliceLength, uint offset, uint length) => ((offset <= sliceLength) && (length <= (sliceLength - offset)));

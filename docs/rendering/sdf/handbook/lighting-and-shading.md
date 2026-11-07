@@ -55,7 +55,7 @@ The surface pass queries a light wherever its diffuse response is non-zero. For
 a plain material that is the side facing the light; a wrapped material
 (`wrap`, `max((n·l + wrap) / (1 + wrap), 0)`) takes light past the terminator
 until the cosine reaches `-wrap`, so the pass reads the material's wrap
-(`sdfMaterialWrap`) and queries that side too: an unqueried slot decodes as
+(`sdfMaterialShadowDemand`) and queries that side too: an unqueried slot decodes as
 fully visible, which would light a skin's far side with the sun under a roof. Past the
 terminator the receiver's own lit side stands in front of it toward the light,
 so each shadow cascade holds two layers: its depth, the first face the light

@@ -58,6 +58,10 @@ public static partial class WorldSessionLevers {
     public const string Temporal = "temporal";
     /// <summary>The presentation-only cel-shading choice (<c>world.toon</c>).</summary>
     public const string Toon = "toon";
+    /// <summary>The authored shading measurement path.</summary>
+    public const string ShadePrograms = "shadePrograms";
+    /// <summary>The world's default shading program override.</summary>
+    public const string ShadeDefault = "shadeDefault";
     /// <summary>Camera bloom enable override, negative restoring authored settings.</summary>
     public const string Bloom = "bloom";
     /// <summary>The per-view optical cost gate, negative restoring the preset.</summary>
@@ -154,6 +158,8 @@ public static partial class WorldSessionLevers {
             setter: lever => settings.Temporal = Flag(lever: lever)
         );
         sink.Register(name: Toon, setter: lever => settings.Toon = Flag(lever: lever));
+        sink.Register(name: ShadePrograms, setter: lever => settings.ShadePrograms = Flag(lever: lever));
+        sink.Register(name: ShadeDefault, setter: lever => settings.SetShadeDefault(lever.View));
         sink.Register(name: Bloom, setter: lever => settings.BloomOverride = ((lever.A < 0) ? null : Flag(lever: lever)));
         sink.Register(name: BloomScale, setter: lever => settings.SetBloomScale(lever.Seat, ((float)lever.A)));
         sink.Register(name: BloomQuality, setter: lever => {

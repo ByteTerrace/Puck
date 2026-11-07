@@ -176,6 +176,7 @@ public sealed class SdfKernelInterfaces {
         ], pushesIndex: false);
         WorldParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
+            pushesIndex: true,
             package: RenderGraphPackageCatalog.SdfWorld,
             members: [.. SdfWorldPackage.Members, .. LightAndSkyTables]
         ).Stamped(stamp: stamp);
@@ -210,6 +211,7 @@ public sealed class SdfKernelInterfaces {
         // environment map its reflections read.
         GlassParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
+            pushesIndex: true,
             members: [.. SdfWorldPackage.GlassMembers, .. LightAndSkyTables],
             package: "sdf-glass"
         ).Stamped(stamp: stamp);

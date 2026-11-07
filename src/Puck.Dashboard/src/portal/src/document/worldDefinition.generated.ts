@@ -3107,7 +3107,7 @@ export type PaletteEntryDocument = {
   /**
    * The authored presentation program and runtime parameters.
    */
-  shade?: SdfShadeDefinition | null;
+  shade?: SdfShadeDefinitionVariant2 | null;
 };
 
 export type PaletteFlowDocument = {
@@ -3243,7 +3243,7 @@ export type PalettePaintDocument = {
   /**
    * Prism only: the cross-section; a path profile is refused.
    */
-  profile?: SdfPrismProfile | null;
+  profile?: SdfPrismProfileNullable | null;
   /**
    * Prism only: extrude or revolve.
    */
@@ -3581,7 +3581,16 @@ export type SdfLift = "Revolve" | "Extrude";
  */
 export type SdfPathContour = {
   start: [number, number];
-  segments: SdfPathSegment[];
+  segments: (SdfPathSegment | null)[];
+  closed?: boolean;
+};
+
+/**
+ * A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.
+ */
+export type SdfPathContourNonNullable = {
+  start: [number, number];
+  segments: SdfPathSegmentNonNullable[];
   closed?: boolean;
 };
 
@@ -3589,7 +3598,17 @@ export type SdfPathContour = {
  * A bounded presentation profile. Filled contours use even/odd fill, including holes. Curves are flattened once at composition, with a local-space geometric error at most Tolerance (apart from floating-point rounding). Strokes approximate the union of disks along the curve, including their varying radius, to the same tolerance. The emitted polygon/rounded-segment field is 1-Lipschitz; no margin moves its zero surface. At most 128 edges are emitted; exceeding that budget refuses instead of silently relaxing the requested tolerance.
  */
 export type SdfPathProfile = {
-  contours: SdfPathContour[];
+  contours: (SdfPathContour | null)[];
+  tolerance?: number;
+  stroke?: SdfPathStroke | null;
+  shear?: SdfPathShear | null;
+};
+
+/**
+ * A bounded presentation profile. Filled contours use even/odd fill, including holes. Curves are flattened once at composition, with a local-space geometric error at most Tolerance (apart from floating-point rounding). Strokes approximate the union of disks along the curve, including their varying radius, to the same tolerance. The emitted polygon/rounded-segment field is 1-Lipschitz; no margin moves its zero surface. At most 128 edges are emitted; exceeding that budget refuses instead of silently relaxing the requested tolerance.
+ */
+export type SdfPathProfileNullable = {
+  contours: SdfPathContourNonNullable[];
   tolerance?: number;
   stroke?: SdfPathStroke | null;
   shear?: SdfPathShear | null;
@@ -3599,6 +3618,17 @@ export type SdfPathProfile = {
  * A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile's local XY frame.
  */
 export type SdfPathSegment = {
+  end: [number, number];
+  control?: [number, number];
+  control2?: [number, number];
+  arcCenter?: [number, number];
+  clockwise?: boolean;
+};
+
+/**
+ * A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile's local XY frame.
+ */
+export type SdfPathSegmentNonNullable = {
   end: [number, number];
   control?: [number, number];
   control2?: [number, number];
@@ -3649,7 +3679,7 @@ export type SdfPrismProfile = {
   /**
    * Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.
    */
-  vertices?: Vector2List | null;
+  vertices?: [number, number][] | null;
   /**
    * Required only for Path; its points are normalized profile coordinates.
    */
@@ -3661,7 +3691,40 @@ export type SdfPrismProfile = {
  */
 export type SdfPrismProfileKind = "Trapezoid" | "RoundedRectangle" | "Polygon" | "Ellipse" | "ChamferedRectangle" | "Convex" | "Path";
 
+/**
+ * Authored profile controls for a solid prism. The profile is extruded along local Z.
+ */
+export type SdfPrismProfileNullable = {
+  /**
+   * The profile family.
+   */
+  kind: SdfPrismProfileKind;
+  /**
+   * A fraction in [0, 1]: the profile's smaller half-extent for RoundedRectangle's corner radius or ChamferedRectangle's chamfer radius; the scaled polygon's conservative inradius (ConvexPolygonInradius) for Convex's uniform corner rounding, also clamped to the extrusion half-depth when extruded.
+   */
+  cornerRadius?: number;
+  /**
+   * Polygon side count, from 3 through 32.
+   */
+  sides?: number;
+  /**
+   * Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.
+   */
+  vertices?: Vector2List | null;
+  /**
+   * Required only for Path; its points are normalized profile coordinates.
+   */
+  path?: SdfPathProfileNullable | null;
+};
+
 export type SdfShadeDefinition = {
+  name: string;
+  parameters: (SdfShadeParameter | null)[];
+  outputs: (SdfShadeOutput | null)[];
+  values?: (SdfShadeValue | null)[] | null;
+};
+
+export type SdfShadeDefinitionVariant2 = {
   name: string;
   parameters: SdfShadeParameter[];
   outputs: SdfShadeOutput[];
@@ -3695,7 +3758,9 @@ export type SdfShadeExpression = {
   shape?: SdfShadeShape | null;
 };
 
-export type SdfShadeExpressionList = SdfShadeExpression[];
+export type SdfShadeExpressionList = (SdfShadeExpression | null)[];
+
+export type SdfShadeExpressionListNullable = SdfShadeExpressionNonNullable2[];
 
 /**
  * An expression supplied to shade admission, never executable words. The compiler validates every field.
@@ -3727,6 +3792,33 @@ export type SdfShadeExpressionNonNullable = {
   shape?: SdfShadeShape | null;
 };
 
+/**
+ * An expression supplied to shade admission, never executable words. The compiler validates every field.
+ */
+export type SdfShadeExpressionNonNullable2 = {
+  /**
+   * An op-table spelling, or constant, parameter, or input.
+   */
+  op: string;
+  arguments?: SdfShadeExpressionListNullable | null;
+  /**
+   * A stamp member or runtime parameter name.
+   */
+  name?: string | null;
+  /**
+   * The type of a literal, validated against its bits.
+   */
+  type?: SdfShadeType;
+  /**
+   * 32-bit literal components; integer components are never float converted.
+   */
+  bits?: Int32List | null;
+  /**
+   * The structural descriptor of a shape operation.
+   */
+  shape?: SdfShadeShapeNullable | null;
+};
+
 export type SdfShadeOutput = {
   phase: SdfShadePhase;
   name: string;
@@ -3754,6 +3846,23 @@ export type SdfShadeShape = {
   z?: number;
   taper?: number;
   profile?: SdfPrismProfile | null;
+  lift?: SdfLift;
+  rounding?: number;
+  chamfer?: number;
+  exponent?: number;
+  curve?: SdfSweepParameters | null;
+};
+
+/**
+ * A structural shape descriptor. Compilation uses the existing solid/paint emission and admission.
+ */
+export type SdfShadeShapeNullable = {
+  type: SdfSolidPrimitive;
+  x?: number;
+  y?: number;
+  z?: number;
+  taper?: number;
+  profile?: SdfPrismProfileNullable | null;
   lift?: SdfLift;
   rounding?: number;
   chamfer?: number;
@@ -10710,6 +10819,10 @@ export type WorldRenderDefaults = {
    * The world's render lanes: up to four bindable scalars (a literal, a state.<row> binding, or keys on a clock), resolved at each frame's presented tick and read by every surface and volume as render lanes 4 to 7 (SdfLanes), so a static placement sharing one baked mesh follows world state without a slot. Absent or a missing entry reads zero; world.lighting echoes them as authored.
    */
   lanes?: BindableScalar[] | null;
+  /**
+   * The default shading program inherited by materials without their own.
+   */
+  shade?: SdfShadeDefinition | null;
 };
 
 export type WorldRenderEnvironment = {

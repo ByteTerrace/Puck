@@ -13,6 +13,11 @@
 // colour survive under the band's edge; `celHardStyle` bands the cosine and the shadow together, the harder look in
 // which a penumbra snaps to the band. Both keep the rim lights, the environment reflection and ambient occlusion.
 
+import "shading"
+function celMaterial(base, style, combined = 0) = base with {
+  toon: style
+  shade: cel(style.threshold, style.softness, style.shadowTint, style.specularSize, style.exposure, style.shoulder, combined)
+}
 let celStyle = {
   threshold: 0.45
   softness: 0.08
