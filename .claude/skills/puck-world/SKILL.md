@@ -463,7 +463,14 @@ fault. A new place that evaluates rule expressions opens a scope
 ([expressions](../../../docs/reference/state/expressions.md#constant-folding-and-faults)).
 An operand read answers a `Fact` (an `Outcome`, a case of `Faulted`, `Finite`, `Absent` or `Forever`, beside its cell
 kind) and an address resolves to a `Resolved<T>`; both default to the faulted case and give their value only through
-`TryFinite` or `TryNamed`. `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` exist for the design in
+`TryFinite` or `TryNamed`. An operand declares the addresses it reads through (`IRuleOperand.Addresses`) and reads
+through what the interpreter resolved (`Read(reader, keys)`, `RuleExpressions.ReadOperand`): an address a program
+computes (a `cards[<expression>]` key, a `$zones[<expression>]` row, a ring age) is tokens of the enclosing program
+that `RuleCompiler`'s lowering puts in front of the operand's own, so an operand never evaluates an expression and a
+computed address is priced as the tokens it is; a pattern's per-token program is `IWordFoldOperand.WordProgram`, run
+once per token by `RuleExpressions.FoldWord`, which `world.match` spells its word through as well. A new operand that
+reads through a computed address declares it in `Addresses` and receives it in `keys`; it never calls
+`RuleExpressions.TryEvaluate`. `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` exist for the design in
 [rule faults](../../../docs/plans/rule-faults.md) and nothing produces them yet.
 
 **Narrate through the hub.** Server never writes to `System.Console`; every line

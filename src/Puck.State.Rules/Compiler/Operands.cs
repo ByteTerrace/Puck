@@ -5,6 +5,8 @@ namespace Puck.State.Rules;
 /// <summary>A declared row's named cell — or, through a live row, the named cell of whichever row the index selects
 /// this evaluation (the absent fact when it selects none).</summary>
 public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
+    private readonly OperandAddress[] m_addresses;
+
     /// <summary>Initializes the operand.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal, or <c>-1</c> when <paramref name="rowFrom"/> applies.</param>
     /// <param name="key">The literal cell key, or the invalid default when <paramref name="keyFrom"/> applies.</param>
@@ -16,8 +18,16 @@ public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
         KeyFrom = keyFrom;
         RowFrom = rowFrom;
         RowOrdinal = rowOrdinal;
+        m_addresses = OperandAddress.List(
+            first: rowFrom?.Index,
+            second: keyFrom,
+            secondUse: AddressUse.Key,
+            use: AddressUse.Index
+        );
     }
 
+    /// <inheritdoc/>
+    public override ReadOnlySpan<OperandAddress> Addresses => m_addresses;
     /// <summary>Gets the literal cell key, or the invalid default when <see cref="KeyFrom"/> applies.</summary>
     public CellKey Key { get; }
     /// <inheritdoc/>
@@ -50,30 +60,24 @@ public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
+        var next = 0;
         var ordinal = RowOrdinal;
 
         if (RowFrom is { } live) {
-            var selected = live.Resolve(reader: reader);
-
-            if (!selected.TryNamed(value: out ordinal)) {
-                return Fact.Unnamed(
-                    kind: ValueKind,
-                    resolved: selected
-                );
+            if (!live.Select(index: in keys[next++]).TryNamed(value: out ordinal)) {
+                return Fact.Absent(kind: ValueKind);
             }
         }
 
         return RuleReads.ReadCell(
             kind: ValueKind,
             reader: reader,
-            resolved: RuleReads.ResolveKey(
-                keyFrom: KeyFrom,
-                literal: Key,
-                reader: reader
-            ),
+            resolved: ((KeyFrom is null)
+                ? RuleReads.Literal(literal: Key)
+                : RuleReads.Named(key: in keys[next])),
             rowOrdinal: ordinal
         );
     }
@@ -111,7 +115,7 @@ public sealed class LocalOperand : RuleOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         return Fact.Finite(
@@ -138,8 +142,16 @@ public sealed class TableOperand : RuleOperand {
         KeyFrom = keyFrom;
         Name = name;
         Table = table;
+        m_addresses = OperandAddress.List(
+            first: keyFrom,
+            use: AddressUse.Index
+        );
     }
 
+    private readonly OperandAddress[] m_addresses;
+
+    /// <inheritdoc/>
+    public override ReadOnlySpan<OperandAddress> Addresses => m_addresses;
     /// <summary>Gets the column index.</summary>
     public int Column { get; }
     /// <summary>Gets the literal key.</summary>
@@ -162,23 +174,17 @@ public sealed class TableOperand : RuleOperand {
         val2: 1
     ))));
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         var key = Key;
 
-        if (KeyFrom is { } indirection) {
-            var resolved = RuleReads.ResolveIndex(
-                reader: reader,
-                reference: in indirection
-            );
-
-            if (!resolved.TryNamed(value: out key)) {
-                return Fact.Unnamed(
-                    kind: ValueKind,
-                    resolved: resolved
-                );
+        if (KeyFrom is not null) {
+            if (!keys[0].Named) {
+                return Fact.Absent(kind: ValueKind);
             }
+
+            key = keys[0].Index;
         }
 
         return (Table.TryLookup(
@@ -205,7 +211,7 @@ public sealed class TickOperand : RuleOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         return Fact.Finite(
@@ -235,8 +241,16 @@ public sealed class ReductionOperand : RuleOperand {
         Reduce = reduce;
         RowFrom = rowFrom;
         RowOrdinal = rowOrdinal;
+        m_addresses = OperandAddress.List(
+            first: rowFrom?.Index,
+            use: AddressUse.Index
+        );
     }
 
+    private readonly OperandAddress[] m_addresses;
+
+    /// <inheritdoc/>
+    public override ReadOnlySpan<OperandAddress> Addresses => m_addresses;
     /// <summary>Gets the token domain row's catalog ordinal, for an arrangement rank; <c>-1</c> otherwise.</summary>
     public int DomainOrdinal { get; }
     /// <summary>Gets the filter row's catalog ordinal, or <c>-1</c>.</summary>
@@ -277,19 +291,14 @@ public sealed class ReductionOperand : RuleOperand {
             : 3L
         )));
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         var ordinal = RowOrdinal;
 
         if (RowFrom is { } live) {
-            var selected = live.Resolve(reader: reader);
-
-            if (!selected.TryNamed(value: out ordinal)) {
-                return Fact.Unnamed(
-                    kind: ValueKind,
-                    resolved: selected
-                );
+            if (!live.Select(index: in keys[0]).TryNamed(value: out ordinal)) {
+                return Fact.Absent(kind: ValueKind);
             }
         }
         if (ordinal < 0) {
@@ -326,24 +335,40 @@ public sealed class HistoryOperand : RuleOperand {
     /// <summary>Initializes the operand.</summary>
     /// <param name="rowOrdinal">The history row's catalog ordinal.</param>
     /// <param name="age">0 is the latest push; an age the ring no longer holds reads the trait's empty value. Read
-    /// only when <paramref name="ageExpression"/> is <see langword="null"/>.</param>
+    /// only when <paramref name="ageProgram"/> is <see langword="null"/>.</param>
     /// <param name="ring">The row's ring domain.</param>
     /// <param name="valueKind">The row's own cell kind.</param>
-    /// <param name="ageExpression">The int expression the age is read from per evaluation, or
-    /// <see langword="null"/> for a constant age.</param>
-    public HistoryOperand(int rowOrdinal, long age, StateDomain.Ring ring, CellKind valueKind, CompiledExpressionToken[]? ageExpression = null) : base(valueKind: valueKind) {
+    /// <param name="ageProgram">The int program the age is computed by per evaluation, or
+    /// <see langword="null"/> for a constant age. It is lowered into the enclosing program, and the age arrives as
+    /// this operand's one address.</param>
+    public HistoryOperand(int rowOrdinal, long age, StateDomain.Ring ring, CellKind valueKind, CompiledExpressionToken[]? ageProgram = null) : base(valueKind: valueKind) {
         ArgumentNullException.ThrowIfNull(argument: ring);
 
         Age = age;
-        AgeExpression = ageExpression;
+        AgeFrom = ((ageProgram is null)
+            ? null
+            : new CompiledCellRef(
+                Key: default,
+                Program: ageProgram,
+                RowOrdinal: -1
+            ));
         Ring = ring;
         RowOrdinal = rowOrdinal;
+        m_addresses = OperandAddress.List(
+            first: AgeFrom,
+            use: AddressUse.Index
+        );
     }
 
+    private readonly OperandAddress[] m_addresses;
+
+    /// <inheritdoc/>
+    public override ReadOnlySpan<OperandAddress> Addresses => m_addresses;
     /// <summary>Gets the age: 0 is the latest push.</summary>
     public long Age { get; }
-    /// <summary>Gets the int expression the age is read from per evaluation, or <see langword="null"/>.</summary>
-    public CompiledExpressionToken[]? AgeExpression { get; }
+    /// <summary>Gets the address the age is computed through per evaluation, or <see langword="null"/> for a
+    /// constant age.</summary>
+    public CompiledCellRef? AgeFrom { get; }
     /// <summary>Gets the row's ring domain.</summary>
     public StateDomain.Ring Ring { get; }
     /// <summary>Gets the history row's catalog ordinal.</summary>
@@ -390,42 +415,25 @@ public sealed class HistoryOperand : RuleOperand {
             Key: default,
             RowOrdinal: RowOrdinal
         ));
-        RuleDataflow.CollectExpression(
+        CompiledCellRef.CollectReference(
             into: into,
-            tokens: AgeExpression
+            reference: AgeFrom
         );
     }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => (1L + ((AgeExpression is { } expression)
-        ? RuleWorkBudget.ExpressionCost(
-            context: context,
-            kind: CellKind.Int,
-            tokens: expression
-        )
-        : RuleWork.Zero
-    ));
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         var age = Age;
 
-        // An age whose expression reads an absence names no slot, which the ring answers with its empty value the same
-        // way an age past what it holds does; an age whose arithmetic faulted faults the read.
-        if (
-            (AgeExpression is { } expression) &&
-            !RuleExpressions.TryEvaluate(
-            fault: out var fault,
-            kind: CellKind.Int,
-            program: expression,
-            reader: reader,
-            value: out age
-        )
-        ) {
-            if (fault != ExpressionFault.Absent) {
-                return Fact.Faulted(kind: ValueKind);
-            }
-            age = -1L;
+        // An age that names nothing selects no slot, which the ring answers with its empty value the same way an age
+        // past what it holds does.
+        if (AgeFrom is not null) {
+            age = (keys[0].Named
+                ? keys[0].Index
+                : -1L);
         }
 
         return Fact.Finite(
@@ -461,7 +469,7 @@ public sealed class PhaseOperand : RuleOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         return Fact.Finite(
@@ -488,8 +496,16 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
         KeyFrom = keyFrom;
         RowOrdinal = rowOrdinal;
         TargetFrom = targetFrom;
+        m_addresses = OperandAddress.List(
+            first: keyFrom,
+            use: AddressUse.Key
+        );
     }
 
+    private readonly OperandAddress[] m_addresses;
+
+    /// <inheritdoc/>
+    public override ReadOnlySpan<OperandAddress> Addresses => m_addresses;
     /// <summary>Gets the compiled query.</summary>
     public BoardQuery Board { get; }
     /// <summary>Gets the live destination indirection a <c>pathCost</c> or <c>jumpDistance</c> query reads. A jump
@@ -522,21 +538,12 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => (Board.Topology.CellCount + Board.Visits);
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        var resolved = RuleReads.ResolveKey(
-            keyFrom: KeyFrom,
-            literal: Key,
-            reader: reader
-        );
-
-        if (resolved.Case == FaultCase.Faulted) {
-            return Fact.Faulted(kind: CellKind.Int);
-        }
-
-        resolved.TryNamed(value: out var key);
-
+        var key = ((KeyFrom is null)
+            ? Key
+            : keys[0].Key);
         var origin = -1;
 
         if (
@@ -632,8 +639,16 @@ public sealed class SymmetryOperand : RuleOperand, IStateAddressedOperand {
         Symmetry = symmetry;
         SymmetryArgument = symmetryArgument;
         SymmetryOtherCell = symmetryOtherCell;
+        m_addresses = OperandAddress.List(
+            first: keyFrom,
+            use: AddressUse.Key
+        );
     }
 
+    private readonly OperandAddress[] m_addresses;
+
+    /// <inheritdoc/>
+    public override ReadOnlySpan<OperandAddress> Addresses => m_addresses;
     /// <summary>Gets the literal source cell key, or the invalid default.</summary>
     public CellKey Key { get; }
     /// <inheritdoc/>
@@ -729,27 +744,17 @@ public sealed class SymmetryOperand : RuleOperand, IStateAddressedOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
         ArgumentNullException.ThrowIfNull(argument: reader);
-
-        var resolved = RuleReads.ResolveKey(
-            keyFrom: KeyFrom,
-            literal: Key,
-            reader: reader
-        );
-
-        if (resolved.Case == FaultCase.Faulted) {
-            return Fact.Faulted(kind: ValueKind);
-        }
-
-        resolved.TryNamed(value: out var key);
 
         return Fact.Finite(
             kind: ValueKind,
             value: Fact.RawOf(
                 kind: ValueKind,
                 value: ReadFixed(
-                    key: key,
+                    key: ((KeyFrom is null)
+                        ? Key
+                        : keys[0].Key),
                     reader: reader
                 )
             )
@@ -766,5 +771,5 @@ public sealed class SearchPlyOperand : RuleOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader) => Fact.Finite(kind: CellKind.Int, value: reader.SearchPly);
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) => Fact.Finite(kind: CellKind.Int, value: reader.SearchPly);
 }

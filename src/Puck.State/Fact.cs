@@ -38,14 +38,6 @@ public readonly struct Fact {
         kind: kind,
         outcome: Outcome.Faulted(why: ExpressionFault.Domain)
     );
-    /// <summary>Creates the fact an operand answers when an address it read through named no value: the faulted fact
-    /// when computing the address faulted, the absent fact otherwise.</summary>
-    /// <typeparam name="T">The value the address would have named.</typeparam>
-    /// <param name="resolved">The address's resolution; its value is not read.</param>
-    /// <param name="kind">The encoding a finite reading of the same operand would carry.</param>
-    public static Fact Unnamed<T>(Resolved<T> resolved, CellKind kind) => ((resolved.Case == FaultCase.Faulted)
-        ? Faulted(kind: kind)
-        : Absent(kind: kind));
     /// <summary>Creates a finite fixed-point fact.</summary>
     /// <param name="value">The value.</param>
     public static Fact Finite(FixedQ4816 value) => new(
@@ -76,7 +68,6 @@ public readonly struct Fact {
         : 1L),
         _ => (value.Value >> FixedQ4816.FractionBitCount),
     };
-
     /// <summary>Returns the fact's raw value in a destination encoding, or zero when the fact is not finite.
     /// Compile-time kind matching proves the source and destination encodings agree, so the raw value is carried
     /// through directly and a full-width integer is never narrowed through Q48.16; a <see cref="CellKind.Bool"/>

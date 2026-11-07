@@ -1,3 +1,5 @@
+using AddressUse = Puck.State.Rules.AddressUse;
+using OperandAddress = Puck.State.Rules.OperandAddress;
 using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
 using IRuleKey = Puck.State.Rules.IRuleKey;
 using IRuleOperand = Puck.State.Rules.IRuleOperand;
@@ -25,12 +27,27 @@ public abstract class WorldFactOperand : OperandFact<IWorldFacts>, IRuleOperand 
     /// <returns>The capacity.</returns>
     protected static long PopulationCapacity(IRuleCostContext context) => ((WorldFactsCompileContext)context).Definition.Population.Capacity;
 
-    Fact IRuleOperand.Read(IStateReader reader) {
+    /// <inheritdoc/>
+    public virtual ReadOnlySpan<OperandAddress> Addresses => default;
+
+    /// <summary>Reads the fact once the addresses it declares are resolved. An operand with no addresses answers
+    /// through <see cref="OperandFact{TFacet}.Read"/>.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="facet">The facet the evaluator resolved from the host.</param>
+    /// <param name="keys">What each of <see cref="Addresses"/> named.</param>
+    /// <returns>The fact.</returns>
+    public virtual Fact Read(IStateReader reader, IWorldFacts facet, ReadOnlySpan<ResolvedKey> keys) => Read(
+        facet: facet,
+        reader: reader
+    );
+
+    Fact IRuleOperand.Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         // Admission proved the host serves the facet before any rule naming it ran.
         return Read(
             facet: ((IWorldFacts)reader),
+            keys: keys,
             reader: reader
         );
     }
@@ -127,6 +144,10 @@ public sealed class WorldPlacementInfluenceOperand : WorldFactOperand {
     /// <param name="keyFrom">The live child-key indirection, or <see langword="null"/>.</param>
     public WorldPlacementInfluenceOperand(string channel, string placementId, string? childKey, CompiledCellRef? keyFrom) : base(valueKind: CellKind.Int) {
         KeyFrom = keyFrom;
+        m_addresses = OperandAddress.List(
+            first: keyFrom,
+            use: AddressUse.Key
+        );
         m_operand = new PlacementInfluenceOperand(
             channel: channel,
             key: childKey,
@@ -134,6 +155,10 @@ public sealed class WorldPlacementInfluenceOperand : WorldFactOperand {
         );
     }
 
+    private readonly OperandAddress[] m_addresses;
+
+    /// <inheritdoc/>
+    public override ReadOnlySpan<OperandAddress> Addresses => m_addresses;
     /// <summary>Gets the channel name.</summary>
     public string Channel => m_operand.Channel;
     /// <summary>Gets the dealt child's literal key, or <see langword="null"/>.</summary>
@@ -164,28 +189,30 @@ public sealed class WorldPlacementInfluenceOperand : WorldFactOperand {
 
         return ((bound == 0L)
             ? volumes
-            : (volumes + (2L * volumes) + (BoundVolumeCompileWork * bound))
+            : ((volumes + (2L * volumes)) + (BoundVolumeCompileWork * bound))
         );
     }
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader, IWorldFacts facet) {
+    public override Fact Read(IStateReader reader, IWorldFacts facet) => ((KeyFrom is null)
+        ? Read(
+            facet: facet,
+            keys: default,
+            reader: reader
+        )
+        : Puck.State.Rules.RuleOperandReads.Read(operand: this, reader: reader));
+    /// <inheritdoc/>
+    public override Fact Read(IStateReader reader, IWorldFacts facet, ReadOnlySpan<ResolvedKey> keys) {
         ArgumentNullException.ThrowIfNull(argument: facet);
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        if (KeyFrom is not { } indirection) {
+        if (KeyFrom is null) {
             return facet.Read(operand: m_operand);
         }
 
-        var resolved = RuleReads.ResolveReference(
-            reader: reader,
-            reference: in indirection
-        );
+        var key = keys[0].Key;
 
-        if (resolved.Case == FaultCase.Faulted) {
-            return Fact.Faulted(kind: CellKind.Int);
-        }
         if (
-            !resolved.TryNamed(value: out var key) ||
+            !keys[0].Named ||
             !key.IsValid ||
             !reader.Arena.Keys.TryGetName(
             key: key,

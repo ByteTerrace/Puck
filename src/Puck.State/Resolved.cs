@@ -23,7 +23,6 @@ public readonly struct Resolved<T> {
     /// <summary>Gets the address whose computation faulted (overflow, a divide by zero, a value with no number); a read
     /// through it faults as arithmetic and a write through it refuses.</summary>
     public static Resolved<T> Faulted => default;
-
     /// <summary>Gets which case the address resolved to: <see cref="FaultCase.Finite"/> when it named a value,
     /// <see cref="FaultCase.Absent"/> when it named nothing, <see cref="FaultCase.Faulted"/> when computing it
     /// faulted.</summary>
@@ -36,7 +35,6 @@ public readonly struct Resolved<T> {
         faultCase: FaultCase.Finite,
         value: value
     );
-
     /// <summary>Reads the value when the address named one.</summary>
     /// <param name="value">The named value, or the default when the address named nothing or faulted.</param>
     /// <returns><see langword="true"/> when the address named a value.</returns>
@@ -52,8 +50,11 @@ public readonly struct Resolved<T> {
 /// faulted case to receive, because a faulted address ends the token before the operand runs.</summary>
 /// <param name="Key">The interned key, or the invalid default when <paramref name="Named"/> is <see langword="false"/>
 /// or the named cell is one no row holds.</param>
-/// <param name="Named">Whether the address named a cell.</param>
-public readonly record struct ResolvedKey(CellKey Key, bool Named);
+/// <param name="Named">Whether the address named a cell, an index or an age.</param>
+/// <param name="Index">The integer the address named, for an address its operand reads as an index (a live row's
+/// table index, a static table's key, a ring age); zero otherwise. An index no key table interns still arrives
+/// here, which is why it is carried beside <paramref name="Key"/>.</param>
+public readonly record struct ResolvedKey(CellKey Key, bool Named, long Index = 0L);
 /// <summary>What a gate decided. The zero value is <see cref="Faulted"/>, so a verdict nothing set refuses.</summary>
 public enum Verdict : byte {
     /// <summary>A conjunct faulted: the gate is neither open nor closed, and the latch holds.</summary>

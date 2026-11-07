@@ -482,7 +482,7 @@ public static partial class RuleCompiler {
             throw Invalid(detail: $"age must be 0..{(history.Capacity - 1)} on '{tokens[1]}'");
         }
 
-        CompiledExpressionToken[]? ageExpression = null;
+        CompiledExpressionToken[]? ageProgram = null;
 
         if (!literal) {
             if (!ExpressionSpelling.TryParse(
@@ -493,7 +493,7 @@ public static partial class RuleCompiler {
                 throw Invalid(detail: $"age '{tokens[2]}' on '{tokens[1]}' is neither 0..{(history.Capacity - 1)} nor an expression: {error}");
             }
 
-            ageExpression = CompileExpression(
+            ageProgram = CompileExpression(
                 context: context,
                 expression: parsed,
                 kind: CellKind.Int,
@@ -502,7 +502,7 @@ public static partial class RuleCompiler {
             );
             RuleDataflow.CollectExpressionFacts(
                 into: context.Needs,
-                tokens: ageExpression
+                tokens: ageProgram
             );
         }
 
@@ -510,7 +510,7 @@ public static partial class RuleCompiler {
             describe: name,
             operand: new HistoryOperand(
                 age: age,
-                ageExpression: ageExpression,
+                ageProgram: ageProgram,
                 ring: history,
                 rowOrdinal: ResolveRowOrdinal(
                     context: context,

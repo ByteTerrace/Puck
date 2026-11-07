@@ -17,11 +17,80 @@ public interface IRuleOperand : ICompiledFact {
     /// <param name="context">The context the operand was priced against.</param>
     /// <returns>The work units.</returns>
     RuleWork Cost(IRuleCostContext context);
+
+    /// <summary>Gets every address the operand reads through, in the order <see cref="Read"/> receives them: a cell
+    /// key, a live row's index, a table key or a ring age. Whoever reads the operand resolves each one first
+    /// (<see cref="RuleOperandReads"/>): an address whose resolution faults ends the read before the operand runs,
+    /// and an address computed by a program (<see cref="OperandAddress.Feed"/>) is fed the value that program left on
+    /// the enclosing program's stack, so the operand never evaluates an expression.</summary>
+    ReadOnlySpan<OperandAddress> Addresses { get; }
+
     /// <summary>Reads the operand's live fact for the evaluation in flight.</summary>
     /// <param name="reader">The evaluation in flight, which is also the host serving every facet it advertises.</param>
+    /// <param name="keys">What each of <see cref="Addresses"/> named, in the same order: a cell key or an integer, or
+    /// nothing. There is no faulted case to receive.</param>
     /// <returns>The fact.</returns>
-    Fact Read(IStateReader reader);
+    Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys);
 }
+/// <summary>How an operand reads one of its declared addresses.</summary>
+public enum AddressUse : byte {
+    /// <summary>The address names an interned cell key, delivered as <see cref="ResolvedKey.Key"/>.</summary>
+    Key,
+    /// <summary>The address names an integer (a live row's table index, a table key, a ring age), delivered as
+    /// <see cref="ResolvedKey.Index"/>.</summary>
+    Index,
+}
+/// <summary>One address an operand reads through, and how it reads it.</summary>
+public readonly struct OperandAddress {
+    /// <summary>Initializes the address.</summary>
+    /// <param name="reference">The compiled address.</param>
+    /// <param name="use">How the operand reads what it names.</param>
+    public OperandAddress(CompiledCellRef reference, AddressUse use) {
+        Feed = reference.FeedProgram;
+        Reference = reference;
+        Use = use;
+    }
+
+    /// <summary>Gets the program computing the address, or <see langword="null"/> when the address needs none. A fed
+    /// address is lowered into the enclosing program: these tokens run just before the operand's own, and the operand
+    /// token consumes the value they leave.</summary>
+    public CompiledExpressionToken[]? Feed { get; }
+    /// <summary>Gets the compiled address.</summary>
+    public CompiledCellRef Reference { get; }
+    /// <summary>Gets how the operand reads what the address names.</summary>
+    public AddressUse Use { get; }
+
+    /// <summary>Lists the addresses an operand declares, skipping the absent ones.</summary>
+    /// <param name="first">The first address, or <see langword="null"/>.</param>
+    /// <param name="use">How the first is read.</param>
+    /// <param name="second">The second address, or <see langword="null"/>.</param>
+    /// <param name="secondUse">How the second is read.</param>
+    /// <returns>The addresses, in declared order.</returns>
+    public static OperandAddress[] List(CompiledCellRef? first, AddressUse use, CompiledCellRef? second = null, AddressUse secondUse = AddressUse.Key) {
+        var list = new List<OperandAddress>(capacity: 2);
+
+        if (first is { } head) {
+            list.Add(item: new OperandAddress(
+                reference: head,
+                use: use
+            ));
+        }
+        if (second is { } tail) {
+            list.Add(item: new OperandAddress(
+                reference: tail,
+                use: secondUse
+            ));
+        }
+
+        return [.. list];
+    }
+}
+/// <summary>The value the program computing an address left, handed to the address's resolution: the integer its
+/// program evaluated to, or the absence it read. <c>default</c> is the integer zero, which an address that carries no
+/// program ignores.</summary>
+/// <param name="Value">The integer the program evaluated to.</param>
+/// <param name="Absent">Whether the program read an absence, so the address names nothing.</param>
+public readonly record struct AddressFeed(long Value, bool Absent);
 /// <summary>A read operand that answers from the arena alone. Case types are classes, never records or structs:
 /// nothing at runtime compares two operands for equality, so a generated structural <c>Equals</c> would be a hazard
 /// nobody asked for.</summary>
@@ -34,13 +103,15 @@ public abstract class RuleOperand : IRuleOperand {
     public FacetRef? RequiredFacet => null;
     /// <inheritdoc/>
     public CellKind ValueKind { get; }
+    /// <inheritdoc/>
+    public virtual ReadOnlySpan<OperandAddress> Addresses => default;
 
     /// <inheritdoc/>
     public virtual void CollectReads(List<CellAccess> into) { }
     /// <inheritdoc/>
     public abstract RuleWork Cost(IRuleCostContext context);
     /// <inheritdoc/>
-    public abstract Fact Read(IStateReader reader);
+    public abstract Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys);
 }
 /// <summary>Shared shape for the operand cases that address a row through a (row ordinal, key-or-indirection) pair,
 /// so a caller that must accept any of them can read the row and the live key without enumerating every case.</summary>
@@ -63,6 +134,17 @@ public interface IRuleKey : ICompiledFact {
     /// <see cref="FaultCase.Absent"/>, and reads absent; one whose computation faulted is
     /// <see cref="FaultCase.Faulted"/>.</returns>
     Resolved<CellKey> Resolve(IStateReader reader);
+    /// <summary>Resolves the key when a program that selects a row it reads through has already left its value. Only
+    /// a key that carries such a program (<see cref="ZoneEndKey"/>) reads the feed.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="feed">The value the key's program left.</param>
+    /// <returns>The interned key, as <see cref="Resolve(IStateReader)"/> answers.</returns>
+    Resolved<CellKey> Resolve(IStateReader reader, in AddressFeed feed) => Resolve(reader: reader);
+    /// <summary>Resolves the key as an integer index when the program it reads through has already left its value.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="feed">The value the key's program left.</param>
+    /// <returns>The index, as <see cref="ResolveIndex(IStateReader)"/> answers.</returns>
+    Resolved<long> ResolveIndex(IStateReader reader, in AddressFeed feed) => ResolveIndex(reader: reader);
     /// <summary>Attempts to resolve a key for a state-writing effect. A dynamic key family may explicitly admit a
     /// runtime key here; ordinary reads never do so. A key whose computation faulted refuses.</summary>
     /// <param name="reader">The evaluation in flight.</param>
@@ -100,10 +182,23 @@ public abstract class RuleKeyFact : IRuleKey {
     /// <param name="reader">The evaluation in flight.</param>
     /// <returns>The index when the key spells an integer, <see cref="FaultCase.Faulted"/> when resolving it faulted,
     /// and <see cref="FaultCase.Absent"/> otherwise.</returns>
-    public virtual Resolved<long> ResolveIndex(IStateReader reader) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
+    public virtual Resolved<long> ResolveIndex(IStateReader reader) => IndexOf(
+        reader: reader,
+        resolved: Resolve(reader: reader)
+    );
+    /// <inheritdoc/>
+    public virtual Resolved<CellKey> Resolve(IStateReader reader, in AddressFeed feed) => Resolve(reader: reader);
+    /// <inheritdoc/>
+    public virtual Resolved<long> ResolveIndex(IStateReader reader, in AddressFeed feed) => IndexOf(
+        reader: reader,
+        resolved: Resolve(
+            feed: in feed,
+            reader: reader
+        )
+    );
 
-        var resolved = Resolve(reader: reader);
+    private static Resolved<long> IndexOf(IStateReader reader, Resolved<CellKey> resolved) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
 
         if (resolved.Case == FaultCase.Faulted) {
             return Resolved<long>.Faulted;
@@ -161,13 +256,12 @@ public interface IRuleEffect : ICompiledFact, IEffectNeeds {
     /// <param name="refusal">Why the arm did not fire, or <see cref="EffectRefusal.None"/>.</param>
     /// <returns><see langword="true"/> when the arm fired.</returns>
     bool TryFire(IEffectHost host, in EffectFiring firing, out EffectRefusal refusal);
-
     /// <summary>Delivers an admitted outward effect after its gameplay transaction has committed.</summary>
     bool TryDeliverAfterCommit(IEffectHost host, in EffectFiring firing, out EffectRefusal refusal) {
-        if (firing.Preflight || (Needs & EffectNeeds.Irreversible) == EffectNeeds.None) {
-            throw new InvalidOperationException("Only an admitted post-commit delivery reaches this door.");
+        if (firing.Preflight || ((Needs & EffectNeeds.Irreversible) == EffectNeeds.None)) {
+            throw new InvalidOperationException(message: "Only an admitted post-commit delivery reaches this door.");
         }
-        return TryFire(host, in firing, out refusal);
+        return TryFire(firing: in firing, host: host, refusal: out refusal);
     }
 }
 /// <summary>A compiled effect that writes the arena and nothing outside it.</summary>
@@ -258,7 +352,14 @@ public interface IValueSourcedEffect {
 /// <param name="InnerKeyBinding">For an indirection whose own inner key spells a binding token rather than a literal
 /// declared cell: the row is known, and the cell read every evaluation is whichever one the binding names.</param>
 /// <param name="Kind">The cell kind of the source cell, <see cref="CellKind.Int"/> or <see cref="CellKind.Text"/>.</param>
-public readonly record struct CompiledCellRef(int RowOrdinal, CellKey Key, BoundKey Binding = BoundKey.None, IRuleKey? Custom = null, BoundKey InnerKeyBinding = BoundKey.None, CellKind Kind = CellKind.Int) {
+/// <param name="Program">A compiled Int expression whose value names the cell (the cell whose name is the integer it
+/// evaluates to), or <see langword="null"/>. An operand's program is lowered into the enclosing program
+/// (<see cref="OperandAddress.Feed"/>); an effect's destination, and a live row selected where no operand reads it,
+/// has the evaluator run it where the address resolves.</param>
+public readonly record struct CompiledCellRef(int RowOrdinal, CellKey Key, BoundKey Binding = BoundKey.None, IRuleKey? Custom = null, BoundKey InnerKeyBinding = BoundKey.None, CellKind Kind = CellKind.Int, CompiledExpressionToken[]? Program = null) {
+    /// <summary>Gets the program whose value this address resolves through: its own <see cref="Program"/>, or the
+    /// one a zone endpoint's live row selects through. An address holds at most one.</summary>
+    public CompiledExpressionToken[]? FeedProgram => (Program ?? ((Custom as ZoneEndKey)?.FeedProgram));
     /// <summary>Gets the facet this indirection's own key fact declares, or <see langword="null"/>.</summary>
     public FacetRef? RequiredFacet => Custom?.RequiredFacet;
 
@@ -269,6 +370,14 @@ public readonly record struct CompiledCellRef(int RowOrdinal, CellKey Key, Bound
         ArgumentNullException.ThrowIfNull(argument: into);
 
         if (reference is not { } cell) {
+            return;
+        }
+        if (cell.Program is { } program) {
+            RuleDataflow.CollectExpression(
+                into: into,
+                tokens: program
+            );
+
             return;
         }
         if (cell.Custom is { } custom) {
@@ -295,17 +404,24 @@ public readonly record struct CompiledCellRef(int RowOrdinal, CellKey Key, Bound
     public static void CollectFacts(CompiledCellRef? reference, RuleNeedsBuilder into) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
-        if (reference is not { Custom: { } custom }) {
+        if (reference is not { } cell) {
+            return;
+        }
+        if (cell.Program is { } program) {
+            RuleDataflow.CollectExpressionSchedulingFacts(
+                into: into,
+                tokens: program
+            );
+
+            return;
+        }
+        if (cell.Custom is not { } custom) {
             return;
         }
 
         into.AddFact(fact: custom);
 
-        var source = (custom switch {
-            LocalKeyFact local => local.Source,
-            EffectKeyFact effect => effect.Source,
-            _ => null,
-        });
+        var source = (custom as LocalKeyFact)?.Source;
 
         if (source is not null) {
             RuleDataflow.CollectExpressionSchedulingFacts(

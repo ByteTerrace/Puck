@@ -10,7 +10,7 @@ public sealed class ForeverComparisonLawTests {
     // The one operand that answers forever: the library itself declares none, so the law carries its own.
     private sealed class ForeverOperand() : RuleOperand(valueKind: CellKind.Int) {
         public override RuleWork Cost(IRuleCostContext context) => 1L;
-        public override Fact Read(IStateReader reader) => Fact.Forever(kind: CellKind.Int);
+        public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) => Fact.Forever(kind: CellKind.Int);
     }
 
     private static GateToken[] Gate(CompiledValueSource left, ExpressionOp comparison) => [new GateToken(

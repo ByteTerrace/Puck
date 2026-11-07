@@ -294,7 +294,7 @@ public sealed class RuleCompilerLawTests {
         var effect = Assert.IsType<WriteEffect>(@object: compiled.Effects[0]);
 
         Assert.NotNull(@object: effect.KeyFrom);
-        Assert.IsType<EffectKeyFact>(@object: effect.KeyFrom!.Value.Custom);
+        Assert.NotNull(@object: effect.KeyFrom!.Value.Program);
         Assert.Equal(
             actual: (compiled.Locals?.Length ?? 0),
             expected: 0

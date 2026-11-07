@@ -196,9 +196,11 @@ public static class RuleReads {
             : StateReader.ArrangementRank(domainOrdinals: ordinals[..count])
         );
     }
+
     /// <summary>Why an address whose key computation faulted refused: the one sentence every read and write that
     /// meets a <see cref="FaultCase.Faulted"/> address reports.</summary>
     public const string KeyFaultReason = "the address's key faulted (overflow, a divide by zero, or a value with no number)";
+
     /// <summary>Attempts to resolve the key a state-writing effect addresses. Only a dynamic key family that must
     /// create a new runtime address admits one here; read resolution never changes the key table.</summary>
     /// <param name="reader">The evaluation in flight.</param>
@@ -224,6 +226,19 @@ public static class RuleReads {
             reference: in reference
         );
     }
+    /// <summary>Returns what an operand's address named, as the resolution <see cref="ReadCell"/> reads: the key the
+    /// interpreter resolved, or nothing.</summary>
+    /// <param name="key">What the interpreter resolved the address to.</param>
+    /// <returns>The named key, or <see cref="FaultCase.Absent"/>.</returns>
+    public static Resolved<CellKey> Named(in ResolvedKey key) => (key.Named
+        ? Resolved<CellKey>.Named(value: key.Key)
+        : Resolved<CellKey>.Nothing);
+    /// <summary>Returns what an operand's literal key named: the key, or nothing when it names no cell.</summary>
+    /// <param name="literal">The compile-time key.</param>
+    /// <returns>The named key, or <see cref="FaultCase.Absent"/>.</returns>
+    public static Resolved<CellKey> Literal(CellKey literal) => (literal.IsValid
+        ? Resolved<CellKey>.Named(value: literal)
+        : Resolved<CellKey>.Nothing);
     /// <summary>Resolves the interned key a compiled address names for the evaluation in flight (a literal key, a
     /// bound key token, another cell's value read as a key, or a compiled key fact), and what it named. Each caller
     /// decides what a faulted key means where it sits, a read raising it as arithmetic and a write or remove
@@ -257,8 +272,81 @@ public static class RuleReads {
     public static Resolved<CellKey> ResolveReference(IStateReader reader, in CompiledCellRef reference) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
+        return (TryFeed(
+            feed: out var feed,
+            reader: reader,
+            reference: in reference
+        )
+            ? ResolveReference(
+                feed: in feed,
+                reader: reader,
+                reference: in reference
+            )
+            : Resolved<CellKey>.Faulted);
+    }
+    /// <summary>Runs the program an address resolves through, for a caller no enclosing program feeds: an effect's
+    /// destination, or a live row selected where no operand reads it. An operand's own address programs are tokens of
+    /// the program that reads it, and never reach here.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="reference">The address.</param>
+    /// <param name="feed">The value the program left, or the integer zero for an address that carries none.</param>
+    /// <returns><see langword="false"/> when the program faulted, which is already raised into the evaluation's
+    /// scope; an absence is an answer.</returns>
+    public static bool TryFeed(IStateReader reader, in CompiledCellRef reference, out AddressFeed feed) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        feed = default;
+
+        if (reference.FeedProgram is not { } program) {
+            return true;
+        }
+        if (RuleExpressions.TryEvaluate(
+            fault: out var fault,
+            kind: CellKind.Int,
+            program: program,
+            reader: reader,
+            value: out var value
+        )) {
+            feed = new AddressFeed(
+                Absent: false,
+                Value: value
+            );
+
+            return true;
+        }
+        if (fault == ExpressionFault.Absent) {
+            feed = new AddressFeed(
+                Absent: true,
+                Value: 0L
+            );
+
+            return true;
+        }
+
+        return false;
+    }
+    /// <summary>Resolves one live key indirection once the program it resolves through has left its value.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="reference">The indirection.</param>
+    /// <param name="feed">What its program left; ignored when the indirection carries none.</param>
+    /// <returns>What the indirection named — see <see cref="ResolveKey(IStateReader, CellKey, CompiledCellRef?)"/>.</returns>
+    public static Resolved<CellKey> ResolveReference(IStateReader reader, in CompiledCellRef reference, in AddressFeed feed) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        if (reference.Program is not null) {
+            // An integer names that key even when no row holds it. An absence the program read names no cell.
+            return (feed.Absent
+                ? Resolved<CellKey>.Nothing
+                : Resolved<CellKey>.Named(value: IndexKey(
+                    index: feed.Value,
+                    keys: reader.Arena.Keys
+                )));
+        }
         if (reference.Custom is { } custom) {
-            return custom.Resolve(reader: reader);
+            return custom.Resolve(
+                feed: in feed,
+                reader: reader
+            );
         }
 
         var key = ResolveBuiltIn(named: out var named, reader: reader, reference: in reference);
@@ -363,8 +451,21 @@ public static class RuleReads {
             )
         );
     }
-
     private static bool TryResolveReferenceForWrite(IStateReader reader, in CompiledCellRef reference, out CellKey key, out string reason) {
+        if (reference.Program is not null) {
+            var resolved = ResolveReference(
+                reader: reader,
+                reference: in reference
+            );
+            var faulted = (resolved.Case == FaultCase.Faulted);
+
+            _ = resolved.TryNamed(value: out key);
+            reason = (faulted
+                ? KeyFaultReason
+                : string.Empty);
+
+            return !faulted;
+        }
         if (reference.Custom is { } custom) {
             return custom.TryResolveForWrite(
                 key: out key,
@@ -392,8 +493,37 @@ public static class RuleReads {
     public static Resolved<long> ResolveIndex(IStateReader reader, in CompiledCellRef reference) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
+        return (TryFeed(
+            feed: out var feed,
+            reader: reader,
+            reference: in reference
+        )
+            ? ResolveIndex(
+                feed: in feed,
+                reader: reader,
+                reference: in reference
+            )
+            : Resolved<long>.Faulted);
+    }
+    /// <summary>Resolves one live indirection as an integer index once the program it resolves through has left its
+    /// value.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="reference">The indirection.</param>
+    /// <param name="feed">What its program left; ignored when the indirection carries none.</param>
+    /// <returns>The index when the indirection names one, <see cref="FaultCase.Absent"/> when it names nothing.</returns>
+    public static Resolved<long> ResolveIndex(IStateReader reader, in CompiledCellRef reference, in AddressFeed feed) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        if (reference.Program is not null) {
+            return (feed.Absent
+                ? Resolved<long>.Nothing
+                : Resolved<long>.Named(value: feed.Value));
+        }
         if (reference.Custom is { } custom) {
-            return custom.ResolveIndex(reader: reader);
+            return custom.ResolveIndex(
+                feed: in feed,
+                reader: reader
+            );
         }
         if (
             (reference.Binding == BoundKey.None) &&

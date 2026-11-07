@@ -1,4 +1,8 @@
+using AddressUse = Puck.State.Rules.AddressUse;
+using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
 using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
+using OperandAddress = Puck.State.Rules.OperandAddress;
+using RuleExpressions = Puck.State.Rules.RuleExpressions;
 using RuleOperand = Puck.State.Rules.RuleOperand;
 using RuleReads = Puck.State.Rules.RuleReads;
 
@@ -28,7 +32,7 @@ public sealed class StateKernelReader : IStateReader {
 
         for (var i = 0; (i < cells); ++i) {
             probe[i] = new StateCell(
-                Key: CellName.Parse(candidate: $"k{i}"),
+                Key: CellName.Parse(candidate: i.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
                 Value: CellValue.Int(value: (i + 1L))
             );
         }
@@ -96,7 +100,7 @@ public sealed class StateKernelDirectOperand : RuleOperand {
     }
 
     public override RuleWork Cost(IRuleCostContext context) => 1L;
-    public override Fact Read(IStateReader reader) => Fact.Finite(
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) => Fact.Finite(
         kind: CellKind.Int,
         value: ((long)RuleReads.ReadFixed(
             key: m_key,
@@ -120,7 +124,7 @@ public sealed class StateKernelIndirectOperand : RuleOperand {
     }
 
     public override RuleWork Cost(IRuleCostContext context) => 2L;
-    public override Fact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
         var selected = ((long)RuleReads.ReadFixed(
             key: m_selector,
             reader: reader,
@@ -136,6 +140,35 @@ public sealed class StateKernelIndirectOperand : RuleOperand {
             ).Value)
         );
     }
+}
+// A state read under a key the program computes: the integer it leaves on the stack names the cell.
+public sealed class StateKernelComputedKeyOperand : RuleOperand {
+    private readonly OperandAddress[] m_addresses;
+    private readonly int m_row;
+
+    public StateKernelComputedKeyOperand(int row, CompiledExpressionToken[] program) : base(valueKind: CellKind.Int) {
+        m_addresses = [new OperandAddress(
+            reference: new CompiledCellRef(
+                Key: default,
+                Program: program,
+                RowOrdinal: -1
+            ),
+            use: AddressUse.Key
+        )];
+        m_row = row;
+    }
+
+    public override ReadOnlySpan<OperandAddress> Addresses => m_addresses;
+
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) => Fact.Finite(
+        kind: CellKind.Int,
+        value: ((long)RuleReads.ReadFixed(
+            key: keys[0].Key,
+            reader: reader,
+            rowOrdinal: m_row
+        ).Value)
+    );
 }
 // Builds a compiled program of exactly the requested token count. Values and operations alternate for a dependent
 // chain and are segregated for independent evaluations; an even token count absorbs its parity with one unary
@@ -153,22 +186,46 @@ public static class StateKernelPrograms {
         var program = new List<CompiledExpressionToken>(capacity: tokens);
 
         if (shape == KernelShape.IndependentEvaluations) {
-            for (var i = 0; (i < values); ++i) { program.Add(item: Value(index: i, read: read, reader: reader)); }
+            for (var i = 0; (i < values); ++i) { Append(index: i, program: program, read: read, reader: reader); }
             if (even) { program.Add(item: new(Operation: ExpressionOp.Negate)); }
             for (var i = 0; (i < operations); ++i) { program.Add(item: new(Operation: ExpressionOp.Add)); }
 
             return [.. program];
         }
-        program.Add(item: Value(index: 0, read: read, reader: reader));
+        Append(index: 0, program: program, read: read, reader: reader);
         if (even) { program.Add(item: new(Operation: ExpressionOp.Negate)); }
         for (var i = 0; (i < operations); ++i) {
-            program.Add(item: Value(index: (i + 1), read: read, reader: reader));
+            Append(index: (i + 1), program: program, read: read, reader: reader);
             program.Add(item: new(Operation: ExpressionOp.Add));
         }
 
         return [.. program];
     }
 
+    // One operand site. A computed key's site is the program that computes the key (a small sum) and the operand
+    // that consumes it, which is what the compiler lowers `cells[<expression>]` to.
+    private static void Append(int index, List<CompiledExpressionToken> program, KernelRead read, StateKernelReader reader) {
+        if (read == KernelRead.ComputedKey) {
+            var operand = new StateKernelComputedKeyOperand(
+                program: [
+                    new(Constant: (index % reader.ProbeKeys.Count), Operation: ExpressionOp.Constant),
+                    new(Constant: 0L, Operation: ExpressionOp.Constant),
+                    new(Operation: ExpressionOp.Add),
+                ],
+                row: reader.Probe
+            );
+
+            RuleExpressions.AppendFeeds(into: program, operand: operand);
+            program.Add(item: new(
+                Operand: operand,
+                Operation: ExpressionOp.Operand
+            ));
+
+            return;
+        }
+
+        program.Add(item: Value(index: index, read: read, reader: reader));
+    }
     private static CompiledExpressionToken Value(int index, KernelRead read, StateKernelReader reader) {
         var key = reader.ProbeKeys[(index % reader.ProbeKeys.Count)];
 
