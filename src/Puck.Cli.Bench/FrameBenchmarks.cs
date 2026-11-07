@@ -130,7 +130,12 @@ public static partial class FrameBenchmarks {
                             throw new InvalidOperationException(string.Join("; ", reasons));
                         }
                         Ask($"world.wait until {settledTick}");
+                        // The wait releases once its tick completes, which can be before the command pinned to that tick
+                        // has reported; the sweep reads the log only after its capture. Read until nothing it expects is pending.
                         var scheduled = SweepEvidence.Scheduled(new SweepAnswer(true, Ask("world.at --json"), []), expected);
+                        for (var attempt = 0; (attempt < 32) && !scheduled.Ok && scheduled.Refusals.Any(reason => reason.EndsWith("outcome pending", StringComparison.Ordinal)); attempt++) {
+                            scheduled = SweepEvidence.Scheduled(new SweepAnswer(true, Ask("world.at --json"), []), expected);
+                        }
                         if (!scheduled.Ok) { throw new InvalidOperationException(string.Join("; ", scheduled.Refusals)); }
                         // Framing and the stop's warmup must produce the view's actual program before asking
                         // whether its geometry is resident. Then hold authority while its uploads finish.
