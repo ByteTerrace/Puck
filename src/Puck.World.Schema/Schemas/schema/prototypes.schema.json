@@ -877,7 +877,8 @@
                         "null"
                       ],
                       "default": null,
-                      "description": "Shadow extinction per creation unit, finite and non-negative (null = zero)."
+                      "description": "Shadow extinction per creation unit, finite and non-negative (null = zero).",
+                      "minimum": 0
                     }
                   },
                   "required": [
@@ -3531,7 +3532,9 @@
                     "number",
                     "null"
                   ],
-                  "default": null
+                  "default": null,
+                  "minimum": 1E-06,
+                  "maximum": 1
                 },
                 "scatter": {
                   "type": [

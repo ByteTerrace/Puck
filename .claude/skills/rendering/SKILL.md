@@ -63,6 +63,17 @@ Glass shadow extinction is authored by `SdfGlass.ShadowDensity` (zero by
 default; standard water opts in). Cascade selection's fourth indirect phase
 routes glass to `SdfMeshRasterPass.ShadowGlassKey`; opaque entry/exit stay in
 their existing phases. Count glass vertices once, opaque vertices twice.
+Only a program with a drawn positive-density glass shape adds optical storage
+through `WithGlassShadows`; the graph's ports govern its allocation, clear and
+surface reads. Each texel holds three words (signed depth and nearest entry).
+`pipeline.inspect world` (or a session node named by `world.counters gpu`)
+reads the installed graph's named allocations and actual bytes. Read it beside
+`world.residency` and `host.memory`; those broader reports alone do not identify
+an optical buffer. A document reload clears the exposure pin, so pin the same
+EV again before comparing density-only reload stills.
+The glass vertex variant clips zero-density triangles before rasterization;
+opaque vertices export only position and clip distance. Density has its own
+cadence signature, shared by cascades and surface, including palette-only uploads.
 The cascade's optical-depth buffer integrates to its first opaque depth with
 the shared `frame/sdf-optical-depth.hlsli` accumulator. Surface shadow taps
 read extinction and nearest glass entry beside the opaque depths. Glass is
@@ -74,8 +85,11 @@ Material row 25.w carries shadow density beside cel ink RGB; keep its C# pack
 and HLSL load together without changing the row stride.
 For a neutral-default comparison, omit density from both prototype palettes
 and field materials in `state.world`; changing only the prototypes leaves
-field water shadowing. Compare the original and new surface shadow estimator
-in the same paused World to keep geometry and temporal capture state fixed.
+field water shadowing. Compare fresh base and head processes with lockstep and
+pause enabled before startup, identical camera, tick and pinned exposure. A
+surface-only hot swap cannot establish the complete renderer's neutral default.
+The glass fragment returns zero depth, which fails the pipeline's Greater test
+against non-negative opaque exit depth while preserving its optical side effects.
 `world.shaders.reload` replaces that kernel but not `SdfMeshRasterPass`'s
 occlusion/selection pipeline; a selection diagnostic needs a rebuilt host.
 For an independent vertex check, `world.cull off` and one fixed `world.detail`

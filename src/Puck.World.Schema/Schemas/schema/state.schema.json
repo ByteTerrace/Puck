@@ -1238,7 +1238,8 @@
                           "number",
                           "null"
                         ],
-                        "default": null
+                        "default": null,
+                        "minimum": 0
                       }
                     },
                     "required": [
