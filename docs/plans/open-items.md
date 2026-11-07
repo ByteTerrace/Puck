@@ -1360,10 +1360,15 @@ one canonical op stream the views kernel interprets at once and the engine
 specializes in the background as an input-identified cache; materials binned by
 program; pipeline state engine-owned; a hard per-dispatch work bound; a
 device-loss quarantine; and the engine's layers (paints, inset, weathering,
-flow, cel banding) rewritten as the standard package's first programs. Steps 2
-and 4 are GPU legs (the interpreter's cost and registers on the bar devices,
-then binning's payoff) that decide specialization's scope before the layers
-migrate. Three product calls wait on the owner under
+flow, cel banding) rewritten as the standard package's first programs. The
+design review's twelve findings are resolved in the memo's section 8 (the
+shadow-demand envelope, the light and compose phases, one invocation for opaque
+and glass, IR semantics for tier equivalence, slice-relative operands, cost
+closed over helpers, the planner's jobs on both paths, runtime parameter slots,
+read flags, stall-free publication, a separate filter record, the per-device
+decision matrix). Steps 2 and 4 are GPU legs (the interpreter's cost and
+registers on the bar devices, then binning's payoff) read against that matrix
+before the layers migrate. Three product calls wait on the owner under
 [owner decisions](#owner-decisions).
 
 ### Edit to running, hot reload and boot

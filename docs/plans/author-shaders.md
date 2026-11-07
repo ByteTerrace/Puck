@@ -163,10 +163,10 @@ brings no texture or buffer; the inputs are the interface's), a new pass, a loop
 whose trip count the compiler cannot see, a read of another pixel, a read of
 simulation state or of another world. Those are the bounds that make cost
 static. Expression grows by adding ops to the table (an engine change with a
-declared cost, generated into both tiers), never by opening the bounds. Whether
-authors may also bring image data (a texture a program samples) is a product
-call for the owner (**Needs you**, below); the interface is designed so a
-`sample` op can be added without changing anything else.
+declared cost, generated into both tiers), never by opening the bounds. Image
+data a program samples (a `sample` op over an authored texture) comes after
+tier 2 by the owner's ruling, so its taps are costed like every other op; the
+interface keeps room for it from the start.
 
 ### Why do games compile thousands of shaders, and how do they use and combine them?
 
@@ -354,44 +354,75 @@ Symbols are named so a reader checks the current code rather than this prose.
 
 ### 3.1 Where an authored program plugs in
 
-Three hooks, each a program over its own interface, taken in this order:
+A material's program has three phases over one stamp, and one more hook is
+deferred. The phases are entry points of one program, so an author writes a
+look once and the engine runs its parts where the stage needs them:
 
-1. **The surface response** (`shade`), the first and the one every other rests
-   on. It runs where `sdfLightStage` runs the layers today, after the paints'
-   shape dispatch and before the light walk, and it owns what the layers own:
-   the material's final albedo, roughness, metal, specular, coat, sheen, wrap,
-   fill, emissive, a shading-normal tilt, and the coverage the flow reveals a
-   second surface over. Its output is `SdfMaterialData`'s shaded subset plus the
-   normal, exactly the state `sdfLightStage` hands the light walk.
-2. **The light response** (`light`), optional, per material: what one light adds
-   at the surface, the body of `sdfLightResponse` for that material. Its inputs
-   are the surface hook's outputs, one `SdfLightSource` and the shadow and probe
-   terms the stage already computed (visibility, occlusion, the probes' share);
-   its output is one `SdfLightResponse` (diffuse, rim, specular, attenuation).
-   A material without one takes the standard's. This is the hook every deferred
-   engine withholds; Puck's compute shading offers it on the same path because
-   the light walk runs per pixel in `views` already. It is step 7, after the
-   surface hook has proved the mechanism, and whether it ships is a product call
-   (**Needs you**).
-3. **A screen effect** (`screen`), a program over the composite's output image
-   for a view: a post or lens effect. Its interface is a pixel of the lit image
-   and its neighbours' presence through the existing post-process package
-   mechanism (`docs/reference/shaders.md`, post-process packages), not through
-   the views kernel. It is step 8 and reuses the same language, lowering and
-   tiers; nothing in steps 0 to 6 depends on it.
+1. **The surface phase** (`surface`), before the light walk. It runs where
+   `sdfLightStage` runs the layers today, after the paints' shape dispatch, and
+   it owns what the layers own: the material's final albedo, roughness, metal,
+   specular, coat, sheen, wrap, fill, emissive, the shading normal, and the
+   coverage a revealed second surface takes. Its outputs are the shaded subset
+   of `SdfMaterialData` plus the normal, the state `sdfLightStage` hands the
+   light walk.
+2. **The light phase** (`light`), once per light, the body of
+   `sdfLightResponse` for that material: its inputs are the surface phase's
+   outputs, one light (direction or position, colour, weight, kind, the
+   windowed reach a point light already computed) and the shadow terms the
+   stage computed (the slot's visibility, the ambient occlusion, the probes'
+   share); its output is one `SdfLightResponse` (diffuse, rim, specular,
+   attenuation). The owner ruled it ships; the standard's default is the
+   wrapped Lambert and GGX response `sdfLightResponse` gives every material
+   today, and a program that declares no light phase takes it.
+3. **The compose phase** (`compose`), after the light fold: its inputs are the
+   folded radiance, rim, specular and attenuation, the irradiance volume's
+   indirect term and reflection, the environment lobe's term, the local
+   adaptation gain and the view's exposure; its output is the lit colour before
+   the atmosphere. The standard's default is what `sdfLightStage` does after
+   its loop today (`sdfMaterialShade`, the indirect and environment terms, the
+   emissive and attenuation composition). Cel shading needs this phase: its
+   banding reads each light's cosine and visibility in the light phase
+   (`sdfToonBand`, `sdfToonSpecular`), and it tints the indirect light, flattens
+   the paint and exposes the result after the fold (the `toon` branches of
+   `sdfLightStage`); a surface-only program cannot express it, which is
+   finding 2 of the review.
+
+What stays engine code around the phases: the paints' shape dispatch (a
+`shape` op's operand), the irradiance gather, the shadow filter, the cel
+**outline** (`sdf-toon-outline.hlsli` reads neighbour depth and normal, which
+a per-pixel program may not; its width and tint stay data on the material's
+style row), the local adaptation gain, the editor grid and the atmosphere.
+
+**One invocation serves opaque and glass shading.** The glass pass shades each
+glass interface with the same material mechanisms as the opaque path
+(`sdf-glass.comp.hlsl`: `sdfMaterialLoad`, `sdfLayerFrame`, `sdfShadeFlow` with
+the contact coverage `sdfGlassContact` supplies, then the light walk and the
+probe gather), so a program's surface phase is invoked from both kernels
+through one generated entry, with the stamp carrying what the glass pass
+supplies and the opaque pass does not: the contact coverage (zero for an
+opaque hit) and the interface's thickness. The light and compose phases are
+likewise invoked by the glass pass for its highlights and medium. Glass
+invocations are costed, bounded and quarantined with the opaque ones
+(section 3.7), and they interpret in this round; specializing the glass kernel
+per program is an enhancement step after measurement, since glass covers few
+pixels.
 
 Nothing plugs into the surface pass, the bake, the cascades or the irradiance
 trace: those read geometry and the material facts the bake and the probes need
-(`SdfAppearanceOutline`), and an authored program is presentation. The
-irradiance trace keeps shading the static scene with the material's base
-response, as it ignores the cel style and the flow today
-(`SdfMaterial.Toon`, `SdfMaterial.Flow` XML docs).
+(`SdfAppearanceOutline`), and a program is presentation. The irradiance trace
+keeps shading the static scene with the material's base response, as it
+ignores the cel style and the flow today (`SdfMaterial.Toon`,
+`SdfMaterial.Flow` XML docs). The one thing the surface pass reads from a
+program is its shadow-demand envelope (section 3.9).
+
+The **screen effect hook** (a program over the composite's output image,
+through the post-process package mechanism) is deferred to the next round by
+the owner's ruling; nothing here depends on it.
 
 ### 3.2 The language and its bounds
 
 A program is a `shade` block on a palette slot in `.puck`, in the language the
-author already writes everything else in. It is a pure function of its
-interface:
+author already writes everything else in:
 
 ```text
 palette [
@@ -401,40 +432,69 @@ palette [
   }
 ]
 
-// In the standard package: the weathering layer as a program.
-shade template weathered(seed, under, deposit, settle = 0.3, scale = 1.5, octaves = 2, ...) {
-  let p = surface.position * scale
-  let noise = 0.5 + 0.5 * lattice(turn(p, landscapeTurn), seed)
-  let coverage = saturate(settle * saturate(surface.normal.y) * noise)
-  albedo = mix(material.albedo, deposit, coverage)
-  roughness = mix(material.roughness, 0.98, coverage)
+// In the standard package: the weathering layer as a program. `octaves` is structural (it bounds the loop);
+// every other parameter is a runtime slot the material's rows carry.
+shade template weathered(seed, under, deposit, settle = 0.3, scale = 1.5, structural octaves = 2, ...) {
+  surface {
+    let p = surface.position * scale
+    let noise = 0.5 + 0.5 * lattice(turn(p, landscapeTurn), seed)
+    let coverage = saturate(settle * saturate(surface.normal.y) * noise)
+    albedo = mix(material.albedo, deposit, coverage)
+    roughness = mix(material.roughness, 0.98, coverage)
+  }
 }
 ```
 
 The vocabulary, and what each piece lowers to:
 
-- **Inputs** are the interface stamp alone: `surface` (position in world and
-  layer space, geometric and shading normal, curvature, the pixel footprint at
-  the hit, the ray direction, the frame slot and its rotation), `material` (the
-  slot's base parameters, rows 0 to 3 today), `lanes` (the four slot lanes and
+- **Inputs** are the interface stamp alone: `surface` (the position in world
+  and layer space, the geometric and shading normal, the curvature, the pixel
+  footprint at the hit, the ray direction, the contact coverage and interface
+  thickness a glass invocation supplies and an opaque one reads as zero),
+  `material` (the slot's base parameters), `lanes` (the four slot lanes and
   four world lanes through the one reader `sdfLane`), `clock` (the flow clock,
-  which is zero for a program without flow so a still world stands; never the
-  frame's `time`), and the paint coverage the shape dispatch already computed.
-  There is no spelling for `sdfWords`, a descriptor, a buffer, a neighbour
-  pixel, a world cell or another world. A name outside the stamp is a compile
-  error (`PUCKnnn`, naming the nearest stamp member through
-  `DocumentNearestNames` as every refusal does).
-- **Outputs** are assignments to the hook's output members (`albedo`,
+  which the frame writes as zero when no program reads it, so a still world
+  stands; never the frame's `time`), the paint coverage the shape dispatch
+  already computed, and in the light and compose phases their own inputs
+  (section 3.1). Frames are ops rather than data: `toLayer(v)` and `toWorld(v)`
+  turn a vector between world space and the layer frame, and `drawDirection(v)`
+  turns an object-space vector by the draw's matrix and carry, which the stage
+  implements from the hit's frame slot and draw record (`sdfLayerFrame`,
+  `sdfMeshCarryDirection`), so a world-frame or object-frame flow is expressed
+  without exposing a transform table. There is no spelling for `sdfWords`, a
+  descriptor, a buffer, a neighbour pixel, a world cell or another world. A
+  name outside the stamp is a compile error (`PUCKnnn`, naming the nearest
+  stamp member through `DocumentNearestNames` as every refusal does).
+- **Outputs** are assignments to the phase's output members (`albedo`,
   `roughness`, `metal`, `specular`, `coat`, `sheen`, `wrap`, `fill`,
-  `emissive`, `normal`, `reveal`). An unassigned output keeps the material's
-  value. Assigning anything else is a compile error.
+  `emissive`, `normal`, `reveal` in the surface phase; the response terms in
+  the light phase; `color` in the compose phase). An unassigned output keeps
+  the material's value or the standard's default. Assigning anything else is a
+  compile error. Every output is sanitized by the stage, never the program:
+  a NaN or infinity becomes the material's value, and each output is clamped
+  to its domain (section 3.3).
 - **Builtins** are the op table: arithmetic and vector ops, `saturate`, `mix`,
   `smoothstep`, `step`, `pow`, `exp2`, `log2`, the trigonometric functions,
   `dot`, `cross`, `normalize`, `length`, quaternion rotate and inverse-rotate,
-  `hash` (`sdfPcg3d`), `lattice` (`sdfLatticeNoise3`), `lines`
-  (`sdfLineCoverage`), `shape` (one `evaluateShape` over a paint-style shape
-  stored in the program's words), `refract`, `reflect`. Each is one op with a
-  declared cost. The table is the C# model (`SdfShadeOp`), beside `SdfOp`.
+  `hash` (`sdfPcg3d` over quantized operands), `lattice` (`sdfLatticeNoise3`),
+  `lines` (`sdfLineCoverage`), `shape` (one `evaluateShape` over a shape
+  descriptor stored in the program's slice), `refract`, `reflect`, `quantize` (a
+  `floor` and a bitcast to `uint`, the one way a float reaches `hash`), `tilt`
+  (the normal turned by a slope up to a declared angle, the one op that writes
+  the normal short of assigning it), the frame
+  ops above. Each is one op of the C# model (`SdfShadeOp`) with a declared
+  cost function (section 3.7), typed operands and a declared output domain.
+- **Runtime parameters and structural constants are distinct.** A `shade
+  template`'s parameters are runtime slots by default: each becomes an entry
+  of the program's parameter block, packed as data in the material's rows, so
+  a seed, a colour, a scale or a threshold changes no program and no kernel. A
+  parameter the lowering finds in a structural position (a `for` range, a
+  `shape` type or descriptor layout, a lane selector, a `step` count) is
+  structural and must be a compile-time constant at the call; the author marks
+  it `structural` so a reader knows, and a runtime value flowing into a
+  structural position is refused by name. The canonicalizer folds literals and
+  structural constants and never a runtime slot. This is finding 8 of the
+  review, and it is what makes two materials with different seeds one program.
 - **`let`, `function`, `template` and compile-time `for`** are the ones
   `puck-dsl` already defines: a `function` is inlined where called and never
   recursive (the parser refuses recursion today), a `for` runs at compile time
@@ -444,213 +504,395 @@ The vocabulary, and what each piece lowers to:
   precedent for statically shaped loops (confirmed, S53), and WGSL's
   no-recursion rule the precedent for calls (S47). A `for` whose range is not a
   compile-time constant is `PUCK044` today and stays so.
-- **A static cost per program.** The lowering counts each op's declared cost,
-  each `shape` and `lattice` tap and each unrolled iteration, and refuses a
-  program over the hard cap (`MaxOps` on `SdfShadeProgram`, a representation
-  constant, not a tuning knob) by name. A program's static cost is a fact of its
-  canonical stream, so it is identical for every spelling that lowers to the
-  same stream.
+- **What a program reads is recorded.** The lowering records which stamp
+  members a program reads (`clock`, each world lane, each slot lane, the
+  contact, the footprint) as flags on the sealed program, from the ops that
+  read them and never from a template's name. `SdfAppearance` aggregates them
+  over its materials (replacing `HasFlow` and `ReadsWorldLanes`, which today
+  inspect the fixed layer records), and `SdfFrameBlock.FlowClockOf` and
+  `WorldLanesOf` and the cadence's lighting signature read the aggregate: a
+  clock-driven program animates, a world-lane program follows the world's
+  state, and a program reading neither leaves the frame standing. This is
+  finding 9.
+- **A static cost per program.** The lowering sums each op's cost function
+  over its validated operands and each unrolled iteration, in checked
+  arithmetic, and refuses a program over the hard cap (`MaxOps` on
+  `SdfShadeProgram`, a representation constant) by name. A program's cost is a
+  fact of its canonical stream, so every spelling that lowers to the same
+  stream costs the same.
 - **Spellings lower to one canonical form.** The existing constant folder folds
   names, enum members, exact operators over constants and ternaries on
   constants before lowering; the shade lowering adds what a straight-line
-  arithmetic program needs on top: common-subexpression elimination, canonical
-  operand order for commutative ops, dead-output elimination and constant
-  propagation through `let`s. The spelling-equivalence corpus gains shade
-  pairs: a `template` call and its hand-expanded body, a `for` over three
-  octaves and three written lines, `a * b` and `b * a`, must lower to identical
-  streams with identical costs, and a pair that does not is a compiler defect
-  (the ruling).
+  program needs on top: common-subexpression elimination, canonical operand
+  order for commutative ops, dead-output elimination and constant propagation
+  through `let`s over literals and structural constants. The
+  spelling-equivalence corpus gains shade pairs: a `template` call and its
+  hand-expanded body, a `for` over three octaves and three written lines,
+  `a * b` and `b * a`, must lower to identical streams with identical costs,
+  and a pair that does not is a compiler defect (the ruling).
 
 A float program with no reads of simulation state and no writes to anything but
 its outputs is outside the determinism contract by construction (rule 4: a
 presentation-only float path), which is the "no simulation state" bound the open
 item asked for, enforced by the stamp rather than by policy.
 
-### 3.3 The canonical form and where it lives
+### 3.3 The canonical form: its semantics, its slice, its identity
 
-A lowered program is a stream of fixed-width ops over a register file of static
-size (`MaxRegisters` on `SdfShadeProgram`, float4 registers), with its constants and
-its `shape` descriptors inline, the same packing discipline as a paint entry
-(`SdfAppearance.PaintVectorsPerEntry`). It is packed into the appearance's word
-stream after the paints, and a material row names its program by first vector
-and op count, as row 20 names the paints today. Nothing about it enters the
-field words, so nothing about it enters the mesh bake's identity
+**Semantics the IR defines and both tiers enforce.** One generated table is
+provenance, not equivalence (finding 4): DXC's `-O3` may contract and reorder
+non-`precise` float arithmetic, and an interpreter's loop iterations and a
+specialized kernel's straight-line locals offer it different opportunities, so
+a value feeding `step` or a hash could differ by one unit in the last place and
+flip a whole colour. The IR therefore states, and the per-op template enforces
+in both tiers:
+
+- every value is a 32-bit float or a 32-bit unsigned integer; no half, no
+  `min16float`, no double;
+- every op's result is `precise` in the emitted HLSL of both tiers, so DXC
+  neither contracts (`a * b + c` into an FMA) nor reassociates it, per
+  Microsoft's `precise` semantics; the interpreter's `switch` arms and the
+  emitter's statements are the same template text, so the same ops see the
+  same operands in the same order;
+- constant folding happens in Puck's lowering only, over the exactly
+  rounded IEEE operations (add, subtract, multiply, divide, min, max,
+  comparisons) in round-to-nearest-even, which C#'s `float` arithmetic gives;
+  a transcendental (`pow`, `exp2`, `log2`, `sin`, `cos`, `sqrt`) is never
+  folded, so both tiers evaluate it with the device's implementation;
+- integer and bitcast ops are defined bit for bit (`hash` takes `uint`
+  operands; a float enters it only through `quantize`, a `floor` and a
+  bitcast); there is no implicit conversion;
+- exceptional values are defined: division by zero and `log2` of a
+  non-positive value produce the IEEE result (an infinity or NaN) inside the
+  program, and the stage sanitizes every output (NaN or infinity becomes the
+  material's own value, then each output is clamped to its domain: colours
+  non-negative, unit terms to [0, 1], the normal renormalized) in both tiers
+  through one shared function the stage calls, never the program;
+- the op table's fingerprint hashes the per-op template text and the helpers
+  it names, and joins the kernel stamp (`SdfIsaHlsl.DescribeFingerprint`'s
+  mechanism), so a template or helper edit moves every kernel's stamp and a
+  specialization's identity (section 3.4) together.
+
+The equivalence check is a corpus, not a still: a scratch world of
+threshold-sensitive programs (a `step` on a value the lowering can fold to a
+boundary, a `lattice` read at a cell corner, a `smoothstep` edge at the pixel
+footprint, a hash of a quantized coordinate at an integer, a reveal at exactly
+its threshold) rendered through both tiers on both targets and compared pixel
+by pixel; a program whose tiers differ by more than the still tolerance fails
+the step, and the memo does not claim equivalence for a program class the
+corpus does not hold (step 3).
+
+**The slice and its typed operands.** A lowered program is a stream of
+fixed-width ops over a register file of static size (`MaxRegisters` on
+`SdfShadeProgram`, float4 registers, every register zero at entry), with its
+structural constants and its shape descriptors inline and its runtime
+parameters in a block the material row carries. Every address inside the
+program is **relative to its own slice**: a register operand is a typed index
+below `MaxRegisters` that the lowering has seen defined before every read; a
+constant or descriptor operand is an offset below the slice's length; a
+`shape` op's side table (a polygon's vertices, a sweep's curve) lies inside the
+slice at a validated relative offset. The interpreter and the emitted kernel
+read the slice through one reader that takes the slice base and length from
+the material row and answers zero outside the slice, and the `shape` op's
+helpers (`sdfConvexPolygon2D`, the sweep) are called with the absolute offset
+the reader computed from a validated relative one; the existing whole-buffer
+check (`sdfProgramRange`, which bounds an address against the whole `sdfWords`
+allocation and so cannot tell one program's words from another's) remains the
+outer boundary, not the ownership proof. This is finding 5.
+
+The slice is packed into the appearance's word stream after the paints
+(`SdfAppearance.Pack`), and a material row names its program by first vector
+and length as row 20 names the paints today. Nothing about it enters the field
+words, so nothing about it enters the mesh bake's identity
 (`SdfMeshBakeClosure`), and an edit to a program leaves every stored mesh
-standing, as a material edit does today.
+standing.
 
-Its identity is the hash of the canonical stream (ops, constants, register
-assignments) with the op table's fingerprint, stamped the way `SdfIsaHlsl`
-stamps the field's instruction set; that identity names the specialized kernel
-in the shader cache (section 3.4) and the program's line in `world.budget`.
-Two materials whose programs lower to the same stream share one identity, one
-specialized kernel and one bin; their parameters (the material rows) are data
-the shared program reads, exactly as Unreal's constant material instances avoid
-recompilation (confirmed, E10) and as gpu.md recommends: "do not specialize
-every roughness, colour, seed, time or view value".
+**Identity.** A program's identity is the hash of its canonical stream (ops,
+structural constants, register assignments, descriptor layouts), its
+parameter block's layout (slot count and types, not values) and the op table's
+fingerprint. That identity names the specialized kernel in the shader cache
+and the program's line in `world.budget`. Two materials whose programs lower to
+the same stream with the same parameter layout share one identity, one
+specialized kernel and one bin; their parameter values are data, exactly as
+Unreal's constant material instances avoid recompilation (confirmed, E10) and
+as gpu.md recommends: "do not specialize every roughness, colour, seed, time or
+view value". Step 0's check includes the pair: a seed or colour edit keeps the
+identity, kernel and bin; an `octaves` edit changes all three.
 
 ### 3.4 The two tiers, generated from one table
 
 **Tier 1, the interpreter.** The views kernel gains one rolled `[loop]` over
-the program's ops with a `switch` over the op table, running in the slot where
-the layers run today, reading the stamp from the state `sdfLightStage` already
-holds and writing the hook's outputs into `shadeMaterial` and `normal`. It is
-live the moment the document recompiles: a program edit is a material-table
-upload, not a DXC run, which is what keeps edit-to-running inside 30 seconds
-(the measurement above says a DXC compile of a views-sized kernel alone costs
-two to seven seconds).
+the program's ops with a `switch` over the op table, one per phase, running in
+the slots where the layers, the light response and the composition run today,
+reading the stamp from the state `sdfLightStage` already holds. It is live the
+moment the document recompiles: a program edit is a material-table upload, not
+a DXC run, which is what keeps edit-to-running inside 30 seconds (the
+measurement above says a DXC compile of a views-sized kernel alone costs two to
+seven seconds).
 
 **Tier 2, the specialized kernel.** For each distinct program identity in a
-loaded world, the engine emits HLSL text for the program (the op stream
-unrolled into straight-line code, constants folded, registers as locals), splices
-it into the views kernel's source in place of the interpreter loop (a
-`#include` the kernel's wrapper names, so the include closure is the kernel plus
-the generated program), and compiles it through the existing `ShaderCompiler`
-with the existing identity (compiler version, closure, steps) to the running
-backend's target, on the thread pool the reload already uses
-(`SdfKernelTreeLoad`'s one-per-processor turnstile, shortest first). The result
-is a cache entry like any kernel's, identified from its inputs, derived again on
-a miss and counted. The residency leases its pipeline through
-`GpuPassPipelineCache` under the one `SdfWorldTables.PipelineLayouts` spec for
-views (the description never changes, so the key differs only by bytecode), and
-installs it at a frame boundary exactly as a reload installs a batch
-(`InstallShaderReload`). A player build's `world prepare` emits every program's
-kernel for both targets, so the player's cache is prewarmed and the interpreter
-covers only a miss.
+loaded world, the engine emits HLSL text for the program (the op stream as
+straight-line `precise` statements, structural constants folded, registers as
+locals), splices it into the views kernel's source in place of the interpreter
+loops (an include the kernel's wrapper names, so the include closure is the
+kernel plus the generated program), and compiles it through the existing
+`ShaderCompiler` with the existing identity (compiler version, closure, steps)
+to the running backend's target, on the compile turnstile the reload already
+uses (`SdfKernelTreeLoad`'s one-per-processor semaphore, shortest first,
+extracted so a loader over authored identities shares it; the tree load itself
+enumerates the fixed `SdfKernel` set and stays as it is). The result is a cache
+entry like any kernel's, identified from its inputs, derived again on a miss
+and counted. Its identity also carries the interpreter kernel's content key
+(`SdfKernelSet.ContentKey`), so a helper edit that changes the interpreter
+discards every specialization with it.
+
+**Publication without a stall.** A finished specialization is not installed
+the way a kernel reload is: `SdfWorldTables.InstallReload` waits for the device
+to go idle, forgets the environment and screen-emission renders and advances
+the program and geometry revisions, which is right for a kernel whose pixels
+change and wrong for a kernel whose pixels are equivalent (finding 10). A
+specialization arrives through its own door: the residency leases its pipeline
+through `GpuPassPipelineCache` under the one views description (section 3.6),
+checks that its identity still matches the program's current identity and the
+host's shade-table fingerprint (an edit that overtook the compile discards the
+arrival), and at the next frame boundary points the program's bin at the new
+pipeline for the next recording. No idle wait, no forgotten renders, no
+revision bump: the replaced pipeline's lease stays held until the last
+submission that recorded it retires, which is the pass-pipeline cache's
+existing retire-after-fence behaviour for a replaced graph. A burst of
+arrivals is a burst of pointer swaps. A player build's `world prepare` emits
+every program's kernel for both targets, so the player's cache is prewarmed
+and the interpreter covers only a miss.
 
 **One table generates both.** `SdfShadeOp` is the C# model; a generator in
 `Puck.Shaders.Generator` beside `SdfIsaHlsl` writes the op declarations, the
-interpreter's `switch` body **and** the emitter's per-op HLSL from the same
-per-op template. This is a step further than the field ISA, whose interpreter
-body is hand-written, and it is what makes the swap invisible without a second
-proof: the interpreter and the emitted code are the same template instantiated
-two ways. A still rendered through tier 1 and through tier 2 must agree within
-the still tolerance; step 3's check compares them pixel by pixel on both
-backends.
+interpreter's `switch` bodies **and** the emitter's per-op statements from the
+same per-op template, under the IR semantics of section 3.3. This is a step
+further than the field ISA, whose interpreter body is hand-written, and it is
+what makes the swap invisible, together with the semantics and the equivalence
+corpus; the table alone would prove provenance only.
 
 **Where tier 2 pays, and where it may not.** Specialization removes the
-interpreter loop's control flow and live state, folds the program's constants
+interpreter loop's control flow and live state, folds the structural constants
 and lets DXC schedule the straight-line code, which is the gain Khronos's
 specialization sample measures at 4.4% for a trivial light loop (S18) and the
 gain MJP and AMD describe for register pressure (E68, S3). Whether it pays on
 Puck's views pass is step 2's measurement, and the design works either way: if
-the interpreter is within the bar on the 2060 and the Deck, tier 2 is an
-enhancement the steps leave for later; if it is not, tier 2 is required and
-binning (next) keeps the interpreter out of the specialized kernels' register
-budget.
+the interpreter is within the bar on every device, tier 2 is an enhancement the
+steps leave for later; if it is not, tier 2 is required and binning (next)
+keeps the interpreter out of the specialized kernels' register budget.
+
+**If binning loses: specialization by program set.** The fallback keeps the
+unsplit views kernel and specializes it per **program set**: one kernel per
+distinct set of program identities a world's documents declare, whose identity
+is the hash of the sorted program identities and whose kernel dispatches each
+pixel's program by a `switch` over the set. Its edit behaviour differs from the
+per-program kernel's and is stated here rather than assumed: any program edit
+changes the set identity, so the set kernel recompiles whole while the
+interpreter shows the edit; the debug world is one set, so one compile. The
+bound and the quarantine hold on this path too (section 3.7).
 
 ### 3.5 Binning: authored code out of the views pass's register budget
 
-The views kernel today is one dispatch over every pixel. With an interpreter
-loop in it, every pixel pays the loop's register allocation, programs or not
+The views kernel today is one dispatch over every pixel. With interpreter
+loops in it, every pixel pays the loops' register allocation, programs or not
 (E68). The design splits views in two:
 
-1. **`views-filter`**, the existing tile-coherent head: the group gather,
-   the barrier, `sdfViewsFilter`, and then, new, a write of the filtered
-   occlusion and the four shadow visibilities into the visibility record (two
-   words), and a per-program pixel count through a wave-reduced atomic per
-   group (the pattern `SdfMeshOcclusion` already uses to count draws on the
-   GPU). The spatial filter's barrier assumptions stay intact because this pass
-   keeps today's pixel layout.
+1. **`views-filter`**, the existing tile-coherent head: the group gather, the
+   barrier, `sdfViewsFilter`, and then a write of the filtered occlusion and
+   the four shadow visibilities into a **filter record of its own**, a new
+   two-word per-pixel storage the package declares beside the visibility
+   record (the occlusion as a half, the four visibilities as four bytes, the
+   precisions the record holds them in today), plus a per-program pixel count
+   through a wave-reduced atomic per group (the pattern `SdfMeshOcclusion`
+   uses to count draws on the GPU). The visibility record is immutable after
+   the surface pass: its eight words have no spare field, and a group writing
+   its own filtered values into the AO or K words would race a neighbouring
+   group's apron gather, which the group barrier does not order (finding 11).
+   The graph declares the filter record as this pass's write and the shade
+   bins' read, with the transition between them, and step 4 prices its bytes
+   and traffic (eight bytes a pixel per view at full extent).
 2. **`views-shade`**, one indirect dispatch per bin: a prefix sum over the
    program counts gives each bin its range of a pixel-index list; a scatter
    writes each pixel's index into its program's range; each bin dispatches over
    its range with the pipeline its program has (its specialized kernel, or the
    interpreter kernel for a program still compiling or not yet specialized).
-   A bin's kernel reads the filtered words from the record and shades.
+   A bin's kernel reads the filter record and the visibility record and shades.
+
+**A world with no program pays nothing for bins.** When the loaded documents
+declare no program, the planner (section 3.7) emits today's one dispatch over
+the extent with the kernel whose interpreter loops run zero ops, allocates no
+filter record and no pixel list, and records no classification; the split
+exists only while a program exists, and the no-program frame is one of the
+decision matrix's rows (section 6).
 
 The pipeline count is one interpreter plus the specialized programs in view,
 tens rather than thousands, every one enumerable from the document before the
 first frame. The interpreter kernel then carries the interpreter's registers
 only for the pixels that need it, and a specialized kernel carries only its
 program's. The cost is the classification, the prefix sum, the scatter, the
-indirect arguments, the tail waves of small bins and the lost 8×8 locality in
-shading; gpu.md's warning is that none of these is free and the Burns/Hunt
-visibility-buffer paper found "little to no net benefit" at two million samples
-on 2013 hardware (S6). So the split is step 4, after the interpreter's cost is
-measured, and it lands only if the measured frame is better; if it is not, the
-interpreter runs in the unsplit kernel and tier 2 specializes the whole views
-kernel per program set instead (one kernel per distinct set of programs in a
-world, which for the debug world is one). Both outcomes keep the same
-language, lowering, tiers and identity.
+indirect arguments, the tail waves of small bins, the filter record's traffic
+and the lost 8×8 locality in shading; gpu.md's warning is that none of these
+is free and the Burns/Hunt visibility-buffer paper found "little to no net
+benefit" at two million samples on 2013 hardware (S6). So the split is step 4,
+after the interpreter's cost is measured, and it lands only by the decision
+matrix; otherwise the set-specialization fallback of section 3.4 is taken.
+Both outcomes keep the same language, lowering, tiers, identity, bound and
+quarantine.
 
 ### 3.6 Pipeline state stays engine-owned and enumerable
 
-An authored program changes the compute bytecode of a views bin and nothing
-else. There is no authored blend, depth, cull, format, vertex layout, binding
-or workgroup size: the description a bin's pipeline is created from is the one
+An authored program changes the compute bytecode of a views bin (or of the
+views or glass kernel on the unsplit path) and nothing else. There is no
+authored blend, depth, cull, format, vertex layout, binding or workgroup size:
+the description a bin's pipeline is created from is the one
 `SdfWorldTables.PipelineLayouts` spec for views, so the key
 (`GpuPassPipelineKey.OfCompute`) differs between two bins by bytecode alone.
 This is Dolphin's 2022 lesson applied by construction (S86, S87): nothing an
 author writes can make the driver specialize a pipeline behind the engine's
-back, and the set of pipelines a world needs is the set of program identities
-its documents declare, listed by `world.budget` and emitted by `world prepare`.
-The graphics pipelines (mesh, cascades, glass raster) never see a program.
+back, and the set of pipelines a world's shading needs is the set of program
+identities (or set identities) its documents declare, listed by `world.budget`
+and emitted by `world prepare`. The graphics pipelines (mesh, cascades, glass
+raster) never see a program. The review found no hidden multiplier in this
+ABI; the engine's own passes and targets still have their pipelines, so the
+world's whole pipeline count is the program count plus the engine's fixed set.
 
-### 3.7 A hard per-dispatch work bound
+### 3.7 Shade jobs: a hard per-dispatch work bound on both paths
 
-The invariant the dispatcher keeps: **no views-shade dispatch carries more
-predicted work than `MaxWork` on `SdfShadeDispatch`**, where a dispatch's predicted
-work is its pixel count times its program's static cost (the interpreter bin
-uses the largest static cost among its programs). A bin whose work exceeds the
-bound is issued as consecutive dispatches of at most the bound each, over
-consecutive ranges of its pixel list. Unlike the relight's `RelightRaysPerJob`,
-there is no oversized-unit exception: the unit is one pixel, and one pixel's
-work is bounded by the program cap (`MaxOps`), which the compiler refused to
-exceed. So the largest single submission an author can cause is `MaxWork` ops'
-worth of pixels, whatever they write, and the bound is chosen so that it is far
-inside the two-second timeouts on every bar device (its value is a measured
-constant set in step 5, from the slowest bar device's measured throughput on
-the interpreter bin, with margin).
+**The counted unit.** A program's cost is the sum of its ops' cost functions,
+each a declared function of the op's validated operands that bounds the whole
+helper it calls: a `shape` over a sphere costs one evaluation, over a convex
+polygon `SDF_MAX_CONVEX_VERTICES` edges, over a sweep `strands × (SDF_SWEEP_SAMPLES + 2 × SDF_SWEEP_ROUNDS)`
+gap evaluations with `strands` read from the validated descriptor (the loops
+in `field/sdf-shapes.hlsli` that unrolling a source loop does not reach, which
+is finding 6); a `lattice` or `lines` costs its taps; a transcendental its
+declared weight. The sum is computed in checked arithmetic and must be at or
+under `MaxOps`. A pixel's logical shade work is then
+`surface + lights × light + compose + engine`, where `lights` is the frame's
+light count, `light` and `compose` are the program's phases (the standard's
+defaults when it declares none) and `engine` is a declared constant for the
+stage's fixed per-pixel work (the gather filter, the probe gather, the
+sanitizer), stated beside the op table and revised when the kernel changes.
+Work is submitted work, never elapsed time: it bounds neither cache behaviour
+nor divergence nor the driver's code generation, and section 4 says so.
 
-The static cost is ops, not cycles. It does not bound texture cache misses,
-divergence inside a wave or the driver's own code generation, so it is a bound
-on submitted work, not a proof of a time; that is where this guarantee stops
-(section 4), and why the device-loss quarantine remains.
+**The job.** The one enforcement door is a planner, `SdfShadeDispatch`, that
+every shading recorder calls to turn what it must shade into **jobs** of
+predicted work at most `MaxWork`; no recorder has an entry point that
+dispatches shading without it. On the binned path a job is a range of a bin's
+pixel list, its work the range's length times the bin's program cost (the
+interpreter bin takes the largest cost among its programs). On the unsplit
+path (views today, the glass pass, and the set-specialization fallback) a job
+is a run of whole 8×8 groups of the extent, in group rows, its work the groups'
+pixels times the largest program cost the loaded documents declare, since the
+kernel cannot know a pixel's program before it reads the record; the group
+barrier's assumptions hold because a job never splits a group. A job whose
+unit alone exceeds the bound cannot exist: the unit is one pixel (or one
+group), its cost is at most `MaxOps` (or 64 × `MaxOps`), and `MaxWork` is at
+least that by construction, checked where both constants are declared. Unlike
+the relight's `RelightRaysPerJob`, there is no oversized-unit exception.
+
+**A dispatch, not a submission.** Each job is one dispatch. The frame's
+recorder puts many dispatches in one command list and the submitter sends
+lists in one queue submission (`SubmitCounted`), so a submission's total work is
+the sum of its jobs, not `MaxWork`; the bound limits what any single dispatch
+asks of the GPU, which is the unit the driver schedules and can preempt
+between. The memo claims no bound on a submission. `MaxWork` is set in step 5
+from the slowest bar device's measured throughput on an adversarial admitted
+program (a cap-cost program over a full-screen surface, interpreted), with the
+margin stated in the commit that sets it.
 
 ### 3.8 Device-loss quarantine to a neutral default
 
-When the device is lost while views-shade dispatches are in flight, the
-residency already rebuilds (S06). It will also mark every program whose bin was
-in flight in the lost submission as **quarantined**: its materials shade with
-the standard's neutral default program until the document that authors it
-changes (a `world.reload` or an edit of that program), and `world.budget` and
-`world.shaders.status` list the quarantined identities with the loss that
-caused each. The mark is conservative (every program in flight, since DRED's
-breadcrumb is not guaranteed exact, S46) and sticky (a program is never
-re-admitted by time, so one bad program cannot hang the machine five times in a
-minute, S38). The neutral default is the one fallback the bar admits: it is used
-only for a quarantined program, never for "still compiling", which the
-interpreter covers (Dolphin's Skip Drawing is ruled out, and so are Unreal's
-and Bevy's default-material and skip fallbacks).
+Each submission carries, on the host, the set of program identities its shade
+jobs recorded (a list per in-flight slot, retained by `SdfWorldResidency`
+beside the fences it already tracks, so it survives `OnDeviceLost` disposing
+the tables). When the device is lost, every identity in any unretired
+submission is marked **quarantined**: its materials shade with the standard's
+neutral default program until the document that authors it changes that
+program's canonical stream (a `world.reload` or an edit that moves the
+identity), and `world.budget` and `world.shaders.status` list the quarantined
+identities with the loss that caused each. A reload that leaves a program's
+identity unchanged leaves its mark. The mark is conservative (every program in
+flight, since DRED's breadcrumb is not guaranteed exact, S46) and sticky (never
+re-admitted by time, so one bad program cannot hang the machine five times in
+a minute, S38). It holds on both paths, because the identities come from the
+planner's jobs, not from bins. The neutral default is the one fallback the
+bar admits: it is used only for a quarantined program, never for "still
+compiling", which the interpreter covers (Dolphin's Skip Drawing is ruled
+out, and so are Unreal's and Bevy's default-material and skip fallbacks).
 
-### 3.9 The engine's layers become the first authored programs
+### 3.9 The shadow-demand envelope
 
-Once the interpreter runs the standard's programs, the fixed-function layers
-are deleted rather than kept beside them, so shading has one path.
+The surface pass decides which shadow slots a pixel queries from the base
+material's wrap and the geometric normal (`sdfSurfaceStage`: a slot is queried
+while the cosine to its light exceeds `-wrap`, and an unqueried slot is stored
+as `SDF_SHADOW_UNQUERIED`, which decodes as fully visible); that decision is
+cached and keyed by the palette's wraps (`m_wrapSignature` in
+`SdfWorldTables.PassSignature`). A surface program that raises `wrap` or tilts
+the normal, or a light program whose response reaches past the base terminator,
+would light a side for which no shadow was measured (finding 1). The envelope
+closes this:
+
+- the lowering computes, by interval analysis over the surface phase, the
+  **largest wrap the program can output** (saturated to one when it cannot
+  bound it) and the **largest tilt of the normal** it can apply (the `tilt` op
+  declares a maximum angle from its operand's bound; a normal assigned from an
+  unbounded expression means "every side"), and for the light phase whether its
+  diffuse term can be positive where the wrapped Lambert of that wrap is zero
+  (then "every side"); the three fold into one demand per material, a cosine
+  below which no slot needs querying;
+- the demand is packed in the material row the surface pass reads in place of
+  the bare wrap (`sdfMaterialWrap` becomes the demand), enters the wrap
+  signature so an edit to a program refreshes the surface pass's decisions,
+  and is listed in `world.budget` since a program that demands every side costs
+  the cascades' taps on every pixel;
+- in the authored path the stage hands a light phase the slot's visibility only
+  where the slot was queried, and **zero** where it was not, so a response the
+  envelope did not foresee goes dark rather than lit; the decode-as-visible rule
+  stays only for the base response, whose term is zero there anyway.
+
+Step 1's checks include a shadowed back-facing surface under a wrap-raising
+program and a program animating its normal and wrap through a lane.
+
+### 3.10 The engine's layers become the first authored programs
+
+Once the interpreter runs the standard's programs through all three phases
+and from both kernels, the fixed-function layers are deleted rather than kept
+beside them, so shading has one path.
 
 - The standard package (`worlds/standard/`) gains `shade` templates
   `paint(...)`, `inset(...)`, `weathered(...)`, `flow(...)` and `cel(...)`,
-  each the program the HLSL layer is today, emitted by the generator from the
-  same op table. The debug world's palettes, which reach those layers through
-  `landscapeSurface` and the like (`worlds/standard/foliage.puck`), author the
-  same values through those templates.
+  each the program the HLSL layer is today, with runtime parameters for what
+  the rows carry and structural parameters for what shapes the program
+  (`octaves`, a reveal stage count, a shape type). `flow(...)` uses the frame
+  ops and reads `surface.contact`, so the standard's water (`worlds/standard/water.puck`,
+  whose glass slot carries a flow with contact foam) migrates with it;
+  `cel(...)` declares light and compose phases. The debug world's palettes,
+  which reach those layers through `landscapeSurface` and the like
+  (`worlds/standard/foliage.puck`), author the same values through the
+  templates.
 - The C# records `SdfWeathering`, `SdfInset`, `SdfRadialPaint`, `SdfFlow` and
   the toon style's shading half, their palette documents
   (`PaletteWeatheringDocument`, `PaletteInsetDocument`, `PaletteFlowDocument`),
   their admission rules in `SdfMaterialLayers.IsValid`, their rows in
-  `SdfAppearance.Pack` (rows 4 to 19 and 22 to 30) and their HLSL
-  (`shade-layers.hlsli`, `shade-weathering.hlsli`, `shade-flow.hlsli`'s shading
-  half, `sdf-toon.hlsli`'s banding) go. What remains in C# is the mechanism:
-  the base response the light walk and the bake read (rows 0 to 3), glass (a
-  pass, a group and raster state, which no program can express), the paints'
-  shape descriptors (a `shape` op's operand), the lanes, the flow clock as a
-  stamp input, and the cel outline (`sdf-toon-outline.hlsli` reads neighbour
-  depth and normal, which a per-pixel program may not).
-- A migration is one change: the lowering of a palette slot's old `weathering`
-  member is not kept as a compatibility path (rule 5). The standard's
-  `weathered(...)` template takes the same parameters, the debug world's and
-  standard's sources are rewritten to call it, and `PaletteWeatheringDocument`
-  is deleted in that change.
+  `SdfAppearance.Pack` (rows 4 to 19 and 22 to 30, apart from the outline's)
+  and their HLSL (`shade-layers.hlsli`, `shade-weathering.hlsli`,
+  `shade-flow.hlsli`, `sdf-toon.hlsli`'s banding, the `toon` branches of
+  `sdfLightStage` and `sdfLightResponse`) go. What remains in C# is the
+  mechanism: the base response the light walk and the bake read (rows 0 to 3),
+  glass (a pass, a group and raster state, which no program can express, with
+  its contact ramp `sdfGlassContact` feeding the stamp), the paints' shape
+  descriptors (a `shape` op's operand), the lanes, the flow clock as a stamp
+  input, and the cel outline with its style row.
+- A palette slot's `shade` member (a program reference and its parameter
+  values by name) replaces the deleted layer members in the schema
+  (`puck schema`), and a slot that still spells `weathering` or `flow` is
+  refused by name; the migration is one change with no compatibility path
+  (rule 5).
+- The order is forced by findings 2 and 3: the light and compose phases and
+  the shared glass invocation land before any layer is deleted (step 1
+  authors every standard program beside the old HLSL under a measurement
+  lever; step 6 deletes the HLSL after the decision).
 
 This is also what keeps the engine generic: a noise's character, a reveal's
 ramp and a cel band's shape are the standard's choices, authored, and an
@@ -661,36 +903,54 @@ rulings on the standard require.
 
 **Invariant.** Every instruction the GPU executes on an authored program's
 behalf is either (a) the interpreter kernel, whose per-pixel work is bounded by
-the program's static cost and which indexes only the program's own word range
-through `sdfProgramRange`, or (b) a kernel the engine emitted from the same
-canonical stream through the same op table; and every views-shade dispatch's
-predicted work is at most `MaxWork`.
+the program's static cost and which reads only the program's own slice through
+the slice reader, or (b) a kernel the engine emitted from the same canonical
+stream through the same op table under the same IR semantics; every shading
+dispatch is a job the planner sized to at most `MaxWork` of predicted work on
+every path; and no shadow slot a program's response can reach is left
+unqueried.
 
-**Enforced by three doors, none of which a new caller can bypass:**
+**Enforced by five doors, none of which a new caller can bypass:**
 
 1. **The compiler is the only writer of program words.** A program reaches
    `sdfWords` only through `SdfAppearance.Pack` from an `SdfShadeProgram`, and
-   an `SdfShadeProgram` is constructed only by the lowering, which has validated
-   names against the stamp, inlined every call, unrolled every loop, computed the
-   static cost and refused the cap. There is no constructor that takes raw ops
-   (as `SdfProgramBuilder` is the only writer of field instructions today).
-2. **One op table, one generator.** `SdfShadeOp` and its per-op template are the
-   single source of the declarations, the interpreter body and the emitter;
-   `puck shaders generate --check` fails on drift as it does for `sdf-isa.hlsli`,
-   and the shade table's fingerprint joins the kernel stamp so a kernel built
-   against another table is refused at reload.
-3. **The dispatcher computes chunking from the static cost it reads from the
-   same program record**, in one place (`SdfShadeDispatch`), and the bin
-   recorder has no entry point that takes a range without going through it.
+   an `SdfShadeProgram` is constructed only by the lowering, which has
+   validated names against the stamp, inlined every call, unrolled every loop,
+   typed and range-checked every operand against the slice, classified every
+   parameter as runtime or structural, recorded the reads, computed the cost in
+   checked arithmetic and the shadow demand, and refused the cap. There is no
+   constructor that takes raw ops (as `SdfProgramBuilder` is the only writer of
+   field instructions today).
+2. **One op table, one generator, one semantics.** `SdfShadeOp`, its per-op
+   template and the IR's precision and folding rules are the single source of
+   the declarations, the interpreter bodies and the emitter;
+   `puck shaders generate --check` fails on drift as it does for
+   `sdf-isa.hlsli`, and the shade table's fingerprint (template text and
+   helpers included) joins the kernel stamp and every specialization's
+   identity, so a kernel or specialization built against another table is
+   refused.
+3. **One slice reader.** Both tiers and the `shape` helpers read program words
+   through the reader that takes the slice from the material row; there is no
+   other read of a program's words in the shading kernels.
+4. **One planner.** `SdfShadeDispatch` turns every shading extent or bin into
+   bounded jobs and records their identities for the quarantine; no recorder
+   dispatches shading around it, on either path or in the glass pass.
+5. **One surface-pass decision.** The surface pass queries slots by the
+   material's packed demand, which only the lowering writes, and the stage
+   zeroes an unqueried slot's visibility for an authored light phase.
 
 **Where the guarantee stops.** The static cost bounds ops, not time: texture
 cache behaviour, divergence and the driver's code generation are outside it, so
-`MaxWork` is a work bound with a measured margin, not a proof against a timeout.
-The interpreter's own register allocation is bounded by the op table, not by
-any one program, so a heavy op added to the table costs every interpreted pixel
-(step 2 measures this and section 3.5 limits it). DRED attribution is
-conservative, so a quarantine may take an innocent program with the guilty one
-until its author edits it. And the emitted kernel's correctness rests on DXC and
+`MaxWork` is a work bound with a measured margin, not a proof against a
+timeout, and a submission of many jobs is not bounded. The interpreter's own
+register allocation is bounded by the op table, not by any one program, so a
+heavy op added to the table costs every interpreted pixel (step 2 measures
+this and section 3.5 limits it). DRED attribution is conservative, so a
+quarantine may take an innocent program with the guilty one until its author
+edits it. Tier equivalence holds for the semantics the IR states and the corpus
+exercises; a device whose transcendental implementation differs between two
+compilations of the same `precise` expression would break it, and the corpus
+is what would show that. And the emitted kernel's correctness rests on DXC and
 the driver, as every kernel's does today.
 
 ## 5. The open questions, settled or stepped
@@ -698,84 +958,135 @@ the driver, as every kernel's does today.
 | Question | Answer |
 |---|---|
 | DXC compile time per kernel | Settled above: 2.4 to 3.1 s to SPIR-V and 5.0 to 7.0 s to DXIL for `sdf-world-views`, 8.7 to 12.2 s and 5.0 to 6.1 s for `sdf-resolve`, with every kernel's three runs in the table. Decides: tier 2 never on the edit path; the interpreter covers edits and misses. |
-| Interpreter overhead against the fixed-function shade on the RTX 2060 and the Deck | Step 2. Shows the views pass's GPU time and counted work with the standard's programs interpreted versus today's kernel, same world, camera, tick and exposure, both backends. Decides whether tier 2 is required for the bar or an enhancement. |
+| Interpreter overhead against the fixed-function shade on the bar devices | Step 2, by the decision matrix. Shows the views pass's GPU time and counted work with the whole standard program set interpreted versus today's layers, same build, world, camera, tick and exposure, both backends. Decides whether tier 2 is required for the bar or an enhancement. |
 | The interpreter loop's register cost in views | Step 2, from driver-native registers, spills and occupancy limiters (PIX, Nsight, RenderDoc's pipeline statistics; `gpu-cost.md`), not DXIL counts. Decides how much live state the stamp may carry and whether binning is required to keep the interpreter out of specialized kernels. |
-| Binning's payoff | Step 4: the split views against the unsplit, measured with every added pass and buffer counted. Decides whether bins land or tier 2 specializes the whole kernel per program set. |
+| Binning's payoff | Step 4, by the decision matrix: the split views against the unsplit, with every added pass, byte and recording operation counted. Decides whether bins land or the set-specialization fallback is taken. |
+| Tier equivalence | Step 3's corpus on both targets; a class of program the corpus does not hold is not claimed. |
 | The 4.3 ms views figure | Unmeasured in the record (E75, S95). Step 2 captures it first. |
 
 ## 6. Implementation steps
 
-Each step is a vertical slice with a mechanical check; the first two measure
-before the design commits to binning and to specialization's scope. Steps 0, 1,
-3, 5 and 6 are headless or CPU work a lane runs itself; steps 2 and 4 are GPU
-legs for the lead's quiet window.
+Each step is a vertical slice with a mechanical check. A check that renders a
+still, reads `world.gpu-timing` or injects a device loss is **GPU work** and runs
+on a granted GPU leg (steps 1 to 6 all have one); the lowering, the corpus
+compile, the generator check and the compile-time measurements are CPU work a
+lane runs itself. The first two steps measure before the design commits to
+binning and to specialization's scope.
 
-0. **The op table, the lowering and the cost.** `SdfShadeOp` in
-   `Puck.SignedDistance`; `SdfShadeProgram` (validated, packed, costed);
-   the `shade` block in `Puck.World.Transpiler` with its stamp, refusals and
-   canonicalization; `puck shaders generate` writing `isa/sdf-shade.hlsli`
-   (declarations, interpreter body, emitter template); `world.budget`'s
-   `shading programs` clause (count, interpreted, specialized, pending,
-   quarantined, worst static cost and its author's name). Check: the
+**The decision matrix** that steps 2 and 4 read, and step 6 reads again on the
+final set:
+
+- Devices and backends: the RTX 2060 (Direct3D 12 and Vulkan), the RTX 4070
+  (both), the Steam Deck (Vulkan). Metric: `host.frames` p99 frame time and
+  `world.gpu-timing`'s root-view `views` (and `views-filter` plus every
+  `views-shade` bin, and `glass-shade`) at the highest quality, at the sweep's
+  worst stops and at the matrix's scratch stops, three runs each, the median
+  taken. Bar: 16.7 ms, 16.7 ms and 22.2 ms p99.
+- Rows: zero authored programs (the no-program path); one program on every
+  surface; the whole standard set (paints, inset, weathered, flow, cel) on the
+  debug world; a cap-cost program over a full-screen surface (adversarial);
+  mixed cold tiers (half the programs specialized, half interpreted, as a
+  cold cache would leave them); a nested view (a portal and a session view);
+  and, at step 6, the final migrated debug world.
+- Columns per row: base (today's layers), tier 1 unsplit, tier 1 binned,
+  tier 2 unsplit (per set), tier 2 binned.
+- Noise: a column regresses when its median p99 exceeds the base's by more
+  than the base's own run-to-run spread (the three runs' maximum less their
+  minimum); a column passes when every device meets its bar on every row.
+- The rule: the cheapest passing column is taken; if the unsplit columns pass
+  on every device, binning is deferred as an enhancement; if only a binned
+  column passes, it lands; if no column passes on some device, the interpreter
+  is restricted to edit time on that device (a player build ships every
+  program specialized and a runtime miss is reported, not interpreted), which
+  is a quality-versus-bar trade the memo does not make: it goes to the owner
+  with the readings.
+
+0. **The op table, the lowering, the semantics and the cost** (CPU).
+   `SdfShadeOp` and its per-op template with the IR semantics of section 3.3;
+   `SdfShadeProgram` (validated slice, typed operands, runtime and structural
+   parameters, read flags, checked cost, shadow demand); the `shade` block in
+   `Puck.World.Transpiler` with its stamp, refusals and canonicalization;
+   `puck shaders generate` writing `isa/sdf-shade.hlsli` (declarations,
+   interpreter bodies, emitter template); `world.budget`'s `shading programs`
+   clause (count, interpreted, specialized, pending, quarantined, worst static
+   cost, worst shadow demand, each with its author's name). Check: the
    spelling-equivalence corpus holds ten shade pairs that compile to identical
-   canonical streams and costs (`puck test` of the corpus); a recursive call, a
-   runtime-bounded loop, a stamp name outside the interface and a program over
-   the cap are each refused by their `PUCKnnn` code; `puck shaders generate
-   --check` is clean.
-1. **The interpreter, with the standard's first program.** The rolled loop in
-   `sdf-light-stage.hlsli` behind the paints; the standard's `weathered(...)`
-   template authored and the debug world's landscape palettes calling it;
-   `applyWeathering` deleted. Check: a settled still of the meadow and the
-   forest road on both backends, tier 1 against the base commit, within the
-   still tolerance (a hot swap is not enough; fresh base and head processes
-   under lockstep, pinned camera, tick and exposure); `world.counters gpu`
-   `views` dispatch counts unchanged; `puck mesh identity --against` shows the
-   bake identity unmoved.
-2. **Measure the interpreter on the bar devices** (GPU leg). Frozen base and
-   head builds from step 1; the sweep's worst stops at highest quality on the
-   RTX 2060, the RTX 4070 (both backends) and the Steam Deck (Vulkan);
-   `world.gpu-timing` for `views` beside driver-native registers, spills and
-   occupancy limiters from PIX, Nsight or RenderDoc; `host.frames` p99. Decides
-   the scope of tier 2 (required or enhancement) and the stamp's live-state
-   budget; a result past the bar on the Deck makes steps 3 and 4 required and
-   ordered before step 6.
-3. **Tier 2.** The emitter's HLSL splice, the background compile through
-   `ShaderCompiler` on the reload's turnstile, the pipeline lease and
-   frame-boundary install, `world prepare` emitting every program's kernel for
-   both targets. Check: tier 1 and tier 2 stills of the same stop agree within
-   the still tolerance on both backends; `world.shaders.status` reports each
-   program's state; the compile is counted in the shader compiler's work and a
-   second boot of the same world compiles nothing; edit-to-running of a program
-   edit is measured under 30 s with the interpreter showing it and the
-   specialized kernel arriving later without a frame change in the presented
-   burst (`puck_capture_frame` `mode: presented`).
+   canonical streams and costs (`puck test` of the corpus); a seed or colour
+   edit keeps a program's identity and an `octaves` edit changes it; a
+   recursive call, a runtime-bounded loop, a stamp name outside the interface, a
+   runtime value in a structural position, a read of an undefined register and
+   a program over the cap are each refused by their `PUCKnnn` code;
+   `puck shaders generate --check` is clean; `MaxOps <= MaxWork` is checked
+   where the constants are declared.
+1. **The interpreter, all three phases, both kernels, the standard's programs
+   beside the old layers** (GPU). The rolled loops in `sdf-light-stage.hlsli`
+   and `sdf-glass.comp.hlsl` through one generated entry; the light and
+   compose phases replacing the toon branches; the stamp's frame ops and
+   contact; the shadow-demand envelope in the surface pass and its signature;
+   the read flags driving `SdfFrameBlock` and the cadence; the standard's five
+   templates authored and the debug world's palettes calling them, behind a
+   measurement lever `world.shade programs|layers` that selects the authored
+   programs or today's HLSL layers in one build. Check: settled stills of the
+   meadow, the forest road, the water and a cel-styled stop on both backends,
+   programs against layers, within the still tolerance (fresh base and head
+   processes under lockstep, pinned camera, tick and exposure); a shadowed
+   back-facing surface under a wrap-raising program and a lane-animated
+   normal and wrap show no unmeasured lit band; a clock-driven program, a
+   world-lane program and a program reading neither change the frame's clock
+   and lanes exactly as the flags say (`world.counters gpu` shows the still
+   program's views held); contact foam and a transformed static copy's flow
+   render through the glass invocation; `puck mesh identity --against` shows
+   the bake identity unmoved.
+2. **Measure the interpreter on the bar devices** (GPU leg). The decision
+   matrix's tier 1 unsplit column against base, on every row the step reaches
+   (zero programs, one program, the whole standard set through the lever, the
+   adversarial program, nested views), with driver-native registers, spills and
+   occupancy limiters from PIX, Nsight or RenderDoc beside the timings.
+   Decides the scope of tier 2 and the stamp's live-state budget; a device
+   past its bar makes steps 3 and 4 required and ordered before step 6.
+3. **Tier 2 and the equivalence corpus** (GPU for the stills). The emitter's
+   HLSL splice, the background compile through `ShaderCompiler` on the shared
+   turnstile, the specialization loader over authored identities, the
+   stall-free publication of section 3.4, `world prepare` emitting every
+   program's kernel for both targets. Check: the threshold-sensitive corpus of
+   section 3.3 rendered through both tiers agrees within the still tolerance on
+   both targets, pixel by pixel; `world.shaders.status` reports each program's
+   state; the compile is counted in the shader compiler's work and a second
+   boot of the same world compiles nothing; edit-to-running of a program edit
+   is measured under 30 s with the interpreter showing it; a burst of twenty
+   arrivals and an edit that overtakes an older compile (the stale arrival
+   discarded) show no frame change and no spike in a presented burst
+   (`puck_capture_frame` `mode: presented`).
 4. **Binning** (GPU leg). The `views-filter` and `views-shade` split, the
-   per-program count, prefix sum, scatter and indirect dispatches. Check:
-   counted work for every added pass, the frame compared against step 3's on the
-   same stops and devices; it lands only if the worst frame is better, otherwise
-   the design's fallback (tier 2 over the unsplit kernel per program set) is
-   recorded and taken.
-5. **The work bound and the quarantine.** `SdfShadeDispatch` chunking with
-   `MaxWork` set from step 2's slowest device; the loss mark and the neutral
-   default. Check: a scratch world whose program is at the cap over a
-   full-screen surface shows its dispatches chunked in `world.counters gpu`;
-   `gpu.faults` injecting a loss mid-frame lists the in-flight programs as
-   quarantined in `world.budget`, the frame renders with the neutral default,
-   and a `world.reload` of an edited program clears the mark while an unedited
-   one keeps it across the reload.
-6. **The remaining layers migrate.** `paint(...)`, `inset(...)`, `flow(...)`
-   and `cel(...)` as standard programs; their C# records, palette documents,
-   rows and HLSL deleted; `sdfMaterialLoad` reduced to the base response, glass,
-   the program reference and the lanes. Check: the debug world's sweep tour
-   stills on both backends within the still tolerance against step 5; the
-   schema regenerated (`puck schema`) with the old members gone and
-   `puck compile --validate` refusing a slot that still spells `weathering`.
-7. **The light hook** (if the owner wants it): `SdfLightResponse`'s body as a
-   per-material program; the standard's `lambertGgx(...)` as the default.
-   Check: as step 1's, with a material authoring a different response visibly
-   different in a captured still and the default one unchanged.
-8. **The screen effect hook**, over the post-process package mechanism.
-   Check: a view with an authored effect captured; a view without one unchanged.
+   filter record, the per-program count, prefix sum, scatter and indirect
+   jobs. Check: the decision matrix's binned columns against the unsplit, with
+   every added pass, byte and recording operation counted in
+   `world.counters gpu`; the no-program row allocates no filter record and
+   records one dispatch; the matrix's rule decides, and the outcome and its
+   readings go in the commit.
+5. **The work bound and the quarantine** (GPU for the fault injection).
+   `SdfShadeDispatch` on both paths and the glass pass, `MaxWork` set from the
+   slowest device's throughput on the adversarial row with its margin; the
+   in-flight identity lists and the sticky mark. Check: the adversarial
+   program's dispatches are chunked on the unsplit path (group rows) and on
+   the binned path (list ranges) in `world.counters gpu`; `gpu.faults`
+   injecting a loss mid-frame lists the in-flight identities as quarantined in
+   `world.budget` on both paths, the frame renders with the neutral default,
+   a `world.reload` of an edited program clears its mark and an unedited one
+   keeps it across the reload.
+6. **The layers migrate** (GPU for the stills). The lever and the HLSL layers,
+   their C# records, palette documents and rows deleted; `sdfMaterialLoad`
+   reduced to the base response, glass, the program reference, the parameter
+   block, the demand and the lanes; the schema regenerated (`puck schema`).
+   Check: the decision matrix's final row on every device; the debug world's
+   sweep tour stills on both backends within the still tolerance against
+   step 5; `puck compile --validate` refusing a slot that still spells
+   `weathering` or `flow`.
+
+Image sampling (a `sample` op over authored image data, with explicit taps,
+filter and level-of-detail bounds declared before admission) follows tier 2
+by the owner's ruling, as its own step; the screen effect hook waits for the
+next round.
 
 ## 7. How it fits Puck
 
@@ -791,9 +1102,9 @@ system has:
   shape coverage to a material, because no engine surveyed has the field.
 - **Derived products identified from inputs.** The specialized kernel is a
   cache entry of the shader compiler that already exists, keyed by the
-  canonical stream and the compiler's identity; `world prepare` prewarms it; a
-  miss derives it again and counts. Nothing is recorded, nothing is traced from
-  play.
+  canonical stream, the parameter layout, the table's fingerprint and the
+  compiler's identity; `world prepare` prewarms it; a miss derives it again
+  and counts. Nothing is recorded, nothing is traced from play.
 - **Change-proportional work.** A parameter edit is a row upload; a program
   edit re-lowers one program and recompiles one kernel while the interpreter
   shows it; an op-table change recompiles every kernel, as an ISA change does.
@@ -805,18 +1116,123 @@ system has:
   so an author sees what the engine's defaults cost before replacing them.
 - **One implementation.** The field interpreter's generator, the shader
   compiler, its cache, the reload's compile turnstile, the pass-pipeline cache
-  and the residency's install path are each used, not copied. The one new
-  mechanism, the per-op template that generates both tiers, is what the field
-  ISA should have had and may adopt later.
+  and the residency's fence tracking are each used, not copied. The one new
+  mechanism, the per-op template that generates both tiers under one
+  semantics, is what the field ISA should have had and may adopt later.
+
+## 8. The design review's findings, resolved
+
+The Codex design review ([memo-review.md](author-shaders/memo-review.md))
+returned twelve findings against the first draft. Each is resolved below: the
+design changed, or the finding is answered with the code that shows why.
+
+1. **The surface hook invalidated shadow decisions.** True of the draft:
+   `sdfSurfaceStage` queries a slot while the cosine exceeds `-wrap` from the
+   base row, and the views filter runs before the hook. Resolved by the
+   shadow-demand envelope (section 3.9): the lowering bounds the program's wrap
+   and normal tilt and the light phase's reach, the surface pass queries by
+   that demand, the demand enters the wrap signature, and an authored light
+   phase reads zero visibility on an unqueried slot. Step 1 checks the
+   back-facing and animated cases.
+2. **Cel needed the light hook and a composition interface.** True: the toon
+   branches live in `sdfLightResponse` and after the fold in `sdfLightStage`.
+   Resolved by making the light and compose phases parts of one program
+   (section 3.1), with the owner's ruling that the light hook ships, and by
+   ordering them into step 1 before any deletion (section 3.10, step 6); the
+   outline stays engine code with its style row.
+3. **The views-only ABI could not migrate glass flow.** True:
+   `sdf-glass.comp.hlsl` calls `sdfShadeFlow` per interface with
+   `sdfGlassContact`, and `sdfShadeFlow` turns an object-frame velocity through
+   `sdfMeshCarryDirection` when no slot owns the hit. Resolved by one generated
+   invocation for opaque and glass shading with `contact`, the thickness and
+   the frame ops in the stamp (sections 3.1, 3.2); glass invocations are
+   costed, bounded and quarantined (section 3.7) and interpret in this round;
+   step 1 renders the standard's water with contact foam and a transformed
+   copy.
+4. **One table did not prove numerical equivalence.** True: `-O3` lets DXC
+   contract and reorder non-`precise` arithmetic differently in a loop and in
+   straight-line code. Resolved by IR semantics both tiers enforce (section
+   3.3: 32-bit values, `precise` on every op, folding only of exactly rounded
+   operations in Puck's lowering, bit-defined integer ops, sanitized
+   exceptional values), by the fingerprint covering template text and helpers
+   and the interpreter's content key joining every specialization's identity,
+   and by a threshold-sensitive corpus on both targets as step 3's check; the
+   invariant's stop names what remains.
+5. **The range door did not enforce the slice.** True: `sdfProgramRange`
+   bounds an address against the whole `sdfWords` allocation, and a paint's
+   side-table pointer is absolute (`PackPaint`). Resolved by slice-relative,
+   typed, construction-validated operands and one slice reader through which
+   both tiers and the `shape` helpers read (section 3.3, door 3), with the
+   whole-buffer check kept as the outer boundary.
+6. **Cost was not closed over helper work.** True: a `shape` over a sweep runs
+   the strand, sample and refinement loops of `field/sdf-shapes.hlsli`.
+   Resolved by per-op cost functions over validated operands that bound each
+   helper, a pixel's work defined with the light walk and a declared engine
+   constant, checked arithmetic, and `MaxOps <= MaxWork` checked at
+   declaration (section 3.7, step 0); the "work is not time" qualification
+   stays.
+7. **The bound and the quarantine vanished on the fallback; dispatch was
+   conflated with submission.** True on both counts: the draft's door named
+   bins, and `SubmitCounted` sends many lists in one submission. Resolved by
+   the planner that sizes jobs on both paths and the glass pass (group rows on
+   the unsplit path, list ranges on the binned path), by identity lists the
+   residency retains outside the GPU tables, by the set-specialization
+   fallback's own identity and invalidation rule (section 3.4), and by
+   restating the claim as a per-dispatch bound with no submission bound
+   (section 3.7).
+8. **Identity and editable parameters contradicted each other.** True: the
+   draft's example inlined seed and colour as constants. Resolved by runtime
+   parameter slots distinct from structural constants, a parameter layout in
+   the identity and values in appearance data only, the `structural` marker,
+   and the refusal of a runtime value in a structural position (sections 3.2,
+   3.3; step 0 checks a seed edit against an `octaves` edit). The `shade`
+   member with parameters by name replaces the deleted layer records in the
+   schema (section 3.10).
+9. **Inputs lacked read metadata for upload and cadence.** True:
+   `SdfAppearance.HasFlow` and `ReadsWorldLanes` inspect the layer records, and
+   `SdfFrameBlock.FlowClockOf` and `WorldLanesOf` write zero from them.
+   Resolved by read flags the lowering derives from the ops and the appearance
+   aggregates (section 3.2), replacing those members; step 1 checks the three
+   programs.
+10. **Reload installation was not a stall-free swap.** True:
+    `SdfWorldTables.InstallReload` waits idle, forgets the environment and
+    screen-emission renders and bumps both revisions, and `SdfKernelTreeLoad`
+    enumerates fixed kernels. Resolved by a publication door of its own that
+    swaps a bin's pipeline at a frame boundary, discards a stale arrival by
+    identity and fingerprint, and retires the old pipeline after its last
+    submission's fence; the turnstile is shared, the tree load untouched
+    (section 3.4); step 3 measures a burst and an overtaken compile in a
+    presented burst.
+11. **Filter output ownership was unspecified.** True: the record is eight
+    words with no spare field (`sdf-visibility.hlsli`,
+    `SdfWorldPackage.VisibilityRecordByteLength`), and a group's store into it
+    would race a neighbour's apron gather. Resolved by a separate filter
+    record the package declares, with its precisions, graph access and
+    transition stated and its bytes priced in step 4 (section 3.5); the
+    visibility record is immutable after the surface pass.
+12. **Steps 2 and 4 did not decide the whole design against the bar.** True:
+    the draft measured one slice and named one device's failure. Resolved by
+    the decision matrix (section 6): every bar device and backend, the rows
+    the review named (zero, one and many programs, the cap-cost program, mixed
+    cold tiers, nested views, the final set), explicit noise and regression
+    criteria, a no-program path that allocates and records nothing extra, a
+    rule for the case where no column passes, and step 1's lever so the whole
+    standard set is measured before anything is deleted; the GPU work in steps
+    1, 3, 5 and 6 is labelled as such.
+
+The review found no independent defect in the fixed compute pipeline state,
+the appearance's separation from bake inputs, the derived shader cache's reuse,
+or the barrier placement and simulation separation; those parts of the design
+stand as written.
 
 ## The owner's rulings
 
-- The **light hook** (section 3.1, step 7) ships: an author may change how a
+- The **light hook** (section 3.1) ships: an author may change how a
   material responds to each light. The standard package keeps the valley's
   consistent lighting by default; a world that replaces it does so as its
   author's choice (AGENTS.md, "Authors rule").
 - **Image data** a program samples (a `sample` op over an authored texture)
   comes after tier 2, so a texture's cost is charged in `world.budget` like
   every other op; the interface keeps room for it from the start.
-- The **screen effect hook** (step 8) is deferred to the next round, after the
+- The **screen effect hook** is deferred to the next round, after the
   surface hook and the interpreter and binning measurements land.
