@@ -96,9 +96,9 @@ promise. The evidence and the measurement:
   the bar devices before specialization's scope is fixed.
 - **Specialization is never on the edit path.** This memo timed DXC on the
   shipped kernels, in place, with the compiler's own options
-  (`ShaderCompiler.StepsOf`), three runs each, on the lead machine with no other
-  GPU or build work running, through dxc 1.9.0.5512 from the Vulkan SDK (the
-  script and its conditions are in the commit that landed this memo):
+  (`ShaderCompiler.StepsOf`), three runs each, on the lead machine with none of
+  this lane's builds or Worlds running, through dxc 1.9.0.5512 from the Vulkan
+  SDK (the script and its conditions are in the commit that landed this memo):
 
   | Kernel | SPIR-V (ms, 3 runs) | DXIL (ms, 3 runs) |
   |---|---|---|
