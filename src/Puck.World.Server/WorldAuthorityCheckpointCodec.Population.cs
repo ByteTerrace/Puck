@@ -44,10 +44,11 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
         FoldContinuationSegments(digests: digests, hash: ref hash, present: present);
     }
+
     // One slot's continuation digest: the entry's continuation bytes, hashed alone.
     internal static ulong ContinuationDigest(WireWriter writer, in WorldPopulationEntryCheckpoint entry) {
         writer.Reset();
-        WriteContinuationEntry(writer: writer, entry: entry);
+        WriteContinuationEntry(entry: entry, writer: writer);
         return Fnv1aHash.Compute(values: writer.WrittenSpan);
     }
     // The continuation's shape: the slot count, then one digest per segment of WorldPopulation.HashSegmentSlots slots,
@@ -65,7 +66,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             hash.Add(value: segment.Value);
         }
     }
-
     /// <summary>Writes one entry's simulation continuation: its checkpoint encoding without the rendered
     /// appearance.</summary>
     /// <param name="writer">The writer.</param>
@@ -130,6 +130,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         writer.WriteString(value: entry.IdentityDomain);
         writer.WriteString(value: entry.IdentitySubject);
+        WorldWireLeaves.WriteAdmissionTrust(writer: writer, trust: entry.AdmissionTrust);
         writer.WriteInt32(value: entry.ProducerAcquiredTarget);
         writer.WriteFixed(value: entry.ProducerActivityPhase);
         writer.WriteFixed(value: entry.ProducerActivityRate);
@@ -264,6 +265,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "population entry identity subject",
             maxBytes: MaxStringBytes
         );
+        var admissionTrust = WorldWireLeaves.ReadAdmissionTrust(reader: ref reader);
         var producerAcquiredTarget = reader.ReadInt32();
         var producerActivityPhase = reader.ReadFixed();
         var producerActivityRate = reader.ReadFixed();
@@ -343,6 +345,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         return new WorldPopulationEntryCheckpoint(
             AdmissionInstalledGrantTemplates: admissionInstalledGrantTemplates,
             AdmissionRevokedKeys: admissionRevokedKeys,
+            AdmissionTrust: admissionTrust,
             Autonomy: autonomy,
             BodyColor: bodyColor,
             CatalogRig: catalogRig,
@@ -362,7 +365,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             Parked: parked,
             ParkedUntilTick: parkedUntilTick,
             PlacementId: placementId,
-            Titled: titled,
             Position: position,
             ProducerAcquiredTarget: producerAcquiredTarget,
             ProducerActiveCurveIndex: producerActiveCurveIndex,
@@ -381,6 +383,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             SelectedLook: selectedLook,
             SpawnPosition: spawnPosition,
             SpawnYaw: spawnYaw,
+            Titled: titled,
             TravelTurn: travelTurn,
             Yaw: yaw
         );

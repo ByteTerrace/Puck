@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.Confinement;
 
 namespace Puck.Launcher.Stub;
@@ -7,8 +8,8 @@ namespace Puck.Launcher.Stub;
 /// The pointer/generation file layout an install root carries, and the pure read/parse and atomic-write helpers
 /// over it — shared by <see cref="Puck.Launcher.Stub"/>'s own reader (this project) and
 /// <c>Puck.Launcher.Release.FileUpdateApplier</c>'s own independent writer. The two sides agree on this shape by
-/// convention rather than by a shared reference: the stub references only the BCL and <see cref="ConfinedDirectory"/>,
-/// so it parses no manifest and shares no release code with the app it launches.
+/// convention. The stub shares directory confinement and <see cref="AtomicFile"/>'s durable writes with the updater,
+/// but parses no release manifest and references no launcher implementation.
 /// </summary>
 public static class StubInstall {
     /// <summary>Excludes UpdateService and other stub decisions for this install root. Hold across reading
@@ -134,20 +135,10 @@ public static class StubInstall {
             path1: installRoot,
             path2: fileName
         );
-        var tmpPath = Path.Combine(
-            path1: installRoot,
-            path2: $"{Guid.NewGuid():n}.tmp"
-        );
 
-        Directory.CreateDirectory(path: installRoot);
-        File.WriteAllText(
+        AtomicFile.WriteAllText(
             contents: value,
-            path: tmpPath
-        );
-        File.Move(
-            destFileName: path,
-            overwrite: true,
-            sourceFileName: tmpPath
+            path: path
         );
     }
 }

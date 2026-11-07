@@ -253,6 +253,8 @@ public enum WorldHostPresentation : byte {
 /// <param name="Authority">The QUIC endpoint at which this world's authority is reached when another world resolves
 /// it as a destination, or <see langword="null"/> when the authority is colocated with the resolver. Colocation
 /// short-circuits the authority transport; it does not select a separate transfer path.</param>
+/// <param name="AuthorityNamespace">The authenticated federation subject expected at <paramref name="Authority"/>.
+/// Authored independently of its transport endpoint; required when resolving a remote destination.</param>
 /// <param name="Backend">The preferred graphics backend (<see cref="WorldBackendPreference.Auto"/> is OS-portable), or
 /// <see langword="null"/> when <paramref name="BackendRow"/> reads it from a row — omitting both reads as
 /// <see cref="WorldBackendPreference.Auto"/>.</param>
@@ -292,6 +294,7 @@ public sealed record WorldHostDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Genlock = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Listen = null,
     string? Authority = null,
+    string? AuthorityNamespace = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBackendPreference? Backend = null,
     // OPTIONAL — the authored-randomness facet over Backend above (see the param docs). XOR-BY-PRESENCE against it:
     // WorldHostDefaults is a CLASS, so a null Backend is honestly distinguishable from an authored one and declaring

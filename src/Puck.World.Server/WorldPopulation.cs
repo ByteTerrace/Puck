@@ -136,11 +136,13 @@ public sealed partial class WorldPopulation {
     /// <summary>The static collider inputs actually held by the analytic solver, with authored provenance.</summary>
     public IReadOnlyList<WorldDiagnosticCollider> DiagnosticColliders =>
         ((m_baseContactField as WorldColliderSet)?.DiagnosticColliders ?? []);
+
     /// <summary>The attached solid rows held by the analytic solver at the pose its latest refresh sampled, with their
     /// colliders and authored provenance (<see cref="WorldColliderSet.DiagnosticAttached"/>); empty under another provider.</summary>
     /// <returns>The posed rows.</returns>
     public IReadOnlyList<WorldAttachedDiagnostic> DiagnosticAttached() =>
         ((m_baseContactField as WorldColliderSet)?.DiagnosticAttached() ?? []);
+
     /// <summary>Gets or sets the hub this population narrates through, the owning server's own; <see langword="null"/>
     /// narrates nothing.</summary>
     public WorldOutputHub? NarrationHub { get; set; }
@@ -232,10 +234,10 @@ public sealed partial class WorldPopulation {
     // The world's compiled cos(collision.maxSlopeDegrees), handed to every body on the same terms as the frame
     // policy above so a hold and the ground it ends on cannot disagree about which faces are walkable.
     private FixedQ4816 m_walkableThreshold = FixedQ4816.One;
+
     // The compiled collision tuning's ContactReach, compiled with the solid consumers: how far past a body's surface a
     // contact-field change can act on it, whichever provider holds the field.
     private FixedQ4816 m_contactReach;
-
     // The census of the definition the contact field was last compiled from, measured when read (ContactCensus).
     private WorldContactCensus? m_contactCensus;
     private WorldDefinition? m_censusDefinition;
@@ -571,6 +573,9 @@ public sealed partial class WorldPopulation {
         // what the current document would mint.
         public string IdentityDomain { get; set; } = string.Empty;
         public string IdentitySubject { get; set; } = string.Empty;
+
+        public WorldAdmissionTrustIdentity? AdmissionTrust { get; set; }
+
         public string DesignationRefusal { get; set; } = string.Empty;
         // The most recent body.motion refusal reason (empty on the last switch's success) — the synchronous
         // submitter's read-back so an honest immediate echo never has to guess the outcome.

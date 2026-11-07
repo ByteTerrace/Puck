@@ -64,6 +64,7 @@ public sealed partial class WorldPopulation {
         entry.Generation = checked((entry.Generation + 1));
         entry.Active = true;
     }
+
     /// <summary>Advances an inactive body index's occupant generation without seating anyone, as a landing that was rolled
     /// back did: recovery redoes a refused commit's burned generations through it so the slot's next occupant is a new
     /// generation here too.</summary>
@@ -77,6 +78,7 @@ public sealed partial class WorldPopulation {
         }
         entry.Generation = checked((entry.Generation + 1));
     }
+
     // Activate a simulated entry: re-seed its canonical pose/color/producer state from its index, then mint its own body from
     // its kit row (tuning + primary-action binding) spawned at that pose with the stored peer-source default. The
     // Warp/Face is a server-authoritative spawn (a one-time write into the sim); from here the pose flows only out.
@@ -145,6 +147,7 @@ public sealed partial class WorldPopulation {
             Identity: identity,
             IdentityDomain: entry.IdentityDomain,
             IdentitySubject: entry.IdentitySubject,
+            AdmissionTrust: entry.AdmissionTrust,
             AuthorityTransferred: entry.IsAuthorityTransferred,
             PlacementId: entry.PlacementId,
             CatalogRig: entry.CatalogRig,
@@ -335,6 +338,7 @@ public sealed partial class WorldPopulation {
         entry.AdmissionRevokedKeys.Clear();
         entry.IdentityDomain = peer.IdentityDomain;
         entry.IdentitySubject = peer.IdentitySubject;
+        entry.AdmissionTrust = peer.AdmissionTrust;
         m_simulatedCount = CountActiveCensus();
     }
     /// <summary>Re-applies one recorded disconnect through the population door. Park-with-grace: on the same terms as
@@ -376,6 +380,7 @@ public sealed partial class WorldPopulation {
                 entry.AdmissionRevokedKeys.Clear();
                 entry.IdentityDomain = string.Empty;
                 entry.IdentitySubject = string.Empty;
+                entry.AdmissionTrust = null;
                 entry.Parked = false;
                 entry.ParkedUntilTick = null;
             } else {
@@ -438,11 +443,13 @@ public sealed partial class WorldPopulation {
     /// <see cref="ApplyPeerDisconnected"/> exactly as admission set it.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public bool IsAdmittedPeer(int bodyIndex) => ((((uint)bodyIndex) < Capacity) && m_entries[bodyIndex].IsRemoteHuman);
+
     /// <summary>Gets the number of remote humans the instance holds, parked ones included: what the
     /// <see cref="NetworkPlayers"/> cap counts.</summary>
     public int RemoteHumanCount => CountRemoteHumans();
     /// <summary>Gets the live document's <c>networkPlayers</c> admission cap on remote humans.</summary>
     public int NetworkPlayers => m_remoteCap;
+
     /// <summary>Returns a value indicating whether <paramref name="bodyIndex"/> is human-occupied — the co-driving
     /// fold's occupancy discriminator (and the bot-overwrite door in <c>WorldServer.ApplyIntentSubmission</c>): a
     /// body is human-occupied iff a local seat slot is <see cref="IsActive"/> and bound to it, or the body is bound
@@ -543,6 +550,8 @@ public sealed partial class WorldPopulation {
     /// (<see cref="WorldAdmissionDoor.TryMatchEntry"/>) rather than trusting <see cref="PeerAdmissionInstalledGrantTemplates"/>
     /// is still what the current document would mint.</summary>
     /// <param name="bodyIndex">The 0-based body index.</param>
+    public WorldAdmissionTrustIdentity? PeerAdmissionTrust(int bodyIndex) => m_entries[bodyIndex].AdmissionTrust;
+    /// <summary>Gets the admitted identity names.</summary>
     public (string Domain, string Subject) PeerIdentity(int bodyIndex) =>
         ((((uint)bodyIndex) < Capacity)
             ? (m_entries[bodyIndex].IdentityDomain, m_entries[bodyIndex].IdentitySubject)
@@ -667,6 +676,7 @@ public sealed partial class WorldPopulation {
             entry.AdmissionRevokedKeys.Clear();
             entry.IdentityDomain = string.Empty;
             entry.IdentitySubject = string.Empty;
+            entry.AdmissionTrust = null;
         }
     }
 
@@ -769,6 +779,7 @@ public sealed partial class WorldPopulation {
         InvalidateInhabitCountCache();
         m_revision++;
     }
+
     /// <summary>Gets or sets what holds an empty body index for a body that may come back to it (a companion whose title
     /// is away or whose hop is pending, or a body a departure in doubt left), answering the placement the held body
     /// belongs to (empty for none) or <see langword="null"/> for an index nothing holds. A held index is never
@@ -814,6 +825,7 @@ public sealed partial class WorldPopulation {
         m_revision++;
         return true;
     }
+
     // An inhabitant's binding to its placement as installed now: the kit (recompiled in place, its pose kept), the look
     // and the intent source. A structural reconcile and a re-adoption bind here.
     private void BindInhabitant(Entry entry, WorldPlacement placement, byte kitIndex) {
@@ -839,7 +851,6 @@ public sealed partial class WorldPopulation {
                 tether: m_kits[kitIndex].Tether
             );
     }
-
     // Grows or shrinks one inhabited placement's live census to `desired`: growth claims the highest free slots in
     // document order (HighestFreeSlot's own remarks — the first body admitted always lands at the highest index), and
     // shrink retires the lowest surviving index that is not currently a seat's own claimed body (Entry.IsRemoteHuman)
@@ -1324,6 +1335,7 @@ public sealed partial class WorldPopulation {
             entry.AdmissionRevokedKeys.Clear();
             entry.IdentityDomain = string.Empty;
             entry.IdentitySubject = string.Empty;
+            entry.AdmissionTrust = null;
             m_simulatedCount = CountActiveCensus();
         }
         m_revision++;

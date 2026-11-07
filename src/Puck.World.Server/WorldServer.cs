@@ -524,7 +524,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// preparation refuses, or the supplied admission names a different definition or machine catalog.</exception>
     /// <param name="landingRefusal">Optional transfer admission policy fixed at composition; null admits each reserved member.</param>
     /// <param name="authorityIdentity">The namespace this authority's entity addresses are minted under when the
-    /// document names no <c>host.authority</c>, or <see langword="null"/> for <paramref name="instanceIdentity"/>. A
+    /// document names no <c>host.authorityNamespace</c>, or <see langword="null"/> for <paramref name="instanceIdentity"/>. A
     /// host starting a name again passes a fresh one, so the incarnations of the bodies the new lifetime seats never
     /// equal an incarnation the earlier lifetime minted; a replay or history shadow passes the live authority's.</param>
     /// <param name="jobs">The engine's job pool the tick's partitioned phases fork onto, or <see langword="null"/> to
@@ -567,7 +567,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         Extensions = new WorldExtensions(server: this);
         Jobs = jobs;
         InstanceIdentity = instanceIdentity;
-        AuthorityIdentity = ((definition.Host.Authority is { Length: > 0 } authority)
+        AuthorityIdentity = ((definition.Host.AuthorityNamespace is { Length: > 0 } authority)
             ? authority
             : ((authorityIdentity is { Length: > 0 } lifetime)
                 ? lifetime

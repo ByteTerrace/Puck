@@ -161,6 +161,7 @@ public sealed partial class AdmissionArrivalLawTests {
     [Fact]
     public void ArrivalRows_AreInvisibleToTheAttestationClaimArm() {
         Assert.False(condition: WorldAdmissionDoor.TryMatchEntry(
+            trustIdentity: null,
             entries: [Arrivals(domain: SourceAuthority)],
             domain: SourceAuthority,
             subject: null,

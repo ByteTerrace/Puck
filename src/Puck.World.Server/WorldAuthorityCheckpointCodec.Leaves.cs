@@ -216,6 +216,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     private static void WriteAdmissionVerdict(WireWriter writer, WorldAdmissionVerdict verdict) {
         writer.WriteString(value: verdict.IdentityDomain);
         writer.WriteString(value: verdict.IdentitySubject);
+        WorldWireLeaves.WriteAdmissionTrust(writer: writer, trust: verdict.TrustIdentity);
         writer.WriteArray(
             items: verdict.Templates,
             writeItem: WriteAdmissionGrant
@@ -231,6 +232,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "verdict identity subject",
             maxBytes: MaxStringBytes
         );
+        var trustIdentity = WorldWireLeaves.ReadAdmissionTrust(reader: ref reader);
         var templates = reader.ReadArray(
             field: "verdict templates",
             readItem: static (ref WireReader r) => ReadAdmissionGrant(reader: ref r),
@@ -252,7 +254,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             identityDomain: domain,
             identitySubject: subject,
             templates: templates,
-            tier: tier
+            tier: tier,
+            trustIdentity: trustIdentity
         );
     }
 

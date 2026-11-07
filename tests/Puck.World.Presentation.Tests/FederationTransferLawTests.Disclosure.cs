@@ -14,6 +14,58 @@ namespace Puck.World.Presentation.Tests;
 /// <summary>Laws for what a federated traveler is handed of its destination's hidden state: every federation egress
 /// that knows the traveler composes the document for it, through the one disclosure door.</summary>
 public sealed partial class FederationTransferLawTests {
+    [Fact]
+    public async Task PublicObservationRequiresExplicitFederationDisclosure() {
+        using var oracle = LocalOracle(subject: DisclosureSource);
+        var document = Fixtures.BuildDocument() with { Admission = [TrustEntryFor(oracle: oracle) with { Disclosure = WorldDisclosureTier.Frames }] };
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var security = Authenticator(oracle: oracle, trustEntries: () => fixture.Server.Definition.Admission!);
+        using var host = new WorldPeerHost(server: fixture.Server, authenticator: security, timeProvider: new VirtualClock(),
+            transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
+
+        PeerTestClient.StartOrSkip(host: host);
+        using var client = new PeerTestClient();
+        var ct = TestContext.Current.CancellationToken;
+        var stream = await AuthenticatedLaneAsync(client, IPEndPoint.Parse(s: host.ListenEndpoint!), security, ct);
+
+        await WorldFederationCodec.WriteRequestAsync(body: default, ct: ct, kind: WorldFederationRequest.Observe, stream: stream);
+        var response = await RequireFrameAsync(ct: ct, stream: stream);
+
+        Assert.Equal(expected: ((byte)WorldFederationResponse.Refusal), actual: response.Kind);
+    }
+    [Fact]
+    public async Task PublicReplicaObservationEndsWhenItsAdmissionTierChanges() {
+        using var oracle = LocalOracle(subject: DisclosureSource);
+        var arrival = new WorldAdmissionEntry(Domain: DisclosureSource, Mode: WorldAdmissionTrustMode.FederatedAuthority,
+            Grants: [], Disclosure: WorldDisclosureTier.Replica);
+        var document = Fixtures.BuildDocument() with { Admission = [TrustEntryFor(oracle: oracle), arrival] };
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var security = Authenticator(oracle: oracle, trustEntries: () => fixture.Server.Definition.Admission!);
+        using var host = new WorldPeerHost(server: fixture.Server, authenticator: security, timeProvider: new VirtualClock(),
+            transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
+
+        PeerTestClient.StartOrSkip(host: host);
+        using var client = new PeerTestClient();
+        var ct = TestContext.Current.CancellationToken;
+        var stream = await AuthenticatedLaneAsync(client, IPEndPoint.Parse(s: host.ListenEndpoint!), security, ct);
+
+        await WorldFederationCodec.WriteRequestAsync(body: default, ct: ct, kind: WorldFederationRequest.Observe, stream: stream);
+        Assert.Equal(expected: ((byte)WorldFederationResponse.Definition), actual: (await RequireFrameAsync(ct: ct, stream: stream)).Kind);
+        var candidate = document with { Admission = [TrustEntryFor(oracle: oracle), arrival with { Disclosure = WorldDisclosureTier.Frames }] };
+
+        fixture.Server.EnqueueRebuild(request: new WorldRebuildRequest(Kind: WorldRebuildKind.Load, Definition: candidate,
+            Origin: new WorldRebuildOrigin.File(Path: "disclosure.world.json"), Force: true,
+            ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: candidate))), principal: Principal.Console);
+        fixture.Step();
+        // A queued initial snapshot may precede the invalidation; no new document may follow the downgrade.
+        while (true) {
+            var response = await RequireFrameAsync(ct: ct, stream: stream);
+
+            if (response.Kind == ((byte)WorldFederationResponse.ProjectionInvalidated)) { break; }
+            Assert.NotEqual(expected: ((byte)WorldFederationResponse.Definition), actual: response.Kind);
+        }
+    }
+
     private const string DisclosureSource = "player-world/source";
     private const string GateOpen = "gateOpen";
     private const string GateShut = "gateShut";
@@ -108,8 +160,9 @@ public sealed partial class FederationTransferLawTests {
         );
 
         var proof = BoundClientProof(security: security, client: client, serverChallenge: challenge.Body.Span, clientChallenge: out var clientChallenge);
+
         await WorldFederationCodec.WriteRequestAsync(
-            body: WorldFederationCodec.EncodeAuthentication(proof: proof, challenge: clientChallenge),
+            body: WorldFederationCodec.EncodeAuthentication(challenge: clientChallenge, proof: proof),
             ct: ct,
             kind: WorldFederationRequest.Authenticate,
             stream: stream

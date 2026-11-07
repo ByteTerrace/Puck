@@ -43,6 +43,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
         using var authority = new WorldRemoteAuthority(
+            expectedAuthority: "machine-b/boot",
             endpoint: "127.0.0.1:42001",
             initialRoute: Route(travelTurn: committed),
             network: network,

@@ -51,5 +51,6 @@ public readonly record struct WorldPopulationEntryCheckpoint(
     IReadOnlyList<WorldRigidContactSlotImage> RigidContacts,
     WorldPopulationNavigationCheckpoint? Navigation = null,
     WorldPopulationFlockCheckpoint Flock = default,
-    WorldPopulationAutonomyCheckpoint Autonomy = default
+    WorldPopulationAutonomyCheckpoint Autonomy = default,
+    WorldAdmissionTrustIdentity? AdmissionTrust = null
 );

@@ -26,7 +26,7 @@ public sealed partial class WorldInstanceHost {
 
             // The destination may have left a companion out of the commit: the settlement names who landed, and every
             // other member is restored here after the landed members' routes are made durable.
-            if (!pending.SettlementRecorded && (pending.CommitMembers.Any(predicate: static member => member.Companion is not null))) {
+            if (!pending.SettlementRecorded && (pending.CommitMembers.Any(predicate: static member => (member.Companion is not null)))) {
                 if (!pending.TargetAuthority!.Value.TryLanded(
                     landed: out var landedIds,
                     sourceAuthority: pending.SourceAuthority,
@@ -47,6 +47,7 @@ public sealed partial class WorldInstanceHost {
                         // checkpoints an exact, retryable cohort rather than a shortened committed transfer.
                         var landedOrdinals = Enumerable.Range(start: 0, count: pending.CommitMembers.Count)
                             .Where(predicate: ordinal => landedIds.Contains(value: MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))).ToArray();
+
                         PublishCommittedTransfer(
                             in transfer,
                             pending.TargetAuthority!.Value,
@@ -271,6 +272,7 @@ public sealed partial class WorldInstanceHost {
                         WorldAuthorityEndpoint? publishedEndpoint = null;
 
                         routeAuthority = new WorldRemoteAuthority(
+                            expectedAuthority: remoteTarget.PeerAuthority,
                             endpoint: remoteTarget.Endpoint,
                             placeholder: remoteTarget.Definition,
                             security: sourceInstance!.Federation.Authenticator,

@@ -1444,7 +1444,7 @@ public sealed partial class FederationTransferLawTests {
                 actual: status.Kind
             );
             Assert.True(condition: WorldFederationCodec.TryDecodeStatus(body: status.Body.Span, landed: out var landed, status: out var answered));
-            Assert.Equal(expected: WorldTransferStatus.Missing, actual: answered);
+            Assert.Equal(actual: answered, expected: WorldTransferStatus.Missing);
             Assert.Null(@object: landed);
 
             await WorldFederationCodec.WriteRequestAsync(
@@ -1905,6 +1905,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
         using var remote = new WorldRemoteAuthority(
+            expectedAuthority: fixture.Server.AuthorityIdentity,
             endpoint: host.ListenEndpoint!,
             network: network,
             placeholder: fixture.Server.Definition,

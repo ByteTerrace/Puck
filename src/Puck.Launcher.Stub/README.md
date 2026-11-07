@@ -37,7 +37,7 @@ Contention refuses the launch for retry. Under the same lease it holds
 a handle without `FILE_SHARE_DELETE` on Windows) until the child exits, so the
 launcher's pruner never removes the version the child runs from; the stub's exit
 releases it, a crash included, and the child registers itself as well. The lease
-and the hold go through `Puck.Confinement`, the stub's one project reference, so
+and the hold go through `Puck.Confinement`, the stub's directory-confinement dependency, so
 the stub and the pruner share one implementation. Before rolling back, it deletes only
 the pending `install-intent.json` whose manifest version matches the rejected
 version; cancellation precedes the pointer write so interrupted cleanup cannot

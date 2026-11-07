@@ -3384,6 +3384,30 @@ step's completion criteria; C1 to C7 are in.
 Owner: an independent reviewer (Argon) · unconfirmed · Next: the researcher
 brief's priorities ([security review](../development/security-review.md)).
 
+- [medium, confirmed] Rejected payload selection (verified finding 2.1).
+  `StubInstall.RevertToLastGood` cancels the failed version's intent but records
+  no durable rejection; `StubHealth.IncrementAndFlush` replaces its single health
+  slot on the fallback launch. `AttestationReleaseVerifier.Verify` admits fresh
+  higher-sequence authorization for the same failed payload, and
+  `InstallPruner.Prune` ranks inactive installs without rejection status. This
+  requires new valid signed authorization, not replay of a consumed sequence.
+  Next: persist the installed payload's complete identity and rejection before
+  rollback, consult it at install selection and retention, and prove that rollout
+  metadata progression cannot retry identical rejected content while changed
+  payloads remain eligible. Keep this state separate from transient launch attempts.
+- [medium, confirmed] Revoked rollback candidate (verified finding 2.2).
+  `AttestationReleaseVerifier.Verify` rejects a manifest that revokes itself but
+  does not persist its other revocations. `FileUpdateApplier.Apply` can retain a
+  revoked current as last-good; `StubDecisionTable.Decide` checks generations and
+  attempts, and `StubInstall.RevertToLastGood` publishes that candidate without
+  revocation selection. Next: share persisted accepted revocations across every
+  launch and rollback selection; select an allowed, state-compatible proven
+  candidate or refuse rollback. Prove the signed-release → failed-startup →
+  revoked-last-good schedule, including interruption during policy publication.
+  `ReleaseManifest.MinimumSupported` remains update eligibility, not an invented
+  persistent rollback floor. Implement alongside rejected-payload selection so
+  updater, stub and pruner use one durable policy mechanism.
+
 - [high] Hidden state is distinguishable from absent state at doors the
   door-by-door fixes (`state-correctness`, `disclosure-2`) did not reach, and
   each review found more. [The disclosure plan](disclosure.md) is the structural

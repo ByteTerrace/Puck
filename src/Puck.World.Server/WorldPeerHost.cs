@@ -234,8 +234,7 @@ public sealed class WorldPeerHost : IDisposable {
     }
     // The tier a federated peer's own authority namespace is authored at, decided once per connection through the
     // same admission arm that decides what an arriving traveler is minted. A namespace no admission row names
-    // resolves to presentation: an authority that never authored trust for this peer never authorized a replica of
-    // its document either.
+    // receives no document. A cryptographic identity alone authorizes no public federation disclosure.
     private WorldDisclosureTier DisclosureFor(string sourceAuthority) =>
         (((WorldAdmissionDoor.TryAdmitArrival(
             entries: m_server.Definition.Admission,
@@ -243,7 +242,7 @@ public sealed class WorldPeerHost : IDisposable {
             verdict: out var verdict
         ) is null) && (verdict is not null))
             ? verdict.Tier
-            : WorldDisclosureTier.Presentation
+            : WorldDisclosureTier.Frames
         );
     private async Task FrameLoopAsync(Connection connection, CancellationToken ct) {
         while (!ct.IsCancellationRequested) {
@@ -1238,7 +1237,7 @@ public sealed class WorldPeerHost : IDisposable {
                 var refusal = await WorldTravelerProjection.StreamAsync(
                     m_server,
                     observation,
-                    (m_server.Definition.Host.Authority ?? m_server.AuthorityIdentity),
+                    m_server.AuthorityIdentity,
                     stream,
                     ct
                 ).ConfigureAwait(continueOnCapturedContext: false);
@@ -1256,6 +1255,7 @@ public sealed class WorldPeerHost : IDisposable {
                 await StreamProjectionAsync(
                     credential: credential,
                     ct: ct,
+                    sourceAuthority: sourceAuthority,
                     stream: stream,
                     tier: tier
                 ).ConfigureAwait(continueOnCapturedContext: false);
@@ -1880,8 +1880,17 @@ public sealed class WorldPeerHost : IDisposable {
     }
     // The lane authenticated a source authority's namespace, which names no body here, so it observes as the public
     // observer. A seat reads its own disclosure through ObserveTraveler, whose credential resolves to its principal.
-    private async Task StreamProjectionAsync(Stream stream, WorldDisclosureTier tier, Credential credential, CancellationToken ct) {
+    private async Task StreamProjectionAsync(Stream stream, string sourceAuthority, WorldDisclosureTier tier, Credential credential, CancellationToken ct) {
+        var policy = m_server.Definition.Admission;
+
+        tier = ((WorldDisclosureTier)Math.Min(val1: ((byte)tier), val2: ((byte)DisclosureFor(sourceAuthority: sourceAuthority))));
+        if (tier == WorldDisclosureTier.Frames) {
+            await WriteFederationRefusal(ct: ct, detail: "no public federation document disclosure is authorized",
+                refusal: WorldFederationRefusal.AuthenticationFailed, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
+            return;
+        }
         var sink = new WorldFederationProjectionSink(
+            isCurrent: () => (ReferenceEquals(objA: policy, objB: m_server.Definition.Admission) && credential.IsValid()),
             authority: m_server.AuthorityIdentity,
             revision: () => m_server.Population.Revision,
             server: m_server,

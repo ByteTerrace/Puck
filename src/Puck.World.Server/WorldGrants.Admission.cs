@@ -63,13 +63,13 @@ public sealed partial class WorldGrants {
     /// count against the <c>networkPlayers</c> cap, whatever its control source.</param>
     internal SessionReply AdmitTransferredPeer(int slot, WorldAdmissionVerdict? verdict, WorldTransferredOccupant occupant, IntentSource source) {
         if (!TryAdmitVerifiedParticipant(
-            verdict: verdict,
-            reservedSlot: slot,
-            source: source,
+            admitted: out _,
             authorityTransferred: true,
             occupant: occupant,
-            admitted: out _,
-            refusal: out var refusal
+            refusal: out var refusal,
+            reservedSlot: slot,
+            source: source,
+            verdict: verdict
         )) {
             return new SessionReply(
                 Accepted: false,
@@ -199,6 +199,7 @@ public sealed partial class WorldGrants {
             admitted: out admitted
         )
         ) {
+            admitted = admitted with { AdmissionTrust = decision.TrustIdentity };
             ApplyLifecycleEvents(
                 admitted: [admitted],
                 disconnected: [],
@@ -241,6 +242,7 @@ public sealed partial class WorldGrants {
             return false;
         }
 
+        admitted = admitted with { AdmissionTrust = decision.TrustIdentity };
         // A transfer commit's admission is its landing's consequence: the tape's arrival entry lands it again.
         ApplyLifecycleEvents(
             admitted: [admitted],
@@ -427,6 +429,7 @@ public sealed partial class WorldGrants {
                     entries: candidate.Admission,
                     domain: domain,
                     subject: subject,
+                    trustIdentity: Host.Population.PeerAdmissionTrust(bodyIndex: index),
                     verdict: out var matchedVerdict
                 )
                     ? matchedVerdict

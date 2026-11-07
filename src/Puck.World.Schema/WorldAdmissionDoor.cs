@@ -180,6 +180,7 @@ public static class WorldAdmissionDoor {
         var subject = claim.Header.Subject;
 
         if (!TryMatchEntry(
+            trustIdentity: ((result.TrustEntry is { } selected) ? WorldAdmissionTrustIdentity.FromVerified(entry: selected) : null),
             domain: domain,
             entries: rows,
             subject: subject,
@@ -222,6 +223,7 @@ public static class WorldAdmissionDoor {
                 comparisonType: StringComparison.Ordinal
             )) {
                 verdict = new WorldAdmissionVerdict(
+                    trustIdentity: WorldAdmissionTrustIdentity.FromEntry(entry: entry),
                     identityDomain: sourceAuthority,
                     identitySubject: string.Empty,
                     templates: entry.Grants,
@@ -244,6 +246,7 @@ public static class WorldAdmissionDoor {
 
         if (wildcard is { } any) {
             verdict = new WorldAdmissionVerdict(
+                trustIdentity: WorldAdmissionTrustIdentity.FromEntry(entry: any),
                 identityDomain: sourceAuthority,
                 identitySubject: string.Empty,
                 templates: any.Grants,
@@ -292,8 +295,8 @@ public static class WorldAdmissionDoor {
 
         return true;
     }
-    /// <summary>Matches an already-verified (domain, subject) identity against a set of admission entries, through
-    /// the same (domain, subject, mode) predicate <see cref="TryAdmit"/> uses at first connection — factored out so
+    /// <summary>Matches the exact verified trust identity against admission entries, retaining mode, pinned key,
+    /// domain and subject from <see cref="TryAdmit"/> at first connection — factored out so
     /// a later re-authorization (a whole-document rebuild re-checking an already-connected peer against the
     /// current policy rather than the connection-time one — see <c>Server.WorldGrants.RemintPeerAdmissionGrants</c>)
     /// can never drift from what a fresh connection would decide. This performs no cryptographic verification at
@@ -302,13 +305,16 @@ public static class WorldAdmissionDoor {
     /// <param name="entries">The admission entries to match against — a candidate document's own, when
     /// re-authorizing at rebuild.</param>
     /// <param name="domain">The already-verified identity's domain.</param>
-    /// <param name="subject">The already-verified identity's subject (empty/null for a Vouches root's
-    /// chain-resolved subject, exactly as <see cref="TryAdmit"/> resolves and stores it).</param>
+    /// <param name="subject">The claim's verified subject, including a vouching chain's resolved subject.</param>
     /// <param name="verdict">What the matching entry authorizes, when matched.</param>
     /// <returns><see langword="true"/> when an entry matches.</returns>
-    public static bool TryMatchEntry(IReadOnlyList<WorldAdmissionEntry>? entries, string? domain, string? subject, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldAdmissionVerdict? verdict) {
+    /// <param name="trustIdentity">The exact mode and pinned identity that authenticated the original admission.</param>
+    public static bool TryMatchEntry(IReadOnlyList<WorldAdmissionEntry>? entries, string? domain, string? subject, WorldAdmissionTrustIdentity? trustIdentity, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldAdmissionVerdict? verdict) {
         if (entries is { Count: > 0 } rows) {
             foreach (var entry in rows) {
+                if ((trustIdentity is null) || (WorldAdmissionTrustIdentity.FromEntry(entry: entry) != trustIdentity)) {
+                    continue;
+                }
                 var matchesDirect = ((entry.Mode is WorldAdmissionTrustMode.SignsDirectly or WorldAdmissionTrustMode.OAuth) && string.Equals(
                     a: entry.Domain,
                     b: domain,
@@ -329,6 +335,7 @@ public static class WorldAdmissionDoor {
                     matchesVouching
                 ) {
                     verdict = new WorldAdmissionVerdict(
+                        trustIdentity: trustIdentity,
                         identityDomain: (domain ?? string.Empty),
                         identitySubject: (subject ?? string.Empty),
                         templates: entry.Grants,
@@ -358,6 +365,7 @@ public static class WorldAdmissionDoor {
                 (row.Subject == subject)
             ) {
                 verdict = new(
+                    trustIdentity: WorldAdmissionTrustIdentity.FromEntry(entry: row),
                     identityDomain: issuer,
                     identitySubject: subject,
                     templates: row.Grants,

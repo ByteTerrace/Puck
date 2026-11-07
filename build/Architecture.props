@@ -293,14 +293,10 @@
              Puck.Launcher.Windows gets no equivalent profile for the same reason Puck.Platform.Windows does not:
              it legitimately carries the full Windows surface. -->
         <PuckArchitectureProfile Include="Puck.Launcher.Linux" Forbid="Puck.Platform.Windows;Puck.Launcher.Windows;Puck.DirectX;Puck.DirectX.Presentation" />
-        <!-- The self-update stub (docs/project-map.md's Puck.Launcher.Stub row): its whole point is the ABSENCE of
-             every other Puck.* project, including Puck.Launcher itself, so a bricked stub is unrecoverable in-band by
-             construction rather than by policy, and its profile's Allow list is what proves that rather than merely stating it.
-             Its one reference is Puck.Confinement, a BCL-only leaf: the stub takes the update lease and holds the
-             version it launches through the same handle-held directories the launcher's pruner checks, and a second
-             copy of that native code in the stub would be the duplicate the pruner's safety cannot afford. -->
-
-        <PuckArchitectureProfile Include="Puck.Launcher.Stub" Allow="Puck.Confinement" />
+        <!-- The self-update stub excludes the launcher and engine implementations. Confinement owns its install
+             leases; Abstractions owns the flushed AtomicFile replacement shared with the updater. Maths is that
+             leaf's dependency. Keeping one durable writer avoids a weaker independent stub implementation. -->
+        <PuckArchitectureProfile Include="Puck.Launcher.Stub" Allow="Puck.Confinement;Puck.Abstractions;Puck.Maths" />
         <!-- The browser-wasm engine (docs/project-map.md's Puck.World.Browser row): Schema's closure plus
              Puck.World.Schema itself, since this project references it directly, and the authoring toolchain
              (Puck.Transpiler, Puck.World.Transpiler) the studio edits .puck sources through. Composition-roots layer, same as

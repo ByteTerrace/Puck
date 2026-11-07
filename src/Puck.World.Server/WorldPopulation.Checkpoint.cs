@@ -70,6 +70,7 @@ public sealed partial class WorldPopulation {
         ),
         writer: (m_continuationWriter ??= new WireWriter())
     );
+
     /// <summary>Captures every active slot's simulation state. Asserts the per-tick pending-output lists are empty —
     /// guaranteed by <see cref="WorldServer.TryCaptureCheckpoint"/>'s capture point sitting between a completed
     /// <c>Step</c> and the next, never inside one.</summary>
@@ -186,6 +187,7 @@ public sealed partial class WorldPopulation {
             AdmissionRevokedKeys: revokedKeys,
             IdentityDomain: entry.IdentityDomain,
             IdentitySubject: entry.IdentitySubject,
+            AdmissionTrust: entry.AdmissionTrust,
             ProducerAcquiredTarget: entry.ProducerState.AcquiredTarget,
             ProducerActivityPhase: entry.ProducerState.ActivityPhase,
             ProducerActivityRate: entry.ProducerState.ActivityRate,
@@ -311,6 +313,7 @@ public sealed partial class WorldPopulation {
             entry.AdmissionRevokedKeys = [];
             entry.IdentityDomain = string.Empty;
             entry.IdentitySubject = string.Empty;
+            entry.AdmissionTrust = null;
             entry.NavigationState.Clear();
             ClearDesignations(entry: entry);
         }
@@ -387,6 +390,7 @@ public sealed partial class WorldPopulation {
             entry.AdmissionRevokedKeys = [.. captured.AdmissionRevokedKeys.Select(selector: static key => (key.Capability, key.Subject))];
             entry.IdentityDomain = captured.IdentityDomain;
             entry.IdentitySubject = captured.IdentitySubject;
+            entry.AdmissionTrust = captured.AdmissionTrust;
             entry.ProducerState = new BodyProducerState {
                 AcquiredTarget = captured.ProducerAcquiredTarget,
                 ActiveProducerCurveIndex = captured.ProducerActiveCurveIndex,
@@ -463,6 +467,7 @@ public sealed partial class WorldPopulation {
                     entry.AdmissionRevokedKeys.Clear();
                     entry.IdentityDomain = string.Empty;
                     entry.IdentitySubject = string.Empty;
+                    entry.AdmissionTrust = null;
                 } else {
                     entry.Parked = true;
                     entry.ParkedUntilTick = unchecked((((long)tick) + m_reconnectGraceTicks.Ticks));

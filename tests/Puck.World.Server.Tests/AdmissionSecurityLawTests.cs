@@ -27,6 +27,41 @@ namespace Puck.World.Server.Tests;
 /// the socket laws still exercise the complete cryptographic Hello door. OAuth admission has separate laws.
 /// </summary>
 public sealed class AdmissionSecurityLawTests {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void DirectSignerNeverReceivesAnotherTrustModesPolicy(bool directFirst) {
+        var root = GenerateIdentity(subject: "root");
+        var signer = GenerateIdentity(subject: "contractor");
+        using var rootKey = root.Key;
+        using var signerKey = signer.Key;
+        var direct = BuildEntry(identity: signer with { Domain = root.Domain }, grants: []) with { Disclosure = WorldDisclosureTier.Frames };
+        var vouching = BuildEntry(identity: root, grants: [new(WorldCapability.Observe, Budget: 100)]) with {
+            Mode = WorldAdmissionTrustMode.Vouches,
+            Subject = null,
+            Disclosure = WorldDisclosureTier.Replica,
+        };
+        var challenge = WorldAdmissionDoor.NewChallenge();
+        var now = ClaimInstant.ToUnixTimeSeconds();
+        var claim = AttestationSigner.SignClaim(codec: new CborAttestationCodec(), domain: root.Domain,
+            subject: signer.Subject, signerKey: signer.Key, signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
+            purpose: WorldAdmissionDoor.Purpose, notBefore: (now - 1), notAfter: (now + 1),
+            audience: WorldAdmissionDoor.Audience, sequence: null, claimBytes: challenge);
+        var outcome = WorldAdmissionDoor.TryAdmit(chain: [],
+            challenge: challenge, claim: claim, entries: (directFirst ? [direct, vouching] : [vouching, direct]), now: ClaimInstant);
+
+        Assert.True(condition: outcome.Admitted, userMessage: outcome.Detail);
+        Assert.Equal(expected: WorldDisclosureTier.Frames, actual: outcome.Tier);
+        Assert.Empty(collection: outcome.Grants!);
+        Assert.True(condition: WorldAdmissionDoor.TryMatchEntry(entries: [vouching, direct], domain: root.Domain,
+            subject: signer.Subject, trustIdentity: outcome.Verdict!.TrustIdentity, verdict: out var renewed));
+        Assert.Equal(expected: WorldDisclosureTier.Frames, actual: renewed.Tier);
+        Assert.False(condition: WorldAdmissionDoor.TryMatchEntry(entries: [vouching], domain: root.Domain,
+            subject: signer.Subject, trustIdentity: outcome.Verdict.TrustIdentity, verdict: out _));
+        Assert.False(condition: WorldAdmissionDoor.TryMatchEntry(entries: [direct with { PublicKey = vouching.PublicKey }],
+            domain: root.Domain, subject: signer.Subject, trustIdentity: outcome.Verdict.TrustIdentity, verdict: out _));
+    }
+
     private static CancellationToken TestToken => TestContext.Current.CancellationToken;
 
     private static async Task<(Stream Stream, ReadOnlyMemory<byte> Challenge)> ConnectPastChallengeAsync(WorldPeerHost host, PeerTestClient client, CancellationToken ct) {

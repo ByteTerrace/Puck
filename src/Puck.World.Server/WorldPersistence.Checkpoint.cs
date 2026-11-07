@@ -851,7 +851,7 @@ public sealed partial class WorldPersistence {
         }
 
         if ((authorityIdentity ?? server.AuthorityIdentity) is { Length: > 0 } restoredAuthority) {
-            Host.AuthorityIdentity = ((restoredDefinition.Host.Authority is { Length: > 0 } declaredAuthority)
+            Host.AuthorityIdentity = ((restoredDefinition.Host.AuthorityNamespace is { Length: > 0 } declaredAuthority)
                 ? declaredAuthority
                 : restoredAuthority
             );
