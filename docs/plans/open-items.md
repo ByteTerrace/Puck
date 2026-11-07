@@ -749,11 +749,12 @@ Remaining:
   support along the measured normal, not the volume's own nearest point. Cover
   the volume with core spheres as the certified sweep does
   (`FixedFieldContactSolver.WalkCores`, `FixedFieldContactSolver.cs:209`).
-- **[medium] Relief bounds for non-exact primitives** (`WorldColliderSet.PrimitiveColliders`,
-  `src/Puck.World.Server/WorldColliderSet.Relief.cs:30`): a superellipsoid grows
-  by its gauge and every blend's growth is charged, but a primitive whose field
-  reads under its distance (the cone family) grows only by the reach. Take each
-  shape's gain from the evaluator's reach certificates.
+- **[medium] Relief bounds for non-exact primitives** (`WorldColliderSet.CopyReach`,
+  `SdfSolidGeometry.DilationGain`): a gauge-lowered shape (sphere, ellipsoid,
+  superellipsoid) and the generic Scale arm grow by their gain and every blend's
+  growth is charged, but a primitive whose own unit field reads under its
+  distance (the cone family) grows only by the reach. Take each shape's gain
+  from the evaluator's reach certificates.
 - [medium] A carved creation's contact narrows to its analytic pieces only for
   hard unions and hard subtractions (`FixedFieldPartition`, built in
   `WorldColliderSet.PrimitiveColliders`): any other blend (smooth, chamfer,

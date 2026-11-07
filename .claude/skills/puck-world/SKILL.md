@@ -805,14 +805,20 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   A field collider costs a certified field solve a query only where a carve can
   reach the body: an unrelieved creation whose shapes join only by hard union or
   hard subtraction carries a `FixedFieldPartition` (its union pieces with their
-  exact analytic colliders, and each subtrahend's margined bound), and a query
-  whose region meets no carve and one exact piece reads that piece's analytic
-  collider (`FixedStaticCollider.Narrow`, behind `TryGetPush`, the support
-  descent and rigid contact collection; `world.counters physics.contact`
-  counts them as `field-narrowed`), so the river's whole ground patch costs no
-  more than a box away from the channel. A smooth or other blend, or relief,
-  leaves every query on the field, and so does a region meeting a piece whose
-  collider only bounds it (an ellipsoid stone). The hall builds a doorway, window or stairwell as a union of
+  exact analytic colliders, and each operand's reach: its
+  `SdfSolidGeometry.LocalBox`, the one rule for a shape's extent, grown by its
+  margin times `SdfSolidGeometry.DilationGain`), and a query whose region meets
+  no carve and one exact piece reads that piece's analytic collider
+  (`FixedStaticCollider.Narrow`, behind `TryGetPush`, the support descent and
+  rigid contact collection, whose support witness and edge witness name the
+  piece; `world.counters physics.contact` counts them as `field-narrowed`), so
+  the river's whole ground patch costs no more than a box away from the channel.
+  A smooth or other blend, or relief, leaves every query on the field, and so
+  does a region meeting a piece whose collider only bounds it (an ellipsoid
+  stone). A projection from a point (`FixedSurfaceQuery`'s nearest point for a
+  hold or an anchor) has no bounded region to narrow and reads the field, within
+  its bracket of the piece; the world-wide field provider
+  (`FixedFieldContactSolver`) carries no partition. The hall builds a doorway, window or stairwell as a union of
   boxes around the opening, and keeps 2.4 m of headroom over every tread and landing (her
   height plus the 0.3 m step-up raise). `worlds/debug/hall.puck` is the
   worked building: switchback stairs of 0.25 m risers, slabs holed by unions,

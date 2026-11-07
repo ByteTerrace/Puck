@@ -105,12 +105,12 @@ public sealed class CarvedFieldPartitionLawTests {
     }
 
     // F3: under a 0.12 m contact margin an ellipsoid carve of radii [4, 1, 4] dilates by its gauge, to x = 4.48 at its
-    // equator, not 4.12; a ball over x = 4.3 has the ground cut from under it.
+    // equator, not 4.12; a small ball over x = 4.3, whose reach misses the undilated carve, has the ground cut from under it.
     [Fact]
     public void AGaugeScaledCarveUnderAMarginReachesItsDilatedSurface() {
         var collider = Collider(margin: 0.12f, Ground, Shape(blend: SdfBlendOp.Subtraction, id: 1, position: Vector3.Zero,
             scale: new Vector3(x: 4f, y: 1f, z: 4f), type: SdfSolidPrimitive.Ellipsoid));
 
-        Assert.False(condition: Agree(centre: V(x: 4.3d, y: 0.2d, z: 0d), collider: collider, radius: 0.1d).Pushes);
+        Assert.False(condition: Agree(centre: V(x: 4.3d, y: 0.2d, z: 0d), collider: collider, radius: 0.05d).Pushes);
     }
 }
