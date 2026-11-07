@@ -59,9 +59,18 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   a midpoint's nearest old surface and inherited error depend only on its two
   places, material and the prepared fan. `PrepareFrom` clears the witness map,
   and `Pass` stops at its first commit; never retain those answers across it.
+  `MeasureReverse` computes a maximum of point errors: once a point has a
+  witness no farther than the maximum established by preceding points, a nearer
+  witness cannot change the result. The cached distance is an upper bound plus
+  the next old triangle to visit, not necessarily the exact nearest distance.
+  A tighter later target resumes that search; only a completed search may raise
+  the maximum. Shared edge midpoints precede the unshared centroid.
   Forward checks measure the removed vertex's samples first, then every other
-  tracked sample. Each independently chooses its nearest admissible witness;
-  ordering only avoids later work when an early sample refuses the collapse.
+  tracked sample. An original vertex retained by its tracked triangle witnesses
+  its own position, normal and material exactly; the other samples choose their
+  nearest admissible witness. Ordering avoids later work when an early sample
+  refuses the collapse. A nearest point already beyond the current distance
+  limit needs no interpolated-normal calculation.
 - **Retry refused edges only after their inputs change.** `Collapser.Pass` keys
   each rejection by its directed edge and both endpoint fan revisions. `Commit`
   is the one mutation door for topology, surface and line samples, and inherited
@@ -301,8 +310,10 @@ laws exercise that boundary.
   group's far ground cut at 8 m makes 160,000 draws, too many to cull and
   level on the CPU for every pass, so `frame/sdf-mesh-selection.hlsli` selects them through the existing counted indirect
   path; chunk sizing still controls retained geometry and candidate work.
-  `SdfMeshChunks` partitions the finished contour's triangles by their
-  centroid into 8 m bins before merging and collapse. It never clips a triangle: each chunk's box includes its whole
+  `SdfMeshChunks` merges the contour's planar regions first, then partitions the
+  merged triangles by centroid into 8 m bins before collapse. Splitting first
+  locks artificial rows of contour vertices along otherwise flat faces and
+  makes every later level keep them. It never clips a triangle: each chunk's box includes its whole
   triangles. The merge keeps every open-edge vertex and the collapse locks them, so every level shares the exact seam
   edges with its neighbours. `SdfMesh.Chunks` holds the separately levelled draws; the parent holds the joined vertex
   and triangle attributes the chunks view, and never enters the GPU region. The store writes only the chunks; an offline
