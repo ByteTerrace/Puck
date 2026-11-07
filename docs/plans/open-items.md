@@ -1134,13 +1134,6 @@ specification, the audit, the definition of done and the lanes (A2 to A5 the wor
 authoring, R3 the particle pool, P1 the tour). The items below
 are what the plan defers or the water strained in a system beside it.
 
-- [medium · glass-shadow review F4] Attribute the Vulkan neutral-default image
-  residual. First establish fresh-process repeatability within one build using
-  the [rendering capture procedure](../../.claude/skills/rendering/SKILL.md#seeing-a-change).
-  Then isolate renderer changes in a shared authored scene, keeping the installed
-  optical-allocation report beside the stills. Absence of optical buffers does
-  not prove unchanged pixels; judge shading correctness rather than making the
-  earlier build's image an invariant.
 - [low · glass-shadow review F5] Mixed-density faces do not define a thickness
   integral: `src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-optical-depth.hlsli:22`
   accumulates each face's own density. An entry at density 0.8 and an exit at
