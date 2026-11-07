@@ -491,7 +491,8 @@ along the course by a subtraction per leg (bed `bedHalf`, banks widening to
 has no notch), the bed and banks in one material and the riffle and bank stones
 as unions. A creation that blends other than by union collides as its composed
 field (`WorldColliderSet.CollidesAsField`), so a body walks the banks and the
-bed as drawn. The debug world authors the course once (`riverLegs`,
+bed as drawn, and a body the cuts cannot reach reads the patch's ground box
+analytically (`FixedFieldPartition`). The debug world authors the course once (`riverLegs`,
 `worlds/debug/water-site.puck`): the channel, the water, the bridge and the
 two basins' wall openings all read it, and the pool's and the plunge basin's
 openings sit where the course crosses their walls (`riverCrossing`).
