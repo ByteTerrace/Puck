@@ -510,11 +510,8 @@ public sealed partial class WorldPersistence {
     /// <param name="authorityIdentity">The namespace the restored authority mints entity addresses under, or
     /// <see langword="null"/> for <paramref name="instanceIdentity"/> (see the <see cref="WorldServer"/>
     /// constructor).</param>
-    /// <param name="jobs">The engine's job pool the restored tick's partitioned phases fork onto, or
-    /// <see langword="null"/> to run them on the stepping thread.</param>
     /// <returns>The restored server and the population it owns.</returns>
-    [Constructs]
-    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null, bool restoreOwnedIdentities = true, string? authorityIdentity = null, Puck.Hosting.Jobs.JobPool? jobs = null) {
+    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null, bool restoreOwnedIdentities = true, string? authorityIdentity = null) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: machines);
@@ -532,8 +529,7 @@ public sealed partial class WorldPersistence {
             instanceIdentity: instanceIdentity,
             machines: machines,
             population: population,
-            profiles: profiles,
-            jobs: jobs
+            profiles: profiles
         );
 
         server.Adjacencies = adjacencies;

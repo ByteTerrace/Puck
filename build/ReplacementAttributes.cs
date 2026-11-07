@@ -37,13 +37,3 @@ internal sealed class ReplacesAttribute(Type root) : Attribute {
     /// <summary>The root type the member can replace.</summary>
     public Type Root { get; } = root;
 }
-
-/// <summary>
-/// Marks a static method that builds a new object and restores state into it before returning it, so the replacement it
-/// reaches belongs to the new object, which no one holds yet: construction, the same as a constructor, where
-/// <c>Puck.Analyzers</c> already ignores what the constructor swaps. A call to it replaces nothing a caller captured, so
-/// the analyzer does not record it. Never put it on a method that restores into an object its caller passed in or
-/// already holds.
-/// </summary>
-[AttributeUsage(validOn: AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
-internal sealed class ConstructsAttribute : Attribute;

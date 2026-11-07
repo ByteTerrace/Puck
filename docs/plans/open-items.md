@@ -3678,10 +3678,25 @@ ordinary · Next: new content and art on the owner's call.
 
 - [high] Player-state defects found grounding the hub design. The design memo
   ([hub and saves](hub-and-saves.md)) decides the shape; these are defects
-  whatever it decides (the desktop's durable images are built: a persisted
-  destination's row writes `durable.image` at stop, at quit and every engine
-  minute, and its next activation restores it; the memo's H7 remainder is
-  user-scoped images under the account, which waits for H2's one account):
+  whatever it decides:
+  - `WorldInstanceHost.DurableImages` is never assigned, so a persisted
+    destination loses its state when the process quits. A first build
+    (`WorldDirectoryImages`, reverted; git history keeps it as prior art) failed its review on image identity: a path from the instance name
+    collides by case on Windows (`room`, `ROOM`); adoption (`TryAdopt`) makes the
+    location depend on activation order; the image carries its own definition, so
+    a retargeted destination or an edited source is silently replaced by the
+    saved one; reactivating a stopped forwarding row refuses its own image
+    (`LifetimeAuthority` mints `N~1`) and retiring the failed activation drops the
+    resolver generation, so later writes stop; some restore refusals
+    (`InvalidDataException` from admission) skip the set-aside and clean start;
+    quit skips a frozen row whose final image failed. The fix is a design step
+    first: image identity from (destination, scope, referenced document), stored
+    filesystem-safe, restored onto the current source (the memo's M1 question);
+  - the deal gate (`WorldDefinitionValidator.TryValidateDealtChildren`) admits a
+    solid variant whose shape the load validator refuses (`CreationShapeLaws
+    .SolidRefusals` runs only on the template's base prototype), so the sweep can
+    install a document that load rejects; the gate should be the load
+    validator's own child laws, not a second list;
   - `MachineCreationRequest.SavePath` is never set, so a cartridge's battery
     save dies with the process. The memo's H8 (battery bytes in the request,
     cores without file I/O) needs the image of the world that owns the machine,
