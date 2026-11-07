@@ -1101,33 +1101,6 @@ final set:
   is a quality-versus-bar trade the memo does not make: it goes to the owner
   with the readings.
 
-1. **The interpreter, all three phases, both kernels, the standard's programs
-   beside the old layers** (GPU). The rolled loops in `sdf-light-stage.hlsli`
-   and `sdf-glass.comp.hlsl` through one generated entry; the light and
-   compose phases replacing the toon branches; the stamp's frame ops and
-   contact; the shadow-demand envelope in the surface pass and its signature;
-   the read flags driving `SdfFrameBlock` and the cadence; the standard's five
-   templates authored and the debug world's palettes calling them, behind a
-   measurement lever `world.shade programs|layers` that selects the authored
-   programs or today's HLSL layers in one build; the world default program
-   (`render.shade`, `world.shade default`); the planner `SdfShadeDispatch` on
-   the unsplit path and the glass pass with a provisional `MaxWork` and the
-   in-flight identity lists, so no authored program ever dispatches outside a
-   job; executed shade ops counted into the views pass's work counters
-   (`sdfWorkSteps`, which views leaves at zero today) and two debug views,
-   `world.debug-view shade-cost` (each pixel's static cost over the cap, as
-   `sky-cost` shows the sky's) and `shade-tier` (interpreted, specialized or
-   quarantined). Check: settled stills of the
-   meadow, the forest road, the water and a cel-styled stop on both backends,
-   programs against layers, within the still tolerance (fresh base and head
-   processes under lockstep, pinned camera, tick and exposure); a shadowed
-   back-facing surface under a wrap-raising program and a lane-animated
-   normal and wrap show no unmeasured lit band; a clock-driven program, a
-   world-lane program and a program reading neither change the frame's clock
-   and lanes exactly as the flags say (`world.counters gpu` shows the still
-   program's views held); contact foam and a transformed static copy's flow
-   render through the glass invocation; `puck mesh identity --against` shows
-   the bake identity unmoved.
 2. **Measure the interpreter on the bar devices** (GPU leg). The decision
    matrix's tier 1 unsplit column against base, on every row the step reaches
    (zero programs, one program, the whole standard set through the lever, the

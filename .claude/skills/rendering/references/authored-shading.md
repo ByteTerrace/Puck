@@ -101,12 +101,34 @@ clock/world-lane/no-read cadence separately. `puck mesh identity --against`
 checks that presentation changes leave the bake identity alone. Timing belongs
 to step 2's measurement round.
 
+`worlds/debug/shade-surface-checks.puck` isolates the shadow and glass cases:
+its `shadeWrap` and `shadeTilt` state cells drive the panel's world lanes, a
+blocker covers one panel, and shallow glass copies carry object-frame flow with
+one rotated copy. Shadows are explicitly enabled; the minimal basis defaults
+them off. Keep indirect lighting off for the isolated shadow witness, and check
+the cel sphere with indirect lighting enabled separately.
+`worlds/debug/shade-checks.puck` isolates cadence and the inherited default.
+Use `world.row.set render shade` to select programs reading `clock`,
+`lanes.world0`, or neither, and inspect the views pass while simulation runs.
+The clock reader executes as ticks advance; the lane reader stands until
+`shadeLane` changes; the neither-reader stands throughout. `SdfFrameBlockLawTests`
+checks the corresponding clock/lane bytes and default identity directly.
+
 Wait for `world.wait ready` before submitting simulation-routed setup commands
 under lockstep. `WorldRenderProbe` includes `RenderGraphRuntime.Render` in readiness,
 so it reports the dependency holding a tick, including probe convergence in a routed
 view, instead of declaring a partially completed graph ready. A frame rendering
 while simulation commands wait is not evidence of a device hang; inspect that
 reason and the advancing work counters first.
+
+Keep lockstep enabled from startup for fresh-process animation comparisons.
+Pausing the boot world does not pause routed instances: inspect
+`world.instance.status` and pause their schedules too when their lighting must
+stand. A `world.wait captures` answer only means no request remains pending;
+confirm the requested PNG and its capture completion line. A refused request
+also drains that queue, including when convergence outlasts the host's capture
+hold budget. After an unknown control outcome, read the current state before
+moving a camera or issuing the next capture.
 
 `latticeGradient` uses `sdfLatticeNoiseGradient3`, shared with the old flow layer.
 `shape` is a coverage-distance operation: within its footprint neighbourhood it

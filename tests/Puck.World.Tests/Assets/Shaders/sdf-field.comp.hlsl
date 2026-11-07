@@ -2,8 +2,8 @@
 // the program the host packed into sdfWords, at each case's point, and writes what mapCore returns into one texel of the
 // results. SdfFieldDeviceLawTests packs each program with SdfProgram, binds it at the world interface's sdfWords, and
 // dispatches the probe once per program, pushing the program's first case and its case count. The probe's own two
-// resources sit in the Pass group at bindings the world interface leaves free; the pushed index is Direct3D 12's root
-// constant at b0, space 4.
+// resources sit in the Pass group at bindings the world interface leaves free; its generated pushed index carries the
+// case range through the same Vulkan push constant / Direct3D 12 root constant binding.
 
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-world.interface.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-vm.hlsli"
@@ -16,16 +16,11 @@
 
 static const uint FieldResultsWidth = 256u;
 
-struct FieldProbeIndex {
-    [[vk::offset(0)]] uint index;
-};
-[[vk::push_constant]] ConstantBuffer<FieldProbeIndex> fieldProbeIndex : register(b0, space4);
-
 [numthreads(64, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
     // The pushed index packs the program's first case in its low 16 bits and its case count in its high 16.
-    uint first = (fieldProbeIndex.index & 0xFFFFu);
-    uint count = (fieldProbeIndex.index >> 16u);
+    uint first = (pushedIndex.index & 0xFFFFu);
+    uint count = (pushedIndex.index >> 16u);
 
     if (id.x >= count) {
         return;

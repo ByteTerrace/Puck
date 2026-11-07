@@ -40,6 +40,9 @@ host tool.
 ## Rules that prevent wrong answers
 
 - Search paths are repository-relative unless the task says otherwise.
+- Positional roots must exist and are literal paths, never wildcard paths. Discover
+  an uncertain filename with `--files`, or search an existing directory with `-g`;
+  `src/Puck.World*` is not a family of search roots.
 - Use `-F` for literal text; otherwise the pattern is the Puck regex dialect.
 - Add `-M 0` when all results are required; the default result cap is 250 and
   only a stderr line reports a truncation. `-l` lists files, `-c` counts matching lines per file,
