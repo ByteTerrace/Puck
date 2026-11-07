@@ -86,7 +86,8 @@ public readonly record struct PresentationRate(int DisplayHertz, double GridHert
             return ((frame * frames) <= GridSteps(hertz: hertz));
         }
 
-        return ((Math.Max(val1: 0d, val2: frameSeconds) * frames) <= ((1d / hertz) + ToleranceSeconds));
+        // Each frame estimated from the one sampled span carries that sample's jitter, so each takes the slack.
+        return ((Math.Max(val1: 0d, val2: frameSeconds) * frames) <= ((1d / hertz) + (ToleranceSeconds * frames)));
     }
     /// <summary>Returns the longest interval between updates a floor allows: a whole number of grid steps on a fixed grid,
     /// otherwise the floor's own period.</summary>
