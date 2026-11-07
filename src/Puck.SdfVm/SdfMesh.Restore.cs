@@ -18,6 +18,12 @@ namespace Puck.SdfVm;
 public sealed partial record SdfMesh {
     private Restorable? m_restorable;
 
+    // A mesh prints its counts: its joined indices may be absent and its normals and levels let go.
+    private bool PrintMembers(System.Text.StringBuilder builder) {
+        _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"Vertices = {Positions.Length}, Triangles = {TriangleCount}, Levels = {Levels.Count}, Chunks = {Chunks.Count}, Resident = {Resident}");
+        return true;
+    }
+
     /// <summary>Gets whether the mesh's normals and coarser levels' indices are in memory: always, unless the library
     /// published it from its store and no region has needed its words since they landed.</summary>
     internal bool Resident => m_restorable?.Resident ?? true;
@@ -52,12 +58,14 @@ public sealed partial record SdfMesh {
         private readonly List<(int Piece, OwnedBuffer<Vector3> Block, int Length, Payload Owner)> m_normals = [];
         private readonly List<(int Piece, int Level, OwnedBuffer<uint> Block, int Length, Payload Owner)> m_levels = [];
         private int m_needs;
-        private State m_state;
+        // Written under the gate; read without it, so the frame thread never waits on a restore's copy. The write that
+        // makes it Resident follows the copy, so a reader that sees Resident sees the restored parts.
+        private volatile State m_state;
         // The bytes the blocks hold while resident.
         private long m_bytes;
 
-        public bool Resident { get { lock (m_gate) { return (m_state == State.Resident); } } }
-        public bool Lost { get { lock (m_gate) { return (m_state == State.Lost); } } }
+        public bool Resident => (m_state == State.Resident);
+        public bool Lost => (m_state == State.Lost);
 
         // A piece of -1 names the joined normals of a chunked mesh, which its chunks view in order.
         public void AddNormals(int piece, Payload owner, OwnedBuffer<Vector3>? block) {

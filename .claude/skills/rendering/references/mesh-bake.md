@@ -289,9 +289,10 @@ laws exercise that boundary.
   `SdfMeshChunks` partitions the finished contour's triangles by their
   centroid into 8 m bins before merging and collapse. It never clips a triangle: each chunk's box includes its whole
   triangles. The merge keeps every open-edge vertex and the collapse locks them, so every level shares the exact seam
-  edges with its neighbours. `SdfMesh.Chunks` holds the separately levelled draws; the parent concatenates their merged
-  surfaces for whole-group queries, and never enters the GPU region. The store writes only the chunks and reconstructs
-  that query view on load. Dynamic groups and glass stay whole; glass skips collapse because its pass always draws level
+  edges with its neighbours. `SdfMesh.Chunks` holds the separately levelled draws; the parent holds the joined vertex
+  and triangle attributes the chunks view, and never enters the GPU region. The store writes only the chunks; an offline
+  decode joins their indices for whole-group queries (the audit), and a published (native) parent keeps none, since the
+  region, the irradiance scene and the store all read the chunks. Dynamic groups and glass stay whole; glass skips collapse because its pass always draws level
   zero. The existing per-draw box cull and detail selector apply to each chunk without shader changes.
 - **A glass instance is a group of its own** (`SdfMeshBakeGroup.Glass`, from
   `SdfProgram.IsGlassRange`): it never joins a static run and no instance joins
@@ -769,6 +770,14 @@ laws exercise that boundary.
   mesh renumbered (`SdfMeshPathBake.Renumbers`), so the bodies after it bake
   nothing, though they stand off their baked pose (the renumber law in
   `SdfMeshPathBakeLawTests.Rebuild`).
+- **A published mesh is what the store reads back.** `SdfMeshLibrary.Store` writes the entry and publishes it
+  through `TryLoad`, so a cold bake draws the decoded mesh a warm boot loads, and every store-published mesh's normals
+  and coarser levels' indices can be let go once no region owes its words and restored from the entry when a
+  region owes them again (`SdfMesh.Restore.cs`; the residency's store line reads `mesh-releases`, `mesh-restores`,
+  `mesh-released-now` and `mesh-restore-misses`). A restore the store cannot answer loses the geometry
+  (`SdfMeshLibrary.Lose`): the library forgets it, `LostRevision` moves, and each bake holding the library restarts on
+  its program, baking again the groups whose meshes were lost (`Keeps`). A write the store refuses publishes the
+  baked mesh, which keeps its parts.
 - **The World's library persists across runs** (`SdfMeshStore`, the `meshes`
   device cache), keyed by geometry and the bake's identity
   (`SdfMeshBakeIdentity`): the hashes of the mask and bake kernels' bytecode

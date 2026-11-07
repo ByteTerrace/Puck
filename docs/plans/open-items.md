@@ -376,11 +376,6 @@ The custom no-GC runtime port stays later work, on the
   peak, so the account cannot pace the collections it causes. The cure is the
   next native movers (the contour and the refinement's per-cell masks), not a
   count cap.
-- [low] A chunked mesh stores its triangles' indices twice: the parent's
-  joined indices for whole-group queries and each chunk's own
-  (`SdfMesh.Storage.cs`, `NativeCopy`). Dropping the parent's needs its readers
-  (the irradiance scene, `SdfMeshAudit`, the diagnostics' nearest query) to
-  walk the chunks.
 - [low] The library releases evicted claims, which frees native payloads,
   under its own gate (`SdfMeshLibrary.cs` `Retain`), the gate the frame thread
   takes in `Restart` through `TryTake`.
@@ -2321,13 +2316,24 @@ first:
 
 Grounded causes and leads, largest first:
 
-- The baked meshes are held twice: the region's GPU copy and the CPU payloads
-  (positions and normals, level-0 indices and materials, levels 1 and 2;
-  `world.residency`'s `vertex-bytes` and `level0`..`level2` read each). Normals
-  and levels 1 and 2 have no CPU reader after landing except the store write,
-  material variants and a region rebuild; releasing them (and the chunked
-  parent's second index copy) needs each of those readers to read the store or
-  the GPU copy instead. Owner: rendering/bake.
+- The baked meshes keep part of their CPU payload beside the region's GPU copy.
+  A store-published mesh lets its normals and coarser levels' indices go once
+  no region owes its words and restores them from the store when one does
+  (`SdfMesh.Restore.cs`; `mesh-released-now` on `world.residency`'s store
+  line), and a published chunked mesh keeps no joined indices. What stays is
+  positions, level-0 indices and every level's triangle materials: the GI trace
+  scene's CPU hierarchy reads the first three (the trace-scene lead below), renumbered
+  variants read the materials. Next cuts: dynamic and glass meshes, which the
+  scene leaves out, can let positions and level-0 indices go through the same
+  door; the static ones follow once placement and classification move to the
+  GPU trace. Owner: rendering/bake.
+- The mesh region keeps meshes no draw names until their words outweigh the
+  named ones (`SdfMeshRegionArena.Plan`'s relocation rule, past
+  `RetainedSlackWords`), so a running debug world whose bodies change form and
+  whose placements re-pose grows `region-used` far past its named meshes within
+  minutes (the readings are in the commit that made mesh storage restorable).
+  Bound the retained slack by bytes, not by the named meshes' size.
+  Owner: rendering/bake.
 - The device-local memory no residency line names needs an owner line. The
   render-graph nodes' `owned-bytes` gauges (`world.counters gpu --json`) run
   past the 1 MiB an MCP answer carries, so name it with a reading that fits

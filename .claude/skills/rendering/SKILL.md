@@ -758,7 +758,11 @@ compares and fails naming the file that drifted, it writes nothing.
   each mesh's positions and indices, never a copy. A new consumer of baked
   triangles reads the `SdfMesh` buffers rather than copying them: the debug
   world's published meshes are native payloads with explicit consumer claims, and every copy costs that
-  much again in working set.
+  much again in working set. A mesh the library published from its store lets its normals and coarser
+  levels' indices go once no region owes its words, and the region's owed set (`OwedMeshes`, which holds
+  `SdfMesh.Need` while a placement is owed) brings them back from the store before it lands the mesh
+  again (`SdfMesh.Restore.cs`). Reading those parts anywhere else while they are let go throws; a new
+  reader holds a need first. A published chunked mesh keeps no joined indices: read its chunks.
 - A scoped creation emits one instance, a scope-free one an instance per shape
   (`CreationStampEmitter.PerCopyInstanceCount`). `world.budget` prints the live
   cost sheet.
