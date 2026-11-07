@@ -102,7 +102,9 @@ orders, verifying a change by building and running it, and fixing a defect at it
   (`timeout 590 bash -c 'until …'`). One waiter per condition: never start a wait on a file or job
   while an earlier wait on it is still running (three bounded copies on one log is still three
   copies); a background wait notifies once, so take the next step on its notification instead of
-  arming another.
+  arming another. Prefer a bounded foreground wait for a run under about ten minutes; it leaves
+  nothing behind. No agent can list its own background tasks, so when the lead resumes you for a
+  next step, first stop every background task and monitor your previous step started.
 - Evidence is load-independent ([the phases](../orchestration/SKILL.md#spend-verification-not-writing)):
   counters, hashes, bytes, executes, laws, captures. Report no timing as a result. A timing
   question goes in your hand-back as a measurement request (frozen before and after builds, the
