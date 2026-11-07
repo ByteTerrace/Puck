@@ -45,10 +45,13 @@ milestone. The owner requested its baseline and implementation plan, which
    [baseline and implementation order](dense-landscapes.md) keep CPU field
    queries first and connect static-copy sharing, retained updates, GPU
    instancing, geometry/shadow work and memory to one proving landscape.
-1. [Measurement window](#measurement-window) [the frame bar's evidence]: the
-   harness for the questions no `puck measure` report reads yet (windowed boot
-   frames, glass-pass GPU time, the tour's frame percentiles, `host.frames` at
-   the water views), then a window that answers them.
+1. The frame bar [high]: 60 FPS steady state on the lead machine is not met
+   (every sweep stop fails it, with p99 hitches of 23-50 ms; see
+   [frame-time findings](#other-frame-time-findings)). Measure every stop's
+   p50/p99 in a quiet [measurement window](#measurement-window), then fix the
+   worst stops at their causes. The disclosure leaks, transmission's exit-layer
+   highs, the lockstep relight under a moving sun and the tour's and cold
+   bake's memory are open highs in their own packets, not owner decisions.
 2. [Memory](#memory-on-the-deck-tier) [high, the Deck]: the debug world's
    process plus GPU memory at or under 10 GB on the Deck tier, attribution
    first.
@@ -126,13 +129,6 @@ milestone. The owner requested its baseline and implementation plan, which
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
-- Deferred by the owner, not resolved, and first in Next: the disclosure leaks the harness shows
-  ([disclosure](disclosure.md#the-build-order)); transmission's remaining
-  exit-layer highs ([transmission](transmission.md)); the lockstep relight
-  under a moving sun ([lighting](#lighting-and-gi)); the tour's and the cold
-  bake's memory ([memory](#memory-on-the-deck-tier),
-  [sweep](#sweep-and-visual-checks)); and the frame bar failing at every stop
-  ([frame-time findings](#other-frame-time-findings)).
 - Pushing `main` (owner-only: a push to `main` deploys to Azure). The
   integration branch `lead/velocity` is far ahead of `main`, hundreds of commits.
   Recommendation: push once the milestone's riskiest areas have had a fresh fix
