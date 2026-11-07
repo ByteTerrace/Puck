@@ -50,34 +50,30 @@ public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         var ordinal = RowOrdinal;
 
         if (RowFrom is { } live) {
-            var selected = live.Resolve(
-                reader: reader,
-                rowOrdinal: out ordinal
-            );
+            var selected = live.Resolve(reader: reader);
 
-            if (selected != KeyNaming.Cell) {
-                return ((selected == KeyNaming.Fault)
-                    ? RuleFact.Faulted(kind: ValueKind)
-                    : RuleFact.Absent(kind: ValueKind));
+            if (!selected.TryNamed(value: out ordinal)) {
+                return Fact.Unnamed(
+                    kind: ValueKind,
+                    resolved: selected
+                );
             }
         }
 
         return RuleReads.ReadCell(
-            key: RuleReads.ResolveKey(
+            kind: ValueKind,
+            reader: reader,
+            resolved: RuleReads.ResolveKey(
                 keyFrom: KeyFrom,
                 literal: Key,
-                naming: out var naming,
                 reader: reader
             ),
-            kind: ValueKind,
-            naming: naming,
-            reader: reader,
             rowOrdinal: ordinal
         );
     }
@@ -115,10 +111,10 @@ public sealed class LocalOperand : RuleOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: ValueKind,
             value: reader.LocalValue(ordinal: Ordinal)
         );
@@ -166,22 +162,22 @@ public sealed class TableOperand : RuleOperand {
         val2: 1
     ))));
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         var key = Key;
 
         if (KeyFrom is { } indirection) {
-            var naming = RuleReads.ResolveIndex(
-                index: out key,
+            var resolved = RuleReads.ResolveIndex(
                 reader: reader,
                 reference: in indirection
             );
 
-            if (naming != KeyNaming.Cell) {
-                return ((naming == KeyNaming.Fault)
-                    ? RuleFact.Faulted(kind: ValueKind)
-                    : RuleFact.Absent(kind: ValueKind));
+            if (!resolved.TryNamed(value: out key)) {
+                return Fact.Unnamed(
+                    kind: ValueKind,
+                    resolved: resolved
+                );
             }
         }
 
@@ -190,11 +186,11 @@ public sealed class TableOperand : RuleOperand {
             key: key,
             raw: out var raw
         )
-            ? RuleFact.Finite(
+            ? Fact.Finite(
                 kind: ValueKind,
                 value: raw
             )
-            : RuleFact.Absent(kind: ValueKind)
+            : Fact.Absent(kind: ValueKind)
         );
     }
 }
@@ -209,10 +205,10 @@ public sealed class TickOperand : RuleOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Int,
             value: unchecked((long)reader.Tick)
         );
@@ -281,31 +277,29 @@ public sealed class ReductionOperand : RuleOperand {
             : 3L
         )));
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         var ordinal = RowOrdinal;
 
         if (RowFrom is { } live) {
-            var selected = live.Resolve(
-                reader: reader,
-                rowOrdinal: out ordinal
-            );
+            var selected = live.Resolve(reader: reader);
 
-            if (selected != KeyNaming.Cell) {
-                return ((selected == KeyNaming.Fault)
-                    ? RuleFact.Faulted(kind: ValueKind)
-                    : RuleFact.Absent(kind: ValueKind));
+            if (!selected.TryNamed(value: out ordinal)) {
+                return Fact.Unnamed(
+                    kind: ValueKind,
+                    resolved: selected
+                );
             }
         }
         if (ordinal < 0) {
-            return RuleFact.Finite(
+            return Fact.Finite(
                 kind: ValueKind,
                 value: 0L
             );
         }
         if (Reduce == StateReduceOp.ArrangementRank) {
-            return RuleFact.Finite(
+            return Fact.Finite(
                 kind: ValueKind,
                 value: RuleReads.ArrangementRank(
                     domainOrdinal: DomainOrdinal,
@@ -315,7 +309,7 @@ public sealed class ReductionOperand : RuleOperand {
             );
         }
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: ValueKind,
             value: RuleReads.Reduce(
                 filterOrdinal: FilterOrdinal,
@@ -411,7 +405,7 @@ public sealed class HistoryOperand : RuleOperand {
         : RuleWork.Zero
     ));
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         var age = Age;
@@ -429,12 +423,12 @@ public sealed class HistoryOperand : RuleOperand {
         )
         ) {
             if (fault != ExpressionFault.Absent) {
-                return RuleFact.Faulted(kind: ValueKind);
+                return Fact.Faulted(kind: ValueKind);
             }
             age = -1L;
         }
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: ValueKind,
             value: ReadSlot(
                 age: age,
@@ -467,10 +461,10 @@ public sealed class PhaseOperand : RuleOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Int,
             value: reader.Arena.PhaseSequence(rowOrdinal: RowOrdinal)
         );
@@ -528,19 +522,20 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => (Board.Topology.CellCount + Board.Visits);
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        var key = RuleReads.ResolveKey(
+        var resolved = RuleReads.ResolveKey(
             keyFrom: KeyFrom,
             literal: Key,
-            naming: out var naming,
             reader: reader
         );
 
-        if (naming == KeyNaming.Fault) {
-            return RuleFact.Faulted(kind: CellKind.Int);
+        if (resolved.Case == FaultCase.Faulted) {
+            return Fact.Faulted(kind: CellKind.Int);
         }
+
+        resolved.TryNamed(value: out var key);
 
         var origin = -1;
 
@@ -558,7 +553,7 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
         }
 
         if (Board is BoardOffsetQuery offset) {
-            return RuleFact.Finite(
+            return Fact.Finite(
                 kind: CellKind.Int,
                 value: (((origin >= 0) && Board.Topology.TryOffset(
                     origin,
@@ -583,7 +578,7 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
                     time: in time,
                     value: out var target
                 ) || (target < 0L) || (target >= Board.Topology.CellCount)) {
-                    return RuleFact.Finite(
+                    return Fact.Finite(
                         kind: CellKind.Int,
                         value: -1L
                     );
@@ -600,7 +595,7 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
 
         using var values = reader.Scratch.Rent<long>(length: Board.Topology.CellCount);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Int,
             value: (ArenaBoards.TryEvaluate(
                 arena: reader.Arena,
@@ -734,23 +729,24 @@ public sealed class SymmetryOperand : RuleOperand, IStateAddressedOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        var key = RuleReads.ResolveKey(
+        var resolved = RuleReads.ResolveKey(
             keyFrom: KeyFrom,
             literal: Key,
-            naming: out var naming,
             reader: reader
         );
 
-        if (naming == KeyNaming.Fault) {
-            return RuleFact.Faulted(kind: ValueKind);
+        if (resolved.Case == FaultCase.Faulted) {
+            return Fact.Faulted(kind: ValueKind);
         }
 
-        return RuleFact.Finite(
+        resolved.TryNamed(value: out var key);
+
+        return Fact.Finite(
             kind: ValueKind,
-            value: RuleFact.RawOf(
+            value: Fact.RawOf(
                 kind: ValueKind,
                 value: ReadFixed(
                     key: key,
@@ -770,5 +766,5 @@ public sealed class SearchPlyOperand : RuleOperand {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader) => RuleFact.Finite(kind: CellKind.Int, value: reader.SearchPly);
+    public override Fact Read(IStateReader reader) => Fact.Finite(kind: CellKind.Int, value: reader.SearchPly);
 }

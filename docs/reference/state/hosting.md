@@ -325,10 +325,10 @@ public interface IBodyPositions : IFacet {
 // The compiled fact. Its type argument is its facet, so RuleNeeds records IBodyPositions.
 public sealed class BodyDistanceFact(int bodyA, int bodyB) : OperandFact<IBodyPositions>(valueKind: CellKind.Fixed), IRuleOperand {
     public override RuleWork Cost(IRuleCostContext context) => 1L;
-    public override RuleFact Read(IStateReader reader, IBodyPositions facet) => RuleFact.Finite(value: facet.Distance(bodyA: bodyA, bodyB: bodyB));
+    public override Fact Read(IStateReader reader, IBodyPositions facet) => Fact.Finite(value: facet.Distance(bodyA: bodyA, bodyB: bodyB));
 
     // Admission proved the host serves the facet before any rule naming it ran.
-    RuleFact IRuleOperand.Read(IStateReader reader) => Read(reader: reader, facet: (IBodyPositions)reader);
+    Fact IRuleOperand.Read(IStateReader reader) => Read(reader: reader, facet: (IBodyPositions)reader);
 }
 
 public enum DistanceRefusal : byte {

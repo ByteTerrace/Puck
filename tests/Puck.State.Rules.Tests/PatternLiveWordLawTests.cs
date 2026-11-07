@@ -133,7 +133,7 @@ public sealed class PatternLiveWordLawTests {
         var (operand, host, level) = Arrange(spelling: spelling);
 
         Assert.Equal(
-            actual: operand.Read(reader: host).Value,
+            actual: operand.Read(reader: host).ToRaw(kind: CellKind.Int),
             expected: 0L
         );
 
@@ -156,7 +156,7 @@ public sealed class PatternLiveWordLawTests {
         }
 
         Assert.Equal(
-            actual: operand.Read(reader: host).Value,
+            actual: operand.Read(reader: host).ToRaw(kind: CellKind.Int),
             expected: 1L
         );
     }

@@ -20,13 +20,13 @@ public sealed class WorldHostOwnedCellOperand(int rowOrdinal, CellKey key, Compi
         CompiledCellRef.CollectReference(into: into, reference: KeyFrom);
     }
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
-        var resolved = RuleReads.ResolveKey(reader: reader, literal: Key, keyFrom: KeyFrom, naming: out var naming);
+    public override Fact Read(IStateReader reader, IWorldFacts facet) {
+        var resolved = RuleReads.ResolveKey(reader: reader, literal: Key, keyFrom: KeyFrom);
 
-        if (naming != KeyNaming.Cell) { return ((naming == KeyNaming.Fault) ? RuleFact.Faulted(kind: ValueKind) : RuleFact.Absent(kind: ValueKind)); }
-        var value = ((resolved.IsValid && RuleReads.TryKeyIndex(keys: reader.Arena.Keys, key: resolved, index: out var cell) &&
+        if (!resolved.TryNamed(value: out var key)) { return Fact.Unnamed(kind: ValueKind, resolved: resolved); }
+        var value = ((key.IsValid && RuleReads.TryKeyIndex(keys: reader.Arena.Keys, key: key, index: out var cell) &&
             (cell >= 0) && (cell <= int.MaxValue) && facet.TryReadHostOwnedCell(RowOrdinal, ((int)cell), out var raw)) ? raw : 0L);
 
-        return RuleFact.Finite(kind: ValueKind, value: value);
+        return Fact.Finite(kind: ValueKind, value: value);
     }
 }

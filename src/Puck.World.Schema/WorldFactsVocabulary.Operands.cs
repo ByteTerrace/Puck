@@ -275,7 +275,7 @@ public static partial class WorldFactsVocabulary {
                 world: world
             );
         }
-        private static WorldBodyFactOperand BodyFact(CellKind valueKind, WorldFactsCompileContext world, CompiledBodyRef bodyA, CompiledBodyRef bodyB, int rowOrdinal, long cost, Func<IWorldFacts, RuleFact> read, string describe, WorldOperandFact? payload = null) => new(
+        private static WorldBodyFactOperand BodyFact(CellKind valueKind, WorldFactsCompileContext world, CompiledBodyRef bodyA, CompiledBodyRef bodyB, int rowOrdinal, long cost, Func<IWorldFacts, Fact> read, string describe, WorldOperandFact? payload = null) => new(
             bodyA: world.Ordinals(body: in bodyA),
             bodyB: world.Ordinals(body: in bodyB),
             cost: cost,

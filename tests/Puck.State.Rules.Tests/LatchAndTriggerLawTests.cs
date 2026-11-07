@@ -148,6 +148,68 @@ public sealed class LatchAndTriggerLawTests {
             expected: 2L
         );
     }
+    // L1: an Edge firing that committed inside an enclosing scope is undone with that scope, latch bit and cells
+    // together, so the crossing it consumed is still to be crossed.
+    [Fact]
+    public void ARewoundScopeRestoresTheEdgeCrossingAChildFiringConsumed() {
+        var (host, evaluator, rules, latch, _) = EvaluatorFixture.Arrange(rules: [Counting(
+                mode: ActionTriggerMode.Edge,
+                name: "cross"
+            )]);
+        var arena = host.Arena;
+        var slot = arena.Catalog.Keys.Intern(name: StateRow.SlotKey);
+        var flag = EvaluatorFixture.Ordinal(
+            host: host,
+            row: "flag"
+        );
+
+        void Step(ulong tick) {
+            host.Advance(
+                engineTick: tick,
+                tick: tick
+            );
+            _ = evaluator.Evaluate(
+                latch: latch,
+                rules: rules,
+                stepTicks: 1UL
+            );
+        }
+
+        _ = arena.TryWrite(
+            key: slot,
+            operand: 1L,
+            reason: out _,
+            rowOrdinal: flag,
+            write: StateWriteKind.Set
+        );
+
+        var parent = arena.BeginScope();
+
+        Step(tick: 0UL);
+        Assert.Equal(
+            actual: EvaluatorFixture.Cell(
+                host: host,
+                row: "score"
+            ),
+            expected: 1L
+        );
+        arena.Rewind(mark: parent);
+        Assert.Equal(
+            actual: EvaluatorFixture.Cell(
+                host: host,
+                row: "score"
+            ),
+            expected: 0L
+        );
+        Step(tick: 1UL);
+        Assert.Equal(
+            actual: EvaluatorFixture.Cell(
+                host: host,
+                row: "score"
+            ),
+            expected: 1L
+        );
+    }
     [Fact]
     public void AnIterationBindsTheKeysTheRowHeldWhenTheSweepOpened() {
         var (host, evaluator, rules, latch, _) = EvaluatorFixture.Arrange(rules: [new Rule(
