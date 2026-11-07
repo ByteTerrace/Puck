@@ -425,7 +425,42 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         var query = (Job)job;
         var kind = (query.CommitSource is not null) ? "commit" : query.Meter ? "meter" : query.Selection ? "select" : (query.Lighting is not null) ? "relight" : "trace";
         var lights = ((query.Lighting is { Length: > 0 } rows) ? FormattableString.Invariant($" lights={rows[0].Y} points={rows[0].Z}") : string.Empty);
-        return FormattableString.Invariant($"{kind} origins={query.Origins.Length} destinations={query.Destinations.Length} hit-capacity={query.HitCapacity}{lights}");
+        return FormattableString.Invariant($"{kind} origins={query.Origins.Length} destinations={query.Destinations.Length} hit-capacity={query.HitCapacity}{lights}{((kind == "relight") ? DescribeRelight(query) : string.Empty)}");
+    }
+    // What decides a relight's cost: the probes it shades and, for each, the shadowing point lights in range of its
+    // origin, each of which a hit texel traces a ray toward (sdfProbeShade).
+    private static string DescribeRelight(Job query) {
+        var rows = query.Lighting!;
+        var input = query.Input.Span;
+        var origins = query.Origins.Span;
+        var lightBase = SdfMeshProbeRelight.HeaderRows + ((int)rows[0].X * SdfMeshProbeRelight.MaterialRows);
+        var lightCount = (int)(rows[0].Y + rows[0].Z);
+        var valid = 0;
+        var reused = 0;
+        var most = 0;
+        var total = 0L;
+        var slots = 0u;
+
+        for (var probe = 0; (probe < origins.Length) && (((probe + 1) * SdfMeshProbeRelight.InputWords) <= input.Length); probe++) {
+            var flags = input[probe * SdfMeshProbeRelight.InputWords];
+
+            if ((flags & 1u) == 0u) { continue; }
+            valid++;
+            if ((flags & 2u) != 0u) { reused++; continue; }
+            slots = Math.Max(slots, input[(probe * SdfMeshProbeRelight.InputWords) + 3]);
+
+            var near = 0;
+
+            for (var light = 0; (light < lightCount) && ((lightBase + (light * SdfMeshProbeRelight.LightRows) + 3) < rows.Length); light++) {
+                var position = rows[lightBase + (light * SdfMeshProbeRelight.LightRows)];
+                var mode = rows[lightBase + (light * SdfMeshProbeRelight.LightRows) + 3];
+
+                if ((mode.W != 0f) && (mode.Z != 0f) && (Vector3.DistanceSquared(new Vector3(position.X, position.Y, position.Z), new Vector3(origins[probe].X, origins[probe].Y, origins[probe].Z)) < (position.W * position.W))) { near++; }
+            }
+            most = Math.Max(most, near);
+            total += near;
+        }
+        return FormattableString.Invariant($" valid={valid} reused={reused} shadowing-points-in-range-max={most} mean={((valid > reused) ? (total / (double)(valid - reused)) : 0.0):0.0} max-slot={slots}");
     }
     private static GpuObjectName Name(string part, int index = GpuObjectName.NoIndex) =>
         new(index: index, owner: SdfWorldTables.ObjectOwner, part: $"probe-trace {part}");

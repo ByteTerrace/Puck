@@ -193,9 +193,9 @@ public sealed class SdfGpuWork : IDisposable {
     /// the copy kernel's read of host staging memory across the bus.</summary>
     public const double UploadBytesPerSecond = 1e10;
     /// <summary>The measured GPU time, in seconds, past which a completed job is written as a <c>[sdf.gpu-work] slow</c>
-    /// line: a tenth of a second, a twentieth of the two seconds after which Windows resets a device whose submission
+    /// line: a twentieth of a second, a fortieth of the two seconds after which Windows resets a device whose submission
     /// has not finished (TDR).</summary>
-    public const double SlowJobSeconds = 0.1;
+    public const double SlowJobSeconds = 0.05;
 
     /// <summary>Returns the GPU time, in seconds, an upload job of <paramref name="bytes"/> host payload bytes is
     /// estimated to take (<see cref="UploadBytesPerSecond"/>).</summary>
