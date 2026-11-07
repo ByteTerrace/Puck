@@ -6,9 +6,12 @@ namespace Puck.State.Rules;
 /// common effects do not, and the choice must not outlive an option that refused.</remarks>
 public interface IFiringContinuation {
     /// <summary>Chooses the effect sequence to propose next, and binds whatever it reads.</summary>
+    /// <param name="firing">The firing both sequences belong to.</param>
+    /// <param name="queued">The irreversible arms the first sequence queued, in order, exactly as the firing's commit
+    /// would install and deliver them: an arm under a branch the sequence did not take is absent.</param>
     /// <returns>The effects to propose into the same scope, or <see langword="null"/> when there are none and the
     /// firing proposes only what it has.</returns>
-    IRuleEffect[]? Next();
+    IRuleEffect[]? Next(in EffectFiring firing, ReadOnlySpan<IRuleEffect> queued);
     /// <summary>Releases what <see cref="Next"/> bound, once the sequence it returned has been proposed, however that
     /// ended. An arm the sequence queued keeps the binding it was queued under.</summary>
     void End();

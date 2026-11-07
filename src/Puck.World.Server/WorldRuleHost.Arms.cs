@@ -87,7 +87,7 @@ public sealed partial class WorldRuleHost {
             current: Proposed().Definition,
             denied: out _,
             engineTick: firing.EngineTick,
-            mutation: DocumentUnit(),
+            mutation: DocumentUnit(rows: m_documentArms),
             preMetered: false,
             prepared: out var prepared,
             reason: out var reason,
@@ -131,13 +131,32 @@ public sealed partial class WorldRuleHost {
     // The proposal is taken once per firing: its preflights run after the firing's last arena write.
     private WorldArenaPublication Proposed() => (m_proposedPublication ??= Host.ProposePublication() with { Definition = Host.MaterializeArena() });
     // One row travels as itself, so its journal entry is the mutation it always was; several travel as one batch.
-    private WorldMutation DocumentUnit() => ((m_documentArms.Count == 1)
-        ? m_documentArms[0]
+    private static WorldMutation DocumentUnit(List<WorldMutation> rows) => ((rows.Count == 1)
+        ? rows[0]
         : new WorldMutation.Batch(
-            Mutations: [.. m_documentArms],
+            Mutations: [.. rows],
             Principal: Principal.World
         )
     );
+    // The document row a row effect installs.
+    private static WorldMutation DocumentRow(WorldDocumentEffect effect) => (effect.Write switch {
+        WorldDocumentWrite.UpsertHudPanel => new WorldMutation.UpsertHudPanel(
+            Panel: effect.HudPanel!,
+            Principal: Principal.World
+        ),
+        WorldDocumentWrite.RemoveHudPanel => new WorldMutation.RemoveHudPanel(
+            Id: effect.Id,
+            Principal: Principal.World
+        ),
+        WorldDocumentWrite.UpsertPlacement => new WorldMutation.UpsertPlacement(
+            Placement: effect.Placement!,
+            Principal: Principal.World
+        ),
+        _ => new WorldMutation.RemovePlacement(
+            Id: effect.Id,
+            Principal: Principal.World
+        ),
+    });
 
     /// <inheritdoc/>
     public bool Fire(ICompiledFact effect, in EffectFiring firing, out EffectRefusal refusal) {
@@ -750,24 +769,7 @@ public sealed partial class WorldRuleHost {
             );
         }
 
-        WorldMutation mutation = (effect.Write switch {
-            WorldDocumentWrite.UpsertHudPanel => new WorldMutation.UpsertHudPanel(
-            Panel: effect.HudPanel!,
-            Principal: Principal.World
-        ),
-            WorldDocumentWrite.RemoveHudPanel => new WorldMutation.RemoveHudPanel(
-            Id: effect.Id,
-            Principal: Principal.World
-        ),
-            WorldDocumentWrite.UpsertPlacement => new WorldMutation.UpsertPlacement(
-            Placement: effect.Placement!,
-            Principal: Principal.World
-        ),
-            _ => new WorldMutation.RemovePlacement(
-            Id: effect.Id,
-            Principal: Principal.World
-        ),
-        });
+        var mutation = DocumentRow(effect: effect);
 
         // A document row is never fired on its own: the evaluator preflights it, the firing's rows are prepared as one
         // unit (PrepareTransactional), and the commit installs that unit (CommitTransactional).
@@ -791,7 +793,7 @@ public sealed partial class WorldRuleHost {
             engineTick: firing.EngineTick,
             evictedKey: out _,
             instanceIdentity: Host.InstanceIdentity,
-            mutation: DocumentUnit(),
+            mutation: DocumentUnit(rows: m_documentArms),
             reason: out var composeReason,
             tick: firing.Tick
         ) || Refuse(
