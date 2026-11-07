@@ -62,7 +62,7 @@ public sealed partial class SdfWorldTables {
         for (var index = 0; (index < draws.Count); index++) {
             var draw = draws[index];
 
-            if (!m_meshesOwed.Contains(item: draw.Mesh)) { continue; }
+            if (!m_meshesOwed.Contains(mesh: draw.Mesh)) { continue; }
             m_owedOrder.Add(item: (((demand is null)
                 ? 0f
                 : (SdfMeshDemand.BoxOf(center: out var center, draw: in draw, half: out var half) ? demand.Priority(center: center, half: half) : float.PositiveInfinity)), index));
@@ -96,10 +96,19 @@ public sealed partial class SdfWorldTables {
         const int Budget = (SdfGpuWork.UploadChunkBytes / sizeof(uint));
         var taken = 0;
 
+        // A mesh whose storage is still coming back from the store (SdfMesh.Resident) is passed over, and the cursor stays
+        // at the first such mesh so a later take finds it restored.
+        var waiting = -1;
+
         while ((m_landingCursor < m_landingOrder.Count) && (taken < Budget) && ((job?.Slices.Count ?? 0) < LandingSlices)) {
             var mesh = m_landingOrder[m_landingCursor];
 
-            if (!m_meshesOwed.Contains(item: mesh)) { m_landingCursor++; continue; }
+            if (!m_meshesOwed.Contains(mesh: mesh)) { m_landingCursor++; continue; }
+            if (!m_landing.ContainsKey(key: mesh) && !mesh.Resident) {
+                if (waiting < 0) { waiting = m_landingCursor; }
+                m_landingCursor++;
+                continue;
+            }
             if (!m_landing.TryGetValue(key: mesh, value: out var progress)) {
                 progress = new LandingProgress(words: SdfMeshRegion.WordsOf(mesh: mesh));
                 m_landing.Add(key: mesh, value: progress);
@@ -114,6 +123,7 @@ public sealed partial class SdfWorldTables {
             }
             if (progress.Taken == progress.Words) { m_landingCursor++; }
         }
+        if (waiting >= 0) { m_landingCursor = Math.Min(val1: m_landingCursor, val2: waiting); }
         if (job is not null) { job.Words = taken; }
         return (job is not null);
     }
@@ -152,7 +162,7 @@ public sealed partial class SdfWorldTables {
             progress.Landed += slice.Count;
             if (progress.Landed < progress.Words) { continue; }
             _ = m_landing.Remove(key: slice.Mesh);
-            if (m_meshesOwed.Remove(item: slice.Mesh)) {
+            if (m_meshesOwed.Remove(mesh: slice.Mesh)) {
                 m_meshStaged = false;
                 m_meshLandedSinceStaging = true;
                 // The staged list's owed words fall as its meshes land, so a residency whose view is held (no staging
@@ -175,6 +185,48 @@ public sealed partial class SdfWorldTables {
     // The landing's counts for DescribeLanding.
     private string DescribeLandingJobs() => string.Create(provider: CultureInfo.InvariantCulture,
         handler: $"landing-jobs={m_landingJobs} landing-bytes={m_landingBytes}B landing-most={m_landingMostBytes}B landing-stale={m_landingStale} landing-chunk={SdfGpuWork.UploadChunkBytes}B");
+
+    // The placed meshes whose words the region owes. A mesh holds a need on its storage (SdfMesh.Need) from the moment it is
+    // owed until it leaves, so its normals and coarser levels stay in memory, or come back from the store, until its words
+    // land: the one door between the region and a mesh's restorable parts.
+    private sealed class OwedMeshes {
+        private HashSet<SdfMesh> m_set = new(comparer: ReferenceEqualityComparer.Instance);
+        private HashSet<SdfMesh> m_spare = new(comparer: ReferenceEqualityComparer.Instance);
+
+        public IReadOnlySet<SdfMesh> Set => m_set;
+        public int Count => m_set.Count;
+        public bool Contains(SdfMesh mesh) => m_set.Contains(item: mesh);
+        public void Add(SdfMesh mesh) { if (m_set.Add(item: mesh)) { mesh.Need(); } }
+        public bool Remove(SdfMesh mesh) {
+            if (!m_set.Remove(item: mesh)) { return false; }
+            mesh.Unneed();
+            return true;
+        }
+        public void UnionWith(IEnumerable<SdfMesh> meshes) { foreach (var mesh in meshes) { Add(mesh: mesh); } }
+        // Owes exactly these meshes, taking each new need before letting any old one go, so a mesh owed both before and
+        // after keeps its storage.
+        public void ReplaceWith(IEnumerable<SdfMesh> meshes) {
+            m_spare.Clear();
+            foreach (var mesh in meshes) {
+                if (m_spare.Add(item: mesh) && !m_set.Contains(item: mesh)) { mesh.Need(); }
+            }
+            foreach (var mesh in m_set) {
+                if (!m_spare.Contains(item: mesh)) { mesh.Unneed(); }
+            }
+            (m_set, m_spare) = (m_spare, m_set);
+            m_spare.Clear();
+        }
+        public void RemoveWhere(Predicate<SdfMesh> match) {
+            m_spare.Clear();
+            foreach (var mesh in m_set) { if (match(obj: mesh)) { _ = m_spare.Add(item: mesh); } }
+            foreach (var mesh in m_spare) { _ = Remove(mesh: mesh); }
+            m_spare.Clear();
+        }
+        public void Clear() {
+            foreach (var mesh in m_set) { mesh.Unneed(); }
+            m_set.Clear();
+        }
+    }
 
     private sealed class LandingProgress(int words) {
         public int Words { get; } = words;

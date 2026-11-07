@@ -388,11 +388,6 @@ The custom no-GC runtime port stays later work, on the
   contour and the refinement's per-cell masks), not a count cap; the
   [allocation churn item](#engine-job-system) lists the cold bake's measured
   managed sites in order.
-- [low] A chunked mesh stores its triangles' indices twice: the parent's
-  joined indices for whole-group queries and each chunk's own
-  (`SdfMesh.Storage.cs`, `NativeCopy`). Dropping the parent's needs its readers
-  (the irradiance scene, `SdfMeshAudit`, the diagnostics' nearest query) to
-  walk the chunks.
 - [low] The library releases evicted claims, which frees native payloads,
   under its own gate (`SdfMeshLibrary.cs` `Retain`), the gate the frame thread
   takes in `Restart` through `TryTake`.
@@ -637,6 +632,12 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   for the quiet wall-time comparison. The stage log's `cpu` fields sum worker
   elapsed intervals, including descheduling and GC/profiler suspension; they
   are diagnostics, not measured processor time or a quiet-wall-time result.
+- [medium] `SdfMeshLibrary.Store` now publishes a baked mesh by decoding its
+  store entry back (`TryLoad`), so a cold bake draws what a warm boot loads and
+  every stored mesh is restorable; the decode raised the cold bake's store stage
+  from about 22 to 63 summed CPU-seconds. Publish the encoded mesh's own native
+  form (renumbered, restorable) without the round trip, keeping the one
+  publication door.
 - [medium] Every view still renders every frame while a bake is pending
   (`SdfWorldResidency.IsUnchanged` returns false on `MeshPathBake.Pending`),
   which the frame-paced bake needed to dispatch and the background GPU work
@@ -1407,6 +1408,10 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [low] `HeapAllocator` is copied three times in the Vulkan tests
+  (`tests/Puck.Vulkan.Tests/VulkanGroupedBindingLawTests.cs:206`,
+  `VulkanGroupedPipelineLayoutLawTests.cs:233`, `VulkanIndirectCountLawTests.cs:155`);
+  move it to `tests/Shared`.
 - [medium · addons] `WasmModuleDeclarations.WithCheckpointExports`
   (`src/Puck.Assets/WasmModuleDeclarations.Checkpoint.cs:17`) refuses every
   table and every element/data-count section, and the World mount gate
@@ -2361,13 +2366,24 @@ first:
 
 Grounded causes and leads, largest first:
 
-- The baked meshes are held twice: the region's GPU copy and the CPU payloads
-  (positions and normals, level-0 indices and materials, levels 1 and 2;
-  `world.residency`'s `vertex-bytes` and `level0`..`level2` read each). Normals
-  and levels 1 and 2 have no CPU reader after landing except the store write,
-  material variants and a region rebuild; releasing them (and the chunked
-  parent's second index copy) needs each of those readers to read the store or
-  the GPU copy instead. Owner: rendering/bake.
+- The baked meshes keep part of their CPU payload beside the region's GPU copy.
+  A store-published mesh lets its normals and coarser levels' indices go once
+  no region owes its words and restores them from the store when one does
+  (`SdfMesh.Restore.cs`; `mesh-released-now` on `world.residency`'s store
+  line), and a published chunked mesh keeps no joined indices. What stays is
+  positions, level-0 indices and every level's triangle materials: the GI trace
+  scene's CPU hierarchy reads the first three (the trace-scene lead below), renumbered
+  variants read the materials. Next cuts: dynamic and glass meshes, which the
+  scene leaves out, can let positions and level-0 indices go through the same
+  door; the static ones follow once placement and classification move to the
+  GPU trace. Owner: rendering/bake.
+- The mesh region keeps meshes no draw names until their words outweigh the
+  named ones (`SdfMeshRegionArena.Plan`'s relocation rule, past
+  `RetainedSlackWords`), so a running debug world whose bodies change form and
+  whose placements re-pose grows `region-used` far past its named meshes within
+  minutes (the readings are in the commit that made mesh storage restorable).
+  Bound the retained slack by bytes, not by the named meshes' size.
+  Owner: rendering/bake.
 - The device-local memory no residency line names needs an owner line. The
   render-graph nodes' `owned-bytes` gauges (`world.counters gpu --json`) run
   past the 1 MiB an MCP answer carries, so name it with a reading that fits
@@ -2520,6 +2536,11 @@ failing case is argued from source, not run):
 
 ### Vulkan regressions and GPU robustness
 
+- [medium · unconfirmed] Vulkan's world GI trace fell behind on a running
+  debug World (`[sdf.mesh-gi] behind … relit-per-second=252 needed=2496`) and
+  printed no `done` after more than five minutes (seen by the mesh-twice lane;
+  not compared against a base Vulkan run). Compare base and tip on Vulkan before
+  calling it a regression.
 - [low · unchecked] `SdfWorldPickReadback.Dispose` returns its readback's
   arena range (`DirectXGpuReadbackBuffer.Dispose` now reports the release), but
   whether every retirement path of the pick readback runs after its fence

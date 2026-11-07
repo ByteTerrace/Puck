@@ -23,7 +23,7 @@ public sealed partial class SdfWorldTables {
         placements = m_meshArena.Placements;
         meshes = m_meshRegion.Buffer(m_currentSlot);
         version = m_meshPlacementVersion;
-        return BindsBackgroundWork && (m_meshRequiredUpload <= m_uploads) && scene.HasGpuPlacements(placements, m_meshesOwed);
+        return BindsBackgroundWork && (m_meshRequiredUpload <= m_uploads) && scene.HasGpuPlacements(placements, m_meshesOwed.Set);
     }
 
     internal GpuRegion CreateProbeSceneRegion(int bytes, int slots = 1) => new(
@@ -101,7 +101,15 @@ public sealed partial class SdfWorldTables {
         m_meshTransformReseats.StorageBytes + m_reseatedDraws.StorageBytes);
 
     // The placed meshes whose words the region still owes, and the draws of the planned list whose meshes are written.
-    private readonly HashSet<SdfMesh> m_meshesOwed = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly OwedMeshes m_meshesOwed = new();
+    // The meshes a grown draw reserve moved, written by the next frame upload's flush: each holds a need until that upload
+    // is submitted (ReleaseUploadNeeds).
+    private readonly List<SdfMesh> m_meshesWithUpload = [];
+
+    private void ReleaseUploadNeeds() {
+        foreach (var mesh in m_meshesWithUpload) { mesh.Unneed(); }
+        m_meshesWithUpload.Clear();
+    }
     private readonly HashSet<SdfMesh> m_activeOwed = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<SdfMeshDraw> m_meshLanded = [];
     // A copy of each draw last staged, by index, and whether that staging staged its whole list (no draw waiting on an
@@ -272,14 +280,18 @@ public sealed partial class SdfWorldTables {
                 // draw reserve moved are written in this frame's upload, which carries the records naming them, since
                 // their draws were drawn from the words the reserve took; the rest this list placed are owed.
                 if (m_meshArena.Relocated || !m_meshSectionWritten) {
-                    m_meshesOwed.Clear();
-                    m_meshesOwed.UnionWith(other: m_meshArena.Placements.Keys);
+                    m_meshesOwed.ReplaceWith(meshes: m_meshArena.Placements.Keys);
                     ForgetAllLanding();
                 } else {
-                    m_meshesOwed.UnionWith(other: m_meshArena.Placed);
+                    m_meshesOwed.UnionWith(meshes: m_meshArena.Placed);
                     foreach (var mesh in m_meshArena.Moved) {
-                        _ = m_meshesOwed.Remove(item: mesh);
                         ForgetLanding(mesh: mesh);
+                        // A moved mesh whose normals and levels are still coming back from the store stays owed and
+                        // lands through the background work, its draws held out until it does.
+                        if (!mesh.Resident) { continue; }
+                        mesh.Need();
+                        m_meshesWithUpload.Add(item: mesh);
+                        _ = m_meshesOwed.Remove(mesh: mesh);
                         WriteMeshWords(mesh: mesh, placement: m_meshArena.Placements[mesh]);
                     }
                 }
@@ -303,10 +315,10 @@ public sealed partial class SdfWorldTables {
         // written, and the next frames write the rest.
         var staged = draws;
 
-        if ((m_meshesOwed.Count > 0) && draws.Any(predicate: draw => m_meshesOwed.Contains(item: draw.Mesh))) {
+        if ((m_meshesOwed.Count > 0) && draws.Any(predicate: draw => m_meshesOwed.Contains(mesh: draw.Mesh))) {
             m_meshLanded.Clear();
             foreach (var draw in draws) {
-                if (!m_meshesOwed.Contains(item: draw.Mesh)) { m_meshLanded.Add(item: draw); }
+                if (!m_meshesOwed.Contains(mesh: draw.Mesh)) { m_meshLanded.Add(item: draw); }
             }
             staged = m_meshLanded;
         }
@@ -490,7 +502,7 @@ public sealed partial class SdfWorldTables {
     /// draws wait out of the staged records until a frame writes them. Read on the frame's thread.</summary>
     /// <param name="mesh">The mesh, a chunk of a chunked group's mesh being a mesh of its own.</param>
     /// <returns><see langword="true"/> while the region owes it.</returns>
-    public bool OwesMesh(SdfMesh mesh) => (m_meshArena.Placements.ContainsKey(key: mesh) && m_meshesOwed.Contains(item: mesh));
+    public bool OwesMesh(SdfMesh mesh) => (m_meshArena.Placements.ContainsKey(key: mesh) && m_meshesOwed.Contains(mesh: mesh));
     /// <summary>Describes the mesh region's landing: the bytes it holds and the latest list uses, the mesh bytes written
     /// into it, the bytes it still owes, the frames and seconds it spent owing them, the mesh region bytes the frame
     /// uploads staged (the latest, the most one staged and at which upload, and their sum), the uploads submitted and the

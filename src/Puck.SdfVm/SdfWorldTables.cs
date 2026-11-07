@@ -445,6 +445,8 @@ public sealed partial class SdfWorldTables : IDisposable {
         m_deviceContext.TryWaitIdle();
         m_gpuWork.Dispose();
         m_meshClaims?.Dispose(); m_meshClaims = null;
+        m_meshesOwed.Clear();
+        ReleaseUploadNeeds();
         m_meshArena.Dispose();
         DisposeRetired(completed: ulong.MaxValue);
 
