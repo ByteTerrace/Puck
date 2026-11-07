@@ -212,7 +212,7 @@ internal static class SdfDualContouring {
             }
         }
 
-        HandOff(besides: besides, features: features, grid: grid, handoffs: handoffs, positions: positions, solveds: solveds, target: (x, y, z) => {
+        HandOff(besides: CollectionsMarshal.AsSpan(list: besides), features: CollectionsMarshal.AsSpan(list: features), grid: grid, handoffs: handoffs, positions: CollectionsMarshal.AsSpan(list: positions), solveds: CollectionsMarshal.AsSpan(list: solveds), target: (x, y, z) => {
             var (tx, ty, tz) = (((int)Math.Floor(x)), ((int)Math.Floor(y)), ((int)Math.Floor(z)));
 
             if ((tx < 0) || (ty < 0) || (tz < 0) || (tx >= cellsX) || (ty >= cellsY) || (tz >= cellsZ)) {
@@ -710,16 +710,25 @@ internal static class SdfDualContouring {
             }
         }
 
+        // A merged vertex is an unowned vertex or the root of a piece, so the merged arrays are sized exactly once and
+        // filled in place, rather than grown as lists and copied.
+        var mergedCount = 0;
+
+        for (var vertex = 0; (vertex < vertexCount); vertex++) {
+            if ((owners[vertex] < 0) || (Root(vertex: vertex) == vertex)) { mergedCount++; }
+        }
+
         var remap = new int[vertexCount];
         var sums = new Dictionary<int, (double X, double Y, double Z, int Count)>();
         var normalSums = new Dictionary<int, (double X, double Y, double Z)>();
         // Per piece, its fine vertices' tangent planes in world space (nx, ny, nz, d each).
         var planeLists = new Dictionary<int, List<double>>();
-        var mergedPositions = new List<double>();
-        var mergedNormals = new List<double>();
-        var mergedFeatures = new List<bool>();
-        var mergedSolved = new List<bool>();
-        var mergedBesides = new List<bool>();
+        var mergedPositions = new double[(3 * mergedCount)];
+        var mergedNormals = new double[(3 * mergedCount)];
+        var mergedFeatures = new bool[mergedCount];
+        var mergedSolved = new bool[mergedCount];
+        var mergedBesides = new bool[mergedCount];
+        var merged = 0;
         // Per piece, whether any of its fine vertices lies on a crease.
         var pieceFeatures = new HashSet<int>();
 
@@ -748,14 +757,15 @@ internal static class SdfDualContouring {
                 }
             }
             if (remap[root] < 0) {
-                remap[root] = (mergedPositions.Count / 3);
+                remap[root] = merged;
                 for (var axis = 0; (axis < 3); axis++) {
-                    mergedPositions.Add(item: positions[((3 * root) + axis)]);
-                    mergedNormals.Add(item: normals[((3 * root) + axis)]);
+                    mergedPositions[((3 * merged) + axis)] = positions[((3 * root) + axis)];
+                    mergedNormals[((3 * merged) + axis)] = normals[((3 * root) + axis)];
                 }
-                mergedFeatures.Add(item: ((owners[root] < 0) && features[root]));
-                mergedSolved.Add(item: ((owners[root] < 0) && solveds[root]));
-                mergedBesides.Add(item: ((owners[root] < 0) && besides[root]));
+                mergedFeatures[merged] = ((owners[root] < 0) && features[root]);
+                mergedSolved[merged] = ((owners[root] < 0) && solveds[root]);
+                mergedBesides[merged] = ((owners[root] < 0) && besides[root]);
+                merged++;
             }
             remap[vertex] = remap[root];
         }
@@ -812,11 +822,8 @@ internal static class SdfDualContouring {
             return ((vertex < 0) ? -1 : remap[vertex]);
         });
 
-        var mergedQuads = new List<int>(capacity: quads.Count);
-        var mergedCorners = new List<int>(capacity: quadCorners.Count);
-        Span<int> distinct = stackalloc int[4];
-
-        for (var quad = 0; (quad < quadCorners.Count); quad++) {
+        // The vertices a quad keeps once its merged corners collapse, or zero for a quad that collapses to fewer than three.
+        int Collapse(int quad, Span<int> distinct) {
             var count = 0;
 
             for (var corner = 0; (corner < 4); corner++) {
@@ -829,25 +836,41 @@ internal static class SdfDualContouring {
             if ((count > 1) && (distinct[(count - 1)] == distinct[0])) {
                 count--;
             }
-            if ((count < 3) || ((count == 4) && ((distinct[0] == distinct[2]) || (distinct[1] == distinct[3])))) {
-                continue;
-            }
 
-            mergedQuads.Add(item: distinct[0]);
-            mergedQuads.Add(item: distinct[1]);
-            mergedQuads.Add(item: distinct[2]);
-            mergedQuads.Add(item: distinct[((count == 4) ? 3 : 2)]);
-            mergedCorners.Add(item: quadCorners[quad]);
+            return (((count < 3) || ((count == 4) && ((distinct[0] == distinct[2]) || (distinct[1] == distinct[3])))) ? 0 : count);
+        }
+
+        Span<int> distinct = stackalloc int[4];
+        var keptQuads = 0;
+
+        for (var quad = 0; (quad < quadCorners.Count); quad++) {
+            if (Collapse(quad: quad, distinct: distinct) > 0) { keptQuads++; }
+        }
+
+        var mergedQuads = new int[(4 * keptQuads)];
+        var mergedCorners = new int[keptQuads];
+
+        keptQuads = 0;
+        for (var quad = 0; (quad < quadCorners.Count); quad++) {
+            var count = Collapse(quad: quad, distinct: distinct);
+
+            if (count == 0) { continue; }
+            mergedQuads[(4 * keptQuads)] = distinct[0];
+            mergedQuads[((4 * keptQuads) + 1)] = distinct[1];
+            mergedQuads[((4 * keptQuads) + 2)] = distinct[2];
+            mergedQuads[((4 * keptQuads) + 3)] = distinct[((count == 4) ? 3 : 2)];
+            mergedCorners[keptQuads] = quadCorners[quad];
+            keptQuads++;
         }
 
         return new SdfSurface {
-            Features = [.. mergedFeatures],
-            Beside = [.. mergedBesides],
-            Solved = [.. mergedSolved],
-            Normals = [.. mergedNormals],
-            Positions = [.. mergedPositions],
-            QuadCorners = [.. mergedCorners],
-            Quads = [.. mergedQuads],
+            Features = mergedFeatures,
+            Beside = mergedBesides,
+            Solved = mergedSolved,
+            Normals = mergedNormals,
+            Positions = mergedPositions,
+            QuadCorners = mergedCorners,
+            Quads = mergedQuads,
         };
     }
     // Moves each convex crease a vertex's planes meet past its cell (Place's `beyond`, or a merged piece's past its
@@ -859,7 +882,7 @@ internal static class SdfDualContouring {
     // cuts its corner in a notch. A target that holds a crease of its own, a cell of several patches and a cell the
     // surface misses take none. A vertex that hands its crease over stays inside its cell and keeps its
     // crease mark, since its quads turn across the crease.
-    private static void HandOff<TLattice>(TLattice grid, List<double> positions, List<bool> features, List<bool> solveds, List<bool> besides, List<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> target) where TLattice : ISdfContourLattice {
+    private static void HandOff<TLattice>(TLattice grid, Span<double> positions, Span<bool> features, Span<bool> solveds, Span<bool> besides, List<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> target) where TLattice : ISdfContourLattice {
         if (handoffs.Count == 0) {
             return;
         }
