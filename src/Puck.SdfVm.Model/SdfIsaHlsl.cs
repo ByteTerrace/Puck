@@ -390,6 +390,16 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_LEVEL_SHIFT", value: SdfKernelInterfaces.MeshLevelShift);
         declarations.Count(name: "SDF_MESH_SELECTION_GROUP_SIZE", value: SdfKernelInterfaces.MeshSelectionGroupSize);
         declarations.Count(name: "SDF_MESH_SELECTION_GROUPS_PER_ROW", value: SdfKernelInterfaces.MeshSelectionGroupsPerRow);
+        declarations.Count(name: "SDF_OCCLUSION_EARLY_STEP", value: SdfKernelInterfaces.MeshOcclusionEarlyStep);
+        declarations.Count(name: "SDF_OCCLUSION_DEPTH_STEP", value: SdfKernelInterfaces.MeshOcclusionDepthStep);
+        declarations.Count(name: "SDF_OCCLUSION_LATE_STEP", value: SdfKernelInterfaces.MeshOcclusionLateStep);
+        declarations.Count(name: "SDF_OCCLUSION_SIGHT_STEP", value: SdfKernelInterfaces.MeshOcclusionSightStep);
+        declarations.Count(name: "SDF_RECEIVER_STEP", value: SdfKernelInterfaces.MeshReceiverStep);
+        declarations.Count(name: "SDF_RECEIVER_REDUCE_STEP", value: SdfKernelInterfaces.MeshReceiverReduceStep);
+        declarations.Count(name: "SDF_RECEIVER_SHIFT", value: SdfKernelInterfaces.MeshReceiverShift);
+        declarations.Count(name: "SDF_RECEIVER_ROW", value: SdfKernelInterfaces.MeshReceiverRow);
+        declarations.Count(name: "SDF_SIGHT_ROW", value: SdfKernelInterfaces.MeshSightRow);
+        declarations.Count(name: "SDF_SIGHT_COUNT_BASE", value: SdfKernelInterfaces.MeshSightCountBase);
         declarations.Section(title: "The irradiance volume's probe record and read (SdfMeshIrradianceProbe).");
         declarations.Count(name: "SDF_MESH_IRRADIANCE_PROBE_WORDS", value: SdfMeshIrradianceProbe.ProbeWords);
         declarations.Count(name: "SDF_MESH_IRRADIANCE_LEVELS", value: SdfMeshIrradianceProbe.Levels);

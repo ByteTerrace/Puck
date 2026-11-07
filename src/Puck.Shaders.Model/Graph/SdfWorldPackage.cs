@@ -585,6 +585,13 @@ public static partial class SdfWorldPackage {
         OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
         Outputs: [new ResourceReference(Name: target), new ResourceReference(Name: depth)]
     );
+    /// <summary>Removes the far cascade's camera-depth input when receiver culling is disabled.</summary>
+    /// <param name="fragment">The fragment to specialize.</param>
+    /// <returns>A fragment whose cascades have no camera-depth dependency.</returns>
+    public static RenderGraphPackageFragment WithoutCasterReceivers(RenderGraphPackageFragment fragment) => fragment with {
+        Passes = [.. fragment.Passes.Select(static pass => pass.Name == Parts.ShadowFar
+            ? pass with { Inputs = [], InputAccesses = [] } : pass)],
+    };
     // A shadow cascade's raster pass, drawing the frame's mesh draws from the cascade's light camera into its two layers:
     // the depth, the nearest face of any facing (where the light enters the first solid it crosses), and the exit layer,
     // the nearest face turned from the light (where it leaves the first solid it crosses).

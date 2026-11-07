@@ -2,17 +2,18 @@ using System.Numerics;
 using Puck.Abstractions.Counting;
 using Puck.Hosting;
 using Puck.Maths;
+using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
-// The far cascade's rate (SdfUpdateRates.ShadowFar), for box-only selection: a view holds its layers and fit while a refresh at
+// The far cascade's rate (SdfUpdateRates.ShadowFar): a view holds its layers and fit while a refresh at
 // least 30 times a second of presentation time allows (SdfUpdateRateTiers.Holds), so the shadow-far pass stands between
 // refreshes whatever else of the frame renders. A hold ends early when the fit it stands for no longer covers what the
 // view shows: the light turns by more than the far camera's depth span moves a shadow one texel, the camera turns or
 // moves past the tiers' tolerances, the cascade's extent or texels change, the camera cuts, the instance follows another
 // view or residency, or a capture converges. A sun on a day clock turns every frame, by less than that in a 30th of a
-// second, so it holds as a still light does. Receiver-conditioned occlusion instead refreshes both layers on changes:
-// newly exposed receivers cannot use a mask from a previous view.
+// second, so it holds as a still light does. Receiver-conditioned occlusion additionally requires both retained layers'
+// receiver coverage identities to match: newly exposed receivers cannot use a mask from a previous view.
 //
 // A refresh the rate alone calls for (the fit still covers the view) draws the cascade's two layers on consecutive frames
 // when two frames fit in the rate's period: the depth (with its glass extinction) first, then the exit layer on a frame
@@ -26,6 +27,27 @@ namespace Puck.SdfVm;
 // once the frame's submission succeeds. A pass that stands, skips or whose recording is abandoned commits nothing, and a
 // layer the recorder has not drawn in its current graph is always drawn (RecordFar answers both).
 public sealed partial class SdfWorldPasses {
+    // A layer's receiver coverage is valid for exactly the geometry, lens and sample grid it classified. The light
+    // is deliberately absent: readers use that layer's committed light camera. This conservative equality proof
+    // permits redundant mesh writes (for example screen shading or motion-history settles) without invalidating it.
+    // Changed geometry, camera, jitter or grid cannot borrow a prior coverage proof.
+    internal ulong? ReceiverSignatureOf(string instance) => ReceiverSignatureOf(Refresh(instance));
+    private static ulong? ReceiverSignatureOf(Entry entry) {
+        if (entry.View is not { } view || view.Residency.Frame is not { } frame || view.Residency.Tables is not { } tables) { return null; }
+        if (frame.MeshCull != SdfMeshCullLevel.Occlusion) { return 0UL; }
+        var index = Math.Min(view.View, frame.Views.Count - 1);
+        var hash = Fnv1aHash.Create();
+        hash.Add(tables.PassSignature(frame, index, SdfWorldPackage.Parts.Mesh));
+        hash.Add(unchecked((ulong)entry.Bindings));
+        hash.Add(unchecked((ulong)frame.Views[index].CutRevision));
+        hash.Add((uint)frame.MeshDetail);
+        hash.Add(entry.Temporal.Epoch.Width);
+        hash.Add(entry.Temporal.Epoch.Height);
+        hash.Add(BitConverter.DoubleToUInt64Bits(entry.CurrentScale));
+        hash.Add(BitConverter.SingleToUInt32Bits(entry.Temporal.Jitter.X));
+        hash.Add(BitConverter.SingleToUInt32Bits(entry.Temporal.Jitter.Y));
+        return hash.Value;
+    }
     /// <summary>Returns the cascades a pass of an instance draws and reads this frame: the frame's own fit, its far
     /// cascade's layers through the cameras they were drawn from.</summary>
     /// <param name="instance">The instance's name.</param>
@@ -87,9 +109,10 @@ public sealed partial class SdfWorldPasses {
 
         entry.FarPendingFrame = m_frame;
         entry.FarPendingLayers = layers;
+        entry.FarPendingReceivers = ReceiverSignatureOf(entry);
+        entry.FarPendingCounts = counts;
         // An exit layer alone is drawn from the camera its depth was drawn from.
         entry.FarPendingCamera = ((layers == SdfFarLayers.Exit) ? entry.FarCamera : fresh);
-        counts?.Count(kind: ((layers == SdfFarLayers.Both) ? SdfUpdateRateCounts.ShadowFarRendered : SdfUpdateRateCounts.ShadowFarSplit));
 
         return layers;
     }
@@ -104,19 +127,25 @@ public sealed partial class SdfWorldPasses {
         }
 
         var camera = entry.FarPendingCamera;
+        entry.FarPendingCounts?.Count(kind: entry.FarPendingLayers == SdfFarLayers.Both
+            ? SdfUpdateRateCounts.ShadowFarRendered : SdfUpdateRateCounts.ShadowFarSplit);
 
         switch (entry.FarPendingLayers) {
             case SdfFarLayers.Depth:
                 entry.FarCamera = camera;
+                entry.FarDepthReceivers = entry.FarPendingReceivers;
                 entry.FarExitOwed = true;
                 break;
             case SdfFarLayers.Exit:
                 entry.FarExitCamera = camera;
+                entry.FarExitReceivers = entry.FarPendingReceivers;
                 entry.FarExitOwed = false;
                 break;
             default:
                 entry.FarCamera = camera;
                 entry.FarExitCamera = camera;
+                entry.FarDepthReceivers = entry.FarPendingReceivers;
+                entry.FarExitReceivers = entry.FarPendingReceivers;
                 entry.FarExitOwed = false;
                 break;
         }
@@ -128,10 +157,8 @@ public sealed partial class SdfWorldPasses {
         var fresh = cascades[1];
         var snapshot = frame.Views[Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1))];
         var camera = snapshot.Camera;
-        // Receiver-conditioned depth is valid only for the exact current camera samples.
-        // A motion tolerance or a 30 Hz hold cannot prove that newly exposed receivers
-        // were covered. Ordinary unchanged-pass signatures may still retain it.
-        var rated = ((frame.UpdateRates & SdfUpdateRates.ShadowFar) != 0 && frame.MeshCull != SdfMeshCullLevel.Occlusion);
+        var rated = ((frame.UpdateRates & SdfUpdateRates.ShadowFar) != 0);
+        var receivers = ReceiverSignatureOf(entry: entry);
         // Every frame since the refresh decided, so the time since it is this view's presentation time.
         var continuous = (entry.FarDecided == (m_frame - 1));
         var elapsed = (continuous ? (entry.FarElapsedSeconds + m_context.FrameDeltaSeconds) : 0d);
@@ -150,6 +177,8 @@ public sealed partial class SdfWorldPasses {
             (drawn.Far == fresh.Far) &&
             (entry.FarCut == snapshot.CutRevision) &&
             (entry.FarBindings == entry.Bindings) &&
+            (frame.MeshCull != SdfMeshCullLevel.Occlusion || (receivers is not null &&
+                entry.FarDepthReceivers == receivers && entry.FarExitReceivers == receivers)) &&
             (Vector3.Dot(vector1: camera.Forward, vector2: entry.FarForward) >= MathF.Cos(x: SdfUpdateRateTiers.ShadowFarTurnRadians)) &&
             (Vector3.DistanceSquared(value1: camera.Position, value2: entry.FarEye) <= (SdfUpdateRateTiers.ShadowFarMoveMetres * SdfUpdateRateTiers.ShadowFarMoveMetres)) &&
             (entry.Convergence is not { IsActive: true })
@@ -163,9 +192,6 @@ public sealed partial class SdfWorldPasses {
         if (held) {
             entry.FarElapsedSeconds = elapsed;
             entry.FarLayers = (entry.FarExitOwed ? SdfFarLayers.Exit : SdfFarLayers.None);
-            if (entry.FarLayers == SdfFarLayers.None) {
-                frame.RateCounts?.Count(kind: SdfUpdateRateCounts.ShadowFarHeld);
-            }
 
             return;
         }
@@ -261,6 +287,10 @@ public sealed partial class SdfWorldPasses {
         public ulong? FarDepthSignature { get; set; }
         public ulong? FarExitSceneSignature { get; set; }
         public int FarTexels { get; set; }
+        public ulong? FarDepthReceivers { get; set; }
+        public ulong? FarExitReceivers { get; set; }
+        public ulong? FarPendingReceivers { get; set; }
+        public WorkCounterSet? FarPendingCounts { get; set; }
     }
 }
 /// <summary>Which of the far shadow cascade's two layers its pass draws on a frame (<see cref="SdfWorldPasses"/>).</summary>

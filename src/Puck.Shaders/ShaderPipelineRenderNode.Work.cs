@@ -111,6 +111,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                 if (Stands(pass: pass, signature: signature)) {
                     SkipAccesses(pass: pass, slot: slot);
                     m_work.StandPass(pass: index);
+                    pass.Package?.Stood();
                     continue;
                 }
                 if (!countersWritten && counters is not null) {

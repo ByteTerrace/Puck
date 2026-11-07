@@ -66,6 +66,26 @@ public sealed class SdfKernelInterfaces {
     public const int MeshLevelShift = 24;
     /// <summary>The selection kernel's threads per group.</summary>
     public const uint MeshSelectionGroupSize = 64u;
+    /// <summary>Early selection step.</summary>
+    public const int MeshOcclusionEarlyStep = 0;
+    /// <summary>Entry depth reduction step.</summary>
+    public const int MeshOcclusionDepthStep = 1;
+    /// <summary>Late selection step.</summary>
+    public const int MeshOcclusionLateStep = 2;
+    /// <summary>Portal sight step.</summary>
+    public const int MeshOcclusionSightStep = 3;
+    /// <summary>Receiver marking step.</summary>
+    public const int MeshReceiverStep = 4;
+    /// <summary>Receiver hierarchy reduction step.</summary>
+    public const int MeshReceiverReduceStep = 5;
+    /// <summary>Cascade texels per receiver cell, as a power of two.</summary>
+    public const int MeshReceiverShift = 4;
+    /// <summary>Receiver sample grid and jitter row.</summary>
+    public const int MeshReceiverRow = 14;
+    /// <summary>First portal sight query row.</summary>
+    public const int MeshSightRow = 15;
+    /// <summary>First portal sight verdict after draw counts.</summary>
+    public const int MeshSightCountBase = 5;
     /// <summary>The selection dispatch's groups per row, within both backends' per-axis limit.</summary>
     public const uint MeshSelectionGroupsPerRow = 65535u;
     /// <summary>The raster pass's GPU selection controls: one header, three level-choice rows, ten cull rows and the
