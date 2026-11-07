@@ -18,7 +18,7 @@ public static class StartupBenchmarks {
         var samples = CliOptions.Count(defaultValue: 3, description: "Fresh processes measured per world, 1 to 100.", maximum: 100, minimum: 1, name: "--samples");
         var timeout = CliOptions.Count(defaultValue: 120, description: "Seconds one sample may take before it is abandoned, 1 to 3600.", maximum: 3600, minimum: 1, name: "--timeout-seconds");
         var headless = new Option<bool>("--headless") { Description = "Measure console readiness only; default launches the windowed renderer and requires a completed PNG capture." };
-        var bake = new Option<bool>("--bake") { Description = "Measure from the first mesh-bake start through completion of every residency reported by world.residency, using a fresh cache and --paused --lockstep to isolate baking from lighting. This is not an ordinary windowed cold boot." };
+        var bake = new Option<bool>("--bake") { Description = "Measure from the first mesh-bake start through completion of every residency reported by world.residency, using a fresh cache, --paused --lockstep to pin authority and display clocks. This is not an ordinary windowed cold boot." };
         var backend = WorldLaunch.BackendOption(description: "Graphics backend for the windowed sample: auto, directx or vulkan.");
         var width = CliOptions.Count(defaultValue: 1280, description: "Window width in pixels for the rendered capture, 1 to 16384.", maximum: 16384, minimum: 1, name: "--width");
         var height = CliOptions.Count(defaultValue: 720, description: "Window height in pixels for the rendered capture, 1 to 16384.", maximum: 16384, minimum: 1, name: "--height");
@@ -29,7 +29,7 @@ public static class StartupBenchmarks {
             (parse.GetValue(argument: worlds) ?? []), parse.GetValue(option: artifact), parse.GetValue(option: output),
             parse.GetValue(option: samples), parse.GetValue(option: timeout), parse.GetValue(option: headless), parse.GetValue(option: width), parse.GetValue(option: height), parse.GetValue(option: cache),
             parse.GetValue(option: json), sampleHost, parse.GetValue(option: bake), parse.GetValue(option: backend)));
-        command.Detail(detail: "Writes report.json (puck.bench.v1) in a unique run directory under --output after every sample: the World build's identity (version with its commit, SHA-256 of its engine assemblies), the host load sampled during the run, and the metric `startup` (console readiness headless, the completed capture windowed, in ms), or `cold-bake` with --bake, as median, p10 and p90. --bake uses --paused --lockstep to isolate baking from lighting, rather than measuring an ordinary windowed cold boot. It times the first bake start through completion of every residency world.residency reports after world.wait bakes, matched by residency identity; missing completions fail the sample. Boot, shutdown and lighting convergence are outside the interval. `puck measure` reads /metrics/startup/median or /metrics/cold-bake/median. Exit 0 when every sample passed, 1 when one failed, 2 for invalid arguments.");
+        command.Detail(detail: "Writes report.json (puck.bench.v1) in a unique run directory under --output after every sample: the World build's identity (version with its commit, SHA-256 of its engine assemblies), the host load sampled during the run, and the metric `startup` (console readiness headless, the completed capture windowed, in ms), or `cold-bake` with --bake, as median, p10 and p90. --bake uses --paused --lockstep to pin authority and display clocks, rather than measuring an ordinary windowed cold boot. It times the first bake start through completion of every residency world.residency reports after world.wait bakes, matched by residency identity; missing completions fail the sample. Boot, shutdown and lighting convergence are outside the interval. `puck measure` reads /metrics/startup/median or /metrics/cold-bake/median. Exit 0 when every sample passed, 1 when one failed, 2 for invalid arguments.");
         return command;
     }
 
@@ -108,6 +108,8 @@ public static class StartupBenchmarks {
 
                     File.WriteAllText($"{directory}/stdout.log", result.Stdout);
                     File.WriteAllText($"{directory}/stderr.log", result.Stderr);
+                    File.WriteAllLines($"{directory}/timeline.log", result.OutputLines.Select(static line =>
+                        string.Create(CultureInfo.InvariantCulture, $"{line.ElapsedMilliseconds:0.000} {line.Stream} {line.Line}")));
                     row = Assess(worlds[index], sample, result, (headless || bake), capture);
                     if (bake) {
                         row = StartupBake.Assess(row, result);
@@ -162,7 +164,7 @@ public static class StartupBenchmarks {
 }
 public sealed record StartupSample(string World, int Sample, double? ConsoleMilliseconds, double? CaptureMilliseconds, int? ExitCode, string? Error) {
     /// <summary>Gets the first bake start through completion of every reported residency under paused lockstep scheduling,
-    /// in milliseconds. Lockstep isolates the bake from lighting; this is not ordinary windowed startup.</summary>
+    /// in milliseconds. Authority and presentation clocks are pinned; this is not ordinary windowed startup.</summary>
     public double? BakeMilliseconds { get; init; }
     /// <summary>Gets each reported residency's identity and observed bake endpoints, relative to process launch.</summary>
     public IReadOnlyList<StartupBakeResidency>? BakeResidencies { get; init; }
