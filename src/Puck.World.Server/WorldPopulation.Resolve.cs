@@ -404,6 +404,7 @@ public sealed partial class WorldPopulation {
         m_contactField = (((m_adjacencies is { } source) && (bands.Count > 0))
             ? new WorldAdjacencyContactField(
                 inner: opened,
+                population: this,
                 source: source
             )
             : opened
