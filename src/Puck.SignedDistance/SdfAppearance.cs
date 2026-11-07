@@ -15,7 +15,7 @@ namespace Puck.SignedDistance;
 public sealed class SdfAppearance {
     /// <summary>The material float4 stride, written by the packing and read by the kernels' <c>sdfMaterialLoad</c>
     /// (<c>SDF_MATERIAL_VECTORS_PER_ENTRY</c>).</summary>
-    public const int MaterialVectorsPerEntry = 32;
+    public const int MaterialVectorsPerEntry = 34;
     /// <summary>The paint table's float4 stride, read by the views pass's paint layer (<c>SDF_PAINT_VECTORS_PER_ENTRY</c>):
     /// the frame origin and shape, the rotation, the residual scale, the shape's two data vectors, the color and stroke,
     /// the slot and bound center, the bound half-extents, then <see cref="PaintTableVectors"/> of side table.</summary>
@@ -51,6 +51,7 @@ public sealed class SdfAppearance {
     private readonly SdfMaterial[] m_materials;
     private readonly SdfScreenSurface[] m_screenSurfaces;
     private readonly uint[] m_screenSurfaceWords;
+
     private bool? m_hasFlow;
     private bool? m_readsWorldLanes;
 
@@ -113,18 +114,23 @@ public sealed class SdfAppearance {
     public ReadOnlySpan<uint> ScreenSurfaceWords => m_screenSurfaceWords;
     /// <summary>Gets what a field may know of this appearance (<see cref="SdfAppearanceOutline"/>).</summary>
     public SdfAppearanceOutline Outline { get; }
+    /// <summary>Gets the aggregate authored-input reads, derived from admitted programs.</summary>
+    public SdfShadeReads ShadeReads => m_materials.Aggregate(SdfShadeReads.None, static (reads, material) => reads | (material.Shade?.Reads ?? SdfShadeReads.None));
+    /// <summary>Gets the authored programs carried by this appearance, including different runtime data for one identity.</summary>
+    public IEnumerable<SdfShadeProgram> ShadingPrograms => m_materials.Where(predicate: static m => (m.Shade is not null)).Select(selector: static m => m.Shade!);
     /// <summary>Gets whether any material reads a world lane (<see cref="SdfLanes.FirstWorld"/> and above) through its
     /// emission, weathering or flow: a frame of such a program carries the world's lanes in its pass block, and a frame
     /// of any other carries zero for its materials, so its views stand while the world's state moves. Measured once, on
     /// first read.</summary>
     public bool ReadsWorldLanes => (m_readsWorldLanes ??= m_materials.Any(predicate: static material =>
-        IsWorldLane(lane: material.EmissiveLane) ||
+        ((((material.Shade?.Reads & SdfShadeReads.WorldLanes) is { } reads) && (reads != SdfShadeReads.None)) || IsWorldLane(lane: material.EmissiveLane) ||
         ((material.Weathering is { } weathering) && IsWorldLane(lane: weathering.Lane)) ||
-        ((material.Flow is { } flow) && (IsWorldLane(lane: flow.Lane) || IsWorldLane(lane: flow.CoverageLane)))));
+        ((material.Flow is { } flow) && (IsWorldLane(lane: flow.Lane) || IsWorldLane(lane: flow.CoverageLane))))));
     /// <summary>Gets whether any material carries a flow layer (<see cref="SdfMaterial.Flow"/>): a frame of such a program
     /// carries the flow clock in its pass block, and a frame of any other carries zero, so its views stand while nothing
     /// else changes. Measured once, on first read.</summary>
-    public bool HasFlow => (m_hasFlow ??= m_materials.Any(predicate: static material => (material.Flow is not null)));
+    public bool HasFlow => (m_hasFlow ??= m_materials.Any(predicate: static material => ((material.Flow is not null) ||
+        ((material.Shade?.Reads & SdfShadeReads.Clock) == SdfShadeReads.Clock))));
 
     /// <summary>Returns the vectors a palette's packed tables span: each material's <see cref="MaterialVectorsPerEntry"/>,
     /// then each paint's <see cref="PaintVectorsPerEntry"/>. The one statement of the appearance section's size, which a
@@ -135,12 +141,14 @@ public sealed class SdfAppearance {
         ArgumentNullException.ThrowIfNull(argument: materials);
 
         var paints = 0;
+        var shades = 0;
 
         foreach (var material in materials) {
             paints += (material.Paints?.Count ?? 0);
+            if (material.Shade is { } shade) { shades = checked((shades + ((shade.Words.Length + shade.ParameterWords.Length) / WordsPerVector))); }
         }
 
-        return checked(((MaterialVectorsPerEntry * materials.Count) + (PaintVectorsPerEntry * paints)));
+        return checked((((MaterialVectorsPerEntry * materials.Count) + (PaintVectorsPerEntry * paints)) + shades));
     }
 
     private static bool IsWorldLane(int? lane) => (lane >= SdfLanes.FirstWorld);
@@ -324,6 +332,7 @@ public sealed class SdfAppearance {
     /// <param name="materialVector">The vector the material table starts at (the header's material offset).</param>
     internal void Pack(uint[] words, int materialVector) {
         var paintCursor = (materialVector + (MaterialVectorsPerEntry * m_materials.Length));
+        var shadeCursor = checked((paintCursor + m_materials.Sum(selector: static m => ((m.Paints?.Count ?? 0) * PaintVectorsPerEntry))));
         Span<Vector4> toonRows = stackalloc Vector4[4];
 
         for (var index = 0; (index < m_materials.Length); index++) {
@@ -343,6 +352,16 @@ public sealed class SdfAppearance {
             Row(row: 1, value: new(m.Specular, m.Roughness, m.Sheen, m.Metal));
             Row(row: 2, value: new(m.Coat, m.Wrap, m.Soften, bleed.X));
             Row(row: 3, value: new(value: m.Fill, w: m.Receive));
+            if (m.Shade is { } shade) {
+                var length = (shade.Words.Length / WordsPerVector);
+
+                shade.Words.CopyTo(destination: words.AsSpan(start: (shadeCursor * WordsPerVector)));
+                shade.ParameterWords.CopyTo(destination: words.AsSpan(start: ((shadeCursor + length) * WordsPerVector)));
+                Row(row: 32, value: new(BitConverter.UInt32BitsToSingle(value: ((uint)shadeCursor)), BitConverter.UInt32BitsToSingle(value: ((uint)length)),
+                    BitConverter.UInt32BitsToSingle(value: ((uint)(shadeCursor + length))), BitConverter.UInt32BitsToSingle(value: ((uint)shade.ParameterLayout.Count))));
+                Row(row: 33, value: new(shade.Demand.Cosine(baseWrap: m.Wrap), BitConverter.UInt32BitsToSingle(value: ((uint)shade.Reads)), 0, 0));
+                shadeCursor = checked(((shadeCursor + length) + (shade.ParameterWords.Length / WordsPerVector)));
+            }
             Row(row: 7, value: new Vector4(w: bleed.Z, x: 0, y: 0, z: bleed.Y));
             var paints = (m.Paints ?? []);
 
@@ -350,10 +369,10 @@ public sealed class SdfAppearance {
                 row: 20,
                 value: new(
                     x: BitConverter.UInt32BitsToSingle(value: ((paints.Count > 0) ? (uint)paintCursor : 0u)),
-                    y: BitConverter.UInt32BitsToSingle(value: (uint)paints.Count),
+                    y: BitConverter.UInt32BitsToSingle(value: ((uint)paints.Count)),
                     z: BitConverter.UInt32BitsToSingle(value: ((m.EmissiveLane is { } lane) ? (((uint)lane) + 1u) : 0u)),
                     w: BitConverter.UInt32BitsToSingle(value: ((m.Glass is { HasContact: true } contact)
-                        ? (BitConverter.HalfToUInt16Bits(value: (Half)contact.ContactReach) | ((uint)BitConverter.HalfToUInt16Bits(value: (Half)contact.ContactCoverage) << 16))
+                        ? BitConverter.HalfToUInt16Bits(value: ((Half)contact.ContactReach)) | (((uint)BitConverter.HalfToUInt16Bits(value: ((Half)contact.ContactCoverage))) << 16)
                         : 0u))
                 )
             );
@@ -415,29 +434,31 @@ public sealed class SdfAppearance {
                     Row(row: 19, value: new(deposit.Roughness, deposit.Metal, 0, 0));
                 }
                 // Pattern XYZ and noise coverage use existing reserved components; material stride stays fixed.
-                var pattern = w.PatternScale ?? Vector3.One;
-                words[materialBase + 15 * WordsPerVector + 3] = BitConverter.SingleToUInt32Bits(pattern.X);
-                words[materialBase + 17 * WordsPerVector + 3] = BitConverter.SingleToUInt32Bits(pattern.Y);
-                words[materialBase + 19 * WordsPerVector + 2] = BitConverter.SingleToUInt32Bits(pattern.Z);
-                words[materialBase + 19 * WordsPerVector + 3] = BitConverter.SingleToUInt32Bits(w.Noise);
-                words[materialBase + 17 * WordsPerVector + 2] = BitConverter.SingleToUInt32Bits(w.Softness);
+                var pattern = (w.PatternScale ?? Vector3.One);
+
+                words[((materialBase + (15 * WordsPerVector)) + 3)] = BitConverter.SingleToUInt32Bits(value: pattern.X);
+                words[((materialBase + (17 * WordsPerVector)) + 3)] = BitConverter.SingleToUInt32Bits(value: pattern.Y);
+                words[((materialBase + (19 * WordsPerVector)) + 2)] = BitConverter.SingleToUInt32Bits(value: pattern.Z);
+                words[((materialBase + (19 * WordsPerVector)) + 3)] = BitConverter.SingleToUInt32Bits(value: w.Noise);
+                words[((materialBase + (17 * WordsPerVector)) + 2)] = BitConverter.SingleToUInt32Bits(value: w.Softness);
                 // A second octave exists when the gain word is positive; a single octave leaves both words zero.
                 if (w.Octaves >= 2) {
-                    words[materialBase + 15 * WordsPerVector + 2] = BitConverter.SingleToUInt32Bits(w.OctaveRatio);
-                    words[materialBase + 18 * WordsPerVector + 3] = BitConverter.SingleToUInt32Bits(w.OctaveGain);
+                    words[((materialBase + (15 * WordsPerVector)) + 2)] = BitConverter.SingleToUInt32Bits(value: w.OctaveRatio);
+                    words[((materialBase + (18 * WordsPerVector)) + 3)] = BitConverter.SingleToUInt32Bits(value: w.OctaveGain);
                 }
                 var turn = Quaternion.Normalize(value: (w.Turn ?? Quaternion.Identity));
 
-                Row(row: 26, value: new(x: turn.X, y: turn.Y, z: turn.Z, w: turn.W));
+                Row(row: 26, value: new(w: turn.W, x: turn.X, y: turn.Y, z: turn.Z));
             }
         }
     }
+
     // A flow's control word (row 30.w): its velocity lane plus one, or zero for a constant flow, under FlowLaneMask;
     // FlowWorldFrame for a velocity authored in world space; its coverage lane plus one, or zero, at
     // FlowCoverageLaneShift.
     private static uint FlowControl(SdfFlow flow) =>
-        (LanePlusOne(lane: flow.Lane) | ((flow.Frame == SdfFlowFrame.World) ? FlowWorldFrame : 0u) |
-        (LanePlusOne(lane: flow.CoverageLane) << FlowCoverageLaneShift));
+        LanePlusOne(lane: flow.Lane) | ((flow.Frame == SdfFlowFrame.World) ? FlowWorldFrame : 0u) |
+        (LanePlusOne(lane: flow.CoverageLane) << FlowCoverageLaneShift);
     private static uint LanePlusOne(int? lane) => ((lane is { } index) ? (((uint)index) + 1u) : 0u);
     // PaintVectorsPerEntry float4 rows. KEEP IN SYNC with sdfApplyPaints in shade/shade-layers.hlsli.
     // 0 frame origin, shape type (uint bits); 1 frame rotation; 2 residual scale, its smallest component;
@@ -446,13 +467,7 @@ public sealed class SdfAppearance {
     private static void PackPaint(SdfPaint paint, int paintVector, uint[] words) {
         var shape = paint.Shape;
         var tableVector = (paintVector + 8);
-        var data0 = shape.Type switch {
-            SdfShapeType.ConvexPolygon => shape.Data0 with {
-                X = BitConverter.UInt32BitsToSingle(value: SdfPrismProfile.PackConvexReference(count: ((int)(BitConverter.SingleToUInt32Bits(value: shape.Data0.X) & ((1u << SdfPrismProfile.ConvexCountBits) - 1u)) + 1), tableVector: tableVector)),
-            },
-            SdfShapeType.Sweep => shape.Data0 with { X = BitConverter.UInt32BitsToSingle(value: (uint)tableVector) },
-            _ => shape.Data0,
-        };
+        var data0 = shape.Data0At(tableVector: tableVector);
         var rotation = Quaternion.Normalize(value: paint.Rotation);
         var minimumScale = MathF.Min(x: shape.Scale.X, y: MathF.Min(x: shape.Scale.Y, y: shape.Scale.Z));
 
@@ -464,8 +479,8 @@ public sealed class SdfAppearance {
             y: value.Y,
             z: value.Z
         );
-        Row(row: 0, value: new(value: paint.Origin, w: BitConverter.UInt32BitsToSingle(value: (uint)shape.Type)));
-        Row(row: 1, value: new(x: rotation.X, y: rotation.Y, z: rotation.Z, w: rotation.W));
+        Row(row: 0, value: new(value: paint.Origin, w: BitConverter.UInt32BitsToSingle(value: ((uint)shape.Type))));
+        Row(row: 1, value: new(w: rotation.W, x: rotation.X, y: rotation.Y, z: rotation.Z));
         Row(row: 2, value: new(value: shape.Scale, w: minimumScale));
         Row(row: 3, value: data0);
         Row(row: 4, value: shape.Data1);
@@ -482,7 +497,6 @@ public sealed class SdfAppearance {
         }
     }
 }
-
 /// <summary>
 /// What a program's field derivation may know of its appearance (<see cref="SdfAppearance.Outline"/>): the material
 /// count, the vectors the appearance section spans, which materials are glass (a glass shape bakes into a group of its

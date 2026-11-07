@@ -63,7 +63,8 @@ namespace Puck.SignedDistance;
 /// Presentation only: the irradiance trace and every query ignore it.</param>
 /// <param name="Flow">The flow layer, shading that moves along an authored flow over still geometry, or
 /// <see langword="null"/> for none. Presentation only: the irradiance trace and every query ignore it.</param>
-public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f, SdfWeathering? Weathering = null, float Wrap = 0f, float Soften = 0f, Vector3 Fill = default, SdfInset? Inset = null, Vector3? Bleed = null, float Receive = 1f, IReadOnlyList<SdfPaint>? Paints = null, int? EmissiveLane = null, SdfGlass? Glass = null, SdfToon? Toon = null, SdfFlow? Flow = null) {
+/// <param name="Shade">The admitted presentation program; never a field or simulation input.</param>
+public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f, SdfWeathering? Weathering = null, float Wrap = 0f, float Soften = 0f, Vector3 Fill = default, SdfInset? Inset = null, Vector3? Bleed = null, float Receive = 1f, IReadOnlyList<SdfPaint>? Paints = null, int? EmissiveLane = null, SdfGlass? Glass = null, SdfToon? Toon = null, SdfFlow? Flow = null, SdfShadeProgram? Shade = null) {
     /// <summary>Gets whether the material is glass: it carries a <see cref="Glass"/> response.</summary>
     public bool IsGlass => (Glass is not null);
     /// <summary>Gets whether the glass response, when present, is admissible with this material's albedo as its tint

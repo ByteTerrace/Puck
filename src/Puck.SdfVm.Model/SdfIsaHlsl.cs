@@ -59,7 +59,7 @@ public static class SdfIsaHlsl {
     public static uint DescribeFingerprint() =>
         FingerprintOf(
             encoding: SdfEncodingProbe.Describe(),
-            include: (((GenerateLayout() + SdfRenderHlsl.GenerateLayout()) + SdfSkyKindsHlsl.Generate()) + SdfSkyKindsHlsl.GenerateTable())
+            include: ((((GenerateLayout() + SdfRenderHlsl.GenerateLayout()) + SdfSkyKindsHlsl.Generate()) + SdfSkyKindsHlsl.GenerateTable()) + SdfShadeHlsl.Generate())
         );
     /// <summary>Returns the fingerprint of the field's instruction set, which the mesh bake's interface carries as its
     /// stamp: <see cref="FingerprintOf"/> of this include's layout alone and the encoding described over each probe
@@ -254,6 +254,7 @@ public static class SdfIsaHlsl {
         declarations.Real(name: "SDF_SMOOTH_RADIUS_MIN", value: SdfProgram.SmoothRadiusMin);
         declarations.Count(name: "SDF_SWEEP_SAMPLES", value: SdfFieldEvaluator.SweepSamples);
         declarations.Count(name: "SDF_SWEEP_ROUNDS", value: SdfFieldEvaluator.SweepRounds);
+        declarations.Count(name: "SDF_ELLIPSE_ROOT_STEPS", value: SdfFieldEvaluator.EllipseRootSteps);
         declarations.Section(title: "The integer hash (Pcg3dLatticeNoise): PCG3D's LCG step, the stream decorrelators, the 3D value noise's seed streams, and the R2 lattice's increments (LowDiscrepancy).");
         declarations.Bits(name: "SDF_PCG_MULTIPLIER", value: Pcg3dLatticeNoise.PcgMultiplier);
         declarations.Bits(name: "SDF_PCG_INCREMENT", value: Pcg3dLatticeNoise.PcgIncrement);
@@ -436,7 +437,7 @@ public static class SdfIsaHlsl {
         declarations.Real(name: "SDF_GLASS_DEPTH_DISTANCE_SCALE", value: SdfWorldPackage.GlassDepthDistanceScale);
         declarations.Real(name: "SDF_GLASS_ABSORPTION_SCALE", value: SdfWorldPackage.GlassAbsorptionScale);
         declarations.Section(title: "The flow layer's clock period in seconds (SdfFlow.ClockPeriodSeconds) and its control word (SdfAppearance.FlowLaneMask, SdfAppearance.FlowWorldFrame, SdfAppearance.FlowCoverageLaneShift).");
-        declarations.Real(name: "SDF_FLOW_CLOCK_PERIOD", value: (float)SdfFlow.ClockPeriodSeconds);
+        declarations.Real(name: "SDF_FLOW_CLOCK_PERIOD", value: ((float)SdfFlow.ClockPeriodSeconds));
         declarations.Bits(name: "SDF_FLOW_LANE_MASK", value: SdfAppearance.FlowLaneMask);
         declarations.Bits(name: "SDF_FLOW_WORLD_FRAME", value: SdfAppearance.FlowWorldFrame);
         declarations.Count(name: "SDF_FLOW_COVERAGE_LANE_SHIFT", value: SdfAppearance.FlowCoverageLaneShift);
@@ -466,6 +467,7 @@ public static class SdfIsaHlsl {
 
         return declarations;
     }
+
     // A C# member name's HLSL spelling: upper snake case, with a word break before an upper-case letter that follows a
     // lower-case one, or that starts a new word after an upper-case letter or a digit (P4M stays P4M, LogSphere becomes
     // LOG_SPHERE, F2MinusF1 becomes F2_MINUS_F1).
@@ -599,6 +601,7 @@ public static class SdfIsaHlsl {
         // A real only the shader reads (a bias, a share, a threshold): in the generated text and in no stamp. The host may
         // mirror it for a diagnostic, but packs and decodes no data with it.
         public void Tuning(string name, float value) => Real(name: name, tuning: true, value: value);
+
         private void Real(string name, bool tuning, float value) {
             if (!float.IsFinite(f: value)) {
                 throw new ArgumentOutOfRangeException(
@@ -623,6 +626,7 @@ public static class SdfIsaHlsl {
                 value: ((value < 0f) ? $"({literal})" : literal)
             );
         }
+
         public void Section(string title) {
             Line(line: "");
             Line(line: $"// {title}");

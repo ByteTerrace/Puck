@@ -15,6 +15,13 @@ Rendering is presentation: floats are legal, and nothing here may feed back
 into simulation state. The deterministic contract lives with the fixed-point
 query evaluator (`SdfFieldEvaluator`) and `maths-usage`.
 
+## Authored shading
+
+Read [authored shading](references/authored-shading.md) for `SdfShadeProgram`,
+the op table, CPU admission, slice ownership, helper-closed cost, shadow demand
+and generated interpreter/emitter semantics. The GPU phase calls and bounded
+dispatch planner remain in the author-shader plan; CPU admission proves neither.
+
 ## Camera bloom
 
 The [bloom decision](../../../docs/decisions/rendering.md#bloom-is-a-cameras-scatter-applied-once-before-tonemapping)

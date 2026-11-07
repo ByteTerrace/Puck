@@ -111,6 +111,7 @@ public static partial class WorldSchema {
         private readonly Dictionary<int, int> m_rawKeyCounts = [];
         private readonly Dictionary<int[], int> m_signatures = new(comparer: SignatureComparer.Instance);
         private readonly Dictionary<string, int> m_targetByPath = new(comparer: StringComparer.Ordinal);
+
         private JsonObject? m_documentRoot;
 
         private readonly string?[] m_targetDefNames;
@@ -127,6 +128,7 @@ public static partial class WorldSchema {
         private int m_nextKeyId;
 
         public HoistPass(JsonObject merged, ExportRun run) {
+            m_documentRoot = merged;
             var typesByNode = run.TypesByNode;
 
             m_inlineRoots = run.InlineRoots;
@@ -146,10 +148,18 @@ public static partial class WorldSchema {
             var nodes = new List<JsonNode>();
 
             foreach (var path in targetPaths) {
-                if (ResolvePointer(
-                    pointer: path,
-                    root: merged
-                ) is not { } node) {
+                var pointer = path;
+                var root = merged;
+
+                if (path.StartsWith(comparisonType: StringComparison.Ordinal, value: InlineReferencePrefix)) {
+                    var rest = path[InlineReferencePrefix.Length..];
+                    var slash = rest.IndexOf(value: '/');
+                    var id = int.Parse(((slash < 0) ? rest : rest[..slash]), System.Globalization.CultureInfo.InvariantCulture);
+
+                    root = ((JsonObject)m_inlineRoots[id]);
+                    pointer = ((slash < 0) ? "#" : $"#{rest[slash..]}");
+                }
+                if (ResolvePointer(pointer: pointer, root: root) is not { } node) {
                     continue;
                 }
 
@@ -236,11 +246,17 @@ public static partial class WorldSchema {
                 node: root,
                 order: order
             );
+            // Recursive targets in a converter-owned copy need definitions even when type ancestry cuts the copy.
+            var referencedRoots = m_targetNodes.Select(selector: target => Expand(probes: out _, source: target))
+                .OfType<ExpandedNode>().Where(predicate: static node => (node.RefText is null)).ToArray();
+
+            foreach (var referenced in referencedRoots) { Collect(node: referenced, order: order); }
 
             // Occurrence counts are the expanded TREE's, not the DAG's: a node's count is the sum of its parents'
             // over every edge, capped at two since grouping only asks whether a shape repeats. Reverse post-order
             // visits every parent before its children.
             root.Multiplicity = 1;
+            foreach (var referenced in referencedRoots) { referenced.Multiplicity = 1; }
 
             for (var index = (order.Count - 1); (index >= 0); index--) {
                 var node = order[index];
@@ -280,6 +296,7 @@ public static partial class WorldSchema {
             var reduced = ((JsonObject)Reduce(node: root));
 
             Mirror(node: root);
+            foreach (var referenced in referencedRoots) { Mirror(node: referenced); }
 
             return reduced;
         }
@@ -312,6 +329,7 @@ public static partial class WorldSchema {
                     );
                 }
             } else if (node is JsonObject obj) {
+                if (obj.ContainsKey(propertyName: "$id") && !ReferenceEquals(objA: obj, objB: m_documentRoot)) { return; }
                 if (TryGetAbsoluteRefTarget(
                     refObj: obj,
                     target: out var target

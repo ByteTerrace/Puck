@@ -282,13 +282,15 @@ look (the owner's rulings on authors, the standard and one implementation).
 
 Symbols are named so a reader checks the current code rather than this prose.
 
-- **Materials are 32-vector rows read by one decoder.** `SdfAppearance.Pack`
+- **Materials use a generated stride and one base decoder.** `SdfAppearance.Pack`
   writes each `SdfMaterial` as `SdfAppearance.MaterialVectorsPerEntry` float4s
   into the program's word stream after every table the field reads (its class
   comment states that nothing in it enters the mesh bake's identity);
   `sdfMaterialLoad` in `shade/sdf-material.hlsli` is "the ONE material decode
   point", reading rows 0 to 31 into `SdfMaterialData`: base response, inset,
-  paints' range, weathering's four rows, glass, cel style, flow.
+  paints' range, weathering's four rows, glass, cel style, flow. The admitted
+  shade program's ranges, demand and flags occupy the tail rows described in
+  [the CPU shading contract](../../.claude/skills/rendering/references/authored-shading.md).
 - **The layers run in a fixed order in fixed-function HLSL.** `sdfLightStage`
   (`passes/sdf-light-stage.hlsli`) evaluates, for every opaque hit: the paints
   (`sdfApplyPaints`, before the material loads, to keep the material out of the
@@ -506,7 +508,7 @@ The vocabulary, and what each piece lowers to:
   `smoothstep`, `step`, `pow`, `exp2`, `log2`, the trigonometric functions,
   `dot`, `cross`, `normalize`, `length`, quaternion rotate and inverse-rotate,
   `hash` (`sdfPcg3d` over quantized operands), `lattice` (`sdfLatticeNoise3`),
-  `lines` (`sdfLineCoverage`), `latticeGradient` (`sdfFlowNoise`, the lattice's
+  `lines` (`sdfLineCoverage`), `latticeGradient` (`sdfLatticeNoiseGradient3`, the lattice's
   value and analytic gradient in one pass, which the flow's normal tilt needs),
   `shape` (one `evaluateShape` over a shape descriptor stored in the program's
   slice, keeping the bound-box early-out `sdfApplyPaints` takes today, so a hit
@@ -1099,25 +1101,6 @@ final set:
   is a quality-versus-bar trade the memo does not make: it goes to the owner
   with the readings.
 
-0. **The op table, the lowering, the semantics and the cost** (CPU).
-   `SdfShadeOp` and its per-op template with the IR semantics of section 3.3;
-   `SdfShadeProgram` (validated slice, typed operands, runtime and structural
-   parameters, read flags, checked cost, shadow demand); the `shade` block in
-   `Puck.World.Transpiler` with its stamp, refusals and canonicalization;
-   `puck shaders generate` writing `isa/sdf-shade.hlsli` (declarations,
-   interpreter bodies, emitter template); `world.budget`'s `shading programs`
-   clause (count, interpreted, specialized, pending, quarantined, worst static
-   cost, worst shadow demand, each with its author's name). Check: the
-   spelling-equivalence corpus holds ten shade pairs that compile to identical
-   canonical streams and costs (`puck test` of the corpus); a seed or colour
-   edit keeps a program's identity and an `octaves` edit changes it; a
-   recursive call, a runtime-bounded loop, a stamp name outside the interface, a
-   runtime value in a structural position, a read of an undefined register, a
-   program needing more registers than the set and a program over the cap are
-   each refused by their `PUCKnnn` code; `puck shaders generate --check` is
-   clean; `MaxOps <= MaxWork` is checked where the constants are declared;
-   `puck mesh identity --against` shows a shade-table edit moves no bake
-   identity.
 1. **The interpreter, all three phases, both kernels, the standard's programs
    beside the old layers** (GPU). The rolled loops in `sdf-light-stage.hlsli`
    and `sdf-glass.comp.hlsl` through one generated entry; the light and
@@ -1361,7 +1344,7 @@ stand as written.
    evaluation and the equivalence corpus cover every discontinuity, `hash` and
    `floor` included, and a language without `step` would still have them.
 2. **The flow's analytic-gradient noise and the static copy's draw-space
-   velocity had no op.** True: `sdfFlowNoise` returns the value and gradient in
+   velocity had no op.** True: `sdfLatticeNoiseGradient3` (extracted from the flow helper) returns the value and gradient in
    one pass, and `sdfShadeFlow` turns an object-frame velocity through
    `sdfMeshCarryDirection` when no slot owns the hit. Resolved by the
    `latticeGradient` op and the `drawDirection` frame op (section 3.2); the

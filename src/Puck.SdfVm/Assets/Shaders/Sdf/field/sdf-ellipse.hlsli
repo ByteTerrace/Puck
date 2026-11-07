@@ -8,7 +8,7 @@
 // axis inside the ellipse; float cannot hold a closed form's cancellation there or along either axis. The points on
 // either axis take the CPU evaluator's branches (SdfEllipse2D in SdfFieldEvaluator.Ellipse.cs, KEEP IN SYNC), which
 // answers the same distance in Q48.16.
-float sdfEllipse2D(float2 p, float2 ab) {
+precise float sdfEllipse2D(float2 p, float2 ab) {
     float2 y = abs(p);
     float2 e = ab;
 
@@ -34,7 +34,7 @@ float sdfEllipse2D(float2 p, float2 ab) {
         float u = low;
 
         [loop]
-        for (uint step = 0u; (step < 64u); step++) {
+        for (uint step = 0u; (step < SDF_ELLIPSE_ROOT_STEPS); step++) {
             u = (0.5 * (low + high));
             if ((u <= low) || (u >= high)) {
                 break;

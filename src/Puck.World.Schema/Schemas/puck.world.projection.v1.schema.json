@@ -32762,6 +32762,456 @@
                       "additionalProperties": false,
                       "default": null,
                       "title": "PaletteFlowDocument"
+                    },
+                    "shade": {
+                      "description": "The authored presentation program and runtime parameters.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "parameters": {
+                          "type": "array",
+                          "items": {
+                            "description": "A runtime slot\u0027s type and initial data. Names bind source references and do not enter program identity.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "enum": [
+                                  "Float",
+                                  "Float2",
+                                  "Float3",
+                                  "Float4",
+                                  "UInt",
+                                  "UInt3"
+                                ],
+                                "title": "SdfShadeType"
+                              },
+                              "bits": {
+                                "type": "array",
+                                "items": {
+                                  "type": "integer"
+                                }
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "type",
+                              "bits"
+                            ],
+                            "additionalProperties": false,
+                            "title": "SdfShadeParameter"
+                          }
+                        },
+                        "outputs": {
+                          "type": "array",
+                          "items": {
+                            "description": "An output expression; omitted outputs retain the stage\u0027s default.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "phase": {
+                                "enum": [
+                                  "Surface",
+                                  "Light",
+                                  "Compose"
+                                ],
+                                "title": "SdfShadePhase"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "object",
+                                "properties": {
+                                  "op": {
+                                    "description": "An op-table spelling, or constant, parameter, or input.",
+                                    "type": "string"
+                                  },
+                                  "arguments": {
+                                    "description": "The expression\u0027s operands.",
+                                    "type": [
+                                      "array",
+                                      "null"
+                                    ],
+                                    "items": {
+                                      "description": "An expression supplied to shade admission, never executable words. The compiler validates every field.",
+                                      "type": [
+                                        "object",
+                                        "null"
+                                      ],
+                                      "properties": {
+                                        "op": {
+                                          "description": "An op-table spelling, or constant, parameter, or input.",
+                                          "type": "string"
+                                        },
+                                        "arguments": {
+                                          "$ref": "#/properties/fieldRegions/items/properties/fields/items/properties/material/properties/shade/properties/outputs/items/properties/value/properties/arguments",
+                                          "default": null
+                                        },
+                                        "name": {
+                                          "description": "A stamp member or runtime parameter name.",
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ],
+                                          "default": null
+                                        },
+                                        "type": {
+                                          "description": "The type of a literal, validated against its bits.",
+                                          "enum": [
+                                            "Float",
+                                            "Float2",
+                                            "Float3",
+                                            "Float4",
+                                            "UInt",
+                                            "UInt3"
+                                          ],
+                                          "default": "Float",
+                                          "title": "SdfShadeType"
+                                        },
+                                        "bits": {
+                                          "description": "32-bit literal components; integer components are never float converted.",
+                                          "type": [
+                                            "array",
+                                            "null"
+                                          ],
+                                          "items": {
+                                            "type": "integer"
+                                          },
+                                          "default": null
+                                        },
+                                        "shape": {
+                                          "description": "The structural descriptor of a shape operation.",
+                                          "type": [
+                                            "object",
+                                            "null"
+                                          ],
+                                          "properties": {
+                                            "type": {
+                                              "enum": [
+                                                "Sphere",
+                                                "Box",
+                                                "Torus",
+                                                "Cylinder",
+                                                "Capsule",
+                                                "Ellipsoid",
+                                                "RoundCone",
+                                                "Plane",
+                                                "Cone",
+                                                "Prism",
+                                                "Superellipsoid",
+                                                "Sweep"
+                                              ],
+                                              "title": "SdfSolidPrimitive"
+                                            },
+                                            "x": {
+                                              "type": "number",
+                                              "default": 1
+                                            },
+                                            "y": {
+                                              "type": "number",
+                                              "default": 1
+                                            },
+                                            "z": {
+                                              "type": "number",
+                                              "default": 1
+                                            },
+                                            "taper": {
+                                              "type": "number",
+                                              "default": 0.5
+                                            },
+                                            "profile": {
+                                              "type": [
+                                                "object",
+                                                "null"
+                                              ],
+                                              "properties": {
+                                                "kind": {
+                                                  "description": "The profile family.",
+                                                  "enum": [
+                                                    "Trapezoid",
+                                                    "RoundedRectangle",
+                                                    "Polygon",
+                                                    "Ellipse",
+                                                    "ChamferedRectangle",
+                                                    "Convex",
+                                                    "Path"
+                                                  ],
+                                                  "title": "SdfPrismProfileKind"
+                                                },
+                                                "cornerRadius": {
+                                                  "description": "A fraction in [0, 1]: the profile\u0027s smaller half-extent for RoundedRectangle\u0027s corner radius or ChamferedRectangle\u0027s chamfer radius; the scaled polygon\u0027s conservative inradius (ConvexPolygonInradius) for Convex\u0027s uniform corner rounding, also clamped to the extrusion half-depth when extruded.",
+                                                  "type": "number",
+                                                  "default": 0.15
+                                                },
+                                                "sides": {
+                                                  "description": "Polygon side count, from 3 through 32.",
+                                                  "type": "integer",
+                                                  "default": 6
+                                                },
+                                                "vertices": {
+                                                  "$ref": "#/properties/fieldRegions/items/properties/fields/items/properties/material/properties/paints/items/properties/profile/properties/vertices",
+                                                  "default": null
+                                                },
+                                                "path": {
+                                                  "$ref": "#/properties/fieldRegions/items/properties/fields/items/properties/material/properties/paints/items/properties/profile/properties/path",
+                                                  "default": null
+                                                }
+                                              },
+                                              "required": [
+                                                "kind"
+                                              ],
+                                              "additionalProperties": false,
+                                              "default": null,
+                                              "title": "SdfPrismProfile"
+                                            },
+                                            "lift": {
+                                              "enum": [
+                                                "Revolve",
+                                                "Extrude"
+                                              ],
+                                              "default": "Extrude",
+                                              "title": "SdfLift"
+                                            },
+                                            "rounding": {
+                                              "type": "number",
+                                              "default": 0
+                                            },
+                                            "chamfer": {
+                                              "type": "number",
+                                              "default": 0
+                                            },
+                                            "exponent": {
+                                              "type": "number",
+                                              "default": 2
+                                            },
+                                            "curve": {
+                                              "type": [
+                                                "object",
+                                                "null"
+                                              ],
+                                              "properties": {
+                                                "a": {
+                                                  "description": "The curve\u0027s first control point, in creation units.",
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "number"
+                                                  },
+                                                  "minItems": 3,
+                                                  "maxItems": 3
+                                                },
+                                                "b": {
+                                                  "description": "The curve\u0027s middle control point.",
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "number"
+                                                  },
+                                                  "minItems": 3,
+                                                  "maxItems": 3
+                                                },
+                                                "c": {
+                                                  "description": "The curve\u0027s last control point.",
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "number"
+                                                  },
+                                                  "minItems": 3,
+                                                  "maxItems": 3
+                                                },
+                                                "radiusStart": {
+                                                  "description": "The sweep radius at t = 0.",
+                                                  "type": "number"
+                                                },
+                                                "radiusEnd": {
+                                                  "description": "The sweep radius at t = 1.",
+                                                  "type": "number"
+                                                },
+                                                "bulge": {
+                                                  "description": "The mid-span radius bulge amplitude.",
+                                                  "type": "number"
+                                                },
+                                                "strands": {
+                                                  "description": "The strand count, 1..MaxSweepStrands.",
+                                                  "type": "integer"
+                                                },
+                                                "twist": {
+                                                  "description": "The strand orbit rate, in turns along the curve.",
+                                                  "type": "number"
+                                                },
+                                                "strandOffset": {
+                                                  "description": "The strand orbit radius, in creation units.",
+                                                  "type": "number"
+                                                }
+                                              },
+                                              "additionalProperties": false,
+                                              "default": null,
+                                              "title": "SdfSweepParameters"
+                                            }
+                                          },
+                                          "required": [
+                                            "type"
+                                          ],
+                                          "additionalProperties": false,
+                                          "default": null,
+                                          "title": "SdfShadeShape"
+                                        }
+                                      },
+                                      "required": [
+                                        "op"
+                                      ],
+                                      "additionalProperties": false,
+                                      "title": "SdfShadeExpression"
+                                    },
+                                    "default": null
+                                  },
+                                  "name": {
+                                    "description": "A stamp member or runtime parameter name.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "type": {
+                                    "description": "The type of a literal, validated against its bits.",
+                                    "enum": [
+                                      "Float",
+                                      "Float2",
+                                      "Float3",
+                                      "Float4",
+                                      "UInt",
+                                      "UInt3"
+                                    ],
+                                    "default": "Float",
+                                    "title": "SdfShadeType"
+                                  },
+                                  "bits": {
+                                    "$ref": "#/properties/fieldRegions/items/properties/fields/items/properties/material/properties/shade/properties/outputs/items/properties/value/properties/arguments/items/properties/bits",
+                                    "default": null
+                                  },
+                                  "shape": {
+                                    "$ref": "#/properties/fieldRegions/items/properties/fields/items/properties/material/properties/shade/properties/outputs/items/properties/value/properties/arguments/items/properties/shape",
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "op"
+                                ],
+                                "additionalProperties": false,
+                                "title": "SdfShadeExpression"
+                              }
+                            },
+                            "required": [
+                              "phase",
+                              "name",
+                              "value"
+                            ],
+                            "additionalProperties": false,
+                            "title": "SdfShadeOutput"
+                          }
+                        },
+                        "values": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "description": "A dependency-ordered value in the canonical document. Reads may name only earlier values of this phase.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "phase": {
+                                "enum": [
+                                  "Surface",
+                                  "Light",
+                                  "Compose"
+                                ],
+                                "title": "SdfShadePhase"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "object",
+                                "properties": {
+                                  "op": {
+                                    "description": "An op-table spelling, or constant, parameter, or input.",
+                                    "type": "string"
+                                  },
+                                  "arguments": {
+                                    "$ref": "#/properties/fieldRegions/items/properties/fields/items/properties/material/properties/shade/properties/outputs/items/properties/value/properties/arguments",
+                                    "default": null
+                                  },
+                                  "name": {
+                                    "description": "A stamp member or runtime parameter name.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "type": {
+                                    "description": "The type of a literal, validated against its bits.",
+                                    "enum": [
+                                      "Float",
+                                      "Float2",
+                                      "Float3",
+                                      "Float4",
+                                      "UInt",
+                                      "UInt3"
+                                    ],
+                                    "default": "Float",
+                                    "title": "SdfShadeType"
+                                  },
+                                  "bits": {
+                                    "$ref": "#/properties/fieldRegions/items/properties/fields/items/properties/material/properties/shade/properties/outputs/items/properties/value/properties/arguments/items/properties/bits",
+                                    "default": null
+                                  },
+                                  "shape": {
+                                    "$ref": "#/properties/fieldRegions/items/properties/fields/items/properties/material/properties/shade/properties/outputs/items/properties/value/properties/arguments/items/properties/shape",
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "op"
+                                ],
+                                "additionalProperties": false,
+                                "title": "SdfShadeExpression"
+                              }
+                            },
+                            "required": [
+                              "phase",
+                              "name",
+                              "value"
+                            ],
+                            "additionalProperties": false,
+                            "title": "SdfShadeValue"
+                          },
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "parameters",
+                        "outputs"
+                      ],
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "SdfShadeDefinition"
                     }
                   },
                   "required": [

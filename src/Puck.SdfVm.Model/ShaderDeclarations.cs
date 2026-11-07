@@ -106,6 +106,7 @@ public static class ShaderDeclarations {
         return [
             new ShaderDeclaration(Generate: SdfIsaHlsl.Generate, Path: $"{SdfKernelInterfaces.KernelDirectory}/isa/{SdfIsaHlsl.FileName}"),
             new ShaderDeclaration(Generate: SdfRenderHlsl.Generate, Path: $"{SdfKernelInterfaces.KernelDirectory}/isa/{SdfRenderHlsl.FileName}"),
+            new ShaderDeclaration(Generate: SdfShadeHlsl.Generate, Path: $"{SdfKernelInterfaces.KernelDirectory}/isa/{SdfShadeHlsl.FileName}"),
             new ShaderDeclaration(Generate: () => SdfIsaHlsl.GenerateFingerprintSource(field: field, fingerprint: fingerprint), Path: SdfIsaHlsl.FingerprintSourcePath),
             new ShaderDeclaration(Generate: SdfSkyKindsHlsl.Generate, Path: $"{SdfKernelInterfaces.KernelDirectory}/isa/{SdfSkyKindsHlsl.FileName}"),
             new ShaderDeclaration(Generate: SdfSkyKindsHlsl.GenerateTable, Path: $"{SdfKernelInterfaces.KernelDirectory}/sky/{SdfSkyKindsHlsl.TableFileName}"),
