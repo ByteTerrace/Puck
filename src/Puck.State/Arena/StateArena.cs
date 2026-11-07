@@ -35,14 +35,15 @@ public sealed partial class StateArena {
     private readonly ArenaJournal m_journal;
 
     private ArenaLayout m_layout;
+
     private sbyte[] m_carried = [];
+
     private ArenaColumnBuffer<int> m_nextSlots;
     private ArenaColumnBuffer<int> m_previousSlots;
     private ArenaColumnBuffer<int> m_headSlots;
     private ArenaColumnBuffer<int> m_tailSlots;
     private int[][] m_positions;
     private ulong[] m_positionVersions;
-
 
     private int[] m_reorderAt = [];
     private int[] m_reorderWhich = [];
@@ -154,17 +155,17 @@ public sealed partial class StateArena {
         m_laneNumbers = new long[layout.LaneSlotCount];
         m_laneRoster = new ulong[((layout.LaneRosterCount + 63) / 64)];
         m_layout = layout;
-        m_nextSlots = new(layout: layout, column: ArenaColumn.NextSlot);
-        m_previousSlots = new(layout: layout, column: ArenaColumn.PreviousSlot);
-        m_headSlots = new(layout: layout, column: ArenaColumn.HeadSlot);
-        m_tailSlots = new(layout: layout, column: ArenaColumn.TailSlot);
+        m_nextSlots = new(column: ArenaColumn.NextSlot, layout: layout);
+        m_previousSlots = new(column: ArenaColumn.PreviousSlot, layout: layout);
+        m_headSlots = new(column: ArenaColumn.HeadSlot, layout: layout);
+        m_tailSlots = new(column: ArenaColumn.TailSlot, layout: layout);
         m_positions = new int[layout.RowCount][];
         m_positionVersions = new ulong[layout.RowCount];
         m_memberCounts = new long[layout.RowCount];
         m_memberKeys = new int[layout.CellSlotCount];
         m_numbers = new long[layout.CellSlotCount];
         m_presence = new ulong[((layout.CellSlotCount + 63) / 64)];
-        m_clockSet = new ArenaColumnBuffer<bool>(layout: layout, column: ArenaColumn.ClockSet);
+        m_clockSet = new ArenaColumnBuffer<bool>(column: ArenaColumn.ClockSet, layout: layout);
         m_reindexRow = new int[layout.RowCount];
         m_reindexStamp = new long[layout.RowCount];
         m_rowChangeStamp = new long[layout.RowCount];
@@ -653,6 +654,7 @@ public sealed partial class StateArena {
     /// innermost one.</exception>
     public void Rewind(int mark) {
         m_journal.EnsureCloses(mark: mark);
+        m_journal.UndoParticipants();
 
         var epoch = ++m_reindexEpoch;
 
@@ -660,6 +662,7 @@ public sealed partial class StateArena {
 
         for (var index = (m_journal.Length - 1); (index >= mark); index--) {
             var entry = m_journal[index];
+
             m_restoreJournalLimit = index;
             Restore(entry: entry);
             m_restoreJournalLimit = -1;
@@ -795,14 +798,17 @@ public sealed partial class StateArena {
             BumpRowVersion(rowOrdinal: rowOrdinal);
         }
     }
+
     private bool[] m_deliveryRows = [];
+
     /// <summary>Copies rows reached by committed journal positions, and optionally clears the delivery marks.</summary>
     public void CopyChangedRows(Span<bool> rows, bool clear = false) {
-        for (var i = 0; i < Math.Min(rows.Length, m_deliveryRows.Length); i++) {
+        for (var i = 0; (i < Math.Min(val1: rows.Length, val2: m_deliveryRows.Length)); i++) {
             rows[i] |= m_deliveryRows[i];
             if (clear) { m_deliveryRows[i] = false; }
         }
     }
+
     // Reverse-walks the closing scope so the last entry seen for a position is the first write to it, whose
     // recorded value is therefore what the position held when the scope opened.
     private void SettleVersions(int mark) {
@@ -817,8 +823,8 @@ public sealed partial class StateArena {
 
         for (var index = (m_journal.Length - 1); (index >= mark); index--) {
             var entry = m_journal[index];
-            var stamps = (m_changeStamp[(int)entry.Column] ??= new ArenaColumnBuffer<long>(layout: m_layout, column: entry.Column));
-            var differs = (m_changeDiffers[(int)entry.Column] ??= new ArenaColumnBuffer<bool>(layout: m_layout, column: entry.Column));
+            var stamps = (m_changeStamp[((int)entry.Column)] ??= new ArenaColumnBuffer<long>(layout: m_layout, column: entry.Column));
+            var differs = (m_changeDiffers[((int)entry.Column)] ??= new ArenaColumnBuffer<bool>(layout: m_layout, column: entry.Column));
             var slot = entry.Index;
 
             if (stamps[slot] != epoch) {

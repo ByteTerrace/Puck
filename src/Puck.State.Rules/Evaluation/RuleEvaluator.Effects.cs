@@ -13,6 +13,8 @@ public sealed partial class RuleEvaluator {
         Refused,
         Done,
     }
+    // What one firing proposes: its scope's mark, how many arms were queued below it, and what its steps folded to.
+    private readonly record struct Proposal(FiringDecision Decision, int Mark, int Queued);
 
     private static long ScheduleDueTick(ulong tick, long delayTicks, out ExpressionFault fault) {
         var failed = ((delayTicks < 0L) || (tick > ((ulong)(long.MaxValue - Math.Max(
@@ -50,11 +52,14 @@ public sealed partial class RuleEvaluator {
     /// <param name="tick">The simulation tick.</param>
     /// <param name="stepTicks">The engine ticks this step advances.</param>
     /// <param name="applied">Whether the firing moved the arena.</param>
-    /// <returns><see cref="RuleOutcome.Fired"/> when the scope committed; otherwise <see cref="RuleOutcome.Refused"/>.</returns>
+    /// <param name="prelude">What the host records into the scope the moment it opens, or <see langword="null"/>: the
+    /// state its firing decided beside the cells, which then rewinds with them.</param>
+    /// <returns><see cref="RuleOutcome.Fired"/> when the scope committed, <see cref="RuleOutcome.Refused"/> when an
+    /// effect refused and <see cref="RuleOutcome.Faulted"/> when one faulted; either rewinds the scope.</returns>
     /// <remarks>A host evaluating a rule kind of its own — a decision's option or its no-choice arm — fires through
     /// here so its effects are one scope, exactly as a rule's own are.</remarks>
     [Replaces(root: typeof(StateArena))]
-    public RuleOutcome FireEffects(IRuleEffect[] effects, string ruleName, ulong tick, ulong stepTicks, out bool applied) {
+    public RuleOutcome FireEffects(IRuleEffect[] effects, string ruleName, ulong tick, ulong stepTicks, out bool applied, IFiringPrelude? prelude = null) {
         ArgumentNullException.ThrowIfNull(argument: effects);
 
         if (effects is [RewindGroupEffect rewind]) {
@@ -83,7 +88,8 @@ public sealed partial class RuleEvaluator {
         Step proposed;
 
         try {
-            proposed = Propose(
+            prelude?.Record(journal: m_host.Arena.Journal);
+            proposed = ProposeEffects(
                 applied: ref applied,
                 effects: effects,
                 firing: in firing,
@@ -91,21 +97,63 @@ public sealed partial class RuleEvaluator {
                 ruleName: ruleName
             );
         } catch {
-            m_host.RewindStateTransaction(mark: mark);
-            DiscardQueued(from: queued);
+            _ = Commit(
+                applied: ref applied,
+                firing: in firing,
+                proposal: new Proposal(
+                    Decision: FiringDecision.Faulted,
+                    Mark: mark,
+                    Queued: queued
+                )
+            );
 
             throw;
         }
 
-        if (proposed != Step.Done) {
-            m_host.RewindStateTransaction(mark: mark);
-            DiscardQueued(from: queued);
-            applied = false;
+        return Commit(
+            applied: ref applied,
+            firing: in firing,
+            proposal: new Proposal(
+                Decision: ((proposed == Step.Done)
+                    ? FiringDecision.Fires
+                    : ((proposed == Step.Faulted)
+                        ? FiringDecision.Faulted
+                        : FiringDecision.Refused)),
+                Mark: mark,
+                Queued: queued
+            )
+        );
+    }
 
-            return ((proposed == Step.Faulted)
-                ? RuleOutcome.Faulted
-                : RuleOutcome.Refused);
+    // The one door a firing's scope closes through, switching on what the firing decided: a faulted or refused firing
+    // rewinds cells, edge bit and decision state together and discards what it queued; a gate that closed or an Edge that
+    // was held commits the scope with only its bookkeeping in it; a firing that fires commits, installs the
+    // transactional arms and delivers the rest.
+    private RuleOutcome Commit(in Proposal proposal, in EffectFiring firing, ref bool applied) {
+        var mark = proposal.Mark;
+        var queued = proposal.Queued;
+
+        switch (proposal.Decision) {
+            case FiringDecision.Closed:
+            case FiringDecision.Held:
+                // No effect ran, so nothing but the edge bit is in the scope and no host has anything to resynchronise.
+                m_host.Arena.Commit(mark: mark);
+
+                return RuleOutcome.Idle;
+            case FiringDecision.Fires:
+                break;
+            default:
+                m_host.RewindStateTransaction(mark: mark);
+                DiscardQueued(from: queued);
+                applied = false;
+
+                return ((proposal.Decision == FiringDecision.Faulted)
+                    ? RuleOutcome.Faulted
+                    : RuleOutcome.Refused);
         }
+
+        var ruleName = firing.RuleName;
+        var tick = firing.Tick;
 
         m_host.CommitStateTransaction(mark: mark);
 
@@ -158,7 +206,6 @@ public sealed partial class RuleEvaluator {
 
         return RuleOutcome.Fired;
     }
-
     // Delivers one irreversible arm after its firing's commit. Past the commit nothing rewinds, so an arm whose
     // evaluation faulted refuses its own delivery.
     private bool Deliver(IRuleEffect arm, in EffectFiring firing, out EffectRefusal refusal) => arm.TryDeliverAfterCommit(
@@ -169,7 +216,7 @@ public sealed partial class RuleEvaluator {
     // Everything a firing does before its commit: the reversible effects, then each queued arm's preflight against
     // the state they propose, then the host's preparation of the transactional arms as one unit. False means
     // refused, already reported.
-    private Step Propose(IRuleEffect[] effects, string ruleName, in EffectFiring firing, int queued, ref bool applied) {
+    private Step ProposeEffects(IRuleEffect[] effects, string ruleName, in EffectFiring firing, int queued, ref bool applied) {
         var sequence = FireSequence(
             applied: ref applied,
             effects: effects,

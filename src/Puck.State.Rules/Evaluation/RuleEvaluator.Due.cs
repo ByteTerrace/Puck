@@ -141,7 +141,7 @@ public sealed partial class RuleEvaluator {
 
         m_host.BoundEachKey = default;
         if (full) {
-            latch.EndSweep(state: state);
+            latch.EndSweep(journal: m_host.Arena.Journal, state: state);
         }
         list.ForgetUnswept(index: index, keys: keys, latch: latch, state: state, swept: full);
 

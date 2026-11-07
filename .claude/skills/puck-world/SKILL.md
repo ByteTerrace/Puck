@@ -472,8 +472,14 @@ that `RuleCompiler`'s lowering puts in front of the operand's own, so an operand
 computed address is priced as the tokens it is; a pattern's per-token program is `IWordFoldOperand.WordProgram`, run
 once per token by `RuleExpressions.FoldWord`, which `world.match` spells its word through as well. A new operand that
 reads through a computed address declares it in `Addresses` and receives it in `keys`; it never calls
-`RuleExpressions.Evaluate`. `FiringDecision` exists for the design in
-[rule faults](../../../docs/plans/rule-faults.md) and nothing produces it yet.
+`RuleExpressions.Evaluate`.
+A firing is one journal scope. `RuleEvaluator.FireProposal` (a rule) and `FireEffects` (a host's decision effects) open it,
+write the edge bit through `RuleLatch.SetHeld` (and a host's own state through an `IFiringPrelude`), propose the effects,
+and close it through the one door, `RuleEvaluator.Commit`, which switches on a `FiringDecision` (`Faulted` and `Refused`
+rewind, `Closed` and `Held` commit the bookkeeping alone, `Fires` commits and delivers). A store that is simulation state
+beside the arena's columns implements `IJournalParticipant` and records what it overwrites through
+`ArenaJournal.RecordParticipant` before writing (it throws with no scope open); `StateArena.Rewind` hands the records back
+newest first. `RuleLatch.Restore` refuses inside a scope, since only a firing's writes are recorded.
 
 **Narrate through the hub.** Server never writes to `System.Console`; every line
 is a `WorldOutputHub.Narrate` call, bound to stderr (or stdout for answers) by

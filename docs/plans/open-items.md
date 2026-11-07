@@ -2917,13 +2917,6 @@ Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
 ordinary, the owner's direction · Next: the windowed look at the Klondike and FreeCell tables
 (`worlds/debug/cardtable.md`), then Spider (step 1).
 
-- [medium] The deal sweep never validates what it installs: `WorldTick.Deals.cs`
-  sets `var applied = true;`, so its "refused as one" branch is dead, and a
-  template that deals an invalid child poisons the whole document; every
-  validated transaction is then refused (the shedding racks did this to the
-  granaries until dealt children carried their template's scale). Validate a
-  deal's children as one install and refuse the deal, not the document.
-
 The owner wants proper card tables in the gallery: physical cards on a table,
 played by sitting at it like the chess, Go, Reversi and Alchemy tables. The
 Klondike table stands north of the Go table in the board game room
@@ -3518,8 +3511,11 @@ brief's priorities ([security review](../development/security-review.md)).
   (`src/Puck.World.Azure/EntraWorldAuthenticator.cs:137`,
   `src/Puck.World.Server/WorldRemoteAuthority.cs:1225`): the challenge and
   session are compared but not signed by the bearer, so replay across challenges
-  needs a still-valid bearer token; the client pins its remote transport key. No
-  bypass was reproduced.
+  needs a still-valid bearer token; the client pins its remote transport key. On
+  a pinned transport the destination's server proof is not checked
+  (`WorldRemoteAuthority`'s `pinnedTransport` branch), so the authority name
+  compared with the pin is whatever the key holder sends; decide whether the
+  transport pin alone is the intended authority proof. No bypass was reproduced.
 - Azure deployment policy, independent of Front Door: the API-host storage
   condition omits tag and queue-message actions
   (`src/Puck.Azure.Resources/abacConditions.bicep:50`); establish the identity's
@@ -3684,17 +3680,34 @@ ordinary · Next: new content and art on the owner's call.
   ([hub and saves](hub-and-saves.md)) decides the shape; these are defects
   whatever it decides:
   - `WorldInstanceHost.DurableImages` is never assigned, so a persisted
-    destination loses its state when the process quits;
+    destination loses its state when the process quits. A first build
+    (`WorldDirectoryImages`, reverted; git history keeps it as prior art) failed its review on image identity: a path from the instance name
+    collides by case on Windows (`room`, `ROOM`); adoption (`TryAdopt`) makes the
+    location depend on activation order; the image carries its own definition, so
+    a retargeted destination or an edited source is silently replaced by the
+    saved one; reactivating a stopped forwarding row refuses its own image
+    (`LifetimeAuthority` mints `N~1`) and retiring the failed activation drops the
+    resolver generation, so later writes stop; some restore refusals
+    (`InvalidDataException` from admission) skip the set-aside and clean start;
+    quit skips a frozen row whose final image failed. The fix is a design step
+    first: image identity from (destination, scope, referenced document), stored
+    filesystem-safe, restored onto the current source (the memo's M1 question);
+  - the deal gate (`WorldDefinitionValidator.TryValidateDealtChildren`) admits a
+    solid variant whose shape the load validator refuses (`CreationShapeLaws
+    .SolidRefusals` runs only on the template's base prototype), so the sweep can
+    install a document that load rejects; the gate should be the load
+    validator's own child laws, not a second list;
   - `MachineCreationRequest.SavePath` is never set, so a cartridge's battery
-    save dies with the process;
+    save dies with the process. The memo's H8 (battery bytes in the request,
+    cores without file I/O) needs the image of the world that owns the machine,
+    and the debug world's devices are on the boot row, which keeps no image
+    until boot is a travel into `hub` (H3);
   - `WorldOwnedWorlds.IdentityBase` copies the whole host world into every
     identity (30 MB in the debug world);
   - `world.save` refuses on the debug world: it names the loop-generated
     `sheddingRack1` as a parent, which `shedding.puck` does not export. Note
     that `world.save` writes the world's source when it succeeds, so never run
-    it as a read against a working tree;
-  - the `player.cycle` documentation calls it "the pad-Start gesture"
-    (`PlayerRoster.cs:1253`), but nothing under `worlds/` binds it.
+    it as a read against a working tree.
 - [high] The trees read as inflatable toys (owner's walkthrough, the lawn).
   - Canopies are a few smooth, drooping blended lobes, with no branch
     structure, leaf clumps, gaps or silhouette breakup.

@@ -1424,6 +1424,26 @@ public static partial class WorldDefinitionValidator {
 
         return names;
     }
+    // A placement's scale: finite and positive, then inside the policy envelope. The one rule both the whole-document
+    // placement walk and a dealt child's install check (TryValidateDealtChild) refuse by.
+    private static void ValidatePlacementScale(WorldPlacement placement, WorldPlacementPolicyDefaults authoring, string path, List<string> errors) {
+        if (!float.IsFinite(f: placement.Scale) || (placement.Scale <= 0f)) {
+            // Refused before the envelope: a zero (or negative) scale is invisible content with degenerate
+            // colliders, and a zero-width envelope (a rowless derived policy, a degenerate authored one) would
+            // otherwise ACCEPT exactly 0 — a placement that boots green and renders nothing. A finite positive
+            // scale never contributes an envelope refusal under an unauthored policy: the derived envelope
+            // spans exactly the rows' own scales (WorldPlacementPolicyDefaults.DeriveFrom), so only a DECLARED
+            // policy can put an authored row outside it.
+            errors.Add(item: $"{path}.scale {placement.Scale} must be a finite positive value.");
+        } else if (
+            (placement.Scale < authoring.MinPlacementScale) ||
+            (placement.Scale > authoring.MaxPlacementScale)
+        ) {
+            errors.Add(item: ((authoring.MaxPlacementScale <= 0f)
+                ? $"{path}.scale {placement.Scale}: this world's declared placements.policy has no scale envelope (0..0) — author positive minPlacementScale/maxPlacementScale, or delete the policy block to derive the envelope from the rows' own scales."
+                : $"{path}.scale {placement.Scale} is outside {authoring.MinPlacementScale}..{authoring.MaxPlacementScale}."));
+        }
+    }
     // The placement INSTANCE rows: id presence/uniqueness, the creation reference, finite transform, the policy
     // scale envelope, the lattice distribution's positive counts and finite steps, the mirror plane, and the animated-row
     // constraints (static-only facets; the reserved replay-pool ceiling, word-exact). Returns the resolved id set for
@@ -1599,22 +1619,12 @@ public static partial class WorldDefinitionValidator {
                 errors: errors
             );
 
-            if (!float.IsFinite(f: placement.Scale) || (placement.Scale <= 0f)) {
-                // Refused before the envelope: a zero (or negative) scale is invisible content with degenerate
-                // colliders, and a zero-width envelope (a rowless derived policy, a degenerate authored one) would
-                // otherwise ACCEPT exactly 0 — a placement that boots green and renders nothing. A finite positive
-                // scale never contributes an envelope refusal under an unauthored policy: the derived envelope
-                // spans exactly the rows' own scales (WorldPlacementPolicyDefaults.DeriveFrom), so only a DECLARED
-                // policy can put an authored row outside it.
-                errors.Add(item: $"{path}.scale {placement.Scale} must be a finite positive value.");
-            } else if (
-                (placement.Scale < authoring.MinPlacementScale) ||
-                (placement.Scale > authoring.MaxPlacementScale)
-            ) {
-                errors.Add(item: ((authoring.MaxPlacementScale <= 0f)
-                    ? $"{path}.scale {placement.Scale}: this world's declared placements.policy has no scale envelope (0..0) — author positive minPlacementScale/maxPlacementScale, or delete the policy block to derive the envelope from the rows' own scales."
-                    : $"{path}.scale {placement.Scale} is outside {authoring.MinPlacementScale}..{authoring.MaxPlacementScale}."));
-            }
+            ValidatePlacementScale(
+                authoring: authoring,
+                errors: errors,
+                path: path,
+                placement: placement
+            );
 
             if (placement.Distribution is { } distribution) {
                 ValidateDistribution(

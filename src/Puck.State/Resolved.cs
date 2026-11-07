@@ -69,6 +69,8 @@ public enum Verdict : byte {
 public enum FiringDecision : byte {
     /// <summary>A step the firing folds faulted: the scope rewinds and nothing the firing wrote stands.</summary>
     Faulted = 0,
+    /// <summary>A step the firing folds refused: the scope rewinds exactly as a fault does.</summary>
+    Refused,
     /// <summary>The gate is closed: nothing fires.</summary>
     Closed,
     /// <summary>The gate is open but the trigger holds the firing back (an Edge latch already crossed).</summary>

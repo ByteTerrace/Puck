@@ -574,7 +574,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             if (((uint)rule.PoolBindingSlot) < ((uint)bindingsSpan.Length)) {
                 bindingsSpan[rule.PoolBindingSlot] = default;
             }
-            latch.EndSweep(state: bindings);
+            latch.EndSweep(journal: m_host.Arena.Journal, state: bindings);
             return poolAggregate;
         }
 
@@ -619,7 +619,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         }
 
         m_host.BoundEachKey = default;
-        latch.EndSweep(state: bindings);
+        latch.EndSweep(journal: m_host.Arena.Journal, state: bindings);
 
         return aggregate;
     }
@@ -774,13 +774,6 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         var open = judged.Open;
 
-        ref var slot = ref CollectionsMarshal.GetValueRefOrAddDefault(
-            dictionary: held,
-            exists: out _,
-            key: binding
-        );
-
-        slot = open;
         latch.Touch(schedule: scheduling);
 
         if (
@@ -809,19 +802,43 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             trace.GateOpen = open;
         }
 
-        if (!fires) {
+        var changed = (!existed || (wasOpen != open));
+
+        if (!changed && !fires) {
             EndTrace(entry: trace);
 
             return RuleOutcome.Idle;
         }
 
-        var outcome = FireRule(
-            applied: out applied,
-            rule: rule,
-            stepTicks: stepTicks,
-            tick: tick
-        );
+        var outcome = ((fires && (rule.Effects is [RewindGroupEffect]))
+            ? FireRewind(
+                applied: out applied,
+                binding: binding,
+                open: open,
+                rule: rule,
+                state: state,
+                stepTicks: stepTicks,
+                tick: tick
+            )
+            : FireProposal(
+                applied: out applied,
+                binding: binding,
+                changed: changed,
+                fires: fires,
+                latch: latch,
+                open: open,
+                rule: rule,
+                state: state,
+                stepTicks: stepTicks,
+                tick: tick
+            ));
 
+        if (outcome is RuleOutcome.Faulted or RuleOutcome.Refused) {
+            // The scope rewound the edge bit, so the verdict the schedule cached against it is stale, and the next tick
+            // judges the binding again.
+            scheduling.GateOwner = null;
+            m_rerun = true;
+        }
         if (outcome == RuleOutcome.Fired) {
             m_firings.Increment();
             state.Spent.Firings++;
@@ -834,6 +851,84 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         EndTrace(entry: trace);
 
         return outcome;
+    }
+    // One evaluation's proposal: the edge bit and the firing's effects written into one journal scope, which the one
+    // door (Commit) then commits or rewinds together.
+    private RuleOutcome FireProposal(CompiledRule rule, RuleLatch.RuleState state, LatchKey binding, RuleLatch latch, bool changed, bool fires, bool open, ulong tick, ulong stepTicks, out bool applied) {
+        applied = false;
+
+        var firing = new EffectFiring(
+            EngineTick: m_host.EngineTick,
+            RuleName: rule.Name,
+            StepTicks: stepTicks,
+            Tick: tick
+        );
+        var mark = m_host.BeginStateTransaction();
+        var queued = m_deferred.Count;
+        Step step;
+
+        try {
+            if (changed) {
+                latch.SetHeld(
+                    binding: binding,
+                    held: open,
+                    journal: m_host.Arena.Journal,
+                    state: state
+                );
+            }
+
+            step = (fires
+                ? ProposeEffects(
+                    applied: ref applied,
+                    effects: rule.Effects,
+                    firing: in firing,
+                    queued: queued,
+                    ruleName: rule.Name
+                )
+                : Step.Done);
+        } catch {
+            _ = Commit(
+                applied: ref applied,
+                firing: in firing,
+                proposal: new Proposal(
+                    Decision: FiringDecision.Faulted,
+                    Mark: mark,
+                    Queued: queued
+                )
+            );
+
+            throw;
+        }
+
+        return Commit(
+            applied: ref applied,
+            firing: in firing,
+            proposal: new Proposal(
+                Decision: ((step == Step.Done)
+                    ? (fires
+                        ? FiringDecision.Fires
+                        : (open
+                            ? FiringDecision.Held
+                            : FiringDecision.Closed))
+                    : ((step == Step.Faulted)
+                        ? FiringDecision.Faulted
+                        : FiringDecision.Refused)),
+                Mark: mark,
+                Queued: queued
+            )
+        );
+    }
+    // A rule whose whole effect is rewinding its group restores the world to a turn boundary the undo arena holds, which
+    // no scope can enclose; its edge bit is written plainly and the restore carries the rest.
+    private RuleOutcome FireRewind(CompiledRule rule, RuleLatch.RuleState state, LatchKey binding, bool open, ulong tick, ulong stepTicks, out bool applied) {
+        state.Held[binding] = open;
+
+        return FireRule(
+            applied: out applied,
+            rule: rule,
+            stepTicks: stepTicks,
+            tick: tick
+        );
     }
     // A fault decided nothing. A binding that merely could not evaluate (an absence) leaves its entry for the sweep to
     // close, as a closed gate would; one that faulted touches it, so the sweep keeps the verdict the entry last held.
