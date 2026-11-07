@@ -237,18 +237,13 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     uint hitIdentity = 0u;
     uint hitRecord = 0u;
     uint2 hitPixel = uint2(0u, 0u);
-    // The 5x5 render samples about the nearest one, their luma for the feature test and the inner nine's colors.
+    // The 5x5 render samples' luma about the nearest one, for the feature test. The inner nine's colors are loaded again at
+    // their taps below rather than held: nine float4s live across the tap loop cost more registers than the cached reads.
     float window[25];
-    float4 colors[9];
 
     [unroll] for (int wy = 0; wy < 5; wy++) {
         [unroll] for (int wx = 0; wx < 5; wx++) {
-            float4 color = currentColor.Load(int3(sdfResolveClamp((nearest + int2(wx - 2, wy - 2)), render), 0));
-
-            window[(wy * 5) + wx] = sdfToYCoCg(color.rgb).x;
-            if ((wx >= 1) && (wx <= 3) && (wy >= 1) && (wy <= 3)) {
-                colors[((wy - 1) * 3) + (wx - 1)] = color;
-            }
+            window[(wy * 5) + wx] = sdfToYCoCg(currentColor.Load(int3(sdfResolveClamp((nearest + int2(wx - 2, wy - 2)), render), 0)).rgb).x;
         }
     }
     // Each 3x3 tap's identity (0 on a miss) and tangent-plane distance along the output ray, and the receiver history keeps:
@@ -281,7 +276,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
         [unroll] for (int dx = -1; dx <= 1; dx++) {
             uint2 pixel = sdfResolveClamp((nearest + int2(dx, dy)), render);
             uint tap = ((uint)((dy + 1) * 3) + (uint)(dx + 1));
-            float4 color = colors[tap];
+            float4 color = currentColor.Load(int3(pixel, 0));
             float2 offset = (((float2(pixel) + 0.5 + jitter) - center) * scale);
             float weight = exp(-SdfResolveFilterFalloff * dot(offset, offset));
             float3 ycocg = sdfToYCoCg(color.rgb);
@@ -421,40 +416,9 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
         }
     }
 
-    // The weighted mean of every sample the pixel has gathered: history clipped to this frame's neighbourhood, widened
-    // to the feature the pixel remembers while its surface stands still, and weighed down by reactivity, then this
-    // frame's samples, the transport with the color's weights. While less than one sample's full weight is gathered,
-    // the spatial path shows through.
-    float historyWeight = 0.0;
-    float4 history = float4(0.0, 0.0, 0.0, 0.0);
-    float4 historyTransport = float4(0.0, 0.0, 0.0, 0.0);
-    float weightCap = SDF_HISTORY_WEIGHT_CAP;
-
-    if (accepted) {
-        float4 previous;
-        float4 previousTransport;
-
-        sdfHistoryAt(historyPosition, extent, previous, previousTransport);
-        // Clipping infinity can produce NaN, and even zero history weight cannot remove it (NaN * 0 is NaN).
-        accepted = (all(isfinite(previous)) && all(isfinite(previousTransport)));
-        if (accepted) {
-            bool remembered = (hit && (featureLife != 0u) && (travel <= SdfResolveFeatureTravel) && all(isfinite(featureYCoCg)));
-            float3 clipMin = (remembered ? min(boxMin, featureYCoCg) : boxMin);
-            float3 clipMax = (remembered ? max(boxMax, featureYCoCg) : boxMax);
-
-            weightCap = (remembered ? SDF_HISTORY_FEATURE_WEIGHT_CAP : SDF_HISTORY_WEIGHT_CAP);
-            historyWeight = (clamp(historyWeightGathered, 0.0, weightCap) * (1.0 - reactive));
-            history = float4(
-                sdfFromYCoCg(sdfClipToBox(sdfToYCoCg(max(previous.rgb, 0.0)), clipMin, clipMax)),
-                clamp(previous.a, coverageMin, coverageMax)
-            );
-            historyTransport = clamp(previousTransport, transportMin, transportMax);
-        }
-    }
-
-    total = (historyWeight + weightSum);
-    accumulated = (((history * historyWeight) + sum) / max(total, 1.0e-6));
-    accumulatedTransport = (((historyTransport * historyWeight) + transportSum) / max(total, 1.0e-6));
+    // The feature the pixel remembers widens the clip and raises the weight cap while its surface stands still.
+    bool remembered = (accepted && hit && (featureLife != 0u) && (travel <= SdfResolveFeatureTravel) && all(isfinite(featureYCoCg)));
+    float weightCap = (remembered ? SDF_HISTORY_FEATURE_WEIGHT_CAP : SDF_HISTORY_WEIGHT_CAP);
     // Stationary receivers retain one bounded window, not an ever older history. This also follows changes in lighting:
     // every phase is replaced within a period, without clamping its other phases to a neighborhood that jitter moved.
     // Moving or reactive receivers restart the window and keep the ordinary clipped, reprojected resolve while it fills.
@@ -538,6 +502,39 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
         // division's approximate reciprocal rounds just below it before half-float storage (notably full coverage).
         accumulated = clamp((windowColor / windowWeight), windowMin, windowMax);
         accumulatedTransport = (windowTransport / windowWeight);
+    } else {
+        // The weighted mean of every sample the pixel has gathered: history clipped to this frame's neighbourhood, widened
+        // to the feature the pixel remembers while its surface stands still, and weighed down by reactivity, then this
+        // frame's samples, the transport with the color's weights. While less than one sample's full weight is gathered,
+        // the spatial path shows through. A complete window shows its own mean, so only an incomplete one reads the
+        // reprojected history.
+        float historyWeight = 0.0;
+        float4 history = float4(0.0, 0.0, 0.0, 0.0);
+        float4 historyTransport = float4(0.0, 0.0, 0.0, 0.0);
+
+        if (accepted) {
+            float4 previous;
+            float4 previousTransport;
+
+            sdfHistoryAt(historyPosition, extent, previous, previousTransport);
+            // Clipping infinity can produce NaN, and even zero history weight cannot remove it (NaN * 0 is NaN).
+            accepted = (all(isfinite(previous)) && all(isfinite(previousTransport)));
+            if (accepted) {
+                float3 clipMin = (remembered ? min(boxMin, featureYCoCg) : boxMin);
+                float3 clipMax = (remembered ? max(boxMax, featureYCoCg) : boxMax);
+
+                historyWeight = (clamp(historyWeightGathered, 0.0, weightCap) * (1.0 - reactive));
+                history = float4(
+                    sdfFromYCoCg(sdfClipToBox(sdfToYCoCg(max(previous.rgb, 0.0)), clipMin, clipMax)),
+                    clamp(previous.a, coverageMin, coverageMax)
+                );
+                historyTransport = clamp(previousTransport, transportMin, transportMax);
+            }
+        }
+
+        total = (historyWeight + weightSum);
+        accumulated = (((history * historyWeight) + sum) / max(total, 1.0e-6));
+        accumulatedTransport = (((historyTransport * historyWeight) + transportSum) / max(total, 1.0e-6));
     }
     // The working history is half-float. A non-finite current sample contributes no reusable history, and a finite
     // reconstruction must remain representable when stored, so one bright transient cannot poison later frames.
