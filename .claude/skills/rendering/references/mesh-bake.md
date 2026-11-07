@@ -20,6 +20,13 @@ the display clock. `lockstep` pins that clock before the first frame too
 Pausing or enabling lockstep after attachment is too late to control those
 initial inputs. Keep the backend and built source state fixed across repeats.
 
+For timing, `bench startup --bake` pins those clocks with `--paused --lockstep`.
+Lighting convergence can delay the readiness barrier after the bakes finish;
+allow for it in `--timeout-seconds`. Its per-sample `timeline.log` keeps
+the observed timestamp and stream of every stage/job line. Read those spans beside
+a sampled thread-time trace; the `cpu` stage totals are summed worker elapsed time,
+including waits and suspension, not processor time.
+
 Compare the key sets before comparing each key's decompressed payload. A
 different pose can legitimately produce a different key. The store codec maps
 material ids to canonical places before writing every chunk and level, so a
@@ -52,6 +59,17 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   Fine signs cannot change between that preparation and contouring. Coarse
   vertices remain interleaved in their original order; appending all fine
   vertices afterward changes the payload.
+  Adjacent fine cells in an X row reuse their common face's four sign bits. The
+  row reads its first face, then one new face per cell, after `CloseSheets` has
+  fixed every sign; it retains the original cell and edge enumeration order.
+- **Index a collapse fan once.** `Collapser.Kind` indexes outgoing edges and
+  pairs each with exactly one incoming edge before walking their permutation.
+  `OneRing` must visit every triangle and return to its start: several disjoint
+  cycles are not a manifold fan. The index is scratch for that invocation, with
+  every endpoint it can read cleared before filling, never a cache across collapses.
+  Keep feature penalties in edge order, including the prefix before a malformed
+  edge locks the fan: a locked place can still be another collapse's target,
+  whose cost reads those quadrics.
 - **Reuse a collapse's source fan until commit.** `SdfMeshCollapse.Collapser.PrepareFrom`
   lays out the unchanged source triangles once for all attempted neighbours.
   A refused neighbour mutates no source geometry; the first accepted neighbour
