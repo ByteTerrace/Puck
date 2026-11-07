@@ -484,13 +484,20 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
 
 ## Puck's open cases
 
-- **Register-limited pixel passes.** On Vulkan (RTX 4070) views runs at 128
-  registers with spills, resolve at 168 and composite at 96; PIX on Direct3D 12
-  reads views and resolve near 97 % and 93 % register allocation at a quarter to
-  a third of the warps an SM holds. With `world.indirect off` views falls by a
-  third on Vulkan, so the probe gather (`sdfMeshProbesAt`, sixteen addresses
-  and weights live through the light walk) is the largest single share
-  ([frame bar](../../../../docs/plans/open-items.md#next)).
+- **Register-limited pixel passes, set by the shade interpreter.** On Vulkan
+  (RTX 4070) views and glass-shade run at 255 registers, 8 of the SM's 48 warps,
+  resolve at 168 and composite at 96; PIX on Direct3D 12 reads views at 98 %
+  register allocation with 16 % of the warps active. The authored-shading
+  interpreter's light phase, inlined in the light walk with its sixteen named
+  `uint4` registers and the whole stamp, sets the views count: compiled out,
+  views takes 168 registers and spills 144 bytes; with every phase compiled
+  out, 128 and 176 bytes. Taking the probe gather's whole state out of the walk
+  leaves all three counts as they were (255; 168 and 128 bytes; 128 and 176
+  bytes), so less live probe state is not the cure; keeping the interpreter out
+  of the pixels that run no program is
+  ([author shaders](../../../../docs/plans/author-shaders.md#6-implementation-steps),
+  [frame bar](../../../../docs/plans/open-items.md#next)). `world.indirect off`
+  still removes a third of views on Vulkan: that share is the gather's work.
 - **The main mesh pass shades several fragments a pixel,** with no
   front-to-back order and no depth prepass ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
 - **Growing the program region waits for the device to go idle**
@@ -499,16 +506,20 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
   views and screens still share one phase ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
 - **The sky reduction's bank conflict,** **the views filter tile's 2-way
   conflict** and **the bake's `SdfBakeTaps`,**
-  indexed by the `[loop]` counter, the shape the local-array rule forbids,
-  whose local memory no capture has read
+  indexed by the `[loop]` counter, the shape the local-array rule forbids: the
+  bake kernel reads 128 registers and 224 bytes of local memory on Vulkan
   ([frame time](../../../../docs/plans/open-items.md#engine-job-system),
   [cold bake](../../../../docs/plans/open-items.md#bake-proportional-to-change)).
-- **Probe arrays leave registers on Vulkan.** The views kernel's
-  `SdfMeshProbes` arrays sit in about 9 KB of shared memory a group on NVIDIA's
-  Vulkan driver (its `Shared Memory Size` against the 2.9 KB the filter tile
-  declares). Guarding the probe loops' `continue`s removed its spills but raised
-  it to 168 registers and made it slower; the cure is less live probe state, not
-  loop shape.
+- **Probe arrays leave registers.** The gather's arrays (`SdfMeshProbes`'
+  sixteen weights, a stage's eight in `SdfMeshProbeCage`) live in memory rather
+  than registers: shared memory on NVIDIA's Vulkan driver (`Shared Memory Size`
+  against the 2.9 KB the filter tile declares), local memory on Direct3D 12.
+  A gather names each stage by its cage word (`sdfMeshProbeCageWord`), never
+  sixteen addresses, which spilled sixteen times the local-memory traffic; PIX
+  still reads 2.6 million load and 4.2 million store sectors of local memory
+  in views a frame at the teal room's floor (1280×900). Guarding the probe
+  loops' `continue`s removed the Vulkan spills but raised views to 168
+  registers and made it slower.
 
 ## Sources
 

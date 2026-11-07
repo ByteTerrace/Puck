@@ -537,7 +537,10 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   the finest level's boundary probes), and the first that answers counts only in
   its share, its weight over the cage's front weight before visibility (a finer
   level past its window easing out over its reach's outer half), the rest
-  coming from the next stage over another cage. Sixteen pre-scaled slots. One
+  coming from the next stage over another cage. Sixteen pre-scaled slots, named by
+  each stage's cage word (`sdfMeshProbeCageWord`) rather than sixteen addresses;
+  a corner answers where its weight is positive, and `sdfMeshProbeAt` is the one
+  door to its probe. One
   closing rule at every level: taps on solids close as a majority, taps a coarse
   level's trace marked sheets (the curvature half's low bit) at almost any share.
   Only the finest level keeps the behind-plane floor. Nothing a camera sees reads
