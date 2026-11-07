@@ -24,8 +24,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // Controls only; bounds and level metadata live in the shared mesh region. Paired with sdf-mesh-selection.hlsli:
     // one header row, three detail rows, ten cull rows.
     private const int HeaderWords = (14 * 4);
-    // Entry/early, late/solid exit, thin exit, glass extinction; paired with SdfOcclusionPhases in the kernel.
-    private const uint ArgumentPhases = 4u;
+    // Early/late for camera passes; entry/solid exit/thin exit and optional extinction for cascades.
+    private readonly uint m_argumentPhases;
     private const ulong CountsBytes = ((4 + SdfPortalSight.Capacity) * sizeof(uint));
 
     private readonly IGpuBufferFactory m_buffers;
@@ -60,7 +60,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     }
 
     // Creates a view's occlusion state; every buffer is created on the first frame that needs it.
-    public SdfMeshOcclusion(IGpuBufferFactory buffers, int slots, string owner, string part, SdfPortalSight? sight = null) {
+    public SdfMeshOcclusion(IGpuBufferFactory buffers, int slots, string owner, string part, uint argumentPhases, SdfPortalSight? sight = null) {
+        m_argumentPhases = argumentPhases;
         m_buffers = buffers;
         m_candidates = new IGpuStorageBuffer?[slots];
         m_retired = Enumerable.Range(count: slots, start: 0).Select(selector: static _ => new List<IGpuBuffer>()).ToArray();
@@ -115,7 +116,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
 
         words[0] = count;
         words[1] = m_levels;
-        words[2] = (occlude ? 1u : 0u) | (splitExit ? 2u : 0u);
+        words[2] = (occlude ? 1u : 0u) | (splitExit ? 2u : 0u) | (m_argumentPhases << 2);
         words[3] = (glass ? 1u : 0u);
         detail.WriteGpu(rows: rows[1..4], held: held);
         cull.WriteGpu(rows: rows[4..]);
@@ -340,7 +341,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             m_capacity = System.Numerics.BitOperations.RoundUpToPowerOf2(value: capacity);
             m_draws = m_buffers.CreateDeviceLocal(
                 name: Name(detail: "occlusion draws"),
-                sizeBytes: ((((ulong)ArgumentPhases) * m_capacity) * GpuDrawIndirectCommand.StrideBytes),
+                sizeBytes: ((((ulong)m_argumentPhases) * m_capacity) * GpuDrawIndirectCommand.StrideBytes),
                 usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect
             );
         }

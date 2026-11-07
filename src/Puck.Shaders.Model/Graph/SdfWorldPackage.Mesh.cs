@@ -89,6 +89,29 @@ public static partial class SdfWorldPackage {
     public const string MeshShadowSecondOptical = "meshShadowSecondOptical";
     private static readonly string[] ShadowOpticalStorages = [Parts.ShadowNearOptical, Parts.ShadowFarOptical, Parts.ShadowSecondOptical];
 
+    /// <summary>Adds optical storage and dependencies to the cascades of a program with positive glass shadow density.</summary>
+    /// <param name="fragment">The fragment before cascade sizing.</param>
+    /// <returns>The fragment with its optical cascades.</returns>
+    public static RenderGraphPackageFragment WithGlassShadows(RenderGraphPackageFragment fragment) {
+        ArgumentNullException.ThrowIfNull(fragment);
+        return fragment with {
+            Resources = [.. fragment.Resources, .. ShadowOpticalStorages.Select(static name => ShadowOptical(name, MeshShadowResolution))],
+            Passes = [.. fragment.Passes.Select(static pass => {
+                var cascade = Array.IndexOf(ShadowParts, pass.Name);
+                if (cascade >= 0) {
+                    return pass with {
+                        Outputs = [.. pass.Outputs, new ResourceReference(Name: ShadowOpticalStorages[cascade])],
+                        OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.FragmentWrite],
+                    };
+                }
+                return pass.Name != Parts.Surface ? pass : pass with {
+                    Inputs = [.. pass.Inputs, .. ShadowOpticalStorages.Select(static name => new ResourceReference(Name: name))],
+                    InputAccesses = [.. pass.InputAccesses, .. ShadowOpticalStorages.Select(static _ => RenderGraphPortAccess.ComputeRead)],
+                };
+            })],
+        };
+    }
+
     private static readonly string[] ShadowParts = [Parts.ShadowNear, Parts.ShadowFar, Parts.ShadowSecond];
     private static readonly string[] ShadowStorages = [
         Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth,

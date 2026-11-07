@@ -2400,7 +2400,8 @@ workload. Selecting no leg or scenario is refused; a report with no measurements
 `--backend` and `--capture-tool` forward to a newly booted windowed World only;
 they require `--tour` and refuse `--attach`. Loading PIX/RenderDoc before device
 creation lets a plan invoke the existing `gpu.capture` command with named objects.
-Native view names are not authored `pipeline.inspect` instance names.
+`pipeline.inspect` accepts rendered node names from `world.counters gpu`,
+including native World views, as well as authored pipeline names.
 
 `--cache-dir` overrides the device-cache root for owned Worlds, as in `puck
 motion`; fresh Worlds can share one writable scratch cache. Omitted, it keeps
