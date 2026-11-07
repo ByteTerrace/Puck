@@ -119,6 +119,17 @@ rather than traversing the hierarchy on the frame. A job whose scene's meshes
 are not resident within `AdmissionWait` is cancelled like an obsolete one, so it
 never holds the coordinator or the meter behind it without bound.
 
+A relight's GPU time is rays, not probes: each hit texel traces toward every
+shadowing light that reaches the probe, and a probe that cannot reuse its
+local cube traces toward every point light in range. `RelightGpu` predicts each
+probe's rays and submits a batch as consecutive jobs of at most
+`RelightRaysPerJob`, each committed before the next. A batch cut by probe count
+alone (384 fresh probes beside the stage, 78 point lights in range of each) ran
+one dispatch past the device timeout. The walk's step bound bounds one ray, never
+a dispatch. A slow job prints `[sdf.gpu-work] slow`, a device loss lists the
+jobs in flight, and a job whose walks stopped at their bound prints
+`[sdf.mesh-gi] traversal faults`.
+
 `SdfWorldResidency.LightingPending` latches convergence after preparation for
 the whole frame, including the final meter. `SdfWorldPasses.WaitingOf` feeds it
 to render-graph completion. A worker finishing later cannot certify an image

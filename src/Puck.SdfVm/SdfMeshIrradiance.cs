@@ -1879,7 +1879,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         GrowScratch(array: ref m_gpuFresh, length: count);
         var fresh = m_gpuFresh;
         var prepared = traces ? PlaceBatch(candidates, first, count, layout, lows, scene, geometry, hits!, parallel, fresh) : null;
-        SdfMeshProbeGpuWork.Result? relitOutput = null;
+        var committed = true;
 
         try {
             _ = Parallel.For(fromInclusive: 0, toExclusive: count, parallelOptions: parallel, body: index => {
@@ -1888,27 +1888,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 results[index] = Process(candidate: candidate, feedback: feedback, geometry: geometry, hits: hits, index: index, layout: layout, lighting: lighting,
                     lights: lights, lows: lows, scene: scene, sweep: sweep, prepared: prepared?[index]);
             });
-            relitOutput = GpuTrace is not null ? RelightGpu(candidates, first, count, results, lights, lighting, in snapshot, feedback) : null;
+            if (GpuTrace is not null) { committed = RelightGpu(candidates, first, count, results, lights, lighting, in snapshot, feedback); }
         } finally {
             if (traces && (GpuTrace is not null)) { FreeUnadoptedGpuHits(candidates: candidates, first: first, fresh: fresh.AsSpan(start: 0, length: count)); }
         }
 
-        using var gpuResult = relitOutput;
         if (borrowed || (GpuTrace is not null)) { hits?.ReleaseHits(); }
-
-        if (gpuResult is not null) {
-            GrowScratch(array: ref m_gpuDestinations, length: count);
-            var destinations = m_gpuDestinations;
-            lock (m_gate) {
-                if (!Stands(in snapshot)) { m_gpuVolume = null; Array.Clear(results, 0, count); return; }
-                for (var i = 0; i < count; i++) {
-                    var candidate = candidates[first + i];
-                    destinations[i] = results[i].Hits is null ? -1 : VolumeSlot(candidate.Level, candidate.Cell);
-                }
-            }
-            try { GpuTrace!.Commit(snapshot.Scene, snapshot.Geometry, snapshot.WindowVersion, gpuResult, destinations.AsMemory(start: 0, length: count)); }
-            catch (OperationCanceledException) { lock (m_gate) { m_gpuVolume = null; } throw; }
-        }
+        if (!committed) { Array.Clear(results, 0, count); return; }
 
         m_landed.Clear();
         lock (m_gate) {

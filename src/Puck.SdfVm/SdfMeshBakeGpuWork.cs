@@ -231,6 +231,8 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
     /// <inheritdoc/>
     public GpuQueueCategory Category => GpuQueueCategory.Bake;
     /// <inheritdoc/>
+    public string Describe(object job) => string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"bake-batch samples={((SdfMeshBakeBatch)job).Samples} input-rows={((SdfMeshBakeBatch)job).InputRows}");
+    /// <inheritdoc/>
     /// <remarks>Each slot's pass block, point table and sampled table (host-visible) and its instance masks and samples
     /// (device-local), with the frame block and the counters.</remarks>
     public GpuMemoryBytes OwnedBytes {

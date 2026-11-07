@@ -130,7 +130,10 @@ public static partial class FrameBenchmarks {
                             throw new InvalidOperationException(string.Join("; ", reasons));
                         }
                         Ask($"world.wait until {settledTick}");
-                        var scheduled = SweepEvidence.Scheduled(new SweepAnswer(true, Ask("world.at --json"), []), expected);
+                        // Each ask is answered on the World's pump, after the drain that runs and settles the pinned lines.
+                        var ran = Ask("world.at --json");
+                        for (var attempt = 0; (attempt < 64) && !SweepEvidence.Settled(ran, expected); attempt++) { ran = Ask("world.at --json"); }
+                        var scheduled = SweepEvidence.Scheduled(new SweepAnswer(true, ran, []), expected);
                         if (!scheduled.Ok) { throw new InvalidOperationException(string.Join("; ", scheduled.Refusals)); }
                         // Framing and the stop's warmup must produce the view's actual program before asking
                         // whether its geometry is resident. Then hold authority while its uploads finish.

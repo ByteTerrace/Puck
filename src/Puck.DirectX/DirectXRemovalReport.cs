@@ -76,7 +76,12 @@ public static partial class DirectXRemovalReport {
     // A trail's first unfinished operation, the PIX-event labels open at it, and the operations around it.
     private static void WriteUnfinished(List<string> lines, DirectXBreadcrumbTrail trail) {
         var completed = trail.Completed;
-        var contexts = trail.Contexts.ToDictionary(keySelector: static context => context.Index, elementSelector: static context => context.Text);
+        // DRED does not promise one label per operation index, and the report runs inside the host's device-loss
+        // recovery, where a throw ends the host: every distinct label at an index is kept, in the order DRED gave them
+        // (the runtime repeats one label at its operation's index).
+        var contexts = trail.Contexts
+            .GroupBy(keySelector: static context => context.Index, elementSelector: static context => context.Text)
+            .ToDictionary(keySelector: static group => group.Key, elementSelector: static group => string.Join(separator: " | ", values: group.Distinct(comparer: StringComparer.Ordinal)));
         var open = new Stack<string>();
 
         for (var index = 0; (index < completed); index++) {
@@ -119,7 +124,8 @@ public static partial class DirectXRemovalReport {
 /// <param name="CommandList">The command list's name, or <c>(unnamed)</c>.</param>
 /// <param name="Completed">The number of its operations the GPU finished, from its first.</param>
 /// <param name="Operations">Every operation the list recorded, in order.</param>
-/// <param name="Contexts">The PIX-event labels DRED kept, each at the index of the operation that set it.</param>
+/// <param name="Contexts">The PIX-event labels DRED kept, each at the index of the operation that set it; one index can
+/// carry several.</param>
 public sealed record DirectXBreadcrumbTrail(string Queue, string CommandList, int Completed, IReadOnlyList<D3D12_AUTO_BREADCRUMB_OP> Operations, IReadOnlyList<DirectXBreadcrumbContext> Contexts);
 /// <summary>A PIX-event label DRED kept beside a breadcrumb.</summary>
 /// <param name="Index">The index of the operation, in its trail, that set the label.</param>

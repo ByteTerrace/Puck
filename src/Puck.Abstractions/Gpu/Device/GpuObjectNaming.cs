@@ -7,7 +7,8 @@ namespace Puck.Abstractions.Gpu;
 /// Vulkan and <c>ID3D12Object::SetName</c> on Direct3D 12, so validation and debug-layer messages, and the Direct3D 12
 /// teardown's live-object report, show the name beside the handle.
 /// <para>
-/// Naming is on only while the device reports through its debug layers. Off, <see cref="Name"/> returns before
+/// Naming is on while the device reports through its debug layers, and on Direct3D 12 while it keeps a removal record
+/// (DRED), which identifies allocations and command lists by these names. Off, <see cref="Name"/> returns before
 /// formatting anything: no string is built, nothing is allocated, and the backend is never called.
 /// <see cref="GpuWorkCounting"/> and <see cref="GpuCreationFaults"/> pass every name through to the creating member they
 /// wrap and carry this service over unchanged.
@@ -16,8 +17,8 @@ namespace Puck.Abstractions.Gpu;
 public abstract class GpuObjectNaming {
     /// <summary>Gets the naming of a device that names nothing.</summary>
     public static GpuObjectNaming Off { get; } = new OffNaming();
-    /// <summary>Gets whether objects are named: the device reports through its debug layers, and its backend can name
-    /// objects there.</summary>
+    /// <summary>Gets whether objects are named: the device reports through its debug layers or a removal record, and its
+    /// backend can name objects there.</summary>
     public abstract bool IsEnabled { get; }
 
     /// <summary>Applies a formatted name to one native object. Called only while <see cref="IsEnabled"/>, with a

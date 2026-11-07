@@ -51,6 +51,11 @@ public interface ISdfGpuWorkClient : IDisposable {
     /// <param name="idleBefore">The <see cref="Stopwatch.GetTimestamp"/> reading a slot's last recording must precede for
     /// its buffers to go.</param>
     void ReleaseIdle(int slot, long idleBefore) { }
+    /// <summary>Describes a taken job in a few <c>key=value</c> words, for the service's slow-job and device-loss lines:
+    /// what kind of work it is and how much of it, so a long or hung submission names the work it was handed.</summary>
+    /// <param name="job">The taken job.</param>
+    /// <returns>The description; by default the job's type name.</returns>
+    string Describe(object job) => job.GetType().Name;
     /// <summary>Gets the bytes of the client's own buffers for its jobs, by the memory they live in.</summary>
     GpuMemoryBytes OwnedBytes { get; }
     /// <summary>Gets the category the client's jobs count under in <see cref="GpuQueueWork"/>.</summary>
@@ -187,6 +192,10 @@ public sealed class SdfGpuWork : IDisposable {
     /// <summary>The rate, in bytes a second, an upload job's GPU time is estimated at until its timestamps measure it:
     /// the copy kernel's read of host staging memory across the bus.</summary>
     public const double UploadBytesPerSecond = 1e10;
+    /// <summary>The measured GPU time, in seconds, past which a completed job is written as a <c>[sdf.gpu-work] slow</c>
+    /// line: a twentieth of a second, a fortieth of the two seconds after which Windows resets a device whose submission
+    /// has not finished (TDR).</summary>
+    public const double SlowJobSeconds = 0.05;
 
     /// <summary>Returns the GPU time, in seconds, an upload job of <paramref name="bytes"/> host payload bytes is
     /// estimated to take (<see cref="UploadBytesPerSecond"/>).</summary>
@@ -282,9 +291,18 @@ public sealed class SdfGpuWork : IDisposable {
             if (m_clients.Count == 0) { return; }
             if (tables.BindsBackgroundWork) { Refill(tables: tables); } else { m_unbound++; }
             ReleaseIdle();
-        } catch {
+        } catch (Exception exception) {
             m_faulted = true;
+            if (exception is DeviceLostException) { ReportInFlight(); }
             throw;
+        }
+    }
+    // A lost device names the background jobs still in flight, which DRED's trail shows only as their kernels' operations.
+    private void ReportInFlight() {
+        for (var index = 0; (index < SlotCount); index++) {
+            if ((m_slots[index].Job is { } job) && (m_slots[index].Client is { } client)) {
+                Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.gpu-work] lost in flight: {m_name} slot={index} {client.Category} {client.Describe(job: job)} estimate={(m_slots[index].Estimate * 1000.0):0.0}ms"));
+            }
         }
     }
 
@@ -357,6 +375,10 @@ public sealed class SdfGpuWork : IDisposable {
             var client = slot.Client!;
 
             var seconds = Settle(slot: slot);
+
+            if ((m_timestamps is not null) && (seconds >= SlowJobSeconds)) {
+                Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.gpu-work] slow {m_name} slot={index} {client.Category} {client.Describe(job: job)} gpu={(seconds * 1000.0):0.0}ms estimate={(slot.Estimate * 1000.0):0.0}ms"));
+            }
             var readback = new SdfGpuWorkReadback(slot: index, buffer: slot.Readback, length: (int)slot.ReadbackBytes, gpuSeconds: m_timestamps is null ? null : seconds);
             slot.Lease = readback;
             slot.Job = null;

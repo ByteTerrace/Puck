@@ -45,13 +45,13 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         var sizes = GpuDescriptorPoolSizes.ForGroups(layout.Groups) + GpuDescriptorPoolSizes.ForGroups(SdfWorldInterfaces.ProbeRelightLayout.PipelineLayout(GpuShaderStage.Compute).Groups);
         var total = sizes;
         for (var i = 1; i < m_slots.Length; i++) { total += sizes; }
-        m_pool = scope.Own(handle: m_gpu.Bindings.CreatePool(name: default, sizes: total), release: m_gpu.Bindings.DestroyPool);
-        m_directions = scope.Own(created: m_gpu.BufferFactory.CreateHostVisible(name: default,
+        m_pool = scope.Own(handle: m_gpu.Bindings.CreatePool(name: Name(part: "pool"), sizes: total), release: m_gpu.Bindings.DestroyPool);
+        m_directions = scope.Own(created: m_gpu.BufferFactory.CreateHostVisible(name: Name(part: "directions"),
             sizeBytes: SdfMeshProbeDepth.HitCount * 16, usage: GpuBufferUsage.Storage));
         var directions = new Vector4[SdfMeshProbeDepth.HitCount];
         for (var i = 0; i < directions.Length; i++) { directions[i] = new(SdfMeshProbeDepth.RayDirections[i], SdfMeshProbeDepth.RayWeights[i]); }
         m_directions.Write<Vector4>(directions);
-        m_zero = scope.Own(created: m_gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: 4, usage: GpuBufferUsage.Storage));
+        m_zero = scope.Own(created: m_gpu.BufferFactory.CreateHostVisible(name: Name(part: "zero"), sizeBytes: 4, usage: GpuBufferUsage.Storage));
         m_zero.Write<uint>([0]);
         for (var i = 0; i < m_slots.Length; i++) {
             m_slots[i] = new Slot(
@@ -72,10 +72,12 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         return Submit(new Job(scene.Acquire(), origins) { CacheSlots = cacheSlots, HitCapacity = hitCapacity, Reuse = reuse });
     }
     // The origins and input are read before this returns, so a caller may overwrite the arrays its memories view at once.
+    // `rays` is the job's predicted ray count (SdfMeshIrradiance.RelightRaysPerJob bounds it), which its GPU time is
+    // estimated from until its timestamps measure it.
     internal Result Relight(SdfMeshIrradianceScene scene, Memory<Vector4> origins, ReadOnlyMemory<uint> input, Vector4[] lighting,
-        int volumeWords, in Deltas updates, uint hitCapacity, uint[]? reuse = null) {
+        int volumeWords, in Deltas updates, uint hitCapacity, long rays, uint[]? reuse = null) {
         var job = new Job(scene.Acquire(), origins) {
-            Input = input, Lighting = lighting, VolumeWords = volumeWords, Updates = updates, HitCapacity = hitCapacity, Reuse = reuse,
+            Input = input, Lighting = lighting, VolumeWords = volumeWords, Updates = updates, HitCapacity = hitCapacity, Reuse = reuse, Rays = rays,
         };
         var words = Submit(job);
         return new Result(words, job.Output!, job.HeldReadback!);
@@ -193,7 +195,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             m_pending.Dequeue();
             m_inFlight = true;
             job = pending;
-            estimatedSeconds = pending.Origins.Length * (pending.Selection ? 1e-8 : SdfMeshProbeDepth.HitCount * 1e-8);
+            estimatedSeconds = ((pending.Rays > 0) ? (pending.Rays * 1e-8) : (pending.Origins.Length * (pending.Selection ? 1e-8 : SdfMeshProbeDepth.HitCount * 1e-8)));
             return true;
         }
     }
@@ -214,18 +216,18 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         var bytes = (ulong)query.Origins.Length * (ulong)(query.Meter ? SdfMeshProbeRelight.MeterOutputWords : query.Selection ? 1 : relight ? SdfMeshProbeRelight.ResultWords : SdfMeshProbeDepth.HitWords) * 4;
         if (slot.Origins is null || slot.Origins.SizeBytes != (ulong)query.Origins.Length * 16) {
             slot.Origins?.Dispose();
-            slot.Origins = m_gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: (ulong)query.Origins.Length * 16, usage: GpuBufferUsage.Storage);
+            slot.Origins = m_gpu.BufferFactory.CreateHostVisible(name: Name(part: "origins", index: recording.Slot), sizeBytes: (ulong)query.Origins.Length * 16, usage: GpuBufferUsage.Storage);
         }
         if (slot.Hits is null || slot.Hits.SizeBytes < bytes + 4) {
             slot.Hits?.Dispose();
-            slot.Hits = m_gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: bytes + 4, usage: GpuBufferUsage.Storage);
+            slot.Hits = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "hits", index: recording.Slot), sizeBytes: bytes + 4, usage: GpuBufferUsage.Storage);
         }
-        slot.Identities ??= m_gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 8, usage: GpuBufferUsage.Storage);
+        slot.Identities ??= m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "identities", index: recording.Slot), sizeBytes: 8, usage: GpuBufferUsage.Storage);
         if (query.Meter) {
             var cacheBytes = (ulong)query.Origins.Length * (1 + SdfMeshProbeDepth.HitWords) * 4;
             if (m_meterCache is null || m_meterCache.SizeBytes < cacheBytes) {
                 m_meterCache?.Dispose();
-                m_meterCache = m_gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: cacheBytes, usage: GpuBufferUsage.Storage);
+                m_meterCache = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "meter-cache"), sizeBytes: cacheBytes, usage: GpuBufferUsage.Storage);
                 var origins = query.Origins.Span;
                 for (var i = 0; i < origins.Length; i++) { origins[i].W = 1; }
             }
@@ -242,15 +244,15 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         Bind(SdfKernelInterfaces.ProbeHitsWritten, slot.Hits, 4, written: true);
         if (query.HitCapacity != 0) { FitHitCache(query.HitCapacity, command); }
         if (compute) {
-            Write(ref slot.Input, MemoryMarshal.AsBytes(query.Input.Span));
-            Write(ref slot.Lighting, MemoryMarshal.AsBytes(query.Lighting.AsSpan()));
+            Write(ref slot.Input, MemoryMarshal.AsBytes(query.Input.Span), "input", recording.Slot);
+            Write(ref slot.Lighting, MemoryMarshal.AsBytes(query.Lighting.AsSpan()), "lighting", recording.Slot);
             Bind(SdfKernelInterfaces.ProbeInput, slot.Input!, 4);
             Bind(SdfKernelInterfaces.ProbeLighting, slot.Lighting!, 16);
             Bind(SdfWorldPackage.MeshIrradiance, m_feedback?.Buffer(0) ?? m_tables.DummyBuffer, 4);
             var workBytes = (ulong)(query.Origins.Length + 3) * 4;
             if (slot.Work is null || slot.Work.SizeBytes < workBytes) {
                 slot.Work?.Dispose();
-                slot.Work = m_gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: workBytes, usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect);
+                slot.Work = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "work", index: recording.Slot), sizeBytes: workBytes, usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect);
             }
             Bind(SdfKernelInterfaces.ProbeWorkWritten, slot.Work, 4, written: true);
             Bind(SdfKernelInterfaces.ProbeWork, slot.Work, 4);
@@ -329,10 +331,10 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             m_gpu.Bindings.WriteBuffer(binding: resource.Binding, bufferHandle: buffer.BufferHandle, bufferSize: buffer.SizeBytes,
                 descriptorSetHandle: set, elementStride: stride, kind: written ? GpuBindingKind.ReadWriteBuffer : GpuBindingKind.ReadOnlyBuffer);
         }
-        void Write(ref IGpuStorageBuffer? buffer, ReadOnlySpan<byte> words) {
+        void Write(ref IGpuStorageBuffer? buffer, ReadOnlySpan<byte> words, string part, int index) {
             if (buffer is null || buffer.SizeBytes < (ulong)words.Length) {
                 buffer?.Dispose();
-                buffer = m_gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: (ulong)words.Length, usage: GpuBufferUsage.Storage);
+                buffer = m_gpu.BufferFactory.CreateHostVisible(name: Name(part: part, index: index), sizeBytes: (ulong)words.Length, usage: GpuBufferUsage.Storage);
             }
             buffer.Write<byte>(words);
         }
@@ -345,7 +347,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         var bytes = (ulong)capacity * SdfMeshProbeRelight.CacheWords * sizeof(uint);
         if (m_hitCache?.SizeBytes == bytes) { return; }
         m_hitCache?.Dispose();
-        m_hitCache = m_gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: bytes, usage: GpuBufferUsage.Storage);
+        m_hitCache = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "hit-cache"), sizeBytes: bytes, usage: GpuBufferUsage.Storage);
         var recorder = m_gpu.Recorder;
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_hitCache.BufferHandle,
             sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
@@ -390,7 +392,16 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         else { readback.Release(); }
         // A reused array is answered whole, its fault word at words - 1; any other answer drops the fault word's slot.
         var result = ((query.CommitSource is not null) || (query.Reuse is not null)) ? readWords : readWords[..^1];
-        if (query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.TraversalFaults, readWords[words - 1]); }
+        if (query.CommitSource is null) {
+            var faults = readWords[words - 1];
+
+            m_volume.Counters.Add(SdfMeshIrradiance.TraversalFaults, faults);
+            // A walk stopped at its step or stack bound is a scene the hierarchy cannot answer; each costs a ray its whole
+            // bound, which is what makes one probe's thread group long enough to hang the device.
+            if (faults != 0) {
+                Console.Error.WriteLine(FormattableString.Invariant($"[sdf.mesh-gi] traversal faults={faults} {Describe(job: query)} gpu={((readback.GpuSeconds ?? 0.0) * 1000.0):0.0}ms"));
+            }
+        }
         if (query.Lighting is null && query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.GpuRays, query.Origins.Length * SdfMeshProbeDepth.HitCount); }
         if (readback.GpuSeconds is { } seconds) { m_volume.Counters.Add(query.Meter ? SdfMeshIrradiance.GpuMeterNanoseconds : query.Selection ? SdfMeshIrradiance.GpuSelectNanoseconds : query.Lighting is null && query.CommitSource is null ? SdfMeshIrradiance.GpuTraceNanoseconds : SdfMeshIrradiance.GpuRelightNanoseconds, (long)(seconds * 1e9)); }
         if (query.Meter) {
@@ -411,6 +422,50 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         query.Answer.TrySetCanceled();
     }
     public GpuQueueCategory Category => GpuQueueCategory.Probe;
+    public string Describe(object job) {
+        if (job is SceneChunk chunk) { return FormattableString.Invariant($"scene-chunk word={chunk.Word} words={chunk.Count}"); }
+        var query = (Job)job;
+        var kind = (query.CommitSource is not null) ? "commit" : query.Meter ? "meter" : query.Selection ? "select" : (query.Lighting is not null) ? "relight" : "trace";
+        var lights = ((query.Lighting is { Length: > 0 } rows) ? FormattableString.Invariant($" lights={rows[0].Y} points={rows[0].Z}") : string.Empty);
+        return FormattableString.Invariant($"{kind} origins={query.Origins.Length} destinations={query.Destinations.Length} hit-capacity={query.HitCapacity}{lights}{((kind == "relight") ? DescribeRelight(query) : string.Empty)}");
+    }
+    // What decides a relight's cost: the probes it shades and, for each, the shadowing point lights in range of its
+    // origin, each of which a hit texel traces a ray toward (sdfProbeShade).
+    private static string DescribeRelight(Job query) {
+        var rows = query.Lighting!;
+        var input = query.Input.Span;
+        var origins = query.Origins.Span;
+        var lightBase = SdfMeshProbeRelight.HeaderRows + ((int)rows[0].X * SdfMeshProbeRelight.MaterialRows);
+        var lightCount = (int)(rows[0].Y + rows[0].Z);
+        var valid = 0;
+        var reused = 0;
+        var most = 0;
+        var total = 0L;
+        var slots = 0u;
+
+        for (var probe = 0; (probe < origins.Length) && (((probe + 1) * SdfMeshProbeRelight.InputWords) <= input.Length); probe++) {
+            var flags = input[probe * SdfMeshProbeRelight.InputWords];
+
+            if ((flags & 1u) == 0u) { continue; }
+            valid++;
+            if ((flags & 2u) != 0u) { reused++; continue; }
+            slots = Math.Max(slots, input[(probe * SdfMeshProbeRelight.InputWords) + 3]);
+
+            var near = 0;
+
+            for (var light = 0; (light < lightCount) && ((lightBase + (light * SdfMeshProbeRelight.LightRows) + 3) < rows.Length); light++) {
+                var position = rows[lightBase + (light * SdfMeshProbeRelight.LightRows)];
+                var mode = rows[lightBase + (light * SdfMeshProbeRelight.LightRows) + 3];
+
+                if ((mode.W != 0f) && (mode.Z != 0f) && (Vector3.DistanceSquared(new Vector3(position.X, position.Y, position.Z), new Vector3(origins[probe].X, origins[probe].Y, origins[probe].Z)) < (position.W * position.W))) { near++; }
+            }
+            most = Math.Max(most, near);
+            total += near;
+        }
+        return FormattableString.Invariant($" rays={query.Rays} valid={valid} reused={reused} shadowing-points-in-range-max={most} mean={((valid > reused) ? (total / (double)(valid - reused)) : 0.0):0.0} max-slot={slots}");
+    }
+    private static GpuObjectName Name(string part, int index = GpuObjectName.NoIndex) =>
+        new(index: index, owner: SdfWorldTables.ObjectOwner, part: $"probe-trace {part}");
     public GpuMemoryBytes OwnedBytes {
         get {
             var bytes = m_sceneRegion?.OwnedBytes ?? default;
@@ -472,6 +527,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         public ReadOnlyMemory<int> Destinations;
         public uint[]? CacheSlots;
         public uint[]? Reuse;
+        public long Rays;
         public uint HitCapacity;
         public int Geometry;
         public int Window;

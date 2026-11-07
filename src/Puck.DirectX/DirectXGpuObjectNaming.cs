@@ -6,16 +6,18 @@ namespace Puck.DirectX;
 
 /// <summary>
 /// Names a Direct3D 12 device's objects with <c>ID3D12Object::SetName</c>, so the debug layer's messages
-/// (<c>[d3d12-debug]</c> lines), a removal record's allocations and a GPU capture print each object's name. It is on only when the
-/// device context names objects (<see cref="DirectXDeviceContext.NameObjects"/>). It names buffers, images, pipeline states, command allocators and command
+/// (<c>[d3d12-debug]</c> lines), a removal record's allocations and a GPU capture print each object's name. It is on when the
+/// device context names objects (<see cref="DirectXDeviceContext.NameObjects"/>) or records removals
+/// (<see cref="DirectXDeviceContext.RecordRemoval"/>), whose record names allocations and command lists only by these names. It names buffers, images, pipeline states, command allocators and command
 /// lists; Direct3D 12 image views, descriptor pools, descriptor sets and render passes are not objects there, so their
 /// names are dropped.
 /// </summary>
-/// <param name="deviceContext">The device context whose <see cref="DirectXDeviceContext.NameObjects"/> turns naming on.</param>
+/// <param name="deviceContext">The device context whose <see cref="DirectXDeviceContext.NameObjects"/> or
+/// <see cref="DirectXDeviceContext.RecordRemoval"/> turns naming on.</param>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuObjectNaming(DirectXDeviceContext deviceContext) : GpuObjectNaming {
     /// <inheritdoc/>
-    public override bool IsEnabled => deviceContext.NameObjects;
+    public override bool IsEnabled => (deviceContext.NameObjects || deviceContext.RecordRemoval);
 
     /// <inheritdoc/>
     protected override void Apply(GpuObjectKind kind, nint handle, string name) {
