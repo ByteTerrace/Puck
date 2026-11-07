@@ -77,8 +77,10 @@ public static class MeasureCommand {
             using var runner = FileLock.TryAcquire(Path.Combine(queue, "run.guard"));
             if (runner is null) { return CliExit.Refuse("measure run", "queue", "another measurement window is already draining it."); }
             var selected = parse.GetValue(ids) ?? [];
-            var pending = ReadQueue(queue).Where(row => row.Item.Report is null && row.Item.Failure is null && (selected.Length == 0 || selected.Contains(row.Item.Id, StringComparer.Ordinal))).ToArray();
-            if (selected.Any(id => !pending.Any(row => row.Item.Id == id))) { return CliExit.Refuse("measure run", "requests", "an ID is missing, failed or already answered."); }
+            var pending = ReadQueue(queue).Where(row => row.Item.Report is null && (selected.Length == 0
+                ? row.Item.Failure is null : selected.Contains(row.Item.Id, StringComparer.Ordinal)))
+                .Select(row => (row.Path, Item: row.Item with { Failure = null })).ToArray();
+            if (selected.Any(id => !pending.Any(row => row.Item.Id == id))) { return CliExit.Refuse("measure run", "requests", "an ID is missing or already answered."); }
             if (pending.Length == 0) { Console.WriteLine("measure: no pending questions."); return 0; }
             var leases = await CliLease.RootAsync(checkout, token).ConfigureAwait(false);
             using var quiet = await CliLease.AcquireQuietAsync(leases, parse.GetValue(holder)!, TimeSpan.FromSeconds(waiting), clock, checkout, token, ProcessInspection.IsAncestor).ConfigureAwait(false);
@@ -87,7 +89,7 @@ public static class MeasureCommand {
             }
             return await DrainAsync(pending, rounds, (item, side, round, directory, cancellation) => SampleAsync(item, side, round, directory, bound, cancellation), token).ConfigureAwait(false);
         });
-        run.Detail("Use: puck measure run [request-ids...] [--repeats 5] [--wait 600] [--settle 30]\nTakes one priority quiet lease for the pending snapshot. Each request runs before, after in repeated pairs. Failed commands or missing/nonfinite metrics mark that request failed and continue the queue; partial evidence stays. Re-file a corrected request. Reports record raw samples, median and IQR for before, after and paired after-minus-before differences. --decides remains a human criterion.");
+        run.Detail("Use: puck measure run [request-ids...] [--repeats 5] [--wait 600] [--settle 30]\nTakes one priority quiet lease for the pending snapshot. Each request runs before, after in repeated pairs. Failed commands or missing/nonfinite metrics mark that request failed and continue the queue; partial evidence stays. Explicitly name failed IDs to retry unchanged frozen inputs into a new answer directory; an unselected drain skips failures. Re-file to correct inputs. Reports record raw samples, median and IQR for before, after and paired after-minus-before differences. --decides remains a human criterion.");
         return new Command("measure", "Queue frozen before/after timing questions and answer them in a priority quiet window.") { request, list, run };
     }
 

@@ -1,3 +1,6 @@
+using System.Globalization;
+using Puck.Abstractions;
+
 namespace Puck.Cli.Host;
 
 /// <summary>What a start needs of the commit headroom, as <see cref="HostStartTracker.Judge"/> reads it.</summary>
@@ -12,25 +15,34 @@ namespace Puck.Cli.Host;
 public readonly record struct HostStartDemand(bool Covered, double HeadroomGb, double NeedGb, double OwnGb, double GrowthGb, int Growing, HostStartKind Kind);
 
 /// <summary>
-/// Admits a start by its expected peak rather than by the commit charge at the instant it asks: admitted Worlds grow
-/// (a windowed debug World reaches 12 to 18 GB private within minutes), so several starts admitted at a low charge grow
-/// into each other. A start is covered when the commit headroom (limit less charge) holds its own expected peak
-/// (<see cref="HostLoadThresholds.DefaultPeakGb"/>, raised by the measured peak of a finished start of the same kind
-/// this process saw, to at most <see cref="HostLoadThresholds.MeasuredPeakCeilingFactor"/> times the default) plus what
-/// every admitted start still has to grow. A start that has reported ready (<see cref="HostRunningStart.Ready"/>, read
-/// from <see cref="WorldReadiness"/>) has nothing left to grow: this is the one place growth is summed, and it reserves
-/// growth only for the starts that have not.
+/// The single commit-demand calculation: a start's measured peak plus the running starts' remaining growth.
+/// Before a kind has a measurement it uses <see cref="HostLoadThresholds.DefaultPeakGb"/>. Observed private-byte
+/// peaks of plateaued processes, or finished processes observed for a full plateau window, replace that fallback,
+/// including downward, and are shared between CLI
+/// processes under the lease root. A known measurement rises whenever a live process exceeds it, without clipping
+/// real usage. Growth tapers to zero over <see cref="Plateau"/> without a material allocation and returns when growth
+/// resumes. A World that reported ready reserves no growth. The system commit charge already includes live usage.
 /// <para>Admitted starts come from the live processes each reading lists (<see cref="HostSample.Starts"/>, classified by
 /// <see cref="HostProcesses.RunningStart"/>) with their current private bytes, so a process that exits stops counting at
 /// once and nothing is read from a record that can go stale. The one thing a reading cannot show is a start admitted a
 /// moment ago whose process has not appeared: this tracker holds that start as a reservation of its full peak until a
 /// new live process of its kind appears or <see cref="ReservationHold"/> passes, which is what keeps two starts asked in
-/// a row from both taking the same headroom. Reservations and measured peaks live in this process's memory only, never
-/// in a file, so they cover the starts this process admits (an MCP session, the concurrent workers of one verb) and not
+/// a row from both taking the same headroom. Pre-process reservations live in this process's memory only,
+/// so they cover the starts this process admits (an MCP session, the concurrent workers of one verb) and not
 /// those another process admits at the same instant, whose processes are counted once they run.</para>
 /// </summary>
 public sealed class HostStartTracker {
     private sealed record Reservation(HostStartKind Kind, long At, double Gb, HashSet<(int Id, long StartTicks)> Known);
+    private sealed record Observation(HostStartKind Kind, double PeakGb, double AnchorGb, long GrewAt, long FirstAt);
+
+    /// <summary>Without material growth for this long, a live process reserves no further growth.</summary>
+    public static readonly TimeSpan Plateau = TimeSpan.FromMinutes(1);
+    private const double MaterialGrowthGb = 1.0 / 16;
+    private readonly string? m_root;
+
+    /// <summary>Creates a tracker, optionally sharing measured peaks in the machine's lease root.</summary>
+    /// <param name="leaseRoot">The shared lease root; null keeps observations local for injected readings.</param>
+    public HostStartTracker(string? leaseRoot = null) { m_root = leaseRoot; }
 
     /// <summary>How long an admitted start holds its full expected peak before its live process is expected to show.</summary>
     public static readonly TimeSpan ReservationHold = TimeSpan.FromSeconds(seconds: 90);
@@ -39,25 +51,46 @@ public sealed class HostStartTracker {
     private readonly Dictionary<HostStartKind, double> m_measured = [];
     private readonly List<Reservation> m_reservations = [];
     // Keyed by process id and start ticks: a recycled id is another start, and carries none of the last one's peak.
-    private readonly Dictionary<(int Id, long StartTicks), (HostStartKind Kind, double PeakGb)> m_seen = [];
+    private readonly Dictionary<(int Id, long StartTicks), Observation> m_seen = [];
 
     /// <summary>Gets the tracker of this process's host session, which the admission of a real machine reading uses.</summary>
-    public static HostStartTracker Session { get; } = new();
+    public static HostStartTracker Session { get; } = new(leaseRoot: CliLease.RootAsync(Environment.CurrentDirectory).GetAwaiter().GetResult());
 
     private double Expected(HostStartKind kind) {
         var baseline = HostLoadThresholds.DefaultPeakGb(kind: kind);
 
-        return (m_measured.TryGetValue(key: kind, value: out var measured)
-            ? Math.Min(val1: Math.Max(val1: baseline, val2: measured), val2: (baseline * HostLoadThresholds.MeasuredPeakCeilingFactor))
-            : baseline);
+        return m_measured.TryGetValue(kind, out var measured) ? measured : baseline;
     }
 
-    /// <summary>Returns the commit a start of a kind is expected to reach: its default raised by the measured peak of a
-    /// finished start of the same kind this tracker saw.</summary>
+    // Each kind has one measurement file under the existing lease root. An exclusive guard merges concurrent
+    // observations before replacement; a lower observed peak replaces the fallback, never a measured larger peak.
+    private void Learn(HostStartKind kind, double peak) {
+        if (double.IsFinite(peak) && peak > 0) {
+            m_measured[kind] = Math.Max(peak, m_measured.GetValueOrDefault(kind));
+        }
+    }
+    private void Measurements() {
+        if (m_root is null) { return; }
+        var directory = Path.Combine(m_root, "host-peaks");
+        Directory.CreateDirectory(directory);
+        foreach (var kind in Enum.GetValues<HostStartKind>()) {
+            var path = Path.Combine(directory, kind.ToString());
+            using var held = FileLock.TryAcquire(path + ".guard");
+            if (held is null) { continue; }
+            if (File.Exists(path) && double.TryParse(File.ReadAllText(path), CultureInfo.InvariantCulture, out var peak)) { Learn(kind, peak); }
+            if (m_measured.TryGetValue(kind, out var measured)) {
+                var text = measured.ToString("R", CultureInfo.InvariantCulture);
+                if (!File.Exists(path) || File.ReadAllText(path) != text) { AtomicFile.WriteAllText(path, text); }
+            }
+        }
+    }
+
+    /// <summary>Returns the kind's measured peak, or its fallback before a measurement exists.</summary>
     /// <param name="kind">The start's kind.</param>
     /// <returns>The expected peak, in gigabytes.</returns>
     public double ExpectedPeakGb(HostStartKind kind) {
         lock (m_gate) {
+            Measurements();
             return Expected(kind: kind);
         }
     }
@@ -72,16 +105,26 @@ public sealed class HostStartTracker {
     /// <returns>The start's demand.</returns>
     public HostStartDemand Judge(HostSample reading, HostStartKind kind, HostLoadThresholds thresholds, TimeProvider clock, bool reserve) {
         lock (m_gate) {
+            Measurements();
             var live = (reading.Starts ?? []);
             var liveIds = new HashSet<(int Id, long StartTicks)>(collection: live.Select(selector: static start => (start.Id, start.StartTicks)));
 
             foreach (var start in live) {
-                m_seen[(start.Id, start.StartTicks)] = (start.Kind, Math.Max(val1: start.PrivateGb, val2: (m_seen.TryGetValue(key: (start.Id, start.StartTicks), value: out var seen) ? seen.PeakGb : 0)));
+                var id = (start.Id, start.StartTicks);
+                var seen = m_seen.GetValueOrDefault(id) ?? new Observation(start.Kind, start.PrivateGb, start.PrivateGb, clock.GetTimestamp(), clock.GetTimestamp());
+                var grew = start.PrivateGb >= seen.AnchorGb + MaterialGrowthGb;
+                seen = seen with { PeakGb = Math.Max(start.PrivateGb, seen.PeakGb),
+                    AnchorGb = grew ? start.PrivateGb : Math.Min(start.PrivateGb, seen.AnchorGb), GrewAt = grew ? clock.GetTimestamp() : seen.GrewAt };
+                m_seen[id] = seen;
+                if (m_measured.ContainsKey(start.Kind) || clock.GetElapsedTime(seen.GrewAt) >= Plateau) { Learn(start.Kind, seen.PeakGb); }
             }
             foreach (var (id, seen) in m_seen.Where(predicate: pair => !liveIds.Contains(item: pair.Key)).ToArray()) {
-                m_measured[seen.Kind] = Math.Max(val1: seen.PeakGb, val2: (m_measured.TryGetValue(key: seen.Kind, value: out var measured) ? measured : 0));
+                // A short focused check is not a measurement of a long run's peak. It can raise an existing
+                // measurement, but replacing the fallback needs a full observation window.
+                if (m_measured.ContainsKey(seen.Kind) || clock.GetElapsedTime(seen.FirstAt) >= Plateau) { Learn(seen.Kind, seen.PeakGb); }
                 _ = m_seen.Remove(key: id);
             }
+            Measurements();
 
             // A reservation ends when its hold passes or a live process of its kind it did not know of appears; each new
             // process answers one reservation.
@@ -109,10 +152,11 @@ public sealed class HostStartTracker {
             var growth = 0.0;
             var growing = 0;
 
-            // Reserved growth covers only the starts that have not reported ready: a World at steady state counts its
-            // actual usage, which the commit charge already holds.
+            // The one growth sum: ready or plateaued processes count only their actual usage in the system charge.
             foreach (var start in live) {
-                var left = (start.Ready ? 0 : (Expected(kind: start.Kind) - start.PrivateGb));
+                var seen = m_seen[(start.Id, start.StartTicks)];
+                var remaining = Math.Max(0, 1 - clock.GetElapsedTime(seen.GrewAt).TotalSeconds / Plateau.TotalSeconds);
+                var left = start.Ready ? 0 : (Math.Max(Expected(start.Kind), seen.PeakGb) - start.PrivateGb) * remaining;
 
                 if (left > 0) {
                     growth += left;
@@ -125,10 +169,6 @@ public sealed class HostStartTracker {
             }
 
             var own = Expected(kind: kind);
-
-            if (double.IsFinite(d: reading.CommitLimitGb) && (reading.CommitLimitGb > 0)) {
-                own = Math.Min(val1: own, val2: (HostLoadThresholds.PeakShareOfCommitLimit * reading.CommitLimitGb));
-            }
 
             var need = (own + growth);
             var covered = thresholds.CommitCovers(reading: reading, needGb: need);

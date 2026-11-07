@@ -1020,7 +1020,8 @@
           "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "Microsoft.CodeAnalysis.CSharp": "[5.*, )",
           "Puck.Cli.Core": "[1.0.0, )",
-          "Puck.Launcher": "[1.0.0, )"
+          "Puck.Launcher": "[1.0.0, )",
+          "Puck.SdfVm.Model": "[1.0.0, )"
         }
       },
       "puck.cli.runs": {

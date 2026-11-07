@@ -183,7 +183,7 @@ public sealed class CliLease : IDisposable {
     /// what its files mean: holders, tickets and sidecars, rotation, the quiet reservation, the child layout, readiness marks,
     /// and how host admission classifies the processes it waits on (<c>HostProcesses</c>). Raise it in any change to one of
     /// those meanings: a copy built before the change then refuses by name instead of deadlocking against a newer one.</summary>
-    public const int Protocol = 1;
+    public const int Protocol = 2;
     private const string ProtocolFile = "protocol";
 
     /// <summary>Reads the lease protocol a lease root records: the highest any CLI that queued there spoke; zero when none has
@@ -204,6 +204,7 @@ public sealed class CliLease : IDisposable {
     private static bool QuietPending(string root, DateTimeOffset now) {
         var directory = Path.Combine(path1: root, path2: "quiet");
         var queue = (directory + ".queue");
+        PruneQuiet(directory);
 
         // Placing a ticket name no waiter holds counts every live ticket ahead of it.
         return ((Directory.Exists(path: queue) && (Admission(now: now, rotation: (directory + ".rotation"), ticket: Path.Combine(path1: queue, path2: "probe")).Ahead > 0))
@@ -231,15 +232,15 @@ public sealed class CliLease : IDisposable {
     /// none.</param>
     public sealed record LeaseState(string? Holder, string? Lane, bool HolderAlive, IReadOnlyList<LeaseTicket> Queue, DateTimeOffset? Since = null, string? Checkout = null);
 
-    /// <summary>Reads a lease without changing it: no ticket is taken, no dead ticket or stale holder is removed, no rotation
-    /// serial is written. Whether the holder is alive is read from its guard lock through a momentary shared hold, which an
-    /// acquirer racing it retries past.</summary>
+    /// <summary>Inspects a lease without taking a ticket, removing dead tickets or writing rotation. An unlocked quiet
+    /// holder's metadata is pruned under its exclusive guard. Other holders' liveness is read with a momentary shared hold.</summary>
     /// <param name="root">The shared lease directory.</param>
     /// <param name="name">The resource: build, gpu or heavy.</param>
     /// <param name="now">The time the metadata of a process the OS cannot name is judged against.</param>
     /// <returns>The holder and the live waiters; an absent directory reads as an idle lease.</returns>
     public static LeaseState Inspect(string root, string name, DateTimeOffset now) {
         var directory = Path.Combine(path1: root, path2: name);
+        if (name == "quiet") { PruneQuiet(directory); }
         var holder = ReadHolder(directory: directory);
         string? holderName = null, holderLane = null, holderCheckout = null;
         var alive = false;
@@ -298,6 +299,15 @@ public sealed class CliLease : IDisposable {
         } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
             return (ProcessGone(lines: holder, now: now) == false);
         }
+    }
+    // The same exclusive guard used by acquisition proves there is no holder and prevents a replacement racing
+    // cleanup. Never unlink the guard itself, nor infer death from metadata age or a process inventory.
+    private static void PruneQuiet(string directory) {
+        if (!Directory.Exists(directory)) { return; }
+        try {
+            using var held = FileLock.TryAcquire(directory + ".guard");
+            if (held is not null) { ConfinedDirectory.RemoveTree(directory); }
+        } catch (Exception error) when (error is IOException or UnauthorizedAccessException or PlatformNotSupportedException) { }
     }
     private static string TicketCheckoutPath(string ticket) {
         var queue = Path.GetDirectoryName(path: ticket)!;

@@ -1037,7 +1037,12 @@ CAPACITY cpu=<percent> freeRAM=<GB> freeDisk=<GB> reuseNodes=<count>
 
 `--json` writes one JSON object per reading that prints a line instead: `at`,
 `cpuPercent` (the window's mean), `freeRamGb`, `freeDiskGb`, `commitPercent`,
-`reuseNodes`, `gpuHolder`, `heavyTestHolder` and `admission`.
+`commitChargeGb`, `commitLimitGb`, `starts` (PID, kind, private GB, readiness and start ticks),
+`demands` (headroom, own peak, growth, total need and commit coverage by kind),
+`reuseNodes`, `gpuHolder`, `heavyTestHolder` and `admission`. Text readings add the
+same per-kind admission demands and running starts after each transition.
+These demand lines judge commit coverage; the capacity lines also judge RAM,
+disk and CPU, and device admission separately checks GPU ownership.
 
 - `GPU busy` or `GPU idle` appears at the first reading and on every change
   after. GPU work is the World (`Puck.World` or `Puck.World.dll`) when its
@@ -1376,7 +1381,11 @@ project files import or link from elsewhere in the checkout, read as MSBuild
 reads them, with a backslash as a directory separator on every platform. It also
 covers every file directly in the repository root. For these paths, the key hashes
 git's object ids in `HEAD` together with the content of every uncommitted,
-staged, or untracked change that `git status` reports. The machine's runtime
+staged, or untracked change that `git status` reports.
+Changed outputs owned by `ShaderDeclarations` are excluded: the build regenerates
+them from model inputs already in the closure. The source key is checked after
+build admission and again after compilation, so real source edits still discard
+the build while generator reconciliation does not. The machine's runtime
 identifier and the build command line are part of the key too. Edits to
 documentation, tests, or projects the World does not reference leave the key
 unchanged. Worktrees whose World sources are identical share a build. Outside a git
@@ -2811,7 +2820,9 @@ Forward the command after `--`, without the leading `puck`. Supported forms are 
 
 `run [request-ids...]` takes one [`quiet` lease](#puck-lease-quieta-settle-window) for the pending snapshot, then runs before, after, before, after for `--repeats` paired rounds per request (1–100, default 5). New requests wait for the next window. `--wait` bounds lease acquisition; `--settle` defaults to 30 idle seconds; `--timeout-seconds` bounds each command including shutdown (default 600). The existing bench and sweep harnesses own every measurement; this verb does not time child-process wall clocks. Reports retain raw samples and source reports, plus median and interquartile range (linearly interpolated quartiles) for before, after and the paired **after minus before** difference. The paired median is computed from each pair's difference, not by subtracting the two independent medians.
 
-Each completed report is written under the request's `answers/` directory before the request is marked answered. Filing validates pointers against the command's numeric metric schema. A failed command or missing/nonfinite metric preserves partial evidence, marks that request failed with its name and reason, and continues the queue. Pointer refusals name the report schema and available numeric pointers. Re-file a corrected question; failed requests are never answered or silently retried. Cancellation leaves unfinished requests pending. `--decides` is the lead's recorded criterion, not an inferred automatic pass. `list` includes pending, failed and answered requests, their criteria and report paths. A second concurrent runner refuses rather than scheduling another window. All requests, frozen builds, transcripts and reports stay uncommitted.
+Each completed report is written under the request's `answers/` directory before the request is marked answered. Filing validates pointers against the command's numeric metric schema. A failed command or missing/nonfinite metric preserves partial evidence, marks that request failed with its name and reason, and continues the queue. Pointer refusals name the report schema and available numeric pointers. Explicitly naming a failed ID retries
+its frozen inputs into a new answer directory, preserving earlier evidence. An unselected drain skips failed
+requests. Re-file when the question or its inputs need correcting. Cancellation leaves unfinished requests pending. `--decides` is the lead's recorded criterion, not an inferred automatic pass. `list` includes pending, failed and answered requests, their criteria and report paths. A second concurrent runner refuses rather than scheduling another window. All requests, frozen builds, transcripts and reports stay uncommitted.
 
 ## `puck bench`—the Puck.Maths microscope
 
@@ -3224,8 +3235,11 @@ waits for renderer readiness, then runs `--ticks` simulation ticks (default 120,
 this measures host iterations during boot, not process startup latency.
 With `--plan`, the existing sweep plan reader selects its tour and `--stop`
 names (all stops by default). Prelude, reset, framing, steps and after-lines
-are honored. Capture lockstep is disabled. Each stop settles bakes, readiness
-and GPU residency, runs its authored frame/step timeline and settle interval,
+are honored. Capture lockstep is disabled. Before the prelude and first stop,
+the boot gets a separate 60-second renderer-ready wait and 180-second cold-bake
+wait, within the process budget. Each stop runs its authored frame/step timeline
+and settle interval, pauses authority, settles bakes and readiness,
+then settles the resulting view's GPU residency,
 then resets frame history for its ordinary display-paced measurement window.
 There are no still captures or lighting convergence waits in that window.
 
@@ -4551,21 +4565,36 @@ that takes the same lease waits on a sibling, never on itself.
 and before the command runs, the one `gate`, `affected` and the MCP server's World start wait on
 ([`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s thresholds): free memory
 over the capacity threshold, a commit charge under its share of the commit limit, commit headroom that covers the start's expected peak
-(a windowed World 18 GB, a headless World 6 GB, a heavy suite 10 GB, a test-batch replica 9 GB, an ordinary step 2 GB, plus what
-admitted starts still running have left to grow), free disk
+(the machine's observed peak for that kind, plus what admitted starts still running have left to grow), free disk
 over the pressure threshold, and, for `gpu`, an idle GPU (for `heavy`, no other process running a
 heavy test suite). The wait is bounded by what `--wait` has left, so `--wait 0` refuses at once
 (exit 2, lease released) when the machine has no headroom; wait lines go to standard error
 (`gate: waiting for host capacity before lease heavy <holder> (at most N minutes): no memory
 headroom: commit headroom 16.0GB (admission needs at least 18.0GB (18.0GB expected peak of a windowed World plus 0.0GB still to grow in 0 admitted start(s))).`) and a heartbeat repeats them
-while it lasts. `lease build` and `lease quiet` take no admission of their own: a World build
+while it lasts. The final refusal names the last blocker even before a heartbeat
+is due; growth shortfalls also name the live starts by kind and PID. `lease build` and `lease quiet` take no admission of their own: a World build
 holds its own limits, and a quiet window settles on the same readings.
 
-Every `Puck.World` process the CLI starts goes through one launch, `WorldLaunch` (`Puck.Cli.Harness`): `puck test` for each worker process (so each replica of `--reproduce` and each `--workers` leg is admitted on its own reading, with the heavy-suite wait when it holds the heavy lease), `canary`, `sweep` (its budget stands still while it waits), `motion`, `counters`, `parity`, `qualify`, `docs citations`, `verbs`, `bench startup` and the MCP adapter's `puck_world_start`. It resolves the build (with Vulkan SPIR-V when a World that opens a device boots on Vulkan or on a backend its document picks), parses `--backend` through the World's own spelling (`WorldBackendTokens`), builds the shared arguments (`--devices none`, the backend, state directory and exit backstop), and admits the start. A headless World takes no GPU lease and passes the host admission installed once by the root. A World that opens a device (windowed, or offscreen through its document) first waits for that admission's headroom without reserving it, then takes the `gpu` lease (nested under an ancestor that holds it and shared by the process's other device Worlds of the same holder and lane, so two GPU verbs queue on the lease instead of polling for an idle GPU), then is judged and reserved again with the lease held, since the lease is what keeps two device starts from reading the same headroom; a leased judgement that does not pass within `WorldLaunch.LeasedAdmissionBound` gives the lease back and waits for headroom again, so the GPU never idles under a lease waiting for memory. A device World's admission also waits for an idle GPU apart from the waiting process's own Worlds. The admission reserves the growth to its expected peak only for a World that has not reported ready: the launch reads the World's output and marks it ready (`WorldReadiness`, a mark beside the leases) once a headless World answers on its console or publishes its attachment, or a device World's renderer is ready or its bakes settle, and from then on its actual usage is what counts. Each start names its kind (a windowed World, a headless World, or a `--test-batch` replica), which sets the commit the admission expects it to reach. The wait is the same bounded, heartbeat-printing one, and a start the bound refuses fails with `HostAdmissionRefusedException`, which a verb reports as it reports any process that would not start. Every World joins a job the operating system ends with the CLI on Windows, so a killed verb leaves no World running. The in-process World boots of `bench` and `determinism` pass the admission through `WorldAdmission.WaitInProcess`.
+Every `Puck.World` process the CLI starts goes through one launch, `WorldLaunch` (`Puck.Cli.Harness`): `puck test` for each worker process (so each replica of `--reproduce` and each `--workers` leg is admitted on its own reading, with the heavy-suite wait when it holds the heavy lease), `canary`, `sweep` (its budget stands still while it waits), `motion`, `counters`, `parity`, `qualify`, `docs citations`, `verbs`, `bench startup` and the MCP adapter's `puck_world_start`. It resolves the build (with Vulkan SPIR-V when a World that opens a device boots on Vulkan or on a backend its document picks), parses `--backend` through the World's own spelling (`WorldBackendTokens`), builds the shared arguments (`--devices none`, the backend, state directory and exit backstop), and admits the start. A headless World takes no GPU lease and passes the host admission installed once by the root. A World that opens a device (windowed, or offscreen through its document) first waits for that admission's headroom without reserving it, then takes the `gpu` lease (nested under an ancestor that holds it and shared by the process's other device Worlds of the same holder and lane, so two GPU verbs queue on the lease instead of polling for an idle GPU), then is judged and reserved again with the lease held, since the lease is what keeps two device starts from reading the same headroom; a leased judgement that does not pass within `WorldLaunch.LeasedAdmissionBound` gives the lease back and waits for headroom again, so the GPU never idles under a lease waiting for memory. A device World's admission also waits for an idle GPU apart from the waiting process's own Worlds. The admission reserves growth only while a process is still growing: it tapers
+the unused reserve over one minute without a material allocation (64 MB),
+releasing it entirely at the plateau and restoring it if growth resumes. A World
+that reports ready also releases its reserve: the launch reads the World's output and marks it ready (`WorldReadiness`, a mark beside the leases) once a headless World answers on its console or publishes its attachment, or a device World's renderer is ready or its bakes settle, and from then on its actual usage is what counts. Each start names its kind (a windowed World, a headless World, or a `--test-batch` replica).
+`HostStartTracker` learns the maximum private bytes observed in plateaued or
+finished processes observed for a full plateau window of each kind, then raises known measurements when live usage
+exceeds them. These measurements replace the fallback in either direction,
+without clipping real peaks, and persist per machine in the shared lease root
+under `host-peaks/<HostStartKind>`. An exclusive sibling guard merges concurrent
+measurements. Before the first measurement, `HostLoadThresholds.DefaultPeakGb`
+provides the fallback. The ordinary host samplers feed this same tracker,
+including during a benchmark; no separate admission or sampling service runs.
+Pre-process reservations remain local and expire when a matching process appears
+or after `HostStartTracker.ReservationHold`. The wait is the same bounded, heartbeat-printing one, and a start the bound refuses fails with `HostAdmissionRefusedException`, which a verb reports as it reports any process that would not start. Every World joins a job the operating system ends with the CLI on Windows, so a killed verb leaves no World running. The in-process World boots of `bench` and `determinism` pass the admission through `WorldAdmission.WaitInProcess`.
 
 ### `puck lease list`—who holds what and who waits
 
-Run `puck lease list` to read the shared lease directory without changing it. For each of `build`, `gpu` and `heavy` it prints one line, `idle` or `held by <holder> (lane <lane>) for <time> from <checkout>` (with `, stale: no process holds its lock` for a holder file whose guard no process holds, read from the guard itself with a momentary shared hold; the next acquisition replaces it), followed by the queued count. Under it, one line per live waiter in admission order, the order the lease will be granted in: its holder, lane, checkout, how long it has waited, its lane's turn among the queued lanes, and how many admissions come before it. The verb takes no ticket, deletes no dead ticket, and writes no rotation serial, so it can run at any time beside any lease (it reads through `CliLease.Inspect`, the reader `puck lanes` uses). A lease a holder's descendants hold as a child of it (`<name>.child`) is not shown. The lead reads it for lease pressure ([orchestration](../../.claude/skills/orchestration/SKILL.md#schedule-machines)).
+Run `puck lease list` to inspect the shared lease directory. It prunes unlocked
+quiet-holder metadata under the exclusive quiet guard; a live guard is never
+removed, and the persistent guard file stays in place. For each of `build`, `gpu` and `heavy` it prints one line, `idle` or `held by <holder> (lane <lane>) for <time> from <checkout>` (with `, stale: no process holds its lock` for a holder file whose guard no process holds, read from the guard itself with a momentary shared hold; the next acquisition replaces it), followed by the queued count. Under it, one line per live waiter in admission order, the order the lease will be granted in: its holder, lane, checkout, how long it has waited, its lane's turn among the queued lanes, and how many admissions come before it. The verb takes no ticket, deletes no dead ticket, and writes no rotation serial, so it can run at any time beside any lease (it reads through `CliLease.Inspect`, the reader `puck lanes` uses). A lease a holder's descendants hold as a child of it (`<name>.child`) is not shown. The lead reads it for lease pressure ([orchestration](../../.claude/skills/orchestration/SKILL.md#schedule-machines)).
 
 ```text
 build: idle
@@ -4584,7 +4613,10 @@ heavy: idle
 
 Run `puck lease quiet --holder <lane> [--lane <lane>] [--wait <seconds>] [--settle <seconds>] -- <executable> <arguments...>` to reserve a priority measurement window. Once a quiet ticket is queued, **no root grant is issued**: only the reservation's own drains and acquisitions nested under a live holder (any holder, the quiet owner included) are granted, so a holder's own descendants still finish. `CliLease.TryAcquire` is the single grant door; its short `admission.guard` lock also serializes ticket registration, closing the check/grant race. Current holders finish without being stopped; later root grants wait and say they are waiting for the measurement window. Ordinary work keeps its lane rotation.
 
-The reservation drains and holds `heavy`, `build` and `gpu`, then samples the same readings [`puck host load`](#puck-host-loadadmission-lines-for-the-machine) prints until the machine stays idle for `--settle` seconds (default 30; zero explicitly skips settling). Idle means no GPU work, no other heavy test run and host capacity. `--wait` bounds acquisition in total, including a current holder that does not finish; the settling bound is `--wait` plus `--settle`. A refusal releases the reservation and all partial holdings. The command's descendants can take serialized nested leases for sweeps, Worlds and builds. Every exit releases resources in reverse before releasing the reservation. Child failure preserves its exit code; cancellation kills the child tree and exits 130. Processes outside the lease protocol remain visible to the idle sampler; quiet never suspends or kills them.
+The reservation drains and holds `heavy`, `build` and `gpu`, then samples the same readings [`puck host load`](#puck-host-loadadmission-lines-for-the-machine) prints until the machine stays idle for `--settle` seconds (default 30; zero explicitly skips settling). Idle means no GPU work, no other heavy test run and host capacity. `--wait` bounds acquisition in total, including a current holder that does not finish; the settling bound is `--wait` plus `--settle`, starting after the sampler
+collects its initial CPU window. Thus `--wait` bounds only the extra wait for
+load to clear; the required idle settle always gets its full time, including
+with the defaults `--wait 0 --settle 30`. A refusal releases the reservation and all partial holdings. The command's descendants can take serialized nested leases for sweeps, Worlds and builds. Every exit releases resources in reverse before releasing the reservation. Child failure preserves its exit code; cancellation kills the child tree and exits 130. Processes outside the lease protocol remain visible to the idle sampler; quiet never suspends or kills them.
 
 The exclusive guard handle proves ownership; holder metadata is diagnostic. Once the admitted waiter owns the guard, it replaces leftover metadata, including missing or malformed data and an alive adapter PID left when a Windows reader delayed cleanup after a World exited. Disposal always releases the guard even when directory deletion is delayed. Metadata readers permit deletion, and an unreadable queue ticket counts as occupied until it can be read or disappears. A live guard never expires. Never unlink its file or remove an active holder manually. The sandbox must allow writes to the shared lease directory; a refusal to write is an infrastructure error, never permission to run without the lease.
 

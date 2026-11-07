@@ -62,7 +62,7 @@ public static class HostAdmission {
         var shortfalls = Shortfalls(reading: reading, thresholds: thresholds, demand: demand);
 
         return (
-            $"no memory headroom: {string.Join(separator: "; ", values: shortfalls.Select(selector: static shortfall => $"{shortfall.Reading} (admission needs {shortfall.Need})"))}",
+            $"no memory headroom: {string.Join(separator: "; ", values: shortfalls.Select(selector: static shortfall => $"{shortfall.Reading} (admission needs {shortfall.Need})"))}{(demand.GrowthGb > 0 ? "; running starts: " + string.Join(", ", (reading.Starts ?? []).Select(start => $"{start.Kind} PID {start.Id} private={start.PrivateGb:0.0}GB ready={start.Ready}")) : string.Empty)}",
             $"memory headroom: {string.Join(separator: ", ", values: shortfalls.Select(selector: static shortfall => shortfall.Reading))}"
         );
     }
@@ -113,6 +113,7 @@ public static class HostAdmission {
             var demand = starts.Judge(clock: clock, kind: peak, reading: reading, reserve: (reserve && !held), thresholds: thresholds);
 
             if (!held && demand.Covered) {
+                if (peak != HostStartKind.Step && double.IsFinite(demand.HeadroomGb)) { error.WriteLine(string.Create(CultureInfo.InvariantCulture, $"gate: admitted {step}: commit headroom {demand.HeadroomGb:0.0}GB covers {demand.NeedGb:0.0}GB ({demand.OwnGb:0.0}GB expected peak plus {demand.GrowthGb:0.0}GB growth in {demand.Growing} start(s)).")); }
                 if (reason is not null) { error.WriteLine(value: $"gate: capacity returned for {step}."); }
                 if (reading.CpuPercent >= (thresholds.CapacityCpuPercent ?? 100)) {
                     error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"gate: {step} runs under cpu={reading.CpuPercent:0}% (over {thresholds.CapacityCpuPercent}%; CPU load is advisory and only slows the step)."));
@@ -138,7 +139,11 @@ public static class HostAdmission {
             }
             var remaining = (limit - waited);
 
-            if (remaining <= TimeSpan.Zero) { return false; }
+            if (remaining <= TimeSpan.Zero) {
+                error.WriteLine($"gate: refused {step} after {Span(waited)}: {now}.");
+                error.Flush();
+                return false;
+            }
             delay(((remaining < Interval) ? remaining : Interval));
         }
     }
