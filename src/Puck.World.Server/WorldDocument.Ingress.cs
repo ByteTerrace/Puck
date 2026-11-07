@@ -31,7 +31,7 @@ public sealed partial class WorldDocument {
             binding: binding,
             code: ActivationMismatchCode,
             detail: reason,
-            version: current
+            version: Host.RecipientVersion(binding.Actor)
         ));
     }
 }

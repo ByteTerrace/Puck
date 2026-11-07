@@ -416,6 +416,43 @@ plan drops the physical form rather than building that translation.
 
 ### 5. A delta is a difference of views, owned by the stream
 
+Step 1 implementation invariant: `WorldDeliveryCursor` alone owns the hashes
+and sequence of a stream's delivered images. `WorldRecipientView` reads live
+sources at its fixed ceiling; neither a read nor the world-owned
+`WorldDisclosureImages` table changes a cursor. Images copy vector bytes before
+hashing. Committed value and clock writes carry interned key bits; membership,
+order and audience changes conservatively invalidate a whole row. The shared
+table indexes `readersFrom` and containing-zone dependencies at installation
+and after structural changes. Resource measurements are visible only in the
+operator's `world.budget` answer.
+
+Implementation choices for step 1:
+
+- Audience classes are the current policy-admission bit vector plus the tier;
+  policy dependencies include containing ordered zones and their `readersFrom`
+  rows. Structural and audience writes rebuild that index. The world owns it;
+  a cursor holds only hashes, sequence and any pending observation headers.
+- Replica definitions carry readable cells. Their immediate snapshot primers
+  carry a row's hidden count and anonymous backs in `FieldCellDelta.Observation`;
+  those headers are pending even when no cell changed on the resumed tick.
+  Later count, order and deletion changes compare the complete image.
+- Typed receipts use the actor's sole attached delivery cursor. With no stream,
+  or several streams at different ceilings and no stream identity on the
+  submission, the sequence is zero. They never borrow an authority counter or
+  choose a higher-fidelity stream. The activation identity remains the world's.
+- A traveller compares against the projection its sink last delivered, with
+  the feed's held clock anchors and sequence. The raw definition reference is
+  only an invalidation hint for when to compare content. Route, live principal,
+  admission tier and Observe grant checks still apply on every delivery.
+- Presentation feeds retain shared typed observation rows, removing state from
+  their retained JSON diff tree. A read may warm the shared image cache but
+  changes neither a cursor nor a feed. The earlier composer overloads remain
+  for existing callers until the read and retirement steps migrate them.
+- The shared table's work/byte counters are visible only in the operator's
+  budget; a recipient receives a fixed message in their place. Snapshot cadence
+  alone does not advance a document sequence; delivered document, state-image
+  and anchor changes do.
+
 **Puck builds:** two objects where the first draft had one. The view
 ([decision 1](#1-one-capability-the-recipients-view)) composes; a
 `WorldDeliveryCursor`, owned by each delivery stream (a session sink, a

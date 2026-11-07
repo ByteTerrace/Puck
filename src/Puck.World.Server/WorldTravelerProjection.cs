@@ -35,6 +35,12 @@ internal static class WorldTravelerProjection {
                 server: server
             )) { return null; }
             var definition = server.Definition;
+            var checkedDefinition = definition;
+            bool SameProjection() {
+                if (ReferenceEquals(checkedDefinition, server.Definition)) { return true; }
+                checkedDefinition = server.Definition;
+                return sink?.HoldsProjection != false;
+            }
             var subject = GrantSubject.Body(index: principal.Index);
 
             if (!server.Grants.Allows(
@@ -44,10 +50,9 @@ internal static class WorldTravelerProjection {
             ).IsAllowed) {
                 return "the traveler holds no Observe grant for its body";
             }
-            bool Current() => (ReferenceEquals(
-                objA: server.Definition,
-                objB: definition
-            ) &&
+            bool Current() => (SameProjection() &&
+                WorldAdmissionDoor.TryAdmitArrival(server.Definition.Admission, request.SourceAuthority, out var liveAdmission) is null &&
+                liveAdmission!.Tier >= request.Ceiling &&
                 server.TryTransferredPrincipal(
                 request.SourceAuthority,
                 request.Mobility,
@@ -72,7 +77,6 @@ internal static class WorldTravelerProjection {
                 disclosure: () => disclosure,
                 isCurrent: Current,
                 recipient: principal,
-                revision: () => server.Population.Revision,
                 server: server,
                 tier: request.Ceiling
             );

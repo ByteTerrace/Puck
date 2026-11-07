@@ -35,7 +35,8 @@ public sealed partial class StateArena {
     }
 
     // Moves one row's version: the only increment of m_rowVersions outside a wholesale reset.
-    private void BumpRowVersion(int rowOrdinal) {
+    private void BumpRowVersion(int rowOrdinal, bool changesRecorded = false) {
+        if (!changesRecorded) { MarkDisclosureRow(rowOrdinal); }
         m_rowVersions[rowOrdinal]++;
         if (!m_moveFeedOpen) {
             return;
@@ -50,6 +51,8 @@ public sealed partial class StateArena {
     }
     // Every version moved or restarted at once (adoption, a rebuilt store): the reader must take every row as moved.
     private void MarkEveryRowMoved() {
+        ChangedKeys.Clear();
+        for (var row = 0; row < m_layout.RowCount; row++) { MarkDisclosureRow(row); }
         m_moveFeedAll = true;
         ClearMoveFeed();
     }

@@ -1,9 +1,42 @@
 using Puck.World.Protocol;
+using Puck.Commands;
 using Xunit;
 
 namespace Puck.World.Server.Tests;
 
 public sealed class WorldProjectionBackpressureLawTests {
+    [Theory]
+    [InlineData(WorldDisclosureTier.Replica)]
+    [InlineData(WorldDisclosureTier.Presentation)]
+    public async Task AHiddenInstallDoesNotChangeThePeersWire(WorldDisclosureTier tier) {
+        async Task<byte[]> Received(bool install) {
+            var row = new WorldStateRow(CellName.Parse("hand"), CellKind.Int,
+                Visibility: new StateVisibility(Hidden: HiddenCells.Omit), Cells: [
+                    new StateCell(CellName.Parse("pub"), CellValue.Int(3)),
+                    new StateCell(CellName.Parse("secret"), CellValue.Int(7), Visibility: new StateVisibility(Readers: ["seat1"]))]);
+            using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument() with { StateRaw = new WorldStateSection(World: [row]) });
+            var current = true;
+            var sink = new WorldFederationProjectionSink(tier, fixture.Server.AuthorityIdentity,
+                () => new WorldSinkDisclosure(new WorldObserverDisclosure(UpdateSeconds: 0f), -1),
+                server: fixture.Server, recipient: Principal.Peer(4, 1), isCurrent: () => current);
+            using var attached = fixture.Server.AttachSink(sink);
+            fixture.Step();
+            if (install) {
+                fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateRow(Principal.Console, row with {
+                    Cells = [row.Cells![0], row.Cells[1] with { Value = CellValue.Int(19) }]
+                }));
+            }
+            fixture.Step();
+            fixture.Step();
+            Assert.Null(sink.DetachReason);
+            current = false;
+            sink.DeliverDefinition(fixture.Server.Definition, fixture.Server.DocumentVersion);
+            using var wire = new ProjectionWire();
+            await sink.StreamAsync(wire, TestContext.Current.CancellationToken);
+            return wire.ToArray();
+        }
+        Assert.Equal(await Received(false), await Received(true));
+    }
     [Fact]
     public void AChangedAuthorityRouteDetachesWithoutWaitingForTheWire() {
         var current = true;
@@ -11,7 +44,6 @@ public sealed class WorldProjectionBackpressureLawTests {
             authority: "authority/one",
             disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)),
             isCurrent: () => current,
-            revision: static () => 1,
             tier: WorldDisclosureTier.Replica
         );
         var hub = new WorldOutputHub();
@@ -33,7 +65,6 @@ public sealed class WorldProjectionBackpressureLawTests {
         var sink = new WorldFederationProjectionSink(
             authority: "authority/one",
             disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)),
-            revision: static () => 1,
             tier: WorldDisclosureTier.Replica
         );
         var hub = new WorldOutputHub();
@@ -102,7 +133,6 @@ public sealed class WorldProjectionBackpressureLawTests {
         var sink = new WorldFederationProjectionSink(
             authority: "authority/one",
             disclosure: () => disclosure,
-            revision: () => 1,
             tier: WorldDisclosureTier.Replica
         );
         var hub = new WorldOutputHub();
@@ -169,7 +199,7 @@ public sealed class WorldProjectionBackpressureLawTests {
                 snapshot: out var decoded
             ), userMessage: failure.ToString());
             Assert.Equal(expected: tick, actual: decoded.Tick);
-            Assert.Equal(expected: ((int)tick), actual: decoded.Revision);
+            Assert.Equal(expected: 0, actual: decoded.Revision);
             Assert.Equal(expected: "authority/one", actual: decoded.Authority);
         }
 

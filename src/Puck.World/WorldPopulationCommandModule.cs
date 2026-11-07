@@ -131,7 +131,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         ),
         comparisonType: StringComparison.Ordinal
     );
-    private string DescribeBudget() {
+    private string DescribeBudget(bool operatorView) {
         var (visibilityBytes, meshAttachmentBytes, glassBytes) = WorldViewBytes();
         var render = ((renderProbe?.Residency is { } node)
             ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), {node.LiveProgramMaterials} material(s), {node.LiveDynamicTransforms} dynamic slot(s), {(renderProbe.ProgramBuildsSource?.Invoke() ?? 0)} program build(s), globalStepScale {node.LiveProgramStepScale.ToString(
@@ -268,6 +268,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             gravity,
             placements,
             $"state {(server.Definition.State?.Count ?? 0)} row(s)",
+            operatorView ? server.DescribeDisclosureBudget() : "disclosure work: operator only",
             rules,
             curves,
             navigation,
@@ -507,12 +508,12 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             bindability: CommandBindability.Unbindable,
             name: "world.budget",
             description: "Prints the immediate compose-time cost sheet, one line per section (and per field region, live instance and infinity root, so the answer narrows by line): rendering (the live program's words, instances, step scale, the indirect volume's probes per level, bytes a probe, budget and lighting age, volumes, scoped clamps and segments), the creation-stamp pool's per-stamp shape ceiling and worst-case instance draw, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, local flock perception work, and every views.graphs instance with its extent ceiling, rate and planned passes against the scheduler's pass-pixel budget, the live infinity plans with each root's count against its cap and named fallbacks, then the live budget: every instance the render graph runtime scheduled in its latest frame, with what it decided, its extent, frame divisor, passes and pass-pixels, and the passes, dispatches and draws its newest completed submission counted (counts, never timing). Rendering and the live budget read 'not built yet' under a headless host; authoritative costs remain available.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(
+            handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.budget"
             ) is { } refusal)
             ? refusal
-            : new CommandResult(Output: DescribeBudget())),
+            : new CommandResult(Output: DescribeBudget(context.Principal.Kind == PrincipalKind.Console))),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(

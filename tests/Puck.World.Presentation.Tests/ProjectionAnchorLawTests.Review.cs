@@ -149,7 +149,6 @@ public sealed partial class ProjectionAnchorLawTests {
         var sink = new WorldFederationProjectionSink(
             authority: "boot",
             disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)),
-            revision: static () => 1,
             server: fixture.Server,
             tier: WorldDisclosureTier.Presentation
         );
@@ -183,7 +182,6 @@ public sealed partial class ProjectionAnchorLawTests {
         var sink = new WorldFederationProjectionSink(
             authority: "boot",
             disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)),
-            revision: static () => 1,
             server: fixture.Server,
             tier: WorldDisclosureTier.Presentation
         );
@@ -525,7 +523,6 @@ public sealed partial class ProjectionAnchorLawTests {
         var sink = new WorldFederationProjectionSink(
             authority: "boot",
             disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 1f)),
-            revision: static () => 1,
             server: server,
             tier: WorldDisclosureTier.Presentation
         );
