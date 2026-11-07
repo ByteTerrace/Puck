@@ -189,24 +189,15 @@ public sealed partial class WorldBody {
         ) {
             var volumes = ScaledColliderVolumes();
 
-            resolution = ((field is IEntityContactField entityField)
-                ? entityField.ResolveEntitySweep(
-                    entityIndex: entityIndex,
-                    previousPosition: trajectory.PreviousPosition,
-                    position: ref next,
-                    up: in m_up,
-                    velocity: ref velocity,
-                    orientation: in m_orientation,
-                    volumes: volumes
-                )
-                : field.ResolveSweep(
-                    previousPosition: trajectory.PreviousPosition,
-                    position: ref next,
-                    up: in m_up,
-                    velocity: ref velocity,
-                    orientation: in m_orientation,
-                    volumes: volumes
-                )
+            resolution = SweepContact(
+                entityIndex: entityIndex,
+                field: field,
+                previousPosition: trajectory.PreviousPosition,
+                position: ref next,
+                up: in m_up,
+                velocity: ref velocity,
+                orientation: in m_orientation,
+                volumes: volumes
             );
         }
 

@@ -45,35 +45,14 @@ public static class WorldAdjacencyOwnership {
         var population = server.Population;
         var candidates = new List<WorldAdjacencyFaceHit>?[population.Capacity];
 
-        if (server.Definition.Adjacencies is not { Count: > 0 } adjacencies) {
+        if (server.Definition.Adjacencies is not { Count: > 0 }) {
             return candidates;
         }
 
-        _ = WorldAdjacencyPolicy.TryReciprocalHysteresis(
-            definition: server.Definition,
-            depth: out var reciprocalHysteresis,
-            reason: out _
-        );
-        _ = WorldAdjacencyPolicy.TryVerticalOwnershipDeadband(
-            definition: server.Definition,
-            depth: out var verticalOwnershipDeadband,
-            reason: out _
-        );
-
-        foreach (var adjacency in adjacencies) {
-            if (adjacency is null) {
-                continue;
-            }
-
-            var frame = adjacency.Boundary.CompileFrame();
-            var ownershipThreshold = FixedQ4816.Max(
-                x: FixedQ4816.FromDouble(value: adjacency.Hysteresis),
-                y: WorldAdjacencyPolicy.OwnershipThreshold(
-                    frame: in frame,
-                    reciprocalHysteresis: reciprocalHysteresis,
-                    verticalOwnershipDeadband: verticalOwnershipDeadband
-                )
-            );
+        foreach (var face in WorldAdjacencyPolicy.OwnershipFaces(definition: server.Definition)) {
+            var adjacency = face.Adjacency;
+            var frame = face.Frame;
+            var ownershipThreshold = face.Threshold;
 
             for (var seat = 0; (seat < population.Capacity); seat++) {
                 if (!TryTraveller(

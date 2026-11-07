@@ -552,15 +552,15 @@ round would otherwise leave it unowned.
 authorities, what each can lie about, and what invariant 1 (only a body's
 authority writes it) implies. It matters because the owner names direct
 player-to-player interaction as raw PvP, and the one cross-authority decision
-in the code is a pair hash for physical contact **[opened]**
-(`src/Puck.World.Server/WorldAdjacencyContactField.cs:106-110`):
+in the code is an authority-pair hash for physical contact **[opened]**
+(`WorldAdjacencyContactField.ResolveCore`):
 
 ```csharp
-                    !WorldCrossAuthoritySettlement.LocalResponds(
-                    local: in localAddress,
-                    remote: neighbour.EntityAddress(index: entity),
-                    interaction: "physical-contact"
-                )
+            var responds = (localIsSolid && WorldCrossAuthoritySettlement.LocalResponds(
+                interaction: "physical-contact",
+                localAuthority: localAddress.Authority,
+                remoteAuthority: neighbour.Authority
+            ));
 ```
 
 over poses the neighbour delivered as presentation floats, which the code names
@@ -572,8 +572,9 @@ as outside replay determinism **[opened]** (`src/Puck.World.Server/WorldAdjacenc
 /// replay-deterministic across network schedules.
 ```
 
-Lane E found the missing per-tick cap. The seam-clamp fix now enforces a
-local collider-reach budget through `WorldPopulation.BoundAdjacencyCorrection`
+Lane E found the missing per-tick cap. The seam clamp now enforces a local
+collider-reach budget and ownership-face containment over neighbour bodies and
+geometry through `WorldPopulation.AdmitAdjacencyResponse`
 ([puck-today, premise verdicts](puck-today.md#premise-verdicts)); tick-addressed
 neighbour records remain the [replay packet](../open-items.md#transfers-federation-and-server).
 
@@ -850,10 +851,10 @@ unblocks. Steps marked "new" are not in any plan today.
    `WorldDeliveryCursor`. Unblocks I1, the trusted-dealer check and any claim
    that a silo keeps hidden state from a visitor
    ([disclosure, build order](../disclosure.md#the-build-order)).
-2. **C3's taped neighbour records** (a defect fix; the dynamic correction cap
-   is implemented). Build the [neighbour replay packet](../open-items.md#transfers-federation-and-server).
-   The cap bounds A10's displacement but does not prove reported bodies exist
-   or prevent repeated bounded shoves; tapes close the named replay boundary.
+2. **C3's taped neighbour records** (a defect fix; the correction cap and
+   ownership-face containment are implemented). Build the [neighbour replay packet](../open-items.md#transfers-federation-and-server).
+   The cap bounds A10's displacement and keeps shoves behind the ownership face
+   but does not prove reported bodies exist; tapes close the named replay boundary.
    Independent of everything else.
 3. **H1 and H2** unchanged: the standard's identity template and one account
    per process ([hub-and-saves, build order](../hub-and-saves.md#build-order)).

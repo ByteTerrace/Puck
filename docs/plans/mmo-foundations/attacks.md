@@ -87,9 +87,9 @@ content.
 simulation rule. The page does not say what happens when two bodies under two
 authorities act on each other, which is the raw-PvP question. The code's one
 answer is `WorldCrossAuthoritySettlement.LocalResponds`, a deterministic
-pair-hash that picks which authority answers one named interaction, and it has
+authority-pair hash that picks which authority answers one named interaction, and it has
 exactly one caller, for `"physical-contact"`
-(`src/Puck.World.Server/WorldCrossAuthoritySettlement.cs:51-80`,
+(`WorldCrossAuthoritySettlement.LocalResponds`,
 `src/Puck.World.Server/WorldAdjacencyContactField.cs:106-110`) **[checked]**.
 Interactions (`WorldInteraction`) are property co-occurrence rows one authority
 evaluates over its own bodies (`src/Puck.World.Schema/WorldInteractions.cs:57-66`)
@@ -345,8 +345,9 @@ about, and what invariant 1 implies.
   the fight (A3). Co-location onto a participant is the worst case of every
   attack above at once.
 - **Who decides a hit under a seam settlement like `LocalResponds`:** each
-  pair's responder is chosen by hash, so each side adjudicates about half the
-  contacts, over positions and colliders the other side reported off the mirror
+  authority pair's responder is chosen by hash, so one side adjudicates every
+  contact between two authorities, over positions and colliders the other side
+  reported off the mirror
   (`src/Puck.World.Server/WorldAdjacencyFields.cs:486-498`) **[checked]**.
   Each side can therefore lie about its own body (position, collider, contact
   mode) in every pair, and about the outcome in the pairs it answers. A hit so
@@ -444,17 +445,21 @@ about, and what invariant 1 implies.
 
 - **Attacker:** an adjacency neighbour (a player host whose world borders
   yours); it controls the snapshots its mirror delivers.
-- **Steps:** report phantom solid bodies at the boundary. For each neighbour
-  entity that is active, solid and whose pair `LocalResponds` picks the local
-  side, the local body is corrected out of the phantom
-  (`src/Puck.World.Server/WorldAdjacencyContactField.cs:100-144`) **[checked]**.
+- **Steps:** report phantom solid bodies, or place solid geometry, at the
+  boundary. When `LocalResponds` picks the local authority for the pair, the
+  local body is corrected out of each phantom; the neighbour's solid field is
+  consulted in the band either way (`WorldAdjacencyContactField`) **[checked]**.
   Report them moving into the seam each tick.
-- **Gain:** repeated phantom contacts can still shove or pin visitors, and a
-  bounded shove can cross an ownership plane. The formerly unbounded
-  displacement is now limited by `WorldPopulation.BoundAdjacencyCorrection`:
-  all dynamic corrections for one body share its local collider reach per
-  tick, with each request also limited by the overlap depth minus spent budget.
-  `WorldAdjacencyCorrectionLawTests` witnesses the cap and its counter.
+- **Gain:** repeated phantom contacts can still shove a visitor within the seam
+  strip. `WorldPopulation.AdmitAdjacencyResponse` bounds the bodies' and the
+  geometry's combined displacement per body per tick by its local collider
+  reach and the overlap depth, and keeps it and the body's outward speed behind
+  every ownership face the body is still owned behind, so a shove cannot cross
+  an ownership plane. The responder is chosen by the authority pair alone, so
+  reissuing bodies under new generations cannot make the visitor always yield.
+  `WorldAdjacencyCorrectionLawTests` witnesses each. Open: a neighbour field's
+  sweep refusal can still pin a body, and the remote identity is a claim until
+  attested ([open items](../open-items.md#transfers-federation-and-server)).
 - **Today:** the overlap depth takes the larger of both sides' reaches and the
   sum of both speed ceilings (`src/Puck.World.Schema/WorldAdjacencies.cs:649-657`)
   **[checked]**, so a neighbour can widen the shared strip but never shrink
