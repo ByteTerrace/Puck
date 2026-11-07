@@ -1048,16 +1048,7 @@ ahead, changed files, last commit, newest write, log exit, GPU lease state and a
 monitor, and it prints only a lane finishing, stalling or resuming, a lease
 changing, or a lane appearing or leaving. Re-arm it only after the previous
 watcher has expired or been stopped (`TaskStop`), so one watcher runs at a time:
-re-arming a narrower filter beside a live one left two watchers running.
-
-The lead cannot list its own background tasks: a task reports only when it ends.
-So the lead keeps a ledger (`.claude/scratch/lead-tasks.md`): every background
-command, monitor and waiter it starts, with its ID, purpose and expected end, and
-reconciles it at each lane check, stopping what is finished, stale or duplicated.
-A resumed lane does the same with its own: before it starts its next step, it stops
-every background task its previous step left. Stray waits from several resumed steps
-once sat in the harness's task list while the lead's process and agent checks both
-looked clean. A findings-only lane's launch writes
+re-arming a narrower filter beside a live one left two watchers running. A findings-only lane's launch writes
 `<worktree>/.claude/scratch/<lane>.task` holding `mode: findings-only` and
 `report: <its findings path>` (a Codex log whose header names a read-only
 sandbox needs none), so `puck lanes` judges it by its log and report rather
