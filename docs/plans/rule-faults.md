@@ -571,14 +571,20 @@ on a working integration branch. The witness file is
 `worlds/debug/rule-faults-tests.puck`, run with
 `puck test worlds/debug/rule-faults-tests.puck --jobs 1`; its header states
 each block's expected verdict, and W8, W10, W11 and L1, the blocks for findings
-still open, are red until their steps.
+still open, are red until their steps. W13 and L1 are C# laws
+(`FlockLawTests.AFaultingAffinityIsACountedFailureThatWeighsNothing`,
+`LatchAndTriggerLawTests.ARewoundScopeRestoresTheEdgeCrossingAChildFiringConsumed`),
+since a test block cannot read the counters they need. A name check uses a
+word-boundary form, which `puck search` spells
+`(^|[^A-Za-z])(Name)([^A-Za-z]|$)` (it rejects `\b`).
 
 2. **Addresses are program.** Lowering of computed keys, live row indices,
    ring ages and token expressions; `IRuleOperand`'s `Addresses` and `Read(reader, keys)`;
    `world.match` reads through the detached `Word` fold; pricing corrected
    (the lowered tokens priced once, `HistoryOperand`/`PatternOperand` internal
    charges removed). The interpreter still has its `out` parameters and still
-   raises into the register. Check: W2, W3, W6 green; `puck search
+   raises into the register. Check: W2, W3 and W6 stay green (they already are,
+   so the step's own checks are the ones below); `puck search
    "ReadTupleWord|AgeExpression|EffectKeyFact.ResolveIndex" src` returns no
    line; a spelling-equivalence check that `let k = <expr>; cards[k]` and
    `cards[<expr>]` compile to equal tokens and equal `world.budget` units;
@@ -592,7 +598,9 @@ still open, are red until their steps.
    sources, decisions, groups, search score, arms, browser, constant folder).
    **Bridge:** `Evaluate` and `Decide` still raise a `Faulted` result into the
    register, so the deciding places that poll it keep working unchanged until
-   step 4 removes both. Check: W7, W8 green; `puck search "TryEvaluate\(|TryEvaluateAlone\(|GateHolds\(|TryReadSource\(" src`
+   step 4 removes both. Check: W8 turns green (W7 already is; the fold's nested
+   runs stop sharing the caller's `fault`, `RuleExpressions.cs` call and fold
+   branches); `puck search "TryEvaluate\(|TryEvaluateAlone\(|GateHolds\(|TryReadSource\(" src`
    returns no line; the kernels in the cost section within their stated
    bounds.
 4. **Verdicts at every deciding place; the register goes.** `RuleOutcome`'s `Faulted`
