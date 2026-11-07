@@ -22,6 +22,9 @@ Only what the owner rules after the round is written into
   authority.
 - Visible portals are the wrong default for shards and layers; hidden seams may
   fit them.
+- The line between client and server is blurred in Puck because of federation.
+  Direct player-to-player interaction, if implemented, is in effect raw PvP.
+- Fable takes a full pass to critique the design and find ways to attack it.
 - The design is done properly before anything is committed: a full session that
   reaches consensus, with the homework done.
 
@@ -82,6 +85,14 @@ hold at MMO scale.
 | C. World seams | Antigravity (search; pages copied in) | WoW sharding, layering and phasing, the GW2 megaserver, ESO, Star Citizen's server meshing, SpatialOS's failures, interest management. |
 | D. Economy and table integrity | Claude or Codex | Dupe history, escrow, provable fairness, hidden information, loot-box and gambling regulation. |
 | E. Puck as it is | Claude specialist, code only | Identity worlds, write-back, attestation, adjacency and crossing, federation, the custody protocol, disclosure, durable images: what exists, cited by symbol and `file:line`. |
+
+An attack pass (Fable) runs before the synthesis and again on it: it treats
+every world as possibly hostile, including a peer that is both client and server
+under federation and two player-hosted authorities interacting directly, and
+names each way the model can be broken (duplication, forged or replayed claims,
+custody races, a dishonest or vanishing authority, hidden state leaking to its
+host, interaction between bodies whose authorities disagree), with what currently
+stops each one, cited, or the gap.
 
 Each lane separates what it opened and quoted from search summaries and from its
 own inference. A synthesis memo (a principal) states each decision with options
