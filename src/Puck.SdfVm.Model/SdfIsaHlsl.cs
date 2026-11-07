@@ -155,6 +155,8 @@ public static class SdfIsaHlsl {
         declarations.Lane(lane: SdfProgram.InstructionBlendLane, name: "SDF_INSTRUCTION_BLEND");
         declarations.Lane(lane: SdfProgram.InstructionMaterialLane, name: "SDF_INSTRUCTION_MATERIAL");
         declarations.Count(name: "SDF_INSTRUCTION_DATA_VECTORS", value: SdfProgram.InstructionDataVectors);
+        // SdfProgram.BoundsVectorOf: the bound table follows the instruction data.
+        declarations.Expression(name: "SDF_PROGRAM_BOUNDS_OFFSET(v)", value: "(SDF_PROGRAM_DATA_OFFSET(v) + (SDF_INSTRUCTION_DATA_VECTORS * SDF_PROGRAM_INSTRUCTION_COUNT(v)))");
         declarations.Section(title: "The bound records and the directories: a record's vectors, a directory's header vectors, and its header's lane accessors.");
         declarations.Count(name: "SDF_BOUND_RECORD_VECTORS", value: SdfProgram.BoundRecordVectors);
         declarations.Count(name: "SDF_DIRECTORY_HEADER_VECTORS", value: SdfProgram.DirectoryHeaderVectors);

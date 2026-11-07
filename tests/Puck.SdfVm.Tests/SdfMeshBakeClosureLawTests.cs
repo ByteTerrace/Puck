@@ -80,12 +80,42 @@ public sealed class SdfMeshBakeClosureLawTests {
         // The program's constructor is the field derivation and stays in the closure; the appearance it is joined to
         // (SdfProgram.Of) and the palette values it packs never enter it, so an appearance edit keeps every stored mesh.
         Assert.Contains(collection: closure.Members.Keys, filter: member => member.StartsWith(value: $"{program.Assembly.GetName().Name}!{program.FullName}..ctor`", comparisonType: StringComparison.Ordinal));
-        foreach (var appearance in new[] { typeof(Puck.SignedDistance.SdfAppearance), typeof(Puck.SignedDistance.SdfMaterial) }) {
+        Type[] appearances = [
+            typeof(Puck.SignedDistance.SdfAppearance), typeof(Puck.SignedDistance.SdfMaterial), typeof(Puck.SignedDistance.SdfPaint),
+            typeof(Puck.SignedDistance.SdfToon), typeof(Puck.SignedDistance.SdfFlow), typeof(Puck.SignedDistance.SdfGlass),
+            typeof(Puck.SignedDistance.SdfInset), typeof(Puck.SignedDistance.SdfWeathering), typeof(Puck.SignedDistance.SdfMaterialLayers),
+            typeof(Puck.SignedDistance.SdfScreenSurface),
+        ];
+
+        foreach (var appearance in appearances) {
             var prefix = $"{appearance.Assembly.GetName().Name}!{appearance.FullName}";
 
             Assert.DoesNotContain(collection: closure.Members.Keys, filter: member => (member.StartsWith(value: (prefix + "."), comparisonType: StringComparison.Ordinal) || member.StartsWith(value: (prefix + " "), comparisonType: StringComparison.Ordinal)));
             Assert.False(condition: closure.Reads(type: appearance));
         }
+    }
+
+    [Fact]
+    public void TheOutlineCarriesOnlyFactsThatReachNoFieldWordOrAreHashed() {
+        // SdfAppearanceOutline is the one appearance input of the field constructor, and its values reach neither the code
+        // identity nor the kernels. Each member is safe for its own reason: the material count and declared screens only
+        // validate material lanes (and fill a header lane no field kernel reads), the vectors only size the stream's tail,
+        // and glass enters every glass group's geometry (SdfMeshGeometryBuilder.AppendGlass). A member added here must be
+        // one of those kinds, or hashed into the geometry, before this list grows.
+        var outline = typeof(Puck.SignedDistance.SdfAppearanceOutline);
+        const System.Reflection.BindingFlags Declared = (System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly);
+
+        Assert.Equal(
+            expected: ["DeclaresScreen", "IsGlass", "Materials", "Screens", "Vectors"],
+            actual: outline.GetMembers(bindingAttr: (System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.DeclaredOnly))
+                .Where(predicate: static member => member.MemberType is (System.Reflection.MemberTypes.Property or System.Reflection.MemberTypes.Method))
+                .Where(predicate: static member => !member.Name.StartsWith(value: "get_", comparisonType: StringComparison.Ordinal))
+                .Select(selector: static member => member.Name).Order(comparer: StringComparer.Ordinal).ToArray()
+        );
+        Assert.Equal(
+            expected: [typeof(bool[]), typeof(int), typeof(uint)],
+            actual: outline.GetFields(bindingAttr: Declared).Select(selector: static field => field.FieldType).OrderBy(keySelector: static type => type.Name, comparer: StringComparer.Ordinal).ToArray()
+        );
     }
 }
 

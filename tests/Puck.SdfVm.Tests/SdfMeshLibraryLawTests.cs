@@ -6,6 +6,26 @@ namespace Puck.SdfVm.Tests;
 
 public sealed class SdfMeshLibraryLawTests {
     [Fact]
+    public void TwoFactsWhosePayloadsShareTheirBytesKeyTwoGeometries() {
+        // A glass group and a clamped opaque group of the same shapes: before facts were tagged, the glass marker and a
+        // reach of the same bits appended the same four bytes, so the glass group could load the chunked opaque mesh.
+        SdfMeshGeometry Of(Action<SdfMeshGeometryBuilder> append) {
+            var geometry = new SdfMeshGeometryBuilder(dynamic: false);
+
+            append(geometry);
+            geometry.Seal();
+
+            return geometry.Geometry;
+        }
+
+        var glass = Of(append: static geometry => geometry.AppendGlass());
+        var reach = Of(append: static geometry => geometry.AppendReach(reach: BitConverter.UInt32BitsToSingle(value: 0x47_4C_41_53u)));
+
+        Assert.NotEqual(expected: glass, actual: reach);
+        Assert.NotEqual(expected: glass, actual: Of(append: static _ => { }));
+        Assert.Equal(expected: glass, actual: Of(append: static geometry => geometry.AppendGlass()));
+    }
+    [Fact]
     public void BakeGroupsKeepTheirOwnDetailWhileSharingOneMotionSlot() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(new SdfMaterial(Vector3.One));

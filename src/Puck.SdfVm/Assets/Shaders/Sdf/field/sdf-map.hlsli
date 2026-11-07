@@ -36,7 +36,7 @@ float3 sdfRigidFoldPoint(float3 p, uint extensionOffset, uint dataOffset) {
 }
 SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) {
     // Layout offsets/counts — decoded ONCE per invocation by sdfLoadProgramLayout (see the struct above), not
-    // re-derived here. The host-baked bounding-sphere tables sit right after the materials (2 uint4 per material):
+    // re-derived here. The host-baked bounding-sphere tables sit right after the instruction data (2 uint4 per data pair):
     // the per-shape table (2 uint4 per instruction), then the segment directory (a count vector, then 2 uint4 per
     // segment), then the instance directory, then the world-segment list. KEEP IN SYNC with SdfProgram.PackBounds /
     // PackInstances / PackWorldSegments.

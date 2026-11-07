@@ -10,7 +10,7 @@
 // slot's frame. A hit outside the shape's bound box, widened by the stroke and the pixel, costs one rotation. It reads
 // and writes the albedo alone (sdfMaterialPaints), so the caller loads the rest of the material after it: a material
 // live across the shape dispatch held the views pass at 168 registers on Direct3D 12. KEEP IN SYNC with
-// SdfProgram.PackPaint.
+// SdfAppearance.PackPaint.
 void sdfApplyPaints(float3 worldPoint, float3 layerPoint, float footprint, uint paintFirst, uint paintCount, inout float3 albedo) {
     uint count = min(paintCount, SDF_MAX_PAINTS_PER_MATERIAL);
     if ((count == 0u) || !sdfProgramRange(paintFirst, count, SDF_PAINT_VECTORS_PER_ENTRY)) return;

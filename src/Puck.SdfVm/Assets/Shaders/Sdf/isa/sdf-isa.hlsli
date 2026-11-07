@@ -126,6 +126,7 @@
 #define SDF_INSTRUCTION_BLEND(v)     ((v).z)
 #define SDF_INSTRUCTION_MATERIAL(v)  ((v).w)
 #define SDF_INSTRUCTION_DATA_VECTORS 2u
+#define SDF_PROGRAM_BOUNDS_OFFSET(v) (SDF_PROGRAM_DATA_OFFSET(v) + (SDF_INSTRUCTION_DATA_VECTORS * SDF_PROGRAM_INSTRUCTION_COUNT(v)))
 
 // The bound records and the directories: a record's vectors, a directory's header vectors, and its header's lane accessors.
 #define SDF_BOUND_RECORD_VECTORS         2u
