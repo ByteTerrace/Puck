@@ -220,9 +220,11 @@ must include what it may mint, not merely whether its key is authentic.
 
 ### What live-game interfaces promise
 
-**[opened]** EVE's [direct-trade documentation][eve-trade] says a trade finishes
+**[summary]** EVE's [direct-trade documentation][eve-trade] says a trade finishes
 "once both pilots have clicked \"Accept\"" and warns about scams and last-minute
-changes. **[inference]** The operator arbitrates the exchange. A confirmation
+changes. Citation check: relabelled from **[opened]** because the support page
+refused the check's fetch (HTTP 403) and a search found the quoted words nowhere
+else; player forum threads describe the last-minute-change scam. **[inference]** The operator arbitrates the exchange. A confirmation
 must refer to one immutable offer revision; editing the offer invalidates prior
 consent. The documentation does not reveal whether items are physically moved
 into an escrow row while the window is open or reserved in their original rows.
@@ -245,7 +247,11 @@ the recipient's inventory UI has collected it.
 **[opened]** EVE's [courier documentation][eve-courier] says items become a
 "Plastic Wrap" package and collateral is returned on delivery or paid to the
 issuer on failure. It documents lost packages, broken packages, destroyed
-destinations, and an offline delivery hangar. **[inference]** This is secured
+destinations, and an offline delivery hangar. Citation check: the support page
+refused the check's fetch (HTTP 403); a search excerpt of a blog quoting it confirms the "Plastic
+Wrap" packaging and that on failure "the creator of the courier contract will
+receive the collateral", while the failure-case list stays unconfirmed.
+**[inference]** This is secured
 performance, not an atomic swap of identical goods. The courier holds the
 package; the operator holds conditional collateral and the contract record.
 The issuer may receive compensation rather than recover the original goods.
@@ -284,11 +290,15 @@ requirements on it.
 
 ### Commit-reveal
 
-**[opened]** Stake's [published implementation][stake] names "a client seed, a
+**[summary]** Stake's [published implementation][stake] names "a client seed, a
 server seed, a nonce and a cursor" and publishes an HMAC-based calculation.
 Its server seed is committed before betting and disclosed after rotation.
 This documents one operator's scheme, not an independent audit of its service.
 The page calls a hash encrypted; a hash commitment is not encryption.
+Citation check: relabelled from **[opened]** because the page refused the
+check's fetch (HTTP 403); search found third-party tutorials describing the same
+HMAC-SHA256 of server seed over client seed, nonce and cursor, but not Stake's
+own text, so the quotation and the "encrypted" wording are unconfirmed.
 
 **[inference]** A multiparty candidate would bind each commitment to the table,
 hand, seat roster, rules identity, protocol, and fresh secret contribution.
@@ -773,7 +783,7 @@ is identified; inaccessible sources are not treated as read.
 - [WoW linked reply][wow-reply], opened; no separate technical claim used.
 - [WoW manual][wow-manual], summary-only; opening timed out.
 - [EVE POS exploit postmortem][eve-exploit], primary engineering and economy account.
-- [EVE direct trade][eve-trade], primary interface contract.
+- [EVE direct trade][eve-trade], primary interface contract; refused the citation check, now summary-only.
 - [EVE buy and sell orders][eve-market], primary matching contract.
 - [EVE auction contracts][eve-auction], primary award and collection contract.
 - [EVE courier contracts][eve-courier], primary custody and failure contract.
@@ -796,7 +806,7 @@ is identified; inaccessible sources are not treated as read.
 - [Kurosawa, Katayama, and Ogata][mental-lazy], primary abstract only.
 - [Castellà-Roca thesis][mental-thesis], summary-only excerpt; opening timed out.
 - [RFC 9381][vrf], primary cryptographic specification.
-- [Stake implementation][stake], primary operator description, not certification.
+- [Stake implementation][stake], primary operator description, not certification; refused the citation check, now summary-only.
 - [Arkin and colleagues' investigation mirror][poker-bug], primary researcher paper.
 
 ### Regulatory sources
@@ -860,5 +870,30 @@ and [Diablo character FAQ URL](https://classic.battle.net/diablo2exp/faq/char.sh
 [ukgc]: https://www.gamblingcommission.gov.uk/authorities/codes-of-practice/guide/page/digital-and-virtual-currencies
 [china]: https://www.cac.gov.cn/2016-12/06/c_1120060575.htm
 [kater]: https://cdn.ca9.uscourts.gov/datastore/opinions/2018/03/28/16-35010.pdf
+
+## Citation check
+
+A review lane from another family reopened a sample of this page's **[opened]**
+web claims, weighted to those the options rest on (operator-mediated custody,
+auction terminal outcomes, production conservation, commit-reveal, VRFs,
+shuffle failures, verifiable dealing and the regulatory boundary). Fetch dates
+and the inspected revision are in the commit that added this section.
+
+- **Checked:** 17: the WoW cancellation report and Blizzard's repair notice,
+  CCP's POS postmortem, EVE direct trade, auction and courier contracts, Stake's
+  implementation, RFC 9381, Arkin and colleagues, Barnett and Smart's abstract,
+  both Mohnblatt accounts, Kurosawa, Katayama and Ogata, New World's 1.0.5
+  notes, the Gambling Commission guidance and Kater.
+- **Confirmed:** 15. The EVE auction quotation was confirmed through a verbatim
+  forum quotation and the Kurosawa abstract through IEICE's author listing,
+  because both primary pages refused the check's fetch; the courier quotation's
+  packaging and collateral terms were confirmed the same way, its failure-case
+  list was not.
+- **Relabelled:** 2, from **[opened]** to **[summary]**: EVE direct trade and
+  Stake's implementation, both refused (HTTP 403) with the quotation found
+  nowhere else. Neither carries an option alone: the trusted-dealer option's
+  live-game custody precedent still rests on the market, auction and courier
+  pages, and the commit-reveal analysis is inference.
+- **Corrected or refuted:** none.
 
 [MMO foundations](../mmo-foundations.md) · [Plans](../README.md)

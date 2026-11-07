@@ -108,6 +108,18 @@ debug world would prove each choice. Two other families review it adversarially;
 every finding is answered, and what a bounded prototype or measurement settles is
 settled. The owner then rules on the open calls.
 
+### Records
+
+- [Synthesis](mmo-foundations/synthesis.md): the decisions, the classes of
+  value, the abstractions, the order of work and the owner calls.
+- [Attacks on the synthesis](mmo-foundations/synthesis-attacks.md): the second
+  attack pass, on the favoured composition as if it were built.
+- [Persistence and live ops](mmo-foundations/persistence.md) (lane A).
+- [Distributed custody and trust](mmo-foundations/custody.md) (lane B).
+- [World seams](mmo-foundations/seams.md) (lane C).
+- [Economy and table integrity](mmo-foundations/economy.md) (lane D).
+- [Puck as it is](mmo-foundations/puck-today.md) (lane E).
+
 ## Hypotheses raised in conversation
 
 These are starting points for the lanes to confirm or refute, not positions.

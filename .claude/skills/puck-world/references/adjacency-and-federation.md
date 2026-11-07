@@ -539,6 +539,17 @@ generation-addressed dynamic bodies, then maps the answer back through the
 inverse path. Querying only authored direct edges leaves a physical hole at the
 literal corner even when the rendered diagonal floor is present.
 
+Neighbour-body pushes pass through `WorldPopulation.BoundAdjacencyCorrection`
+before application. Its per-body tick scratch is shared across projections and
+sweep retries, including failed retries, and survives contact-field rebuilds.
+The sum of admitted lengths is bounded by the local body's scaled collider
+reach, with each request also limited by the consulted overlap depth minus
+spent budget. Remote body counts, sizes and speed claims cannot widen the local
+reach. The cap applies to dynamic body reports, not neighbour terrain contact.
+`WorldBodyWork.AdjacencyCorrectionClamps` counts shortened or rejected requests
+in `world.counters physics.bodies`; its class is pacing until neighbour inputs
+are taped. The fixed arithmetic is deterministic for the same admitted images.
+
 Outward of a boundary plane the neighbour's geometry decides the vertical. This
 world's own terrain has ended there by construction, so ground its field still
 reports is the rim of that terrain rather than the floor the seam continues, and

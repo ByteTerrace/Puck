@@ -820,6 +820,7 @@ public sealed partial class WorldPopulation {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
         SimulatedBodyVisits = 0;
         m_rigidTickStepTicks = stepTicks;
+        BeginAdjacencyContacts();
 
         AutonomyStatistics = default;
 

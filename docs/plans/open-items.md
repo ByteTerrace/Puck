@@ -912,6 +912,32 @@ custodian reaches a remote home only through a remote authority its host
 already opened. The debug world's faerie declares no role yet, so it does not
 travel.
 
+Neighbour contact replay packet (independent of companion custody):
+
+- [high] Tape fixed neighbour inputs at their local admission tick. The dynamic
+  correction budget is enforced by `WorldPopulation.BoundAdjacencyCorrection`,
+  but `WorldAdjacencyFields.Handle.Pin` (`src/Puck.World.Server/WorldAdjacencyFields.cs:669`)
+  copies the latest presentation snapshot and discards `sourceTick`;
+  `WorldAdjacencyContactField.ResolveCore`
+  (`src/Puck.World.Server/WorldAdjacencyContactField.cs:25`) still quantizes floats
+  after delivery. `WorldReplayTickInput`
+  (`src/Puck.World.Server/WorldReplaySnapshot.cs:218`) carries authority events
+  and intents, not the neighbour image. Build a fixed-point neighbour record
+  containing authority/generation, source tick, document/geometry revision,
+  active entity addresses, poses, colliders and contact modes. The local tick
+  owner admits an immutable image once before simulation, chooses and records
+  stale/missing/late-image handling, and tapes that image's local admission
+  tick (source ticks alone cannot align different simulation rates). Record
+  the initial pinned image for recordings begun mid-session and the geometry
+  revisions those records reference. Both shadow and live replay install those
+  inputs through one simulation-facing source with live delivery disconnected;
+  rendering may keep interpolated floats. Check reordered, delayed and missing
+  deliveries, mixed rates, a mid-session recording and a document change:
+  replaying the same admitted records must produce identical local state and
+  clamp counts. This is a transport/admission/tape change, beyond the bounded
+  depenetration fix; the bound does not claim replay determinism or prove a
+  neighbour's bodies exist.
+
 Still open from the companion build:
 
 - [medium] The silo's deactivation (`WorldSiloHost.DeactivateCoreAsync`) writes
