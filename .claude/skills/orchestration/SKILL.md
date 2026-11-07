@@ -602,7 +602,7 @@ is not proof a command succeeded. Record runtime probes in the landing commit.
 | Native `codex exec` | Configured on | Own-branch commits; checkout and common Git directory granted by profile | Refused for a lane | Lead grant and lease | Project `puck` registration | Current definitions trusted through `/hooks` | `.agents/skills` link |
 | Codex companion `task --write` | Sandbox has no network | `workspace-write` excludes Git; lead commits | Refused | No sandbox GPU; lead verifies | Project `puck` registration | Same per-user trust, on supported tool paths | Same link |
 | Claude worktree agent | Harness permissions | Own-branch commits; own-tree isolation | Refused | Lead grant and lease | Shared `puck` server | Project registration | `.claude/skills` |
-| Antigravity `agy -p` | Terminal sandbox has no network | Own-branch commits | Refused by git-safety | No sandbox GPU; lead verifies | Workspace plugin registration (server `puck_operator`) | `.agents/hooks.json`; hooks start in `.agents/` | `.agents/skills.json` |
+| Antigravity `agy -p` | Web search (summaries) only; no page reader, no terminal network | Own-branch commits | Refused by git-safety | No sandbox GPU; lead verifies | Workspace plugin registration (server `puck_operator`) | `.agents/hooks.json`; hooks start in `.agents/` | `.agents/skills.json` |
 
 A native Codex lane commits directly; git-safety and git.rules guard shared
 state. Linked worktrees need a grant to their separate common Git directory
@@ -986,11 +986,17 @@ anything. Several models augmenting one idea is valuable even when one of them
 writes poor code: divergent proposals, a third critic on a design, a
 large-context read of a whole subsystem, a second synthesis voice.
 
-What the Antigravity sandbox cannot do is an environment fact, not a judgement:
-a headless `agy -p` run has no network, no GPU and refuses pushes and
-shared-state Git. So a brief puts every source it needs in its workspace, asks
-it to cite only what it opened and quoted, labels hypotheses as hypotheses, and
-sends cost questions with a measurement attached or to a lane that can measure.
+What the Antigravity sandbox cannot do is an environment fact, not a judgement.
+A headless `agy -p` run has web search (`search_web`, which returns
+Google-grounded summaries with redirect links and names the pages it drew on),
+but no tool that opens a page (the `read_url` permission is set, yet headless
+mode declares no URL-reading tool), no network from its terminal, no GPU, and
+it refuses pushes and shared-state Git; a probe asking it to open a page got a
+plain, accurate refusal naming each limit. So a brief tells it it may search,
+copies any page whose exact text matters into its workspace (or pairs it with a
+lane that opens pages), asks it to cite only what it opened and quoted and to
+mark search-summary facts as such, labels hypotheses as hypotheses, and sends
+cost questions with a measurement attached or to a lane that can measure.
 
 Lessons the setup now answers: in one research round, with no way to open web
 pages, it labelled search summaries "Opened URL"; in a culling round it cited
