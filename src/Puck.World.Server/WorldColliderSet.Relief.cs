@@ -11,7 +11,9 @@ namespace Puck.World.Server;
 // noise facet relieves them) collides as the surface its bake draws: one field collider per stamped copy, whose field
 // is the creation's own fixed-point program (its contact shapes, their blends and any relief over their union, in one
 // scope), read by the evaluator the field provider uses. A collider follows the drawn solid
-// (docs/decisions/engine-design.md); its primitives' analytic colliders stand only as the diagnostic's witnesses.
+// (docs/decisions/engine-design.md); its primitives' analytic colliders stand as the diagnostic's witnesses, and an
+// unrelieved creation's exact union pieces answer for the field wherever its partition proves no carve reaches
+// (FixedFieldPartition).
 public sealed partial class WorldColliderSet {
     // The gradient taps' half-span: the field's default, or a sixteenth of the relief's finest wavelength when that is
     // shorter, and never under a 1024th of a metre.
@@ -45,32 +47,61 @@ public sealed partial class WorldColliderSet {
     // relief's reach, which the composed field reads at most `growth` below its shapes' union. Within an exact primitive
     // that reading is within `growth` of it; a superellipsoid's field is its gauge times its least radius, so it grows by
     // 1 + growth over that radius.
+    //
+    // With `partitioned`, also the copy's FixedFieldPartition, whose invariant (FixedFieldPartition's remarks) rests on
+    // what this walk establishes: every copy joins by hard union (a piece) or hard subtraction (a carve), any other blend
+    // leaving the creation without a partition; each copy's reach is its drawn oriented bound grown by the margin its
+    // contact primitive is dilated by (FixedFieldReach.Oriented pads it past rounding), so its own field reads above zero
+    // outside it; and a piece's exact collider is the copy's own contact surface (ExactCollider). The caller asks for
+    // none over relief, which displaces the union everywhere.
     private static List<FixedStaticCollider> PrimitiveColliders(CreationDocument document, in FixedCreationStampTransform transform, FixedQ4816 margin,
-        FixedQ4816 growth, out bool unbounded, out (FixedVector3 Center, FixedVector3 HalfExtent) bounds) {
+        FixedQ4816 growth, bool partitioned, out bool unbounded, out (FixedVector3 Center, FixedVector3 HalfExtent) bounds, out FixedFieldPartition? partition) {
         var colliders = new List<FixedStaticCollider>();
         var plane = false;
         var low = new FixedVector3(X: FixedQ4816.MaxValue, Y: FixedQ4816.MaxValue, Z: FixedQ4816.MaxValue);
         var high = new FixedVector3(X: FixedQ4816.MinValue, Y: FixedQ4816.MinValue, Z: FixedQ4816.MinValue);
         var reach = (growth + margin);
         var pad = new FixedVector3(X: FixedQ4816.Epsilon, Y: FixedQ4816.Epsilon, Z: FixedQ4816.Epsilon);
+        var pieces = (partitioned ? new List<FixedFieldPiece>() : null);
+        var carves = new List<FixedFieldReach>();
+        var pieceGrowth = FixedQ4816.Max(x: margin, y: FixedQ4816.Zero);
 
         CreationStampEmitter.VisitFixedPrimitiveCopies(
             document: document,
             transform: transform,
             visitor: copy => {
+                var witness = CopyCollider(copy: copy, margin: margin);
+
+                colliders.Add(item: witness);
+
+                if (pieces is not null) {
+                    var copyReach = ((copy.Shape.Type == SdfSolidPrimitive.Plane)
+                        ? FixedFieldReach.Unbounded(center: copy.Center)
+                        : FixedFieldReach.Oriented(center: copy.Center, rotation: copy.Rotation,
+                            halfExtent: (FixedVector3.Abs(value: copy.LocalHalfExtents) + new FixedVector3(X: pieceGrowth, Y: pieceGrowth, Z: pieceGrowth))));
+
+                    switch (copy.Shape.Blend ?? SdfBlendOp.Union) {
+                        case SdfBlendOp.Union: {
+                                pieces.Add(item: new FixedFieldPiece(Exact: ExactCollider(collider: in witness, copy: in copy, margin: margin), Reach: copyReach));
+                                break;
+                            }
+                        case SdfBlendOp.Subtraction: {
+                                carves.Add(item: copyReach);
+                                break;
+                            }
+                        default: {
+                                pieces = null;
+                                break;
+                            }
+                    }
+                }
+
                 if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
                     plane = true;
-                    colliders.Add(item: FixedStaticCollider.HalfSpace(point: (copy.Center + (copy.PlaneNormal * margin)), normal: copy.PlaneNormal));
                     return;
                 }
 
-                var witness = (((copy.Shape.Type == SdfSolidPrimitive.Sphere) && (copy.UniformScale > FixedQ4816.Zero))
-                    ? FixedStaticCollider.Sphere(center: copy.Center,
-                        radius: ((FixedQ4816.FromDouble(value: SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere).HalfExtents.X) * copy.UniformScale) + margin))
-                    : PlacementFinite(copy: copy, margin: margin));
                 FixedVector3 half;
-
-                colliders.Add(item: witness);
 
                 if (witness.Kind == FixedStaticColliderKind.Superellipsoid) {
                     // The witness is the drawn superellipsoid itself, uninset; a convex solid's support along each world
@@ -94,7 +125,27 @@ public sealed partial class WorldColliderSet {
 
         unbounded = plane;
         bounds = (((low + high) / FixedQ4816.FromInteger(value: 2)), ((high - low) / FixedQ4816.FromInteger(value: 2)));
+        partition = ((pieces is null) ? null : new FixedFieldPartition(carves: carves, pieces: pieces));
         return colliders;
+    }
+    // A copy's analytic collider when its surface is the copy's own surface in the contact field: a sphere, a Box's
+    // rounded or chamfered box, a round capsule and a half-space are the drawn primitive dilated by the margin, as the
+    // field's margined primitive is. A cylinder is exact only undilated and with no rim inset, since a dilated cylinder's
+    // rims round where its collider's stay sharp; an oriented-box stand-in, an inset core and a superellipsoid (whose
+    // field dilates by its gauge, not by distance) only bound theirs. A negative margin erodes, which no collider here
+    // mirrors.
+    private static FixedStaticCollider? ExactCollider(in FixedStaticCollider collider, in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) {
+        if (margin < FixedQ4816.Zero) {
+            return null;
+        }
+
+        var exact = collider.Kind switch {
+            FixedStaticColliderKind.Sphere or FixedStaticColliderKind.RoundedBox or FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.HalfSpace => true,
+            FixedStaticColliderKind.Cylinder => ((margin == FixedQ4816.Zero) && (CylinderInset(copy: in copy) == default)),
+            _ => false,
+        };
+
+        return (exact ? collider : null);
     }
     // How far below the least of its shapes' readings a composed program can read: each blend's growth past its operands
     // (SdfBoundAlgebra.Growth), summed down the stream, since each compose sags from the least of what it joins.
@@ -113,7 +164,7 @@ public sealed partial class WorldColliderSet {
     // its evaluator's own box bounds prove a body clear, an identical box reusing its answer (a body at rest asks the same
     // box every tick).
     private static FixedColliderField ReliefField(CreationDocument document, in FixedCreationStampTransform transform, float margin, bool bounded,
-        IReadOnlyList<FixedStaticCollider> bases) {
+        IReadOnlyList<FixedStaticCollider> bases, FixedFieldPartition? partition) {
         var relieved = Relieves(document: document);
         // The finest octave's wavelength in world units: the creation's units scaled by the stamp; none without relief.
         var finest = (relieved ? MathF.Abs(x: document.Noise!.Frequency) : 0f);
@@ -134,6 +185,7 @@ public sealed partial class WorldColliderSet {
         ) {
             Bases = bases,
             Bounds = new SdfBoundsCache(field: evaluator),
+            Partition = partition,
         };
     }
     // A creation copy's contact shapes in one scope, with its relief over their union or without it.
@@ -155,12 +207,13 @@ public sealed partial class WorldColliderSet {
         var fixedMargin = FixedQ4816.FromDouble(value: margin);
         // The unrelieved program, at the stamp's own origin: its blends bound how far the relief's union reaches.
         var envelope = ReliefProgram(document: document, margin: margin, relieved: false, transform: transform);
-        var growth = ((Relieves(document: document) ? FixedQ4816.FromDouble(value: MathF.Abs(x: document.Noise!.Amplitude)) : FixedQ4816.Zero) + BlendGrowth(program: envelope));
-        var primitives = PrimitiveColliders(bounds: out var box, document: document, growth: growth, margin: fixedMargin, transform: transform,
-            unbounded: out var unbounded);
+        var relieved = Relieves(document: document);
+        var growth = ((relieved ? FixedQ4816.FromDouble(value: MathF.Abs(x: document.Noise!.Amplitude)) : FixedQ4816.Zero) + BlendGrowth(program: envelope));
+        var primitives = PrimitiveColliders(bounds: out var box, document: document, growth: growth, margin: fixedMargin, partition: out var partition,
+            partitioned: !relieved, transform: transform, unbounded: out var unbounded);
         var (center, half) = (unbounded ? (transform.Origin, FixedVector3.Zero) : box);
         var local = (transform with { Origin = (transform.Origin - center) });
-        var field = ReliefField(bases: primitives, bounded: !unbounded, document: document, margin: margin, transform: local);
+        var field = ReliefField(bases: primitives, bounded: !unbounded, document: document, margin: margin, partition: partition, transform: local);
 
         return FixedStaticCollider.FieldSurface(center: center, rotation: FixedQuaternion.Identity, halfExtent: half, field: field);
     }

@@ -40,6 +40,10 @@ public sealed class FixedColliderField(IFieldEvaluator field, FixedQ4816 gradien
     /// when it was compiled, which a diagnostic samples witnesses from before projecting them onto the field; empty when
     /// none are known.</summary>
     public IReadOnlyList<FixedStaticCollider> Bases { get; init; } = [];
+    /// <summary>Gets the field's hard-union pieces and carve boxes, which narrow a query confined to a box to one exact
+    /// analytic collider, or to none of the solid (<see cref="FixedStaticCollider.TryGetPush"/>); <see langword="null"/>
+    /// when the field has no such structure, and every query reads the field.</summary>
+    public FixedFieldPartition? Partition { get; init; }
 }
 /// <summary>How one certified field contact solve ended.</summary>
 public enum FixedFieldContactOutcome {
