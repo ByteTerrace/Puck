@@ -787,7 +787,7 @@ Compared with this tree **[opened]**:
   `worlds/debug/companion-body.puck` do not exist in this tree.
 
 The repository already records this verdict **[opened]**
-(`docs/plans/open-items.md:951-958`):
+(`docs/plans/open-items.md:977-984`):
 
 ```text
 - [low] Branch `lane/companion-v1` on `origin` (companions v1) is superseded
