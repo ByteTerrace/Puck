@@ -56,7 +56,7 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
     public bool Scores => (m_score is not null);
 
     /// <inheritdoc/>
-    public bool Judge(in ArenaSearchView view) {
+    public JudgeOutcome Judge(in ArenaSearchView view) {
         m_host.SearchPly = view.Ply;
         m_host.Advance(
             engineTick: view.EngineTick,
@@ -67,19 +67,25 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
         // Whatever the candidate queued is dropped however the evaluation ends, so nothing it queued is counted
         // against the next candidate.
         try {
-            return m_evaluator.Evaluate(
+            var outcome = m_evaluator.Evaluate(
+                applied: out var applied,
                 latch: m_latch,
                 rules: m_rules,
                 stepTicks: 1UL
+            );
+
+            return new JudgeOutcome(
+                Applied: applied,
+                Faulted: (outcome == RuleOutcome.Faulted)
             );
         } finally {
             m_host.DiscardQueuedArms();
         }
     }
     /// <inheritdoc/>
-    public long Score(in ArenaSearchView view) {
+    public Outcome Score(in ArenaSearchView view) {
         if (m_score is not { } program) {
-            return 0L;
+            return Outcome.Finite(raw: 0L);
         }
 
         m_host.SearchPly = view.Ply;
@@ -90,13 +96,10 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
 
         var frame = new EvaluationFrame(reader: m_host);
 
-        return (RuleExpressions.Evaluate(
+        return RuleExpressions.Evaluate(
             frame: ref frame,
             kind: CellKind.Int,
             program: program
-        ).TryFinite(raw: out var value)
-            ? value
-            : 0L
         );
     }
     /// <inheritdoc/>

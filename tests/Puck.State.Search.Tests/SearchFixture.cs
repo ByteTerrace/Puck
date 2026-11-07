@@ -14,8 +14,11 @@ internal sealed class DelegateJudge(StateArena arena, JudgeStep judge, ScoreStep
     public IReadOnlyList<int> KeyRows => (keyRows ?? []);
     public bool Scores => (score is not null);
 
-    public bool Judge(in ArenaSearchView view) => judge(view: in view);
-    public long Score(in ArenaSearchView view) => (score?.Invoke(view: in view) ?? 0L);
+    public JudgeOutcome Judge(in ArenaSearchView view) => new(
+        Applied: judge(view: in view),
+        Faulted: false
+    );
+    public Outcome Score(in ArenaSearchView view) => Outcome.Finite(raw: (score?.Invoke(view: in view) ?? 0L));
     public bool TryAdmit(ArenaSearchPlan plan, out string refusal) {
         refusal = string.Empty;
 

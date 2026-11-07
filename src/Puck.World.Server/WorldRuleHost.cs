@@ -245,11 +245,12 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     }
     // A decision evaluates on its own timers; an interaction evaluates once per bound carrier or pair, each through
     // the evaluator's own gate-and-fire under the latch binding the sweep chooses.
-    bool IRuleOwner.TryEvaluateOwn(Puck.State.Rules.RuleEvaluator evaluator, CompiledRule rule, RuleLatch latch, ulong stepTicks, out bool applied) {
+    bool IRuleOwner.TryEvaluateOwn(Puck.State.Rules.RuleEvaluator evaluator, CompiledRule rule, RuleLatch latch, ulong stepTicks, out bool applied, out RuleOutcome outcome) {
         var world = ((CompiledWorldFactsRule)rule);
 
         if (world.Decision is not null) {
-            applied = EvaluateDecisionRule(
+            outcome = EvaluateDecisionRule(
+                applied: out applied,
                 rule: world,
                 stepTicks: stepTicks
             );
@@ -257,7 +258,8 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
             return true;
         }
         if (world.Interaction is { } interaction) {
-            applied = EvaluateInteraction(
+            outcome = EvaluateInteraction(
+                applied: out applied,
                 bindings: latch.Rule(name: rule.Name),
                 interaction: interaction,
                 latch: latch,
@@ -269,6 +271,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         }
 
         applied = false;
+        outcome = RuleOutcome.Idle;
 
         return false;
     }

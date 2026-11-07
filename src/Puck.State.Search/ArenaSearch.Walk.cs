@@ -268,7 +268,7 @@ public sealed partial class ArenaSearch {
                         level: level,
                         target: target,
                         token: token,
-                        value: job.Judge.Score(view: View(ply: MovePly(job: job)))
+                        value: ScorePosition(job: job)
                     );
                 }
 

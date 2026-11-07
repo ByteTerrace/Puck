@@ -104,7 +104,7 @@ public sealed class ArenaSearchJudgeTruthLawTests {
             Tick: 1UL
         );
 
-        var accepted = judge.Judge(view: in view);
+        var accepted = judge.Judge(view: in view).Applied;
 
         Assert.True(
             condition: accepted,

@@ -2,6 +2,7 @@ namespace Puck.State.Rules;
 
 public sealed partial class RuleEvaluator {
     private RuleDueList? m_dueList;
+
     private readonly List<int> m_dueLive = [];
 
     private Puck.Abstractions.Counting.WorkCount m_due;
@@ -18,7 +19,7 @@ public sealed partial class RuleEvaluator {
     /// <param name="latch">The family's edge latch.</param>
     /// <param name="stepTicks">How many engine ticks the simulation step spans.</param>
     /// <returns><see langword="true"/> when any firing moved the arena.</returns>
-    /// <remarks>With <see cref="SchedulingEnabled"/> off it is <see cref="Evaluate"/>: every rule, every tick.</remarks>
+    /// <remarks>With <see cref="SchedulingEnabled"/> off it is <see cref="Evaluate(CompiledRule[], RuleLatch, ulong)"/>: every rule, every tick.</remarks>
     [Replaces(root: typeof(StateArena))]
     public bool EvaluateDue(CompiledRule[] rules, RuleLatch latch, ulong stepTicks) {
         ArgumentNullException.ThrowIfNull(argument: latch);
@@ -102,11 +103,11 @@ public sealed partial class RuleEvaluator {
         latch.BeginSweep();
 
         foreach (var body in m_dueLive) {
-            if (!full && !list.IsFull(index: index) && !list.IsBodyDue(index: index, body: body)) {
+            if (!full && !list.IsFull(index: index) && !list.IsBodyDue(body: body, index: index)) {
                 continue;
             }
 
-            list.ClearBody(index: index, body: body);
+            list.ClearBody(body: body, index: index);
 
             if (!RuleReads.TryIndexKey(index: body, key: out var key, keys: keys)) {
                 continue;
@@ -127,9 +128,9 @@ public sealed partial class RuleEvaluator {
 
             applied |= moved;
             if (m_rerun) {
-                list.MarkBodyNext(index: index, body: body);
+                list.MarkBodyNext(body: body, index: index);
             }
-            if (!full && !latch.TouchedInSweep(state: state, binding: binding)) {
+            if (!full && !latch.TouchedInSweep(binding: binding, state: state)) {
                 // A binding that could not evaluate is closed exactly as a full sweep's end closes it.
                 latch.Forget(binding: binding, state: state);
             }

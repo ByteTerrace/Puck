@@ -208,9 +208,22 @@ public sealed partial class ArenaSearch {
     }
     // The score of the position the arena holds, from the perspective of the side that moved into it.
     private long EvaluateOutcome(Job job) => (job.Judge.Scores
-        ? job.Judge.Score(view: View(ply: MovePly(job: job)))
+        ? ScorePosition(job: job)
         : 0L
     );
+    // The judge's score of the position the arena holds. An absence scores zero; a fault scores zero too and leaves the
+    // step deciding nothing.
+    private long ScorePosition(Job job) {
+        var scored = job.Judge.Score(view: View(ply: MovePly(job: job)));
+
+        if (scored.TryFinite(raw: out var score)) {
+            return score;
+        }
+
+        job.StepFaulted |= (scored.Case == FaultCase.Faulted);
+
+        return 0L;
+    }
     private void StartTree(Job job) {
         job.Best = -SearchCapacity.MateScore;
         job.BestTarget = -1;

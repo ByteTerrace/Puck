@@ -150,10 +150,10 @@ The zero value is the faulted case everywhere, so an uninitialised or
 defaulted outcome refuses rather than reads as zero; `ExpressionFault.Absent`
 leaves the enum, because absence is a `FaultCase`, which the register's own
 remarks already say (`src/Puck.State/ExpressionFault.cs:6-8`). Deleted with
-their callers: `KeyNaming`, `RuleFact`, `ArenaScratch.RaiseFault`,
-`EnterFaultScope`, `LeaveFaultScope`, `RaisedFault`, `FaultScope`,
-`TryEvaluate`, `TryEvaluateAlone`, every `out ExpressionFault` and
-`out KeyNaming` parameter, and `RuleEvaluator.HoldOnFault`.
+their callers: `KeyNaming`, `RuleFact`, the register's members
+(`RaiseFault`, `EnterFaultScope`, `LeaveFaultScope`, `RaisedFault`,
+`FaultScope`), `TryEvaluate`, `TryEvaluateAlone`, every `out ExpressionFault`
+and `out KeyNaming` parameter, and `RuleEvaluator.HoldOnFault`.
 
 ### Absence and the combining rule
 
@@ -341,8 +341,7 @@ receives values the evaluator read; the arm never holds a frame), and fold
 every step's outcome into one `FiringDecision`. A `transaction` step folds
 its own body first: a faulted body is the savepoint's refusal (the register's
 transaction clause), so the savepoint rewinds, `onFailure` runs, and the
-firing folds the savepoint's result rather than the fault; `ArenaScratch.AnswerFaultScope`
-is that boundary while the register stands. A decision binding's phase
+firing folds the savepoint's result rather than the fault. A decision binding's phase
 also writes its next binding state through the journal and fires its common
 and option effects into the same scope. Nothing outside the journal is
 written.
@@ -579,7 +578,7 @@ read: `FlockLawTests.AFaultingAffinityIsACountedFailureThatWeighsNothing`) and L
 
 ## Implementation steps
 
-Steps 4 to 9 remain (steps 1 to 3 have landed. Step 1, the representation: `Outcome`, `Fact`, `Resolved<T>`, `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` are in `Puck.State`, `Fact` and `Resolved<T>` carry every operand read and key resolution, and the witnesses exist. Step 2, addresses as program: the lowering above, `IRuleOperand.Addresses` and `Read(reader, keys)`, and the pricing below. Step 3, the interpreter and the gate: `Run` answers an `Outcome`; `RuleExpressions.Evaluate(ref EvaluationFrame, ...)` and `EvaluateDetached` are the entries; `RuleEvaluation.Decide` answers a `Verdict`, folding the text conjuncts in, with `RuleEvaluation.ReadSource` beside it). Each is a vertically coherent slice: one producer and every consumer
+Steps 5 to 9 remain (steps 1 to 4 have landed. Step 1, the representation: `Outcome`, `Fact`, `Resolved<T>`, `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` are in `Puck.State`, `Fact` and `Resolved<T>` carry every operand read and key resolution, and the witnesses exist. Step 2, addresses as program: the lowering above, `IRuleOperand.Addresses` and `Read(reader, keys)`, and the pricing below. Step 3, the interpreter and the gate: `Run` answers an `Outcome`; `RuleExpressions.Evaluate(ref EvaluationFrame, ...)` and `EvaluateDetached` are the entries; `RuleEvaluation.Decide` answers a `Verdict`, folding the text conjuncts in, with `RuleEvaluation.ReadSource` beside it. Step 4, verdicts at every deciding place: the register is gone, and a rule's judgement, a group trigger and its fixpoint pass, a decision, an interaction and a search step each read the `Outcome`, `Verdict`, `BindingsResult`, `RuleOutcome` or `JudgeOutcome` they were handed; every evaluator-side effect answers a `Step` of `Faulted`, `Refused` or `Done`). Each is a vertically coherent slice: one producer and every consumer
 it affects land together, every bridge is named with the step that removes
 it, and the check proves what the step establishes. Each step builds what it
 touches (`dotnet build <project> -c Release -m:2 -nodeReuse:false`) and lands
@@ -594,17 +593,6 @@ since a test block cannot read the counters they need. A name check uses a
 word-boundary form, which `puck search` spells
 `(^|[^A-Za-z])(Name)([^A-Za-z]|$)` (it rejects `\b`).
 
-4. **Verdicts at every deciding place; the register goes.** `RuleOutcome`'s `Faulted`
-   produced by `EvaluateOnce` and aggregated by `Evaluate`; `JudgeOutcome`
-   through `PushScope`, the replay and `StepJob`; group policies on the
-   three-way outcome; decisions and interactions returning `RuleOutcome`;
-   every `RaisedFault` poll replaced by the value in hand; the bridge of step
-   3 (`Evaluate` and `Decide` raising a faulted answer into the register, and
-   `RuleEvaluation.Decide`'s `out ExpressionFault`, which `RuleEvaluator.Decide`
-   words its refusal from), `ArenaScratch`'s fault members and `FaultScope`
-   deleted. Check: W12,
-   W13 green; `puck search "EnterFaultScope|RaisedFault|RaiseFault|LeaveFaultScope|FaultScope" src`
-   returns no line; the solution builds.
 5. **Journal participants.** `IJournalParticipant`, the `Participant` entry,
    `Rewind` and turn-undo dispatch; `RuleLatch`, the decision store and
    `RuleGroupState` write through the journal; the no-open-scope refusal for
@@ -616,9 +604,11 @@ word-boundary form, which `puck search` spells
    inside `Puck.State.Rules`; `puck test --reproduce` agrees across two runs.
 6. **Arms prepared once; host reads as sources.** `Prepare(values, keys)` on
    arms with generation-carrying targets; the five host reads become declared
-   `Sources`; the host's preflight scratch moves into the proposal; the
-   input resynchronisation split into prepare (before the arena commit, can
-   refuse) and apply (after, cannot). Check: W5, W9 green; `puck references
+   `Sources` (until then an arm that evaluates in the host and meets a fault
+   answers a refusal, so its firing is `Refused` where a fault in the
+   evaluator's own effects is `Faulted`); the host's preflight scratch moves
+   into the proposal; the input resynchronisation split into prepare (before the
+   arena commit, can refuse) and apply (after, cannot). Check: W5, W9 green; `puck references
    RuleExpressions.Evaluate` and `IRuleOperand.Read` outside `Puck.State.Rules`
    list only the detached table's entries; a fault-injection run with a host
    that refuses input synchronisation in prepare shows the firing refused and

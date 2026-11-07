@@ -310,14 +310,13 @@ An expression that fails reports one of these `ExpressionFault` values:
 | `Absent` | An operand's dynamic key named no cell, or a table read named a key the table doesn't carry. |
 | `Forever` | An operand produced a fact that carries no number. |
 
-`Domain` and `Forever` are faults, and no consumer can lose one: the evaluator
-raises it into the evaluation's fault register (`ArenaScratch.RaiseFault`) where
-it happens, and the caller that decides what the evaluation meant reads the
-register, not the value an intermediate read made of the fault. A rule's gate,
-a firing, a decision, a group trigger and a search step each open such a scope.
-An evaluation that faults with no scope open throws, because nothing would
-answer its fault. `Absent` is a value, not a fault: each consumer answers it
-where it sits.
+`Domain` and `Forever` are faults, and a fault is a case of the answer: the
+interpreter returns an `Outcome` (`RuleExpressions.Evaluate`), a nested call or
+fold member's outcome is a value its caller combines, and a gate's verdict
+(`RuleEvaluation.Decide`) is `Faulted` when any conjunct faulted. A rule's
+judgement, a decision, a group trigger and a search step each read the outcome
+or verdict in hand and decide nothing when it faulted. `Absent` is a value, not
+a fault: each consumer answers it where it sits.
 
 Arithmetic never wraps. Int addition, subtraction, and multiplication compute
 the exact result and fail if it doesn't fit 64 bits. Int division truncates

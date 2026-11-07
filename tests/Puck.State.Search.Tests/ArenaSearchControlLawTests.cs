@@ -47,8 +47,8 @@ public sealed class ArenaSearchControlLawTests {
         Assert.Equal(0, live.SearchPly);
         var judge = RuleJudge(position, [AcceptEveryCandidate()], score: "$search:ply");
 
-        Assert.Equal(3, judge.Score(view: new ArenaSearchView(position.Arena, 1, 1, 3)));
-        Assert.Equal(1, judge.Score(view: new ArenaSearchView(position.Arena, 1, 1, 1)));
+        Assert.Equal(Outcome.Finite(raw: 3L), judge.Score(view: new ArenaSearchView(position.Arena, 1, 1, 3)));
+        Assert.Equal(Outcome.Finite(raw: 1L), judge.Score(view: new ArenaSearchView(position.Arena, 1, 1, 1)));
         Assert.Equal(0, live.SearchPly);
     }
 }
