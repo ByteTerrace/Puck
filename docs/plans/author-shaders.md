@@ -551,8 +551,9 @@ The vocabulary, and what each piece lowers to:
   finding 9.
 - **A static cost per program.** The lowering sums each op's cost function
   over its validated operands and each unrolled iteration, in checked
-  arithmetic, and refuses a program over the hard cap (`MaxOps` on
-  `SdfShadeProgram`, a representation constant) by name. A program's cost is a
+  arithmetic, and refuses a program whose maximum-light, two-interface group
+  exceeds `SdfShadeProgram.MaxWork` by name. `MaxOps` separately bounds the
+  allocated instruction count. A program's cost is a
   fact of its canonical stream, so every spelling that lowers to the same
   stream costs the same.
 - **Spellings lower to one canonical form.** The existing constant folder folds
@@ -854,8 +855,8 @@ polygon `SDF_MAX_CONVEX_VERTICES` edges, over a sweep `strands × (SDF_SWEEP_SAM
 gap evaluations with `strands` read from the validated descriptor (the loops
 in `field/sdf-shapes.hlsli` that unrolling a source loop does not reach, which
 is finding 6); a `lattice` or `lines` costs its taps; a transcendental its
-declared weight. The sum is computed in checked arithmetic and must be at or
-under `MaxOps`. A pixel's logical shade work is then
+declared weight. The sum is computed in checked arithmetic; `MaxOps` bounds
+instruction count independently of this weighted work. A pixel's logical shade work is then
 `surface + lights × light + compose + engine`, where `lights` is the frame's
 light count, `light` and `compose` are the program's phases (the standard's
 defaults when it declares none) and `engine` is a declared constant for the
@@ -883,8 +884,8 @@ pixels times the largest program cost the loaded documents declare, since the
 kernel cannot know a pixel's program before it reads the record; the group
 barrier's assumptions hold because a job never splits a group. A job whose
 unit alone exceeds the bound cannot exist: the unit is one pixel (or one
-group), its cost is at most `MaxOps` (or 64 × `MaxOps`), and `MaxWork` is at
-least that by construction, checked where both constants are declared. Unlike
+group), and admission checks the allocated program's `PixelWork` at `MaxLights`
+for a whole group including both glass interfaces against `MaxWork`. Unlike
 the relight's `RelightRaysPerJob`, there is no oversized-unit exception.
 
 **A dispatch, not a submission.** Each job is one dispatch. The frame's
@@ -1246,8 +1247,8 @@ or the finding is answered with the code that shows why.
    the strand, sample and refinement loops of `field/sdf-shapes.hlsli`.
    Resolved by per-op cost functions over validated operands that bound each
    helper, a pixel's work defined with the light walk and a declared engine
-   constant, checked arithmetic, and `MaxOps <= MaxWork` checked at
-   declaration (section 3.7, step 0); the "work is not time" qualification
+   constant, checked arithmetic, and the maximum-light two-interface group
+   checked against `MaxWork` at admission (section 3.7, step 0); the "work is not time" qualification
    stays.
 7. **The bound and the quarantine vanished on the fallback; dispatch was
    conflated with submission.** True on both counts: the draft's door named

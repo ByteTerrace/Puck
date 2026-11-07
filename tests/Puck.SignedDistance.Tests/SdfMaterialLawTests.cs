@@ -401,9 +401,9 @@ public sealed class SdfMaterialLawTests {
         var second = ((paintVector + SdfAppearance.PaintVectorsPerEntry) * 4);
 
         Assert.Equal(expected: (uint)SdfShapeType.Sweep, actual: program.Words[(second + 3)]);
-        Assert.Equal(expected: (uint)((paintVector + SdfAppearance.PaintVectorsPerEntry) + 8), actual: program.Words[(second + 12)]);
+        Assert.Equal(expected: (uint)((paintVector + SdfAppearance.PaintVectorsPerEntry) + 9), actual: program.Words[(second + 12)]);
         Assert.Equal(expected: 5u, actual: program.Words[(second + 24)]);
-        Assert.Equal(expected: [0f, 0f, 0f, 0.02f, 1f, 0.5f, 0f, 0.02f, 2f, 0f, 0f, 0f], actual: Enumerable.Range(start: (second + 32), count: 12).Select(selector: Lane));
+        Assert.Equal(expected: [0f, 0f, 0f, 0.02f, 1f, 0.5f, 0f, 0.02f, 2f, 0f, 0f, 0f], actual: Enumerable.Range(start: (second + 36), count: 12).Select(selector: Lane));
         foreach (var paint in new[] {
             plane with { Rotation = default }, plane with { Stroke = -1f },
             plane with { Origin = new Vector3(x: float.NaN, y: 0f, z: 0f) }, plane with { Color = new Vector3(x: -1f, y: 0f, z: 0f) },
@@ -424,6 +424,10 @@ public sealed class SdfMaterialLawTests {
     /// cannot evaluate (a path profile) is refused.</summary>
     [Fact]
     public void PaintShapesCaptureThePrimitiveTheBuilderPacks() {
+        var cylinder = SdfPaintShape.Of(type: SdfSolidPrimitive.Cylinder, scale: new Vector3(1f, 2f, 3f));
+        var point = Vector3.Transform(Vector3.UnitY, Quaternion.Inverse(cylinder.Rotation));
+        Assert.InRange(MathF.Abs(point.Y), 0f, 0.000001f);
+        Assert.InRange(MathF.Abs(point.Z + 1f), 0f, 0.000001f);
         var torus = SdfPaintShape.Of(scale: new Vector3(x: 1f, y: 2f, z: 3f), type: SdfSolidPrimitive.Torus);
         var elliptic = SdfPaintShape.Of(scale: new Vector3(x: 1f, y: 2f, z: 1f), type: SdfSolidPrimitive.Torus);
         var polygon = SdfPaintShape.Of(profile: new SdfPrismProfile(Kind: SdfPrismProfileKind.Convex, CornerRadius: 0f, Vertices: [new Vector2(x: -1f, y: -1f), new Vector2(x: 0f, y: 1f), new Vector2(x: 1f, y: -1f)]), scale: new Vector3(value: 0.5f), type: SdfSolidPrimitive.Prism);

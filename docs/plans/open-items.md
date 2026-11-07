@@ -911,6 +911,32 @@ custodian reaches a remote home only through a remote authority its host
 already opened. The debug world's faerie declares no role yet, so it does not
 travel.
 
+Neighbour contact replay packet (independent of companion custody):
+
+- [high] Tape fixed neighbour inputs at their local admission tick. The dynamic
+  correction budget is enforced by `WorldPopulation.BoundAdjacencyCorrection`,
+  but `WorldAdjacencyFields.Handle.Pin` (`src/Puck.World.Server/WorldAdjacencyFields.cs:669`)
+  copies the latest presentation snapshot and discards `sourceTick`;
+  `WorldAdjacencyContactField.ResolveCore`
+  (`src/Puck.World.Server/WorldAdjacencyContactField.cs:25`) still quantizes floats
+  after delivery. `WorldReplayTickInput`
+  (`src/Puck.World.Server/WorldReplaySnapshot.cs:218`) carries authority events
+  and intents, not the neighbour image. Build a fixed-point neighbour record
+  containing authority/generation, source tick, document/geometry revision,
+  active entity addresses, poses, colliders and contact modes. The local tick
+  owner admits an immutable image once before simulation, chooses and records
+  stale/missing/late-image handling, and tapes that image's local admission
+  tick (source ticks alone cannot align different simulation rates). Record
+  the initial pinned image for recordings begun mid-session and the geometry
+  revisions those records reference. Both shadow and live replay install those
+  inputs through one simulation-facing source with live delivery disconnected;
+  rendering may keep interpolated floats. Check reordered, delayed and missing
+  deliveries, mixed rates, a mid-session recording and a document change:
+  replaying the same admitted records must produce identical local state and
+  clamp counts. This is a transport/admission/tape change, beyond the bounded
+  depenetration fix; the bound does not claim replay determinism or prove a
+  neighbour's bodies exist.
+
 Still open from the companion build:
 
 - [medium] The silo's deactivation (`WorldSiloHost.DeactivateCoreAsync`) writes
@@ -1344,36 +1370,13 @@ and the Water packet).
 
 ### Author shaders
 
-Owner: rendering · ordinary · Next: the step-0 review's findings below, then
+Owner: rendering · ordinary · Next:
 [step 2 of the design memo](author-shaders.md#6-implementation-steps) (the
 interpreter's cost and registers on the bar devices). Steps 0 and 1 have
 landed; step 1's GPU lifetimes (retained identity lists through fence
 retirement in `SdfWorldResidency`, the bounded `SdfShadeDispatch` records) owe
 an adversarial review.
 
-- [high] `SdfShadeHlsl.Emit` subscripts a scalar for `SdfShadeOp.Component` on
-  a width-1 operand (`clock.x` emits `asfloat(regs.r0).x[0u]`), which DXC
-  rejects, so tier 2 cannot specialize a program tier 1 admits.
-- [high] `WorldShadeLowering` types runtime parameters from one expected type:
-  `hash` never asks for `UInt3`, `select` arms and user `function` bodies drop
-  the expectation, and `ParameterType` rewrites a slot in place when one
-  parameter is used as float and uint, failing later as an internal mismatch.
-- [high] Canonical identity depends on spelling: `==` and `!=` are not ordered
-  as commutative, and `SdfShadeProgram.Compiler` fills its parameter slots in
-  declaration order, so dead parameters stay and two equivalent programs get
-  different `Identity`, layout and cost.
-- [high] `WrapSignatureOf` (`SdfWorldTables.ProgramUpload.cs`) ignores
-  `material.Shade.Demand`, so a palette-only edit that widens shadow demand
-  never re-runs the Surface pass. Check against step 1's upload changes first.
-- [medium] `shape(...)` in a shade program skips the document's member checks
-  and `TryValidateScaledPrimitive`, keeps uncanonicalized fields in the
-  program's definition, and drops an elliptic cylinder's rotation
-  (`CapturePaintShape` ignores `SdfOp.Rotate`).
-- [medium] `MaxOps` counts dispatch-scaled work as instructions, capping a
-  program near 63 instructions and refusing any multi-strand `Sweep` shape.
-- [medium] A `let` outside a phase block is not bound as a shade expression.
-- [low] Raw JSON shade definitions reach `Compile` without null or overflow
-  guards.
 The owner's ruling (AGENTS.md, "Authors rule"): authors may bring their own
 shaders, so a look is never limited to what the engine's shading offers.
 [The design memo](author-shaders.md) answers the owner's questions from

@@ -24,6 +24,10 @@ Only what the owner rules after the round is written into
   fit them.
 - The line between client and server is blurred in Puck because of federation.
   Direct player-to-player interaction, if implemented, is in effect raw PvP.
+- Azure and Entra are one provider, not the design: the round abstracts
+  identity, issuance, key lifetimes, revocation, storage and hosting properly,
+  so Puck could move off Azure, and asks its questions of those abstractions
+  rather than of one provider's configuration.
 - Fable takes a full pass to critique the design and find ways to attack it.
 - The design is done properly before anything is committed: a full session that
   reaches consensus, with the homework done.
@@ -103,6 +107,18 @@ caches, behaviour as authored programs, deterministic replay), and names how the
 debug world would prove each choice. Two other families review it adversarially;
 every finding is answered, and what a bounded prototype or measurement settles is
 settled. The owner then rules on the open calls.
+
+### Records
+
+- [Synthesis](mmo-foundations/synthesis.md): the decisions, the classes of
+  value, the abstractions, the order of work and the owner calls.
+- [Attacks on the synthesis](mmo-foundations/synthesis-attacks.md): the second
+  attack pass, on the favoured composition as if it were built.
+- [Persistence and live ops](mmo-foundations/persistence.md) (lane A).
+- [Distributed custody and trust](mmo-foundations/custody.md) (lane B).
+- [World seams](mmo-foundations/seams.md) (lane C).
+- [Economy and table integrity](mmo-foundations/economy.md) (lane D).
+- [Puck as it is](mmo-foundations/puck-today.md) (lane E).
 
 ## Hypotheses raised in conversation
 

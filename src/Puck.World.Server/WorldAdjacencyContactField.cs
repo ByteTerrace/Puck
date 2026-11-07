@@ -22,6 +22,9 @@ namespace Puck.World.Server;
 /// boundary plane — where this world's terrain has ended and its field can only be answering with its own rim. A
 /// body standing inside its own world therefore pays nothing extra and behaves identically to one in a world with
 /// no adjacency at all.</para>
+/// <para><b>Untrusted bodies.</b> Every neighbour-body correction enters through
+/// <see cref="WorldPopulation.BoundAdjacencyCorrection"/> before it moves the local body. All sweeps in a tick
+/// share that body's locally owned reach budget; neighbour terrain resolution remains a separate contribution.</para>
 /// <para><b>Replay boundary.</b> Neighbour poses presently arrive as presentation-float snapshot fields and are
 /// converted to fixed point below at delivery timing. Ground and dynamic-contact correction are therefore not yet
 /// replay-deterministic across network schedules. Track 3 replaces this input with tick-addressed taped neighbour
@@ -31,16 +34,19 @@ namespace Puck.World.Server;
 internal sealed class WorldAdjacencyContactField : IEntityContactField {
     private readonly IContactField m_inner;
     private readonly IWorldAdjacencySource m_source;
+    private readonly WorldPopulation m_population;
 
     /// <summary>Initializes the wrapper.</summary>
     /// <param name="inner">This world's own compiled contact field.</param>
     /// <param name="source">The injected neighbour resolver.</param>
-    public WorldAdjacencyContactField(IContactField inner, IWorldAdjacencySource source) {
+    /// <param name="population">Owns the local envelopes and the correction budget shared across this tick's sweeps.</param>
+    public WorldAdjacencyContactField(IContactField inner, IWorldAdjacencySource source, WorldPopulation population) {
         ArgumentNullException.ThrowIfNull(argument: inner);
         ArgumentNullException.ThrowIfNull(argument: source);
 
         m_inner = inner;
         m_source = source;
+        m_population = population;
     }
 
     private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
@@ -84,6 +90,7 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             );
 
             var dynamicObstruction = FixedVector3.Zero;
+            var localDynamicCorrection = FixedVector3.Zero;
             var localAddress = ((entityIndex >= 0)
                 ? m_source.LocalEntityAddress(index: entityIndex)
                 : default
@@ -131,7 +138,16 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
                     continue;
                 }
 
-                neighbourPosition += correction;
+                correction = m_population.BoundAdjacencyCorrection(
+                    entityIndex: entityIndex,
+                    overlapDepth: projection.OverlapDepth,
+                    correction: WorldAdjacencyPath.MapVectorIntoSource(value: correction, path: projection.Path)
+                );
+                if (correction == FixedVector3.Zero) { continue; }
+                localDynamicCorrection += correction;
+                neighbourPosition = WorldAdjacencyPath.MapPointIntoNeighbour(
+                    value: position + localDynamicCorrection, path: projection.Path);
+                correction = WorldAdjacencyPath.MapVectorIntoNeighbour(value: correction, path: projection.Path);
                 var normal = correction.Normalize();
                 var inward = FixedVector3.Dot(
                     left: neighbourVelocity,
@@ -144,6 +160,7 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
                 dynamicObstruction = normal;
             }
 
+            var neighbourDynamicPosition = neighbourPosition;
             var neighbourResolution = default(ContactResolution);
             // Outward of this world's own boundary plane its terrain has ended by construction, so ground its field
             // still answers there is the rim of that terrain rather than the floor the seam continues — the
@@ -200,8 +217,10 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
                 continue;
             }
             // Map the projected neighbour's depenetrated answer through every forward stage into this authority.
-            position = WorldAdjacencyPath.MapPointIntoSource(
-                value: neighbourPosition,
+            // Commit admitted body pushes in the local frame. A point round trip through a rotated seam can round;
+            // it must not add displacement outside the budget. Geometry resolution remains a separate contribution.
+            position += localDynamicCorrection + WorldAdjacencyPath.MapVectorIntoSource(
+                value: neighbourPosition - neighbourDynamicPosition,
                 path: projection.Path
             );
             velocity = WorldAdjacencyPath.MapVectorIntoSource(

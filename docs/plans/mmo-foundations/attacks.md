@@ -449,11 +449,12 @@ about, and what invariant 1 implies.
   side, the local body is corrected out of the phantom
   (`src/Puck.World.Server/WorldAdjacencyContactField.cs:100-144`) **[checked]**.
   Report them moving into the seam each tick.
-- **Gain:** push visitors across the plane into the attacker's world (then
-  A2, A3), pin them against the boundary, or launch them; the correction's
-  magnitude is whatever `FixedDynamicBodyContacts.TryCorrection` returns for
-  the overlap (`src/Puck.Physics/FixedDynamicBodyContacts.cs:282`) and no
-  per-tick bound was read **[unverified]**.
+- **Gain:** repeated phantom contacts can still shove or pin visitors, and a
+  bounded shove can cross an ownership plane. The formerly unbounded
+  displacement is now limited by `WorldPopulation.BoundAdjacencyCorrection`:
+  all dynamic corrections for one body share its local collider reach per
+  tick, with each request also limited by the overlap depth minus spent budget.
+  `WorldAdjacencyCorrectionLawTests` witnesses the cap and its counter.
 - **Today:** the overlap depth takes the larger of both sides' reaches and the
   sum of both speed ceilings (`src/Puck.World.Schema/WorldAdjacencies.cs:649-657`)
   **[checked]**, so a neighbour can widen the shared strip but never shrink
