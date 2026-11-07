@@ -121,7 +121,7 @@ public sealed partial class WorldRuleHost {
 
         m_boundLeft = -1;
         m_boundRight = -1;
-        latch.EndSweep(state: bindings);
+        latch.EndSweep(journal: Host.Arena.Journal, state: bindings);
         applied = moved;
 
         return aggregate;

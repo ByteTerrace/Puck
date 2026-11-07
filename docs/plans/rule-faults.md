@@ -578,30 +578,20 @@ read: `FlockLawTests.AFaultingAffinityIsACountedFailureThatWeighsNothing`) and L
 
 ## Implementation steps
 
-Steps 5 to 9 remain (steps 1 to 4 have landed. Step 1, the representation: `Outcome`, `Fact`, `Resolved<T>`, `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` are in `Puck.State`, `Fact` and `Resolved<T>` carry every operand read and key resolution, and the witnesses exist. Step 2, addresses as program: the lowering above, `IRuleOperand.Addresses` and `Read(reader, keys)`, and the pricing below. Step 3, the interpreter and the gate: `Run` answers an `Outcome`; `RuleExpressions.Evaluate(ref EvaluationFrame, ...)` and `EvaluateDetached` are the entries; `RuleEvaluation.Decide` answers a `Verdict`, folding the text conjuncts in, with `RuleEvaluation.ReadSource` beside it. Step 4, verdicts at every deciding place: the register is gone, and a rule's judgement, a group trigger and its fixpoint pass, a decision, an interaction and a search step each read the `Outcome`, `Verdict`, `BindingsResult`, `RuleOutcome` or `JudgeOutcome` they were handed; every evaluator-side effect answers a `Step` of `Faulted`, `Refused` or `Done`). Each is a vertically coherent slice: one producer and every consumer
+Steps 6 to 9 remain (steps 1 to 5 have landed. Step 1, the representation: `Outcome`, `Fact`, `Resolved<T>`, `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` are in `Puck.State`, `Fact` and `Resolved<T>` carry every operand read and key resolution, and the witnesses exist. Step 2, addresses as program: the lowering above, `IRuleOperand.Addresses` and `Read(reader, keys)`, and the pricing below. Step 3, the interpreter and the gate: `Run` answers an `Outcome`; `RuleExpressions.Evaluate(ref EvaluationFrame, ...)` and `EvaluateDetached` are the entries; `RuleEvaluation.Decide` answers a `Verdict`, folding the text conjuncts in, with `RuleEvaluation.ReadSource` beside it. Step 4, verdicts at every deciding place: the register is gone, and a rule's judgement, a group trigger and its fixpoint pass, a decision, an interaction and a search step each read the `Outcome`, `Verdict`, `BindingsResult`, `RuleOutcome` or `JudgeOutcome` they were handed; every evaluator-side effect answers a `Step` of `Faulted`, `Refused` or `Done`. Step 5, journal participants: `IJournalParticipant` and the journal's participant records, which `StateArena.Rewind` dispatches; `RuleLatch` and a decision binding write through them, and a firing closes only through `RuleEvaluator.Commit`, switching on `FiringDecision`). Each is a vertically coherent slice: one producer and every consumer
 it affects land together, every bridge is named with the step that removes
 it, and the check proves what the step establishes. Each step builds what it
 touches (`dotnet build <project> -c Release -m:2 -nodeReuse:false`) and lands
 on a working integration branch. The witness file is
 `worlds/debug/rule-faults-tests.puck`, run with
 `puck test worlds/debug/rule-faults-tests.puck --jobs 1`; its header states
-each block's expected verdict, and W10, W11 and L1, the blocks for findings
-still open, are red until their steps. W13 and L1 are C# laws
+each block's expected verdict, and every block is green. W13 and L1 are C# laws
 (`FlockLawTests.AFaultingAffinityIsACountedFailureThatWeighsNothing`,
 `LatchAndTriggerLawTests.ARewoundScopeRestoresTheEdgeCrossingAChildFiringConsumed`),
 since a test block cannot read the counters they need. A name check uses a
 word-boundary form, which `puck search` spells
 `(^|[^A-Za-z])(Name)([^A-Za-z]|$)` (it rejects `\b`).
 
-5. **Journal participants.** `IJournalParticipant`, the `Participant` entry,
-   `Rewind` and turn-undo dispatch; `RuleLatch`, the decision store and
-   `RuleGroupState` write through the journal; the no-open-scope refusal for
-   lifecycle writers; `Propose`/`Commit` as the only transaction callers in
-   `Puck.State.Rules`, with `FiringDecision`. Check: W4, W10, W11 green; L1
-   green (a nested-scope law: open a scope, commit a child Edge firing, rewind
-   the parent, the child's latch bit is back); `puck references
-   CommitStateTransaction` and `RewindStateTransaction` list only `Commit`
-   inside `Puck.State.Rules`; `puck test --reproduce` agrees across two runs.
 6. **Arms prepared once; host reads as sources.** `Prepare(values, keys)` on
    arms with generation-carrying targets; the five host reads become declared
    `Sources` (until then an arm that evaluates in the host and meets a fault
