@@ -43,17 +43,14 @@ public sealed partial class WorldColliderSet {
     }
 
     // One placement copy's analytic primitive colliders, the witnesses a relieved field projects, and the world box that
-    // holds its relieved surface: each primitive's own drawn bound (never a witness collider's inset core), grown by the
-    // relief's reach, which the composed field reads at most `growth` below its shapes' union. Within an exact primitive
-    // that reading is within `growth` of it; a superellipsoid's field is its gauge times its least radius, so it grows by
-    // 1 + growth over that radius.
+    // holds its relieved surface: the union of each copy's reach (CopyReach) under the margin plus `growth`, the most the
+    // composed field reads below its shapes' union through its blends and relief.
     //
     // With `partitioned`, also the copy's FixedFieldPartition, whose invariant (FixedFieldPartition's remarks) rests on
     // what this walk establishes: every copy joins by hard union (a piece) or hard subtraction (a carve), any other blend
-    // leaving the creation without a partition; each copy's reach is its drawn oriented bound grown by the margin its
-    // contact primitive is dilated by (FixedFieldReach.Oriented pads it past rounding), so its own field reads above zero
-    // outside it; and a piece's exact collider is the copy's own contact surface (ExactCollider). The caller asks for
-    // none over relief, which displaces the union everywhere.
+    // leaving the creation without a partition; each copy's reach under its margin (CopyReach) holds every point its own
+    // margined field reads at or below zero; and a piece's exact collider is the copy's own contact surface
+    // (ExactCollider). The caller asks for none over relief, which displaces the union everywhere.
     private static List<FixedStaticCollider> PrimitiveColliders(CreationDocument document, in FixedCreationStampTransform transform, FixedQ4816 margin,
         FixedQ4816 growth, bool partitioned, out bool unbounded, out (FixedVector3 Center, FixedVector3 HalfExtent) bounds, out FixedFieldPartition? partition) {
         var colliders = new List<FixedStaticCollider>();
@@ -61,10 +58,8 @@ public sealed partial class WorldColliderSet {
         var low = new FixedVector3(X: FixedQ4816.MaxValue, Y: FixedQ4816.MaxValue, Z: FixedQ4816.MaxValue);
         var high = new FixedVector3(X: FixedQ4816.MinValue, Y: FixedQ4816.MinValue, Z: FixedQ4816.MinValue);
         var reach = (growth + margin);
-        var pad = new FixedVector3(X: FixedQ4816.Epsilon, Y: FixedQ4816.Epsilon, Z: FixedQ4816.Epsilon);
         var pieces = (partitioned ? new List<FixedFieldPiece>() : null);
         var carves = new List<FixedFieldReach>();
-        var pieceGrowth = FixedQ4816.Max(x: margin, y: FixedQ4816.Zero);
 
         CreationStampEmitter.VisitFixedPrimitiveCopies(
             document: document,
@@ -75,10 +70,7 @@ public sealed partial class WorldColliderSet {
                 colliders.Add(item: witness);
 
                 if (pieces is not null) {
-                    var copyReach = ((copy.Shape.Type == SdfSolidPrimitive.Plane)
-                        ? FixedFieldReach.Unbounded(center: copy.Center)
-                        : FixedFieldReach.Oriented(center: copy.Center, rotation: copy.Rotation,
-                            halfExtent: (FixedVector3.Abs(value: copy.LocalHalfExtents) + new FixedVector3(X: pieceGrowth, Y: pieceGrowth, Z: pieceGrowth))));
+                    var copyReach = CopyReach(copy: in copy, dilation: margin);
 
                     switch (copy.Shape.Blend ?? SdfBlendOp.Union) {
                         case SdfBlendOp.Union: {
@@ -101,25 +93,10 @@ public sealed partial class WorldColliderSet {
                     return;
                 }
 
-                FixedVector3 half;
+                var box = CopyReach(copy: in copy, dilation: reach).Box;
 
-                if (witness.Kind == FixedStaticColliderKind.Superellipsoid) {
-                    // The witness is the drawn superellipsoid itself, uninset; a convex solid's support along each world
-                    // axis is its exact world box.
-                    var least = FixedQ4816.Max(x: FixedQ4816.Epsilon, y: FixedQ4816.Min(x: witness.Extent.X, y: FixedQ4816.Min(x: witness.Extent.Y, y: witness.Extent.Z)));
-                    var grown = (witness with { Extent = (witness.Extent * (FixedQ4816.One + (reach / least))), Radius = FixedQ4816.Zero });
-
-                    half = (new FixedVector3(
-                        X: (grown.SupportPoint(direction: FixedVector3.UnitX).X - grown.Center.X),
-                        Y: (grown.SupportPoint(direction: FixedVector3.UnitY).Y - grown.Center.Y),
-                        Z: (grown.SupportPoint(direction: FixedVector3.UnitZ).Z - grown.Center.Z)
-                    ) + pad);
-                } else {
-                    half = ((copy.HalfExtents + new FixedVector3(X: reach, Y: reach, Z: reach)) + pad);
-                }
-
-                low = -FixedVector3.Max(left: -low, right: (half - copy.Center));
-                high = FixedVector3.Max(left: high, right: (copy.Center + half));
+                low = -FixedVector3.Max(left: -low, right: (box.Extent - box.Center));
+                high = FixedVector3.Max(left: high, right: (box.Center + box.Extent));
             }
         );
 
@@ -127,6 +104,38 @@ public sealed partial class WorldColliderSet {
         bounds = (((low + high) / FixedQ4816.FromInteger(value: 2)), ((high - low) / FixedQ4816.FromInteger(value: 2)));
         partition = ((pieces is null) ? null : new FixedFieldPartition(carves: carves, pieces: pieces));
         return colliders;
+    }
+    // Where a copy's own contact field, read `dilation` metres lower (its margin's Dilate, or that and the composed field's
+    // sag), can read at or below zero: its oriented box (the copy's SdfSolidGeometry.LocalBox, which holds its zero set)
+    // grown along each local axis by the dilation times its gain (SdfSolidGeometry.DilationGain), since a gauge or a
+    // stretched field reads under the distance and dilates farther along its long axes; FixedFieldReach.Oriented pads
+    // it past rounding. An erosion stays inside the box. A half-space has no reach to bound.
+    private static FixedFieldReach CopyReach(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 dilation) {
+        if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
+            return FixedFieldReach.Unbounded(center: copy.Center);
+        }
+
+        var gain = FixedVector3.FromVector3(value: SdfSolidGeometry.DilationGain(scale: copy.Shape.Scale, type: copy.Shape.Type));
+        var half = (FixedVector3.Abs(value: copy.LocalHalfExtents) + (gain * FixedQ4816.Max(x: dilation, y: FixedQ4816.Zero)));
+        var reach = FixedFieldReach.Oriented(center: copy.Center, halfExtent: half, rotation: copy.Rotation);
+
+        if (copy.Shape.Type is not (SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid or SdfSolidPrimitive.Superellipsoid)) {
+            return reach;
+        }
+
+        // A gauge-lowered shape's grown zero set is the Lp ball of the grown radii (exponent two for a sphere or an
+        // ellipsoid), whose support along each world axis is its exact world box, far tighter than its turned box's.
+        var ball = FixedStaticCollider.Superellipsoid(center: copy.Center, exponent: FixedQ4816.FromDouble(value: ((copy.Shape.Type == SdfSolidPrimitive.Superellipsoid)
+            ? (copy.Shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent)
+            : SdfProgramBuilder.MinSuperellipsoidExponent)), radii: half, rotation: copy.Rotation);
+        var padding = new FixedVector3(X: FixedFieldReach.Padding, Y: FixedFieldReach.Padding, Z: FixedFieldReach.Padding);
+        var world = (new FixedVector3(
+            X: (ball.SupportPoint(direction: FixedVector3.UnitX).X - ball.Center.X),
+            Y: (ball.SupportPoint(direction: FixedVector3.UnitY).Y - ball.Center.Y),
+            Z: (ball.SupportPoint(direction: FixedVector3.UnitZ).Z - ball.Center.Z)
+        ) + padding);
+
+        return (reach with { Box = new FixedColliderBox(Center: copy.Center, Extent: -FixedVector3.Max(left: -reach.Box.Extent, right: -world)) });
     }
     // A copy's analytic collider when its surface is the copy's own surface in the contact field: a sphere, a Box's
     // rounded or chamfered box, a round capsule and a half-space are the drawn primitive dilated by the margin, as the

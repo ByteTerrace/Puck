@@ -336,14 +336,14 @@ public sealed partial class WorldColliderSet : IContactField {
         }
         if ((copy.Shape.Type == SdfSolidPrimitive.Capsule) && (MathF.Abs(x: copy.Shape.Scale.X) == MathF.Abs(x: copy.Shape.Scale.Z))) {
             // A capsule is a rounded box whose inner box is its segment, which runs 0.5·scale.y from the shape's position
-            // along its own Y (SdfSolidGeometry's unit law): scale.y stretches the segment, never the radius, so the
-            // capsule's scaled unit bound would reach a whole radius-scaled length past either end.
+            // along its own Y (SdfSolidGeometry's unit law): scale.y stretches the segment, never the radius. The copy's
+            // centre is its box's (SdfSolidGeometry.LocalBox), the segment's midpoint, and its X half-extent the radius.
             var segmentScale = FixedQ4816.Max(x: FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: copy.Shape.Scale.Y)),
                 y: FixedQ4816.FromDouble(value: SdfSolidGeometry.MinimumScale));
             var halfSegment = ((segmentScale * copy.StampScale) * CapsuleHalfSegment);
 
             return FixedStaticCollider.RoundedBox(
-                (copy.Center + (copy.Rotation.Rotate(vector: FixedVector3.UnitY) * halfSegment)),
+                copy.Center,
                 copy.Rotation,
                 new FixedVector3(X: FixedQ4816.Zero, Y: halfSegment, Z: FixedQ4816.Zero),
                 (copy.LocalHalfExtents.X + margin)

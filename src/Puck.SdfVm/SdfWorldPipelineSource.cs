@@ -357,5 +357,5 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     }
 }
 // The pass pipelines an engine takes beside its set: the region copy its uploads record with, its mesh pass, the
-// shadow cascades' two depth-only passes, the glass pass and the mesh pass's occlusion kernel.
+// shadow cascades' opaque depth and glass extinction passes, the glass pass and the mesh pass's occlusion kernel.
 internal readonly record struct SdfWorldPassPipelines(IGpuComputePipeline RegionCopy, GpuPassPipeline MeshRaster, GpuPassPipeline ShadowRaster, GpuPassPipeline ShadowExitRaster, GpuPassPipeline ShadowGlassRaster, GpuPassPipeline GlassRaster, GpuPassPipeline Occlusion);

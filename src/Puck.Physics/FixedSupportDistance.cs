@@ -60,7 +60,7 @@ public static class FixedSupportDistance {
         var low = -FixedVector3.Max(left: (start.Extent - start.Center), right: (end.Extent - end.Center));
         var high = FixedVector3.Max(left: (start.Center + start.Extent), right: (end.Center + end.Extent));
 
-        switch (collider.Narrow(center: ((low + high) / Two), collider: out var narrowed, extent: (((high - low) / Two) + new FixedVector3(X: PaddingSlack, Y: PaddingSlack, Z: PaddingSlack)),
+        switch (collider.NarrowQuery(center: ((low + high) / Two), collider: out var narrowed, extent: (((high - low) / Two) + new FixedVector3(X: PaddingSlack, Y: PaddingSlack, Z: PaddingSlack)),
             reach: skin)) {
             case FixedFieldRegion.Empty: {
                     descent = FixedQ4816.Zero;

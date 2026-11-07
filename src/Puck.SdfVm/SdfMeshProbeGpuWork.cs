@@ -65,19 +65,23 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // The job owns a scene claim until completion/abandonment. The service owns every slot's fence and readback token.
     // A trace also copies each origin's hits into the device hit cache at its slot, so a relight reads them there and the
     // host never uploads hits it read back.
-    internal uint[] Trace(SdfMeshIrradianceScene scene, Vector4[] origins, uint[] cacheSlots, uint hitCapacity) {
-        return Submit(new Job(scene.Acquire(), origins) { CacheSlots = cacheSlots, HitCapacity = hitCapacity });
+    // The answer of a job that is given `reuse` is `reuse` itself, or a larger array when it is too small: the caller keeps
+    // the returned array for its next job and reads only the rows its origins name, never past them, since the words beyond
+    // are an earlier job's.
+    internal uint[] Trace(SdfMeshIrradianceScene scene, Memory<Vector4> origins, uint[] cacheSlots, uint hitCapacity, uint[]? reuse = null) {
+        return Submit(new Job(scene.Acquire(), origins) { CacheSlots = cacheSlots, HitCapacity = hitCapacity, Reuse = reuse });
     }
-    internal Result Relight(SdfMeshIrradianceScene scene, Vector4[] origins, uint[] input, Vector4[] lighting,
-        int volumeWords, (int Word, uint[] Words)[] updates, uint hitCapacity) {
+    // The origins and input are read before this returns, so a caller may overwrite the arrays its memories view at once.
+    internal Result Relight(SdfMeshIrradianceScene scene, Memory<Vector4> origins, ReadOnlyMemory<uint> input, Vector4[] lighting,
+        int volumeWords, in Deltas updates, uint hitCapacity, uint[]? reuse = null) {
         var job = new Job(scene.Acquire(), origins) {
-            Input = input, Lighting = lighting, VolumeWords = volumeWords, Updates = updates, HitCapacity = hitCapacity,
+            Input = input, Lighting = lighting, VolumeWords = volumeWords, Updates = updates, HitCapacity = hitCapacity, Reuse = reuse,
         };
         var words = Submit(job);
         return new Result(words, job.Output!, job.HeldReadback!);
     }
-    internal void Commit(SdfMeshIrradianceScene scene, int geometry, int window, Result source, int[] destinations) =>
-        Submit(new Job(scene.Acquire(), []) { CommitSource = source, Destinations = destinations, Geometry = geometry, Window = window });
+    internal void Commit(SdfMeshIrradianceScene scene, int geometry, int window, Result source, ReadOnlyMemory<int> destinations) =>
+        Submit(new Job(scene.Acquire(), default) { CommitSource = source, Destinations = destinations, Geometry = geometry, Window = window });
     internal IGpuBuffer FeedbackBuffer => m_feedback!.Buffer(0);
 
     // The service's existing readback token also pins the job's device output. A commit may borrow it only while
@@ -88,10 +92,10 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         private SdfGpuWorkReadback? m_readback = readback;
         public void Dispose() => Interlocked.Exchange(ref m_readback, null)?.Release();
     }
-    internal uint[] Select(SdfMeshIrradianceScene scene, Vector4[] centers, uint[] metadata, Vector4[] changes, uint hitCapacity) =>
-        Submit(new Job(scene.Acquire(), centers) { Input = metadata, Lighting = changes, Selection = true, HitCapacity = hitCapacity });
-    internal Task<uint[]> Meter(SdfMeshIrradianceScene scene, Vector4[] origins, Vector4[] lighting, int words, int geometry, int window) =>
-        SubmitAsync(new Job(scene.Acquire(), origins) { Input = [0], Lighting = lighting, Meter = true, VolumeWords = words, Geometry = geometry, Window = window });
+    internal uint[] Select(SdfMeshIrradianceScene scene, Memory<Vector4> centers, ReadOnlyMemory<uint> metadata, Vector4[] changes, uint hitCapacity, uint[]? reuse = null) =>
+        Submit(new Job(scene.Acquire(), centers) { Input = metadata, Lighting = changes, Selection = true, HitCapacity = hitCapacity, Reuse = reuse });
+    internal Task<uint[]> Meter(SdfMeshIrradianceScene scene, Memory<Vector4> origins, Vector4[] lighting, int words, int geometry, int window) =>
+        SubmitAsync(new Job(scene.Acquire(), origins) { Input = new uint[] { 0 }, Lighting = lighting, Meter = true, VolumeWords = words, Geometry = geometry, Window = window });
     private uint[] Submit(Job job) => SubmitAsync(job).GetAwaiter().GetResult();
     private Task<uint[]> SubmitAsync(Job job) {
         lock (m_gate) {
@@ -145,7 +149,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 m_pending.Dequeue();
                 m_inFlight = true;
                 job = pending;
-                estimatedSeconds = pending.Destinations!.Length * 1e-8;
+                estimatedSeconds = pending.Destinations.Length * 1e-8;
                 return true;
             }
             if (!tables.TryProbeScene(pending.Scene, out var placements, out var meshes, out var version)) {
@@ -181,7 +185,10 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                     m_feedback = tables.CreateProbeSceneRegion(pending.VolumeWords * 4);
                     m_feedbackWords = pending.VolumeWords;
                 }
-                foreach (var (word, words) in pending.Updates!) { m_feedback!.Write(word * 4, MemoryMarshal.AsBytes(words.AsSpan())); }
+                var updates = pending.Updates;
+                for (var update = 0; update < updates.Count; update++) {
+                    m_feedback!.Write(updates.Words.Span[update] * 4, MemoryMarshal.AsBytes(updates.Data.Span.Slice(update * updates.Length, updates.Length)));
+                }
             }
             m_pending.Dequeue();
             m_inFlight = true;
@@ -219,10 +226,11 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             if (m_meterCache is null || m_meterCache.SizeBytes < cacheBytes) {
                 m_meterCache?.Dispose();
                 m_meterCache = m_gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: cacheBytes, usage: GpuBufferUsage.Storage);
-                for (var i = 0; i < query.Origins.Length; i++) { query.Origins[i].W = 1; }
+                var origins = query.Origins.Span;
+                for (var i = 0; i < origins.Length; i++) { origins[i].W = 1; }
             }
         }
-        slot.Origins.Write<Vector4>(query.Origins);
+        slot.Origins.Write<Vector4>(query.Origins.Span);
         var command = recording.CommandBuffer;
         // TryTake admits one query until Complete observes its fence. These shared regions therefore need
         // one upload slot; the service slots still independently own outputs and held readback tokens.
@@ -234,7 +242,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         Bind(SdfKernelInterfaces.ProbeHitsWritten, slot.Hits, 4, written: true);
         if (query.HitCapacity != 0) { FitHitCache(query.HitCapacity, command); }
         if (compute) {
-            Write(ref slot.Input, MemoryMarshal.AsBytes(query.Input.AsSpan()));
+            Write(ref slot.Input, MemoryMarshal.AsBytes(query.Input.Span));
             Write(ref slot.Lighting, MemoryMarshal.AsBytes(query.Lighting.AsSpan()));
             Bind(SdfKernelInterfaces.ProbeInput, slot.Input!, 4);
             Bind(SdfKernelInterfaces.ProbeLighting, slot.Lighting!, 16);
@@ -355,8 +363,9 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: destination.BufferHandle,
             sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.TransferRead, sourceStageMask: GpuStage.ComputeShader | GpuStage.Transfer,
             destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
-        for (var i = 0; i < query.Destinations!.Length; i++) {
-            var slot = query.Destinations[i];
+        var destinations = query.Destinations.Span;
+        for (var i = 0; i < destinations.Length; i++) {
+            var slot = destinations[i];
             if (slot < 0) { continue; }
             recorder.CopyBuffer(command, source.Buffer.BufferHandle, destination.BufferHandle,
                 (ulong)SdfMeshIrradianceProbe.ProbeWords * 4,
@@ -372,14 +381,16 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     public void Complete(object job, SdfGpuWorkReadback readback) {
         if (job is SceneChunk chunk) { CompleteSceneUpload(chunk, readback); return; }
         var query = (Job)job;
-        var readWords = new uint[readback.Length / 4];
+        var words = readback.Length / 4;
+        var readWords = (words == 0) ? [] : (query.Reuse is { } reuse && (reuse.Length >= words)) ? reuse : new uint[words];
         var holdsOutput = query.Lighting is not null && !query.Selection && !query.Meter;
-        try { readback.Read(MemoryMarshal.AsBytes(readWords.AsSpan())); }
+        try { readback.Read(MemoryMarshal.AsBytes(readWords.AsSpan(start: 0, length: words))); }
         catch { readback.Release(); throw; }
         if (holdsOutput) { query.HeldReadback = readback; }
         else { readback.Release(); }
-        var result = query.CommitSource is not null ? readWords : readWords[..^1];
-        if (query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.TraversalFaults, readWords[^1]); }
+        // A reused array is answered whole, its fault word at words - 1; any other answer drops the fault word's slot.
+        var result = ((query.CommitSource is not null) || (query.Reuse is not null)) ? readWords : readWords[..^1];
+        if (query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.TraversalFaults, readWords[words - 1]); }
         if (query.Lighting is null && query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.GpuRays, query.Origins.Length * SdfMeshProbeDepth.HitCount); }
         if (readback.GpuSeconds is { } seconds) { m_volume.Counters.Add(query.Meter ? SdfMeshIrradiance.GpuMeterNanoseconds : query.Selection ? SdfMeshIrradiance.GpuSelectNanoseconds : query.Lighting is null && query.CommitSource is null ? SdfMeshIrradiance.GpuTraceNanoseconds : SdfMeshIrradiance.GpuRelightNanoseconds, (long)(seconds * 1e9)); }
         if (query.Meter) {
@@ -440,22 +451,27 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         m_zero.Dispose();
         m_gpu.Bindings.DestroyPool(m_pool);
     }
-    private sealed class Job(SdfMeshIrradianceScene scene, Vector4[] origins) {
+    /// <summary>The slot-sized updates a relight job applies to the feedback volume before it runs: the first word each
+    /// update writes, then every update's words back to back, each <see cref="Length"/> words long.</summary>
+    internal readonly record struct Deltas(ReadOnlyMemory<int> Words, ReadOnlyMemory<uint> Data, int Count, int Length);
+
+    private sealed class Job(SdfMeshIrradianceScene scene, Memory<Vector4> origins) {
         public readonly SdfMeshIrradianceScene Scene = scene;
-        public readonly Vector4[] Origins = origins;
+        public readonly Memory<Vector4> Origins = origins;
         public readonly TaskCompletionSource<uint[]> Answer = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public IGpuBuffer? Meshes;
-        public uint[]? Input;
+        public ReadOnlyMemory<uint> Input;
         public Vector4[]? Lighting;
         public int VolumeWords;
-        public (int Word, uint[] Words)[]? Updates;
+        public Deltas Updates;
         public bool Selection;
         public bool Meter;
         public IGpuBuffer? Output;
         public SdfGpuWorkReadback? HeldReadback;
         public Result? CommitSource;
-        public int[]? Destinations;
+        public ReadOnlyMemory<int> Destinations;
         public uint[]? CacheSlots;
+        public uint[]? Reuse;
         public uint HitCapacity;
         public int Geometry;
         public int Window;

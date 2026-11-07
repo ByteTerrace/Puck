@@ -215,6 +215,19 @@ public sealed partial class WorldCreationInstances {
 
         public float RateLead;
 
+        // The pack whose rate decision RateHertz and RatePixelsPerMetre hold (WorldCreationInstances.RateOf), and the name
+        // world.rates lists the registration by, made on its first reading.
+        public long RatePack = -1L;
+        public int RateHertz = SdfUpdateRateTiers.EveryFrameHertz;
+        public float RatePixelsPerMetre;
+        public string? RateName;
+        // A reducing placed creation's measured part speed relative to its root, in creation units a second (infinity
+        // until measured), and each shape's root-relative pose at its last full pack, which the next one measures
+        // against (WorldCreationInstances.MeasurePartSpeed).
+        public float PartSpeed = float.PositiveInfinity;
+        public Vector3[] PartLocalPositions = [];
+        public Quaternion[] PartLocalOrientations = [];
+
         // The pack count when something outside the pack last read one of the body's parts (NotePoseRead), and the
         // farthest, in creation units, any full pack has posed one of its parts' geometry from its root.
         public long PoseReadPack = (long.MinValue / 2);

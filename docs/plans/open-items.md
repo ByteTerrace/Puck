@@ -45,10 +45,13 @@ milestone. The owner requested its baseline and implementation plan, which
    [baseline and implementation order](dense-landscapes.md) keep CPU field
    queries first and connect static-copy sharing, retained updates, GPU
    instancing, geometry/shadow work and memory to one proving landscape.
-1. [Measurement window](#measurement-window) [the frame bar's evidence]: the
-   harness for the questions no `puck measure` report reads yet (windowed boot
-   frames, glass-pass GPU time, the tour's frame percentiles, `host.frames` at
-   the water views), then a window that answers them.
+1. The frame bar [high]: 60 FPS steady state on the lead machine is not met
+   (every sweep stop fails it, with p99 hitches of 23-50 ms; see
+   [frame-time findings](#other-frame-time-findings)). Measure every stop's
+   p50/p99 in a quiet [measurement window](#measurement-window), then fix the
+   worst stops at their causes. The disclosure leaks, transmission's exit-layer
+   highs, the lockstep relight under a moving sun and the tour's and cold
+   bake's memory are open highs in their own packets, not owner decisions.
 2. [Memory](#memory-on-the-deck-tier) [high, the Deck]: the debug world's
    process plus GPU memory at or under 10 GB on the Deck tier, attribution
    first.
@@ -126,13 +129,6 @@ milestone. The owner requested its baseline and implementation plan, which
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
-- Deferred by the owner, not resolved, and first in Next: the disclosure leaks the harness shows
-  ([disclosure](disclosure.md#the-build-order)); transmission's remaining
-  exit-layer highs ([transmission](transmission.md)); the lockstep relight
-  under a moving sun ([lighting](#lighting-and-gi)); the tour's and the cold
-  bake's memory ([memory](#memory-on-the-deck-tier),
-  [sweep](#sweep-and-visual-checks)); and the frame bar failing at every stop
-  ([frame-time findings](#other-frame-time-findings)).
 - Pushing `main` (owner-only: a push to `main` deploys to Azure). The
   integration branch `lead/velocity` is far ahead of `main`, hundreds of commits.
   Recommendation: push once the milestone's riskiest areas have had a fresh fix
@@ -305,21 +301,34 @@ landed geometry).
   scale (`WorldEffectorSolver.cs:28`). The surface probe also runs while the
   effector's gate is shut and its weight at rest
   (`WorldCreationInstances.Effectors.cs:82-93`).
-- [high] Remaining managed allocation churn, read by `gc-cuts` on the Release
-  debug World, before any custom runtime. Zero steady gen0 is not reached. The
-  steady frame's remaining sites are irradiance probe blocks
-  (`SdfMeshIrradiance`), dressed-pick arrays (`SdfDressedPickMap.cs:24-25`) and
-  dressed motion identities (`SdfMeshPathBake.cs:408, :425`; the `Dress` item
-  under [other frame-time findings](#other-frame-time-findings)); scene
-  emission's residue includes pick material labels (`WorldPickMap.cs:64`) and
-  shape-specific materials. A cold bake's remaining sites are the pooled
-  readback-copy byte arrays (`SdfMeshBakeGpuWork.Complete`), point rounds
-  (`SdfSampledLattice.CrossingPoints`, `SdfSampledLattice.GradientPoints`) and
-  contour merge doubles (`SdfDualContouring.Merge`). Refinement indexes already
-  fill owned storage directly; their managed growth/copy path is gone. Continue
-  with owned storage, through
-  `IAllocator` and `MimallocAllocator` where it goes native; a shared
-  cross-thread pool belongs to the memo.
+- [high] Remaining managed allocation churn, read on the windowed Release
+  debug World with `dotnet-trace --profile gc-verbose` (sampled allocation
+  ticks by type and first `Puck.*` frame), before any custom runtime. Zero
+  steady gen0 is not reached. The relight batch's GPU scratch, the trace and
+  selection answers, the bake readback copies, the point rounds, the follow
+  scan's closures and the pick material labels no longer allocate per call; the
+  contour merge fills exact arrays. What remains, in measured order:
+  - Steady frame: the landed probe blocks (`SdfMeshIrradiance.Batch`'s
+    `ProbeBlock` and `LightBlock` floats) are the probe cache's own storage,
+    which readers outside the gate hold whole, so recycling one needs an epoch
+    or a slab with per-entry ownership; then `SdfMeshDresser.BuildDrawTopology`
+    draw bindings, the dressed `SdfFrame` copies and the view-snapshot
+    enumerators. The dressed-pick arrays (`SdfDressedPickMap`) are immutable
+    because a delayed GPU pick holds the map of its frame; they rebuild only
+    when draw identities change, as do the dressed motion identities
+    (`SdfMeshPathBake.IndexCopies`), and neither allocated in a steady window.
+  - Cold bake: `SdfMeshPathBake.ContourProjection`'s triangles,
+    `SdfContour.SplitAtCreases`, `SdfDualContouring.ExtractRefined`'s vertex
+    lists (which feed `Merge`), `SdfMeshCollapse.Collapser`,
+    `SdfMeshPlanarMerge.Merger`, `SdfMeshMaterialCut`, the encode path
+    (`SdfMeshStoreCodec`), and the lattice's gradient and crossing
+    dictionaries and `CrossingRoot[]`. The piece, dictionary and plane
+    bookkeeping inside `Merge` is still managed.
+  - Remaining GPU-side churn: `SdfMeshProbeGpuWork` recreates a slot's origins
+    buffer whenever the batch size changes.
+
+  Continue with owned storage, through `IAllocator` and `MimallocAllocator`
+  where it goes native; a shared cross-thread pool belongs to the memo.
 - Open from the allocation cuts:
   - [medium] The cold-bake pause comparison needs at least three alternating
     A/B runs on a quiet machine, with GC events read from the trace; loaded runs
@@ -370,12 +379,15 @@ the account itself is described in the
 The custom no-GC runtime port stays later work, on the
 [memory-pooling page](memory-pooling.md). Still open from the memory review:
 
-- [medium] Managed working memory per admitted group (contour lists,
-  refinement masks and `Vector3[]` point rounds: `SdfSampledLattice.cs:439`
-  onward, `SdfMeshPathBake.cs` `ChooseCrossingPoints`) is not in a group's
-  peak, so the account cannot pace the collections it causes. The cure is the
-  next native movers (the contour and the refinement's per-cell masks), not a
-  count cap.
+- [medium] Managed working memory per admitted group (the contour's lists
+  and per-vertex arrays, the refinement's per-cell masks, and the lattice's
+  gradient and crossing dictionaries and root array: `SdfSampledLattice.cs`
+  `Refine`, `CrossingPoints`, `GradientPoints`) is not in a group's peak, so
+  the account cannot pace the collections it causes. The point rounds
+  themselves are owned storage now. The cure is the next native movers (the
+  contour and the refinement's per-cell masks), not a count cap; the
+  [allocation churn item](#engine-job-system) lists the cold bake's measured
+  managed sites in order.
 - [low] The library releases evicted claims, which frees native payloads,
   under its own gate (`SdfMeshLibrary.cs` `Retain`), the gate the frame thread
   takes in `Restart` through `TryTake`.
@@ -416,25 +428,34 @@ The custom no-GC runtime port stays later work, on the
   a bit-still one. The gradient's six taps are not the marched point and are
   shared with physics (bit-identical per point), so batching them is a design
   step.
-- [high] The meadow (`debug.go meadow`) is a forcing workload in the real debug
-  world: its two-part blades add thousands of dynamic slots and retained mesh
-  draws, and its frame and cold bake are far past both bars. Animated
-  placement registrations cannot use the existing pose-rate holds:
-  `WorldCreationInstances.Pack.cs:247` requires `BodyIndex`, and
-  `WorldCreationInstances.Rates.cs:193` omits them from readings. Owner:
-  rendering lane. Extend the same projection- and consumer-based rate mechanism
-  to placement roots, measure pose packing and draw recording, and preserve
-  planted roots, continuous world-phased gusts and independent tip flutter (the
+- [high] The meadow (`debug.go meadow`, the sweep tour's `meadow` stop) is a
+  forcing workload in the real debug world: its two-part blades add thousands
+  of dynamic slots and retained mesh draws, and its frame and cold bake are far
+  past both bars. Placed creations rate through the bodies' one decision
+  (`WorldCreationInstances.RateOf`), sized for their measured part speed
+  (`MeasurePartSpeed`, about 0.4 m/s for a wind tile against a body's assumed
+  2 m/s), and `world.rates` lists and counts them. What remains of the
   [visibility plan](visibility.md#v2-instance-updates-proportional-to-change-and-authored-motion-on-the-gpu)'s
-  step V2a). A registration is a whole tile and takes the tier of its nearest
-  point, so with the camera inside the patch most tiles stay every-frame; read
-  `world.rates` at the stop before promising frame time. V2a pays on the lawn's
-  far tiles and wherever the camera stands off the patch, and a tile that is too
-  coarse is an authoring lever (`windMeadowTile`), never an engine special
-  case. Draw count is the other cost, one draw per blade part over a few
-  hundred unique geometries; its cause fix is the visibility plan's V1. The
-  meadow is also R1's forcing workload: measure produce's draw-recording share
-  before and after.
+  step V2a: under lockstep the debug world's ticks are 30 Hz, so the 30 Hz tier
+  holds nothing there and the inspection camera's tiles (114 to 217 px/m, 30
+  and 60 Hz) pose about as often as before; from 20 m every tile takes 10 Hz.
+  A registration is a whole tile and takes the tier of its nearest point, and a
+  tile that is too coarse is an authoring lever (`windMeadowTile`), never an
+  engine special case. The measured bound is the fastest speed any pair of
+  consecutive full packs showed: motion faster than any yet seen (a gust
+  stronger than before, a flutter quicker than the tier's period) shows one
+  step past the two-pixel rule before the bound follows, and nothing proves
+  the first measurement saw the peak. Draw count is the other cost, one draw
+  per blade part over a few hundred unique geometries; its cause fix is the
+  visibility plan's V1. The meadow is also R1's forcing workload: measure
+  produce's draw-recording share before and after.
+- [medium] Bodies still tier on an assumed 2 m/s part speed
+  (`BodyPartSpeed`), so a sprinting body's planted foot, sliding faster than
+  that relative to its root, can step more than two pixels at a far tier. Pass
+  `max(BodyPartSpeed, measured)` through the same `MeasurePartSpeed` placements
+  use. `sdf.creations.registrations.rate-held` counts `HoldsPose` on every
+  rendered frame, tickless ones included, so it scales with frames rather than
+  ticks; read posed counts, or count it once per tick.
 - [high] Measure the meadow before ordering the visibility work, on a quiet
   machine (the [visibility plan](visibility.md#measure-first)). M1:
   `debug.go meadow` on Direct3D 12 and a windowed Vulkan leg with
@@ -594,17 +615,19 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   hashes the actual mask/bake kernel bytes. The bake/dresser, view/bake parameter
   and sample-input/transport boundaries now exclude the observed unrelated
   renderer edits; remaining program-packing coupling belongs to
-  [dense landscapes](#dense-landscapes). Before replacing kernel-byte identity
-  with a source identity or sharing backend products, prove the intended output
-  equivalence, including compiler changes and skin/material/refinement behavior.
-  The latest native forest legs have different aggregate triangle counts, so
-  source equality alone is not proof of identical products or a halved cold cost.
+  [dense landscapes](#dense-landscapes). A source identity or a product shared
+  across backends is judged by whether every backend's mesh is correct
+  (`puck mesh audit`), not by byte equality with today's per-backend products
+  (AGENTS.md rule 4). The latest native forest legs have different aggregate
+  triangle counts, so source equality alone does not show a halved cold cost.
 - The cold bake has not met the one-minute bar on either backend. The CPU
   stages remain the target after removing the repeated refinement-index walk,
   fine-cell sign scan and collapse fan preparation. `SdfMeshCollapse.Levels`
   still dominates `land`; its `Measure` and `MeasureReverse` checks are the
-  next profile-led cuts. Preserve their sample order, exact distances and
-  acceptance bounds. The overall CPU-halving target remains open. Queue
+  next profile-led cuts. A cheaper collapse that produces different but
+  equally good meshes (same or better geometric error against the field,
+  coverage and triangle budget in `puck mesh audit`) is a valid cut; equality
+  with today's output is not required. The overall CPU-halving target remains open. Queue
   `bench startup worlds/debug --bake --backend <backend>` through `puck measure`
   for the quiet wall-time comparison. The stage log's `cpu` fields sum worker
   elapsed intervals, including descheduling and GC/profiler suspension; they
@@ -744,11 +767,12 @@ Remaining:
   support along the measured normal, not the volume's own nearest point. Cover
   the volume with core spheres as the certified sweep does
   (`FixedFieldContactSolver.WalkCores`, `FixedFieldContactSolver.cs:209`).
-- **[medium] Relief bounds for non-exact primitives** (`WorldColliderSet.PrimitiveColliders`,
-  `src/Puck.World.Server/WorldColliderSet.Relief.cs:30`): a superellipsoid grows
-  by its gauge and every blend's growth is charged, but a primitive whose field
-  reads under its distance (the cone family) grows only by the reach. Take each
-  shape's gain from the evaluator's reach certificates.
+- **[medium] Relief bounds for non-exact primitives** (`WorldColliderSet.CopyReach`,
+  `SdfSolidGeometry.DilationGain`): a gauge-lowered shape (sphere, ellipsoid,
+  superellipsoid) and the generic Scale arm grow by their gain and every blend's
+  growth is charged, but a primitive whose own unit field reads under its
+  distance (the cone family) grows only by the reach. Take each shape's gain
+  from the evaluator's reach certificates.
 - [medium] A carved creation's contact narrows to its analytic pieces only for
   hard unions and hard subtractions (`FixedFieldPartition`, built in
   `WorldColliderSet.PrimitiveColliders`): any other blend (smooth, chamfer,
@@ -1104,6 +1128,22 @@ Next: [the water feature plan](water.md) owns the feature end to end: the arc as
 specification, the audit, the definition of done and the lanes (A2 to A5 the world
 authoring, R3 the particle pool, P1 the tour). The items below
 are what the plan defers or the water strained in a system beside it.
+
+- [low · glass-shadow review F5] Mixed-density faces do not define a thickness
+  integral: `src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-optical-depth.hlsli:22`
+  accumulates each face's own density. An entry at density 0.8 and an exit at
+  zero in overlapping glass slots integrate through air to the receiver;
+  swapping their densities clamps the negative sum to no shadow. A water
+  surface touching the `reservoirPavilion` pane is the failing case. The
+  camera absorption shares this design. Give the integral a medium identity
+  or otherwise account for transitions before supporting mixed-density shells.
+- [low · glass-shadow review F6] Open or portal-clipped glass loses its paired
+  face: `src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-mesh-occlusion.comp.hlsl:263`
+  routes glass without requiring the enclosing bit, and the shadow vertex
+  stage clips it at the portal plane. A kept front face with its back face
+  beyond that plane integrates all the way to the receiver, so its shadow
+  darkens as the floor moves away. An open authored sheet has the same failing
+  case. Define and enforce the optical boundary for non-enclosing casters.
 
 - [medium] A lattice row that is simulation only. The water chain
   (`worlds/standard/hydrology.puck`) levels water against a bed with
@@ -2683,7 +2723,10 @@ shards by cause.
   "cache retention lists again"; `SdfWorldPassesLawTests.AViewAllocatesEachScratchBufferOnce`
   and `CadenceCanBeDisabledAndDoesNotAllocateOnAStillView`, a per-frame
   closure allocation in `SdfMeshIrradiance`; and
-  `AViewSizesItsCascadesByItsShadowResolution…` timing out at 5 minutes.
+  `AViewSizesItsCascadesByItsShadowResolution…` timing out at 5 minutes; and
+  `SdfMeshIrradianceLawTests.RemovingTheLastStaticDrawReplacesItsSceneAndProbeMeasurements`
+  failing on `volume.Settling` (`SdfMeshIrradianceLawTests.cs:390`), which the
+  gc-churn lane saw on its base files too.
   Each is a defect in the code or the law; fix or delete it, never keep it red.
 
 The suite target (100 % line coverage plus the keep-list) and CI's `coverage` job

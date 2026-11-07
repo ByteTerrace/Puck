@@ -6,6 +6,7 @@ public sealed partial class SdfProgram {
     // Attached by Of once the field constructor has returned, so it is null for the whole field derivation.
     private SdfAppearance? m_appearance;
     private bool? m_hasGlass;
+    private bool? m_hasGlassShadows;
 
     /// <summary>Returns the program of a field joined to an appearance: the field is derived from its own inputs and
     /// the appearance's <see cref="SdfAppearance.Outline"/> alone, then the appearance packs its materials and paints into
@@ -65,6 +66,9 @@ public sealed partial class SdfProgram {
     /// nothing for them. Measured once, on first read.</summary>
     public bool HasGlass => (m_hasGlass ??= MeasureGlass());
 
+    /// <summary>Gets whether a drawn glass shape has positive shadow extinction; only these programs need optical cascades.</summary>
+    public bool HasGlassShadows => (m_hasGlassShadows ??= MeasureGlass(shadows: true));
+
     /// <summary>Returns whether a material id names a glass material of the program's palette; a screen sentinel or an
     /// id past the palette is opaque.</summary>
     /// <param name="material">The material id.</param>
@@ -94,9 +98,10 @@ public sealed partial class SdfProgram {
         return (shapes > 0);
     }
 
-    private bool MeasureGlass() {
+    private bool MeasureGlass(bool shadows = false) {
         foreach (var instruction in m_instructions) {
-            if ((instruction.Op == SdfOp.ShapeBlend) && IsGlassMaterial(material: unchecked((int)instruction.Material))) {
+            if ((instruction.Op == SdfOp.ShapeBlend) && IsGlassMaterial(material: unchecked((int)instruction.Material)) &&
+                (!shadows || Appearance.Materials[(int)instruction.Material].Glass is { ShadowDensity: > 0f })) {
                 return true;
             }
         }

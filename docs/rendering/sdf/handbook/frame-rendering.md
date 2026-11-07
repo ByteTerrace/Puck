@@ -262,9 +262,16 @@ packs (`WorldCreationInstances.Rates`). A placed creation's animation decides
 through the same function: it holds while no view, shadow cascade or reader of
 its parts may show it, and takes the reduced tiers while visible only where its
 author allows them (the creation's `behavior.reducedRateAtDistance`; the
-standard's wind meadow tiles do), updating every frame otherwise. The machine behind a rated screen and the
-simulation behind a rated body run at full rate. Each tier bounds the step a
-held update jumps by on screen to two pixels for the speed it is sized for.
+standard's wind meadow tiles do), updating every frame otherwise. A body's
+tiers are sized for an assumed part speed (`SdfUpdateRateTiers.BodyPartSpeed`);
+a placed creation's for its own, measured relative to its root across each pair
+of consecutive full packs (each part's centre travel plus the chord its reach
+sweeps by its turn, `WorldCreationInstances.MeasurePartSpeed`), keeping the
+fastest seen and updating every frame until the first measurement. The
+machine behind a rated screen and the simulation behind a rated body run at
+full rate. Each tier bounds the step a held update jumps by on screen to two
+pixels for the speed it is sized for. `world.rates` lists bodies as
+`body:<index>` and placed creations as `placement:<id>`, and counts both.
 
 Every lever decides its holds through one function, `PresentationRate.Holds`:
 an item updates on the first frame where waiting one more frame, estimated from

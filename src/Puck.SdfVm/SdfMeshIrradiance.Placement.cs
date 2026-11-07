@@ -18,7 +18,10 @@ public sealed partial class SdfMeshIrradiance {
         var pending = new bool[count];
         var valid = new bool[count];
         var inside = new float[count];
-        var savedHits = new uint[count * SdfMeshProbeDepth.HitWords];
+        // A probe's saved words are written in Place before the result loop reads them, so the scratch keeps stale words
+        // only for probes that read none.
+        GrowScratch(array: ref m_gpuSavedHits, length: (count * SdfMeshProbeDepth.HitWords));
+        var savedHits = m_gpuSavedHits;
         var indices = new List<int>(count);
         var clearance = SdfMeshIrradianceProbe.Clearance;
         var trace = GpuTrace;
@@ -106,7 +109,8 @@ public sealed partial class SdfMeshIrradiance {
                     if (slot == NoGpuHits) { slot = AllocateGpuHits(layout: layout, lows: lows); }
                     slots[j] = slot;
                 }
-                var hits = trace.Trace(scene, origins, slots, GpuHitCapacity);
+                var hits = trace.Trace(scene, origins, slots, GpuHitCapacity, reuse: m_gpuAnswer);
+                m_gpuAnswer = hits;
                 for (var j = 0; j < indices.Count; j++) {
                     var i = indices[j];
                     hits.AsSpan(j * SdfMeshProbeDepth.HitWords, SdfMeshProbeDepth.HitWords).CopyTo(block.Hits(i));
