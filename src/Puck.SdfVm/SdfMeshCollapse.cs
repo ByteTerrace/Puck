@@ -132,6 +132,11 @@ public static class SdfMeshCollapse {
         private readonly int[] m_filled;
         private readonly int[] m_touched;
         private readonly int[] m_changed;
+        // A refused directed edge depends on both endpoint fans. Commit is the sole topology/sample/line mutation
+        // door and stamps every old fan endpoint, including removed triangles; Run clears rejections for new budgets.
+        private readonly int[] m_revisions;
+        private readonly Dictionary<(int From, int To), (int From, int To)> m_rejected = [];
+        private int m_revision;
         private readonly int[] m_stamp;
         private readonly byte[] m_kind;
         private readonly double m_lineLimit;
@@ -215,6 +220,7 @@ public static class SdfMeshCollapse {
             m_filled = new int[m_places];
             m_touched = new int[m_places];
             m_changed = new int[m_places];
+            m_revisions = new int[m_places];
             m_stamp = new int[m_places];
             m_kind = new byte[m_places];
             m_candidateCosts = new double[m_places];
@@ -268,6 +274,7 @@ public static class SdfMeshCollapse {
 
         // Collapses until no pass takes enough within the bounds, then returns the level the alive triangles make.
         public SdfMeshLevel Run(double error, double cosine) {
+            m_rejected.Clear();
             for (var pass = 0; (pass < MaxPasses); pass++) {
                 // The constructor's lists and kinds stand for the first pass; later, a place no collapse changed keeps its
                 // triangles and its kind.
@@ -351,10 +358,14 @@ public static class SdfMeshCollapse {
                 if (m_targets.Count == 0) { continue; }
                 PrepareFrom(place: place);
                 foreach (var (_, target) in m_targets) {
+                    var edge = (place, target);
+                    var revision = (m_revisions[place], m_revisions[target]);
+                    if (m_rejected.TryGetValue(key: edge, value: out var rejected) && (rejected == revision)) { continue; }
                     if (TryCollapse(cosine: cosine, error: error, from: place, to: target)) {
                         taken++;
                         break;
                     }
+                    m_rejected[edge] = revision;
                 }
             }
 
@@ -607,11 +618,7 @@ public static class SdfMeshCollapse {
             if (!MeasureReverse(error: error, fan: fan)) { return false; }
             if (!MeasureLines(error: Math.Min(val1: error, val2: m_lineLimit), fan: fan, from: from, to: to)) { return false; }
 
-            CommitLines(from: from, to: to);
             Commit(fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond);
-            for (var at = 0; (at < m_strays.Count); at++) {
-                m_stray[m_measured[at].Triangle] = m_strays[at];
-            }
 
             return true;
         }
@@ -640,6 +647,16 @@ public static class SdfMeshCollapse {
                     NormalSum = sum,
                 };
                 Bounds(candidate: ref m_previous[index].Surface);
+                // A midpoint on an unchanged original edge is already an exact zero-distance witness. Seed those
+                // shared edges before trying targets; no nearest-triangle query can improve a zero inherited bound.
+                if (m_stray[triangle] == 0.0) {
+                    var corner = (3 * triangle);
+                    for (var edge = 0; (edge < 3); edge++) {
+                        var a = m_placeOf[m_corners[(corner + edge)]];
+                        var b = m_placeOf[m_corners[(corner + ((edge + 1) % 3))]];
+                        m_reverseEdges[(Key(a: a, b: b), m_materials[triangle])] = 0.0;
+                    }
+                }
             }
         }
         private struct OriginalTriangle {
@@ -980,7 +997,11 @@ public static class SdfMeshCollapse {
         // Takes a collapse: the edge's two triangles go, the rest about the place take the neighbour's vertices, every
         // measured sample is tracked to its chosen triangle, and the neighbour takes the place's planes.
         private void Commit(List<int> fan, int from, int to, int first, int second, int fromFirst, int toFirst, int toSecond) {
+            m_revision++;
             foreach (var triangle in fan) {
+                for (var corner = (3 * triangle); (corner < ((3 * triangle) + 3)); corner++) {
+                    m_revisions[m_placeOf[m_corners[corner]]] = m_revision;
+                }
                 m_tracked[triangle] = -1;
             }
 
@@ -1006,6 +1027,10 @@ public static class SdfMeshCollapse {
 
                 m_sampleDistanceSquared[m_samples[index]] = distance;
                 Track(sample: m_samples[index], triangle: triangle);
+            }
+            CommitLines(from: from, to: to);
+            for (var at = 0; (at < m_strays.Count); at++) {
+                m_stray[m_measured[at].Triangle] = m_strays[at];
             }
             for (var term = 0; (term < 10); term++) {
                 m_quadrics[((10 * to) + term)] += m_quadrics[((10 * from) + term)];

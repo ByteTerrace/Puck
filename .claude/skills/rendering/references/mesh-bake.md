@@ -58,12 +58,21 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   ends that fan's attempts. Its reverse edge witnesses share that lifetime:
   a midpoint's nearest old surface and inherited error depend only on its two
   places, material and the prepared fan. `PrepareFrom` clears the witness map,
-  and `Pass` stops at its first commit; never retain those answers across it.
+  seeds zero-distance witnesses on original edges, and `Pass` stops at its first
+  commit; never retain those answers across it.
   The triangle's edge vectors and Gram products are prepared once for all of
   its point queries. A retained original vertex is an exact forward witness;
   other samples may keep a measured witness no farther than their previous
   bound instead of searching for the nearest. Every accepted witness still
   satisfies the material, distance and interpolated-normal limits.
+- **Retry refused edges only after their inputs change.** `Collapser.Pass` keys
+  each rejection by its directed edge and both endpoint fan revisions. `Commit`
+  is the one mutation door for topology, surface and line samples, and inherited
+  bounds; it stamps every endpoint of the old fan, including deleted triangles.
+  `Run` clears rejections when the distance and normal budgets change. The cache
+  only skips failed attempts; every accepted collapse still passes all checks.
+  Distance and acute normal-cone comparisons use squared quantities, avoiding
+  roots and division in forward sample queries.
 - **One contouring.** `SdfSampledLattice` contours a GPU-sampled lattice through
   `SdfDualContouring` over `ISdfContourLattice`; never write a second mesher.
   A final lattice refines the cells its samples cannot resolve
