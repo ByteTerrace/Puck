@@ -121,10 +121,12 @@ public sealed class LiveRow {
     );
     /// <summary>Gets the live index indirection.</summary>
     public CompiledCellRef Index { get; }
+
     /// <summary>Gets the widest row this reference can select, for pricing a live read.</summary>
     /// <param name="context">The admitted row reservations.</param>
     public long SelectionCapacity(IRuleCostContext context) {
         var capacity = 0L;
+
         if (Table is { } table) {
             foreach (var ordinal in table.Ordinals) {
                 if (ordinal >= 0) { capacity = Math.Max(val1: capacity, val2: context.RowCapacity(rowOrdinal: ordinal)); }
@@ -136,6 +138,7 @@ public sealed class LiveRow {
         }
         return capacity;
     }
+
     /// <summary>Gets the authored spelling.</summary>
     public string Spelling { get; }
     /// <summary>Gets the rule's zone table, or <see langword="null"/> for a family selection.</summary>
@@ -237,6 +240,34 @@ public sealed class LiveRow {
             reference: in reference
         );
 
+        return Select(resolved: resolved);
+    }
+    /// <summary>Resolves the row once the program its index resolves through has left its value.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="feed">What the index's program left; ignored when the index carries none.</param>
+    /// <returns>As <see cref="Resolve(IStateReader)"/> answers.</returns>
+    public Resolved<int> Resolve(IStateReader reader, in AddressFeed feed) {
+        var reference = Index;
+
+        return Select(resolved: RuleReads.ResolveIndex(
+            feed: in feed,
+            reader: reader,
+            reference: in reference
+        ));
+    }
+    /// <summary>Selects the row an index the interpreter already resolved names: an operand reads its live row through
+    /// this, since the index is one of its declared addresses.</summary>
+    /// <param name="index">What the index address named.</param>
+    /// <returns>The selected row's catalog ordinal when the index selects a row, and
+    /// <see cref="FaultCase.Absent"/> otherwise.</returns>
+    public Resolved<int> Select(in ResolvedKey index) => (index.Named
+        ? Select(resolved: Resolved<long>.Named(value: index.Index))
+        : Resolved<int>.Nothing);
+
+    /// <summary>Gets the program the index resolves through, or <see langword="null"/>.</summary>
+    public CompiledExpressionToken[]? FeedProgram => Index.FeedProgram;
+
+    private Resolved<int> Select(Resolved<long> resolved) {
         if (!resolved.TryNamed(value: out var index)) {
             return ((resolved.Case == FaultCase.Faulted)
                 ? Resolved<int>.Faulted
@@ -261,62 +292,6 @@ public sealed class LiveRow {
         )
             ? Resolved<int>.Named(value: familyOrdinal)
             : Resolved<int>.Nothing);
-    }
-}
-/// <summary>A key computed where it is used: the cell whose name is the integer its expression evaluates to at the
-/// moment the effect or condition holding it reads or writes. Preceding effects are visible to the expression.</summary>
-/// <remarks>An integer names that key even when no row holds it. An absence the expression reads names no cell; any
-/// other fault is the key's fault (<see cref="FaultCase.Faulted"/>), which a read raises as arithmetic.</remarks>
-public sealed class EffectKeyFact : RuleKeyFact {
-    /// <summary>Initializes the fact.</summary>
-    /// <param name="source">The key's compiled Int expression.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public EffectKeyFact(CompiledExpressionToken[] source) {
-        ArgumentNullException.ThrowIfNull(argument: source);
-
-        Source = source;
-    }
-
-    /// <summary>Gets the key's compiled expression.</summary>
-    public CompiledExpressionToken[] Source { get; }
-
-    /// <summary>Appends what the key's expression reads: a read addressed by this key moves whenever they do.</summary>
-    /// <param name="into">The read set being collected.</param>
-    public override void CollectReads(List<CellAccess> into) => RuleDataflow.CollectExpression(
-        into: into,
-        tokens: Source
-    );
-    /// <inheritdoc/>
-    public override Resolved<CellKey> Resolve(IStateReader reader) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
-        var resolved = ResolveIndex(reader: reader);
-
-        if (!resolved.TryNamed(value: out var index)) {
-            return ((resolved.Case == FaultCase.Faulted)
-                ? Resolved<CellKey>.Faulted
-                : Resolved<CellKey>.Nothing);
-        }
-
-        return Resolved<CellKey>.Named(value: (RuleReads.TryIndexKey(index: index, key: out var key, keys: reader.Arena.Keys) ? key : default));
-    }
-    /// <inheritdoc/>
-    public override Resolved<long> ResolveIndex(IStateReader reader) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
-        if (RuleExpressions.TryEvaluate(
-            fault: out var fault,
-            kind: CellKind.Int,
-            program: Source,
-            reader: reader,
-            value: out var index
-        )) {
-            return Resolved<long>.Named(value: index);
-        }
-
-        return ((fault == ExpressionFault.Absent)
-            ? Resolved<long>.Nothing
-            : Resolved<long>.Faulted);
     }
 }
 /// <summary>The key a declared local computed: the cell whose name is the local's integer.</summary>

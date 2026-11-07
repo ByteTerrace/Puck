@@ -38,8 +38,8 @@ public sealed class PatternPreviousTokenLawTests {
         );
 
         Span<long> word = stackalloc long[4];
-        var spelled = PatternOperand.ReadTupleWord(
-            expression: program!,
+        var spelled = RuleExpressions.FoldWord(
+            body: program!,
             kind: CellKind.Int,
             length: out var length,
             reader: host,

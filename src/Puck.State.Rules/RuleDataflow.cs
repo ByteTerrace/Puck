@@ -79,7 +79,6 @@ public static class RuleDataflow {
             tokens: tokens
         );
     }
-
     /// <summary>Appends everything one judgement of a rule observes — its locals (declared and implicit, all evaluated
     /// before the gate), its live-row selection and its gate, never its effects, which run only once the verdict is
     /// in — as the rows it reads and the facts it observes: what a read schedule is built from.</summary>
@@ -115,7 +114,6 @@ public static class RuleDataflow {
             live.CollectFacts(into: facts);
         }
     }
-
     /// <summary>Appends what one value source observes, its key indirections included: the walk a schedule is built
     /// from.</summary>
     /// <param name="source">The compiled value source.</param>
@@ -171,7 +169,7 @@ public static class RuleDataflow {
             case PatternOperand { TokenExpression: { } tokens }:
                 CollectExpressionFacts(includeKeyDependencies: includeKeyDependencies, into: into, tokens: tokens);
                 break;
-            case HistoryOperand { AgeExpression: { } age }:
+            case HistoryOperand { AgeFrom: { Program: { } age } }:
                 CollectExpressionFacts(includeKeyDependencies: includeKeyDependencies, into: into, tokens: age);
                 break;
         }

@@ -6,7 +6,7 @@ namespace Puck.State.Rules;
 /// <remarks>Evaluation allocates nothing once it has run: the value stack and the absence marks are leased from
 /// the reader's <see cref="ArenaScratch"/> at the program's own length, a call's argument frame is a fixed few
 /// words of machine stack, and a fold reads its family's cells straight off the arena.</remarks>
-public static class RuleExpressions {
+public static partial class RuleExpressions {
     /// <summary>The most arguments one shared function takes: a call's argument frame is this many eight-byte
     /// words of machine stack in every evaluator frame.</summary>
     public const int MaxArguments = 16;
@@ -47,7 +47,6 @@ public static class RuleExpressions {
 
         return false;
     }
-
     /// <summary>Evaluates a compiled postfix program as a fault scope of its own, for a caller that is itself what
     /// decides what a fault means (a read-back, a perception sample): the caller receives the fault as
     /// <paramref name="fault"/>, and any scope enclosing this one sees it too.</summary>
@@ -103,6 +102,8 @@ public static class RuleExpressions {
         var absent = absentLease.Span;
         // One frame serves every call site: a call evaluates its body before the next call site is reached.
         Span<long> frame = stackalloc long[MaxArguments];
+        // The values the programs computing an operand's addresses left, which the operand token consumes.
+        Span<AddressFeed> feeds = stackalloc AddressFeed[MaxAddresses];
         var top = 0;
 
         try {
@@ -144,7 +145,22 @@ public static class RuleExpressions {
                         return false;
                     }
 
-                    var fact = token.Operand!.Read(reader: reader);
+                    var operand = token.Operand!;
+                    var fed = FeedCount(operand: operand);
+
+                    top -= fed;
+                    for (var slot = 0; (slot < fed); slot++) {
+                        feeds[slot] = new AddressFeed(
+                            Absent: absent[(top + slot)],
+                            Value: stack[(top + slot)]
+                        );
+                    }
+
+                    var fact = ReadOperand(
+                        feeds: feeds[..fed],
+                        operand: operand,
+                        reader: reader
+                    );
 
                     if (fact.Outcome.Case is FaultCase.Forever or FaultCase.Faulted) {
                         fault = ((fact.Outcome.Case == FaultCase.Faulted)
@@ -160,7 +176,7 @@ public static class RuleExpressions {
                     absent[top] = factAbsent;
                     stack[top++] = (factAbsent
                         ? 0L
-                        : fact.ToRaw(kind: token.CarrierKind ?? kind)
+                        : fact.ToRaw(kind: (token.CarrierKind ?? kind))
                     );
 
                     continue;
@@ -183,21 +199,22 @@ public static class RuleExpressions {
                         stack[top] = truthValue;
                         absent[top++] = false;
                     }
-                    stack[top - 1] = absent[top - 1] || stack[top - 1] == 0L ? 1L : 0L;
-                    absent[top - 1] = false;
+                    stack[(top - 1)] = ((absent[(top - 1)] || (stack[(top - 1)] == 0L)) ? 1L : 0L);
+                    absent[(top - 1)] = false;
                     continue;
                 }
                 if (token.Operation is ExpressionOp.And or ExpressionOp.Or) {
-                    var truth = !absent[top - 1] && stack[top - 1] != 0L;
-                    if ((token.Operation == ExpressionOp.And && truth) || (token.Operation == ExpressionOp.Or && !truth)) {
+                    var truth = (!absent[(top - 1)] && (stack[(top - 1)] != 0L));
+
+                    if (((token.Operation == ExpressionOp.And) && truth) || ((token.Operation == ExpressionOp.Or) && !truth)) {
                         if (!Run(reader, token.Call!.Body, kind, member, arguments, out var rightTruth, out var rightFault)) {
                             if (rightFault != ExpressionFault.Absent) { value = 0L; fault = rightFault; return false; }
                             rightTruth = 0L;
                         }
-                        truth = rightTruth != 0L;
+                        truth = (rightTruth != 0L);
                     }
-                    stack[top - 1] = truth ? 1L : 0L;
-                    absent[top - 1] = false;
+                    stack[(top - 1)] = (truth ? 1L : 0L);
+                    absent[(top - 1)] = false;
                     continue;
                 }
                 if (token.Operation == ExpressionOp.Coalesce) {
@@ -384,14 +401,14 @@ public static class RuleExpressions {
                     if (
                         !ExpressionArithmetic.FunctionAdmits(
                         token.Operation,
-                        token.CarrierKind ?? kind
+                        (token.CarrierKind ?? kind)
                     ) ||
                         !ExpressionArithmetic.TryValidatedFunction(
                         arguments: stack.Slice(
                             length: functionArity,
                             start: top
                         ),
-                        kind: token.CarrierKind ?? kind,
+                        kind: (token.CarrierKind ?? kind),
                         operation: token.Operation,
                         value: out var applied
                     )
@@ -408,7 +425,7 @@ public static class RuleExpressions {
                 if (ExpressionArithmetic.IsUnary(operation: token.Operation)) {
                     if (!ExpressionArithmetic.TryUnary(
                         token.Operation,
-                        token.CarrierKind ?? kind,
+                        (token.CarrierKind ?? kind),
                         stack[(top - 1)],
                         out var unary
                     )) {
@@ -429,7 +446,7 @@ public static class RuleExpressions {
                 // semantics are preserved without allocating an exception per evaluation.
                 if (!ExpressionArithmetic.TryBinary(
                     token.Operation,
-                    token.CarrierKind ?? kind,
+                    (token.CarrierKind ?? kind),
                     left,
                     right,
                     out var result

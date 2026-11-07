@@ -34,6 +34,8 @@ public enum KernelRead {
     Direct,
     /// <summary>A state cell under a key another cell's value resolves.</summary>
     Indirect,
+    /// <summary>A state cell under a key a program computes, the program's tokens standing in front of the read.</summary>
+    ComputedKey,
 }
 /// <summary>Whether a compiled expression program's tokens depend on each other's results.</summary>
 public enum KernelShape {
@@ -226,7 +228,7 @@ public class StateExpressionKernels {
     [Params(0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129, 255, 256)]
     public int Tokens { get; set; }
     /// <summary>Gets or sets how the program reaches its operand values.</summary>
-    [Params(KernelRead.Literal, KernelRead.Direct, KernelRead.Indirect)]
+    [Params(KernelRead.Literal, KernelRead.Direct, KernelRead.Indirect, KernelRead.ComputedKey)]
     public KernelRead Read { get; set; }
     /// <summary>Gets or sets whether the program's operations depend on each other.</summary>
     [Params(KernelShape.DependentChain, KernelShape.IndependentEvaluations)]

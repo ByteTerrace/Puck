@@ -30,20 +30,47 @@ public sealed class ZoneEndKey : RuleKeyFact {
             ));
         }
     }
+
+    /// <summary>Gets the program the live row's index resolves through, or <see langword="null"/>.</summary>
+    public CompiledExpressionToken[]? FeedProgram => m_rowFrom?.FeedProgram;
+
     /// <inheritdoc/>
     public override Resolved<CellKey> Resolve(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        var ordinal = m_rowOrdinal;
+        return ((m_rowFrom is { } live)
+            ? EndOf(
+                reader: reader,
+                selected: live.Resolve(reader: reader)
+            )
+            : EndOf(
+                reader: reader,
+                selected: Resolved<int>.Named(value: m_rowOrdinal)
+            ));
+    }
+    /// <inheritdoc/>
+    public override Resolved<CellKey> Resolve(IStateReader reader, in AddressFeed feed) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
 
-        if (m_rowFrom is { } live) {
-            var selected = live.Resolve(reader: reader);
+        return ((m_rowFrom is { } live)
+            ? EndOf(
+                reader: reader,
+                selected: live.Resolve(
+                    feed: in feed,
+                    reader: reader
+                )
+            )
+            : EndOf(
+                reader: reader,
+                selected: Resolved<int>.Named(value: m_rowOrdinal)
+            ));
+    }
 
-            if (!selected.TryNamed(value: out ordinal)) {
-                return ((selected.Case == FaultCase.Faulted)
-                    ? Resolved<CellKey>.Faulted
-                    : Resolved<CellKey>.Nothing);
-            }
+    private Resolved<CellKey> EndOf(IStateReader reader, Resolved<int> selected) {
+        if (!selected.TryNamed(value: out var ordinal)) {
+            return ((selected.Case == FaultCase.Faulted)
+                ? Resolved<CellKey>.Faulted
+                : Resolved<CellKey>.Nothing);
         }
         if (ordinal < 0) {
             return Resolved<CellKey>.Nothing;

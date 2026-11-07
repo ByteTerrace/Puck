@@ -96,9 +96,42 @@ public sealed class CompiledVector {
             return FaultCase.Faulted;
         }
 
-        return ((resolved.TryNamed(value: out var key) && key.IsValid && reader.Arena.TryReadVector(
+        return ReadSpan(
+            key: (resolved.TryNamed(value: out var key)
+                ? new ResolvedKey(
+                    Key: key,
+                    Named: true
+                )
+                : default),
+            reader: reader,
+            span: out span
+        );
+    }
+    /// <summary>Reads the component span for this operand once its address is resolved: what an operand's own read
+    /// does, since the interpreter resolved <see cref="KeyFrom"/> before the operand ran.</summary>
+    /// <param name="key">What the address named: the key the interpreter resolved, or nothing. Ignored for a
+    /// constant.</param>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="span">The components when a vector was read, or empty.</param>
+    /// <returns><see cref="FaultCase.Finite"/> when a vector was read, <see cref="FaultCase.Absent"/> when the address
+    /// holds no vector.</returns>
+    public FaultCase ReadSpan(ResolvedKey key, IStateReader reader, out ReadOnlySpan<sbyte> span) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        span = default;
+        if (Constant is { } constant) {
+            span = constant.Components;
+
+            return FaultCase.Finite;
+        }
+
+        var literal = ((KeyFrom is null)
+            ? Key
+            : key.Key);
+
+        return ((((KeyFrom is null) || key.Named) && literal.IsValid && reader.Arena.TryReadVector(
             components: out span,
-            key: key,
+            key: literal,
             rowOrdinal: RowOrdinal
         ))
             ? FaultCase.Finite
@@ -120,8 +153,22 @@ public sealed class VectorCallOperand : RuleOperand {
         Left = left;
         Operation = operation;
         Right = right;
+        m_addresses = OperandAddress.List(
+            first: (((left.KeyFrom is null) || left.IsConstant)
+                ? null
+                : left.KeyFrom),
+            second: (((right.KeyFrom is null) || right.IsConstant)
+                ? null
+                : right.KeyFrom),
+            secondUse: AddressUse.Key,
+            use: AddressUse.Key
+        );
     }
 
+    private readonly OperandAddress[] m_addresses;
+
+    /// <inheritdoc/>
+    public override ReadOnlySpan<OperandAddress> Addresses => m_addresses;
     /// <summary>Gets the dimensions of the vector space.</summary>
     public int Dimensions { get; }
     /// <summary>Gets the left vector operand.</summary>
@@ -142,24 +189,25 @@ public sealed class VectorCallOperand : RuleOperand {
         _ => (2L + Dimensions),
     });
     /// <inheritdoc/>
-    public override Fact Read(IStateReader reader) {
-        // Both sides are read before either answers: an absence beside a faulted key is still the fault, which a
-        // negation must not turn into truth.
+    public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
+        // Both sides' addresses were resolved before either answers: an absence beside a faulted key is still the
+        // fault, which a negation must not turn into truth.
+        var leftFrom = ((Left.KeyFrom is not null) && !Left.IsConstant);
         var leftNaming = Left.ReadSpan(
+            key: (leftFrom
+                ? keys[0]
+                : default),
             reader: reader,
             span: out var left
         );
         var rightNaming = Right.ReadSpan(
+            key: (((Right.KeyFrom is not null) && !Right.IsConstant)
+                ? keys[(leftFrom ? 1 : 0)]
+                : default),
             reader: reader,
             span: out var right
         );
 
-        if (
-            (leftNaming == FaultCase.Faulted) ||
-            (rightNaming == FaultCase.Faulted)
-        ) {
-            return Fact.Faulted(kind: ValueKind);
-        }
         if (
             (leftNaming != FaultCase.Finite) ||
             (rightNaming != FaultCase.Finite)

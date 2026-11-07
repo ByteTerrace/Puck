@@ -2,34 +2,46 @@ namespace Puck.State.Rules;
 
 public static partial class RuleCompiler {
     // Type checking sees both operands. Execution stores the right subtree as a call body so an
-    // unneeded operand does not read state or produce a domain fault.
+    // unneeded operand does not read state or produce a domain fault. The same walk lowers an operand whose addresses
+    // a program computes: the tokens of each such program stand in front of the operand's own token, so the program
+    // that reads the operand evaluates its addresses on its own stack, and a skipped operand evaluates none of them.
     private static CompiledExpressionToken[] ShortCircuit(CompiledExpressionToken[] tokens) {
-        if (!tokens.Any(static token => token.Operation is ExpressionOp.And or ExpressionOp.Or or ExpressionOp.Not)) { return tokens; }
+        if (!tokens.Any(predicate: static token => ((token.Operation is ExpressionOp.And or ExpressionOp.Or or ExpressionOp.Not) || ((token.Operand is { } operand) && (RuleExpressions.FeedCount(operand: operand) > 0))))) { return tokens; }
         var stack = new Stack<List<CompiledExpressionToken>>();
+
         foreach (var token in tokens) {
-            var arity = token.Call?.Arity ?? ExpressionOperators.Arity(token.Operation);
+            var arity = (token.Call?.Arity ?? ExpressionOperators.Arity(operation: token.Operation));
             var operands = new List<CompiledExpressionToken>[arity];
-            for (var index = arity - 1; index >= 0; index--) { operands[index] = stack.Pop(); }
-            var result = arity == 0 ? [] : operands[0];
+
+            for (var index = (arity - 1); (index >= 0); index--) { operands[index] = stack.Pop(); }
+            var result = ((arity == 0) ? [] : operands[0]);
+
             if (token.Operation == ExpressionOp.Not) {
                 var body = result.ToArray();
+
                 result = [token with { Call = new CompiledSubprogram("not", 0, body, RuleWorkBudget.Steps(tokens: body)) }];
             } else if (token.Operation is ExpressionOp.And or ExpressionOp.Or) {
                 var left = result.ToArray();
+
                 result = [new CompiledExpressionToken(ExpressionOp.Not,
                     Call: new CompiledSubprogram("truth", 0, left, RuleWorkBudget.Steps(tokens: left))),
                     new CompiledExpressionToken(ExpressionOp.Not)];
                 var right = operands[1].ToArray();
-                result.Add(token with { Call = new CompiledSubprogram(
-                    Name: token.Operation.ToString(), Arity: 1, Body: right, Steps: RuleWorkBudget.Steps(tokens: right)) });
+
+                result.Add(item: token with {
+                    Call = new CompiledSubprogram(
+                    Name: token.Operation.ToString(), Arity: 1, Body: right, Steps: RuleWorkBudget.Steps(tokens: right)),
+                });
             } else {
-                for (var index = 1; index < arity; index++) { result.AddRange(operands[index]); }
-                result.Add(token);
+                for (var index = 1; (index < arity); index++) { result.AddRange(collection: operands[index]); }
+                if (token.Operand is { } leaf) { RuleExpressions.AppendFeeds(into: result, operand: leaf); }
+                result.Add(item: token);
             }
-            stack.Push(result);
+            stack.Push(item: result);
         }
         return stack.Pop().ToArray();
     }
+
     /// <summary>Compiles a postfix expression program into its evaluated token program, proving it with a typed
     /// stack: every slot's kind is known at compile time, so an Int comparison result can feed a select inside a
     /// Fixed expression while never reaching an arithmetic operator of the wrong kind. The program leaves exactly
@@ -101,10 +113,7 @@ public static partial class RuleCompiler {
         var output = new CompiledExpressionToken[tokens.Length];
 
         foreach (var token in tokens) {
-            var arity = ((token.Call is { } call)
-                ? call.Arity
-                : ExpressionOperators.Arity(operation: token.Operation)
-            );
+            var arity = RuleExpressions.Arity(token: in token);
             var start = ((arity == 0)
                 ? count
                 : starts[(depth - arity)]
@@ -186,8 +195,8 @@ public static partial class RuleCompiler {
         var literalAt = new int[authored.Count];
         var literals = new decimal[authored.Count];
         var tokens = new CompiledExpressionToken[authored.Count];
-        var inferLiterals = resultKind is null || authored.Any(static instruction =>
-            instruction?.Operation is ExpressionOp.And or ExpressionOp.Or or ExpressionOp.Not);
+        var inferLiterals = ((resultKind is null) || authored.Any(predicate: static instruction =>
+            (instruction?.Operation is ExpressionOp.And or ExpressionOp.Or or ExpressionOp.Not)));
 
         for (var index = 0; (index < authored.Count); index++) {
             var instruction = (authored[index] ?? throw Malformed(detail: "contains a null instruction"));
@@ -226,7 +235,7 @@ public static partial class RuleCompiler {
         if (depth != 1) {
             throw Malformed(detail: $"leaves {depth} values on the postfix stack instead of exactly one");
         }
-        if (resultKind is { } required && kinds[0] != required) {
+        if ((resultKind is { } required) && (kinds[0] != required)) {
             throw Malformed(detail: $"leaves a kind={StateSpelling.Kind(kind: kinds[0])} value where kind={StateSpelling.Kind(kind: (resultKind ?? kind))} is required");
         }
 
@@ -234,7 +243,7 @@ public static partial class RuleCompiler {
 
         return FoldConstants(
             kind: kind,
-            tokens: ShortCircuit(tokens)
+            tokens: ShortCircuit(tokens: tokens)
         );
 
         CompiledExpressionToken Absence() {
@@ -339,15 +348,17 @@ public static partial class RuleCompiler {
             return token with { CarrierKind = pushed };
         }
         CellKind MatchLiterals(int arity) {
-            var first = depth - arity;
+            var first = (depth - arity);
             var carrier = kinds[first];
-            for (var slot = first; slot < depth; slot++) {
+
+            for (var slot = first; (slot < depth); slot++) {
                 if (literalAt[slot] < 0) { carrier = kinds[slot]; break; }
             }
-            for (var slot = first; slot < depth; slot++) {
-                if (literalAt[slot] >= 0 && kinds[slot] != carrier) {
+            for (var slot = first; (slot < depth); slot++) {
+                if ((literalAt[slot] >= 0) && (kinds[slot] != carrier)) {
                     tokens[literalAt[slot]] = tokens[literalAt[slot]] with {
-                        Constant = LiteralToRaw(carrier, literals[slot], ruleName, verb), CarrierKind = carrier,
+                        Constant = LiteralToRaw(kind: carrier, literal: literals[slot], ruleName: ruleName, verb: verb),
+                        CarrierKind = carrier,
                     };
                     kinds[slot] = carrier;
                 }
@@ -357,7 +368,7 @@ public static partial class RuleCompiler {
         CompiledExpressionToken PushConstant(InstructionPayload.Constant constant, int index) {
             literalAt[depth] = index;
             literals[depth] = constant.Value;
-            var literalKind = inferLiterals && HasFixedSpelling(constant.Value) ? CellKind.Fixed : kind;
+            var literalKind = ((inferLiterals && HasFixedSpelling(value: constant.Value)) ? CellKind.Fixed : kind);
 
             return Push(
                 new CompiledExpressionToken(
@@ -573,8 +584,8 @@ public static partial class RuleCompiler {
             }
             if (descriptor.Signature == ExpressionSignature.Truth) {
                 Require(arity: descriptor.Arity, operation: operation);
-                depth -= descriptor.Arity - 1;
-                kinds[depth - 1] = CellKind.Int;
+                depth -= (descriptor.Arity - 1);
+                kinds[(depth - 1)] = CellKind.Int;
                 return new CompiledExpressionToken(Operation: operation);
             }
             if (descriptor.Signature == ExpressionSignature.Comparison) {
@@ -593,7 +604,8 @@ public static partial class RuleCompiler {
                 arity: descriptor.Arity,
                 operation: operation
             );
-            var carrier = MatchLiterals(descriptor.Arity);
+            var carrier = MatchLiterals(arity: descriptor.Arity);
+
             if (!descriptor.Admits(kind: carrier)) {
                 throw Malformed(detail: $"instruction '{operation}' is admitted in kind={descriptor.Signature} expressions only");
             }
@@ -625,7 +637,8 @@ public static partial class RuleCompiler {
 
             // Reads retain their own encoding. Arithmetic checks matching kinds; truth conversion
             // can consume Int and Fixed subexpressions independently without coercing either.
-            var readKind = resolved.ValueKind == CellKind.Bool ? CellKind.Int : resolved.ValueKind;
+            var readKind = ((resolved.ValueKind == CellKind.Bool) ? CellKind.Int : resolved.ValueKind);
+
             if (readKind is not (CellKind.Int or CellKind.Fixed)) {
                 throw new RuleException(
                     detail: $"'{verb}' expression reads '{state.Name}' as kind={StateSpelling.Kind(kind: resolved.ValueKind)} into a kind={StateSpelling.Kind(kind: kind)} destination",
@@ -735,6 +748,7 @@ public static partial class RuleCompiler {
             }
 
             var carrier = kinds[(depth - 1)];
+
             kinds[(depth - 1)] = CellKind.Int;
 
             return new CompiledExpressionToken(Operation: ExpressionOp.Sign, CarrierKind: carrier);

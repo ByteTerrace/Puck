@@ -58,12 +58,26 @@ public readonly record struct CompiledValueSource(long RawValue = 0L, IRuleOpera
     /// <returns>The work units.</returns>
     public RuleWork Cost(IRuleCostContext context, CellKind kind = CellKind.Fixed) {
         if (Operand is { } operand) {
-            return operand.Cost(context: context);
+            // A read inside a program prices the tokens that compute an address beside the operand's own; a source
+            // that is an operand alone prices the same programs, since it runs them to read.
+            var cost = operand.Cost(context: context);
+
+            foreach (var address in operand.Addresses) {
+                if (address.Feed is { } feed) {
+                    cost += RuleWorkBudget.ExpressionCost(
+                        context: context,
+                        kind: CellKind.Int,
+                        tokens: feed
+                    );
+                }
+            }
+
+            return cost;
         }
         if (Expression is { } expression) {
             return RuleWorkBudget.ExpressionCost(
                 context: context,
-                kind: CarrierKind ?? kind,
+                kind: (CarrierKind ?? kind),
                 tokens: expression
             );
         }
