@@ -51,17 +51,24 @@ milestone. The owner requested its baseline and implementation plan, which
    recovery rebuild without duplicate registration. Evidence: the window's
    `frames-tour` run under the main checkout's ignored scratch.
 2. The frame bar [high]: 60 FPS steady state on the lead machine is not met.
-   A quiet `bench frames` tour of all 59 sweep stops (Direct3D 12, 1280x720,
-   one complete sample) passes p99 at 3 stops; p50 is at the display rate at
-   about 34, and the worst stops run at 15 FPS (`studio` p50 67 / p99 90 ms,
-   `finding-teal-roof` 69 / 77, `gather-teal-door-near` 67 / 88,
-   `gather-stairwell-flight-b-1` 67 / 75, `finding-wall-slivers` 61 / 67;
-   the granaries and wing doors near 30). Lead: most stops' `-indirect` twin
-   (the same camera under `world.debug-view indirect`, run right after) holds
-   16.7 ms where the plain view is 2-4x slower, so either the passes the indirect
-   view skips cost the frame or the first stop at a place pays a settling cost;
-   read per-pass GPU time (`bench frames --gpu-pass`) at the five worst stops
-   before choosing. Then fix the worst at their causes
+   The worst sweep stops (the teal room, flight B of the second storey, the
+   studio) are GPU-bound on the root view, not settling: a stop measured again
+   after its `-indirect` twin is as slow as on arrival. The far shadow cascade
+   holds under the day clock's sun and splits each refresh over two frames
+   (`SdfFarLayers`), so those stops run at the display rate at p50 but still
+   miss vsync on some frames (p99 one 30 Hz period): the root view's GPU time
+   stays just under a 60 Hz frame, mostly `views` and `resolve`, which
+   `world.debug-view indirect` skips. Next: the views shading's and the
+   temporal resolve's own cost per pixel (registers, occupancy, the history
+   window's reads; [gpu cost](../../.claude/skills/rendering/references/gpu-cost.md)),
+   then the far cascade's caster count. It keeps about three quarters of the
+   world's draws, at each mesh's coarsest level, and a light-space occlusion
+   test on the existing pyramid machinery would cull casters hidden behind
+   nearer ones. Arrival at a new place can also pay a settling cost of several
+   seconds, with produce and simulate both inflated as if the frame thread were
+   starved, which the steady readings do not show and a quiet tour's first stop
+   at a place sometimes catches; attribute it with a `dotnet-trace` of the
+   frame thread on arrival
    ([frame-time findings](#other-frame-time-findings)). The disclosure leaks,
    transmission's exit-layer highs, the lockstep relight under a moving sun and
    the tour's and cold bake's memory are open highs in their own packets, not
@@ -429,6 +436,21 @@ The custom no-GC runtime port stays later work, on the
   ([motion](#dual-stick-play-and-the-moths-motion)) is the mechanism to reuse.
 
 #### Other frame-time findings
+
+- [high] The far shadow cascade draws nearly every caster in its box at the
+  coarsest level whose error fits its texel (`world.counters gpu pass
+  sdf.world$shadow-far counter vertices` against the mesh pass's), in two
+  layers. Three things keep that count high. A level chain of two levels stops
+  at two contour cells of error, so a finely contoured mesh (the card backs and
+  console bricks at sub-millimetre cells) never coarsens toward a far texel:
+  four levels (`SdfMeshCollapse.CellShares` to 128 cells) made no level past
+  the second for the card back under `puck mesh audit --cpu --level`, since its
+  material edges slide only along themselves, while the oak went from 3,052 to
+  1,440 triangles, still above a far texel's error. Draws with members, such
+  as the falls' 14 slots of up to 150,000 triangles each, have no host box and
+  draw level zero in every pass. No caster is culled behind a nearer one in
+  light space. Measure each against the cascade's vertices before changing the
+  bake identity.
 
 - [high] The frame thread's CPU field queries (Next item 0;
   [where the frame thread goes](engine-job-system.md#where-the-frame-thread-goes)).
