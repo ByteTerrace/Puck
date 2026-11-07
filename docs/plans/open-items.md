@@ -3404,6 +3404,16 @@ step's completion criteria; C1 to C7 are in.
 Owner: an independent reviewer (Argon) · unconfirmed · Next: the researcher
 brief's priorities ([security review](../development/security-review.md)).
 
+- [medium] The deployed debug world hands its whole document to every
+  authenticated authority: `worlds/debug/debug.puck`, `garden.puck` and
+  `night.puck` author a `FederatedAuthority` admission row with domain `"*"`
+  and `disclosure: Replica` (deliberate, so a returning traveller's windows
+  observe the world whole). With `azure.api-users` deployed, that is every
+  member of the configured Entra group, hidden draw secrets included
+  (inference; [Puck today](mmo-foundations/puck-today.md), the MMO round's
+  lane E). Decide whether a returning traveller's window needs `Replica` or
+  whether `Presentation` serves it, and narrow the row to the debug world's
+  own authorities if `Replica` stays.
 - [low, latent API hazard] The verified review's 1.4 is not a reproduced player
   escalation. `WorldRemoteAuthority.TryRouteCredential` still selects the lowest
   body's credential for an unbound, body-agnostic request. Production seat routes
