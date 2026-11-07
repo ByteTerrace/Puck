@@ -249,9 +249,14 @@ keeps capacity and logical length for reference-free storage. Growth allocates,
 copies and publishes before releasing the old block, including overlap in the
 owner's charge. Every borrowed span or memory slice ends before growth, reset
 or disposal. Managed backing serves standalone geometry callers without an
-injected allocator; published World bake payloads, decoded readback answers,
-lattice planes, lattice indices and point workspaces use the injected native
-allocator, charged to the group that owns them. A caller that overwrites every
+injected allocator; published World bake payloads, the readback copy of each
+completed batch and its sampled table (charged while they last), decoded
+readback answers, lattice planes, lattice indices, point workspaces and the
+lattice's point rounds use the injected native allocator, charged to the group
+that owns them. The irradiance worker's batch scratch (relight input and
+origins, answer words, saved hits, update words) is grow-only managed storage
+that only the worker task touches; a GPU job reads it before its submit
+returns, and a job given a reusable answer array returns it for the next job. A caller that overwrites every
 entry grows a buffer with `Resize(..., preserve: false)`, which copies nothing.
 Mesh-store decode scratch follows the same scope (`SdfMeshStoreCodec.TryDecode`):
 expanded bytes live in an accounted `OwnedBuffer<byte>` until parsing ends, and
