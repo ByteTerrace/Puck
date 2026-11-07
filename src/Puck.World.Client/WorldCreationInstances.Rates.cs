@@ -13,9 +13,10 @@ namespace Puck.World.Client;
 // rigidly, so the body moves smoothly while its limbs hold; the next full pack advances by every second the holds
 // carried past. A body nothing may show or read (no camera, no shadow cascade, no consumer of its parts) holds until
 // something may (HeldHertz), and its next full pack is a continuity cut, as a teleport's is, rather than an advance over
-// everything it held. A placed creation (a row-rooted registration) decides through the same function (BodyHertz): it
+// everything it held. A placed creation (a row-rooted registration) decides through the same function (RateOf): it
 // holds wherever nothing may show or read it, and takes the reduced tiers only where its creation's author allows them
-// (CreationBehaviorDocument.ReducedRateAtDistance), updating every frame otherwise. The bodies that take a tier together alternate their phase by half its period, so their packs
+// (CreationBehaviorDocument.ReducedRateAtDistance), sized for its measured part speed rather than a body's assumed one,
+// updating every frame otherwise. The registrations that take a tier together alternate their phase by half its period, so their packs
 // spread over the period's frames. The levers and the step flags are this frame's (PresentAt, before the pack); the
 // views and shadow cascades are the frame just dressed, a frame's lag the tiers do not notice, so a camera cut shows a
 // held body's held pose for one frame.
@@ -39,9 +40,8 @@ public sealed partial class WorldCreationInstances {
     private bool m_writesRateCodes;
     private byte[] m_slotRateCodes = [];
 
-    // The latest pack's bodies' readings, published once it ends, and each body's name in them, by body index.
+    // The latest pack's rated registrations' readings, published once it ends.
     private readonly SdfUpdateRateReadings.Buffer m_bodyReadings = new();
-    private readonly Dictionary<int, string> m_bodyNames = [];
 
     /// <summary>Gets each dynamic-transform slot's <see cref="SdfUpdateRateCode"/> as the latest
     /// <see cref="PackTransforms"/> wrote it, indexed by slot, while <see cref="RateBy"/> asked for codes: a body-rooted
@@ -100,25 +100,85 @@ public sealed partial class WorldCreationInstances {
         }
     }
 
-    // The rate a registration updates at: a body's largest pixels per metre over the views that may see the sphere it
-    // reaches, held when nothing may show or read its pose (Shown), and every frame while the lever is off or no view is
-    // known yet. A row-rooted registration (a placed creation) takes the reduced tiers only where its creation's author
-    // allows them (CreationBehaviorDocument.ReducedRateAtDistance); otherwise only the held tier, updating every frame
-    // wherever anything may show or read it, so the lever changes how visible scenery animates only by the author's leave.
-    private int BodyHertz(Registration live, Vector3 center, float radius) {
-        if ((m_rates & SdfUpdateRates.Bodies) == 0) {
-            return SdfUpdateRateTiers.EveryFrameHertz;
+    // The one rate decision, made once a pack per registration: the tier it updates at and the pixels per metre it was
+    // rated by. A registration takes its largest pixels per metre over the views that may see the sphere it reaches, is
+    // held when nothing may show or read its pose (Shown), and updates every frame while the lever is off or no view is
+    // known yet. A body's tiers are sized for SdfUpdateRateTiers.BodyPartSpeed. A row-rooted registration (a placed
+    // creation) takes the reduced tiers only where its creation's author allows them
+    // (CreationBehaviorDocument.ReducedRateAtDistance), sized for its own measured part speed (MeasurePartSpeed), and
+    // every frame until that speed is measured; otherwise only the held tier, updating every frame wherever anything may
+    // show or read it, so the lever changes how visible scenery animates only by the author's leave.
+    private (int Hertz, float PixelsPerMetre) RateOf(Registration live, Vector3 center, float radius, float placementScale) {
+        if (live.RatePack == m_packCount) {
+            return (live.RateHertz, live.RatePixelsPerMetre);
         }
 
-        var hertz = TierOf(center: center, live: live, pixelsPerMetre: BodyPixelsPerMetre(center: center, radius: radius), radius: radius);
-        var reduces = ((live.BodyIndex is not null) || (live.Creation.EngineDocument.Behavior?.ReducedRateAtDistance == true));
+        var (hertz, pixelsPerMetre) = (SdfUpdateRateTiers.EveryFrameHertz, float.PositiveInfinity);
 
-        return ((reduces || (hertz == SdfUpdateRateTiers.HeldHertz)) ? hertz : SdfUpdateRateTiers.EveryFrameHertz);
+        if ((m_rates & SdfUpdateRates.Bodies) != 0) {
+            pixelsPerMetre = BodyPixelsPerMetre(center: center, radius: radius);
+
+            var shownElsewhere = ((pixelsPerMetre <= 0f) && Shown(center: center, live: live, radius: radius));
+
+            hertz = ((live.BodyIndex is not null)
+                ? SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: pixelsPerMetre, shownElsewhere: shownElsewhere)
+                : (ReducesAtDistance(live: live)
+                    ? SdfUpdateRateTiers.BodyHertz(partSpeed: (live.PartSpeed * placementScale), pixelsPerMetre: pixelsPerMetre, shownElsewhere: shownElsewhere)
+                    : (((pixelsPerMetre > 0f) || shownElsewhere) ? SdfUpdateRateTiers.EveryFrameHertz : SdfUpdateRateTiers.HeldHertz)));
+        }
+
+        live.RatePack = m_packCount;
+        live.RateHertz = hertz;
+        live.RatePixelsPerMetre = pixelsPerMetre;
+
+        return (hertz, pixelsPerMetre);
     }
-    private int TierOf(Registration live, Vector3 center, float radius, float pixelsPerMetre) => SdfUpdateRateTiers.BodyHertz(
-        pixelsPerMetre: pixelsPerMetre,
-        shownElsewhere: ((pixelsPerMetre <= 0f) && Shown(center: center, live: live, radius: radius))
-    );
+    // Whether a row-rooted registration's author lets it take the reduced tiers.
+    private static bool ReducesAtDistance(Registration live) => (live.Creation.EngineDocument.Behavior?.ReducedRateAtDistance == true);
+    // Measures a reducing placed creation's part speed after a full pack (the bound RateOf sizes its tiers for): each
+    // part's travel relative to the root since the previous full pack, its centre's displacement plus the chord its
+    // reach sweeps by its turn, over the seconds between the packs. The bound keeps the fastest any such interval
+    // showed, in creation units a second, so a held pose never differs from the full-rate pose by more than the tier's
+    // step for any speed already seen. An interval across a cut (a new registration, a reseat, a resume after an unseen
+    // hold, a scale change) measures nothing and only restarts the comparison.
+    private void MeasurePartSpeed(Registration live, in DynamicTransform root, int shapeCount, float elapsedSeconds, bool continuous) {
+        if ((live.BodyIndex is not null) || !ReducesAtDistance(live: live) || (root.Scale <= 0f)) {
+            return;
+        }
+        if (live.PartLocalPositions.Length != shapeCount) {
+            live.PartLocalPositions = new Vector3[shapeCount];
+            live.PartLocalOrientations = new Quaternion[shapeCount];
+            continuous = false;
+        }
+
+        var reaches = ShapeReachesOf(live: live);
+        var unturn = Quaternion.Conjugate(value: root.Orientation);
+        var inverseScale = (1f / root.Scale);
+        var measures = (continuous && (elapsedSeconds > 0f));
+        var fastest = 0f;
+
+        for (var index = 0; (index < shapeCount); index++) {
+            var posed = live.ShapeTransforms[index];
+            var position = (Vector3.Transform(rotation: unturn, value: (posed.Position - root.Position)) * inverseScale);
+            var orientation = (unturn * posed.Orientation);
+
+            if (measures && (reaches[index] >= 0f)) {
+                var cosine = MathF.Min(x: 1f, y: MathF.Abs(x: Quaternion.Dot(quaternion1: orientation, quaternion2: live.PartLocalOrientations[index])));
+                var travel = (Vector3.Distance(value1: position, value2: live.PartLocalPositions[index]) + ((2f * MathF.Sqrt(x: (1f - (cosine * cosine)))) * reaches[index]));
+
+                fastest = MathF.Max(x: fastest, y: travel);
+            }
+
+            live.PartLocalPositions[index] = position;
+            live.PartLocalOrientations[index] = orientation;
+        }
+
+        if (measures) {
+            var speed = (fastest / elapsedSeconds);
+
+            live.PartSpeed = (float.IsPositiveInfinity(f: live.PartSpeed) ? speed : MathF.Max(x: live.PartSpeed, y: speed));
+        }
+    }
     // Whether anything but a displayed view's image may show a body's pose or read it, so it may not hold: something
     // read one of its parts since the previous pack (NotePoseRead, the one record of a pose's consumers); a camera may
     // see the sphere it reaches though the display showed its view none last frame (a window about to open); or a shadow
@@ -199,24 +259,18 @@ public sealed partial class WorldCreationInstances {
 
         Array.Clear(array: m_slotRateCodes);
     }
-    // Notes a body-rooted registration's tier after its pack: its reading while the bodies lever rates, and its slots'
-    // code while the pool writes codes.
-    private void NoteRate(Registration live, int rootSlot, int packedSlots, Vector3 center, float radius, bool posed) {
-        if ((live.BodyIndex is not { } body) || ((m_rateReadings is null) && !m_writesRateCodes)) {
+    // Notes a registration's tier after its pack (a body's, or a row-rooted placement's: an animated or attached one):
+    // its reading while the bodies lever rates, and its slots' code while the pool writes codes.
+    private void NoteRate(Registration live, int rootSlot, int packedSlots, Vector3 center, float radius, float placementScale, bool posed) {
+        if ((m_rateReadings is null) && !m_writesRateCodes) {
             return;
         }
 
-        var rated = ((m_rates & SdfUpdateRates.Bodies) != 0);
-        var pixelsPerMetre = (rated ? BodyPixelsPerMetre(center: center, radius: radius) : float.PositiveInfinity);
-        var hertz = (rated ? TierOf(center: center, live: live, pixelsPerMetre: pixelsPerMetre, radius: radius) : SdfUpdateRateTiers.EveryFrameHertz);
+        var (hertz, pixelsPerMetre) = RateOf(center: center, live: live, placementScale: placementScale, radius: radius);
 
-        if (rated && (m_rateReadings is not null)) {
-            if (!m_bodyNames.TryGetValue(key: body, value: out var name)) {
-                name = $"body:{body}";
-                m_bodyNames[body] = name;
-            }
-
-            m_bodyReadings.Add(item: new SdfUpdateRateReadings.Reading(Hertz: hertz, Name: name, Size: pixelsPerMetre));
+        if (((m_rates & SdfUpdateRates.Bodies) != 0) && (m_rateReadings is not null)) {
+            live.RateName ??= ((live.BodyIndex is { } body) ? $"body:{body}" : $"placement:{live.Row?.Id}");
+            m_bodyReadings.Add(item: new SdfUpdateRateReadings.Reading(Hertz: hertz, Name: live.RateName, Size: pixelsPerMetre));
         }
         if (m_writesRateCodes) {
             m_slotRateCodes.AsSpan(length: packedSlots, start: rootSlot).Fill(value: ((byte)SdfUpdateRateTiers.CodeOf(hertz: hertz, updated: posed)));
@@ -231,8 +285,8 @@ public sealed partial class WorldCreationInstances {
     // Whether a woken body-rooted registration holds its pose this frame rather than packing it in full: the floor at its
     // tier still holds over the seconds since its last full pack with this frame's (SdfUpdateRateTiers.Holds), counted
     // ahead by its phase's lead. The slowest tier since that pack is the one its next interval is recorded under.
-    private bool HoldsPose(Registration live, float deltaSeconds, Vector3 center, float radius) {
-        var hertz = BodyHertz(center: center, live: live, radius: radius);
+    private bool HoldsPose(Registration live, float deltaSeconds, Vector3 center, float radius, float placementScale) {
+        var (hertz, _) = RateOf(center: center, live: live, placementScale: placementScale, radius: radius);
 
         live.RateSlowest = Math.Min(val1: live.RateSlowest, val2: hertz);
         ChoosePhase(hertz: hertz, live: live);

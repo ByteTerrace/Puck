@@ -56,13 +56,13 @@ in the tree.
   (`Assets/Shaders/Sdf/passes/sdf-mesh.vert.hlsl:1`;
   [the meadow](../../worlds/debug/meadow.md)).
 - **A blade's pose is an authored program**: three or four `swings` per part
-  driven by state cells (`worlds/standard/foliage.puck:409-554`). Animated
-  placements bypass the pose-rate holds
-  (`src/Puck.World.Client/WorldCreationInstances.Pack.cs:246-249`,
-  `WorldCreationInstances.Rates.cs:192-195`). The outer owner wake guard can retain
-  their poses; the body-only rate hold is a separate decision. Driver continuation
-  now prevents an active authored clock from settling merely because one output
-  pose was equal.
+  driven by state cells (`worlds/standard/foliage.puck`, `windMeadowTile`).
+  Animated placements take the bodies' pose-rate holds through one decision
+  (`WorldCreationInstances.RateOf`), their tiers sized for each placement's
+  measured part speed (`MeasurePartSpeed`) and reduced only by the author's
+  leave (`behavior.reducedRateAtDistance`). The outer owner wake guard can
+  retain their poses. Driver continuation prevents an active authored clock
+  from settling merely because one output pose was equal.
 - **Dressing retains topology and picking metadata.** `SdfMeshDresser.Dress`
   reads the copy-membership index shared with bake demand instead of scanning
   every copy per group. Changed poses still traverse retained bindings and
@@ -272,10 +272,12 @@ the raster decision's sentence on draw order change with V1.
 **Puck builds:**
 
 1. **The rate holds applied to placed animations** (first, and small):
-   placement roots join the projection- and consumer-based rate mechanism that
-   bodies use (`WorldCreationInstances.Pack.cs:246-249`, `Rates.cs:192-195`),
-   keeping planted roots, continuous world-phased gusts and independent tip
-   flutter.
+   placement roots rate through the bodies' projection- and consumer-based
+   decision (`WorldCreationInstances.RateOf`), sized for their measured part
+   speed and keeping planted roots, continuous world-phased gusts and
+   independent tip flutter. What remains is in the
+   [open items](open-items.md#other-frame-time-findings): under lockstep's
+   30 Hz ticks the 30 Hz tier holds nothing, and the measured bound is learned.
 2. **Retained instance updates.** `Dress` stops rebuilding the list: a moved
    slot updates its instances' transforms in place, a new or retired instance
    updates the table and its generation, and uploads are proportional to what

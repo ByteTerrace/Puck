@@ -810,7 +810,8 @@ deadline; the hold predicate reports exactly one
 line on stderr, so a script never polls. Use it, not `world.wait`, before a
 pipeline capture: `world.wait` counts simulation ticks, not compilation or
 submitted frames. `counted` waits for completed per-pass work counts (relative
-to the last reset, like `submitted`); `pipeline.inspect` prints them, one
+to the last reset, like `submitted`); `pipeline.inspect` also accepts rendered
+node names from `world.counters gpu`, including World and session views, and prints one
 `work <pass> executed: …` line per pass (`GpuWorkReport`), and the first line carries
 `work submission=S revision=R` for a canary's `response` extraction, after
 `owned=`, `steady=`, `peak=` and `budget=` byte fields. `pipeline.budget

@@ -335,7 +335,16 @@ settles a question, decide by that principle and say why.
    it. `puck test --reproduce` shows two runs agree. Never preserve a wrong
    result to keep a hash, and never add a path that reproduces old-wrong
    behavior. Presentation-only float and artistic work are outside this
-   contract.
+   contract. Matching the previous build's output is never a requirement on a
+   change (the owner's ruling: obsessing over bit-identical values blocks real
+   quality changes). A change that alters output, a mesh, an image, a contact
+   answer or a state hash, is judged by whether the new output is better or
+   equally correct (captures, `puck mesh audit`, counted work, exactness against
+   the true field), never by whether it equals the old bytes. An equality
+   check is a cheap tool only for a change that claims to change nothing, a
+   pure refactor, and a difference there is information, not a stop. No brief
+   makes "output identical to the base" an invariant, and no lane avoids a
+   better algorithm because it changes output.
 5. **Zero consumers, zero legacy.** Nothing outside this repository consumes
    Puck. Backwards compatibility is a non-goal; never raise it or let it shape a
    change. Rename, reshape and delete freely, updating every internal caller in

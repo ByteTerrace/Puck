@@ -174,8 +174,19 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
 
         var contact = contacts[deepest];
         var set = ((contact.Source == FixedSurfaceColliderSource.Static) ? colliders : dynamicColliders);
+        var collider = set.Colliders[contact.ColliderIndex];
 
-        return new ContactSupportWitness(Collider: set.Colliders[contact.ColliderIndex], ColliderIndex: contact.ColliderIndex,
+        // A field collider's surface here may be one exact piece's (CollectContacts measured it there): the surface lies
+        // within the separation past the skin of the volume, the region the witness narrows, so it names that piece.
+        if (collider.Kind == FixedStaticColliderKind.Field) {
+            var bounds = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume);
+
+            if (collider.Narrow(center: bounds.Center, collider: out var piece, extent: bounds.Extent, reach: (contact.Separation + ContactSkin)) == FixedFieldRegion.Base) {
+                collider = piece;
+            }
+        }
+
+        return new ContactSupportWitness(Collider: collider, ColliderIndex: contact.ColliderIndex,
             Orientation: orientation, Position: position, Push: new FixedContactPush(Normal: contact.Normal, Penetration: -contact.Separation),
             Source: contact.Source, Volume: volume) {
             BodyPoint = (position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -contact.Normal)),
@@ -206,7 +217,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             var collider = colliders[index];
 
             if (collider.Kind == FixedStaticColliderKind.Field) {
-                switch (collider.Narrow(center: center, collider: out var narrowed, extent: grown, reach: FixedQ4816.Zero)) {
+                switch (collider.NarrowQuery(center: center, collider: out var narrowed, extent: grown, reach: FixedQ4816.Zero)) {
                     case FixedFieldRegion.Empty: {
                             continue;
                         }
@@ -303,8 +314,10 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             if (culls && frames[index].Separates(bodyExtent: in bounds.Extent, offset: (bounds.Center - boxes[index].Center), skin: ContactSkin)) {
                 continue;
             }
-            ref readonly var collider = ref colliders[index];
-            var pushes = collider.TryGetPush(
+            // The collider that answered: a field collider's exact piece where it narrowed, whose surface the edge witness
+            // and the support witness below then read, as the push did.
+            var pushes = colliders[index].TryGetAnsweredPush(
+                answered: out var collider,
                 orientation: in orientation,
                 position: position,
                 push: out var push,

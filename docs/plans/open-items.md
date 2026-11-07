@@ -437,25 +437,34 @@ The custom no-GC runtime port stays later work, on the
   a bit-still one. The gradient's six taps are not the marched point and are
   shared with physics (bit-identical per point), so batching them is a design
   step.
-- [high] The meadow (`debug.go meadow`) is a forcing workload in the real debug
-  world: its two-part blades add thousands of dynamic slots and retained mesh
-  draws, and its frame and cold bake are far past both bars. Animated
-  placement registrations cannot use the existing pose-rate holds:
-  `WorldCreationInstances.Pack.cs:247` requires `BodyIndex`, and
-  `WorldCreationInstances.Rates.cs:193` omits them from readings. Owner:
-  rendering lane. Extend the same projection- and consumer-based rate mechanism
-  to placement roots, measure pose packing and draw recording, and preserve
-  planted roots, continuous world-phased gusts and independent tip flutter (the
+- [high] The meadow (`debug.go meadow`, the sweep tour's `meadow` stop) is a
+  forcing workload in the real debug world: its two-part blades add thousands
+  of dynamic slots and retained mesh draws, and its frame and cold bake are far
+  past both bars. Placed creations rate through the bodies' one decision
+  (`WorldCreationInstances.RateOf`), sized for their measured part speed
+  (`MeasurePartSpeed`, about 0.4 m/s for a wind tile against a body's assumed
+  2 m/s), and `world.rates` lists and counts them. What remains of the
   [visibility plan](visibility.md#v2-instance-updates-proportional-to-change-and-authored-motion-on-the-gpu)'s
-  step V2a). A registration is a whole tile and takes the tier of its nearest
-  point, so with the camera inside the patch most tiles stay every-frame; read
-  `world.rates` at the stop before promising frame time. V2a pays on the lawn's
-  far tiles and wherever the camera stands off the patch, and a tile that is too
-  coarse is an authoring lever (`windMeadowTile`), never an engine special
-  case. Draw count is the other cost, one draw per blade part over a few
-  hundred unique geometries; its cause fix is the visibility plan's V1. The
-  meadow is also R1's forcing workload: measure produce's draw-recording share
-  before and after.
+  step V2a: under lockstep the debug world's ticks are 30 Hz, so the 30 Hz tier
+  holds nothing there and the inspection camera's tiles (114 to 217 px/m, 30
+  and 60 Hz) pose about as often as before; from 20 m every tile takes 10 Hz.
+  A registration is a whole tile and takes the tier of its nearest point, and a
+  tile that is too coarse is an authoring lever (`windMeadowTile`), never an
+  engine special case. The measured bound is the fastest speed any pair of
+  consecutive full packs showed: motion faster than any yet seen (a gust
+  stronger than before, a flutter quicker than the tier's period) shows one
+  step past the two-pixel rule before the bound follows, and nothing proves
+  the first measurement saw the peak. Draw count is the other cost, one draw
+  per blade part over a few hundred unique geometries; its cause fix is the
+  visibility plan's V1. The meadow is also R1's forcing workload: measure
+  produce's draw-recording share before and after.
+- [medium] Bodies still tier on an assumed 2 m/s part speed
+  (`BodyPartSpeed`), so a sprinting body's planted foot, sliding faster than
+  that relative to its root, can step more than two pixels at a far tier. Pass
+  `max(BodyPartSpeed, measured)` through the same `MeasurePartSpeed` placements
+  use. `sdf.creations.registrations.rate-held` counts `HoldsPose` on every
+  rendered frame, tickless ones included, so it scales with frames rather than
+  ticks; read posed counts, or count it once per tick.
 - [high] Measure the meadow before ordering the visibility work, on a quiet
   machine (the [visibility plan](visibility.md#measure-first)). M1:
   `debug.go meadow` on Direct3D 12 and a windowed Vulkan leg with
@@ -615,17 +624,19 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   hashes the actual mask/bake kernel bytes. The bake/dresser, view/bake parameter
   and sample-input/transport boundaries now exclude the observed unrelated
   renderer edits; remaining program-packing coupling belongs to
-  [dense landscapes](#dense-landscapes). Before replacing kernel-byte identity
-  with a source identity or sharing backend products, prove the intended output
-  equivalence, including compiler changes and skin/material/refinement behavior.
-  The latest native forest legs have different aggregate triangle counts, so
-  source equality alone is not proof of identical products or a halved cold cost.
+  [dense landscapes](#dense-landscapes). A source identity or a product shared
+  across backends is judged by whether every backend's mesh is correct
+  (`puck mesh audit`), not by byte equality with today's per-backend products
+  (AGENTS.md rule 4). The latest native forest legs have different aggregate
+  triangle counts, so source equality alone does not show a halved cold cost.
 - The cold bake has not met the one-minute bar on either backend. The CPU
   stages remain the target after removing the repeated refinement-index walk,
   fine-cell sign scan and collapse fan preparation. `SdfMeshCollapse.Levels`
   still dominates `land`; its `Measure` and `MeasureReverse` checks are the
-  next profile-led cuts. Preserve their sample order, exact distances and
-  acceptance bounds. The overall CPU-halving target remains open. Queue
+  next profile-led cuts. A cheaper collapse that produces different but
+  equally good meshes (same or better geometric error against the field,
+  coverage and triangle budget in `puck mesh audit`) is a valid cut; equality
+  with today's output is not required. The overall CPU-halving target remains open. Queue
   `bench startup worlds/debug --bake --backend <backend>` through `puck measure`
   for the quiet wall-time comparison. The stage log's `cpu` fields sum worker
   elapsed intervals, including descheduling and GC/profiler suspension; they
@@ -765,11 +776,12 @@ Remaining:
   support along the measured normal, not the volume's own nearest point. Cover
   the volume with core spheres as the certified sweep does
   (`FixedFieldContactSolver.WalkCores`, `FixedFieldContactSolver.cs:209`).
-- **[medium] Relief bounds for non-exact primitives** (`WorldColliderSet.PrimitiveColliders`,
-  `src/Puck.World.Server/WorldColliderSet.Relief.cs:30`): a superellipsoid grows
-  by its gauge and every blend's growth is charged, but a primitive whose field
-  reads under its distance (the cone family) grows only by the reach. Take each
-  shape's gain from the evaluator's reach certificates.
+- **[medium] Relief bounds for non-exact primitives** (`WorldColliderSet.CopyReach`,
+  `SdfSolidGeometry.DilationGain`): a gauge-lowered shape (sphere, ellipsoid,
+  superellipsoid) and the generic Scale arm grow by their gain and every blend's
+  growth is charged, but a primitive whose own unit field reads under its
+  distance (the cone family) grows only by the reach. Take each shape's gain
+  from the evaluator's reach certificates.
 - [medium] A carved creation's contact narrows to its analytic pieces only for
   hard unions and hard subtractions (`FixedFieldPartition`, built in
   `WorldColliderSet.PrimitiveColliders`): any other blend (smooth, chamfer,
@@ -1125,6 +1137,22 @@ Next: [the water feature plan](water.md) owns the feature end to end: the arc as
 specification, the audit, the definition of done and the lanes (A2 to A5 the world
 authoring, R3 the particle pool, P1 the tour). The items below
 are what the plan defers or the water strained in a system beside it.
+
+- [low · glass-shadow review F5] Mixed-density faces do not define a thickness
+  integral: `src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-optical-depth.hlsli:22`
+  accumulates each face's own density. An entry at density 0.8 and an exit at
+  zero in overlapping glass slots integrate through air to the receiver;
+  swapping their densities clamps the negative sum to no shadow. A water
+  surface touching the `reservoirPavilion` pane is the failing case. The
+  camera absorption shares this design. Give the integral a medium identity
+  or otherwise account for transitions before supporting mixed-density shells.
+- [low · glass-shadow review F6] Open or portal-clipped glass loses its paired
+  face: `src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-mesh-occlusion.comp.hlsl:263`
+  routes glass without requiring the enclosing bit, and the shadow vertex
+  stage clips it at the portal plane. A kept front face with its back face
+  beyond that plane integrates all the way to the receiver, so its shadow
+  darkens as the floor moves away. An open authored sheet has the same failing
+  case. Define and enforce the optical boundary for non-enclosing casters.
 
 - [medium] A lattice row that is simulation only. The water chain
   (`worlds/standard/hydrology.puck`) levels water against a bed with
