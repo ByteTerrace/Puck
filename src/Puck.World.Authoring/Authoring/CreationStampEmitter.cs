@@ -49,7 +49,9 @@ public readonly record struct FixedCreationStampTransform(
 );
 /// <summary>One primitive copy after a fixed-point stamp transform has been applied.</summary>
 /// <param name="Shape">The authored shape.</param>
-/// <param name="Center">The primitive's bound center, shared by its world-axis and oriented bounds.</param>
+/// <param name="Center">The primitive's bound center (<see cref="SdfSolidGeometry.LocalBox"/>), shared by its world-axis
+/// and oriented bounds: its own origin, except up its Y for a primitive that reaches farther up than down (a baked
+/// Capsule's segment midpoint, a RoundCone's).</param>
 /// <param name="HalfExtents">The primitive's world-axis bound half-extents.</param>
 /// <param name="UniformScale">The primitive's world scale when it is isotropic; zero otherwise.</param>
 /// <param name="PlaneNormal">The unit world normal for an unbounded plane; zero for a finite primitive.</param>
@@ -1475,8 +1477,8 @@ public static partial class CreationStampEmitter {
             (((warpedReach + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) * transform.Scale)
         );
     }
-    /// <summary>Measures one shape's world-axis box under the stamp transform: its primitive's canonical box
-    /// (<see cref="SdfSolidGeometry.GetLocalBounds"/>) at its scale, turned and placed as the stamp places it, widened by
+    /// <summary>Measures one shape's world-axis box under the stamp transform: its primitive's local box
+    /// (<see cref="SdfSolidGeometry.LocalBox"/>) at its scale, turned and placed as the stamp places it, widened by
     /// a raised panel, <see cref="ShapeDocument.Dilate"/> and <see cref="ShapeDocument.Onion"/> as
     /// <see cref="ShapeStampBound"/> widens its sphere. For a long, thin shape it is far tighter than that sphere's
     /// cube.</summary>
@@ -1494,7 +1496,7 @@ public static partial class CreationStampEmitter {
             return null;
         }
 
-        var bounds = SdfSolidGeometry.GetLocalBounds(type: shape.Type);
+        var bounds = SdfSolidGeometry.LocalBox(lift: (shape.Lift ?? SdfLift.Extrude), scale: shape.Scale, type: shape.Type);
 
         if (bounds.IsUnbounded) {
             return null;
@@ -1503,10 +1505,9 @@ public static partial class CreationStampEmitter {
         var frame = StampFrame.Of(transform: transform);
         var (position, rotation) = ReflectedShapeTransformFixed(normal: frame.ReflectionNormal, shape: shape);
         var turn = (frame.Rotation * rotation).Normalize().ToQuaternion();
-        var scale = (EffectiveScale(value: shape.Scale).ToVector3() * transform.Scale);
-        var axisX = Vector3.Transform(value: (Vector3.UnitX * scale.X), rotation: turn);
-        var axisY = Vector3.Transform(value: (Vector3.UnitY * scale.Y), rotation: turn);
-        var axisZ = Vector3.Transform(value: (Vector3.UnitZ * scale.Z), rotation: turn);
+        var axisX = Vector3.Transform(value: (Vector3.UnitX * transform.Scale), rotation: turn);
+        var axisY = Vector3.Transform(value: (Vector3.UnitY * transform.Scale), rotation: turn);
+        var axisZ = Vector3.Transform(value: (Vector3.UnitZ * transform.Scale), rotation: turn);
         var center = (StampedPosition(frame: frame, local: position).ToVector3() + (((axisX * bounds.Center.X) + (axisY * bounds.Center.Y)) + (axisZ * bounds.Center.Z)));
         var raise = ((shape.Panel is { Depth: < 0f } panel) ? -panel.Depth : 0f);
         var widen = (((raise + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) * transform.Scale);
@@ -1562,7 +1563,9 @@ public static partial class CreationStampEmitter {
             }
             if (shape.Domain is { Count: > 0 }) { frames = expanded; }
 
-            var bounds = SdfSolidGeometry.GetLocalBounds(type: shape.Type);
+            // The shape's own box at its scale (SdfSolidGeometry.LocalBox, symmetric across local X, so a mirrored copy
+            // keeps it), in its scaled local units: a revolve's radial offset and a baked capsule's segment included.
+            var bounds = SdfSolidGeometry.LocalBox(lift: (shape.Lift ?? SdfLift.Extrude), scale: shape.Scale, type: shape.Type);
             var boundsCenter = FixedVector3.FromVector3(value: bounds.Center);
             var boundsHalfExtents = FixedVector3.FromVector3(value: bounds.HalfExtents);
             var shapeScale = EffectiveScale(value: shape.Scale);
@@ -1589,13 +1592,13 @@ public static partial class CreationStampEmitter {
                 var shapeAxisY = placed.Rotation.Rotate(vector: FixedVector3.UnitY);
                 var shapeAxisZ = placed.Rotation.Rotate(vector: FixedVector3.UnitZ);
                 var localBoundsCenter = (placed.Position + (
-                    ((shapeAxisX * (boundsCenter.X * shapeScale.X))
-                    + (shapeAxisY * (boundsCenter.Y * shapeScale.Y)))
-                    + (shapeAxisZ * (boundsCenter.Z * shapeScale.Z))
+                    ((shapeAxisX * boundsCenter.X)
+                    + (shapeAxisY * boundsCenter.Y))
+                    + (shapeAxisZ * boundsCenter.Z)
                 ));
-                var axisX = stampRotation.Rotate(vector: ((shapeAxisX * shapeScale.X) * stampScale));
-                var axisY = stampRotation.Rotate(vector: ((shapeAxisY * shapeScale.Y) * stampScale));
-                var axisZ = stampRotation.Rotate(vector: ((shapeAxisZ * shapeScale.Z) * stampScale));
+                var axisX = stampRotation.Rotate(vector: (shapeAxisX * stampScale));
+                var axisY = stampRotation.Rotate(vector: (shapeAxisY * stampScale));
+                var axisZ = stampRotation.Rotate(vector: (shapeAxisZ * stampScale));
 
                 visitor(obj: new FixedCreationStampPrimitiveCopy(
                     Center: (transform.Origin + stampRotation.Rotate(vector: (localBoundsCenter * stampScale))),
@@ -1604,11 +1607,7 @@ public static partial class CreationStampEmitter {
                         Y: (((FixedQ4816.Abs(value: axisX.Y) * boundsHalfExtents.X) + (FixedQ4816.Abs(value: axisY.Y) * boundsHalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Y) * boundsHalfExtents.Z)),
                         Z: (((FixedQ4816.Abs(value: axisX.Z) * boundsHalfExtents.X) + (FixedQ4816.Abs(value: axisY.Z) * boundsHalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Z) * boundsHalfExtents.Z))
                     ),
-                    LocalHalfExtents: new FixedVector3(
-                        X: ((boundsHalfExtents.X * shapeScale.X) * stampScale),
-                        Y: ((boundsHalfExtents.Y * shapeScale.Y) * stampScale),
-                        Z: ((boundsHalfExtents.Z * shapeScale.Z) * stampScale)
-                    ),
+                    LocalHalfExtents: (boundsHalfExtents * stampScale),
                     PlaneNormal: (bounds.IsUnbounded
                     ? axisY.Normalize()
                     : FixedVector3.Zero),

@@ -333,11 +333,33 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         FixedQ4816 skin,
         out FixedContactPush push,
         out bool uncertain
+    ) => TryGetAnsweredPush(answered: out _, orientation: in orientation, position: position, push: out push, skin: skin, uncertain: out uncertain, volume: in volume);
+    /// <summary>Queries the depenetration required for one body volume, naming the collider that answered: the exact
+    /// analytic piece a field collider narrowed to (<see cref="Narrow"/>), or this collider.</summary>
+    /// <param name="position">The body's world position.</param>
+    /// <param name="orientation">The body's world orientation.</param>
+    /// <param name="volume">The body-local convex volume.</param>
+    /// <param name="skin">The requested separation skin.</param>
+    /// <param name="push">The contact push when overlap or skin intrusion exists.</param>
+    /// <param name="uncertain">Whether the query proved neither clearance nor its contact.</param>
+    /// <param name="answered">The collider whose surface the answer measured, which a support witness or a surface query
+    /// about the push reads.</param>
+    /// <returns><see langword="true"/> when a push is required.</returns>
+    internal bool TryGetAnsweredPush(
+        FixedVector3 position,
+        in FixedQuaternion orientation,
+        in FixedBodyColliderVolume volume,
+        FixedQ4816 skin,
+        out FixedContactPush push,
+        out bool uncertain,
+        out FixedStaticCollider answered
     ) {
+        answered = this;
+
         if (Kind == FixedStaticColliderKind.Field) {
             var bounds = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume);
 
-            switch (Narrow(center: bounds.Center, extent: bounds.Extent, reach: skin, collider: out var narrowed)) {
+            switch (NarrowQuery(center: bounds.Center, extent: bounds.Extent, reach: skin, collider: out var narrowed)) {
                 case FixedFieldRegion.Empty: {
                         push = default;
                         uncertain = false;
@@ -345,6 +367,7 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
                     }
                 case FixedFieldRegion.Base: {
                         uncertain = false;
+                        answered = narrowed;
                         return narrowed.TryGetAnalyticPush(orientation: in orientation, position: position, push: out push, skin: skin, volume: in volume);
                     }
                 default: {
@@ -358,10 +381,12 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         return TryGetAnalyticPush(orientation: in orientation, position: position, push: out push, skin: skin, volume: in volume);
     }
     /// <summary>Narrows a field collider for a query confined to a world box grown by a reach: the one exact analytic
-    /// collider its <see cref="FixedColliderField.Partition"/> proves the solid there is, or none of the solid. Every
-    /// query a field collider answers from a bounded region asks here first, so a body its carves cannot reach reads
-    /// the analytic surface the field equals there; each narrowing counts as
-    /// <see cref="FixedStaticContactWork.FieldNarrowed"/>.</summary>
+    /// collider its <see cref="FixedColliderField.Partition"/> proves the solid there is, or none of the solid. The
+    /// contact queries a field collider answers from a bounded region (a push, a support descent, rigid contact
+    /// collection) ask here first, so a body its carves cannot reach reads the analytic surface the field equals there,
+    /// and a support witness names the piece. A projection from a point (<see cref="FixedSurfaceQuery"/>'s nearest
+    /// point for a hold or an anchor) has no bounded region and reads the field, which agrees with the piece within
+    /// the field's bracket where both answer.</summary>
     /// <param name="center">The region's world centre.</param>
     /// <param name="extent">The region's world half-extent before the reach.</param>
     /// <param name="reach">The distance, in metres, the query looks past the region; a negative reach counts as zero.</param>
@@ -376,7 +401,18 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         }
 
         var grow = (FixedQ4816.Max(x: reach, y: FixedQ4816.Zero) + BoundsPadding);
-        var region = partition.Narrow(center: in center, collider: out collider, extent: (extent + new FixedVector3(X: grow, Y: grow, Z: grow)));
+
+        return partition.Narrow(center: in center, collider: out collider, extent: (extent + new FixedVector3(X: grow, Y: grow, Z: grow)));
+    }
+    /// <summary>Narrows a field collider for a query that a narrowed answer replaces a field solve for, counting the
+    /// replacement as <see cref="FixedStaticContactWork.FieldNarrowed"/>.</summary>
+    /// <param name="center">The region's world centre.</param>
+    /// <param name="extent">The region's world half-extent before the reach.</param>
+    /// <param name="reach">The distance, in metres, the query looks past the region.</param>
+    /// <param name="collider">The exact analytic collider when the answer is <see cref="FixedFieldRegion.Base"/>.</param>
+    /// <returns>What <see cref="Narrow"/> answers.</returns>
+    internal FixedFieldRegion NarrowQuery(FixedVector3 center, FixedVector3 extent, FixedQ4816 reach, out FixedStaticCollider collider) {
+        var region = Narrow(center: center, collider: out collider, extent: extent, reach: reach);
 
         if (region != FixedFieldRegion.Field) {
             FixedStaticContactWork.Process.CountNarrowed();
@@ -384,6 +420,12 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
 
         return region;
     }
+    /// <summary>Returns whether a query against this collider can answer with a collider: this one, or one of the exact
+    /// pieces its field's partition narrows to (<see cref="Narrow"/>), as a support witness names.</summary>
+    /// <param name="effective">The collider a solve answered with.</param>
+    /// <returns><see langword="true"/> when <paramref name="effective"/> is this collider or one of its pieces.</returns>
+    public bool AnswersWith(in FixedStaticCollider effective) =>
+        ((effective == this) || ((Kind == FixedStaticColliderKind.Field) && (Field?.Partition is { } partition) && partition.Holds(collider: in effective)));
     private bool TryGetAnalyticPush(
         FixedVector3 position,
         in FixedQuaternion orientation,

@@ -19,6 +19,10 @@ public enum FixedFieldRegion {
 /// <param name="Frame">The oriented box's world axes and half-extent along each, or a frame that separates nothing for an
 /// operand without bounds.</param>
 public readonly record struct FixedFieldReach(FixedColliderBox Box, FixedColliderFrame Frame) {
+    /// <summary>Gets the padding, in metres, an oriented reach adds past its operand's extent on every axis: far wider than
+    /// any rounding of a primitive's field or of a turned box, as a collider's own bounds padding is.</summary>
+    public static FixedQ4816 Padding => FixedStaticCollider.BoundsPadding;
+
     /// <summary>Creates the reach of an operand bounded by an oriented box.</summary>
     /// <param name="center">The box's world centre.</param>
     /// <param name="rotation">The box-to-world rotation, unit.</param>
@@ -28,7 +32,7 @@ public readonly record struct FixedFieldReach(FixedColliderBox Box, FixedCollide
         var axisX = rotation.Rotate(vector: FixedVector3.UnitX);
         var axisY = rotation.Rotate(vector: FixedVector3.UnitY);
         var axisZ = rotation.Rotate(vector: FixedVector3.UnitZ);
-        var padding = new FixedVector3(X: FixedStaticCollider.BoundsPadding, Y: FixedStaticCollider.BoundsPadding, Z: FixedStaticCollider.BoundsPadding);
+        var padding = new FixedVector3(X: Padding, Y: Padding, Z: Padding);
         var world = ((((FixedVector3.Abs(value: axisX) * halfExtent.X) + (FixedVector3.Abs(value: axisY) * halfExtent.Y)) + (FixedVector3.Abs(value: axisZ) * halfExtent.Z)) + padding);
 
         return new FixedFieldReach(Box: new FixedColliderBox(Center: center, Extent: world),
@@ -97,6 +101,19 @@ public sealed class FixedFieldPartition {
         m_carves = [.. (carves ?? throw new ArgumentNullException(paramName: nameof(carves)))];
     }
 
+    /// <summary>Returns whether a collider is one of this partition's exact pieces: one a narrowed query can answer
+    /// with.</summary>
+    /// <param name="collider">The collider.</param>
+    /// <returns><see langword="true"/> when a piece's exact collider equals it.</returns>
+    public bool Holds(in FixedStaticCollider collider) {
+        foreach (ref readonly var piece in m_pieces.AsSpan()) {
+            if (piece.Exact == collider) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>Narrows a query confined to a world box: the one exact piece the solid there is, or none of it.</summary>
     /// <param name="center">The box's world centre.</param>
     /// <param name="extent">The box's world half-extent, at least zero on every axis.</param>
