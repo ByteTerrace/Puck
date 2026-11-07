@@ -46,6 +46,10 @@ public sealed class PuckBuildTask : Task, ICancelableTask {
     public ITaskItem[] Layers { get; set; } = Array.Empty<ITaskItem>();
     /// <summary>See <see cref="PuckArchitectureGate.Profiles"/>.</summary>
     public ITaskItem[] Profiles { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>See <see cref="PuckArchitectureGate.Provider"/>.</summary>
+    public string Provider { get; set; } = "";
+    /// <summary>See <see cref="PuckArchitectureGate.ProviderAssemblies"/>.</summary>
+    public ITaskItem[] ProviderAssemblies { get; set; } = Array.Empty<ITaskItem>();
     /// <summary>The project's full path, for the architecture gates' diagnostics.</summary>
     public string ProjectFile { get; set; } = "";
     /// <summary>The project's name, for the architecture gates.</summary>
@@ -97,6 +101,8 @@ public sealed class PuckBuildTask : Task, ICancelableTask {
                     Layer = Layer,
                     Layers = Layers,
                     Profiles = Profiles,
+                    Provider = Provider,
+                    ProviderAssemblies = ProviderAssemblies,
                     ProjectFile = ProjectFile,
                     ProjectName = ProjectName,
                     References = References,
@@ -200,6 +206,12 @@ public sealed class PuckArchitectureGate : Task {
     public ITaskItem[] Layers { get; set; } = Array.Empty<ITaskItem>();
     /// <summary>Lane profiles: <c>Include</c> is the project, <c>Forbid</c> a semicolon list of projects and layer rows its closure must not hold, and <c>Allow</c>, when present, the only projects it may hold.</summary>
     public ITaskItem[] Profiles { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>This project's declared <c>&lt;PuckProvider&gt;</c>: the deployment or identity provider it implements, empty for a
+    /// provider-neutral project.</summary>
+    public string Provider { get; set; } = "";
+    /// <summary>Provider SDKs: <c>Include</c> is the provider, <c>Assemblies</c> a semicolon list of assembly-name prefixes that
+    /// belong to it. A provider-neutral ranked project's resolved references must hold none of them.</summary>
+    public ITaskItem[] ProviderAssemblies { get; set; } = Array.Empty<ITaskItem>();
     /// <summary>This project's full path, used for provenance and for the diagnostic's file position.</summary>
     public string ProjectFile { get; set; } = "";
     /// <summary>This project's name.</summary>
@@ -236,6 +248,57 @@ public sealed class PuckArchitectureGate : Task {
 
         ok &= CheckBackendQuarantine(closure: closure, kinds: kinds);
         ok &= CheckProfile(closure: closure);
+        ok &= CheckProviders(closure: closure, kinds: kinds);
+
+        return ok;
+    }
+
+    /// <summary>
+    /// Provider independence: a ranked project that declares no provider (or another one) holds no provider project and
+    /// no provider SDK assembly in its resolved closure. A terminal kind composes and is exempt, as it is from the rank
+    /// rule: a test exercises a provider, and a tool deploys to one.
+    /// </summary>
+    private bool CheckProviders(List<ProjectFacts> closure, Dictionary<string, bool> kinds) {
+        if (kinds.TryGetValue(key: Kind, value: out var ranked) && !ranked) {
+            return true;
+        }
+
+        var ok = true;
+
+        foreach (var reference in closure.Where(predicate: f => ((f.Provider.Length > 0) && !string.Equals(a: f.Provider, b: Provider, comparisonType: StringComparison.OrdinalIgnoreCase)))) {
+            LogViolation(
+                code: "PUCKARCH009",
+                message:
+                    (((string)$"{Describe()} holds '{reference.Name}', which declares <PuckProvider>{reference.Provider}</PuckProvider>, in its resolved closure. Arrives by: {DescribePath(target: reference.Name)}. ")
+                    + "A provider is one replaceable implementation behind Puck's own abstraction (a store, an issuer, a host); a host reaches it through an installed extension's "
+                    + "contribution, never a reference. Move the code that needs the provider into the provider's project, or declare this project's <PuckProvider> if it is one."));
+            ok = false;
+        }
+
+        foreach (var provider in ProviderAssemblies) {
+            if (string.Equals(a: provider.ItemSpec, b: Provider, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                continue;
+            }
+
+            var prefixes = (provider.GetMetadata(metadataName: "Assemblies") ?? "").Split(options: StringSplitOptions.RemoveEmptyEntries, separator: new[] { ';' }).Select(selector: s => s.Trim()).ToArray();
+            var held = References
+                .Select(selector: r => Path.GetFileNameWithoutExtension(path: r.ItemSpec))
+                .Where(predicate: name => prefixes.Any(predicate: prefix => name.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: prefix)))
+                .Distinct(comparer: StringComparer.OrdinalIgnoreCase)
+                .OrderBy(keySelector: n => n, comparer: StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (held.Length == 0) {
+                continue;
+            }
+
+            LogViolation(
+                code: "PUCKARCH009",
+                message:
+                    ((string)$"{Describe()} holds {provider.ItemSpec} SDK assemblies in its resolved references: {string.Join(separator: ", ", values: ((IEnumerable<string>)held))}. ")
+                    + $"Only a project declaring <PuckProvider>{provider.ItemSpec}</PuckProvider> may; a provider-neutral project reaches the provider through Puck's own abstraction.");
+            ok = false;
+        }
 
         return ok;
     }
@@ -552,6 +615,7 @@ public sealed class PuckArchitectureGate : Task {
 
             facts.Kind = (document.Descendants().FirstOrDefault(predicate: e => (e.Name.LocalName == "PuckKind"))?.Value.Trim() ?? "");
             facts.Layer = (document.Descendants().FirstOrDefault(predicate: e => (e.Name.LocalName == "PuckLayer"))?.Value.Trim() ?? "");
+            facts.Provider = (document.Descendants().FirstOrDefault(predicate: e => (e.Name.LocalName == "PuckProvider"))?.Value.Trim() ?? "");
         }
 
         m_facts[projectFile] = facts;
@@ -644,6 +708,7 @@ public sealed class PuckArchitectureGate : Task {
         public string Kind = "";
         public string Layer = "";
         public string Name = "";
+        public string Provider = "";
         public string ProjectPath = "";
     }
 }

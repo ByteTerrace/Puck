@@ -49,11 +49,11 @@ public static class WorldExtensionContributions {
         contribution: provider,
         key: provider.Type
     );
-    /// <summary>Adds a persistence provider under its <see cref="WorldSiloStorageProvider.Type"/>.</summary>
+    /// <summary>Adds a persistence provider under its <see cref="WorldStorageProvider.Type"/>.</summary>
     /// <param name="registry">The registering extension's registry.</param>
     /// <param name="provider">The provider.</param>
     /// <exception cref="PuckExtensionException">Another registration holds the key.</exception>
-    public static void AddStorage(this IPuckExtensionRegistry registry, WorldSiloStorageProvider provider) => registry.Add(
+    public static void AddStorage(this IPuckExtensionRegistry registry, WorldStorageProvider provider) => registry.Add(
         contribution: provider,
         key: provider.Type
     );

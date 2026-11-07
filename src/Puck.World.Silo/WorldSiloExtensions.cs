@@ -16,7 +16,7 @@ internal static class WorldSiloExtensions {
     internal static IReadOnlyCollection<string> ClusteringKinds => Clustering.Keys;
 
     internal static void Add(IServiceCollection services, WorldSiloDefinition definition, PuckExtensionSet extensions) {
-        var storage = extensions.Select<WorldSiloStorageProvider>(
+        var storage = extensions.Select<WorldStorageProvider>(
             key: definition.Store.Type,
             purpose: "Silo storage"
         );

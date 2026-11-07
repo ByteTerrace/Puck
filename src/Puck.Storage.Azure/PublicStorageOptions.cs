@@ -1,6 +1,6 @@
 using Azure.Storage.Blobs.Models;
 
-namespace Puck.Storage;
+namespace Puck.Storage.Azure;
 
 /// <summary>
 /// The blob endpoint published content is served from, and the upload options it is written with.

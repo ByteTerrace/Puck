@@ -8,7 +8,7 @@ namespace Puck.World.Server.Tests;
 public sealed class WorldReleaseCoordinatorSafetyLawTests {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    private static readonly ObjectStorageTarget Target = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: "UseDevelopmentStorage=true");
+    private static readonly ObjectStorageTarget Target = new DirectoryObjectStorageTarget(rootPath: "fake-store");
 
     private static WorldReleaseManifest Manifest(char image) => new() {
         CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,

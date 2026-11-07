@@ -484,7 +484,7 @@ public sealed partial record WorldDefinition(
     [JsonIgnore]
     public StateCatalog StateCatalog => GetStateCatalog();
     /// <summary>Gets the storage host-section defaults — ABSENT resolves to <see cref="WorldStorageDefaults.None"/>
-    /// (cloud unwired, identity declined).</summary>
+    /// (identity declined).</summary>
     [JsonIgnore]
     public WorldStorageDefaults Storage => (StorageRaw ?? WorldStorageDefaults.None);
     /// <summary>Gets the named per-body target registers and their designation envelopes — ABSENT resolves to

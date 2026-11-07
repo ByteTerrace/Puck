@@ -156,7 +156,7 @@ public static class WorldPostBuildWiring {
 
         // The adjacency proof's neighbour resolver, composed from every transport this boot can reach: a
         // file-backed read beside the currently-loaded document (WorldFileNeighbourResolver — the ONLY resolver a
-        // local-only boot, no --storage-uri, ever has, which is exactly the quilt worlds' shape) tried first, then
+        // local-only boot, with no --storage-config-file, ever has) tried first, then
         // the cloud-backed WorldStorageNeighbourResolver when cloud storage is wired. The file resolver reads
         // worldSource.SourcePath fresh on every call rather than capturing the boot directory once, so it keeps
         // resolving correctly across a live world.load/reload that moves the tracked origin (see

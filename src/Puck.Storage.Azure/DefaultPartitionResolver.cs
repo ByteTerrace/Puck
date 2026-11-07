@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Options;
 using Puck.Maths;
 
-namespace Puck.Storage;
+namespace Puck.Storage.Azure;
 
 /// <summary>
 /// Resolves a user's oid to the storage-account partition that owns their container. The same

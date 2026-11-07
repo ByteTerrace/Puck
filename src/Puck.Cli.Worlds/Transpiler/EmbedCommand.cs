@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
 using Puck.Embeddings;
+using Puck.Embeddings.Azure;
 using Puck.Maths;
 using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler;
@@ -426,7 +427,7 @@ public static class EmbedCommand {
             throw new InvalidOperationException(message: "Endpoint URL (--endpoint) must be specified for remote provider.");
         }
 
-        var options = new OpenAiEmbeddingOptions {
+        var options = new AzureOpenAiEmbeddingOptions {
             Dimensions = identity.Dimensions,
             Endpoint = new Uri(uriString: endpoint),
             Model = identity.Model,
@@ -434,7 +435,7 @@ public static class EmbedCommand {
             Timeout = TimeSpan.FromSeconds(value: timeoutSeconds),
         };
 
-        return OpenAiEmbeddingGeneratorFactory.Create(options: options);
+        return AzureOpenAiEmbeddingGeneratorFactory.Create(options: options);
     }
 
     private sealed record DiscoveredSpace(string Name, EmbeddingIdentity Identity);

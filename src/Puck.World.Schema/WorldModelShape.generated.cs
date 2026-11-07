@@ -6170,9 +6170,7 @@ public static partial class WorldModelShape {
         T(typeof(global::Puck.World.WorldStorageDefaults), true, JsonTypeInfoKind.Object, null,
             [],
             [
-                M("endpoint", typeof(global::System.String), typeof(global::Puck.World.WorldStorageDefaults), "Endpoint", Read | Write, static value => ((global::Puck.World.WorldStorageDefaults)value).Endpoint),
                 M("userId", typeof(global::System.String), typeof(global::Puck.World.WorldStorageDefaults), "UserId", Read | Write, static value => ((global::Puck.World.WorldStorageDefaults)value).UserId),
-                M("discoveryEndpoint", typeof(global::System.String), typeof(global::Puck.World.WorldStorageDefaults), "DiscoveryEndpoint", Read | Write, static value => ((global::Puck.World.WorldStorageDefaults)value).DiscoveryEndpoint),
             ],
             []),
         T(typeof(global::Puck.World.WorldTabletopEngage), true, JsonTypeInfoKind.Object, null,

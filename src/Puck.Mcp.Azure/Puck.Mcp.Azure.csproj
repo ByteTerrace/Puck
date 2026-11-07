@@ -3,6 +3,7 @@
         <EnableDynamicLoading>true</EnableDynamicLoading>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Optional extensions</PuckLayer>
+        <PuckProvider>Azure</PuckProvider>
     </PropertyGroup>
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App" />

@@ -62,7 +62,7 @@ public static partial class AzureCommand {
                 context.Archive,
                 new WorldReleaseRestore(
                     context.Blobs,
-                    Puck.Storage.AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: Text(value: Value(
+                    Puck.Storage.Azure.AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: Text(value: Value(
                         context.Outputs,
                         "worldSiloStorageEndpoint"
                     ))),

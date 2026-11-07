@@ -1324,38 +1324,13 @@ public static partial class WorldDefinitionValidator {
 
         return ids;
     }
-    // The storage host-section: an AUTHORED endpoint (and, identically, an authored discovery endpoint) must be an
-    // absolute URI — a connection string carries account secrets and a document travels, so connection strings are
-    // CLI-reflection-only (--storage-uri / --storage-discovery-uri, the dev/emulator path) and refuse here by
-    // design. A user-id must be non-empty when present. All null (WorldStorageDefaults.None) is the built-in —
-    // cloud unwired, identity declined, discovery unset.
+    // The storage host-section: a user-id must be non-empty when present. Null (WorldStorageDefaults.None) is the
+    // built-in: identity declined. The store is deployment configuration and never reaches the document.
     private static void ValidateStorage(WorldStorageDefaults storage, List<string> errors) {
         if (storage is null) {
             errors.Add(item: "storage is required.");
 
             return;
-        }
-
-        if (
-            (storage.Endpoint is { } endpoint) &&
-            (string.IsNullOrWhiteSpace(value: endpoint) || !Uri.TryCreate(
-            result: out _,
-            uriKind: UriKind.Absolute,
-            uriString: endpoint
-        ))
-        ) {
-            errors.Add(item: $"storage.endpoint '{endpoint}' must be an absolute URI or null.");
-        }
-
-        if (
-            (storage.DiscoveryEndpoint is { } discoveryEndpoint) &&
-            (string.IsNullOrWhiteSpace(value: discoveryEndpoint) || !Uri.TryCreate(
-            result: out _,
-            uriKind: UriKind.Absolute,
-            uriString: discoveryEndpoint
-        ))
-        ) {
-            errors.Add(item: $"storage.discoveryEndpoint '{discoveryEndpoint}' must be an absolute URI or null.");
         }
 
         if (

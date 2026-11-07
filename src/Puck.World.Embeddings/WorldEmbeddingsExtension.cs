@@ -5,7 +5,8 @@ using Puck.World.Server;
 
 namespace Puck.World.Embeddings;
 
-/// <summary>Contributes the <c>embedding.fixture</c> and <c>embedding.azure-openai</c> embedding provider types.</summary>
+/// <summary>Contributes the <c>embedding.fixture</c> embedding provider type. A hosted model provider's type comes from
+/// that provider's own extension (<c>embedding.azure-openai</c> from <c>Puck.World.Azure</c>).</summary>
 public sealed class WorldEmbeddingsExtension : IPuckExtension {
     /// <inheritdoc />
     public string Name => "Puck.World.Embeddings";
@@ -17,10 +18,6 @@ public sealed class WorldEmbeddingsExtension : IPuckExtension {
         registry.AddEmbedding(provider: new WorldExtensionEmbeddingProviderType(
             Create: FixtureConfiguredEmbeddingProvider.Create,
             Type: "embedding.fixture"
-        ));
-        registry.AddEmbedding(provider: new WorldExtensionEmbeddingProviderType(
-            Create: AzureOpenAiConfiguredEmbeddingProvider.Create,
-            Type: "embedding.azure-openai"
         ));
     }
 }

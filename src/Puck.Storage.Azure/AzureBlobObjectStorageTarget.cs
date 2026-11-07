@@ -1,4 +1,4 @@
-namespace Puck.Storage;
+namespace Puck.Storage.Azure;
 
 /// <summary>
 /// The Azure Blob storage target: a service URI (credentialed via <c>DefaultAzureCredential</c>) or a connection
@@ -61,6 +61,25 @@ public sealed record AzureBlobObjectStorageTarget : ObjectStorageTarget {
     /// </summary>
     public string? EdgeNamespace { get; init; }
     public Uri? ServiceUri { get; }
+    /// <inheritdoc/>
+    /// <remarks>A connection string carries the account key, so this names its shape and never echoes it.</remarks>
+    public override string Description {
+        get {
+            var connection = ((ServiceUri is not null)
+                ? $"Azure Blob {ServiceUri.AbsoluteUri}"
+                : "Azure Blob connection string (redacted: it carries the account key)");
+
+            if (EdgeNamespace is not { Length: > 0 } edgeNamespace) {
+                return $"{connection}, raw account shape";
+            }
+
+            return $"{connection} through edge namespace '{edgeNamespace}', list {((DirectEndpoint is { Length: > 0 })
+                ? "through a direct endpoint"
+                : "refused (no direct endpoint)")}";
+        }
+    }
+    /// <inheritdoc/>
+    protected override IObjectBlobStoreBackend Backend => AzureBlobObjectBlobStoreBackend.Instance;
 
     public AzureBlobObjectStorageTarget(Uri serviceUri) {
         ArgumentNullException.ThrowIfNull(serviceUri);

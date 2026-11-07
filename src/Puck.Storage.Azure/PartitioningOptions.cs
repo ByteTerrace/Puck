@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Puck.Storage;
+namespace Puck.Storage.Azure;
 
 /// <summary>
 /// The storage-account partition address space a user's oid routes into.
