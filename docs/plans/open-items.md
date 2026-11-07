@@ -2717,7 +2717,10 @@ shards by cause.
   "cache retention lists again"; `SdfWorldPassesLawTests.AViewAllocatesEachScratchBufferOnce`
   and `CadenceCanBeDisabledAndDoesNotAllocateOnAStillView`, a per-frame
   closure allocation in `SdfMeshIrradiance`; and
-  `AViewSizesItsCascadesByItsShadowResolution…` timing out at 5 minutes.
+  `AViewSizesItsCascadesByItsShadowResolution…` timing out at 5 minutes; and
+  `SdfMeshIrradianceLawTests.RemovingTheLastStaticDrawReplacesItsSceneAndProbeMeasurements`
+  failing on `volume.Settling` (`SdfMeshIrradianceLawTests.cs:390`), which the
+  gc-churn lane saw on its base files too.
   Each is a defect in the code or the law; fix or delete it, never keep it red.
 
 The suite target (100 % line coverage plus the keep-list) and CI's `coverage` job
