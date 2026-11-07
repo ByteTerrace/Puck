@@ -52,7 +52,8 @@ Words this page uses in a plain sense:
   signing mechanism; the keys come from the platform at onboarding
   ([signed attestation](#signed-attestation)).
 - **Title**: whose a thing is. **Custody**: which world is holding or simulating
-  it right now. A crossing moves custody, never title.
+  it right now. A crossing moves custody, never title. Today title and custody
+  cover companions; players and items cross without them.
 - **Epoch**: a counter that rises at every handoff, so a holder that missed a
   handoff is recognisably out of date and its actions on the thing are refused.
 - **Escrow**: holding a thing on behalf of both sides until both have recorded
@@ -69,23 +70,39 @@ Because each world can be run by a different party, a thing that moves between
 worlds can move between parties that do not trust each other. Escrow, title and
 custody, and attestation are the engine's answers to that. When a companion
 follows its player into a zone that someone else runs, the companion's home keeps
-its title and the zone holds custody under a numbered epoch, so a crash or a
-lost connection cannot duplicate it or lose it, and nothing a host merely asserts
-moves it
-([the custody protocol](../plans/companion-redesign.md#1-vocabulary)).
+its title and the zone holds custody under a numbered epoch, so nothing a host
+merely asserts moves it
+([the custody protocol](../plans/companion-redesign.md#1-vocabulary)). A crash
+or a lost connection cannot duplicate or lose it where the authority keeps a
+durable crossing log, as a silo does; a desktop process keeps its crossings only
+while it runs.
 
-A worked example. A player clears a dungeon that a studio runs and earns a
-sword. The dungeon writes the sword back to the player's character as a claim
-the dungeon signed. The player then walks into a friend's world, which a
-friend's machine runs. The friend's world reads the character, verifies the
-dungeon's signature, and applies its own policy: it may show the sword, let it
-be wielded with its stats clamped to the friend's rules, or ignore it. The
-studio decides what it vouches for; the friend decides what that is worth in
-their world. Where something must stay unique or tradeable, such as currency or
-a stake at a card table, the world that issued it keeps the record itself and
-escrow and custody move it, so a copied claim gains nothing. Which kinds of value
-use which form is an open design question
-([MMO foundations](../plans/mmo-foundations.md)).
+A worked example of the intent. A player clears a dungeon that a studio runs and
+earns a sword. The dungeon vouches for the sword with a claim it signs. The
+player then walks into a friend's world, which a friend's machine runs. The
+friend's world verifies the dungeon's signature and applies its own policy: it
+may show the sword, let it be wielded with its stats clamped to the friend's
+rules, or ignore it. The studio decides what it vouches for; the friend decides
+what that is worth in their world. Where something must stay unique or
+tradeable, such as currency or a stake at a card table, the world that issued it
+keeps the record itself and escrow and custody move it, so a copy gains nothing.
+
+What exists today falls short of that intent in ways that matter to anyone
+designing across worlds:
+
+- What a visited world writes onto a traveller is adopted at home unsigned;
+  signed provenance for carried state does not exist yet.
+- A character's world runs on the player's own host, so everything on it is the
+  player's own assertion until another world vouches for it.
+- An authority sees all of its own state: a host sees every hand at a table it
+  runs. Disclosure limits what other worlds receive, never what the host sees.
+- When bodies under two authorities act on each other, only physical contact has
+  a settlement rule; the rest of player-to-player interaction is unbuilt.
+
+Which kinds of value use which form, and how these gaps close, are the open
+questions of [MMO foundations](../plans/mmo-foundations.md); its
+[attack catalogue](../plans/mmo-foundations/attacks.md) lists the ways the model
+can be broken today.
 
 | A single-operator game | Puck |
 |---|---|
