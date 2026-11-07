@@ -453,8 +453,10 @@ public sealed partial class WorldPersistence {
     internal void RestoreLatch(RuleLatch latch, IReadOnlyList<WorldRuleLatchEntry> entries, IReadOnlySet<string>? rules = null) {
         var keys = Host.Arena.Keys;
 
-        if (rules is null) { latch.Clear(); } else {
-            foreach (var rule in rules) { latch.Rule(name: rule).Held.Clear(); }
+        var journal = Host.Arena.Journal;
+
+        if (rules is null) { latch.Clear(journal: journal); } else {
+            foreach (var rule in rules) { latch.ClearRule(journal: journal, name: rule); }
             latch.InvalidateScheduler();
         }
         foreach (var entry in entries) {
@@ -480,6 +482,7 @@ public sealed partial class WorldPersistence {
                     RightGeneration: entry.RightGeneration
                 ),
                 held: entry.Held,
+                journal: journal,
                 name: entry.Rule
             );
         }

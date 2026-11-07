@@ -258,7 +258,9 @@ public readonly record struct EffectRefusal(Enum? Code, string Reason) {
 /// <param name="Preflight">Whether the host should validate what it can without acting. An irreversible arm is
 /// preflighted against the state the firing proposes to commit, so a refusal it can see rewinds the firing instead
 /// of landing outward after the commit.</param>
-public readonly record struct EffectFiring(string RuleName, ulong Tick, ulong EngineTick, ulong StepTicks, bool Preflight = false);
+/// <param name="Values">What the evaluator read for the arm's declared sources, the same values at the preflight and at
+/// the delivery after the commit.</param>
+public readonly record struct EffectFiring(string RuleName, ulong Tick, ulong EngineTick, ulong StepTicks, bool Preflight = false, EffectValues Values = default);
 /// <summary>What a firing effect writes through: the reader every operand answers from, widened with the one
 /// mutation door the library's own effects install by, the arm door for an effect the library compiled but does not
 /// itself apply, and the notification a host installs its own side of a committed firing on.</summary>
@@ -269,6 +271,14 @@ public readonly record struct EffectFiring(string RuleName, ulong Tick, ulong En
 /// candidate, because the firing's journal scope already is one.</para>
 /// </remarks>
 public interface IEffectHost : IStateReader {
+    /// <summary>Captures the bindings the host's arms read when they run (the participants a decision or an interaction
+    /// binds), so an arm queued under one set preflights and delivers under the same set, whatever the host has bound
+    /// by then.</summary>
+    /// <returns>An opaque capture <see cref="ApplyBinding"/> restores; zero for a host with no bindings.</returns>
+    long CaptureBinding() => 0L;
+    /// <summary>Binds what <see cref="CaptureBinding"/> captured.</summary>
+    /// <param name="binding">The capture.</param>
+    void ApplyBinding(long binding) { }
     /// <summary>Begins one bound gate-and-fire evaluation, including its predicate reads.</summary>
     void BeginRuleEvaluation() { }
     /// <summary>Ends that evaluation on success, refusal or a closed gate.</summary>

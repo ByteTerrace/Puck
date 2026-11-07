@@ -4,6 +4,7 @@ using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
 using IRuleKey = Puck.State.Rules.IRuleKey;
 using IRuleOperand = Puck.State.Rules.IRuleOperand;
 using RuleReads = Puck.State.Rules.RuleReads;
+using WriteKey = Puck.State.Rules.WriteKey;
 
 namespace Puck.World;
 
@@ -534,33 +535,30 @@ public sealed class WorldPairKeyFact : KeyFact<IWorldFacts>, IRuleKey {
             ? Resolved<CellKey>.Named(value: key)
             : Resolved<CellKey>.Nothing);
     }
-    bool IRuleKey.TryResolveForWrite(IStateReader reader, out CellKey key, out string reason) {
+    WriteKey IRuleKey.ResolveForWrite(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         var facet = ((IWorldFacts)reader);
+        var existing = facet.PairKey(key: m_key);
 
-        key = facet.PairKey(key: m_key);
-        if (key.IsValid) {
-            reason = string.Empty;
-
-            return true;
+        if (existing.IsValid) {
+            return WriteKey.Resolved(key: existing);
         }
 
         var a = facet.ResolveBody(bodyRef: m_key.BodyA);
         var b = facet.ResolveBody(bodyRef: m_key.BodyB);
 
         if ((a < 0) || (b < 0)) {
-            key = default;
-            reason = string.Empty;
-
-            return true;
+            return WriteKey.Resolved(key: default);
         }
 
-        return reader.Arena.Keys.TryIntern(
-            key: out key,
+        return (reader.Arena.Keys.TryIntern(
+            key: out var interned,
             name: CellName.Parse(candidate: $"{a}_{b}"),
-            reason: out reason
-        );
+            reason: out var reason
+        )
+            ? WriteKey.Resolved(key: interned)
+            : WriteKey.Refused(reason: reason));
     }
     Resolved<long> IRuleKey.ResolveIndex(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

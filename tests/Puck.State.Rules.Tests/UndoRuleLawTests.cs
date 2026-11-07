@@ -231,6 +231,48 @@ public sealed class UndoRuleLawTests {
         Assert.False(condition: runtime.Host.Arena.TryRewindGroup(group: "turn", reason: out var reason));
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "outside");
     }
+    // A rewind that refuses has not crossed its Edge: the rule is judged again once a turn is retained, and then it lands.
+    [Fact]
+    public void ARefusedRewindDoesNotConsumeItsEdgeCrossing() {
+        var step = new Rule(
+            Name: Name(value: "step"),
+            Effects: [new ActionEffect.SetState(State: "score", Value: 7m)],
+            Gate: new ActionPredicate.CompareState(State: "third", Comparison: ExpressionOp.Equal, Value: 1m)
+        );
+        var rewind = new Rule(
+            Name: Name(value: "rewind"),
+            Effects: [new ActionEffect.RewindGroup(Group: Name(value: "turn"))],
+            Gate: new ActionPredicate.CompareState(State: "flag", Comparison: ExpressionOp.Equal, Value: 1m),
+            Mode: ActionTriggerMode.Edge
+        );
+        var runtime = ArrangeRuntime([step, rewind], UndoGroup(member: step.Name));
+
+        TickGroup(runtime: runtime, tick: 0UL);
+        Assert.True(condition: runtime.Host.Arena.TryWrite(
+            rowOrdinal: EvaluatorFixture.Ordinal(host: runtime.Host, row: "flag"),
+            key: runtime.Host.Arena.Catalog.Keys.Intern(name: StateRow.SlotKey),
+            operand: 1L,
+            write: StateWriteKind.Set,
+            reason: out _
+        ));
+        runtime.Host.Advance(engineTick: 1UL, tick: 1UL);
+        _ = runtime.Evaluator.Evaluate(rules: [runtime.Rules[1]], latch: runtime.Latch, stepTicks: 1UL);
+        Assert.False(condition: runtime.Latch.Held(name: "rewind"));
+
+        Assert.True(condition: runtime.Host.Arena.TryWrite(
+            rowOrdinal: EvaluatorFixture.Ordinal(host: runtime.Host, row: "third"),
+            key: runtime.Host.Arena.Catalog.Keys.Intern(name: StateRow.SlotKey),
+            operand: 1L,
+            write: StateWriteKind.Set,
+            reason: out _
+        ));
+        TickGroup(runtime: runtime, tick: 2UL);
+        Assert.Equal(7L, EvaluatorFixture.Cell(runtime.Host, "score"));
+        runtime.Host.Advance(engineTick: 3UL, tick: 3UL);
+        _ = runtime.Evaluator.Evaluate(rules: [runtime.Rules[1]], latch: runtime.Latch, stepTicks: 1UL);
+        Assert.Equal(0L, EvaluatorFixture.Cell(runtime.Host, "score"));
+        Assert.True(condition: runtime.Latch.Held(name: "rewind"));
+    }
     [Fact]
     public void ARewindRuleUsesItsOwnGateAsAuthority() {
         var step = RulesFixture.Rule(name: "step", effects: [new ActionEffect.SetState(State: "score", Value: 7m)]);

@@ -276,6 +276,6 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
     /// position it reads rather than of the tick judged before it.</summary>
     public void BeginJudge() {
         m_hostFacts.Clear();
-        Latch.Clear();
+        Latch.Clear(journal: Arena.Journal);
     }
 }

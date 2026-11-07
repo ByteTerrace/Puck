@@ -148,6 +148,57 @@ public sealed class LatchAndTriggerLawTests {
             expected: 2L
         );
     }
+    // A lifecycle write inside a scope is refused whole: it leaves the latch as it was, so the rewind that follows finds
+    // every record it needs and restores the bit a firing wrote.
+    [Fact]
+    public void ALifecycleWriteInsideAScopeIsRefusedAndLeavesTheRewindIntact() {
+        var (host, _, _, latch, _) = EvaluatorFixture.Arrange(rules: [Counting(
+                mode: ActionTriggerMode.Edge,
+                name: "cross"
+            )]);
+        var journal = host.Arena.Journal;
+        var state = latch.Rule(name: "cross");
+        var binding = new LatchKey(Left: -1, Right: -1);
+
+        state.Held[binding] = true;
+
+        var mark = host.Arena.BeginScope();
+
+        latch.SetHeld(
+            binding: binding,
+            held: false,
+            journal: journal,
+            state: state
+        );
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => latch.Restore(
+            binding: binding,
+            held: true,
+            journal: journal,
+            name: "cross"
+        ));
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => latch.Clear(journal: journal));
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => latch.ClearRule(journal: journal, name: "cross"));
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => latch.Prune(compiled: [], journal: journal));
+        Assert.False(condition: state.Held[binding]);
+
+        host.Arena.Rewind(mark: mark);
+
+        Assert.Equal(expected: 0, actual: host.Arena.Journal.Scopes);
+        Assert.True(condition: latch.Rule(name: "cross").Held[binding]);
+    }
+    // A pruned rule gives its ordinal back, so adding and dropping rules between ticks holds no state that nothing names.
+    [Fact]
+    public void PruningGivesBackTheOrdinalsOfDroppedRules() {
+        var latch = new RuleLatch();
+        var journal = new ArenaJournal();
+
+        for (var cycle = 0; (cycle < 1000); cycle++) {
+            _ = latch.Rule(name: "gone");
+            latch.Prune(compiled: [], journal: journal);
+        }
+
+        Assert.True(condition: (latch.StateSlots <= 1));
+    }
     // L1: an Edge firing that committed inside an enclosing scope is undone with that scope, latch bit and cells
     // together, so the crossing it consumed is still to be crossed.
     [Fact]
@@ -309,11 +360,13 @@ public sealed class LatchAndTriggerLawTests {
         Assert.NotEmpty(collection: flattened);
 
         var restored = new RuleLatch();
+        var journal = new ArenaJournal();
 
         foreach (var (rule, binding, held) in flattened) {
             restored.Restore(
                 binding: binding,
                 held: held,
+                journal: journal,
                 name: rule
             );
         }

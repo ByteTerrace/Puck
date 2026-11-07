@@ -46,36 +46,58 @@ public sealed partial class WorldInputRuntime {
         m_touchedBodies.RemoveRange(count: (m_touchedBodies.Count - kept), index: kept);
         return m_touchedBodies;
     }
-    /// <summary>Checks the candidate selections of the owners routing <paramref name="bodies"/> while the state's
-    /// journal can still rewind; changes no input state.</summary>
+    /// <summary>Prepares the selections of the owners routing <paramref name="bodies"/> while the state's journal can
+    /// still rewind: each owner's candidate mapping is selected and held for <see cref="ApplyPreparedBodies"/>. Changes
+    /// no input state.</summary>
     /// <param name="bodies">The bodies whose selection registers moved, each once.</param>
     /// <param name="reason">Why a selection is refused, or empty.</param>
     /// <returns><see langword="true"/> when every such owner selects an admitted tuple.</returns>
-    public bool TryValidateBodies(IReadOnlyList<int> bodies, out string reason) {
+    public bool TryPrepareBodies(IReadOnlyList<int> bodies, out string reason) {
         foreach (var owner in OwnersOf(bodies: bodies)) {
-            if (!TrySelect(owner, out _, out reason)) { return false; }
+            if (!TryPrepare(owner: owner, reason: out reason)) { return false; }
         }
         reason = string.Empty;
         return true;
     }
-    /// <summary>Synchronizes the owners routing <paramref name="bodies"/> after a committed state change moved their
-    /// selection registers, in the same principal order <see cref="TrySynchronize(ulong, out string)"/> visits.</summary>
-    /// <param name="bodies">The bodies whose selection registers moved, each once.</param>
+    /// <summary>Prepares the selection of every admitted owner, as <see cref="TryPrepareBodies"/> does for the owners of
+    /// some bodies; the prelude to a gate change that resynchronizes them all.</summary>
     /// <param name="reason">Why a selection is refused, or empty.</param>
-    /// <returns><see langword="true"/> when every such owner synchronized.</returns>
-    public bool TrySynchronizeBodies(IReadOnlyList<int> bodies, out string reason) {
-        var owners = OwnersOf(bodies: bodies);
-
-        foreach (var owner in owners) {
-            if (!TrySelect(owner, out _, out reason)) { return false; }
-        }
-        foreach (var owner in owners) {
-            if (!TrySynchronize(activation: 0, owner: owner, reason: out reason)) { return false; }
+    /// <returns><see langword="true"/> when every owner selects an admitted tuple.</returns>
+    public bool TryPrepareAll(out string reason) {
+        foreach (var owner in m_ordered) {
+            if (!TryPrepare(owner: owner, reason: out reason)) { return false; }
         }
         reason = string.Empty;
         return true;
     }
+    /// <summary>Applies the selections <see cref="TryPrepareBodies"/> prepared to the owners routing
+    /// <paramref name="bodies"/> once the state change has committed, in the principal order
+    /// <see cref="ApplyPreparedAll"/> visits. It cannot refuse: every selection was admitted when it was prepared.</summary>
+    /// <param name="bodies">The bodies whose selection registers moved, each once.</param>
+    /// <exception cref="InvalidOperationException">An owner has no prepared selection: the transaction committed
+    /// without its preparing phase, a defect in the committer and not a refusal.</exception>
+    public void ApplyPreparedBodies(IReadOnlyList<int> bodies) {
+        foreach (var owner in OwnersOf(bodies: bodies)) { ApplyPrepared(owner: owner); }
+    }
+    /// <summary>Applies the selection <see cref="TryPrepareAll"/> prepared to every admitted owner, as
+    /// <see cref="ApplyPreparedBodies"/> does for the owners of some bodies.</summary>
+    /// <exception cref="InvalidOperationException">An owner has no prepared selection.</exception>
+    public void ApplyPreparedAll() {
+        foreach (var owner in m_ordered) { ApplyPrepared(owner: owner); }
+    }
 
+    private bool TryPrepare(Owner owner, out string reason) {
+        if (!TrySelect(owner, out var mapping, out reason)) { return false; }
+        owner.Prepared = mapping;
+        return true;
+    }
+    private void ApplyPrepared(Owner owner) {
+        var mapping = (owner.Prepared ?? throw new InvalidOperationException(message: "A state transaction applied an input selection it never prepared."));
+
+        owner.Prepared = null;
+        RefreshPermissions(owner: owner);
+        SynchronizeTo(activation: 0, mapping: mapping, owner: owner);
+    }
     private List<Owner> OwnersOf(IReadOnlyList<int> bodies) {
         m_touchedOwners.Clear();
         foreach (var body in bodies) {

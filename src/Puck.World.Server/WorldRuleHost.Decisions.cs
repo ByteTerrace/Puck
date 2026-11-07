@@ -420,48 +420,100 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
         );
         }
 
-        var common = FireDecisionEffects(
+        var continuation = (m_decisionContinuation ??= new DecisionContinuation(host: this));
+
+        continuation.Arm(
+            common: rule.Effects,
+            generation: generation,
+            key: key,
+            option: policy.Options[selected.Option].Effects,
+            selected: selected
+        );
+
+        // The common effects and the chosen option's are one firing: one scope, and the binding the decision
+        // installed rewinds with both.
+        return FireDecisionEffects(
             applied: out applied,
+            continuation: continuation,
             effects: rule.Effects,
             ruleName: rule.Name,
             stepTicks: stepTicks
         );
-
-        if (
-            (selected.Candidate >= 0) &&
-            (!DecisionBodyLive(
-            generation: generation,
-            index: key
-        ) || !DecisionBodyLive(
-            selected.Candidate,
-            selected.Generation
-        ))
-        ) { return common; }
-        var left = m_boundLeft; var right = m_boundRight;
-
-        m_boundLeft = ((selected.Candidate < 0)
-            ? -1
-            : key
-        ); m_boundRight = selected.Candidate;
-        try {
-            var option = FireDecisionEffects(
-                applied: out var optionApplied,
-                effects: policy.Options[selected.Option].Effects,
-                ruleName: rule.Name,
-                stepTicks: stepTicks
-            );
-
-            applied |= optionApplied;
-
-            return RuleEvaluator.Aggregate(
-                left: common,
-                right: option
-            );
-        } finally { m_boundLeft = left; m_boundRight = right; }
     }
+
+    // What a decision proposes into its firing after its common effects: the chosen option's effects, bound to the
+    // pair they score, unless the common effects would remove a body the option reads.
+    private sealed class DecisionContinuation(WorldRuleHost host) : IFiringContinuation {
+        private IRuleEffect[] m_common = [];
+        private IRuleEffect[] m_option = [];
+        private DecisionChoice m_selected;
+        private int m_generation;
+        private int m_key;
+        private int m_savedLeft;
+        private int m_savedRight;
+
+        public void Arm(IRuleEffect[] common, IRuleEffect[] option, DecisionChoice selected, int key, int generation) {
+            m_common = common;
+            m_option = option;
+            m_selected = selected;
+            m_key = key;
+            m_generation = generation;
+        }
+        public IRuleEffect[]? Next() {
+            if (
+                (m_selected.Candidate >= 0) &&
+                (host.CommonRemovesBody(body: m_key, effects: m_common) ||
+                host.CommonRemovesBody(effects: m_common, body: m_selected.Candidate) ||
+                !host.DecisionBodyLive(generation: m_generation, index: m_key) ||
+                !host.DecisionBodyLive(generation: m_selected.Generation, index: m_selected.Candidate))
+            ) { return null; }
+
+            m_savedLeft = host.m_boundLeft;
+            m_savedRight = host.m_boundRight;
+            host.m_boundLeft = ((m_selected.Candidate < 0)
+                ? -1
+                : m_key
+            );
+            host.m_boundRight = m_selected.Candidate;
+
+            return m_option;
+        }
+        public void End() {
+            host.m_boundLeft = m_savedLeft;
+            host.m_boundRight = m_savedRight;
+        }
+    }
+
+    private DecisionContinuation? m_decisionContinuation;
+
+    // Whether an effect sequence removes the placement a body inhabits: the only way effects deactivate a body, since the
+    // removal installs with the firing's commit, after the option's liveness would be read.
+    private bool CommonRemovesBody(IRuleEffect[] effects, int body) {
+        foreach (var effect in effects) {
+            if (
+                (effect is WorldDocumentEffect { Write: WorldDocumentWrite.RemovePlacement } removal) &&
+                (Host.Population.BodyForPlacementOrdinal(ordinal: Host.PlacementOrdinalOf(id: removal.Id)) == body)
+            ) { return true; }
+            foreach (var arm in effect.Arms) {
+                if (CommonRemovesBody(body: body, effects: arm)) { return true; }
+            }
+        }
+
+        return false;
+    }
+
+    /// <inheritdoc/>
+    public long CaptureBinding() => (((long)m_boundLeft) << 32) | ((uint)m_boundRight);
+    /// <inheritdoc/>
+    public void ApplyBinding(long binding) {
+        m_boundLeft = ((int)(binding >> 32));
+        m_boundRight = ((int)binding);
+    }
+
     // A decision's own effect sequence is one firing, exactly as a rule's is.
-    private RuleOutcome FireDecisionEffects(IRuleEffect[] effects, string ruleName, ulong stepTicks, out bool applied) => m_evaluator.FireEffects(
+    private RuleOutcome FireDecisionEffects(IRuleEffect[] effects, string ruleName, ulong stepTicks, out bool applied, IFiringContinuation? continuation = null) => m_evaluator.FireEffects(
         applied: out applied,
+        continuation: continuation,
         effects: effects,
         prelude: m_decisionPrelude,
         ruleName: ruleName,

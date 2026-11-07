@@ -112,13 +112,17 @@ public sealed class RuleLatch : IJournalParticipant {
     }
 
     private readonly Dictionary<string, RuleState> m_byRule = new(comparer: StringComparer.Ordinal);
-    // Every state the latch has minted, by ordinal. A recompile that drops a name leaves its state here until Clear, so a
-    // record naming it still finds it.
-    private readonly List<RuleState> m_stateList = [];
+    // Every state the latch holds, by ordinal, which is what a journal record names a state by. Only a scope holds a
+    // record and the lifecycle writers refuse to run inside one, so a state Prune drops gives its ordinal back at once.
+    private readonly List<RuleState?> m_stateList = [];
+    private readonly Stack<int> m_freeOrdinals = [];
     // Starts above zero, the sweep a fresh or reset binding schedule reads as last touched in, so it reads untouched.
     private ulong m_sweep = 1UL;
     private readonly List<HashEntry> m_hashScratch = [];
 
+    /// <summary>Gets how many rule-state slots the latch holds, live or free: a dropped rule's slot is reused, so it is
+    /// bounded by the most rules ever live at once.</summary>
+    public int StateSlots => m_stateList.Count;
     /// <summary>Gets how many ticks the host counted through <see cref="CountTick"/> since the latch was created or
     /// last cleared: the window every rule's <see cref="RuleState.Spent"/> covers.</summary>
     public long SpentTicks { get; private set; }
@@ -244,8 +248,13 @@ public sealed class RuleLatch : IJournalParticipant {
         );
 
         if (state is null) {
-            state = new RuleState { Ordinal = m_stateList.Count };
-            m_stateList.Add(item: state);
+            if (m_freeOrdinals.TryPop(result: out var ordinal)) {
+                state = new RuleState { Ordinal = ordinal };
+                m_stateList[ordinal] = state;
+            } else {
+                state = new RuleState { Ordinal = m_stateList.Count };
+                m_stateList.Add(item: state);
+            }
         }
 
         return state;
@@ -297,7 +306,7 @@ public sealed class RuleLatch : IJournalParticipant {
 
     /// <inheritdoc/>
     public void Undo(ReadOnlySpan<long> words) {
-        var state = m_stateList[((int)words[0])];
+        var state = (m_stateList[((int)words[0])] ?? throw new InvalidOperationException(message: "A journal record names a rule state the latch has dropped."));
         var binding = new LatchKey(
             Left: ((int)words[1]),
             LeftGeneration: words[3],
@@ -326,20 +335,59 @@ public sealed class RuleLatch : IJournalParticipant {
         }
     }
 
-    private static void RefuseInsideScope(ArenaJournal? journal) {
-        if (journal is { ScopeOpen: true }) {
+    // The lifecycle writers that cannot be undone refuse to run inside a scope: only a firing's write is recorded, so one
+    // made there would be left standing by the rewind.
+    private static void RefuseInsideScope(ArenaJournal journal) {
+        ArgumentNullException.ThrowIfNull(argument: journal);
+
+        if (journal.ScopeOpen) {
             throw new InvalidOperationException(message: "A latch lifecycle write ran inside an open arena journal scope, which would leave it unrestorable; only a firing's write is recorded.");
         }
+    }
+    // Removes one binding's edge bit, recording what it held when a scope is open so the scope's rewind brings it back:
+    // what a sweep's end, a partial sweep and a candidate's reset do. Between scopes the removal is the writer's own.
+    private void RemoveHeld(ArenaJournal journal, RuleState state, LatchKey binding) {
+        if (!state.Held.TryGetValue(key: binding, value: out var held)) {
+            return;
+        }
+        if (journal.ScopeOpen) {
+            Record(
+                binding: binding,
+                journal: journal,
+                previous: (held
+                    ? WasOpen
+                    : WasClosed),
+                state: state
+            );
+        }
+
+        _ = state.Held.Remove(key: binding);
     }
 
     /// <summary>Forgets every bound entry and every cached verdict while keeping the storage each rule has grown,
     /// so a caller that judges many positions from a clean latch allocates nothing per position.</summary>
     /// <remarks>The latch then reads as empty: <see cref="Count"/> is zero and every crossing is a first one. A
     /// rule's emptied storage is still enumerated by name, so a latch that is hashed or checkpointed uses
-    /// <see cref="Clear"/>.</remarks>
-    public void Reset() {
+    /// <see cref="Clear"/>. An entry removed while a scope is open comes back with that scope.</remarks>
+    /// <param name="journal">The journal of the arena the latch judges beside.</param>
+    public void Reset(ArenaJournal journal) {
+        ArgumentNullException.ThrowIfNull(argument: journal);
+
         SchedulerEpoch++;
         foreach (var state in m_byRule.Values) {
+            if (journal.ScopeOpen) {
+                foreach (var pair in state.Held) {
+                    Record(
+                        binding: pair.Key,
+                        journal: journal,
+                        previous: (pair.Value
+                            ? WasOpen
+                            : WasClosed),
+                        state: state
+                    );
+                }
+            }
+
             state.Held.Clear();
             Forget(schedule: state.Once);
             foreach (var schedule in state.Scheduling.Values) {
@@ -359,11 +407,28 @@ public sealed class RuleLatch : IJournalParticipant {
         }
     }
     /// <summary>Forgets every entry, including the scheduler's own caches and the spent counts.</summary>
-    public void Clear() {
+    /// <param name="journal">The journal of the arena the latch judges beside, which must have no scope open.</param>
+    /// <exception cref="InvalidOperationException">A scope is open on <paramref name="journal"/>.</exception>
+    public void Clear(ArenaJournal journal) {
+        RefuseInsideScope(journal: journal);
+
         m_byRule.Clear();
         m_stateList.Clear();
+        m_freeOrdinals.Clear();
         m_statesFor = null;
         SpentTicks = 0L;
+        SchedulerEpoch++;
+    }
+    /// <summary>Forgets every binding of one rule, as a restore of a scoped replay that rebuilds only that rule's
+    /// entries does.</summary>
+    /// <param name="journal">The journal of the arena the latch judges beside, which must have no scope open.</param>
+    /// <param name="name">The rule's name.</param>
+    /// <exception cref="InvalidOperationException">A scope is open on <paramref name="journal"/>.</exception>
+    public void ClearRule(ArenaJournal journal, string name) {
+        ArgumentNullException.ThrowIfNull(argument: name);
+        RefuseInsideScope(journal: journal);
+
+        Rule(name: name).Held.Clear();
         SchedulerEpoch++;
     }
 
@@ -427,24 +492,18 @@ public sealed class RuleLatch : IJournalParticipant {
     /// <param name="journal">The journal of the arena the sweep runs beside: a removal made while one of its scopes
     /// is open (a search judge's candidate) is recorded and comes back with that scope, and one made with none
     /// open is the sweep's own.</param>
-    public void EndSweep(RuleState state, ArenaJournal? journal = null) {
+    public void EndSweep(RuleState state, ArenaJournal journal) {
         ArgumentNullException.ThrowIfNull(argument: state);
+        ArgumentNullException.ThrowIfNull(argument: journal);
 
         // Dictionary.Remove does not invalidate an in-flight enumerator.
         foreach (var pair in state.Held) {
             if (!Touched(state: state, binding: pair.Key)) {
-                if (journal is { ScopeOpen: true }) {
-                    Record(
-                        binding: pair.Key,
-                        journal: journal,
-                        previous: (pair.Value
-                            ? WasOpen
-                            : WasClosed),
-                        state: state
-                    );
-                }
-
-                _ = state.Held.Remove(key: pair.Key);
+                RemoveHeld(
+                    binding: pair.Key,
+                    journal: journal,
+                    state: state
+                );
             }
         }
         foreach (var pair in state.Scheduling) {
@@ -486,10 +545,15 @@ public sealed class RuleLatch : IJournalParticipant {
 
         return false;
     }
-    /// <summary>Keeps every surviving name's entries and drops the names no longer compiled.</summary>
+    /// <summary>Keeps every surviving name's entries and drops the names no longer compiled, giving each dropped
+    /// state's ordinal back.</summary>
     /// <param name="compiled">The family's compiled rules after a recompile.</param>
-    public void Prune(CompiledRule[] compiled) {
+    /// <param name="journal">The journal of the arena the latch judges beside, which must have no scope open, so no
+    /// record can name a state this drops.</param>
+    /// <exception cref="InvalidOperationException">A scope is open on <paramref name="journal"/>.</exception>
+    public void Prune(CompiledRule[] compiled, ArenaJournal journal) {
         ArgumentNullException.ThrowIfNull(argument: compiled);
+        RefuseInsideScope(journal: journal);
 
         if (m_byRule.Count == 0) {
             return;
@@ -501,8 +565,10 @@ public sealed class RuleLatch : IJournalParticipant {
             _ = live.Add(item: rule.Name);
         }
 
-        foreach (var name in m_byRule.Keys) {
-            if (!live.Contains(item: name) && m_byRule.Remove(key: name)) {
+        foreach (var name in m_byRule.Keys.ToArray()) {
+            if (!live.Contains(item: name) && m_byRule.Remove(key: name, value: out var dropped)) {
+                m_stateList[dropped.Ordinal] = null;
+                m_freeOrdinals.Push(item: dropped.Ordinal);
                 m_statesFor = null;
             }
         }
@@ -511,10 +577,9 @@ public sealed class RuleLatch : IJournalParticipant {
     /// <param name="name">The rule's name.</param>
     /// <param name="binding">The binding the entry belongs to.</param>
     /// <param name="held">Whether the gate held.</param>
-    /// <param name="journal">The journal of the arena the restore runs beside, which must have no scope open, or
-    /// <see langword="null"/>.</param>
+    /// <param name="journal">The journal of the arena the restore runs beside, which must have no scope open.</param>
     /// <exception cref="InvalidOperationException">A scope is open on <paramref name="journal"/>.</exception>
-    public void Restore(string name, LatchKey binding, bool held, ArenaJournal? journal = null) {
+    public void Restore(string name, LatchKey binding, bool held, ArenaJournal journal) {
         ArgumentNullException.ThrowIfNull(argument: name);
         RefuseInsideScope(journal: journal);
 
@@ -535,8 +600,12 @@ public sealed class RuleLatch : IJournalParticipant {
     internal bool TouchedInSweep(RuleState state, LatchKey binding) => Touched(binding: binding, state: state);
     // Forgets one binding of a swept rule — its edge bit and its scheduler caches — exactly as EndSweep forgets a
     // binding the sweep did not touch: what a partial sweep does for each binding it visits and leaves untouched.
-    internal void Forget(RuleState state, LatchKey binding) {
-        _ = state.Held.Remove(key: binding);
+    internal void Forget(RuleState state, LatchKey binding, ArenaJournal journal) {
+        RemoveHeld(
+            binding: binding,
+            journal: journal,
+            state: state
+        );
         _ = state.Scheduling.Remove(key: binding);
     }
 

@@ -200,38 +200,23 @@ public static class RuleReads {
     /// <summary>Why an address whose key computation faulted refused: the one sentence every read and write that
     /// meets a <see cref="FaultCase.Faulted"/> address reports.</summary>
     public const string KeyFaultReason = "the address's key faulted (overflow, a divide by zero, or a value with no number)";
-    /// <summary>Returns whether a refusal reason is the one a faulted address reports, as opposed to an address that
-    /// resolved but could not be admitted.</summary>
-    /// <param name="reason">The reason a write address refused.</param>
-    /// <returns><see langword="true"/> when the address's computation faulted.</returns>
-    public static bool IsKeyFault(string reason) => string.Equals(
-        a: reason,
-        b: KeyFaultReason,
-        comparisonType: StringComparison.Ordinal
-    );
 
     /// <summary>Attempts to resolve the key a state-writing effect addresses. Only a dynamic key family that must
     /// create a new runtime address admits one here; read resolution never changes the key table.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="literal">The compile-time key, used when <paramref name="keyFrom"/> is <see langword="null"/>.</param>
     /// <param name="keyFrom">The live key indirection, or <see langword="null"/>.</param>
-    /// <param name="key">The resolved key, or invalid when no cell was named.</param>
-    /// <param name="reason">Why a required runtime-key admission failed, or empty on success.</param>
-    /// <returns><see langword="true"/> when the write may proceed; otherwise the firing must refuse.</returns>
-    public static bool TryResolveKeyForWrite(IStateReader reader, CellKey literal, CompiledCellRef? keyFrom, out CellKey key, out string reason) {
+    /// <returns>The key (invalid when no cell was named), <see cref="WriteKeyCase.Faulted"/> when computing it
+    /// faulted, or <see cref="WriteKeyCase.Refused"/> when a required runtime-key admission failed.</returns>
+    public static WriteKey ResolveKeyForWrite(IStateReader reader, CellKey literal, CompiledCellRef? keyFrom) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         if (keyFrom is not { } reference) {
-            key = literal;
-            reason = string.Empty;
-
-            return true;
+            return WriteKey.Resolved(key: literal);
         }
 
-        return TryResolveReferenceForWrite(
-            key: out key,
+        return ResolveReferenceForWrite(
             reader: reader,
-            reason: out reason,
             reference: in reference
         );
     }
@@ -460,37 +445,30 @@ public static class RuleReads {
             )
         );
     }
-    private static bool TryResolveReferenceForWrite(IStateReader reader, in CompiledCellRef reference, out CellKey key, out string reason) {
+    private static WriteKey ResolveReferenceForWrite(IStateReader reader, in CompiledCellRef reference) {
         if (reference.Program is not null) {
             var resolved = ResolveReference(
                 reader: reader,
                 reference: in reference
             );
-            var faulted = (resolved.Case == FaultCase.Faulted);
 
-            _ = resolved.TryNamed(value: out key);
-            reason = (faulted
-                ? KeyFaultReason
-                : string.Empty);
+            if (resolved.Case == FaultCase.Faulted) {
+                return WriteKey.Faulted();
+            }
 
-            return !faulted;
+            _ = resolved.TryNamed(value: out var named);
+
+            return WriteKey.Resolved(key: named);
         }
         if (reference.Custom is { } custom) {
-            return custom.TryResolveForWrite(
-                key: out key,
-                reader: reader,
-                reason: out reason
-            );
+            return custom.ResolveForWrite(reader: reader);
         }
 
-        key = ResolveBuiltIn(
+        return WriteKey.Resolved(key: ResolveBuiltIn(
             named: out _,
             reader: reader,
             reference: in reference
-        );
-        reason = string.Empty;
-
-        return true;
+        ));
     }
 
     /// <summary>Resolves one live indirection as an integer index — a live row's table index, a static table's key.

@@ -132,7 +132,7 @@ public sealed partial class RuleEvaluator {
             }
             if (!full && !latch.TouchedInSweep(binding: binding, state: state)) {
                 // A binding that could not evaluate is closed exactly as a full sweep's end closes it.
-                latch.Forget(binding: binding, state: state);
+                latch.Forget(binding: binding, journal: m_host.Arena.Journal, state: state);
             }
             if (outcome == RuleOutcome.Fired) {
                 list.Drain();
@@ -143,7 +143,7 @@ public sealed partial class RuleEvaluator {
         if (full) {
             latch.EndSweep(journal: m_host.Arena.Journal, state: state);
         }
-        list.ForgetUnswept(index: index, keys: keys, latch: latch, state: state, swept: full);
+        list.ForgetUnswept(index: index, journal: m_host.Arena.Journal, keys: keys, latch: latch, state: state, swept: full);
 
         return applied;
     }

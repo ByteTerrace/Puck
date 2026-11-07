@@ -7,6 +7,7 @@ public sealed partial class WorldServer {
     // One flag per arena row and the ordinals the open transaction wrote, so validation and commit visit and clear
     // only what the transaction touched. Every flag is clear between calls.
     private bool[] m_transactionRows = [];
+
     private readonly List<int> m_transactionWritten = [];
     // The bodies whose input selection registers the committing transaction touched.
     private readonly List<int> m_transactionBodies = [];
@@ -19,23 +20,17 @@ public sealed partial class WorldServer {
     /// nothing the batch wrote.</remarks>
     public void CommitStateTransaction(int mark) {
         FlagTransactionRows();
-        var driveGateChanged = false;
+        var driveGateChanged = DrivesGate();
 
-        foreach (var row in m_transactionWritten) {
-            driveGateChanged |= ((row < m_arena.Rows.Count) && (m_arena.Rows[row] is WorldStateRow { GatesDrive: true }));
-        }
         m_transactionBodies.Clear();
         if (!driveGateChanged) { m_transactionBodies.AddRange(collection: Input.TouchedSelectionBodies(writtenRows: m_transactionWritten)); }
         ClearTransactionRows();
         m_arena.Commit(mark: mark);
         if (driveGateChanged) { m_grants.SyncState(Document.Definition, m_arena); }
         m_population.SyncBodyCells(definition: Document.Definition);
-        var reason = string.Empty;
-
-        if (driveGateChanged ? !Input.TrySynchronize(activation: 0, reason: out reason)
-            : ((m_transactionBodies.Count > 0) && !Input.TrySynchronizeBodies(bodies: m_transactionBodies, reason: out reason))) {
-            throw new InvalidOperationException(message: reason);
-        }
+        // Every selection was admitted by ValidateStateTransaction while the journal could still rewind; applying them
+        // cannot refuse, so nothing past the arena commit can need the rewind.
+        if (driveGateChanged) { Input.ApplyPreparedAll(); } else if (m_transactionBodies.Count > 0) { Input.ApplyPreparedBodies(bodies: m_transactionBodies); }
     }
     /// <summary>Restores a refused batch.</summary>
     public void RewindStateTransaction(int mark) => m_arena.Rewind(mark: mark);
@@ -59,7 +54,9 @@ public sealed partial class WorldServer {
                 validateBindings |= DocumentValueRows().Contains(item: name);
             }
             if (!m_arena.TryValidateRelations(changedRows: m_transactionRows, reason: out reason)) { return false; }
-            if (!Input.TryValidateBodies(bodies: Input.TouchedSelectionBodies(writtenRows: m_transactionWritten), reason: out reason)) { return false; }
+            if (DrivesGate()
+                ? !Input.TryPrepareAll(reason: out reason)
+                : !Input.TryPrepareBodies(bodies: Input.TouchedSelectionBodies(writtenRows: m_transactionWritten), reason: out reason)) { return false; }
             if (validateBindings) {
                 try {
                     if (!WorldDefinitionValidator.TryValidateLocally(definition: m_document.Definition, reason: out reason)) { return false; }
@@ -74,6 +71,14 @@ public sealed partial class WorldServer {
         CommitStateTransaction(mark: mark); return true;
     }
 
+    // Whether the transaction wrote a drive-gate row, which resynchronizes the gates and every input owner.
+    private bool DrivesGate() {
+        foreach (var row in m_transactionWritten) {
+            if ((row < m_arena.Rows.Count) && (m_arena.Rows[row] is WorldStateRow { GatesDrive: true })) { return true; }
+        }
+
+        return false;
+    }
     private void FlagTransactionRows() {
         if (m_transactionRows.Length != m_arena.Layout.RowCount) { m_transactionRows = new bool[m_arena.Layout.RowCount]; }
         m_transactionWritten.Clear();
