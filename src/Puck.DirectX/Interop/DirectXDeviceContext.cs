@@ -216,14 +216,16 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// fail, and it cannot be turned off once enabled in a process. The presenter registration sets it from
     /// <c>GpuDeviceOptions.Validation</c>.</summary>
     public GpuValidation Validation { get; init; }
-    /// <summary>Gets whether the device's objects are named (<see cref="DirectXGpuObjectNaming"/>), so the debug layer's
-    /// messages, a removal report's allocations and a GPU capture show each object's name. The presenter registration
-    /// sets it from <c>GpuDeviceOptions.NameObjects</c>.</summary>
+    /// <summary>Gets whether the device's objects are named (<see cref="DirectXGpuObjectNaming"/>) for the debug layer's
+    /// messages and a GPU capture. The presenter registration sets it from <c>GpuDeviceOptions.NameObjects</c>; the
+    /// objects are named whenever <see cref="RecordRemoval"/> is on as well.</summary>
     public bool NameObjects { get; init; }
     /// <summary>Gets whether the device records device removed extended data (DRED): the auto-breadcrumb trail of every
     /// command list, with the PIX-event label each operation ran under, and the page fault that removed a device, with
-    /// the allocations at its address. On by default; a removed device's record is written as <c>[d3d12-dred]</c> lines
-    /// (<see cref="DirectXRemovalReport"/>) before the device is recreated or released.</summary>
+    /// the allocations at its address. On by default, and it names the device's objects
+    /// (<see cref="DirectXGpuObjectNaming"/>), since the record identifies a command list or an allocation only by its
+    /// name; a removed device's record is written as <c>[d3d12-dred]</c> lines (<see cref="DirectXRemovalReport"/>)
+    /// before the device is recreated or released.</summary>
     public bool RecordRemoval { get; init; } = true;
     /// <inheritdoc />
     public DirectXFeatureLevel FeatureLevel { get; }
