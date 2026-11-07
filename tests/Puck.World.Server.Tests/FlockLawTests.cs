@@ -205,6 +205,42 @@ public sealed class FlockLawTests {
             );
         }
     }
+    // W13: an affinity that faults is a counted failure that weighs its neighbor at zero, never a perception the
+    // flock acts on; a finite affinity of one is the discriminating control.
+    [Fact]
+    public void AFaultingAffinityIsACountedFailureThatWeighsNothing() {
+        foreach (var faulting in new[] { true, false }) {
+            using var fixture = Fixtures.FreshServer(Document(Profile() with {
+                CohesionAffinity = ExpressionProgram.Parse(text: (faulting
+                ? "1 / (1 - 1)"
+                : "1")),
+            }));
+            var left = Join(
+                fixture,
+                0,
+                Position(-2)
+            );
+
+            _ = Join(
+                fixture,
+                1,
+                Position(2)
+            );
+            fixture.Step();
+
+            var statistics = fixture.Server.Population.FlockStatistics;
+
+            Assert.Equal(
+                !faulting,
+                (left.FixedPosition.X > FixedQ4816.FromInteger(value: -2))
+            );
+            Assert.Equal(
+                faulting,
+                (statistics.AffinityFailures > 0)
+            );
+            Assert.True(condition: (statistics.AffinityEvaluations > 0));
+        }
+    }
     [Fact]
     public void GoalChangesImmediatelyWhileNeighborCadenceRemainsCached() {
         using var fixture = Fixtures.FreshServer(Document(

@@ -352,7 +352,7 @@ quiescent, no region occupants, no machine byte, no argmax/argmin/nearest
 body (`-1`), the engine's largest representable distance between two bodies
 that do not exist, no line of sight, never parked, perfectly upright, at the origin, a link
 never established, a zero channel, no navigation state, and no board cell under a body (`-1`).
-`PlacementInfluenceOperand` alone reads `RuleFact.Absent`—an unrepresented
+`PlacementInfluenceOperand` alone reads `Fact.Absent`—an unrepresented
 influence provider is unknowable, never a falsely safe zero, exactly as
 `WorldRuleHost.Influence.cs` already answers it for the one real case that
 reads `Absent` today. `experimental/src/Puck.World/Assets/worlds/puck.world.json`'s own `dive`/`kart`/`jump` modules

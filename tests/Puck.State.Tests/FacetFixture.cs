@@ -56,7 +56,7 @@ public sealed class TopCardOperand : OperandFact<ICardFacts> {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader, ICardFacts facet) => RuleFact.Finite(
+    public override Fact Read(IStateReader reader, ICardFacts facet) => Fact.Finite(
         kind: CellKind.Int,
         value: facet.Top()
     );
@@ -69,7 +69,7 @@ public sealed class TemperatureOperand : OperandFact<IWeatherFacts> {
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
-    public override RuleFact Read(IStateReader reader, IWeatherFacts facet) => RuleFact.Finite(
+    public override Fact Read(IStateReader reader, IWeatherFacts facet) => Fact.Finite(
         kind: CellKind.Int,
         value: facet.Temperature()
     );

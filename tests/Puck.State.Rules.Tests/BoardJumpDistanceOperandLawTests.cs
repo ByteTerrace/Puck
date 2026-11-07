@@ -87,7 +87,7 @@ public sealed class BoardJumpDistanceOperandLawTests {
         );
 
         Assert.Equal(
-            actual: operand.Read(reader: host).Value,
+            actual: operand.Read(reader: host).ToRaw(kind: CellKind.Int),
             expected: -1L
         );
     }
@@ -115,7 +115,7 @@ public sealed class BoardJumpDistanceOperandLawTests {
         ));
 
         Assert.Equal(
-            actual: operand.Read(reader: host).Value,
+            actual: operand.Read(reader: host).ToRaw(kind: CellKind.Int),
             expected: -1L
         );
     }
@@ -134,7 +134,7 @@ public sealed class BoardJumpDistanceOperandLawTests {
         );
 
         Assert.Equal(
-            actual: operand.Read(reader: host).Value,
+            actual: operand.Read(reader: host).ToRaw(kind: CellKind.Int),
             expected: 1L
         );
     }

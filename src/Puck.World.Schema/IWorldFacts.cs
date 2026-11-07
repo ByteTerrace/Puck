@@ -7,95 +7,95 @@ namespace Puck.World;
 /// <remarks>Every member is read on the tick path and allocates nothing.</remarks>
 public interface IWorldFacts : IFacet {
     /// <summary>Reads bounded semantic input history or held continuation.</summary>
-    RuleFact Read(WorldInputOperand operand);
+    Fact Read(WorldInputOperand operand);
     /// <summary>Returns the active body count.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(PopulationOperand operand);
+    Fact Read(PopulationOperand operand);
     /// <summary>Returns whether every rigid body is at rest.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(PhysicsQuiescentOperand operand);
+    Fact Read(PhysicsQuiescentOperand operand);
     /// <summary>Returns the music clock's phase error.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(ClockOperand operand);
+    Fact Read(ClockOperand operand);
     /// <summary>Returns a region placement's occupant count.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(RegionOccupancyOperand operand);
+    Fact Read(RegionOccupancyOperand operand);
     /// <summary>Returns a placement's coverage by a spatial influence channel.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(PlacementInfluenceOperand operand);
+    Fact Read(PlacementInfluenceOperand operand);
     /// <summary>Returns one byte of a screen's machine memory.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(MachineMemoryOperand operand);
+    Fact Read(MachineMemoryOperand operand);
     /// <summary>Returns the body whose keyed-row cell is the extreme.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(ArgBodyOperand operand);
+    Fact Read(ArgBodyOperand operand);
     /// <summary>Returns the distance between two bodies.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(BodyDistanceOperand operand);
+    Fact Read(BodyDistanceOperand operand);
     /// <summary>Returns whether two bodies see each other.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(LineOfSightOperand operand);
+    Fact Read(LineOfSightOperand operand);
     /// <summary>Returns the ticks a parked body has left, or forever.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(ParkedOperand operand);
+    Fact Read(ParkedOperand operand);
     /// <summary>Returns a body's uprightness.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(UprightOperand operand);
+    Fact Read(UprightOperand operand);
     /// <summary>Returns whether a body's fact bit holds.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(BodyFactOperand operand);
+    Fact Read(BodyFactOperand operand);
     /// <summary>Returns one world axis of a body's live position.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(BodyPositionOperand operand);
+    Fact Read(BodyPositionOperand operand);
     /// <summary>Returns whether a body's participant holds a control application onto a screen.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(EngagedOperand operand);
+    Fact Read(EngagedOperand operand);
     /// <summary>Returns one of a body's action-state slots.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(BodyStateOperand operand);
+    Fact Read(BodyStateOperand operand);
     /// <summary>Returns an adjacency link's staleness, in ticks.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(LinkStalenessOperand operand);
+    Fact Read(LinkStalenessOperand operand);
     /// <summary>Returns a seat's live composition-channel value.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(ChannelOperand operand);
+    Fact Read(ChannelOperand operand);
     /// <summary>Returns a seat's pointer ray mapped through a screen.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(PointerOperand operand);
+    Fact Read(PointerOperand operand);
     /// <summary>Returns the nearest body carrying a tag-row cell.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(NearestOperand operand);
+    Fact Read(NearestOperand operand);
     /// <summary>Returns one facet of a body's navigation state.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(NavigationOperand operand);
+    Fact Read(NavigationOperand operand);
     /// <summary>Returns the board cell under a body, or -1 off the board.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(BoardCellOfOperand operand);
+    Fact Read(BoardCellOfOperand operand);
     /// <summary>Returns one seat's engagement, pointed cell, or side at a tabletop.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(BoardSeatOperand operand);
+    Fact Read(BoardSeatOperand operand);
     /// <summary>Returns the body index a compiled reference names for the evaluation in flight, or -1.</summary>
     /// <param name="bodyRef">The reference.</param>
     /// <returns>The index, or -1.</returns>

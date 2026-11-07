@@ -12,7 +12,7 @@ namespace Puck.World.Browser.Engine;
 /// <param name="Rule">The rule whose evaluation read the operand.</param>
 /// <param name="Operand">The operand's own type name (e.g. <c>"PhysicsQuiescentOperand"</c>).</param>
 /// <param name="Answer">The hostless value returned, formatted the same way a trace's own bindings already are (see
-/// <see cref="RuleEvaluation.DescribeFact(in RuleFact)"/>) — <c>absent</c>, <c>forever</c>, or the raw value.</param>
+/// <see cref="RuleEvaluation.DescribeFact(in Fact)"/>) — <c>absent</c>, <c>forever</c>, or the raw value.</param>
 public readonly record struct BrowserHostFact(string Rule, string Operand, string Answer);
 /// <summary>The session's own effect host: a <see cref="ArenaEffectHost"/> over the session's
 /// <see cref="StateArena"/>, widened to <see cref="IWorldFacts"/> — the world's operand facts, the two
@@ -84,161 +84,161 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
     // PlacementInfluenceOperand alone reads Absent — an unrepresented influence provider is unknowable, never a
     // falsely safe zero, exactly as WorldServer.Influence.cs already answers it for the one real case that reads
     // Absent today.
-    RuleFact IWorldFacts.Read(PopulationOperand operand) => Record(
+    Fact IWorldFacts.Read(PopulationOperand operand) => Record(
         operand: nameof(PopulationOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Int,
             value: 0L
         )
     );
-    RuleFact IWorldFacts.Read(PhysicsQuiescentOperand operand) => Record(
+    Fact IWorldFacts.Read(PhysicsQuiescentOperand operand) => Record(
         operand: nameof(PhysicsQuiescentOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Bool,
             value: 1L
         )
     );
-    RuleFact IWorldFacts.Read(ClockOperand operand) => Record(
+    Fact IWorldFacts.Read(ClockOperand operand) => Record(
         operand: nameof(ClockOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Int,
             value: 0L
         )
     );
-    RuleFact IWorldFacts.Read(RegionOccupancyOperand operand) => Record(
+    Fact IWorldFacts.Read(RegionOccupancyOperand operand) => Record(
         operand: nameof(RegionOccupancyOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Int,
             value: 0L
         )
     );
-    RuleFact IWorldFacts.Read(PlacementInfluenceOperand operand) => Record(
+    Fact IWorldFacts.Read(PlacementInfluenceOperand operand) => Record(
         operand: nameof(PlacementInfluenceOperand),
-        fact: RuleFact.Absent(kind: CellKind.Int)
+        fact: Fact.Absent(kind: CellKind.Int)
     );
-    RuleFact IWorldFacts.Read(MachineMemoryOperand operand) => Record(
+    Fact IWorldFacts.Read(MachineMemoryOperand operand) => Record(
         operand: nameof(MachineMemoryOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Int,
             value: 0L
         )
     );
-    RuleFact IWorldFacts.Read(ArgBodyOperand operand) => Record(
+    Fact IWorldFacts.Read(ArgBodyOperand operand) => Record(
         operand: nameof(ArgBodyOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Int,
             value: -1L
         )
     );
-    RuleFact IWorldFacts.Read(BodyDistanceOperand operand) => Record(
+    Fact IWorldFacts.Read(BodyDistanceOperand operand) => Record(
         operand: nameof(BodyDistanceOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             value: FixedQ4816.MaxValue.Value,
             kind: CellKind.Fixed
         )
     );
-    RuleFact IWorldFacts.Read(LineOfSightOperand operand) => Record(
+    Fact IWorldFacts.Read(LineOfSightOperand operand) => Record(
         operand: nameof(LineOfSightOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Bool,
             value: 0L
         )
     );
-    RuleFact IWorldFacts.Read(ParkedOperand operand) => Record(
+    Fact IWorldFacts.Read(ParkedOperand operand) => Record(
         operand: nameof(ParkedOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Int,
             value: 0L
         )
     );
-    RuleFact IWorldFacts.Read(UprightOperand operand) => Record(
+    Fact IWorldFacts.Read(UprightOperand operand) => Record(
         operand: nameof(UprightOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             value: FixedQ4816.One.Value,
             kind: CellKind.Fixed
         )
     );
-    RuleFact IWorldFacts.Read(BodyFactOperand operand) => Record(
+    Fact IWorldFacts.Read(BodyFactOperand operand) => Record(
         operand: nameof(BodyFactOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Int,
             value: 0L
         )
     );
-    RuleFact IWorldFacts.Read(BodyPositionOperand operand) => Record(
+    Fact IWorldFacts.Read(BodyPositionOperand operand) => Record(
         operand: nameof(BodyPositionOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Fixed,
             value: 0L
         )
     );
-    RuleFact IWorldFacts.Read(EngagedOperand operand) => Record(
+    Fact IWorldFacts.Read(EngagedOperand operand) => Record(
         operand: nameof(EngagedOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Int,
             value: 0L
         )
     );
-    RuleFact IWorldFacts.Read(BodyStateOperand operand) => Record(
+    Fact IWorldFacts.Read(BodyStateOperand operand) => Record(
         operand: nameof(BodyStateOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Fixed,
             value: 0L
         )
     );
-    RuleFact IWorldFacts.Read(LinkStalenessOperand operand) => Record(
+    Fact IWorldFacts.Read(LinkStalenessOperand operand) => Record(
         operand: nameof(LinkStalenessOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Int,
             value: 0L
         )
     );
-    RuleFact IWorldFacts.Read(ChannelOperand operand) => Record(
+    Fact IWorldFacts.Read(ChannelOperand operand) => Record(
         operand: nameof(ChannelOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             value: FixedQ4816.Zero.Value,
             kind: CellKind.Fixed
         )
     );
-    RuleFact IWorldFacts.Read(WorldInputOperand operand) => Record(
+    Fact IWorldFacts.Read(WorldInputOperand operand) => Record(
         operand: nameof(WorldInputOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             value: 0L,
             kind: operand.ValueKind
         )
     );
-    RuleFact IWorldFacts.Read(PointerOperand operand) => Record(
+    Fact IWorldFacts.Read(PointerOperand operand) => Record(
         operand: nameof(PointerOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             value: 0L,
             kind: operand.ValueKind
         )
     );
-    RuleFact IWorldFacts.Read(NearestOperand operand) => Record(
+    Fact IWorldFacts.Read(NearestOperand operand) => Record(
         operand: nameof(NearestOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Int,
             value: -1L
         )
     );
-    RuleFact IWorldFacts.Read(NavigationOperand operand) => Record(
+    Fact IWorldFacts.Read(NavigationOperand operand) => Record(
         operand: nameof(NavigationOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Int,
             value: 0L
         )
     );
-    RuleFact IWorldFacts.Read(BoardCellOfOperand operand) => Record(
+    Fact IWorldFacts.Read(BoardCellOfOperand operand) => Record(
         operand: nameof(BoardCellOfOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Int,
             value: -1L
         )
     );
     // No seat sits at a board here: not engaged, and no pointed cell or side.
-    RuleFact IWorldFacts.Read(BoardSeatOperand operand) => Record(
+    Fact IWorldFacts.Read(BoardSeatOperand operand) => Record(
         operand: nameof(BoardSeatOperand),
-        fact: RuleFact.Finite(
+        fact: Fact.Finite(
             kind: CellKind.Int,
             value: ((operand.Facet == BoardSeatFacet.Engaged) ? 0L : -1L)
         )
@@ -260,7 +260,7 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
         return false;
     }
 
-    private RuleFact Record(string operand, RuleFact fact) {
+    private Fact Record(string operand, Fact fact) {
         if (m_hostFacts.Count < MaxHostFacts) {
             m_hostFacts.Add(item: new BrowserHostFact(
                 Answer: RuleEvaluation.DescribeFact(fact: in fact),

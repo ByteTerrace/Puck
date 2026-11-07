@@ -179,13 +179,13 @@ public static partial class ArenaTransforms {
         }
 
         var resolved = RuleReads.ResolveReference(
-            naming: out var naming,
             reader: live,
             reference: in indirection
         );
 
-        faulted |= (naming == KeyNaming.Fault);
+        faulted |= (resolved.Case == FaultCase.Faulted);
+        resolved.TryNamed(value: out var resolvedKey);
 
-        return resolved;
+        return resolvedKey;
     }
 }

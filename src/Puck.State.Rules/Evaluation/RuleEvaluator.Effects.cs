@@ -619,8 +619,8 @@ public sealed partial class RuleEvaluator {
         if (effect.Source.Vector is { } vector) {
             var naming = vector.ReadSpan(reader: m_host, span: out source);
 
-            if (naming != KeyNaming.Cell) {
-                ReportRefusal(detail: ((naming == KeyNaming.Fault) ? RuleReads.KeyFaultReason : "the vector source is absent"), effect: effect.Describe, refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
+            if (naming != FaultCase.Finite) {
+                ReportRefusal(detail: ((naming == FaultCase.Faulted) ? RuleReads.KeyFaultReason : "the vector source is absent"), effect: effect.Describe, refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
                 return false;
             }
         } else if ((effect.Source.Pool is { } pool) && (((uint)effect.Source.BindingSlot) < ((uint)bindings.Length)) && (bindings[effect.Source.BindingSlot].PoolOrdinal == pool.Ordinal) && m_host.Arena.TryReadVector(handle: bindings[effect.Source.BindingSlot], fieldOrdinal: effect.Source.Field.Ordinal, components: out source)) {
@@ -800,19 +800,20 @@ public sealed partial class RuleEvaluator {
     private bool FireRemove(RemoveStateCellEffect effect, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
 
-        var key = RuleReads.ResolveKey(
+        var resolved = RuleReads.ResolveKey(
             keyFrom: effect.KeyFrom,
             literal: effect.Key,
-            naming: out var naming,
             reader: m_host
         );
 
         // A faulted key is never the no-op an absent cell is: the firing refuses whole, strict or not.
-        if (naming == KeyNaming.Fault) {
+        if (resolved.Case == FaultCase.Faulted) {
             ReportRefusal(detail: RuleReads.KeyFaultReason, effect: effect.Describe,
                 refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
             return false;
         }
+
+        resolved.TryNamed(value: out var key);
         if (!key.IsValid) {
             if (!strict) {
                 return true;
@@ -847,32 +848,30 @@ public sealed partial class RuleEvaluator {
     private bool FireTransform(TransformStateEffect effect, in EffectFiring firing, out bool moved) {
         moved = false;
 
-        var fromNaming = RowOrdinal(
-            row: effect.FromRow,
-            rowOrdinal: out var fromRowOrdinal
-        );
-        var toNaming = RowOrdinal(
-            row: effect.ToRow,
-            rowOrdinal: out var toRowOrdinal
-        );
-        var keyNaming = KeyNaming.Nothing;
-        var key = ((effect.KeyRef is { } indirection)
+        var fromResolved = RowOrdinal(row: effect.FromRow);
+        var toResolved = RowOrdinal(row: effect.ToRow);
+        var keyResolved = ((effect.KeyRef is { } indirection)
             ? RuleReads.ResolveReference(
-                naming: out keyNaming,
                 reader: m_host,
                 reference: in indirection
             )
-            : default);
+            : Resolved<CellKey>.Nothing);
 
         if (
-            (fromNaming == KeyNaming.Fault) ||
-            (toNaming == KeyNaming.Fault) ||
-            (keyNaming == KeyNaming.Fault)
+            (fromResolved.Case == FaultCase.Faulted) ||
+            (toResolved.Case == FaultCase.Faulted) ||
+            (keyResolved.Case == FaultCase.Faulted)
         ) {
             ReportRefusal(detail: RuleReads.KeyFaultReason, effect: effect.Describe,
                 refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
             return false;
         }
+
+        // A live row that selected none substitutes no row, and a key that named nothing the invalid key.
+        var fromRowOrdinal = (fromResolved.TryNamed(value: out var fromNamed) ? fromNamed : -1);
+        var toRowOrdinal = (toResolved.TryNamed(value: out var toNamed) ? toNamed : -1);
+
+        keyResolved.TryNamed(value: out var key);
 
         var binding = new ArenaTransformBinding(
             bindsKey: (effect.KeyRef is not null),
@@ -955,16 +954,9 @@ public sealed partial class RuleEvaluator {
         return false;
     }
     // A live row's selection, -1 when there is none to substitute (no live row, or an index selecting none).
-    private KeyNaming RowOrdinal(LiveRow? row, out int rowOrdinal) {
-        rowOrdinal = -1;
-
-        return ((row is { } live)
-            ? live.Resolve(
-                reader: m_host,
-                rowOrdinal: out rowOrdinal
-            )
-            : KeyNaming.Nothing);
-    }
+    private Resolved<int> RowOrdinal(LiveRow? row) => ((row is { } live)
+        ? live.Resolve(reader: m_host)
+        : Resolved<int>.Nothing);
     private bool FireWrite(IRuleEffect effect, IStateWriteEffect write, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
 
@@ -974,14 +966,11 @@ public sealed partial class RuleEvaluator {
         // author wrote a value and it would go nowhere, so the firing rewinds exactly as an absent source does. The
         // negative-ordinal skip below is the separate, compile-time-absent case.
         if (write.RowFrom is { } selection) {
-            var selected = selection.Resolve(
-                reader: m_host,
-                rowOrdinal: out ordinal
-            );
+            var selected = selection.Resolve(reader: m_host);
 
-            if (selected != KeyNaming.Cell) {
+            if (!selected.TryNamed(value: out ordinal)) {
                 ReportRefusal(
-                    detail: ((selected == KeyNaming.Fault)
+                    detail: ((selected.Case == FaultCase.Faulted)
                         ? $"{RuleReads.KeyFaultReason}; '{selection.Spelling}' selects no row"
                         : $"{RuleEvaluation.DescribeFault(fault: ExpressionFault.Absent)}; '{selection.Spelling}' selects no row"),
                     effect: effect.Describe,
@@ -1154,19 +1143,20 @@ public sealed partial class RuleEvaluator {
     // A Text source that answers no cell skips its effect, as an absent text always has; one whose address faulted
     // refuses the firing, reported here.
     private bool TryReadText(IRuleEffect effect, IRuleOperand? source, in EffectFiring firing, out string text, out bool refused) {
-        var naming = RuleEvaluation.ReadText(
+        var resolved = RuleEvaluation.ReadText(
             reader: m_host,
-            source: source,
-            text: out text
+            source: source
         );
+        var named = resolved.TryNamed(value: out var read);
 
-        refused = (naming == KeyNaming.Fault);
+        text = (read ?? string.Empty);
+        refused = (resolved.Case == FaultCase.Faulted);
         if (refused) {
             ReportRefusal(detail: RuleReads.KeyFaultReason, effect: effect.Describe,
                 refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
         }
 
-        return (naming == KeyNaming.Cell);
+        return named;
     }
     private void RefuseSource(IRuleEffect effect, in EffectFiring firing, ExpressionFault fault) => ReportRefusal(
         detail: RuleEvaluation.DescribeFault(fault: fault),
@@ -1197,13 +1187,13 @@ public sealed partial class RuleEvaluator {
 
             return false;
         }
-        if (fact.IsForever) {
+        if (fact.Outcome.Case == FaultCase.Forever) {
             return false;
         }
-        if (fact.IsAbsent) {
+        if (fact.Outcome.Case is FaultCase.Absent or FaultCase.Faulted) {
             refused = true;
             ReportRefusal(
-                detail: $"{RuleEvaluation.DescribeFault(fault: (fact.IsFaulted ? ExpressionFault.Domain : ExpressionFault.Absent))}; the effect did not fire",
+                detail: $"{RuleEvaluation.DescribeFault(fault: ((fact.Outcome.Case == FaultCase.Faulted) ? ExpressionFault.Domain : ExpressionFault.Absent))}; the effect did not fire",
                 effect: effect.Describe,
                 refusal: RuleEffectRefusal.Arithmetic,
                 ruleName: firing.RuleName,
@@ -1213,9 +1203,11 @@ public sealed partial class RuleEvaluator {
             return false;
         }
 
+        fact.Outcome.TryFinite(raw: out var finite);
+
         raw = (source.IsOperand
             ? fact.ToRaw(kind: kind)
-            : fact.Value
+            : finite
         );
 
         return true;

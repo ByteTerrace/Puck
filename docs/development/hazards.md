@@ -92,7 +92,7 @@ failure.
 - A nested `RuleExpressions.Run` is handed its caller's `fault` variable, so a
   nested success writes `None` over an outer fault
   ([rule faults](../plans/rule-faults.md#the-verdict-on-the-approach), reason 1).
-- `out _` on `KeyNaming` drops whether an address named anything.
+- `out _` on a key's `Resolved<T>` or `TryNamed` drops whether an address named anything.
 
 **Closed by** carrying the fault in the value: `Outcome`, `Resolved<T>` and
 `Verdict` in the [rule-faults design](../plans/rule-faults.md#the-design), whose

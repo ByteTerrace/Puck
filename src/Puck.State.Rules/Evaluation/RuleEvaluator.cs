@@ -12,6 +12,10 @@ public enum RuleOutcome : byte {
 
     /// <summary>An effect refused, so the firing's scope rewound and one refusal was counted.</summary>
     Refused,
+
+    /// <summary>A step of the evaluation faulted, so the firing's scope rewound and its latch held. Distinct from
+    /// <see cref="Refused"/>: a group's Skip policy skips a refusal and holds on a fault.</summary>
+    Faulted,
 }
 /// <summary>What a host implements to claim a rule kind only it can evaluate — a compiled record that widened
 /// <see cref="CompiledRule"/> with a host concept. The host runs each evaluation back through
@@ -298,13 +302,10 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         foreach (var reference in zones.References) {
             // A faulted index selects no row, so the rule is not for this evaluation either way; the trace names
             // the fault apart from an index that selects none.
-            var naming = reference.Resolve(
-                reader: m_host,
-                rowOrdinal: out var ordinal
-            );
-            var found = (naming == KeyNaming.Cell);
+            var resolved = reference.Resolve(reader: m_host);
+            var found = resolved.TryNamed(value: out var ordinal);
 
-            if (naming == KeyNaming.Fault) {
+            if (resolved.Case == FaultCase.Faulted) {
                 ReportRefusal(
                     detail: $"{RuleReads.KeyFaultReason}; '{reference.Spelling}' selects no row, and the gate decided nothing",
                     effect: "gate",
@@ -316,7 +317,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             selected &= found;
             trace?.Add(item: $"{reference.Spelling} -> {(found
                 ? m_host.Catalog.Descriptors[ordinal].Name
-                : ((naming == KeyNaming.Fault) ? "fault" : "none"))}");
+                : ((resolved.Case == FaultCase.Faulted) ? "fault" : "none"))}");
             if (
                 !found &&
                 (trace is null)
@@ -648,18 +649,19 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         var token = gate[deadline.Token];
         var scratch = m_host.Scratch;
         var scope = scratch.EnterFaultScope();
-        RuleFact x;
-        RuleFact now;
+        Fact x;
+        Fact now;
 
         try {
             _ = RuleEvaluation.TryReadSource(fact: out x, fault: out _, kind: token.ValueKind, reader: m_host, source: (deadline.TickOnLeft ? token.RightSource : token.LeftSource));
             _ = RuleEvaluation.TryReadSource(fact: out now, fault: out _, kind: token.ValueKind, reader: m_host, source: (deadline.TickOnLeft ? token.LeftSource : token.RightSource));
         } finally {
             if (scratch.AnswerFaultScope(scope: scope) != ExpressionFault.None) {
-                x = RuleFact.Faulted(kind: token.ValueKind);
+                x = Fact.Faulted(kind: token.ValueKind);
             }
         }
-        if (x.IsFaulted || (now.Value != unchecked(((long)tick) * deadline.Scale))) {
+        now.Outcome.TryFinite(raw: out var nowRaw);
+        if ((x.Outcome.Case == FaultCase.Faulted) || (nowRaw != unchecked(((long)tick) * deadline.Scale))) {
             return 0UL;
         }
 
