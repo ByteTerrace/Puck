@@ -214,7 +214,9 @@ agent works in that mode by default, without asking:
   - Every push to `main` keeps deploying, through a pipeline made as fast as
     possible.
   - The work comes first. Usage is worth keeping in mind, never a limit: a
-    stronger model is used wherever it pays for itself. Parallelism is pushed
+    stronger model is used wherever it pays for itself. A subscription nearing
+    its weekly cap changes no routing (the owner's ruling: the owner swaps
+    subscriptions when one is reached). Parallelism is pushed
     smartly, and review, integration and fixing never run serially behind
     one lane: a lane lands when its evidence holds, its review runs while
     other lanes work, and findings are fixed in batches. How much review a
