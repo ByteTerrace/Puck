@@ -362,6 +362,7 @@ touched" includes what consumes it:
   the eval ([evaluate an agent skill](../../../docs/development/documentation.md#evaluate-an-agent-skill));
 - every batch runs `puck docs links`, because two lanes that each pass can still break each other's
   citations, and CI checks only `main`; a failure the batch caused is fixed before the fast-forward;
+- before acting on a lane's report, review or research citations, the lead runs `puck docs links <file>` on that file;
 - every check runs from a CLI and test binaries rebuilt after the merge, never stale copies;
 - never merge into a tree while checks are running against it: `puck test` reads the tree's `.puck` sources
   live, so a mid-run merge pairs new sources with old binaries and fails for no reason in the code. One
@@ -1046,7 +1047,9 @@ ahead, changed files, last commit, newest write, log exit, GPU lease state and a
 `STALL` mark, in seconds, read-only, and without walking `bin/` or `obj/`.
 `puck lanes --watch 0` is the stall watcher: run it as the one background
 monitor, and it prints only a lane finishing, stalling or resuming, a lease
-changing, or a lane appearing or leaving. A findings-only lane's launch writes
+changing, or a lane appearing or leaving. Re-arm it only after the previous
+watcher has expired or been stopped (`TaskStop`), so one watcher runs at a time:
+re-arming a narrower filter beside a live one left two watchers running. A findings-only lane's launch writes
 `<worktree>/.claude/scratch/<lane>.task` holding `mode: findings-only` and
 `report: <its findings path>` (a Codex log whose header names a read-only
 sandbox needs none), so `puck lanes` judges it by its log and report rather

@@ -437,7 +437,7 @@ steps depends on it.
 deltas and the join applies them in seat order. Seats become the outer loop
 (today faces are, `WorldInstanceHost.Adjacency.cs:311-348`); the winner per seat
 is unchanged because `WorldFaceCrossingClaim.Outranks` is a total order on the
-claim's own parameter and document identity (`WorldFaceFrame.cs:277`), not on
+claim's own parameter and document identity (`WorldFaceCrossingClaim.Outranks`), not on
 scan order.
 
 **E4's offsets.** The snapshot is compact: inactive slots are skipped and each
@@ -615,9 +615,9 @@ requests and screen-handle binding, moved from the pass recorder into
 residency per frame; then the slot's descriptor writes, mesh sets included,
 which are now safe because the fence has retired the slot. A recording thread
 only binds and records; `GpuPassPipelineCache` is read-only during the fork and
-a miss is a prepare-phase `Bake` job. `SubmitCounted` runs after the join on the
-frame thread, so `m_submissions` and the fence identities (`Work.cs:159-170`)
-stay single-threaded. The pose pack partitions by registration (the packet's
+a miss is a prepare-phase `Bake` job. Submission runs after the join on the
+frame thread, keeping submission records and fence identities single-threaded.
+The pose pack partitions by registration (the packet's
 measurement) and runs as a `Frame` fork before the first wave; the irradiance
 and exposure staging stay serial until measured.
 

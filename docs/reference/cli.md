@@ -2596,7 +2596,7 @@ refused profile, package or plan, or for a blocked check when nothing failed.
 ```text
 puck docs build [--output <directory>] [--site <path>]
                                             stage the website reference (default <repo>/artifacts/docs)
-puck docs links [<document> ...]            check links, anchors, cited paths and symbols, and rot markers
+puck docs links [<document> ...]            check links, symbols, code locations and quotes, and corpus rot
 puck docs citations [--enumeration <path>]  check the console-verb tokens skills and XML docs cite
 ```
 
@@ -2626,7 +2626,35 @@ subdirectories of `docs/game/art/`), under `.claude/skills/` (not `evals/`) and
 under `worlds/`, and every `README.md` under `src/` and `tests/`. A page whose
 opening lines say it is generated and not hand-edited (`docs/world-name-registry.md`)
 is left to its generator's own check. Naming repository-relative markdown files
-checks exactly those instead.
+checks exactly those instead, including ignored reports, reviews and research
+under `.claude/scratch/`, or an absolute path to a markdown file outside the checkout.
+
+Every prose `path:line`, `path:start-end` or `path#Lline` citation must name a
+file and a valid inclusive, one-based range. The checker reads Git blobs at
+HEAD, rather than uncommitted source edits. A standalone declaration
+`Citation revision: <revision>` selects the revision for subsequent citations;
+`path@revision:line` selects it for one citation. A missing revision fails.
+Paths resolve relative to the document or repository, then by a unique suffix
+in that revision. A link's full target disambiguates its bare filename label;
+links into another worktree are mapped to this repository's Git blobs. Compact
+lists such as `path:12`, `:24`, `:65` retain the preceding path on that line.
+
+A fenced block introduced by a citation immediately above it (blank lines
+allowed), or in the bullet that owns the indented block, must appear in the
+cited file. Whitespace runs collapse to one space; other characters, including
+comments and ellipses, remain literal. A matching block must start within five
+lines of the cited range. The checker searches the entire file to distinguish
+drift from a missing quote, preferring a nearby match when text repeats. It
+prints **verified**, **drifted** with the true line, or **not found** for each
+citation, and counts each verdict per document. Drift and missing files,
+ranges or quotes fail the run. Without a block, **verified** confirms only
+existence and bounds; it does not establish that the cited line supports the
+surrounding claim. Fenced examples are not themselves parsed as citations.
+
+Durable corpus pages receive an advisory to replace line citations with
+symbols. Their locations and quotes still undergo the same accuracy checks.
+Reports outside the corpus may carry dates, revisions and scratch paths; the
+durable-document rot policies below do not apply to them.
 
 Each page is checked for citations that stopped resolving: relative markdown
 links, backticked rooted repository paths (`src/...`, `docs/...`, `tests/...`,
@@ -2667,11 +2695,9 @@ Rot markers fail the run, each read from current state with nothing recorded:
   where a branch name opens with a remote or a namespace an existing branch
   uses (`lane/`), or extends a family of existing names (`worktree-agent-…`);
   not checked when no remote-tracking branch exists;
-- outside `docs/plans/`, a `file:line` or `file#Lline` citation in prose, where
-  the extension is one the tree holds.
 
-Dates and SHAs count in fenced blocks too; scratch paths and `file:line`
-citations in a fenced block are example commands and tool output. Each failure
+Dates and SHAs count in fenced blocks too; scratch paths in a fenced block
+are example commands and tool output. Each failure
 names its category, and the summary line counts them with the run's wall time.
 
 A link's `#fragment` into a markdown file, or a bare `#fragment` into the

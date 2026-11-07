@@ -249,6 +249,9 @@ hold are held by a check; the rest are procedure.
   in C#, `<see cref="…"/>`), which survives every edit around it. A `file:line`
   belongs only in a page that is rechecked before use and deleted when it is
   consumed: plans, open items, review findings, hand-backs and commit messages.
+  `puck docs links` advises replacing a durable page's line citations with
+  symbols; invalid locations and inaccurate fenced quotations fail in every
+  checked page, including explicitly named reports outside the corpus.
 - **A plan holds only open work.** The change that closes an item deletes it,
   after moving any lasting fact to its owning home; a status line such as
   "done", "landed" or "is green" is a deletion that has not happened yet.
@@ -277,6 +280,7 @@ hold are held by a check; the rest are procedure.
   - links and anchors;
   - repository paths;
   - cited symbols;
+  - code citation bounds and the accuracy of their introduced fenced quotes;
   - dates and commit SHAs outside the exemptions above;
   - scratch paths;
   - branch names that no longer exist.
