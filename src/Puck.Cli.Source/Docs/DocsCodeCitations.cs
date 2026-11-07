@@ -21,8 +21,11 @@ public sealed partial class DocsCodeCitations(string repositoryRoot) {
     private static partial Regex Bullet();
     [GeneratedRegex(@"(?<![\w/#]):(?<start>\d+)(?:[-–](?<end>\d+))?(?!\d)")]
     private static partial Regex Continuation();
+    [GeneratedRegex(@"\b[a-z][a-z0-9+.-]*://[^\s`)>]+", RegexOptions.IgnoreCase)]
+    private static partial Regex Address();
 
     private readonly Dictionary<string, string[]> m_trees = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string?> m_revisions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string[]? Lines, string Why)> m_blobs = new(StringComparer.Ordinal);
 
     /// <summary>A checked occurrence, with the source line of the citation in the document.</summary>
@@ -51,7 +54,15 @@ public sealed partial class DocsCodeCitations(string repositoryRoot) {
     }
 
     private (string[]? Lines, string Why) Read(Occurrence occurrence, string document) {
-        var paths = Tree(occurrence.Revision);
+        if (!m_revisions.TryGetValue(occurrence.Revision, out var commit)) {
+            var resolved = CliGit.Run(repositoryRoot, "rev-parse", "--verify", "--end-of-options", occurrence.Revision + "^{commit}");
+            commit = resolved.ExitCode == 0 ? resolved.Stdout.Trim() : null;
+            m_revisions[occurrence.Revision] = commit;
+        }
+        if (commit is null) {
+            return (null, $"revision not found: {occurrence.Revision}");
+        }
+        var paths = Tree(commit);
         var path = Uri.UnescapeDataString(occurrence.Path).Replace('\\', '/');
         if (path.StartsWith("file://", StringComparison.OrdinalIgnoreCase)) {
             path = new Uri(path).LocalPath.Replace('\\', '/');
@@ -61,12 +72,12 @@ public sealed partial class DocsCodeCitations(string repositoryRoot) {
         // A report may link to its original worktree. Only a unique suffix in this revision identifies its blob.
         var candidates = paths.Where(candidate => candidate == neighbor || candidate == path).ToArray();
         if (candidates.Length == 0) {
-            candidates = paths.Where(candidate => candidate.EndsWith('/' + path, StringComparison.Ordinal) || path.EndsWith('/' + candidate, StringComparison.Ordinal)).ToArray();
+            candidates = paths.Where(candidate => candidate.EndsWith('/' + path, StringComparison.Ordinal) || candidate.EndsWith('.' + path, StringComparison.Ordinal) || path.EndsWith('/' + candidate, StringComparison.Ordinal)).ToArray();
         }
         if (candidates.Length != 1) {
             return (null, candidates.Length == 0 ? $"file or revision not found at {occurrence.Revision}" : "path is ambiguous; cite a repository-relative path");
         }
-        var key = $"{occurrence.Revision}:{candidates[0]}";
+        var key = $"{commit}:{candidates[0]}";
         if (!m_blobs.TryGetValue(key, out var blob)) {
             var read = CliGit.Run(repositoryRoot, "show", key);
             blob = read.ExitCode == 0 ? (ReadLines(read.Stdout), "") : (null, $"cannot read {key}: {read.Stderr.Trim()}");
@@ -131,6 +142,7 @@ public sealed partial class DocsCodeCitations(string repositoryRoot) {
             }
             return match.Value;
         });
+        text = Address().Replace(text, " ");
         foreach (Match location in Location().Matches(text)) {
             var start = Number(location.Groups["start"]);
             occurrences.Add(new(number, location.Groups["path"].Value, location.Groups["rev"].Success ? location.Groups["rev"].Value : revision, start, Number(location.Groups["end"], start)));
@@ -218,6 +230,9 @@ public sealed partial class DocsCodeCitations(string repositoryRoot) {
         if (occurrence.Start < 1 || occurrence.End < occurrence.Start || occurrence.End > source.Length) {
             return Result("not found", $"range outside file length {source.Length}");
         }
+        if (occurrence.Quotes.Count == 0) {
+            return Result("verified", "file and line range exist; no quotation");
+        }
         var normalized = Normalize(source);
         var drift = new List<int>();
         foreach (var quote in occurrence.Quotes) {
@@ -235,6 +250,6 @@ public sealed partial class DocsCodeCitations(string repositoryRoot) {
                 drift.Add(matches.MinBy(line => Math.Abs((long)line - occurrence.Start)));
             }
         }
-        return drift.Count != 0 ? Result("drifted", $"quotation at true line {string.Join(", ", drift)}") : Result("verified", occurrence.Quotes.Count == 0 ? "file and line range exist; no quotation" : $"file, range and {occurrence.Quotes.Count} quotation(s) match within {Window} lines");
+        return drift.Count != 0 ? Result("drifted", $"quotation at true line {string.Join(", ", drift)}") : Result("verified", $"file, range and {occurrence.Quotes.Count} quotation(s) match within {Window} lines");
     }
 }

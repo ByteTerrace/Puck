@@ -367,9 +367,6 @@ public static class DocsLinksCommand {
         var firstCommit = DocsRot.ReadFirstCommit(repositoryRoot: repositoryRoot);
         var rot = new DocsRot(
             branches: branches,
-            extensions: fileNameIndex.Select(selector: static name => Path.GetExtension(path: name).TrimStart(trimChar: '.').ToLowerInvariant())
-                .Where(predicate: static extension => (extension.Length != 0))
-                .ToHashSet(comparer: StringComparer.Ordinal),
             firstCommit: firstCommit,
             literalDates: symbols.LiteralDates,
             pinnedHashes: DocsRot.HexRuns(path: Path.Combine(
@@ -414,6 +411,9 @@ public static class DocsLinksCommand {
                 checkedCount++;
                 var message = $"{document}:{location.DocumentLine}: {location.Status}: {location.Citation} ({location.Detail})";
                 Console.WriteLine(message);
+                if (corpus && durable) {
+                    advisories.Add($"{document}:{location.DocumentLine}: '{location.Citation}' cites a line, which drifts; cite the symbol by name");
+                }
                 if (location.Status != "verified") {
                     failures.Add(("code-citation", message));
                 }
@@ -430,14 +430,9 @@ public static class DocsLinksCommand {
 
                 foreach (var (category, message) in corpus ? rot.Line(
                     code: code,
-                    durable: durable,
                     line: line
                 ) : []) {
-                    if (category == "file-line") {
-                        advisories.Add($"{document}:{lineNumber}: {message}");
-                    } else {
-                        failures.Add(item: (category, $"{document}:{lineNumber}: {message}"));
-                    }
+                    failures.Add(item: (category, $"{document}:{lineNumber}: {message}"));
                 }
 
                 // A fenced block is an example or a transcript, not a citation: its spans are not names.

@@ -113,4 +113,11 @@ public sealed class DocsCodeCitationLawTests {
         Assert.Equal("not found", Assert.Single(repository.Check("code.cs:1")).Status);
         Assert.Equal("verified", Assert.Single(repository.Check("src/repeated.cs:23\n```cs\ntrue quote\n```")).Status);
     }
+
+    [Fact]
+    public void ExternalAddressesAreNotLocalLocationsAndInvalidRevisionsFail() {
+        using var repository = new Repository();
+        Assert.Empty(repository.Check("https://example.com:123 and [source.cs:4](https://example.com/source.cs#L4)"));
+        Assert.Equal("not found", Assert.Single(repository.Check("src/code.cs@--help:1")).Status);
+    }
 }
