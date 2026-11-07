@@ -30,6 +30,17 @@ A document's `schema:` field selects its vocabulary, never the filename.
 
 ## Grammar that bites
 
+- **Authored material programs.** A palette's `shade` calls a `shade template`
+  or holds `surface`, `light` and `compose` blocks. Parameters are runtime slots
+  unless marked `structural`; loop ranges, shape descriptors and indexed lane
+  selectors require structural values. `WorldShadeLowering` uses the core's
+  expansion and recursion guard. It emits the canonical graph admitted by
+  `SdfShadeProgram`, with typed stamp reads, live-read flags and checked cost.
+  `lanes.slot[index]` and `lanes.world[index]` lower to the same reads as the
+  named lanes. Refusals are `PUCK126`–`PUCK130`; ordinary recursion and invalid
+  compile-time ranges retain the core's codes. See
+  [the rendering contract](../rendering/references/authored-shading.md).
+
 - A keyed row layered over a basis may carry `$before: "target-name"` to lead a
   surviving row, including from an imported fragment. `WorldDocumentBasis.MergeList`
   consumes it after drops and appends; missing targets and cyclic positions refuse.

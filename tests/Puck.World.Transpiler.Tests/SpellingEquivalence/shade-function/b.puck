@@ -1,0 +1,32 @@
+// Equivalent authored shading: shade-function.
+schema: "puck.world.definition.v1"
+documentId: "shade-pair"
+shade template program() {
+  surface {
+    albedo: material.albedo * 0.5
+  }
+}
+prototypes {
+  prototype "p" {
+    document {
+      schema: "puck.creation.v1"
+      palette [{ color: "#808080", shade: program() }]
+      shape Box "box" {
+        scale [1, 1, 1]
+      }
+    }
+  }
+}
+
+state {
+  world {
+    table shadeCheck {
+      admitted = 1
+    }
+  }
+}
+test "shade admission" {
+  expect {
+    shadeCheck.admitted == 1
+  }
+}

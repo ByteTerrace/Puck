@@ -249,6 +249,7 @@ public static partial class WorldSchema {
                 shape.Remove(propertyName: name);
                 obj[name] = value;
             }
+            if ((run.Nested is { } nested) && obj.Remove(propertyName: "$id")) { nested.OwnRoots.Add(item: obj); }
 
             return;
         }
@@ -345,10 +346,12 @@ public static partial class WorldSchema {
     // record where each one first appears.
     private static JsonObject BuildConverterShape(IJsonSchemaNodeConverter converter, Type propertyType, ExportRun run) {
         if (run.Nested is not null) {
-            return converter.BuildSchema(exportType: type => ExportNested(
+            var own = converter.BuildSchema(exportType: type => ExportNested(
                 run: run,
                 type: type
             ));
+
+            return own;
         }
 
         var memos = (CollectionsMarshal.GetValueRefOrAddDefault(
@@ -371,6 +374,10 @@ public static partial class WorldSchema {
                 run: run,
                 type: type
             ));
+            if (shape.Remove(propertyName: "$id")) {
+                ScopeInlineReferences(node: shape, root: run.InlineRoots.Count);
+                run.InlineRoots.Add(item: shape);
+            }
             memos.Add(item: (run.InlineOpen.ToHashSet(), shape));
         }
 
@@ -498,8 +505,9 @@ public static partial class WorldSchema {
     // Turns the internal "$defs/Name" placeholder every hoist produces into its final, file-aware form: a bare
     // same-document pointer for a reference that itself lives inside common.schema.json, a relative cross-file
     // $ref for one that lives in a section (or the root).
-    private static void FinalizeRefs(JsonNode node, bool insideCommon) {
+    private static void FinalizeRefs(JsonNode node, bool insideCommon, bool root = true) {
         if (node is JsonObject obj) {
+            if (!root && obj.ContainsKey(propertyName: "$id")) { return; }
             if (IsPlaceholderRef(
                 name: out var name,
                 obj: obj
@@ -520,7 +528,8 @@ public static partial class WorldSchema {
                     ) {
                         FinalizeRefs(
                             insideCommon: insideCommon,
-                            node: child
+                            node: child,
+                            root: false
                         );
                     }
                 }
@@ -532,7 +541,8 @@ public static partial class WorldSchema {
                 if (child is not null) {
                     FinalizeRefs(
                         insideCommon: insideCommon,
-                        node: child
+                        node: child,
+                        root: false
                     );
                 }
             }
@@ -541,7 +551,8 @@ public static partial class WorldSchema {
                 if (child is not null) {
                     FinalizeRefs(
                         insideCommon: insideCommon,
-                        node: child
+                        node: child,
+                        root: false
                     );
                 }
             }
@@ -572,8 +583,10 @@ public static partial class WorldSchema {
     // because the hoist treats reference nodes as opaque rather than as hashable content — at whatever def its
     // target was hoisted to. Every such target is an exporter $ref target, and the hoist forces exactly those into
     // a def regardless of count, so a match here is guaranteed by construction.
-    private static void FixupCyclicMarkers(JsonNode node, Dictionary<string, string> targetDefNames) {
+    private static void FixupCyclicMarkers(JsonNode node, Dictionary<string, string> targetDefNames, bool root = true) {
         if (node is JsonObject obj) {
+            // An embedded document owns its local recursive references; the outer hoist never rewrites them.
+            if (!root && obj.ContainsKey(propertyName: "$id")) { return; }
             if (ContainsRefKey(obj: obj)) {
                 var value = ((JsonValue)obj["$ref"]!).GetValue<string>();
 
@@ -602,6 +615,7 @@ public static partial class WorldSchema {
                     ) {
                         FixupCyclicMarkers(
                             node: child,
+                            root: false,
                             targetDefNames: targetDefNames
                         );
                     }
@@ -614,6 +628,7 @@ public static partial class WorldSchema {
                 if (child is not null) {
                     FixupCyclicMarkers(
                         node: child,
+                        root: false,
                         targetDefNames: targetDefNames
                     );
                 }
@@ -623,6 +638,7 @@ public static partial class WorldSchema {
                 if (child is not null) {
                     FixupCyclicMarkers(
                         node: child,
+                        root: false,
                         targetDefNames: targetDefNames
                     );
                 }
@@ -1339,16 +1355,18 @@ public static partial class WorldSchema {
     private static void ApplyNumericDomains(JsonTypeInfo type, JsonObject node) {
         if (node["properties"] is not JsonObject properties) { return; }
         foreach (var property in type.Properties) {
-            var scalar = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+            var scalar = (Nullable.GetUnderlyingType(nullableType: property.PropertyType) ?? property.PropertyType);
+
             if ((scalar != typeof(float)) && (scalar != typeof(double))) { continue; }
-            var field = WorldValueFields.All.FirstOrDefault(field => field.Owner == type.Type && field.Name == property.Name);
-            if (field is null || properties[property.Name] is not JsonObject value) { continue; }
+            var field = WorldValueFields.All.FirstOrDefault(predicate: field => ((field.Owner == type.Type) && (field.Name == property.Name)));
+
+            if ((field is null) || (properties[property.Name] is not JsonObject value)) { continue; }
             var domain = field.Domain;
-            if (float.IsFinite(domain.Minimum)) { value[domain.MinimumOpen ? "exclusiveMinimum" : "minimum"] = domain.Minimum; }
-            if (float.IsFinite(domain.Maximum)) { value[domain.MaximumOpen ? "exclusiveMaximum" : "maximum"] = domain.Maximum; }
+
+            if (float.IsFinite(f: domain.Minimum)) { value[(domain.MinimumOpen ? "exclusiveMinimum" : "minimum")] = domain.Minimum; }
+            if (float.IsFinite(f: domain.Maximum)) { value[(domain.MaximumOpen ? "exclusiveMaximum" : "maximum")] = domain.Maximum; }
         }
     }
-
     // A $ref node the exporter emits can carry sibling keywords alongside "$ref" — draft 2020-12 allows it, and
     // the exporter uses it: a cached concrete TypeInfo's memoized $ref plus an occurrence-specific "default" (an
     // optional property's own default value, e.g. WorldPlacement.FaceSources = null). "$ref" alone is never a
@@ -1426,6 +1444,7 @@ public static partial class WorldSchema {
     private sealed class NestedExports {
         public Dictionary<Type, JsonNode> First { get; } = [];
         public List<(Type Type, JsonObject Placeholder)> Later { get; } = [];
+        public List<JsonObject> OwnRoots { get; } = [];
         // The types whose first export is still being built. A shape that reaches itself through its own members (a
         // channel reference's expression argument reads channel references) refers back to that export.
         public HashSet<Type> Open { get; } = [];
@@ -1488,6 +1507,10 @@ public static partial class WorldSchema {
         );
 
         run.InlineOpen.Remove(item: type);
+        // An exporter's recursive pointers belong to this exported root, not the enclosing world's root.
+        // Give that root a namespace before sharing it; otherwise two inline exports can spell one pointer
+        // while naming different types (or a pointer that does not exist in the outer document at all).
+        ScopeInlineReferences(node: exported, root: run.InlineRoots.Count);
         run.InlineRoots.Add(item: exported);
         memos.Add(item: (entryOpen, (run.InlineRoots.Count - 1)));
 
@@ -1498,7 +1521,19 @@ public static partial class WorldSchema {
     // itself is never attached to the document, so every occurrence shares it; each pass reads through the
     // placeholder (ResolveInline), and the hoist expands it where it stands.
     private const string InlineExportKey = "$puck:inline";
+    private const string InlineReferencePrefix = "#/$puck:inline/";
 
+    private static void ScopeInlineReferences(JsonNode node, int root) {
+        if (TryGetInlineRoot(node: node, root: out _)) { return; }
+        if ((node is JsonObject island) && island.ContainsKey(propertyName: "$id")) { return; }
+        if ((node is JsonObject obj) && (obj["$ref"] is JsonValue value) && value.TryGetValue<string>(value: out var reference) &&
+            reference.StartsWith(value: '#') && !reference.StartsWith(comparisonType: StringComparison.Ordinal, value: InlineReferencePrefix)) {
+            obj["$ref"] = $"{InlineReferencePrefix}{root}{reference[1..]}";
+        }
+        foreach (var child in node switch { JsonObject members => members.Select(selector: p => p.Value), JsonArray array => array, _ => Enumerable.Empty<JsonNode?>() }) {
+            if (child is not null) { ScopeInlineReferences(node: child, root: root); }
+        }
+    }
     private static JsonObject InlinePlaceholder(int root) =>
         new() { [InlineExportKey] = root };
     private static bool TryGetInlineRoot(JsonNode? node, out int root) {
@@ -1586,18 +1621,25 @@ public static partial class WorldSchema {
 
         return clone;
     }
+
     // The exporter refers a repeated type's later occurrence to its first by a pointer from the exported root. A creation
     // fragment embeds under the world schema, where the hoist resolves every pointer from the world's own root, so each
     // such reference in the fragment takes a copy of its target, the reference's own sibling keywords replacing the
     // target's in place; a reference to its own ancestor (a shape holding itself) is left as it is.
-    internal static void ExpandOwnReferences(JsonNode node, JsonObject root) {
+    internal static void ExpandOwnReferences(JsonNode node, JsonObject root, HashSet<string>? expanding = null) {
+        expanding ??= new HashSet<string>(comparer: StringComparer.Ordinal);
+        string? opened = null;
+
         if (
             (node is JsonObject reference) &&
             TryGetAbsoluteRefTarget(refObj: reference, target: out var pointer) &&
+            !expanding.Contains(item: pointer) &&
             (ResolvePointer(pointer: pointer, root: root) is JsonObject target) &&
             !$"{reference.GetPath()}.".StartsWith(value: $"{target.GetPath()}.", comparisonType: StringComparison.Ordinal) &&
             !reference.GetPath().StartsWith(value: $"{target.GetPath()}[", comparisonType: StringComparison.Ordinal)
         ) {
+            expanding.Add(item: pointer);
+            opened = pointer;
             var occurrence = reference
                 .Where(predicate: static member => !string.Equals(a: member.Key, b: "$ref", comparisonType: StringComparison.Ordinal))
                 .ToDictionary(keySelector: static member => member.Key, elementSelector: static member => member.Value?.DeepClone(), comparer: StringComparer.Ordinal);
@@ -1614,11 +1656,18 @@ public static partial class WorldSchema {
         }
         foreach (var child in node switch { JsonObject members => members.Select(selector: static member => member.Value).ToArray(), JsonArray items => items.ToArray(), _ => [] }) {
             if (child is not null) {
-                ExpandOwnReferences(node: child, root: root);
+                ExpandOwnReferences(expanding: expanding, node: child, root: root);
             }
         }
+        if (opened is not null) { expanding.Remove(item: opened); }
     }
+
     private static void ResolveNestedRefs(JsonObject root, NestedExports nested) {
+        foreach (var own in nested.OwnRoots) {
+            var prefix = (JsonPointerOf(node: own, root: root) ?? throw new InvalidOperationException(message: "Nested schema root was detached."));
+
+            Rebase(node: own, prefix: prefix);
+        }
         foreach (var (type, placeholder) in nested.Later) {
             var pointer = (JsonPointerOf(
                 node: nested.First[type],
@@ -1626,6 +1675,14 @@ public static partial class WorldSchema {
             ) ?? throw new InvalidOperationException(message: $"the first export of {type.Name} is no longer in the document"));
 
             placeholder["$ref"] = $"#{pointer}";
+        }
+        static void Rebase(JsonNode node, string prefix) {
+            if ((node is JsonObject obj) && (obj["$ref"] is JsonValue value) && value.TryGetValue<string>(value: out var reference) && reference.StartsWith(value: '#')) {
+                obj["$ref"] = $"#{prefix}{reference[1..]}";
+            }
+            foreach (var child in node switch { JsonObject members => members.Select(selector: p => p.Value), JsonArray array => array, _ => Enumerable.Empty<JsonNode?>() }) {
+                if (child is not null) { Rebase(node: child, prefix: prefix); }
+            }
         }
     }
     // The document-absolute JSON pointer of node under root, by parent-chain walk; null when node is not in root.

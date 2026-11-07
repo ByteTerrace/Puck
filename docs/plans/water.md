@@ -441,9 +441,9 @@ kernel's.
 A palette slot's `flow` (`PaletteFlowDocument`, lowered to `SdfFlow` on
 `SdfMaterial.Flow`) packs material rows 27 to 30 (`SdfAppearance.Pack`;
 the stride is `SdfAppearance.MaterialVectorsPerEntry`) and runs `sdfApplyFlow`
-(`shade/shade-layers.hlsli`) in the views pass's light stage after
+(`shade/shade-flow.hlsli`) in the views pass's light stage after
 `applyWeathering`: the weathering's lattice noise with an analytic gradient
-(`sdfFlowNoise`), advected along the velocity's tangential part in two layers
+(`sdfLatticeNoiseGradient3`), advected along the velocity's tangential part in two layers
 half a cycle apart with triangle weights, a low-frequency per-place phase
 offset against pulsing, the blend renormalized so contrast holds through the
 cross-fade, a stretch along the flow, a coverage that reveals an authored

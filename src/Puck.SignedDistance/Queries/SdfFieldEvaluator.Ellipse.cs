@@ -5,7 +5,9 @@ namespace Puck.SignedDistance.Queries;
 public sealed partial class SdfFieldEvaluator {
     // The bisection steps the ellipse's projection root takes at most: its bracket spans at most the point's normalized
     // reach, under 2^48 in Q48.16, so this many halvings reach the format's resolution and the loop ends there.
-    private const int EllipseRootSteps = 96;
+    /// <summary>The projection bisection bound shared by the CPU, generated HLSL and shade work model.</summary>
+    public const int EllipseRootSteps = 96;
+
     // The rounding a fixed-point ellipse distance may carry, which its interval bound widens by: the bisection's last
     // step and the normalizing divisions, far under this.
     private static readonly FixedQ4816 EllipseBoundSlack = (FixedQ4816.One / FixedQ4816.FromInteger(value: 4096));

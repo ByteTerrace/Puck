@@ -28,6 +28,7 @@ namespace Puck.World;
 /// accessories from; absent in a headless host or off Windows.</param>
 public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopulation population, WorldServer server, IServerLink link, WorldRenderProbe? renderProbe = null, GamepadManager? gamepads = null) : ICommandModule {
     private static readonly CommandForms WorldPopulationForms = CommandForms.Of(verb: "world.population", "[count] [idle|producer:<name>]");
+
     // The live budget's reader and its text, reused by every world.budget.
     private readonly RenderGraphLiveBudget m_liveBudget = new();
     private readonly StringBuilder m_liveText = new();
@@ -49,7 +50,6 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             yield return (device, type.ToString());
         }
     }
-
     // The sequence and its row view, then any per-body selector as select(<body register>: <value>=<row>, …).
     private static string DescribeAssignment(WorldRowAssignment assignment) =>
         $"{DescribeSequence(sequence: assignment.Sequence)}[{((assignment.Rows.Count == 0)
@@ -150,6 +150,27 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 : string.Empty)}, visibility records {visibilityBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) at {Puck.Shaders.SdfWorldPackage.VisibilityRecordByteLength.ToString(provider: CultureInfo.InvariantCulture)} a pixel, mesh region {node.MeshRegionUsedBytes.ToString(provider: CultureInfo.InvariantCulture)} of {node.MeshRegionBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) held (at most {Puck.SdfVm.SdfWorldTables.MostMeshRegionBytes.ToString(provider: CultureInfo.InvariantCulture)}) for {node.MeshDrawCount.ToString(provider: CultureInfo.InvariantCulture)} draw(s), mesh attachments {meshAttachmentBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s), glass {glassBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) ({node.GlassDrawCount.ToString(provider: CultureInfo.InvariantCulture)} glass draw(s))"
             : "renderer not built yet"
         );
+        var shadeMaterials = server.Definition.Creations.SelectMany(selector: static prototype => (prototype.Document.Palette ?? []))
+            .Concat(second: server.Definition.FieldRegions.SelectMany(selector: static region => region.Fields)
+                .Where(predicate: static field => (field.Material is not null)).Select(selector: static field => field.Material!))
+            .Where(predicate: static material => (material.Shade is not null))
+            .Select(selector: static material => (Program: Puck.SignedDistance.SdfShadeProgram.Compile(definition: material.Shade!), Wrap: (material.Wrap ?? 0f))).ToArray();
+        var shades = shadeMaterials.Select(selector: static material => material.Program)
+            .GroupBy(static program => program.Identity, StringComparer.Ordinal).Select(selector: static group => group.First()).ToArray();
+        var worstShade = shades.MaxBy(keySelector: static program => program.PixelWork(lights: Puck.SignedDistance.SdfShadeProgram.MaxLights));
+
+        render += $", shading programs {shades.Length}, interpreted {shades.Length}, specialized 0, pending 0, quarantined 0";
+        if (worstShade is not null) {
+            render += $", worst static cost {worstShade.PixelWork(lights: Puck.SignedDistance.SdfShadeProgram.MaxLights)} ({worstShade.Name})";
+            var worstDemand = shadeMaterials.MinBy(keySelector: static material => material.Program.Demand.Cosine(baseWrap: material.Wrap));
+
+            render += string.Create(CultureInfo.InvariantCulture, $", worst shadow demand {worstDemand.Program.Demand.Cosine(baseWrap: worstDemand.Wrap):G6} ({worstDemand.Program.Name})");
+            render += $", authors [{string.Join(separator: ", ", values: shadeMaterials.Select(selector: static material => material.Program.Name).Distinct(comparer: StringComparer.Ordinal))}]";
+            var emissive = shadeMaterials.Where(predicate: static material => material.Program.Outputs.Any(predicate: static output =>
+                ((output.Phase == Puck.SignedDistance.SdfShadePhase.Surface) && (output.Name == "emissive"))))
+                .Select(selector: static material => material.Program.Name).Distinct(comparer: StringComparer.Ordinal).ToArray();
+            if (emissive.Length != 0) { render += $", probes and meter use base response for emissive programs [{string.Join(separator: ", ", values: emissive)}]"; }
+        }
 
         if (renderProbe?.Residency is { } rendered) {
             render += $", {rendered.MeshIrradiance.DescribeBudget()}";
@@ -187,12 +208,12 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###}; atmosphere {atmosphereKinds} kind(s), each at most one composite evaluation a pixel)"
         );
         // The cascades' texels for a full-resolution 60-degree 16:9 view, the shape a seat's chase camera takes.
-        var shadows = WorldRenderFarDistance.ResolveShadowCoverage(defaults: server.Definition.Render).Describe(
+        var shadows = (WorldRenderFarDistance.ResolveShadowCoverage(defaults: server.Definition.Render).Describe(
             aspectRatio: (16f / 9f),
             farDistance: farDistance,
             tanHalfFieldOfView: MathF.Tan(x: (MathF.PI / 6f)),
             texels: Puck.SdfVm.SdfShadowResolutions.Texels(resolution: Puck.SdfVm.SdfShadowResolution.Full)
-        ) + " for a 60-degree 16:9 view";
+        ) + " for a 60-degree 16:9 view");
         var lattice = ((population.FieldRegions.Count > 0)
             ? string.Join(separator: Environment.NewLine, values: population.FieldRegions.Select(selector: region => ($"region {region.Name}: " + region.Lattice.DescribeCost(
                 activeBodyCount: population.ActiveCount(),

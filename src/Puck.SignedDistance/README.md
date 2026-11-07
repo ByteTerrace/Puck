@@ -19,6 +19,13 @@ tail. The mesh bake's identity is rooted at the field constructor, so no
 appearance value or packing code reaches it. `SdfAppearance.Materials` exposes the
 same snapshotted palette the packed shader reads, including immutable nested lists.
 
+`Shading/` holds the presentation-only `SdfShadeProgram` admission compiler,
+typed op table, runtime parameter block, static work and shadow demand.
+`SdfAppearance` packs admitted programs beside their materials; their code and
+values never enter the field's identity. The
+[authored shading contract](../../.claude/skills/rendering/references/authored-shading.md)
+names the generated semantics and the GPU wiring still to come.
+
 `SdfProgram.InspectInstance` reads exclusive packed ownership and culling facts for a
 live instance. Its count includes instructions and their data/bounds, owned segment and
 rigid-leaf rows, shape side tables and part bindings. Shared tables stay in the

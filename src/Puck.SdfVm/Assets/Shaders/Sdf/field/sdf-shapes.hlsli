@@ -3,33 +3,33 @@
 #define FIELD_SDF_SHAPES_HLSLI
 // The exact distance to a box centred on the origin, from q = abs(p) - halfExtents: the outside part's length plus the
 // inside part's largest (never positive) component. Every box, slab and extrude below reads it.
-float sdfBoxDistance(float2 q) {
+precise float sdfBoxDistance(float2 q) {
     return (min(max(q.x, q.y), 0.0) + length(max(q, 0.0)));
 }
-float sdfBoxDistance(float3 q) {
+precise float sdfBoxDistance(float3 q) {
     return (length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0));
 }
-float sdfSphere(float3 p, float radius) {
+precise float sdfSphere(float3 p, float radius) {
     return (length(p) - radius);
 }
 // `cornerRadius` deliberately does NOT shadow the HLSL round() intrinsic (which this file's fold ops rely on).
-float sdfBox(float3 p, float3 halfExtents, float cornerRadius) {
+precise float sdfBox(float3 p, float3 halfExtents, float cornerRadius) {
     float3 q = (abs(p) - (halfExtents - cornerRadius));
     return (sdfBoxDistance(q) - cornerRadius);
 }
-float sdfTorus(float3 p, float major, float minor) {
+precise float sdfTorus(float3 p, float major, float minor) {
     float2 q = float2((length(p.xz) - major), p.y);
     return (length(q) - minor);
 }
-float sdfPlane(float3 p, float3 normal, float offset) {
+precise float sdfPlane(float3 p, float3 normal, float offset) {
     return (dot(p, normal) + offset);
 }
 // inverseLengthSquared = 1/dot(endpoint, endpoint), HOST-BAKED (data1.y) by SdfProgramBuilder.Capsule.
-float sdfCapsule(float3 p, float3 endpoint, float radius, float inverseLengthSquared) {
+precise float sdfCapsule(float3 p, float3 endpoint, float radius, float inverseLengthSquared) {
     float h = clamp((dot(p, endpoint) * inverseLengthSquared), 0.0, 1.0);
     return (length(p - (h * endpoint)) - radius);
 }
-float sdfCylinder(float3 p, float radius, float halfHeight) {
+precise float sdfCylinder(float3 p, float radius, float halfHeight) {
     return sdfBoxDistance(float2(length(p.xz), abs(p.y)) - float2(radius, halfHeight));
 }
 // The ellipsoid: the superellipsoid's scaled gauge at e = 2, (|p/r| - 1) * min(r). EXACTLY 1-Lipschitz at every
@@ -37,12 +37,12 @@ float sdfCylinder(float3 p, float radius, float halfHeight) {
 // it shares its zero set with the true ellipsoid and underestimates Euclidean distance away from it. The center
 // returns -min(r) like the general path's m <= 0 branch (length(0) = 0). KEEP IN SYNC with the e == 2 fast path of
 // Puck.SignedDistance.Queries.SdfFieldEvaluator.SdfSuperellipsoid.
-float sdfEllipsoidGauge(float3 p, float3 radii, float3 inverseRadii) {
+precise float sdfEllipsoidGauge(float3 p, float3 radii, float3 inverseRadii) {
     float minRadius = min(radii.x, min(radii.y, radii.z));
 
     return ((length(p * inverseRadii) - 1.0) * minRadius);
 }
-float sdfSuperellipsoidNormFactor(float exponent) {
+precise float sdfSuperellipsoidNormFactor(float exponent) {
     return 1.0 - (7.0 / 25.0) * (exponent - 2.0);
 }
 bool sdfSuperellipsoidNormIsClamped(float approximate, float norm, float exponent) {
@@ -52,11 +52,11 @@ bool sdfSuperellipsoidNormIsClamped(float approximate, float norm, float exponen
 // For 2 < e <= 3 the exact Lp norm lies between (1-(7/25)*(e-2))*L2 and L2. The rational lower
 // factor follows from convexity of 3^(1/e-1/2) and ln(3)/4 < 7/25. Clamping to that band keeps the field a
 // conservative distance without assuming an error bound for pow.
-float sdfClampSuperellipsoidNorm(float approximate, float norm, float exponent) {
+precise float sdfClampSuperellipsoidNorm(float approximate, float norm, float exponent) {
     if ((asuint(approximate) & 0x7F800000u) == 0x7F800000u) { return norm; }
     return clamp(approximate, sdfSuperellipsoidNormFactor(exponent) * norm, norm);
 }
-float sdfSuperellipsoidPowerNorm(float3 q, float m, float exponent) {
+precise float sdfSuperellipsoidPowerNorm(float3 q, float m, float exponent) {
     float3 u = pow(q / m, exponent);
     return m * pow((u.x + u.y) + u.z, 1.0 / exponent);
 }
@@ -70,7 +70,7 @@ float sdfSuperellipsoidPowerNorm(float3 q, float m, float exponent) {
 // |p|/r ~ 1e5 for e = 8 (and saturates the fixed-point mirror's Q48.16 carrier at |p|/r ~ 60), which would collapse
 // the far field. Mathematically identical to sum(q_i^e)^(1/e). KEEP IN SYNC with
 // Puck.SignedDistance.Queries.SdfFieldEvaluator.SdfSuperellipsoid.
-float sdfSuperellipsoid(float3 p, float3 radii, float3 inverseRadii, float exponent) {
+precise float sdfSuperellipsoid(float3 p, float3 radii, float3 inverseRadii, float exponent) {
     if (exponent == 2.0) {
         return sdfEllipsoidGauge(p, radii, inverseRadii);
     }
@@ -90,7 +90,7 @@ float sdfSuperellipsoid(float3 p, float3 radii, float3 inverseRadii, float expon
     return (norm - 1.0) * minRadius;
 }
 // slope b = (lowerRadius - upperRadius)/height and its complement a = sqrt(1 - b*b) are HOST-BAKED (data0.w / data1.y).
-float sdfRoundCone(float3 p, float lowerRadius, float upperRadius, float height, float b, float a) {
+precise float sdfRoundCone(float3 p, float lowerRadius, float upperRadius, float height, float b, float a) {
     float2 q = float2(length(p.xz), p.y);
     float k = dot(q, float2(-b, a));
 
@@ -108,7 +108,7 @@ float sdfRoundCone(float3 p, float lowerRadius, float upperRadius, float height,
 // b = sqrt(r*r - d*d) = the tip half-height, HOST-BAKED by SdfProgramBuilder.Vesica to skip the per-eval sqrt. Exact
 // and convex, so revolving the exact 2D field yields a true 3D distance (earns a cull bound, factor-1 Lipschitz). The
 // lens is pointed along +/-Y and is a disc of radius (r - d) in the XZ plane.
-float sdfVesica(float3 p, float r, float d, float b) {
+precise float sdfVesica(float3 p, float r, float d, float b) {
     float2 q = float2(length(p.xz), abs(p.y));
 
     return (((q.y - b) * d) > (q.x * b))
@@ -125,7 +125,7 @@ float sdfVesica(float3 p, float r, float d, float b) {
 
 // --- lift operators (extrude along Z / revolve around Y) ---
 // Extrude an exact 2D distance d (evaluated on the XY plane) to half-height h along Z: exact for any exact d.
-float sdfExtrude2D(float d, float pz, float h) {
+precise float sdfExtrude2D(float d, float pz, float h) {
     return sdfBoxDistance(float2(d, (abs(pz) - h)));
 }
 // The chamfered extrude join: sdfExtrude2D's box/slab intersection, further intersected with a 45-degree bevel plane
@@ -135,20 +135,20 @@ float sdfExtrude2D(float d, float pz, float h) {
 // exactly: w.x + w.y is bounded above by sqrt(2)*length(max(w,0)) (equality only on-axis) plus the (always
 // non-positive) `min(max(w.x,w.y),0)` inside term, so the bevel arm never exceeds the plain join and max() picks the
 // plain value unchanged to the bit.
-float sdfExtrudeChamfer2D(float d, float pz, float h, float c) {
+precise float sdfExtrudeChamfer2D(float d, float pz, float h, float c) {
     float2 w = float2(d, (abs(pz) - h));
     float plain = sdfBoxDistance(w);
     float bevel = ((w.x + w.y + c) * SDF_SQRT_HALF);
     return max(plain, bevel);
 }
 // The meridian point for revolving around Y at radial offset o: the 2D core is evaluated at (length(p.xz) - o, p.y).
-float2 sdfRevolve2D(float3 p, float o) {
+precise float2 sdfRevolve2D(float3 p, float o) {
     return float2((length(p.xz) - o), p.y);
 }
 
 // --- exact 2D cores ---
 // Rounded box, single corner radius r: the box half-extents are b, corners rounded by r (staying within b).
-float sdfRoundBox2D(float2 p, float2 b, float r) {
+precise float sdfRoundBox2D(float2 p, float2 b, float r) {
     float2 q = ((abs(p) - b) + r);
     return (sdfBoxDistance(q) - r);
 }
@@ -158,14 +158,14 @@ float sdfRoundBox2D(float2 p, float2 b, float r) {
 // carries; march- and contact-safe, not the branchy true-distance form). c = 0 collapses to the plain box exactly, by
 // the same triangle-inequality argument as sdfExtrudeChamfer2D (q.x + q.y is bounded above by
 // sqrt(2)*length(max(q,0)) for q outside the box, so the bevel arm never wins).
-float sdfChamferBox2D(float2 p, float2 b, float c) {
+precise float sdfChamferBox2D(float2 p, float2 b, float c) {
     float2 q = (abs(p) - b);
     float boxDistance = sdfBoxDistance(q);
     float bevel = ((q.x + q.y + c) * SDF_SQRT_HALF);
     return max(boxDistance, bevel);
 }
 // Isosceles trapezoid: r1 = bottom half-width, r2 = top half-width, he = half-height.
-float sdfTrapezoid2D(float2 p, float r1, float r2, float he) {
+precise float sdfTrapezoid2D(float2 p, float r1, float r2, float he) {
     float2 k1 = float2(r2, he);
     float2 k2 = float2((r2 - r1), (2.0 * he));
     p.x = abs(p.x);
@@ -177,7 +177,7 @@ float sdfTrapezoid2D(float2 p, float r1, float r2, float he) {
 // Exact star-polygon SDF (n points, inner-radius control m): r = outer radius, an = pi/n (baked), ecs = (cos(pi/m), sin(pi/m))
 // (baked). ecs = (0, 1) collapses this to the exact regular n-gon (m = 2). The GLSL `mod` is FLOOR modulo — use the
 // house sdfFloorMod so a negative atan2 sector index folds correctly (HLSL fmod truncates and would mis-fold).
-float sdfStar2D(float2 p, float r, float an, float2 ecs) {
+precise float sdfStar2D(float2 p, float r, float an, float2 ecs) {
     float2 acs = float2(cos(an), sin(an));
     float bn = (sdfFloorMod(atan2(p.x, p.y), (2.0 * an)) - an);
     p = (length(p) * float2(cos(bn), abs(sin(bn))));
@@ -204,7 +204,7 @@ float sdfStar2D(float2 p, float r, float an, float2 ecs) {
 // takes the plain join exactly, so an unchamfered rounded rectangle is unchanged. Revolve has no cap seam to bevel
 // and ignores it, matching the family's existing per-shape-constant convention for data1.z (RegularPolygon/Star bake
 // ecs.y there instead; RoundedRectangle's lane was unused before this).
-float sdfRoundedRect(float3 p, float4 data0, float4 data1) {
+precise float sdfRoundedRect(float3 p, float4 data0, float4 data1) {
     return (((data1.y > 0.5)
         ? sdfExtrudeChamfer2D(sdfRoundBox2D(p.xy, data0.xy, data0.z), p.z, data0.w, data1.z)
         : sdfRoundBox2D(sdfRevolve2D(p, data0.w), data0.xy, data0.z)) - data1.w);
@@ -212,13 +212,13 @@ float sdfRoundedRect(float3 p, float4 data0, float4 data1) {
 // The chamfered rectangle: the 2D core already bevels its own four corners at c (data0.z); the extrude join bevels
 // the two cap rims at the SAME c, so a chamfered box reads chamfered on all twelve edges from one parameter. data1.w
 // is the family-wide edge-rounding radius, applied on top exactly as sdfRoundedRect's is.
-float sdfChamferedRect(float3 p, float4 data0, float4 data1) {
+precise float sdfChamferedRect(float3 p, float4 data0, float4 data1) {
     return (((data1.y > 0.5)
         ? sdfExtrudeChamfer2D(sdfChamferBox2D(p.xy, data0.xy, data0.z), p.z, data0.w, data0.z)
         : sdfChamferBox2D(sdfRevolve2D(p, data0.w), data0.xy, data0.z)) - data1.w);
 }
 // Regular polygon AND star share this: data0 = (r, an, ecs.x, lift), data1.z = ecs.y (the polygon bakes ecs = (0, 1)).
-float sdfPolyStar(float3 p, float4 data0, float4 data1) {
+precise float sdfPolyStar(float3 p, float4 data0, float4 data1) {
     float2 ecs = float2(data0.z, data1.z);
 
     return (((data1.y > 0.5)
@@ -227,13 +227,13 @@ float sdfPolyStar(float3 p, float4 data0, float4 data1) {
 }
 // data1.z is a CAP-chamfer radius (0 = the plain extrude join exactly), unused before this lane and free here — the
 // Trapezoid shape never baked a per-shape constant into it.
-float sdfTrapezoidSolid(float3 p, float4 data0, float4 data1) {
+precise float sdfTrapezoidSolid(float3 p, float4 data0, float4 data1) {
     return (((data1.y > 0.5)
         ? sdfExtrudeChamfer2D(sdfTrapezoid2D(p.xy, data0.x, data0.y, data0.z), p.z, data0.w, data1.z)
         : sdfTrapezoid2D(sdfRevolve2D(p, data0.w), data0.x, data0.y, data0.z)) - data1.w);
 }
 // data1.z is a CAP-chamfer radius (0 = the plain extrude join exactly), unused before this lane.
-float sdfEllipseSolid(float3 p, float4 data0, float4 data1) {
+precise float sdfEllipseSolid(float3 p, float4 data0, float4 data1) {
     return (((data1.y > 0.5)
         ? sdfExtrudeChamfer2D(sdfEllipse2D(p.xy, data0.xy), p.z, data0.w, data1.z)
         : sdfEllipse2D(sdfRevolve2D(p, data0.w), data0.xy)) - data1.w);
@@ -241,7 +241,7 @@ float sdfEllipseSolid(float3 p, float4 data0, float4 data1) {
 // One vertex of a SDF_SHAPE_CONVEX_POLYGON side table (see its own define comment): two packed (x, y) vertices per
 // uvec4 word in sdfWords, so vertex index i lives at word (tableOffset + (i >> 1)), lane .xy for an even index and
 // .zw for an odd one.
-float2 sdfPolygonVertex(uint tableOffset, uint index) {
+precise float2 sdfPolygonVertex(uint tableOffset, uint index) {
     uint4 packed = sdfProgramWord((tableOffset + (index >> 1u)));
 
     return (((index & 1u) != 0u) ? asfloat(packed.zw) : asfloat(packed.xy));
@@ -250,7 +250,7 @@ float2 sdfPolygonVertex(uint tableOffset, uint index) {
 // correct for any simple polygon, convex or not, which is why convexity is validated at authoring time rather than
 // here). The running minimum squared distance to every edge SEGMENT (projection clamped to [0, 1], not the infinite
 // line), signed by one even/odd crossing-parity flip per edge (iq's sdPolygon) — sqrt-free per edge, one sqrt total.
-float sdfConvexPolygon2D(float2 p, uint tableOffset, uint count) {
+precise float sdfConvexPolygon2D(float2 p, uint tableOffset, uint count) {
     if (count < 3u || count > SDF_MAX_CONVEX_VERTICES || !sdfProgramRange(tableOffset, (count + 1u) / 2u, 1u)) { return SDF_FAR_DISTANCE; }
     float2 firstVertex = sdfPolygonVertex(tableOffset, 0u);
     float2 previous = sdfPolygonVertex(tableOffset, (count - 1u));
@@ -281,7 +281,7 @@ float sdfConvexPolygon2D(float2 p, uint tableOffset, uint count) {
 // Lifted wrapper, the family's usual convention: data0.w = lift amount, data1.y = lift mode, data1.z = cap chamfer,
 // data1.w = edge-rounding radius. tableOffset/count are packed into data0.x's reinterpreted uint bits (KEEP IN SYNC
 // with SdfProgramBuilder.ConvexPolygon / SdfProgram's table-offset patch).
-float sdfConvexPolygonSolid(float3 p, float4 data0, float4 data1) {
+precise float sdfConvexPolygonSolid(float3 p, float4 data0, float4 data1) {
     uint packed = asuint(data0.x);
     uint count = ((packed & ((1u << SDF_CONVEX_COUNT_BITS) - 1u)) + 1u);
     uint tableOffset = (packed >> SDF_CONVEX_COUNT_BITS);
@@ -293,7 +293,7 @@ float sdfConvexPolygonSolid(float3 p, float4 data0, float4 data1) {
 // Path tables: two float4 words per edge, (A.xy,B.xy), (radiusA,radiusB,0,0).
 // The stroke segment is the exact convex hull of endpoint disks, including containment when one radius
 // dominates the entire segment. It does not subtract an approximation margin or move the zero surface.
-float sdfPathStrokeEdge(float2 p, float2 a, float2 b, float ra, float rb) {
+precise float sdfPathStrokeEdge(float2 p, float2 a, float2 b, float ra, float rb) {
     float2 ab = b - a;
     float len = length(ab);
     if (abs(ra - rb) >= len) {
@@ -310,7 +310,7 @@ float sdfPathStrokeEdge(float2 p, float2 a, float2 b, float ra, float rb) {
     if (along > len * c) return length(p - b) - rb;
     return x * k + y * c - ra;
 }
-float sdfPathSolid(float3 p, float4 data0, float4 data1) {
+precise float sdfPathSolid(float3 p, float4 data0, float4 data1) {
     uint offset = asuint(data0.x);
     if (!isfinite(data0.y) || data0.y < 0.0 || data0.y > (float)SDF_MAX_PATH_EDGES) { return SDF_FAR_DISTANCE; }
     uint count = (uint)data0.y;
@@ -356,7 +356,7 @@ float sdfPathSolid(float3 p, float4 data0, float4 data1) {
 // Host-baked unorm2x16 of an atlas UV, unpacked: the low 16 bits are u, the high 16 v, each /65535. An integer bit op,
 // so it is bit-identical across DXC's SPIR-V and DXIL targets. Packing the four UV-rect components into two lanes frees
 // data1.x for the ISA-wide smooth-blend radius (the ≤0.06-texel error at 4K is sub-texel at any authoring scale).
-float2 sdfGlyphUnpackUv(float packed) {
+precise float2 sdfGlyphUnpackUv(float packed) {
     uint bits = asuint(packed);
 
     return (float2((bits & 0xFFFFu), (bits >> 16u)) * (1.0 / 65535.0));
@@ -364,7 +364,7 @@ float2 sdfGlyphUnpackUv(float packed) {
 // The extruded-quad FALLBACK: the glyph cell as a plain box, exact and 1-Lipschitz. Every kernel WITHOUT the atlas
 // bound evaluates this — a conservative UNDERESTIMATE of the true glyph distance, since the letter is strictly inside
 // its cell, so a bound skip never holes. halfWidth/halfHeight in data1.yz, extrudeHalfDepth in data0.w.
-float sdfGlyphQuad(float3 p, float4 data0, float4 data1) {
+precise float sdfGlyphQuad(float3 p, float4 data0, float4 data1) {
     return sdfExtrude2D(sdfBoxDistance(abs(p.xy) - float2(data1.y, data1.z)), p.z, data0.w);
 }
 
@@ -373,7 +373,7 @@ float sdfGlyphQuad(float3 p, float4 data0, float4 data1) {
 // RGB median is coverage-only: channel conflicts need not define a conservative march field.
 // Edge-clamped; SampleLevel(…, 0) because
 // implicit-derivative filtering is undefined in a compute kernel's non-uniform control flow.
-float sdfGlyphTexelAlpha(int2 texel, int2 dims) {
+precise float sdfGlyphTexelAlpha(int2 texel, int2 dims) {
     int2 clamped = clamp(texel, int2(0, 0), (dims - int2(1, 1)));
     float2 uv = ((float2(clamped) + 0.5) / float2(dims));
 
@@ -382,7 +382,7 @@ float sdfGlyphTexelAlpha(int2 texel, int2 dims) {
 // Manual bilinear of the true single-channel field: four point taps + arithmetic lerp, NOT a hardware LINEAR sampler,
 // so the reconstruction is bit-stable across both DXC backends (a driver's bilinear can differ ±1 LSB — the exact
 // class WorldHighContrast is calibrated for, but manual keeps the field itself identical).
-float sdfGlyphSampleField(float2 uv) {
+precise float sdfGlyphSampleField(float2 uv) {
     uint2 udims;
     sdfGlyphAtlas.GetDimensions(udims.x, udims.y);
 
@@ -399,7 +399,7 @@ float sdfGlyphSampleField(float2 uv) {
     return lerp(lerp(a00, a10, f.x), lerp(a01, a11, f.x), f.y);
 }
 // One texel's RGB pseudo-distances (edge-clamped, same tap discipline as sdfGlyphTexelAlpha).
-float3 sdfGlyphTexelRgb(int2 texel, int2 dims) {
+precise float3 sdfGlyphTexelRgb(int2 texel, int2 dims) {
     int2 clamped = clamp(texel, int2(0, 0), (dims - int2(1, 1)));
     float2 uv = ((float2(clamped) + 0.5) / float2(dims));
 
@@ -410,7 +410,7 @@ float3 sdfGlyphTexelRgb(int2 texel, int2 dims) {
 // lines are harmless to a coverage threshold — but they kink a marched field, so GEOMETRY keeps sdfGlyphSampleField.
 // A replicated single-channel atlas (the runtime exact-EDT generator) medians to exactly its own value, so this decode
 // is bit-identical to the alpha path there and only diverges — toward crisper corners — on a true MTSDF atlas.
-float sdfGlyphSampleFieldMedian(float2 uv) {
+precise float sdfGlyphSampleFieldMedian(float2 uv) {
     uint2 udims;
     sdfGlyphAtlas.GetDimensions(udims.x, udims.y);
 
@@ -427,7 +427,7 @@ float sdfGlyphSampleFieldMedian(float2 uv) {
 
     return max(min(s.r, s.g), min(max(s.r, s.g), s.b));
 }
-float sdfGlyph(float3 p, float4 data0, float4 data1) {
+precise float sdfGlyph(float3 p, float4 data0, float4 data1) {
     float2 halfSize = float2(data1.y, data1.z);
     float dQuad = sdfBoxDistance(abs(p.xy) - halfSize);
     float distanceScale = data0.z;
@@ -463,7 +463,7 @@ float sdfGlyph(float3 p, float4 data0, float4 data1) {
 // One voxel, clamped to the lattice's own [0, dims-1] so the stencil never reads past its snapshot (clamp-to-edge): the
 // zero set lies strictly inside the box by the bake margin, so the clamped border half-voxel is far field. The index is
 // x-fastest: base + i + j*dx + k*dx*dy, as SdfSampledSnapshot lays it out.
-float sdfSampledVoxel(uint baseWord, uint3 dims, int3 coord) {
+precise float sdfSampledVoxel(uint baseWord, uint3 dims, int3 coord) {
     int3 c = clamp(coord, int3(0, 0, 0), (int3(dims) - int3(1, 1, 1)));
     uint index = baseWord + (uint)c.x + ((uint)c.y * dims.x) + ((uint)c.z * dims.x * dims.y);
 
@@ -471,7 +471,7 @@ float sdfSampledVoxel(uint baseWord, uint3 dims, int3 coord) {
 }
 // A precise result of the lerp intrinsic can still lower to SPIR-V FMix, whose arithmetic need not match DXIL's.
 // Spell every operation and mark each intermediate so both backends retain the same subtraction, product and sum.
-float sdfSampledInterpolate(float left, float right, float weight) {
+precise float sdfSampledInterpolate(float left, float right, float weight) {
     precise float difference = (right - left);
     precise float weighted = (weight * difference);
     precise float result = (left + weighted);
@@ -479,7 +479,7 @@ float sdfSampledInterpolate(float left, float right, float weight) {
     return result;
 }
 #endif
-float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
+precise float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
 #ifdef SDF_SAMPLED_REGIONS
     uint words = 0u;
     uint stride;
@@ -554,20 +554,20 @@ void sdfSweepCurve(uint tableOffset, out float3 a, out float3 b, out float3 c, o
     c = asfloat(wordsC.xyz);
     bulge = asfloat(wordsC.w);
 }
-float3 sdfBezierPoint(float3 a, float3 b, float3 c, float t) {
+precise float3 sdfBezierPoint(float3 a, float3 b, float3 c, float t) {
     float3 ab = lerp(a, b, t);
     float3 bc = lerp(b, c, t);
 
     return lerp(ab, bc, t);
 }
-float3 sdfBezierDerivative(float3 a, float3 b, float3 c, float t) {
+precise float3 sdfBezierDerivative(float3 a, float3 b, float3 c, float t) {
     return (2.0 * (lerp((b - a), (c - b), t)));
 }
 // The closest parameter t in [0, 1] on the quadratic Bezier (a, b, c) to p — the standard closed-form
 // closest-point-on-quadratic-bezier (a depressed-cubic solve, iq's construction), degenerating to the A-C line
 // segment's own closest point when b is (numerically) the exact midpoint of a and c — the quadratic coefficient
 // vanishes there and the cubic solve's 1/dot(coefficient, coefficient) would divide by zero.
-float sdfSweepClosestT(float3 p, float3 a, float3 b, float3 c) {
+precise float sdfSweepClosestT(float3 p, float3 a, float3 b, float3 c) {
     float3 coefA = (b - a);
     float3 coefB = ((a - (2.0 * b)) + c);
     float3 coefC = (coefA * 2.0);
@@ -615,7 +615,7 @@ float sdfSweepClosestT(float3 p, float3 a, float3 b, float3 c) {
 }
 // The sweep's radius profile: a linear taper plus a mid-span bulge that vanishes at both ends (the exponent softens
 // the bulge's rise off zero — KEEP IN SYNC with SdfProgramBuilder.Sweep's remarks).
-float sdfSweepRadiusAt(float t, float radiusStart, float radiusEnd, float bulge) {
+precise float sdfSweepRadiusAt(float t, float radiusStart, float radiusEnd, float bulge) {
     float taper = lerp(radiusStart, radiusEnd, t);
     float s = max(sin((SDF_PI * t)), 0.0);
 
@@ -625,7 +625,7 @@ float sdfSweepRadiusAt(float t, float radiusStart, float radiusEnd, float bulge)
 // golden-section rounds about the nearest sample (SDF_SWEEP_ROUNDS) are SdfFieldEvaluator's, generated into sdf-isa.hlsli.
 // A strand's centre at t: the centreline point, orbited by strandOffset across the tangent at the phase the twist
 // reaches there from the strand's own phase.
-float3 sdfSweepStrandPoint(float3 a, float3 b, float3 c, float t, float twist, float strandOffset, float phase) {
+precise float3 sdfSweepStrandPoint(float3 a, float3 b, float3 c, float t, float twist, float strandOffset, float phase) {
     float3 base = sdfBezierPoint(a, b, c, t);
 
     if (strandOffset == 0.0) { return base; }
@@ -644,7 +644,7 @@ float3 sdfSweepStrandPoint(float3 a, float3 b, float3 c, float t, float twist, f
 }
 // The gap from p to the sphere a strand sweeps at t. Each gap is 1-Lipschitz in p, so their least over t is the swept
 // solid's field: exact outside it, a bound inside.
-float sdfSweepGap(float3 p, float3 a, float3 b, float3 c, float t, float twist, float strandOffset, float phase, float radiusStart, float radiusEnd, float bulge) {
+precise float sdfSweepGap(float3 p, float3 a, float3 b, float3 c, float t, float twist, float strandOffset, float phase, float radiusStart, float radiusEnd, float bulge) {
     return (length(p - sdfSweepStrandPoint(a, b, c, t, twist, strandOffset, phase)) - sdfSweepRadiusAt(t, radiusStart, radiusEnd, bulge));
 }
 // The sweep is the union of the spheres of radius r(t) about each strand's centre. A tube of one radius about the
@@ -653,7 +653,7 @@ float sdfSweepGap(float3 p, float3 a, float3 b, float3 c, float t, float twist, 
 // keeping the least gap any probe measured. The centreline's own nearest parameter is not the nearest sphere's once the
 // radius or the strand varies along t: the radius read there overestimates the distance and jumps where that parameter
 // crosses the centreline's medial axis.
-float sdfSweep(float3 p, float4 data0, float4 data1) {
+precise float sdfSweep(float3 p, float4 data0, float4 data1) {
     uint tableOffset = asuint(data0.x);
     float strandsFloat = data0.y;
     float twist = data0.z;
@@ -726,7 +726,7 @@ float sdfSweep(float3 p, float4 data0, float4 data1) {
 // carry HOST-BAKED derived constants per shape (see SdfProgramBuilder). Ids that share a body FALL THROUGH: DXC inlines
 // each `case` separately, so a duplicated arm duplicates the whole primitive (the Box/ScreenSlab and Polygon/Star pairs
 // cost ~10% of this kernel's instructions when written twice).
-float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
+precise float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
     sdfWorkShapes++;
     float result = SDF_FAR_DISTANCE;
 

@@ -1,0 +1,33 @@
+// Equivalent authored shading: shade-let.
+schema: "puck.world.definition.v1"
+documentId: "shade-pair"
+shade template program() {
+  surface {
+    let tint = material.albedo * 0.5
+    albedo: tint
+  }
+}
+prototypes {
+  prototype "p" {
+    document {
+      schema: "puck.creation.v1"
+      palette [{ color: "#808080", shade: program() }]
+      shape Box "box" {
+        scale [1, 1, 1]
+      }
+    }
+  }
+}
+
+state {
+  world {
+    table shadeCheck {
+      admitted = 1
+    }
+  }
+}
+test "shade admission" {
+  expect {
+    shadeCheck.admitted == 1
+  }
+}

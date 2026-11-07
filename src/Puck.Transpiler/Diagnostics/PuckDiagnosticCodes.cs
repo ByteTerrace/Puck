@@ -319,11 +319,21 @@ public static class PuckDiagnosticCodes {
     /// <summary>PUCK125: a constant, a template or a template parameter declared twice in one scope. The second
     /// declaration is the one refused; the first stands.</summary>
     public const string DuplicateName = "PUCK125";
+    /// <summary>PUCK126: a shade name or phase is outside the fixed presentation interface.</summary>
+    public const string ShadeInterface = "PUCK126";
+    /// <summary>PUCK127: shade operand types or slice-relative ranges disagree.</summary>
+    public const string ShadeOperand = "PUCK127";
+    /// <summary>PUCK128: a shade expression reads an undefined value.</summary>
+    public const string ShadeUndefined = "PUCK128";
+    /// <summary>PUCK129: a shade program exceeds its static work or representation capacity.</summary>
+    public const string ShadeCapacity = "PUCK129";
+    /// <summary>PUCK130: a runtime shade parameter occurs in a structural position.</summary>
+    public const string ShadeStructural = "PUCK130";
 
     private static readonly FrozenSet<string> DeclaredCodes = typeof(PuckDiagnosticCodes)
-        .GetFields(bindingAttr: (System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+        .GetFields(bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
         .Where(predicate: static field => field.IsLiteral)
-        .Select(selector: static field => (string)field.GetRawConstantValue()!)
+        .Select(selector: static field => ((string)field.GetRawConstantValue()!))
         .ToFrozenSet(comparer: StringComparer.Ordinal);
 
     /// <summary>Returns whether a constant here declares <paramref name="code"/>.</summary>

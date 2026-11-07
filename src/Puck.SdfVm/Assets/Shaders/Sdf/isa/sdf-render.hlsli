@@ -49,7 +49,7 @@
 // The appearance section, after every table the field reads (SdfAppearance): the program header's material count and offset, the material and paint strides and the paint limits.
 #define SDF_PROGRAM_MATERIAL_COUNT(v)  ((v).y)
 #define SDF_PROGRAM_MATERIAL_OFFSET(v) ((v).w)
-#define SDF_MATERIAL_VECTORS_PER_ENTRY 32u
+#define SDF_MATERIAL_VECTORS_PER_ENTRY 34u
 #define SDF_PAINT_VECTORS_PER_ENTRY    12u
 #define SDF_MAX_PAINTS_PER_MATERIAL    8u
 #define SDF_PAINT_WINNING_FRAME        0xFFFFFFFFu

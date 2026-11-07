@@ -7,7 +7,7 @@
 // their samples with, the same sequence the display encode dithers its quantization with (display-encode.frag.hlsl in
 // Puck.Shaders). Fixed-point, so both backends compute the IDENTICAL pattern (a float frac(x/phi2 + y/phi2^2) would
 // diverge and break cross-backend parity).
-float sdfR2Dither(uint2 pixel) {
+precise float sdfR2Dither(uint2 pixel) {
     uint h = ((pixel.x * SDF_R2_ALPHA1) + (pixel.y * SDF_R2_ALPHA2));
 
     return ((float)h * SDF_INV_2POW32);
@@ -20,13 +20,13 @@ float sdfR2Dither(uint2 pixel) {
 // Euclidean) is what the host bakes into the step clamp.
 // A cell mask of all ones is the unbounded lattice and leaves every hashed bit as it is; one less than a power of two
 // wraps the lattice to that period.
-float sdfNoiseCorner3(int3 cell, uint3 seed, uint cellMask) {
+precise float sdfNoiseCorner3(int3 cell, uint3 seed, uint cellMask) {
     return ((float)sdfPcg3d((asuint(cell) & cellMask) ^ seed).x * SDF_INV_2POW32);
 }
-float sdfNoiseCorner3(int3 cell, uint3 seed) {
+precise float sdfNoiseCorner3(int3 cell, uint3 seed) {
     return sdfNoiseCorner3(cell, seed, 0xFFFFFFFFu);
 }
-float sdfValueNoise3Cells(float3 q, uint3 seed, uint cellMask) {
+precise float sdfValueNoise3Cells(float3 q, uint3 seed, uint cellMask) {
     float3 cellFloor = floor(q);
     int3 cell = int3(cellFloor);
     float3 f = (q - cellFloor);
@@ -47,7 +47,7 @@ float sdfValueNoise3Cells(float3 q, uint3 seed, uint cellMask) {
     float y1 = lerp(x01, x11, u.y);
     return ((lerp(y0, y1, u.z) * 2.0) - 1.0);
 }
-float sdfValueNoise3(float3 q, uint3 seed) {
+precise float sdfValueNoise3(float3 q, uint3 seed) {
     return sdfValueNoise3Cells(q, seed, 0xFFFFFFFFu);
 }
 // A seeded 3D value-noise sample over the same deterministic lattice (sdfValueNoise3), folding one uint seed into
@@ -56,18 +56,18 @@ float sdfValueNoise3(float3 q, uint3 seed) {
 uint3 sdfLatticeSeeds(uint seed) {
     return uint3(seed, (seed ^ SDF_NOISE_SEED_STREAM_Y), (seed ^ SDF_NOISE_SEED_STREAM_Z));
 }
-float sdfLatticeNoise3(float3 q, uint seed) {
+precise float sdfLatticeNoise3(float3 q, uint seed) {
     return sdfValueNoise3(q, sdfLatticeSeeds(seed));
 }
 // The same lattice wrapped to SDF_NOISE_PERIOD_CELLS on every axis (a power of two): the noise a time-advected field
 // reads, whose host-baked offset is reduced by that period (SdfVolume.NoisePeriodCells), so the field joins without a
 // seam wherever the offset wraps.
-float sdfPeriodicNoise3(float3 q, uint seed) {
+precise float sdfPeriodicNoise3(float3 q, uint seed) {
     return sdfValueNoise3Cells(q, sdfLatticeSeeds(seed), (SDF_NOISE_PERIOD_CELLS - 1u));
 }
 // The two-dimensional periodic lattice the sky's cloud kind reads: one sdfPcg3d per corner, the seed in its third
 // stream, quintic-smoothed bilinear blend, output in [0, 1].
-float sdfPeriodicNoise2(float2 p, uint seed) {
+precise float sdfPeriodicNoise2(float2 p, uint seed) {
     float2 cellFloor = floor(p);
     uint2 cell = (asuint(int2(cellFloor)) & (SDF_NOISE_PERIOD_CELLS - 1u));
     uint2 next = ((cell + 1u) & (SDF_NOISE_PERIOD_CELLS - 1u));
@@ -84,7 +84,7 @@ float sdfPeriodicNoise2(float2 p, uint seed) {
 // one half, each on its own seed, normalized to [0, 1] by the amplitudes' sum. The whole-number lacunarity keeps every
 // octave periodic in the base lattice's period, so a host-reduced offset never shows a seam. Each octave hashes its
 // four corners, which the caller counts.
-float sdfPeriodicFbm2(float2 p, uint seed, uint octaves) {
+precise float sdfPeriodicFbm2(float2 p, uint seed, uint octaves) {
     float value = 0.0;
     float amplitude = 0.5;
     float total = 0.0;
@@ -102,7 +102,7 @@ float sdfPeriodicFbm2(float2 p, uint seed, uint octaves) {
 }
 // The three-dimensional twin: `octaves` octaves of the periodic 3D lattice (sdfPeriodicNoise3, in [-1, 1]) remapped to
 // [0, 1], lacunarity 2 and a gain the caller names. Each octave hashes its eight corners, which the caller counts.
-float sdfPeriodicFbm3(float3 q, uint seed, uint octaves, float gain) {
+precise float sdfPeriodicFbm3(float3 q, uint seed, uint octaves, float gain) {
     float value = 0.0;
     float amplitude = 0.5;
     float total = 0.0;
@@ -120,7 +120,7 @@ float sdfPeriodicFbm3(float3 q, uint seed, uint octaves, float gain) {
 }
 // Exact 27-cell Worley field within SdfCellDisplacement's mode-specific randomness bounds.
 // KEEP IN SYNC with SdfFieldEvaluator.Cells.cs: PCG streams, top 16 bits, and z/y/x visit order.
-float sdfCellDistanceGrad(float3 q, uint seed, uint mode, float randomness, out float3 gradient) {
+precise float sdfCellDistanceGrad(float3 q, uint seed, uint mode, float randomness, out float3 gradient) {
     float3 cellFloor = floor(q);
     int3 cell = int3(cellFloor);
     float3 f = q - cellFloor;
@@ -155,4 +155,35 @@ float sdfCellDistanceGrad(float3 q, uint seed, uint mode, float randomness, out 
 // times per frame while programs build once, and a shared multiply keeps both DXC targets on the identical operation
 // (a varying-numerator divide contracted differently is a cross-backend fuzz-signature risk).
 
+// The value-noise lattice the weathering reads (sdfLatticeNoise3: the same corners, the quintic blend) with its analytic
+// gradient: (value in [-1, 1], its derivative along each lattice axis).
+precise float4 sdfLatticeNoiseGradient3(float3 q, uint seed) {
+    uint3 seeds = sdfLatticeSeeds(seed);
+    float3 cellFloor = floor(q);
+    int3 cell = int3(cellFloor);
+    float3 f = (q - cellFloor);
+    float3 u = (((f * f) * f) * ((f * ((f * 6.0) - 15.0)) + 10.0));
+    float3 du = (((30.0 * f) * f) * ((f * (f - 2.0)) + 1.0));
+    float c000 = sdfNoiseCorner3(cell, seeds);
+    float c100 = sdfNoiseCorner3((cell + int3(1, 0, 0)), seeds);
+    float c010 = sdfNoiseCorner3((cell + int3(0, 1, 0)), seeds);
+    float c110 = sdfNoiseCorner3((cell + int3(1, 1, 0)), seeds);
+    float c001 = sdfNoiseCorner3((cell + int3(0, 0, 1)), seeds);
+    float c101 = sdfNoiseCorner3((cell + int3(1, 0, 1)), seeds);
+    float c011 = sdfNoiseCorner3((cell + int3(0, 1, 1)), seeds);
+    float c111 = sdfNoiseCorner3((cell + int3(1, 1, 1)), seeds);
+    float k1 = (c100 - c000);
+    float k2 = (c010 - c000);
+    float k3 = (c001 - c000);
+    float k4 = (((c110 - c010) - c100) + c000);
+    float k5 = (((c101 - c001) - c100) + c000);
+    float k6 = (((c011 - c001) - c010) + c000);
+    float k7 = (((((((c111 - c011) - c101) - c110) + c100) + c010) + c001) - c000);
+    float value = (((c000 + (k1 * u.x)) + (k2 * u.y)) + (k3 * u.z)) + (((k4 * u.x) * u.y) + ((k5 * u.x) * u.z)) + (((k6 * u.y) * u.z) + (((k7 * u.x) * u.y) * u.z));
+    float3 gradient = (du * float3(
+        (((k1 + (k4 * u.y)) + (k5 * u.z)) + ((k7 * u.y) * u.z)),
+        (((k2 + (k4 * u.x)) + (k6 * u.z)) + ((k7 * u.x) * u.z)),
+        (((k3 + (k5 * u.x)) + (k6 * u.y)) + ((k7 * u.x) * u.y))));
+    return (float4(value, gradient) * 2.0) - float4(1.0, 0.0, 0.0, 0.0);
+}
 #endif

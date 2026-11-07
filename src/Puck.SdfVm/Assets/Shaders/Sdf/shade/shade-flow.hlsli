@@ -27,37 +27,6 @@ void sdfLayerFrame(int frameSlot, float3 surfacePoint, float3 normal, float3 ray
         layerRay = rotatePointByInverseQuaternion(rayDirection, layerRotation);
     }
 }
-// The value-noise lattice the weathering reads (sdfLatticeNoise3: the same corners, the quintic blend) with its analytic
-// gradient: (value in [-1, 1], its derivative along each lattice axis).
-float4 sdfFlowNoise(float3 q, uint seed) {
-    uint3 seeds = sdfLatticeSeeds(seed);
-    float3 cellFloor = floor(q);
-    int3 cell = int3(cellFloor);
-    float3 f = (q - cellFloor);
-    float3 u = (((f * f) * f) * ((f * ((f * 6.0) - 15.0)) + 10.0));
-    float3 du = (((30.0 * f) * f) * ((f * (f - 2.0)) + 1.0));
-    float c000 = sdfNoiseCorner3(cell, seeds);
-    float c100 = sdfNoiseCorner3((cell + int3(1, 0, 0)), seeds);
-    float c010 = sdfNoiseCorner3((cell + int3(0, 1, 0)), seeds);
-    float c110 = sdfNoiseCorner3((cell + int3(1, 1, 0)), seeds);
-    float c001 = sdfNoiseCorner3((cell + int3(0, 0, 1)), seeds);
-    float c101 = sdfNoiseCorner3((cell + int3(1, 0, 1)), seeds);
-    float c011 = sdfNoiseCorner3((cell + int3(0, 1, 1)), seeds);
-    float c111 = sdfNoiseCorner3((cell + int3(1, 1, 1)), seeds);
-    float k1 = (c100 - c000);
-    float k2 = (c010 - c000);
-    float k3 = (c001 - c000);
-    float k4 = (((c110 - c010) - c100) + c000);
-    float k5 = (((c101 - c001) - c100) + c000);
-    float k6 = (((c011 - c001) - c010) + c000);
-    float k7 = (((((((c111 - c011) - c101) - c110) + c100) + c010) + c001) - c000);
-    float value = (((c000 + (k1 * u.x)) + (k2 * u.y)) + (k3 * u.z)) + (((k4 * u.x) * u.y) + ((k5 * u.x) * u.z)) + (((k6 * u.y) * u.z) + (((k7 * u.x) * u.y) * u.z));
-    float3 gradient = (du * float3(
-        (((k1 + (k4 * u.y)) + (k5 * u.z)) + ((k7 * u.y) * u.z)),
-        (((k2 + (k4 * u.x)) + (k6 * u.z)) + ((k7 * u.x) * u.z)),
-        (((k3 + (k5 * u.x)) + (k6 * u.y)) + ((k7 * u.x) * u.y))));
-    return (float4(value, gradient) * 2.0) - float4(1.0, 0.0, 0.0, 0.0);
-}
 // The flow layer (SdfFlow, the material's flow rows): the pattern's lookup point advects along the flow's tangential part
 // by the flow clock, in two layers half a cycle apart whose triangle weights cross-fade so neither restart shows, each
 // place's phase offset by a low-frequency noise so the surface never pulses as one, and the blend renormalized so its
@@ -95,7 +64,7 @@ float3 sdfApplyFlow(float3 layerPoint, float3 layerNormal, float3 layerFlow, flo
     float3 q1 = (((layerPoint - (travel * (c1 - 0.5))) * scale) + float3(5.3, 2.9, 7.1));
     q0 -= (along * (dot(q0, along) * squeeze));
     q1 -= (along * (dot(q1, along) * squeeze));
-    float4 pattern = (((w0 * sdfFlowNoise(q0, seed)) + (w1 * sdfFlowNoise(q1, seed))) * rsqrt(max(((w0 * w0) + (w1 * w1)), 1.0e-6)));
+    float4 pattern = (((w0 * sdfLatticeNoiseGradient3(q0, seed)) + (w1 * sdfLatticeNoiseGradient3(q1, seed))) * rsqrt(max(((w0 * w0) + (w1 * w1)), 1.0e-6)));
     float rate = (footprint * scale);
     float fade = (1.0 - smoothstep(0.35, 0.9, rate));
     if (coverage > 0.0) {

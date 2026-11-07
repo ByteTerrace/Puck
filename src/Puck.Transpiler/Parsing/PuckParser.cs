@@ -634,9 +634,19 @@ public static partial class PuckParser {
             return new ExportNode(Column: col, Facet: facet, Length: len, Line: line, Names: names, Offset: startOffset) { FacetExplicit = facetExplicit };
         }
 
-        var isModule = TryMatchStatementKeyword(context: context, keyword: "module");
+        var shadeStart = cursor.Position;
+        var isShade = TryMatchStatementKeyword(context: context, keyword: "shade");
 
-        if (isModule || TryMatchStatementKeyword(context: context, keyword: "template")) {
+        if (isShade) {
+            SkipWhiteSpace(context: context);
+            if (!TryMatchKeyword(context: context, keyword: "template")) {
+                cursor.ResetPosition(position: shadeStart);
+                isShade = false;
+            }
+        }
+        var isModule = (!isShade && TryMatchStatementKeyword(context: context, keyword: "module"));
+
+        if (isShade || isModule || TryMatchStatementKeyword(context: context, keyword: "template")) {
             SkipWhiteSpace(context: context);
             if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var templateName)) {
                 throw CreateException(context: context, message: "Expected identifier after 'template'");
@@ -654,6 +664,9 @@ public static partial class PuckParser {
                 var paramStart = cursor.Offset;
 
                 var (pLine, pCol) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: paramStart);
+                var structural = (isShade && TryMatchKeyword(context: context, keyword: "structural"));
+
+                if (structural) { SkipWhiteSpace(context: context); }
                 if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var paramName)) {
                     throw CreateException(context: context, message: "Expected parameter name in template definition");
                 }
@@ -704,7 +717,7 @@ public static partial class PuckParser {
 
                 var pLen = (cursor.Offset - paramStart);
 
-                parameters.Add(item: new TemplateParameterNode(Column: pCol, DefaultValue: defaultVal, Length: pLen, Line: pLine, Name: paramName, Offset: paramStart) { Kind = kind, RequiredExports = requiredExports });
+                parameters.Add(item: new TemplateParameterNode(Column: pCol, DefaultValue: defaultVal, Length: pLen, Line: pLine, Name: paramName, Offset: paramStart) { IsStructural = structural, Kind = kind, RequiredExports = requiredExports });
 
                 SkipWhiteSpace(context: context);
                 if (TryConsume(c: ',', context: context)) {
@@ -726,7 +739,7 @@ public static partial class PuckParser {
             var body = ParseBlock(context, identifier: templateName, name: null, target: null, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics);
             var len = (cursor.Offset - startOffset);
 
-            return new TemplateNode(Body: body, Column: col, Length: len, Line: line, Name: templateName, Offset: startOffset, Parameters: parameters) { IsModule = isModule };
+            return new TemplateNode(Body: body, Column: col, Length: len, Line: line, Name: templateName, Offset: startOffset, Parameters: parameters) { IsModule = isModule, IsShade = isShade };
         }
 
         if (TryMatchRuleScopeKeyword(context: context)) {
