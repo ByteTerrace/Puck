@@ -727,7 +727,9 @@ laws exercise that boundary.
 - **Groups are keyed by geometry** (`SdfMeshGeometryBuilder`: instructions with
   side-table values for offsets, materials by place, a dynamic bound's radius
   alone, other slots by their rounded pose in the group's frame, lane-erosion
-  lanes, the reach of a box it clamps), and every meshed group is stored in the
+  lanes, the reach of a box it clamps, glass; each appended as a kind tag, its
+  length and its payload through `AppendFact`, so no two fact sequences hash
+  alike), and every meshed group is stored in the
   `SdfMeshLibrary` all of a presentation's residencies share, so a rebuild, a
   returning body or a body crossing from another world takes its mesh; only new
   geometry bakes. The key has two failure modes. A field the hash reads that a
