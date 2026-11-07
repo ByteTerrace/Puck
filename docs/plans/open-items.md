@@ -1301,13 +1301,12 @@ A tip-only reading needs no paired request: run `puck lease quiet --wait 600 --
 puck bench frames …` directly (the tour and water-view readings feed Next item 1
 and the Water packet).
 
-- [medium] `bench frames` waits only 20 s for residency at a stop
-  (`world.wait residency 20`), so a frozen build measured with a fresh cache,
-  which owes a whole cold bake of about a minute first, is refused before its
-  first window: the glass-shadow falls pair (9cb9d6df) and the meadow-rates pair
-  (0166da71) failed that way. Wait for the boot's bakes to settle under a bound
-  that covers a cold bake (or prewarm each side's cache) before the per-stop
-  settle, then rerun both pairs.
+- The frozen glass-shadow falls and meadow-rates requests remain blocked by
+  the [renderer residency wait](#residency-and-streaming): their CPU bakes finish, but
+  `world.wait residency` still refuses after the boot's separate cold-bake
+  wait and after the stop's authored framing and warmup. Repair residency in
+  the renderer and re-freeze the affected World builds before taking a timing
+  result; longer harness waits do not establish missing residency.
 - [low] Two field-query readings stay unread: the field-queries change's probe
   counts under `world.lockstep` at the meadow and the forest road (a rendered
   World, before and after), and gc-churn's gen2 count and pause per 45 s settled
@@ -2712,26 +2711,9 @@ Render-graph lifecycle lows (read at the cited lines; none run):
 
 ### MCP and the operator attachment
 
-Owner: MCP lane (specialist) · medium · Next: the schema switch, then the stale
-lease holder.
+Owner: MCP lane (specialist) · medium · Next: the private-install activation
+measurement.
 
-- [medium] Memory admission never admits a windowed World or a cold bake
-  while a long heavy suite runs: on a machine with a 45.7 GB commit limit,
-  `puck_world_start` and `bench startup --bake` waited out 1,200 s and 27
-  minutes asking for 24 GB (a declared 18 GB peak plus 6 GB growth reserved
-  for a running `puck test --reproduce`) against 19-23 GB of headroom, which
-  held two lanes' GPU evidence for over an hour. Measure each kind's real peak
-  (the deck-memory attribution read a cold-baking windowed World near 13 GB
-  private) and let admission use it, and make a long heavy suite's reservation
-  shrink with its observed growth; a wait past its deadline names what holds it.
-- [low] A quiet lease whose holder process is gone stays listed
-  (`puck lease list`: "stale: no process holds its lock") for hours after its
-  worktree is removed; prune it when the holder is proven dead.
-- [low] An edit that moves the whole-ISA fingerprint regenerates
-  `SdfIsaFingerprint.cs` and the non-bake interfaces during the World build, so
-  `puck_world_start` discards that build once with "sources changed while
-  building"; the retry succeeds. Generated outputs of the build itself should
-  not count as source changes.
 - Time the MCP front's swap to a newly activated build, from a private install
   root (`puck mcp --prepare-install --install-root <worktree>/.claude/mcp-install`):
   activating in the shared root reaches every session's tools, so it cannot be
@@ -3744,11 +3726,6 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
-- [medium] `puck lease quiet` with its defaults (`--wait 0`, `--settle 30`)
-  can never run: the wait beyond the settle is zero, so it refuses with "the
-  machine was not idle for 30 seconds within 30" even on an idle machine. The
-  settle needs its own time; `--wait` should bound only the extra wait for
-  load to clear. Seen running the lead's frame-bar window.
 - [low · unconfirmed] `puck measure request --after-commit` built the World
   but Windows refused `WorldArtifactStore.Publish`'s directory rename after its
   retries (`src/Puck.Cli.Harness/WorldArtifactStore.cs:183`, `Directory.Move`),

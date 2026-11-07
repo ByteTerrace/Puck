@@ -104,13 +104,16 @@ public static partial class FrameBenchmarks {
                 if (!SweepWorld.TryBoot(request, log, TimeSpan.FromSeconds(120), budget, out var session, out error)) { throw new InvalidOperationException(error); }
                 using var world = session!;
                 string Ask(string line, bool authored = false) {
-                    var answer = authored ? SweepRun.RunTourLine(world, line) : world.Run(line, 120);
+                    var answer = authored ? SweepRun.RunTourLine(world, line) : world.Run(line, 300);
                     rows.Add(new($"{sample}: {line}", answer.Output));
                     if (!answer.Ok) { throw new InvalidOperationException(string.Join("; ", answer.Refusals)); }
                     return answer.Output;
                 }
                 if (!boot) {
                     Ask("world.lockstep off\nworld.rate resume");
+                    // A frozen artifact can boot against an empty mesh store. Settle its cold bake before
+                    // applying a stop's own edits and bounded residency wait.
+                    Ask("world.wait ready 60\nworld.wait bakes 180");
                     foreach (var line in tour.Prelude ?? []) {
                         if (!line.TrimStart().StartsWith("world.lockstep ", StringComparison.Ordinal)) { Ask(line, true); }
                     }
@@ -121,15 +124,18 @@ public static partial class FrameBenchmarks {
                     if (!boot) {
                         Ask("world.rate pause");
                         foreach (var line in (tour.Reset ?? []).Concat(stop.Lines)) { Ask(line, true); }
-                        Ask("world.wait bakes 60\nworld.wait ready 60\nworld.wait residency 20");
                         // Share the sweep's pinning and verdict, while leaving ordinary presentation running at the end.
                         var reasons = new List<string>();
-                        if (!SweepRun.PinStop(world, stop, tour, "world.status", reasons, out var settledTick, out var expected)) {
+                        if (!SweepRun.PinStop(world, stop, tour, "world.rate pause", reasons, out var settledTick, out var expected)) {
                             throw new InvalidOperationException(string.Join("; ", reasons));
                         }
                         Ask($"world.wait until {settledTick}");
                         var scheduled = SweepEvidence.Scheduled(new SweepAnswer(true, Ask("world.at --json"), []), expected);
                         if (!scheduled.Ok) { throw new InvalidOperationException(string.Join("; ", scheduled.Refusals)); }
+                        // Framing and the stop's warmup must produce the view's actual program before asking
+                        // whether its geometry is resident. Then hold authority while its uploads finish.
+                        Ask("world.wait bakes 60\nworld.wait ready 60\nworld.wait residency 20");
+                        Ask("world.rate resume");
                     }
                     if (passes.Length > 0) { Ask("world.gpu-timing off\nworld.gpu-timing on"); }
                     if (!boot) { Ask("host.frames reset"); }

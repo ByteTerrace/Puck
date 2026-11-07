@@ -450,8 +450,12 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   live private bytes), so starts admitted at a low charge no longer grow into
   each other. It cannot see a start another process admits in the same
   instant, or a process it does not classify (a hand-started `dotnet test` of a
-  suite that is not heavy, a build), and a kind's peak is a conservative
-  default, so a lane whose run outgrows its kind says so under **Found**.
+  suite that is not heavy, a build). A kind uses a conservative fallback only
+  until the tracker observes a plateaued or finished process; measured peaks
+  persist per machine under the lease root and replace that fallback in either
+  direction. Unused growth tapers away during a plateau and returns when growth
+  resumes. `puck host load` prints each kind's peak, growth and total demand,
+  beside the live starts' private bytes, so a refusal can be explained numerically.
   The lead cannot stop another lane's process; it asks the lane. On the lead
   machine, more than about three lanes that
   boot Worlds or heavy suites at once kept commit charge between 80% and 94%
