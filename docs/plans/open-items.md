@@ -2867,15 +2867,6 @@ editor E6's.
   derived face (a creation's own screen) does not name the placement it belongs
   to: `WorldStaticSceneEmit` registers no pick target for either. A pick on the
   group of the program's segments no instance owns names nothing.
-- [low] A kernel's registers and local memory are read only through RenderDoc,
-  Nsight or PIX ([gpu cost](../../.claude/skills/rendering/references/gpu-cost.md#read-a-kernels-registers-and-occupancy)),
-  though Vulkan's `VK_KHR_pipeline_executable_properties` is enabled
-  (`VulkanLogicalDeviceFactory.cs:229-234`) and its entry points bound
-  (`VulkanDeviceCommands.cs:180-183`): no pipeline is created with
-  `VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR` and nothing calls
-  `vkGetPipelineExecutableStatisticsKHR`. Wire a verb that prints each kernel's
-  driver statistics on Vulkan, so a register or spill change reads without a
-  capture.
 - Restore and inspect the remaining developer exhibits: the rate range (LoD and
   rate tiers), the traversal course's geometry and the kinematics scope
   (position and measurement). Clean bot verdicts do not show that they look or

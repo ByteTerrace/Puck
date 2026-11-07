@@ -64,17 +64,50 @@ The SPIR-V and DXIL the build writes beside each `*.hlsl` carry no register
 count: the driver compiles them to the GPU's own instructions and allocates
 registers there ([KHR-PEP], [MS-DXIL]). `spirv-dis <kernel>.spv` and
 `dxc -dumpbin <kernel>.dxil` (both ship with the Vulkan SDK) show the
-intermediate code only. Read the driver's numbers one of these
-ways, as a GPU leg under `puck lease gpu`, windowed, after `world.wait bakes`
-and `[sdf.mesh-gi] done`.
+intermediate code only, though an `alloca` in the DXIL is a dynamically indexed
+local array, which NVIDIA places in local memory (the local-array rule below):
+count them over every kernel after a shader change. Read the driver's numbers
+one of these ways, as a GPU leg under `puck lease gpu`, windowed, after
+`world.wait bakes` and `[sdf.mesh-gi] done`.
+
+**In process (Vulkan).** A World whose device names its objects (`--capture-tool
+renderdoc` or `--debug-layers`) creates every compute pipeline with
+`VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR` and writes the driver's
+statistics as one `[pipeline-statistics] <pipeline name> (...)` line on stderr
+(`VulkanPipelineStatistics`): `Register Count`, `Local Memory Size` (NVIDIA sets
+bit 36; the low 32 bits are the bytes) and `Shared Memory Size`, which on NVIDIA
+includes private arrays the compiler moved into shared memory (the resolve's
+25-float luma window shows as 6400 bytes a 64-thread group). Every
+`world.shaders.reload` that builds a new pipeline prints its line, so a register
+change reads in seconds: reload the edited tree, read the line, then reload an
+older tree (a `git archive` of the base revision's `Sdf` and `Shared` shader
+directories) to compare in the same World. A pipeline the runtime already holds
+under the same key prints nothing again.
+
+**PIX counters (Direct3D 12).** `gpu.capture` a PIX capture, then
+`pixtool open-capture <capture> save-event-list <csv> --counters=<name>` under
+`puck lease gpu --kind Step` (each counter its own `--counters`, no spaces in a
+pattern: `--counters=Compute*Register*`). Each pass row (`world/sdf.world$views`)
+then carries `lts__throughput.avg.pct_of_peak_sustained_elapsed` and
+`lts__t_bytes.sum` (L2), `dram__bytes_read.sum` and `dram__bytes_write.sum`,
+`l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum` and `_st.sum` (local memory),
+`sm__warps_active_shader_cs.avg.pct_of_peak_sustained_elapsed` (achieved
+occupancy), `Compute Register Allocation(%)` and `sm__inst_executed.sum`. A
+debug-world capture is about 1.8 GB and its replay can hold 17 GB of memory for
+many minutes, so collect one capture's counters at a time.
 
 **Nsight Graphics GPU Trace (Direct3D 12 and Vulkan).** Its Shader Profiler
 supports both APIs ([NV-SHPROF]). Launch the World under the dotnet host, never
-`Puck.World.exe` ([kernels](kernels.md#captures-faults-and-validation)):
+`Puck.World.exe` ([kernels](kernels.md#captures-faults-and-validation)). Leave
+out `--platform`: Qt reads it as its own platform-plugin switch and `ngfx` stops
+with "no Qt platform plugin could be initialized". Run under Git Bash with
+`MSYS_NO_PATHCONV=1`, or an absolute path in `--args` is rewritten. The traced
+World did not attach (the launcher kept "Searching for attachable processes")
+on Nsight Graphics 2026.2 with the Direct3D 12 backend:
 
 ```text
 <Nsight install>/host/windows-desktop-nomad-x64/ngfx.exe
-  --activity "GPU Trace Profiler" --platform "Windows (x86_64)"
+  --activity "GPU Trace Profiler"
   --exe "C:/Program Files/dotnet/dotnet.exe" --dir <worktree>
   --args "src/Puck.World/bin/Release/net11.0/Puck.World.dll --world worlds/debug --devices none --backend directx"
   --start-after-hotkey --limit-to-frames 3 --set-gpu-clocks base
@@ -221,7 +254,12 @@ Size" to confirm it. On Vulkan, RenderDoc's executable statistics showed local
 memory in the views kernel (the material's paint stops and weathering stages,
 the volume ramp) and the sky kernel (its upper-run summaries and the star
 spectrum table) until every such loop unrolled to a constant index, then none.
-Read local memory on each backend separately.
+Read local memory on each backend separately. A runtime index into a vector,
+a constant-buffer one included (`passGroup.lightMask[i >> 5]`, a float4 of
+slot visibilities), makes DXC copy the vector into a local array on every
+evaluation: inside the views light walk that was PIX's 21 million local-memory
+sectors a frame. Pick the component with `sdfComponent`
+([`frame/sdf-component.hlsli`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-component.hlsli)).
 
 ## Keep a wave on one path
 
@@ -252,6 +290,13 @@ splits it.
 - **Done right.** The region copy walks its words grid-stride: thread `i`
   copies word `i`, then `i` plus the dispatch's threads
   (the copy loop in [`region-copy.comp.hlsl`](../../../../src/Puck.Shaders/Assets/Shaders/Residency/region-copy.comp.hlsl)).
+- **Measured here.** The resolve's history surface (47 words an output pixel)
+  lies in planes (`sdfHistoryWord` in
+  [`sdf-resolve.comp.hlsl`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-resolve.comp.hlsl)).
+  With each pixel's words adjacent, every lane of every load and store touched
+  its own sector: PIX read the resolve at 92 % of L2 throughput, 2.7 GB of L2
+  traffic a 1280×900 frame against 0.5 GB of DRAM. A store moves a whole sector
+  to L2 for its four bytes, so strided stores cost most.
 - **Unmeasured.** The visibility record is 32 bytes a pixel, field after field
   ([`frame/sdf-visibility.hlsli`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-visibility.hlsli)),
   so one word's load across a wave strides 32 bytes. Its typed load and store
@@ -439,8 +484,13 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
 
 ## Puck's open cases
 
-- **Register-limited pixel passes.** Views is the examined case; surface and
-  resolve are unexamined ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
+- **Register-limited pixel passes.** On Vulkan (RTX 4070) views runs at 128
+  registers with spills, resolve at 168 and composite at 96; PIX on Direct3D 12
+  reads views and resolve near 97 % and 93 % register allocation at a quarter to
+  a third of the warps an SM holds. With `world.indirect off` views falls by a
+  third on Vulkan, so the probe gather (`sdfMeshProbesAt`, sixteen addresses
+  and weights live through the light walk) is the largest single share
+  ([frame bar](../../../../docs/plans/open-items.md#next)).
 - **The main mesh pass shades several fragments a pixel,** with no
   front-to-back order and no depth prepass ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
 - **Growing the program region waits for the device to go idle**
@@ -453,9 +503,12 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
   whose local memory no capture has read
   ([frame time](../../../../docs/plans/open-items.md#engine-job-system),
   [cold bake](../../../../docs/plans/open-items.md#bake-proportional-to-change)).
-- **No in-process statistics.** `VK_KHR_pipeline_executable_properties` is
-  enabled and its entry points bound, but no pipeline asks to capture statistics
-  and nothing reads them ([debug tools](../../../../docs/plans/open-items.md#debug-tools)).
+- **Probe arrays leave registers on Vulkan.** The views kernel's
+  `SdfMeshProbes` arrays sit in about 9 KB of shared memory a group on NVIDIA's
+  Vulkan driver (its `Shared Memory Size` against the 2.9 KB the filter tile
+  declares). Guarding the probe loops' `continue`s removed its spills but raised
+  it to 168 registers and made it slower; the cure is less live probe state, not
+  loop shape.
 
 ## Sources
 

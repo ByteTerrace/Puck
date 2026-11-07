@@ -54,8 +54,8 @@ The research round read the code, and the plan rests on these facts:
   desktop and about a minute and a half of process CPU per High-and-Medium
   pair. Nobody has measured the trace on the Deck's four-core CPU.
 - The views pass loops over every light the view's frustum selected
-  (`passes/sdf-light-stage.hlsli`; `sdfLightAt` applies `worldLightSelected`
-  and `sdfLightResponse` exits at zero reach). A bound screen lights a surface
+  (`passes/sdf-light-stage.hlsli`; `sdfLightNext` walks the set bits of the
+  view's light mask and `sdfLightResponse` exits at zero reach). A bound screen lights a surface
   as an unshadowed centre-and-area diffuse term with no specular.
 - The cascades cover 16 m near and 120 m far with casters 200 m toward the
   light, authored as `render.shadowCoverage` (`SdfShadowCoverage`) and printed

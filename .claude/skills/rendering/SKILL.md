@@ -440,6 +440,10 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `TemporalPeriod` and `HistorySurfaceWords`; the generator carries both into
   HLSL. A layout change needs a host with the matching history allocation before
   loading its kernels. Account for this output-sized history in GPU memory.
+  Keep the surface planar, every access through `sdfHistoryWord`: interleaved,
+  its 47 words a pixel put each lane of each access on its own sector and held
+  the resolve at L2 bandwidth. A complete window shows its own mean, so only an
+  incomplete one reads the reprojected Catmull-Rom history.
   Preserve a constant coverage component exactly before half packing and after
   averaging the phases: bound the convex mean by its samples. A rounded value
   just below one becomes 0.9995 in half storage and invents a background share
@@ -461,7 +465,10 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   creation and capability 5379 in `VulkanShaderCapabilities`; `clip` compiles to
   that feature even when the live opacity is one.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
-  light kind is a branch there and nowhere else.
+  light kind is a branch there and nowhere else. Views and glass visit lights
+  through one walk (`sdfLightWalkStart`, `sdfLightNext`): the set bits of the
+  view's light mask, then the bound screens, so a light the view leaves out
+  costs no iteration. Index a vector at run time only through `sdfComponent`.
 - **Cel shading is a style per material, not a whole-image filter.** A palette
   row's `toon` (`SdfMaterial.Toon`, material rows 22 to 25) shades that material;
   every other material inherits the world's default (`render.toon`, which
