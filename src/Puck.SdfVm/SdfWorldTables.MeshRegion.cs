@@ -101,7 +101,7 @@ public sealed partial class SdfWorldTables {
         m_meshTransformReseats.StorageBytes + m_reseatedDraws.StorageBytes);
 
     // The placed meshes whose words the region still owes, and the draws of the planned list whose meshes are written.
-    private readonly OwedMeshes m_meshesOwed = new();
+    private readonly OwedMeshes m_meshesOwed;
     // The meshes a grown draw reserve moved, written by the next frame upload's flush: each holds a need until that upload
     // is submitted (ReleaseUploadNeeds).
     private readonly List<SdfMesh> m_meshesWithUpload = [];
@@ -297,6 +297,8 @@ public sealed partial class SdfWorldTables {
                 }
                 m_meshSectionWritten = true;
             }
+            // An owed mesh this list stopped naming lets its need go, and one it names again takes it back.
+            if (!m_meshArena.Unchanged) { m_meshesOwed.Sync(); }
 
             m_meshSource = draws;
             m_meshSourceRevision = revision;
@@ -522,12 +524,18 @@ public sealed partial class SdfWorldTables {
     private SdfMesh? m_meshWordsMesh;
 
     // One placed mesh's words, from its first vertex word, in the mesh scratch, written there unless it holds them. A
-    // mesh's words relative to its first vertex word follow from the mesh alone.
-    private Span<uint> MeshWordsOf(SdfMesh mesh, SdfMeshRegionMesh placement) {
+    // mesh's words relative to its first vertex word follow from the mesh alone. The words of a mesh not in the scratch
+    // are read through a hold (SdfMesh.Hold), the one door to its normals and levels: a region copy asks for whatever
+    // words its runs cover, and a run coarsened over a landed mesh whose parts were let go restores them first. A mesh
+    // the store could not restore writes zeros; its groups bake again (SdfMeshLibrary.Lose).
+    private ReadOnlySpan<uint> MeshWordsOf(SdfMesh mesh, SdfMeshRegionMesh placement) {
         var words = SdfMeshRegion.WordsOf(mesh: mesh);
 
         if (ReferenceEquals(objA: mesh, objB: m_meshWordsMesh)) { return m_meshWords.AsSpan(length: words, start: 0); }
 
+        using var held = mesh.Hold();
+
+        if (!held.Readable) { return ((words <= ZeroWords.Length) ? ZeroWords.AsSpan(length: words, start: 0) : new uint[words]); }
         if (words > m_meshWords.Length) {
             m_meshWords = new uint[Math.Max(val1: words, val2: (2 * m_meshWords.Length))];
         }
@@ -536,7 +544,7 @@ public sealed partial class SdfWorldTables {
 
         SdfMeshRegion.WriteMesh(
             destination: destination,
-            mesh: mesh,
+            held: in held,
             placement: new SdfMeshRegionMesh(
                 IndexCount: placement.IndexCount,
                 IndexWord: (placement.IndexWord - placement.VertexWord),

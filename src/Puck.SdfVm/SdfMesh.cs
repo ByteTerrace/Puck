@@ -799,21 +799,26 @@ public static class SdfMeshRegion {
         RequireDestination(destination: destination, layout: layout);
 
         foreach (var (mesh, placement) in meshes) {
+            using var held = mesh.Hold();
+
             WriteMesh(
                 destination: destination,
-                mesh: mesh,
+                held: in held,
                 placement: placement
             );
         }
     }
     /// <summary>Writes one mesh's vertices, triangle materials and indices at the words its placement names.</summary>
-    /// <param name="mesh">The mesh.</param>
+    /// <param name="held">The mesh, held so its normals and coarser levels' indices are resident while they are read
+    /// (<see cref="SdfMesh.Held"/>).</param>
     /// <param name="placement">Where the mesh's sections lie, in words from the start of
     /// <paramref name="destination"/>.</param>
     /// <param name="destination">The words the placement counts from.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
-    public static void WriteMesh(SdfMesh mesh, SdfMeshRegionMesh placement, Span<uint> destination) {
-        ArgumentNullException.ThrowIfNull(mesh);
+    /// <exception cref="ArgumentNullException">The hold names no mesh.</exception>
+    public static void WriteMesh(in SdfMesh.Held held, SdfMeshRegionMesh placement, Span<uint> destination) {
+        var mesh = held.Mesh;
+
+        ArgumentNullException.ThrowIfNull(argument: mesh, paramName: nameof(held));
 
         var positions = mesh.Positions.Span;
         var normals = mesh.Normals.Span;

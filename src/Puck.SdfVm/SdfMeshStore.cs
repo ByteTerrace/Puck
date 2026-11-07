@@ -150,6 +150,17 @@ public sealed class SdfMeshStore {
     /// <param name="identity">The bake's identity.</param>
     /// <returns>The directory's absolute path; it exists only once the identity's first entry is written.</returns>
     public string SetDirectoryOf(UInt128 identity) => Path.Combine(path1: Directory, path2: identity.ToString(format: "x32", provider: null));
+    /// <summary>Pins an identity's set against every process's eviction for the rest of this process
+    /// (<see cref="Puck.Abstractions.CacheRetention.HoldSet"/>): a library that publishes meshes whose parts it restores
+    /// from the set (<see cref="SdfMeshLibrary.TryLoad"/>) holds it, so another World's writes cannot evict what this one
+    /// still reads. A second call for one identity holds nothing more.</summary>
+    /// <param name="identity">The bake's identity.</param>
+    /// <returns><see langword="true"/> when the set is pinned; <see langword="false"/> when its lease could not be
+    /// opened, in which case a restore that misses bakes the group again.</returns>
+    public bool Hold(UInt128 identity) => (m_holds.GetOrAdd(key: identity, valueFactory: (key, store) => Puck.Abstractions.CacheRetention.HoldSet(setDirectory: store.SetDirectoryOf(identity: key)), factoryArgument: this) is not null);
+
+    // The leases this process holds on the sets it publishes from, open until it ends.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<UInt128, FileStream?> m_holds = new();
     /// <summary>Reads an entry's file under whatever key it names, leaving the store as it is: a tool that compares the
     /// meshes several builds stored for one geometry reads them this way, since no key reaches another build's
     /// entries.</summary>
