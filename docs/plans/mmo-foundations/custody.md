@@ -810,6 +810,24 @@ revision belong to this lane's commit message.
 - [Transfer escrow][p7]: destination mobility-admission storage and comparison.
 - [Identity records][p8]: `WorldIdentity.TryAdopt`.
 
+## Citation check
+
+A review lane from another family reopened a sample of this page's **[opened]**
+web claims, weighted to those the options rest on (fencing, presumed abort,
+blocking commit, outbox, the Orleans directory, the EVE duplication record,
+conditional exchange, transparency logs and revocation freshness). Fetch dates
+and the inspected revision are in the commit that added this section.
+
+- **Checked:** 14: Chubby [s1], the fencing critique [s2], the Redlock reply
+  [s3], R* [s6], Gray and Lamport [s7], the outbox pattern [s10], the original
+  Orleans paper [s11], the current Orleans directory [s12], CCP's M2-XFE report
+  [s17], the FFXIV travel guide [s24], Certificate Transparency [s28], Herlihy's
+  atomic swaps [s32], OCSP [s35] and Let's Encrypt [s36].
+- **Confirmed:** 14. Each quoted phrase is on the page in the stated sense
+  (Certificate Transparency's in section 11.2; OCSP's in section 4.2.2.1).
+- **Relabelled, corrected or refuted:** none. No option on this page needed a
+  change.
+
 [s1]: https://www.usenix.org/legacy/event/osdi06/tech/full_papers/burrows/burrows.pdf
 [s2]: https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html
 [s3]: https://antirez.com/news/101
