@@ -85,6 +85,17 @@ public sealed class DirectXRemovalReportLawTests {
         );
     }
     [Fact]
+    public void SeveralLabelsAtOneOperationAreAllWritten() {
+        var lines = DirectXRemovalReport.Format(
+            pageFault: null,
+            reason: unchecked((int)0x887A0006),
+            trails: [new DirectXBreadcrumbTrail(CommandList: "x", Completed: 2, Contexts: [new(Index: 1, Text: "bake"), new(Index: 1, Text: "probe")], Operations: [Begin, Begin, Dispatch], Queue: "q")]
+        );
+
+        Assert.Contains(expected: "[d3d12-dred] queue 'q' list 'x': 2 of 3 operations finished; the GPU stopped in (unlabelled event) > bake | probe", collection: lines);
+        Assert.Contains(expected: "[d3d12-dred]      [1] done beginevent 'bake | probe'", collection: lines);
+    }
+    [Fact]
     public void AnOperationOrAllocationTheRuntimeAddedIsWrittenAsItsNumber() {
         var lines = DirectXRemovalReport.Format(
             pageFault: new DirectXPageFault(Address: 16UL, Existing: [new(Name: "x", Type: ((D3D12_DRED_ALLOCATION_TYPE)999))], RecentlyFreed: []),
