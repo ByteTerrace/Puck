@@ -13,6 +13,20 @@ public sealed class CliLeaseTests : IDisposable {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     [Fact]
+    public async Task InspectPrunesAnUnlockedQuietHolderButNeverAnActiveReservation() {
+        using (var quiet = await CliLease.AcquireQuietAsync(m_root, "scheduler quiet", TimeSpan.Zero, TimeProvider.System, m_root, Token)) {
+            Assert.True(CliLease.Inspect(m_root, "quiet", DateTimeOffset.UtcNow).HolderAlive);
+            Assert.True(Directory.Exists(Path.Combine(m_root, "quiet")));
+        }
+        var directory = Path.Combine(m_root, "quiet");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "holder"), $"dead quiet\n{DateTimeOffset.UtcNow:O}\n2147483647\n1\n");
+        Assert.Null(CliLease.Inspect(m_root, "quiet", DateTimeOffset.UtcNow).Holder);
+        Assert.False(Directory.Exists(directory));
+        Assert.True(File.Exists(directory + ".guard"));
+    }
+
+    [Fact]
     public async Task QuietPriorityLawDrainsTwoHoldersAndBlocksEveryCompetingGrant() {
         var clock = new VirtualClock();
         var tick = TimeSpan.FromMilliseconds(100);

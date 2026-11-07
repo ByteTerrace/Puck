@@ -389,10 +389,9 @@ public sealed class HostAdmissionLawTests {
         Assert.False(condition: HostAdmission.Wait("start", true, false, () => Sample(commit: 20, limit: 64, gpu: "Puck.World 9"), clock, clock.Advance, heldError, CancellationToken.None, Thresholds, TimeSpan.FromSeconds(seconds: 15), null, HostStartKind.WindowedWorld, held));
         Assert.Equal(expected: 0.0, actual: held.Judge(reading: asked, kind: HostStartKind.HeadlessWorld, thresholds: Thresholds, clock: clock, reserve: false).GrowthGb);
     }
-    // A finished start's measured peak raises its kind's expected peak, never past twice the default, and a start
-    // still running has not finished.
+    // A finished start teaches its real peak; a still-growing start has not supplied a completed measurement.
     [Fact]
-    public void AFinishedStartsMeasuredPeakRaisesItsKindsExpectedPeakWithinACeiling() {
+    public void AFinishedStartsMeasuredPeakReplacesTheFallbackWithoutClippingRealPeaks() {
         var tracker = new HostStartTracker();
         var clock = new GateClock();
 
@@ -400,12 +399,13 @@ public sealed class HostAdmissionLawTests {
         _ = tracker.Judge(reading: Sample(starts: [new(Id: 4, Kind: HostStartKind.HeadlessWorld, PrivateGb: 9)]), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
         _ = tracker.Judge(reading: Sample(starts: [new(Id: 4, Kind: HostStartKind.HeadlessWorld, PrivateGb: 4)]), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
         Assert.Equal(expected: HostLoadThresholds.HeadlessWorldPeakGb, actual: tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld));
+        clock.Advance(HostStartTracker.Plateau);
         _ = tracker.Judge(reading: Sample(), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
         Assert.Equal(expected: 9.0, actual: tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld));
         Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb, actual: tracker.ExpectedPeakGb(kind: HostStartKind.WindowedWorld));
         _ = tracker.Judge(reading: Sample(starts: [new(Id: 5, Kind: HostStartKind.HeadlessWorld, PrivateGb: 30)]), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
         _ = tracker.Judge(reading: Sample(), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
-        Assert.Equal(expected: (2 * HostLoadThresholds.HeadlessWorldPeakGb), actual: tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld));
+        Assert.Equal(expected: 30.0, actual: tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld));
     }
     // A process is its id and start ticks: a headless World that reuses a finished heavy suite's id is a new start, so the
     // suite's 15 GB peak is measured for heavy suites when it exits and never carried into the headless kind.
@@ -415,15 +415,75 @@ public sealed class HostAdmissionLawTests {
         var clock = new GateClock();
 
         _ = tracker.Judge(reading: Sample(starts: [new(Id: 7, Kind: HostStartKind.HeavySuite, PrivateGb: 15, StartTicks: 1)]), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
+        clock.Advance(HostStartTracker.Plateau);
         _ = tracker.Judge(reading: Sample(starts: [new(Id: 7, Kind: HostStartKind.HeadlessWorld, PrivateGb: 0.5, StartTicks: 2)]), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
         _ = tracker.Judge(reading: Sample(), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
         Assert.Equal(expected: (15.0, HostLoadThresholds.HeadlessWorldPeakGb), actual: (tracker.ExpectedPeakGb(kind: HostStartKind.HeavySuite), tracker.ExpectedPeakGb(kind: HostStartKind.HeadlessWorld)));
     }
-    // A machine whose commit limit sits near one World's peak still admits it when nothing else grows; a platform with no
-    // commit reading is never judged.
+
     [Fact]
-    public void APeakNeverExceedsHalfTheLimitAndAnUnreadableCommitIsNotJudged() {
-        // A 24 GB limit with 4 GB charged: the 18 GB peak counts as 12 GB, covered by 20 GB of headroom.
+    public void APlateauReleasesGrowthAndRenewedGrowthRestoresIt() {
+        var clock = new GateClock();
+        var tracker = new HostStartTracker();
+        var sample = Sample(commit: 50, limit: 45.7, starts: [new(7, HostStartKind.ReproduceReplica, 3, StartTicks: 1)]);
+        HostStartDemand Read() => tracker.Judge(sample, HostStartKind.WindowedWorld, Thresholds, clock, false);
+        var first = Read();
+        Assert.False(first.Covered); // Old demand: 18 + (9 - 3) = 24, against 22.85 GB.
+        clock.Advance(HostStartTracker.Plateau / 2);
+        Assert.Equal(3, Read().GrowthGb);
+        clock.Advance(HostStartTracker.Plateau / 2);
+        var plateau = Read();
+        Assert.True(plateau.Covered);
+        Assert.Equal(0, plateau.GrowthGb);
+        // A process that releases and then allocates again must get its growth reserve back.
+        sample = sample with { Starts = [new(7, HostStartKind.ReproduceReplica, 1, StartTicks: 1)] };
+        Read();
+        sample = sample with { Starts = [new(7, HostStartKind.ReproduceReplica, 2, StartTicks: 1)] };
+        Assert.Equal(1, Read().GrowthGb);
+    }
+
+    [Fact]
+    public void MeasuredPeaksSurviveANewCliAndALowerMeasurementCannotEraseAHigherOne() {
+        using var directory = new Puck.Testing.TemporaryDirectory();
+        var clock = new GateClock();
+        void Measure(double peak) {
+            var tracker = new HostStartTracker(directory.RootPath);
+            tracker.Judge(Sample(starts: [new(8, HostStartKind.WindowedWorld, peak)]), HostStartKind.Step, Thresholds, clock, false);
+            clock.Advance(HostStartTracker.Plateau);
+            tracker.Judge(Sample(), HostStartKind.Step, Thresholds, clock, false);
+        }
+        Measure(13);
+        var next = new HostStartTracker(directory.RootPath);
+        var demand = next.Judge(Sample(commit: 50), HostStartKind.WindowedWorld, Thresholds, clock, false);
+        Assert.Equal(13, demand.OwnGb);
+        Assert.True(demand.Covered);
+        Measure(11);
+        next.Judge(Sample(), HostStartKind.Step, Thresholds, clock, false);
+        Assert.Equal(13, next.ExpectedPeakGb(HostStartKind.WindowedWorld));
+        var live = new HostStartTracker(directory.RootPath).Judge(
+            Sample(starts: [new(9, HostStartKind.WindowedWorld, 18)]), HostStartKind.WindowedWorld, Thresholds, clock, false);
+        Assert.Equal(18, live.OwnGb);
+    }
+
+    [Fact]
+    public void ADeadlinePrintsItsLastBlockerEvenWhenTheHeartbeatHasNotElapsed() {
+        var clock = new GateClock();
+        using var error = new StringWriter();
+        var reads = 0;
+        Assert.False(HostAdmission.Wait("start", true, false, () => Sample(gpu: ++reads == 1 ? "World 1" : "World 2"),
+            clock, clock.Advance, error, CancellationToken.None, Thresholds, TimeSpan.FromSeconds(1)));
+        Assert.Contains("refused start after 1 seconds: the GPU is held by World 2", error.ToString());
+    }
+    // An observed peak is never clipped to a fraction of the host limit; an unknown commit reading is not judged.
+    [Fact]
+    public void ARealPeakIsNeverClippedAndAnUnreadableCommitIsNotJudged() {
+        var tracker = new HostStartTracker();
+        var clock = new GateClock();
+        tracker.Judge(Sample(starts: [new(42, HostStartKind.WindowedWorld, 30)]), HostStartKind.Step, Thresholds, clock, false);
+        clock.Advance(HostStartTracker.Plateau);
+        var measured = tracker.Judge(Sample(commit: 20, limit: 32), HostStartKind.WindowedWorld, Thresholds, clock, false);
+        Assert.Equal(30, measured.OwnGb);
+        Assert.False(measured.Covered);
         Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: Sample(commit: (400.0 / 24.0), limit: 24), tracker: new HostStartTracker(), clock: new GateClock()));
         Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: Sample(starts: [new(Id: 1, Kind: HostStartKind.WindowedWorld, PrivateGb: 1)]), tracker: new HostStartTracker(), clock: new GateClock()));
     }

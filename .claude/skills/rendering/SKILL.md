@@ -773,10 +773,12 @@ compares and fails naming the file that drifted, it writes nothing.
   triangles reads the `SdfMesh` buffers rather than copying them: the debug
   world's published meshes are native payloads with explicit consumer claims, and every copy costs that
   much again in working set. A mesh the library published from its store lets its normals and coarser
-  levels' indices go once no region owes its words, and the region's owed set (`OwedMeshes`, which holds
-  `SdfMesh.Need` while a placement is owed) brings them back from the store before it lands the mesh
-  again (`SdfMesh.Restore.cs`). Reading those parts anywhere else while they are let go throws; a new
-  reader holds a need first. A published chunked mesh keeps no joined indices: read its chunks.
+  levels' indices go once no region needs its words, and brings them back from the store before they are
+  read again (`SdfMesh.Restore.cs`). `SdfMeshRegion.WriteMesh` takes an `SdfMesh.Held`, which only
+  `SdfMesh.Hold` makes (a need, waiting for or running the restore), so every region write, a coarsened
+  copy run's included, reads resident parts; the owed set (`OwedMeshes`) holds a need for the owed meshes
+  the latest list names so landing never waits on the frame thread. A new reader of those parts takes a
+  hold. A published chunked mesh keeps no joined indices: read its chunks.
 - A scoped creation emits one instance, a scope-free one an instance per shape
   (`CreationStampEmitter.PerCopyInstanceCount`). `world.budget` prints the live
   cost sheet.

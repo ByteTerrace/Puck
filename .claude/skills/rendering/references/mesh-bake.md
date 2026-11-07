@@ -802,7 +802,12 @@ laws exercise that boundary.
   through `TryLoad`, so a cold bake draws the decoded mesh a warm boot loads, and every store-published mesh's normals
   and coarser levels' indices can be let go once no region owes its words and restored from the entry when a
   region owes them again (`SdfMesh.Restore.cs`; the residency's store line reads `mesh-releases`, `mesh-restores`,
-  `mesh-released-now` and `mesh-restore-misses`). A restore the store cannot answer loses the geometry
+  `mesh-released-now` and `mesh-restore-misses`). Restores run on at most a quarter of the processors' pool
+  items and copy outside the storage's gate; any failure, an allocation's included, ends the storage lost. A
+  library that publishes from a set pins it (`SdfMeshStore.Hold`, `CacheRetention.HoldSet`: a shared lease
+  beside the set that no process's eviction passes) for the rest of its process. The held mesh's palette is
+  the first taker's only when later takers can renumber from it (`SdfMeshMaterials.Reversible`); otherwise
+  the store's canonical ids are held. A restore the store cannot answer loses the geometry
   (`SdfMeshLibrary.Lose`): the library forgets it, `LostRevision` moves, and each bake holding the library restarts on
   its program, baking again the groups whose meshes were lost (`Keeps`). A write the store refuses publishes the
   baked mesh, which keeps its parts.

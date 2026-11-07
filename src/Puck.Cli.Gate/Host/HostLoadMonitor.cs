@@ -61,15 +61,8 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Capa
     public const double ReproduceReplicaPeakGb = 9;
     /// <summary>The commit, in gigabytes, an ordinary step (a build, a verb that boots no World) is expected to reach.</summary>
     public const double StepPeakGb = 2;
-    /// <summary>The most a finished start's measured peak raises its kind's expected peak, as a multiple of the default, so
-    /// one outlier cannot make every later start of the kind wait for headroom that never comes.</summary>
-    public const double MeasuredPeakCeilingFactor = 2;
-    /// <summary>The most one start's expected peak counts, as a share of the commit limit, so a machine whose limit is
-    /// near one World's peak still admits that World once nothing else is growing.</summary>
-    public const double PeakShareOfCommitLimit = 0.5;
 
-    /// <summary>Returns the commit, in gigabytes, a start of a kind is expected to reach before a measurement of a finished
-    /// start of the same kind raises it.</summary>
+    /// <summary>Returns the fallback peak before this machine has measured a plateaued or finished start of the kind.</summary>
     /// <param name="kind">The start's kind.</param>
     /// <returns>The default expected peak.</returns>
     public static double DefaultPeakGb(HostStartKind kind) => kind switch {

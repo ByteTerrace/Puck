@@ -54,6 +54,9 @@ public sealed class SdfMeshRegionArena : IDisposable {
     /// <summary>Gets each placed mesh's words, keyed by reference: every mesh the latest list names, and the meshes
     /// earlier lists named that the arena still keeps.</summary>
     public Dictionary<SdfMesh, SdfMeshRegionMesh> Placements => m_placements;
+    /// <summary>Gets the meshes the latest list names, the same set object for the arena's lifetime; placements the
+    /// arena keeps beyond them are retained for a list that names them again.</summary>
+    public IReadOnlySet<SdfMesh> Named => m_named;
     /// <summary>Gets the draw records the region reserves ahead of the arena.</summary>
     public int DrawCapacity => m_drawCapacity;
     /// <summary>Gets the region's words: the reserved draw records and the arena up to its last placed mesh.</summary>

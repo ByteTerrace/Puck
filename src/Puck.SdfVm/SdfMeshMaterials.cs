@@ -8,6 +8,26 @@ internal static class SdfMeshMaterials {
         return (((place >= 0) && (place < to.Length)) ? unchecked((uint)to[place]) : material);
     }
 
+    // Whether a mesh whose triangle ids are `from`'s can be held in `to`'s ids and renumbered from them again by place:
+    // `to` names each place by a distinct id, and no id outside `from` (one no shape of the group owns, which renumbering
+    // keeps) is one of `to`'s, where it would read as a place.
+    internal static bool Reversible(IReadOnlyList<SdfMesh> pieces, int[] from, int[] to) {
+        if (to.Distinct().Count() != to.Length) { return false; }
+
+        bool Collides(ReadOnlySpan<uint> values) {
+            foreach (var value in values) {
+                if ((Array.IndexOf(array: from, value: unchecked((int)value)) < 0) && (Array.IndexOf(array: to, value: unchecked((int)value)) >= 0)) { return true; }
+            }
+            return false;
+        }
+
+        foreach (var piece in pieces) {
+            if (Collides(values: piece.TriangleMaterials.Span)) { return false; }
+            foreach (var level in piece.Levels) { if (Collides(values: level.TriangleMaterials.Span)) { return false; } }
+        }
+        return true;
+    }
+
     // Shapes are keyed by material place, never by a program's palette registration. Keep ids no shape owns
     // unchanged, and reserve them before choosing canonical ids so a load cannot mistake one for a place.
     internal static int[] Canonical(IReadOnlyList<SdfMesh> pieces, int[] materials) {

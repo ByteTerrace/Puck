@@ -30,8 +30,24 @@ public static class HostQuiet {
     public static async Task<string?> SettleAsync(TimeSpan settle, TimeSpan timeout, TextWriter progress, TimeProvider clock, CancellationToken cancellationToken) {
         var thresholds = HostLoadThresholds.ThisMachine;
         var probe = new HostProbe(checkoutRoot: Environment.CurrentDirectory);
+        return await SettleAsync(settle, timeout, progress, clock, cancellationToken,
+            () => Task.Run(() => probe.Sample(TimeSpan.FromSeconds(1)), cancellationToken), thresholds).ConfigureAwait(false);
+    }
+
+    /// <summary>Settles injected host readings using the same idle decision as the real sampler.</summary>
+    /// <param name="settle">Required uninterrupted idle time.</param>
+    /// <param name="timeout">Settle time plus the extra load wait allowance, after collecting the CPU window.</param>
+    /// <param name="progress">Receives progress and blockers.</param>
+    /// <param name="clock">Clock for host waits.</param>
+    /// <param name="cancellationToken">Cancels sampling and waits.</param>
+    /// <param name="sample">Reads the host.</param>
+    /// <param name="thresholds">Idle thresholds.</param>
+    /// <returns>Null when settled, otherwise the blocker at the deadline.</returns>
+    public static async Task<string?> SettleAsync(TimeSpan settle, TimeSpan timeout, TextWriter progress, TimeProvider clock,
+        CancellationToken cancellationToken, Func<Task<HostSample>> sample, HostLoadThresholds thresholds) {
         var monitor = new HostLoadMonitor(cpuSamples: Window, thresholds: thresholds);
-        var started = clock.GetTimestamp();
+        long? started = null;
+        var samples = 0;
         long? idleSince = null;
         string? reported = null;
 
@@ -40,14 +56,21 @@ public static class HostQuiet {
         while (true) {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var sample = await Task.Run(function: () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            var reading = await sample().ConfigureAwait(false);
 
-            _ = monitor.Observe(sample: sample);
+            _ = monitor.Observe(sample: reading);
+            // Collecting a CPU mean is sampler setup, not load and not part of the required idle window.
+            if (++samples < Window) {
+                await Task.Delay(Interval, clock, cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+            var now = clock.GetTimestamp();
+            started ??= now;
 
-            var why = Busy(monitor: monitor, sample: sample);
+            var why = Busy(monitor: monitor, sample: reading);
 
             if (why is null) {
-                idleSince ??= clock.GetTimestamp();
+                idleSince ??= now;
 
                 if (clock.GetElapsedTime(startingTimestamp: idleSince.Value) >= settle) {
                     progress.WriteLine(value: $"lease quiet: the machine has been idle for {settle.TotalSeconds:0} seconds.");
@@ -65,9 +88,10 @@ public static class HostQuiet {
                 }
             }
 
-            var remaining = (timeout - clock.GetElapsedTime(startingTimestamp: started));
+            var remaining = timeout - clock.GetElapsedTime(started.Value, now);
+            var idle = idleSince is { } since ? clock.GetElapsedTime(since, now) : TimeSpan.Zero;
 
-            if (remaining <= TimeSpan.Zero) { return $"the machine was not idle for {settle.TotalSeconds:0} seconds within {timeout.TotalSeconds:0}: {(why ?? "the idle window had not yet run")}."; }
+            if (remaining <= TimeSpan.Zero || remaining < settle - idle || (why is not null && remaining <= settle)) { return $"the machine was not idle for {settle.TotalSeconds:0} seconds within {timeout.TotalSeconds:0}: {(why ?? "the idle window had not yet run")}."; }
 
             await Task.Delay(delay: ((remaining < Interval) ? remaining : Interval), timeProvider: clock, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
         }
