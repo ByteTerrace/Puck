@@ -693,7 +693,8 @@ public sealed partial class WorldReleaseCutoverLawTests {
         Assert.True(condition: restoredAlpha.Server.ExecuteAuthorityOperation(operation: () => restoredAlpha.Server.Population.TryResumeParkedPeer(
             admitted: out _,
             identityDomain: "probe",
-            identitySubject: "player"
+            identitySubject: "player",
+            admissionTrust: restoredAlpha.Server.Population.PeerAdmissionTrust(bodyIndex: PeerSlot)
         )));
         Assert.False(condition: restoredAlpha.Server.Population.IsParked(index: PeerSlot));
         Assert.Equal(

@@ -1,7 +1,6 @@
 using Puck.Testing;
 using Puck.Commands;
 using Xunit;
-
 using Puck.World.Protocol;
 
 namespace Puck.World.Server.Tests;
@@ -19,6 +18,25 @@ namespace Puck.World.Server.Tests;
 /// mint. Both halves are measured here against the same grant table.</para>
 /// </summary>
 public sealed class ParkedGrantReleaseLawTests {
+    [Fact]
+    public void ParkedPeerRequiresTheSameAdmissionTrustToResume() {
+        using var fixture = Fixtures.FreshServer(definition: WithGrace(seconds: 3.0f));
+        var trust = new WorldAdmissionTrustIdentity(WorldAdmissionTrustMode.SignsDirectly, "test", "peer", "algorithm", "key");
+        var entry = PeerEntry(peer: Principal.Peer(index: PeerBodyIndex, generation: PeerGeneration)) with { AdmissionTrust = trust };
+        fixture.Server.ApplyServerEvent(serverEvent: new WorldServerEvent.PeerAdmitted(Entries: [entry], MintedGrants: []));
+        Disconnect(fixture: fixture, peer: fixture.Server.Population.PeerPrincipal(index: PeerBodyIndex));
+        Assert.True(condition: fixture.Server.Population.IsParked(index: PeerBodyIndex));
+        Assert.False(condition: fixture.Server.Population.TryResumeParkedPeer(identityDomain: "test", identitySubject: "peer",
+            admissionTrust: trust with { Mode = WorldAdmissionTrustMode.OAuth }, admitted: out _));
+        Assert.True(condition: fixture.Server.Population.IsParked(index: PeerBodyIndex));
+        Assert.False(condition: fixture.Server.Population.TryResumeParkedPeer(identityDomain: "test", identitySubject: "peer",
+            admissionTrust: trust with { KeyHash = "another-key" }, admitted: out _));
+        Assert.True(condition: fixture.Server.Population.TryResumeParkedPeer(identityDomain: "test", identitySubject: "peer",
+            admissionTrust: trust, admitted: out var resumed));
+        Assert.Equal(expected: trust, actual: resumed.AdmissionTrust);
+        Assert.Equal(expected: entry.Generation, actual: resumed.Generation);
+    }
+
     private const int PeerBodyIndex = 4;
     private const int PeerGeneration = 1;
 

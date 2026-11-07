@@ -73,11 +73,11 @@ internal static class CompileShaderCommand {
 
                 // Bytecode under a project's Assets ships as content that built outputs hard-link to: replace each file,
                 // never write through it.
-                Puck.Abstractions.AtomicFile.WriteAllBytes(
+                Puck.Confinement.AtomicFile.WriteAllBytes(
                     bytes: compiled.SpirvByStage[shaderStage].Span,
                     path: spirvPath
                 );
-                Puck.Abstractions.AtomicFile.WriteAllBytes(
+                Puck.Confinement.AtomicFile.WriteAllBytes(
                     bytes: compiled.DxilByStage[shaderStage].Span,
                     path: dxilPath
                 );

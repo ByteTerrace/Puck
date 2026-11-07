@@ -31,7 +31,7 @@ public sealed class DirectoryReleaseSource(string root) : IReleaseSource {
         var channel = Path.Combine(path1: m_root, path2: manifest.Channel);
 
         Directory.CreateDirectory(path: channel);
-        Puck.Abstractions.AtomicFile.WriteAllBytes(Path.Combine(path1: channel, path2: "manifest.json"), canonical.Bytes);
+        Puck.Confinement.AtomicFile.WriteAllBytes(Path.Combine(path1: channel, path2: "manifest.json"), canonical.Bytes);
         return manifest;
     }
     /// <inheritdoc/>

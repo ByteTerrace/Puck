@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using System.IO.MemoryMappedFiles;
 using System.Text;
 using Puck.Testing;

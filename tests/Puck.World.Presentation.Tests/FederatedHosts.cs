@@ -53,8 +53,9 @@ internal sealed class FederatedHosts : IDisposable {
             stateRoot: new WorldStateRoot(path: Directory.CreateDirectory(path: m_scratch.PathOf(name: "destination-state")).FullName)
         );
         SourceRow = HostRow.Build(name: WorldInstanceHost.BootInstanceName);
+        var destinationDefinition = Fixtures.PeerPopulationDocument(networkPlayers: 2);
         DestinationRow = HostRow.Build(
-            definition: Fixtures.PeerPopulationDocument(networkPlayers: 2),
+            definition: destinationDefinition with { HostRaw = destinationDefinition.Host with { AuthorityNamespace = DestinationName } },
             name: DestinationName
         );
         OnwardRow = HostRow.Build(

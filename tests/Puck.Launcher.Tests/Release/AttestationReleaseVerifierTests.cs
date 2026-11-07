@@ -32,8 +32,8 @@ public sealed class AttestationReleaseVerifierTests {
             return accepted;
         }
 
-        public bool TryAdvance(ReplayCommitRequirement requirement) => m_inner.TryAdvance(requirement: requirement);
-        public bool TryReserve(ReplayCommitRequirement requirement, Puck.Assets.ContentPin manifestPin) => m_inner.TryReserve(requirement: requirement, manifestPin: manifestPin);
+        public ReleaseDecision TryAdvance(ReplayCommitRequirement requirement) => m_inner.TryAdvance(requirement: requirement);
+        public ReleaseDecision TryReserve(ReplayCommitRequirement requirement, Puck.Assets.ContentPin manifestPin) => m_inner.TryReserve(requirement: requirement, manifestPin: manifestPin);
         public bool IsReserved(ReplayCommitRequirement requirement, Puck.Assets.ContentPin manifestPin) => m_inner.IsReserved(requirement: requirement, manifestPin: manifestPin);
         public void Dispose() => m_previews.Dispose();
     }

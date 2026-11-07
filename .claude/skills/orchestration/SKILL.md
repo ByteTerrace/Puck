@@ -665,8 +665,11 @@ in those two launches lists none of them, though the project registration is
 enabled (`codex mcp list`), the launcher runs (it installs the worktree's
 `.claude/mcp-install`) and other servers stay visible. A read-only review lane therefore reads sources and cannot drive a World.
 
-An Antigravity lane runs `agy -p "$(cat <brief>)" --output-format text` from
-its worktree, without `--mode`: headless flag validation rejects `--mode auto`
+An Antigravity lane runs `agy -p "$(cat <brief>)" --output-format stream-json` from
+its worktree, without `--mode`, writing to the lane log: one NDJSON line per step keeps the log growing, so
+`puck lanes` sees progress through a long read phase (with `text` the log stays empty until the end and a
+working lane reads as a stall), and the final `result` event's `response` is the hand-back
+(in PowerShell, `Get-Content <log> | Where-Object { $_ -match '"event":"result"' } | ConvertFrom-Json | ForEach-Object { $_.result.response }`). `--mode` stays off because headless flag validation rejects `--mode auto`
 before sign-in, while the user-level `agentMode: "auto"` applies afterwards.
 Auto mode ignores the ask list; git-safety refuses pushes and shared-state Git
 operations. A headless run executes only commands its user-level allow list
@@ -989,10 +992,11 @@ large-context read of a whole subsystem, a second synthesis voice.
 
 What the Antigravity sandbox cannot do is an environment fact, not a judgement.
 A headless `agy -p` run has web search (`search_web`, which returns
-Google-grounded summaries with redirect links and names the pages it drew on),
-but no tool that opens a page (the `read_url` permission is set, yet headless
-mode declares no URL-reading tool), no network from its terminal, no GPU, and
-it refuses pushes and shared-state Git; a probe asking it to open a page got a
+Google-grounded summaries with redirect links and names the pages it drew on).
+A run's `init` event (with `stream-json`) lists the tools it declares: check it
+rather than this paragraph, since one run declared `read_url_content` where
+earlier headless runs had no page reader. It has no network from its terminal,
+no GPU, and it refuses pushes and shared-state Git; a probe asking it to open a page got a
 plain, accurate refusal naming each limit. So a brief tells it it may search,
 copies any page whose exact text matters into its workspace (or pairs it with a
 lane that opens pages), asks it to cite only what it opened and quoted and to

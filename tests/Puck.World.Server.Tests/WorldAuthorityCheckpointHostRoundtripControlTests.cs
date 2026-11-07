@@ -1,6 +1,5 @@
 using Puck.Commands;
 using Xunit;
-
 using Puck.Testing;
 using Puck.World.Protocol;
 
@@ -326,6 +325,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests : IDisposa
         Assert.True(condition: restoredHonest.Population.TryResumeParkedPeer(
             identityDomain: entry.IdentityDomain,
             identitySubject: entry.IdentitySubject,
+            admissionTrust: entry.AdmissionTrust,
             admitted: out var resumed
         ));
         Assert.Equal(

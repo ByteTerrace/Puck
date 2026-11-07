@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using System.Text;
 using Puck.Abstractions;
 using Puck.Assets;

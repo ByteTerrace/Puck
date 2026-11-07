@@ -23,6 +23,9 @@ public sealed partial class DocsCodeCitations(string repositoryRoot) {
     private static partial Regex Continuation();
     [GeneratedRegex(@"\b[a-z][a-z0-9+.-]*://[^\s`)>]+", RegexOptions.IgnoreCase)]
     private static partial Regex Address();
+    // A pasted listing's line-number gutter: `271: code` or the Read tool's `271\tcode`.
+    [GeneratedRegex(@"^\s*\d+(?::\s?|\t)")]
+    private static partial Regex Gutter();
 
     private readonly Dictionary<string, string[]> m_trees = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string?> m_revisions = new(StringComparer.Ordinal);
@@ -178,7 +181,7 @@ public sealed partial class DocsCodeCitations(string repositoryRoot) {
             var marker = Fence().Match(line);
             if (fence is not null) {
                 if (marker.Success && marker.Groups["fence"].Value[0] == fence[0] && marker.Groups["fence"].Length >= fence.Length && marker.Groups["info"].Value.Trim().Length == 0) {
-                    foreach (var owner in owners) {
+                    foreach (var owner in Owning(owners, [.. quote], document)) {
                         owner.Quotes.Add([.. quote]);
                     }
                     fence = null;
@@ -220,6 +223,56 @@ public sealed partial class DocsCodeCitations(string repositoryRoot) {
         return all.Select(occurrence => Verify(occurrence, document)).ToArray();
     }
 
+    // A quotation as pasted from a numbered listing is still a quotation: when every non-blank line carries a line-number
+    // gutter, the gutter is dropped, and a line that is only an elision (`...` or `…`) splits the quotation into pieces that
+    // must each occur.
+    private static IEnumerable<string[]> Pieces(string[] quote) {
+        var numbered = quote.Any(line => line.Trim().Length != 0 && !IsElision(line)) &&
+            quote.Where(line => line.Trim().Length != 0 && !IsElision(line)).All(line => Gutter().IsMatch(line));
+        var piece = new List<string>();
+        var any = false;
+        foreach (var line in quote) {
+            if (IsElision(line)) {
+                if (piece.Count != 0) {
+                    any = true;
+                    yield return [.. piece];
+                    piece.Clear();
+                }
+                continue;
+            }
+            piece.Add(numbered ? Gutter().Replace(line, "", 1) : line);
+        }
+        if (piece.Count != 0 || !any) {
+            yield return [.. piece]; // Nothing but elisions is an empty quotation, which cannot verify.
+        }
+    }
+    private static bool IsElision(string line) => line.Trim() is "..." or "…";
+
+    // A fence introduced by several locations (`a.cs:10-12` and `b.cs:40-44`, then one block each) belongs to the location
+    // whose range it quotes; only a quotation no introducing location holds is charged to them all.
+    private List<Occurrence> Owning(List<Occurrence> owners, string[] quote, string document) {
+        if (owners.Count < 2) {
+            return owners;
+        }
+        var fitting = owners.Where(owner => Pieces(quote).All(piece => Near(owner, piece, document))).ToList();
+        return fitting.Count != 0 ? fitting : owners;
+    }
+    private bool Near(Occurrence owner, string[] piece, string document) {
+        var (source, _) = Read(owner, document);
+        var needle = Normalize(piece).Text;
+        if (source is null || needle.Length == 0) {
+            return false;
+        }
+        var normalized = Normalize(source);
+        for (var offset = normalized.Text.IndexOf(needle, StringComparison.Ordinal); offset >= 0; offset = normalized.Text.IndexOf(needle, offset + 1, StringComparison.Ordinal)) {
+            var line = (long)normalized.Lines[offset];
+            if (line >= (long)owner.Start - Window && line <= (long)owner.End + Window) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private Result Verify(Occurrence occurrence, string document) {
         var label = $"{occurrence.Path}:{occurrence.Start}" + (occurrence.End == occurrence.Start ? "" : $"-{occurrence.End}");
         Result Result(string status, string detail) => new(occurrence.Line, label, status, $"{occurrence.Revision}: {detail}");
@@ -235,7 +288,7 @@ public sealed partial class DocsCodeCitations(string repositoryRoot) {
         }
         var normalized = Normalize(source);
         var drift = new List<int>();
-        foreach (var quote in occurrence.Quotes) {
+        foreach (var quote in occurrence.Quotes.SelectMany(Pieces)) {
             var needle = Normalize(quote).Text;
             var matches = new List<int>();
             if (needle.Length != 0) {

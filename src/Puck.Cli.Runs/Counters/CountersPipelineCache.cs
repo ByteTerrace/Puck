@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using Puck.Abstractions;
 
 namespace Puck.Cli.Counters;
