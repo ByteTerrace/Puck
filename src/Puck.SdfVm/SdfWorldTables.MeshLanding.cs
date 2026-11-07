@@ -104,7 +104,7 @@ public sealed partial class SdfWorldTables {
             var mesh = m_landingOrder[m_landingCursor];
 
             if (!m_meshesOwed.Contains(mesh: mesh)) { m_landingCursor++; continue; }
-            if (!m_landing.ContainsKey(key: mesh) && !mesh.Resident) {
+            if (!mesh.Resident) {
                 if (waiting < 0) { waiting = m_landingCursor; }
                 m_landingCursor++;
                 continue;
@@ -186,35 +186,53 @@ public sealed partial class SdfWorldTables {
     private string DescribeLandingJobs() => string.Create(provider: CultureInfo.InvariantCulture,
         handler: $"landing-jobs={m_landingJobs} landing-bytes={m_landingBytes}B landing-most={m_landingMostBytes}B landing-stale={m_landingStale} landing-chunk={SdfGpuWork.UploadChunkBytes}B");
 
-    // The placed meshes whose words the region owes. A mesh holds a need on its storage (SdfMesh.Need) from the moment it is
-    // owed until it leaves, so its normals and coarser levels stay in memory, or come back from the store, until its words
-    // land: the one door between the region and a mesh's restorable parts.
-    private sealed class OwedMeshes {
+    // The placed meshes whose words the region owes. An owed mesh the latest list names holds a need on its storage
+    // (SdfMesh.Need), so its normals and coarser levels stay in memory, or come back from the store off the frame thread,
+    // until its words land; an owed mesh the list stopped naming lets its need go, and takes it again when a list names it
+    // (Sync). Landing takes only named meshes, and any other read of a mesh's words goes through a hold (MeshWordsOf).
+    private sealed class OwedMeshes(IReadOnlySet<SdfMesh> named) {
         private HashSet<SdfMesh> m_set = new(comparer: ReferenceEqualityComparer.Instance);
         private HashSet<SdfMesh> m_spare = new(comparer: ReferenceEqualityComparer.Instance);
+        // The owed meshes holding a need: those the latest list names.
+        private readonly HashSet<SdfMesh> m_needed = new(comparer: ReferenceEqualityComparer.Instance);
+        private readonly List<SdfMesh> m_changes = [];
 
         public IReadOnlySet<SdfMesh> Set => m_set;
         public int Count => m_set.Count;
         public bool Contains(SdfMesh mesh) => m_set.Contains(item: mesh);
-        public void Add(SdfMesh mesh) { if (m_set.Add(item: mesh)) { mesh.Need(); } }
+        public void Add(SdfMesh mesh) {
+            if (m_set.Add(item: mesh) && named.Contains(item: mesh) && m_needed.Add(item: mesh)) { mesh.Need(); }
+        }
         public bool Remove(SdfMesh mesh) {
             if (!m_set.Remove(item: mesh)) { return false; }
-            mesh.Unneed();
+            if (m_needed.Remove(item: mesh)) { mesh.Unneed(); }
             return true;
         }
         public void UnionWith(IEnumerable<SdfMesh> meshes) { foreach (var mesh in meshes) { Add(mesh: mesh); } }
-        // Owes exactly these meshes, taking each new need before letting any old one go, so a mesh owed both before and
-        // after keeps its storage.
+        // Owes exactly these meshes, taking each new need before letting any old one go, so a mesh owed and named both
+        // before and after keeps its storage.
         public void ReplaceWith(IEnumerable<SdfMesh> meshes) {
             m_spare.Clear();
-            foreach (var mesh in meshes) {
-                if (m_spare.Add(item: mesh) && !m_set.Contains(item: mesh)) { mesh.Need(); }
-            }
-            foreach (var mesh in m_set) {
-                if (!m_spare.Contains(item: mesh)) { mesh.Unneed(); }
-            }
+            foreach (var mesh in meshes) { _ = m_spare.Add(item: mesh); }
             (m_set, m_spare) = (m_spare, m_set);
             m_spare.Clear();
+            Sync();
+        }
+        // Takes a need for each owed mesh the latest list names and lets go of each one it no longer names, new needs
+        // first.
+        public void Sync() {
+            m_changes.Clear();
+            foreach (var mesh in m_set) {
+                if (named.Contains(item: mesh) && m_needed.Add(item: mesh)) { mesh.Need(); }
+            }
+            foreach (var mesh in m_needed) {
+                if (!m_set.Contains(item: mesh) || !named.Contains(item: mesh)) { m_changes.Add(item: mesh); }
+            }
+            foreach (var mesh in m_changes) {
+                _ = m_needed.Remove(item: mesh);
+                mesh.Unneed();
+            }
+            m_changes.Clear();
         }
         public void RemoveWhere(Predicate<SdfMesh> match) {
             m_spare.Clear();
@@ -223,7 +241,8 @@ public sealed partial class SdfWorldTables {
             m_spare.Clear();
         }
         public void Clear() {
-            foreach (var mesh in m_set) { mesh.Unneed(); }
+            foreach (var mesh in m_needed) { mesh.Unneed(); }
+            m_needed.Clear();
             m_set.Clear();
         }
     }

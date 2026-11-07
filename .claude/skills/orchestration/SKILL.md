@@ -486,7 +486,13 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   that counted a new `counters` process as GPU work held the gpu lease waiting
   on that process, which waited on the lease). A copy below the lease root's
   recorded protocol refuses to queue by name rather than deadlocking, so a lane
-  that missed the message finds out at its next lease. A report stores each signal's rule colour (`status`) apart
+  that missed the message finds out at its next lease. The lane that raises the
+  protocol never runs its own CLI's leased verbs on the shared lease root before
+  it lands: the first such run records the new protocol and refuses every other
+  copy on the machine (a scheduler lane's demonstration did this and blocked
+  every running lane's leased runs until it landed). Its brief says so, and it
+  proves the change with laws over a private lease directory; the lead lands it
+  promptly and announces the rebuild. A run is all-or-nothing for the fleet. A report stores each signal's rule colour (`status`) apart
   from its baseline comparison's (`comparison`), and a later comparison reads
   only the rule colour, so a tip report recorded with or without `--baseline`
   serves equally. The lead runs it, and every lead verb, from a CLI built at the tip, and reinstalls the

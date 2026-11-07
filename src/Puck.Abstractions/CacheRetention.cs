@@ -53,6 +53,11 @@ public readonly record struct CacheRetentionResult(int Removed, long RemovedByte
 /// A stamp is file-system metadata and a cache's contents are content-addressed, so retention never decides what a
 /// cache answers: an evicted entry costs its next reader a derivation, never a different result.
 /// </para>
+/// <para>
+/// A set a running process depends on is pinned by its hold (<see cref="HoldSet"/>): a shared lock on the lease file
+/// beside the set's directory, which the operating system releases with the process however it ends. No enforcement, in
+/// any process, removes a pinned set or trims its entries; it counts against the bound first, as the set in use does.
+/// </para>
 /// </summary>
 public static class CacheRetention {
     /// <summary>The longest a writing process goes without listing a directory it writes, so that it counts other
@@ -86,15 +91,59 @@ public static class CacheRetention {
     /// <exception cref="ArgumentOutOfRangeException">The bound keeps no entry or a negative number of bytes.</exception>
     public static IReadOnlyList<CacheEntry> SelectEvictions(IEnumerable<CacheEntry> entries, CacheBound bound, string? inUse = null, DateTime? usedSinceUtc = null) {
         ArgumentNullException.ThrowIfNull(argument: entries);
+
+        return SelectEvictionsCore(bound: bound, entries: entries, kept: entry => IsInUse(entry: entry, inUse: inUse), usedSinceUtc: usedSinceUtc);
+    }
+    /// <summary>Pins a set against every enforcement (<see cref="EnforceSets"/>, <see cref="EnforceSetsOnWrite"/>) while the
+    /// returned hold stays open: a shared lock on <c>&lt;set&gt;.lease</c> beside the set's directory, which any number
+    /// of processes may hold together. The set need not exist yet.</summary>
+    /// <param name="setDirectory">The set's directory: a subdirectory of the cache directory.</param>
+    /// <returns>The hold, released when disposed or when its process ends; or <see langword="null"/> when the lease file
+    /// cannot be opened, so the set is not pinned.</returns>
+    /// <exception cref="ArgumentException"><paramref name="setDirectory"/> is <see langword="null"/>, empty or white
+    /// space.</exception>
+    public static FileStream? HoldSet(string setDirectory) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: setDirectory);
+
+        try {
+            return FileLock.TryAcquireShared(path: LeaseOf(set: Path.GetFullPath(path: setDirectory)));
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            return null;
+        }
+    }
+    // The lease a set's holders lock shared, beside the set's directory, so it is never one of the set's entries.
+    private static string LeaseOf(string set) => (Path.TrimEndingDirectorySeparator(path: set) + ".lease");
+    // Whether a process holds a set's lease: an exclusive open of an existing lease fails while any holder has it.
+    private static bool IsPinned(string set) {
+        var lease = LeaseOf(set: set);
+
+        if (!File.Exists(path: lease)) { return false; }
+        try {
+            using var probe = FileLock.TryAcquire(path: lease);
+
+            return (probe is null);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            return false;
+        }
+    }
+    // Deletes an evicted set's lease while no holder can take it.
+    private static void DeleteLease(string set) {
+        try {
+            using var deleting = FileLock.TryAcquireForDeletion(path: LeaseOf(set: set));
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            // Left for a later eviction.
+        }
+    }
+    private static List<CacheEntry> SelectEvictionsCore(IEnumerable<CacheEntry> entries, CacheBound bound, Func<CacheEntry, bool> kept, DateTime? usedSinceUtc) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: bound.MaxEntries, other: 1, paramName: nameof(bound));
         ArgumentOutOfRangeException.ThrowIfNegative(value: bound.MaxBytes, paramName: nameof(bound));
 
         var ordered = entries.ToList();
 
         ordered.Sort(comparison: (left, right) => {
-            var leftInUse = IsInUse(entry: left, inUse: inUse);
+            var leftInUse = kept(arg: left);
 
-            if (leftInUse != IsInUse(entry: right, inUse: inUse)) {
+            if (leftInUse != kept(arg: right)) {
                 return (leftInUse ? -1 : 1);
             }
 
@@ -109,7 +158,7 @@ public static class CacheRetention {
         var full = false;
 
         foreach (var entry in ordered) {
-            if (IsInUse(entry: entry, inUse: inUse)) {
+            if (kept(arg: entry)) {
                 count++;
                 bytes += entry.Bytes;
             } else if (!full && (count < bound.MaxEntries) && (entry.Bytes <= (bound.MaxBytes - bytes)) && ((usedSinceUtc is not { } since) || (entry.LastUsedUtc >= since))) {
@@ -317,9 +366,12 @@ public static class CacheRetention {
 
         if ((sets.Count > bound.MaxEntries) || (totalBytes > bound.MaxBytes)) {
             var inUseSet = ((used is null) ? -1 : sets.FindIndex(match: set => set.Entries.Any(predicate: entry => IsInUse(entry: entry, inUse: used))));
+            // Sets a running process holds (HoldSet) are kept whole whatever their stamps.
+            var pinned = new HashSet<string>(collection: sets.Where(predicate: static set => Directory.Exists(path: set.Set.Path) && IsPinned(set: set.Set.Path)).Select(selector: static set => set.Set.Path), comparer: PuckPaths.Comparer);
+            var inUsePath = ((inUseSet >= 0) ? sets[inUseSet].Set.Path : null);
 
-            // The set in use trims itself first when it alone holds more than the bound.
-            if ((inUseSet >= 0) && (sets[inUseSet].Set.Bytes > trimTo.MaxBytes)) {
+            // The set in use trims itself first when it alone holds more than the bound, unless a process pins it.
+            if ((inUseSet >= 0) && !pinned.Contains(item: sets[inUseSet].Set.Path) && (sets[inUseSet].Set.Bytes > trimTo.MaxBytes)) {
                 var (set, entries) = sets[inUseSet];
                 var kept = set.Bytes;
 
@@ -334,7 +386,7 @@ public static class CacheRetention {
                 sets[inUseSet] = ((set with { Bytes = kept }), entries);
             }
 
-            foreach (var eviction in SelectEvictions(bound: trimTo, entries: sets.Select(selector: static set => set.Set), inUse: ((inUseSet >= 0) ? sets[inUseSet].Set.Path : null))) {
+            foreach (var eviction in SelectEvictionsCore(bound: trimTo, entries: sets.Select(selector: static set => set.Set), kept: set => (pinned.Contains(item: set.Path) || IsInUse(entry: set, inUse: inUsePath)), usedSinceUtc: null)) {
                 var whole = true;
 
                 foreach (var entry in sets.First(predicate: set => string.Equals(a: set.Set.Path, b: eviction.Path, comparisonType: PuckPaths.Comparison)).Entries) {
@@ -355,6 +407,7 @@ public static class CacheRetention {
                 }
                 if (whole) {
                     _ = gone.Add(item: eviction.Path);
+                    DeleteLease(set: eviction.Path);
                 }
             }
         }
