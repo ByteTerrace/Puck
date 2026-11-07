@@ -167,6 +167,9 @@ public static class SdfMeshCollapse {
         private int[] m_fanCorner = new int[16];
         private int[] m_fanNext = new int[16];
         private int[] m_fanAfter = new int[16];
+        private int[] m_fanTwin = new int[16];
+        // Scratch for Kind's current fan only; every endpoint it reads is cleared before indexing that fan.
+        private readonly (int Outgoing, int Incoming)[] m_fanEdges;
         private Candidate[] m_measured = new Candidate[16];
         private OriginalTriangle[] m_previous = new OriginalTriangle[16];
         private int[] m_laid = new int[16];
@@ -222,6 +225,7 @@ public static class SdfMeshCollapse {
             m_changed = new int[m_places];
             m_revisions = new int[m_places];
             m_stamp = new int[m_places];
+            m_fanEdges = new (int, int)[m_places];
             m_kind = new byte[m_places];
             m_candidateCosts = new double[m_places];
             m_candidatePlaces = new int[m_places];
@@ -465,26 +469,30 @@ public static class SdfMeshCollapse {
                 m_fanCorner = new int[(2 * count)];
                 m_fanNext = new int[(2 * count)];
                 m_fanAfter = new int[(2 * count)];
+                m_fanTwin = new int[(2 * count)];
             }
             for (var at = 0; (at < count); at++) {
                 (m_fanCorner[at], m_fanNext[at], m_fanAfter[at]) = Around(place: place, triangle: fan[at]);
+                m_fanEdges[m_fanNext[at]] = (-1, -1);
+                m_fanEdges[m_fanAfter[at]] = (-1, -1);
+            }
+            // Each neighbour must have exactly one outgoing and one incoming edge. Index those edges once rather
+            // than searching the complete fan for every edge, then searching it again to walk the ring.
+            for (var at = 0; (at < count); at++) {
+                ref var next = ref m_fanEdges[m_fanNext[at]];
+                ref var after = ref m_fanEdges[m_fanAfter[at]];
+                next.Outgoing = ((next.Outgoing == -1) ? at : -2);
+                after.Incoming = ((after.Incoming == -1) ? at : -2);
             }
 
             for (var at = 0; (at < count); at++) {
                 var next = m_fanNext[at];
-                var outgoing = 0;
-                var incoming = -1;
-                var incomingCount = 0;
-
-                // The edge from this place to `next` runs out of this triangle; its twin runs in to this place from `next`.
-                for (var other = 0; (other < count); other++) {
-                    outgoing += ((m_fanNext[other] == next) ? 1 : 0);
-                    if (m_fanAfter[other] == next) {
-                        incoming = other;
-                        incomingCount++;
-                    }
-                }
-                if ((outgoing != 1) || (incomingCount != 1)) { return Locked; }
+                var edge = m_fanEdges[next];
+                // Keep the original edge order, including the penalty prefix before a malformed edge refuses the
+                // fan. Those quadrics also price a locked place as a collapse target.
+                if ((edge.Outgoing < 0) || (edge.Incoming < 0)) { return Locked; }
+                var incoming = edge.Incoming;
+                m_fanTwin[at] = incoming;
 
                 var corner = m_fanCorner[at];
                 var twinCorner = m_fanCorner[incoming];
@@ -525,21 +533,14 @@ public static class SdfMeshCollapse {
 
             return ((m_features.Count <= 1) ? Free : Slides);
         }
-        // Whether the triangles Kind laid out close one ring about their place, each triangle's after place the next place
-        // of the one following it.
+        // Whether Kind's bijection closes one ring rather than several disjoint rings. Follow the incoming twins;
+        // reversing the old outgoing walk visits the same cycle, without searching the fan at every step.
         private bool OneRing(int count) {
             var at = 0;
             var steps = 0;
 
             do {
-                var after = m_fanAfter[at];
-                var following = -1;
-
-                for (var other = 0; (other < count); other++) {
-                    if (m_fanNext[other] == after) { following = other; }
-                }
-
-                at = following;
+                at = m_fanTwin[at];
                 steps++;
             } while ((at > 0) && (steps <= count));
 

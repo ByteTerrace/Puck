@@ -3175,8 +3175,10 @@ after `world.wait bakes` completes its bake, matched by residency identity rathe
 than display name. Late-starting residencies are included; a reported residency
 with no completion fails the sample with its reason. The report retains each
 residency's identity and observed endpoints. It uses `--paused --lockstep` to pin
-authority and display clocks before the first frame and isolate baking from
-lighting work. This measures the lockstep bake, not an ordinary windowed cold boot.
+authority and display clocks before the first frame. Lockstep forces lighting
+convergence and can leave the readiness barrier waiting long after every bake
+finished; allow for that work in `--timeout-seconds`.
+This measures the lockstep bake, not an ordinary windowed cold boot.
 It requires a windowed sample and its fresh cache and records
 `/metrics/cold-bake/median` in milliseconds. Boot, shutdown, the readiness barrier,
 frame capture and lighting convergence are outside that interval. Use it through
@@ -3196,6 +3198,9 @@ bounds failed runs. Shutdown time is excluded from both readiness intervals.
 `--samples` defaults to 3 and `--timeout-seconds` to 120 per process. `--output`
 selects the parent of a unique run directory (default `artifacts/startup`).
 The directory holds logs, captures, and `report.json`, updated after each child.
+Each sample's `timeline.log` retains the observed milliseconds since process launch,
+stream and text of every output line, so bake stages and GPU job lines can be placed
+alongside a thread-time trace instead of compared only by summed worker time.
 The report is the `puck.bench.v1` record [`puck bench world`](#puck-bench-world)
 describes: every sample under `startup`, the runtime and OS, the World build's
 identity, the settings, and the host load. Any failed or missing sample leaves

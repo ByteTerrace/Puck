@@ -1914,15 +1914,19 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var fineX = ((cellsX * factor) + 1);
         var fineY = ((cellsY * factor) + 1);
 
-        // Adds a cell's sign-changing edges and returns its corner mask.
-        byte AddCell(int x, int y, int z, int stride) {
-            var mask = 0;
-
-            for (var offset = 0; (offset < 8); offset++) {
-                mask |= (FineInside(x: (x + ((offset & 1) * stride)), y: (y + (((offset >> 1) & 1) * stride)), z: (z + (((offset >> 2) & 1) * stride))) ? (1 << offset) : 0);
-            }
+        // The four signs on an X face, in the low-X bits of a corner mask. Adjacent fine cells in a row share
+        // this exact face. Signs are fixed after CloseSheets, and the row keeps the face only until its next cell.
+        int Face(int x, int y, int z, int stride) {
+            var key = x + (fineX * (y + (fineY * z)));
+            var dy = fineX * stride;
+            var dz = fineX * fineY * stride;
+            return (FineInside(key) ? 1 : 0) | (FineInside(key + dy) ? 4 : 0) |
+                (FineInside(key + dz) ? 16 : 0) | (FineInside(key + dy + dz) ? 64 : 0);
+        }
+        // Adds a cell's sign-changing edges in the original cell/axis/corner order.
+        void AddCell(int x, int y, int z, int stride, int mask) {
             if ((mask == 0) || (mask == 0xFF)) {
-                return ((byte)mask);
+                return;
             }
 
             for (var axis = 0; (axis < 3); axis++) {
@@ -1946,24 +1950,29 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 }
             }
 
-            return ((byte)mask);
         }
 
         for (var z = 0; (z < cellsZ); z++) {
             for (var y = 0; (y < cellsY); y++) {
                 for (var x = 0; (x < cellsX); x++) {
                     if (!((factor > 1) && m_refined[(x + (cellsX * (y + (cellsY * z))))])) {
-                        _ = AddCell(stride: factor, x: (x * factor), y: (y * factor), z: (z * factor));
+                        var mask = Face(x * factor, y * factor, z * factor, factor) |
+                            (Face((x + 1) * factor, y * factor, z * factor, factor) << 1);
+                        AddCell(stride: factor, x: (x * factor), y: (y * factor), z: (z * factor), mask: mask);
 
                         continue;
                     }
 
                     for (var fz = (z * factor); (fz < ((z + 1) * factor)); fz++) {
                         for (var fy = (y * factor); (fy < ((y + 1) * factor)); fy++) {
+                            var left = Face(x * factor, fy, fz, 1);
                             for (var fx = (x * factor); (fx < ((x + 1) * factor)); fx++) {
-                                var mask = AddCell(stride: 1, x: fx, y: fy, z: fz);
+                                var right = Face(fx + 1, fy, fz, 1);
+                                var mask = left | (right << 1);
+                                left = right;
+                                AddCell(stride: 1, x: fx, y: fy, z: fz, mask: mask);
 
-                                if ((mask != 0) && (mask != 0xFF)) { crossedFine.Add(item: new SdfCrossedCell(Corner: (fx + (fineX * (fy + (fineY * fz)))), Mask: mask)); }
+                                if ((mask != 0) && (mask != 0xFF)) { crossedFine.Add(item: new SdfCrossedCell(Corner: (fx + (fineX * (fy + (fineY * fz)))), Mask: (byte)mask)); }
                             }
                         }
                     }

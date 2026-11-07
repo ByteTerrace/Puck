@@ -654,11 +654,14 @@ payload. Pausing after attachment does not reproduce the initial poses; see
 - [high] The cold bake sits at the one-minute bar on Direct3D 12 and just past
   it on Vulkan (quiet paired `bench startup --bake`, paused lockstep). Its wall
   time no longer follows the worker stages: a 38% cut in summed `land` worker
-  time moved wall time within noise. Name the bake's critical path before more
-  stage work: what runs serially or waits between the first take and the last
-  residency's completion (planning, admission, GPU dispatch and readback,
-  landing, the store's publish decode, idle worker gaps), from a trace of one
-  cold bake's timeline rather than summed stage seconds. `SdfMeshCollapse` now reuses
+  time moved wall time within noise. A sampled thread-time timeline finds
+  occupied bake workers across the interval, overlapping preparation,
+  crossings, contouring and landing, with a short tail; it does not expose
+  a long serial planning, GPU or store-publication link. `StartupBenchmarks`
+  now retains timestamped output alongside the stage totals to separate
+  overlapping work from waits. Collapse fan adjacency is indexed once per
+  classification, and crossing discovery reuses the shared signs of adjacent
+  fine-cell faces. `SdfMeshCollapse` also reuses
   reverse edge witnesses across an unchanged source fan, skips refused directed
   edges until an endpoint fan changes, and tests the removed vertex's samples
   first. Reverse searches resume only when their witness can raise the triangle's
