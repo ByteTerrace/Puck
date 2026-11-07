@@ -1,4 +1,5 @@
 using Puck.Commands;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -703,22 +704,16 @@ public sealed partial class WorldPopulation {
         for (var index = (Capacity - 1); (index >= LocalSeatCount); index--) {
             var entry = m_entries[index];
 
-            if (entry.PlacementId is null) {
+            if (entry.PlacementId is not { } placementId) {
                 continue;
             }
 
-            if (
-                (entry.PlacementId is not { } placementId) ||
-                (FindInhabited(
+            if (!TryFindBindable(
                 definition: definition,
+                kitIndex: out var kitIndex,
+                placement: out var placement,
                 placementId: placementId
-            ) is not { } placement) ||
-                (ResolveInhabitKit(
-                definition: definition,
-                placement: placement
-            ) is not { } kitName) ||
-                (ResolveKitOrNull(name: kitName) is not { } kitIndex)
-            ) {
+            )) {
                 disconnected?.Add(item: PeerEventEntry(index: index));
                 RetireInhabitant(index: index);
 
@@ -741,25 +736,18 @@ public sealed partial class WorldPopulation {
             if (
                 (placement.Inhabit is not { } inhabit) ||
                 (inhabit.Count?.Row is not null) ||
-                (ResolveInhabitKit(
+                (InhabitKit(
                 definition: definition,
                 placement: placement
-            ) is not { } kitName) ||
-                (ResolveKitOrNull(name: kitName) is not { } kitIndex)
+            ) is not { } kitIndex)
             ) {
                 continue;
             }
 
-            var desired = Math.Clamp(
-                value: (inhabit.ResolvedCount.Literal ?? 1),
-                min: 0,
-                max: PeerCapacity
-            );
-
             ReconcileOneInhabitedCount(
                 admitted: admitted,
                 definition: definition,
-                desired: desired,
+                desired: LiteralInhabitants(inhabit: inhabit),
                 disconnected: disconnected,
                 inhabit: inhabit,
                 kitIndex: kitIndex,
@@ -777,6 +765,103 @@ public sealed partial class WorldPopulation {
         InvalidateInhabitCountCache();
         m_revision++;
     }
+
+    /// <summary>Whether <see cref="ReconcileInhabitants"/> against <paramref name="definition"/> would keep the body at
+    /// <paramref name="index"/> as it is now: an inhabitant is kept while its placement still carries an inhabit facet
+    /// whose kit resolves and a literal count the shrink would not retire it under. The structural pass retires
+    /// nothing but inhabitants, so any other index is kept.</summary>
+    /// <param name="index">The body index.</param>
+    /// <param name="definition">The definition the reconcile would install, such as one a firing's document rows
+    /// compose.</param>
+    /// <returns><see langword="false"/> when the reconcile would retire the body.</returns>
+    /// <remarks>A count bound to a cell follows its cell, which only the cell-driven reconcile reads, so its
+    /// inhabitants are kept here.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public bool KeepsInhabitant(int index, WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if (
+            (((uint)index) >= ((uint)Capacity)) ||
+            (m_entries[index].PlacementId is not { } placementId)
+        ) {
+            return true;
+        }
+
+        if (!TryFindBindable(
+            definition: definition,
+            kitIndex: out _,
+            placement: out var placement,
+            placementId: placementId
+        )) {
+            return false;
+        }
+
+        var inhabit = placement.Inhabit!;
+
+        if (inhabit.Count?.Row is not null) {
+            return true;
+        }
+
+        // The shrink retires the lowest retirable inhabitants first, one per surplus body.
+        var from = LocalSeatCount;
+
+        for (var surplus = (CountInhabitants(placementId: placementId) - LiteralInhabitants(inhabit: inhabit)); (surplus > 0); surplus--) {
+            var slot = LowestRetirableInhabitant(
+                from: from,
+                placementId: placementId
+            );
+
+            if (slot < 0) {
+                return true;
+            }
+
+            if (slot == index) {
+                return false;
+            }
+
+            from = (slot + 1);
+        }
+
+        return true;
+    }
+    // The placement an inhabitant binds to in a definition, and its kit: false when the placement is gone, carries no
+    // inhabit facet, or names a kit that does not resolve, which retires the inhabitant.
+    private bool TryFindBindable(WorldDefinition definition, string placementId, [NotNullWhen(returnValue: true)] out WorldPlacement? placement, out byte kitIndex) {
+        placement = FindInhabited(
+            definition: definition,
+            placementId: placementId
+        );
+        kitIndex = 0;
+
+        if (
+            (placement is null) ||
+            (InhabitKit(
+            definition: definition,
+            placement: placement
+        ) is not { } kit)
+        ) {
+            placement = null;
+
+            return false;
+        }
+
+        kitIndex = kit;
+
+        return true;
+    }
+    // The kit row an inhabited placement resolves, or null when it names none that resolves.
+    private byte? InhabitKit(WorldDefinition definition, WorldPlacement placement) => ((ResolveInhabitKit(
+        definition: definition,
+        placement: placement
+    ) is { } kitName)
+        ? ResolveKitOrNull(name: kitName)
+        : null);
+    // The census a literal-count inhabit facet asks for.
+    private int LiteralInhabitants(WorldPlacementInhabit inhabit) => Math.Clamp(
+        value: (inhabit.ResolvedCount.Literal ?? 1),
+        min: 0,
+        max: PeerCapacity
+    );
 
     /// <summary>Gets or sets what holds an empty body index for a body that may come back to it (a companion whose title
     /// is away or whose hop is pending, or a body a departure in doubt left), answering the placement the held body
@@ -803,9 +888,12 @@ public sealed partial class WorldPopulation {
         if (
             (((uint)(slot - LocalSeatCount)) >= PeerCapacity) ||
             !m_entries[slot].Active ||
-            (FindInhabited(definition: definition, placementId: placementId) is not { } placement) ||
-            (ResolveInhabitKit(definition: definition, placement: placement) is not { } kitName) ||
-            (ResolveKitOrNull(name: kitName) is not { } kitIndex)
+            !TryFindBindable(
+            definition: definition,
+            kitIndex: out var kitIndex,
+            placement: out var placement,
+            placementId: placementId
+        )
         ) {
             return false;
         }
@@ -886,7 +974,10 @@ public sealed partial class WorldPopulation {
         }
 
         for (var extra = desired; (extra < live); extra++) {
-            var slot = LowestRetirableInhabitant(placementId: placement.Id);
+            var slot = LowestRetirableInhabitant(
+                from: LocalSeatCount,
+                placementId: placement.Id
+            );
 
             if (slot < 0) {
                 // Every remaining inhabitant is seat-driven — nothing left this pass can retire.
@@ -899,9 +990,9 @@ public sealed partial class WorldPopulation {
     }
     // The shrink half of ReconcileOneInhabitedCount's own retire loop — lowest-index match that is not a seat's own
     // claimed body, never LowestInhabitant's plain scan (which would retire a possessed inhabitant out from under
-    // its player).
-    private int LowestRetirableInhabitant(string placementId) {
-        for (var index = LocalSeatCount; (index < Capacity); index++) {
+    // its player). KeepsInhabitant walks the same order from past each slot it would already have retired.
+    private int LowestRetirableInhabitant(string placementId, int from) {
+        for (var index = from; (index < Capacity); index++) {
             var entry = m_entries[index];
 
             if (

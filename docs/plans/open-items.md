@@ -3683,6 +3683,10 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
+- [medium] `world.decisions` reports 0 policies in the debug world's boot
+  instance, so the pond's decisions may not be running there (seen by the
+  rule-faults step 7 lane on a headless boot; unchecked). Read why before
+  treating it as a defect.
 - [high] Player-state defects found grounding the hub design. The design memo
   ([hub and saves](hub-and-saves.md)) decides the shape; these are defects
   whatever it decides:
