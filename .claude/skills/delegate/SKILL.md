@@ -37,6 +37,13 @@ orders, verifying a change by building and running it, and fixing a defect at it
   ([the live World is shared](../puck-world/SKILL.md#the-live-world-is-shared)). `windowed: true`
   holds the GPU lease: use it only on a granted GPU leg, and stop it once its captures are in, never
   keeping it open across code edits.
+- Your finish line is headless unless your brief says seeing or measuring a windowed World is the
+  work itself (a look you iterate on, a GPU or memory attribution). The GPU, the machine's memory
+  and quiet time are shared and scheduled by the lead: a windowed check that only confirms your change
+  goes in your hand-back as a **verification request** (the World, the view or stop, the commands, the
+  settle state, what you expect to see and what decides it), and the lead runs it in a batched
+  window. Use the shared mesh store: pass a fresh `--cache-dir` (a cold bake, about a minute at full
+  CPU and up to 18 GB) only when your brief asks for one.
 
 ## Shell under the worktree guard
 
@@ -113,8 +120,8 @@ orders, verifying a change by building and running it, and fixing a defect at it
   refuses both. ASP.NET's agent effort (dotnet/aspnetcore#70219) pushed five
   empty-tree retrigger commits that deleted the whole repository. An `--allow-empty` hand-back commit
   on your own tree stays allowed.
-- Hand back under **Needs you** (decisions you could not make and GPU legs you need, with options and
-  their cost), **Changed** (what landed and what you ran; a read-only lane names its findings file)
+- Hand back under **Needs you** (decisions you could not make, and verification requests and GPU
+  legs you need, with options and their cost), **Changed** (what landed and what you ran; a read-only lane names its findings file)
   and **Found** (defects, risks and follow-ups with `file:line`, and what you could not confirm).
   Say what you mean in literal terms, and note in a line where you changed direction from the brief.
 

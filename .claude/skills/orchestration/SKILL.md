@@ -32,6 +32,36 @@ never an open item or "authoring gap". The feature is accepted only by an
 end-to-end capture series against the owner's words and the art direction,
 not by its lanes' separate evidence.
 
+## Schedule the shared machine
+
+The owner's direction: coordinate the whole, not one lane. The GPU, the
+machine's commit and quiet time are one shared resource, and velocity is lost
+when lanes each take it for themselves (a day in which eight lanes each booted,
+cold-baked and measured on their own lost lane-hours to admission waits and
+collided runs, while the same expensive work ran eight times).
+
+- **Brief each lane for the resource it really needs.** The default finish
+  line is headless: builds, a headless boot, laws, counters,
+  `puck compile --validate`. A lane keeps a windowed World only when seeing or
+  measuring it is the work (a look it iterates on, a GPU or memory
+  attribution); otherwise its windowed checks come back as verification
+  requests ([delegate](../delegate/SKILL.md#build-and-run)), and the brief says
+  which.
+- **The lead runs the windowed, cold-bake and timing legs in batched
+  windows** on the integration head after a batch lands: one warm boot checks
+  several lanes' requests, timing goes through `puck measure` or a direct
+  `bench frames` under `puck lease quiet`, and a red result goes back to the
+  lane that owns it. A landing never waits for the window.
+- **Fix the scheduler before working around it.** An admission, lease or
+  harness defect that stalls a lane is a top fix, filed and briefed the day it
+  is found, never a wait every lane absorbs.
+- **Measure the process as the engine is measured.** At each window, record
+  in the window's commit message each lane's wall time, its time blocked on a
+  lease or admission, and the time from its hand-back to its landing. A change
+  to this process is an experiment with a success line set in advance (lanes
+  landed per day, hand-back to landing, lane-hours lost to waiting), kept only
+  if it wins; a standing verifier lane is one such experiment, not a rule.
+
 ## Spend verification, not writing
 
 **Three phases, each with its own evidence (the owner's ruling: measurements
