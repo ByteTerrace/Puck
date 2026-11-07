@@ -354,6 +354,33 @@ public sealed class SdfMeshLibraryLawTests {
 
         return (builder.Geometry, [.. builder.Materials]);
     }
+    // A native library publishes a stored mesh in its first taker's ids only when later takers can renumber from them: a
+    // triangle id no shape of the baking group owns keeps its value in every variant, even when the first taker carries
+    // that id at a place.
+    [Fact]
+    public void AnIdNoShapeOwnsKeepsItsValueThroughEveryRenumberedVariant() {
+        using var scratch = new Puck.Testing.TemporaryDirectory(prefix: "puck-mesh-library-outside-");
+        var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
+        var geometry = new SdfMeshGeometry(Dynamic: false, Hash: 0x5EED_0001ul);
+        UInt128 identity = 3;
+
+        // The baking group carries 10 at its one place; 7 is an id none of its shapes owns.
+        Assert.True(condition: store.Write(geometry: geometry, identity: identity, materials: [10], mesh: Mesh(materials: [10u, 7u, 10u])));
+
+        using var library = new SdfMeshLibrary(allocator: new HeapAllocator(), store: store);
+
+        Assert.True(condition: library.TryLoad(geometry: geometry, identity: identity, materials: [7], mesh: out var first, refusal: out _));
+        Assert.True(condition: library.TryTake(geometry: geometry, identity: identity, materials: [20], mesh: out var second));
+        Assert.Equal(expected: [7u, 7u, 7u], actual: first!.TriangleMaterials.ToArray());
+        Assert.Equal(expected: [20u, 7u, 20u], actual: second.TriangleMaterials.ToArray());
+        first.Release();
+        second.Release();
+    }
+    private sealed unsafe class HeapAllocator : Puck.Abstractions.Memory.IAllocator {
+        public void* Allocate(nuint size, nuint alignment = 0) => System.Runtime.InteropServices.NativeMemory.AlignedAlloc(byteCount: Math.Max(val1: size, val2: 1), alignment: Math.Max(val1: alignment, val2: 16));
+        public void Free(void* ptr) => System.Runtime.InteropServices.NativeMemory.AlignedFree(ptr: ptr);
+        public void* Reallocate(void* ptr, nuint newSize, nuint alignment = 0) => System.Runtime.InteropServices.NativeMemory.AlignedRealloc(ptr: ptr, byteCount: Math.Max(val1: newSize, val2: 1), alignment: Math.Max(val1: alignment, val2: 16));
+    }
     private static SdfMesh Mesh(uint[] materials) => new(
         indices: new uint[] { 0, 1, 2, 0, 2, 1, 1, 2, 0 },
         positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY },

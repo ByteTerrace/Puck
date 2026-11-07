@@ -90,6 +90,48 @@ public sealed class CacheRetentionLawTests {
         Assert.Equal(actual: result.Removed, expected: (OperatingSystem.IsWindows() ? 1 : 2));
         Assert.Equal(actual: (result.Removed + result.Kept), expected: 3);
     }
+    // A set a running process holds (HoldSet) is never evicted or trimmed, by this process's enforcement or a writer
+    // whose own set is in use, whatever its stamps; once its holds close, it ages out like any other and its lease goes.
+    [Fact]
+    public void AHeldSetStaysWholeUntilItsLastHoldCloses() {
+        using var cache = new TemporaryDirectory(prefix: "puck-cache-retention-pin-law-");
+        var written = DateTime.UtcNow;
+        var bound = new CacheBound(MaxBytes: 2, MaxEntries: 10);
+
+        string Write(string name, int minutesAgo) {
+            var path = cache.WriteText(name: name, text: "x");
+
+            File.SetLastWriteTimeUtc(lastWriteTimeUtc: written.AddMinutes(value: -minutesAgo), path: path);
+            return path;
+        }
+        var pinned = (Write(minutesAgo: 90, name: "pinned/a.bin"), Write(minutesAgo: 80, name: "pinned/b.bin"));
+        var other = Write(minutesAgo: 30, name: "other/a.bin");
+        var used = Write(minutesAgo: 1, name: "used/a.bin");
+        var set = Path.GetDirectoryName(path: pinned.Item1)!;
+
+        using (var first = CacheRetention.HoldSet(setDirectory: set))
+        using (var second = CacheRetention.HoldSet(setDirectory: set)) {
+            Assert.NotNull(@object: first);
+            Assert.NotNull(@object: second);
+            _ = CacheRetention.EnforceSets(bound: bound, directory: cache.RootPath, inUse: used, isEntry: static file => (file.Extension == ".bin"));
+
+            // The writer's own set and the held set stay whole; the unheld, newer set is what goes.
+            Assert.True(condition: File.Exists(path: pinned.Item1) && File.Exists(path: pinned.Item2) && File.Exists(path: used));
+            Assert.False(condition: File.Exists(path: other));
+
+            // The held set in use, alone past the bound, trims nothing; the unheld set beside it goes.
+            _ = CacheRetention.EnforceSets(bound: new CacheBound(MaxBytes: 1, MaxEntries: 10), directory: cache.RootPath, inUse: pinned.Item1, isEntry: static file => (file.Extension == ".bin"));
+            Assert.True(condition: File.Exists(path: pinned.Item1) && File.Exists(path: pinned.Item2));
+            Assert.False(condition: File.Exists(path: used));
+        }
+
+        var fresh = Write(minutesAgo: 0, name: "fresh/a.bin");
+
+        _ = CacheRetention.EnforceSets(bound: new CacheBound(MaxBytes: 1, MaxEntries: 10), directory: cache.RootPath, inUse: fresh, isEntry: static file => (file.Extension == ".bin"));
+        Assert.False(condition: Directory.Exists(path: set));
+        Assert.False(condition: File.Exists(path: (set + ".lease")));
+        Assert.True(condition: File.Exists(path: fresh));
+    }
     // A cache of sets keeps and removes each subdirectory whole, its last use its newest entry's, and a loose entry as a
     // set of its own; the set in use stays and, alone past the bound, trims its own oldest entries; a set a reader holds
     // an entry of keeps what it cannot delete; a set with no entry is aged by its directory; a writer enforces once an
