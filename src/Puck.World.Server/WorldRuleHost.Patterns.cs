@@ -193,23 +193,16 @@ public sealed partial class WorldRuleHost {
             }
 
             // The console's read decides what a token's fault means here: the word spells nothing, and says why.
-            var scratch = reader.Scratch;
-            var scope = scratch.EnterFaultScope();
-            Outcome spelled;
+            var spelled = PatternOperand.ReadWord(
+                attributeOrdinal: attributeOrdinal,
+                kind: pattern.Source.Kind,
+                reader: reader,
+                rowOrdinal: rowOrdinal,
+                start: start,
+                tokenExpression: expression,
+                word: word
+            );
 
-            try {
-                spelled = PatternOperand.ReadWord(
-                    attributeOrdinal: attributeOrdinal,
-                    kind: pattern.Source.Kind,
-                    reader: reader,
-                    rowOrdinal: rowOrdinal,
-                    start: start,
-                    tokenExpression: expression,
-                    word: word
-                );
-            } finally {
-                _ = scratch.LeaveFaultScope(scope: scope);
-            }
             if (!spelled.TryFinite(raw: out var length)) {
                 return $"[world.match: {patternName} over {rowName} | the word spells nothing, since a token's value expression did not answer: {RuleEvaluation.DescribeOutcome(outcome: spelled)}]";
             }

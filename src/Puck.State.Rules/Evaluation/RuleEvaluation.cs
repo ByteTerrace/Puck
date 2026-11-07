@@ -43,62 +43,35 @@ public static class RuleEvaluation {
         ExpressionFault.Absent => "the read went through a dynamic key that named no cell (an empty zone's endpoint); answer the absence with 'isAbsent(...)' or '... ?? <fallback>'",
         _ => "the expression overflowed, divided by zero, left a function's domain, or produced an invalid stack result",
     };
+
+    /// <summary>Why a gate that faulted decided nothing, for a conjunct whose fault is not named.</summary>
+    public const string GateFaultReason = "a conjunct overflowed, divided by zero, left a function's domain, or read a fact with no number";
+
     /// <summary>Names why an evaluation did not answer a number, in the author's own vocabulary.</summary>
     /// <param name="outcome">The answer: an absence or a fault.</param>
     /// <returns>The sentence.</returns>
     public static string DescribeOutcome(Outcome outcome) => DescribeFault(fault: ((outcome.Case == FaultCase.Absent)
         ? ExpressionFault.Absent
         : outcome.Fault));
-    /// <summary>Decides a compiled postfix gate inside a fault scope of its own. A conjunct that faults leaves the
-    /// gate undecided: evaluation stops ahead of any negation or grouping and the verdict is
-    /// <see cref="Verdict.Faulted"/>, which also passes on to any enclosing scope. Both sides of a comparison are read,
+    /// <summary>Decides a compiled postfix gate. A conjunct that faults leaves the gate undecided: evaluation stops
+    /// ahead of any negation or grouping and the verdict is <see cref="Verdict.Faulted"/>. Both sides of a comparison are read,
     /// so an absence on one side never hides a fault on the other. A gate with no tokens is always open.</summary>
     /// <param name="frame">The evaluation in flight.</param>
     /// <param name="gate">The compiled postfix gate.</param>
     /// <param name="trace">An optional per-conjunct narration sink.</param>
     /// <returns>What the gate decided; a caller reading <see cref="Verdict.Faulted"/> decides what an undecided gate
     /// means where it sits.</returns>
-    public static Verdict Decide(ref EvaluationFrame frame, GateToken[] gate, List<string>? trace = null) => Decide(
-        fault: out _,
-        frame: ref frame,
-        gate: gate,
-        trace: trace
-    );
-    /// <summary>Decides a compiled postfix gate and names the fault that left it undecided, for the one caller that
-    /// words a refusal from it.</summary>
-    /// <param name="frame">The evaluation in flight.</param>
-    /// <param name="gate">The compiled postfix gate.</param>
-    /// <param name="fault">The first fault any conjunct raised, or <see cref="ExpressionFault.None"/>.</param>
-    /// <param name="trace">An optional per-conjunct narration sink.</param>
-    /// <returns>What the gate decided.</returns>
-    public static Verdict Decide(ref EvaluationFrame frame, GateToken[] gate, out ExpressionFault fault, List<string>? trace = null) {
+    public static Verdict Decide(ref EvaluationFrame frame, GateToken[] gate, List<string>? trace = null) {
         ArgumentNullException.ThrowIfNull(argument: gate);
 
-        fault = ExpressionFault.None;
-
-        if (gate.Length == 0) {
-            return Verdict.Open;
-        }
-
-        var scratch = frame.Reader.Scratch;
-        var scope = scratch.EnterFaultScope();
-        Verdict verdict;
-
-        try {
-            verdict = Fold(
+        return ((gate.Length == 0)
+            ? Verdict.Open
+            : Fold(
                 frame: ref frame,
                 gate: gate,
-                scratch: scratch,
+                scratch: frame.Reader.Scratch,
                 trace: trace
-            );
-        } finally {
-            fault = scratch.LeaveFaultScope(scope: scope);
-        }
-
-        // Whatever the scope saw, an undecided gate is faulted whether or not the conjunct that faulted answered it.
-        return ((fault != ExpressionFault.None)
-            ? Verdict.Faulted
-            : verdict);
+            ));
     }
 
     // Folds the gate's postfix program, answering Faulted the moment a conjunct faults.
@@ -241,20 +214,13 @@ public static class RuleEvaluation {
     /// <param name="source">The compiled source.</param>
     /// <param name="kind">The encoding the read answers in.</param>
     /// <returns>The fact. An operand answering the absent or forever fact still answers: the caller decides what an
-    /// absence means where it sits. An expression that left no number answers its absence or its fault, which is
-    /// raised into the evaluation's scope as every fault is; a fact comparison answers <see cref="FaultCase.Forever"/>
+    /// absence means where it sits. An expression that left no number answers its absence or its fault; a fact comparison answers <see cref="FaultCase.Forever"/>
     /// under infinity semantics, and only an expression's numeric evaluation faults with
     /// <see cref="ExpressionFault.Forever"/>.</returns>
     public static Fact ReadSource(ref EvaluationFrame frame, in CompiledValueSource source, CellKind kind) {
         if (source.Operand is { } operand) {
-            var reader = frame.Reader;
-            var read = operand.Read(reader: reader);
 
-            if (read.Outcome.Case == FaultCase.Faulted) {
-                reader.Scratch.RaiseFault(fault: ExpressionFault.Domain);
-            }
-
-            return read;
+            return operand.Read(reader: frame.Reader);
         }
         if (source.Expression is { } expression) {
             // A Bool destination's program was compiled in Int, the kind a comparison leaves, so it evaluates in Int
@@ -309,16 +275,6 @@ public static class RuleEvaluation {
     public static Resolved<string> ReadText(IStateReader reader, IRuleOperand? source) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        var resolved = ReadTextCore(reader: reader, source: source);
-
-        if (resolved.Case == FaultCase.Faulted) {
-            reader.Scratch.RaiseFault(fault: ExpressionFault.Domain);
-        }
-
-        return resolved;
-    }
-
-    private static Resolved<string> ReadTextCore(IStateReader reader, IRuleOperand? source) {
         CellValue carried;
 
         switch (source) {

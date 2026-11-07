@@ -79,8 +79,8 @@ public sealed class ArenaSearchJudgeLawTests {
         public bool ReadsTick => inner.ReadsTick;
         public bool Scores => inner.Scores;
 
-        public bool Judge(in ArenaSearchView view) => inner.Judge(view: in view);
-        public long Score(in ArenaSearchView view) => inner.Score(view: in view);
+        public JudgeOutcome Judge(in ArenaSearchView view) => inner.Judge(view: in view);
+        public Outcome Score(in ArenaSearchView view) => inner.Score(view: in view);
         public bool TryAdmit(ArenaSearchPlan plan, out string refusal) {
             Admissions++;
 

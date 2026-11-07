@@ -17,72 +17,35 @@ public static partial class RuleExpressions {
 
     /// <summary>Evaluates a compiled postfix program for the evaluation a frame names. The answer is the program's
     /// <see cref="Outcome"/>: a number, an absence, or a fault (<see cref="ExpressionFault.Domain"/> or
-    /// <see cref="ExpressionFault.Forever"/>). A fault is also raised into the frame's reader's
-    /// <see cref="ArenaScratch"/>, where the fault scope of whichever caller decides what the evaluation means sees it,
-    /// until every deciding place reads the outcome in hand; an absence is not raised: its caller answers it.</summary>
+    /// <see cref="ExpressionFault.Forever"/>). The fault is in the answer and nowhere else: whoever decides what the
+    /// evaluation means reads the outcome it was handed.</summary>
     /// <param name="frame">The evaluation in flight.</param>
     /// <param name="program">The postfix program.</param>
     /// <param name="kind">The kind to evaluate in.</param>
     /// <returns>What the program answered.</returns>
-    /// <exception cref="InvalidOperationException">The frame names no reader, or the program faulted with no fault
-    /// scope open on the reader's scratch.</exception>
-    public static Outcome Evaluate(ref EvaluationFrame frame, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) {
-        var reader = frame.Reader;
-        var outcome = Run(
-            arguments: [],
-            kind: kind,
-            member: null,
-            program: program,
-            reader: reader
-        );
-
-        if (outcome.Case == FaultCase.Faulted) {
-            reader.Scratch.RaiseFault(fault: outcome.Fault);
-        }
-
-        return outcome;
-    }
+    /// <exception cref="InvalidOperationException">The frame names no reader.</exception>
+    public static Outcome Evaluate(ref EvaluationFrame frame, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) => Run(
+        arguments: [],
+        kind: kind,
+        member: null,
+        program: program,
+        reader: frame.Reader
+    );
     /// <summary>Evaluates a compiled postfix program for a caller that is not a firing and decides what a fault means
     /// where it sits: the compiler's constant folder (no reader), the search score, a flock's affinity, the console's
-    /// read-back and the browser's. With a reader the evaluation is a fault scope of its own, so the caller receives
-    /// the fault in the outcome and any scope enclosing this one sees it too.</summary>
+    /// read-back and the browser's.</summary>
     /// <param name="reader">The evaluation in flight, or <see langword="null"/> to fold constants: a live read
-    /// refuses without one, and a fold raises nothing.</param>
+    /// refuses without one.</param>
     /// <param name="program">The postfix program.</param>
     /// <param name="kind">The kind to evaluate in.</param>
-    /// <returns>What the program answered; a fault anything in the evaluation raised is the answer.</returns>
-    public static Outcome EvaluateDetached(IStateReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) {
-        if (reader is null) {
-            return Run(
-                arguments: [],
-                kind: kind,
-                member: null,
-                program: program,
-                reader: null
-            );
-        }
-
-        var scratch = reader.Scratch;
-        var scope = scratch.EnterFaultScope();
-        Outcome outcome;
-        ExpressionFault raised;
-
-        try {
-            var frame = new EvaluationFrame(reader: reader);
-
-            outcome = Evaluate(
-                frame: ref frame,
-                kind: kind,
-                program: program
-            );
-        } finally {
-            raised = scratch.LeaveFaultScope(scope: scope);
-        }
-
-        return ((raised != ExpressionFault.None)
-            ? Outcome.Faulted(why: raised)
-            : outcome);
-    }
+    /// <returns>What the program answered.</returns>
+    public static Outcome EvaluateDetached(IStateReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind) => Run(
+        arguments: [],
+        kind: kind,
+        member: null,
+        program: program,
+        reader: reader
+    );
 
     // Every evaluation of authored tokens runs here, and answers an Outcome: a nested call, fold member or short-circuit
     // body is a local the caller combines, so no variable is shared between a program and the programs it calls.

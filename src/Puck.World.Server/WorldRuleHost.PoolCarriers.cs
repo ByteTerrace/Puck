@@ -44,14 +44,16 @@ public sealed partial class WorldRuleHost {
         }
         into.Reverse();
     }
-    private bool FireInteractionPair(CompiledWorldFactsRule rule, CompiledInteraction interaction, RuleLatch latch,
-        RuleLatch.RuleState bindings, ulong stepTicks, int left, int right) {
+    private RuleOutcome FireInteractionPair(CompiledWorldFactsRule rule, CompiledInteraction interaction, RuleLatch latch,
+        RuleLatch.RuleState bindings, ulong stepTicks, int left, int right, out bool applied) {
+        applied = false;
+
         var leftHandle = ((interaction.LeftPool is null) ? default : m_poolCarrierLeft[left]);
         var rightHandle = ((interaction.RightPool is null) ? default : m_poolCarrierRight[right]);
 
         if (((interaction.LeftPool is not null) && !Host.Arena.TryResolve(handle: leftHandle, position: out _)) ||
             ((interaction.RightPool is not null) && !Host.Arena.TryResolve(handle: rightHandle, position: out _))) {
-            return false;
+            return RuleOutcome.Idle;
         }
         m_boundLeft = ((interaction.LeftPool is null) ? left : m_poolCarrierLeftBody[left]);
         m_boundRight = ((interaction.RightPool is null) ? right : m_poolCarrierRightBody[right]);
@@ -62,10 +64,9 @@ public sealed partial class WorldRuleHost {
             _ = m_evaluator.TrySetInstanceBinding(register: interaction.RightBinding, handle: rightHandle);
         }
         try {
-            _ = m_evaluator.EvaluateOnce(rule: rule, latch: latch, state: bindings,
+            return m_evaluator.EvaluateOnce(rule: rule, latch: latch, state: bindings,
                 binding: new LatchKey(Left: left, Right: right, LeftGeneration: leftHandle.Generation, RightGeneration: rightHandle.Generation),
-                stepTicks: stepTicks, applied: out var applied);
-            return applied;
+                stepTicks: stepTicks, applied: out applied);
         } finally {
             m_evaluator.ClearInstanceBinding(register: interaction.RightBinding);
             m_evaluator.ClearInstanceBinding(register: interaction.LeftBinding);

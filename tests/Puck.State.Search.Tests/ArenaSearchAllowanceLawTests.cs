@@ -22,12 +22,12 @@ public sealed class ArenaSearchAllowanceLawTests {
         public long Scored { get; private set; }
         public bool Scores => inner.Scores;
 
-        public bool Judge(in ArenaSearchView view) {
+        public JudgeOutcome Judge(in ArenaSearchView view) {
             Judged++;
 
             return inner.Judge(view: in view);
         }
-        public long Score(in ArenaSearchView view) {
+        public Outcome Score(in ArenaSearchView view) {
             Scored++;
 
             return inner.Score(view: in view);

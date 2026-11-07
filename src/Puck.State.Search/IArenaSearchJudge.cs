@@ -30,14 +30,15 @@ public interface IArenaSearchJudge {
     /// <summary>Judges the position a candidate reached, writing its verdict and turn cells into the open
     /// scope.</summary>
     /// <param name="view">The scoped arena and the tick pair the judge reads as of.</param>
-    /// <returns><see langword="true"/> when the judge wrote the arena.</returns>
+    /// <returns>Whether the judge wrote the arena, and whether any rule it ran faulted.</returns>
     [Replaces(root: typeof(StateArena))]
-    bool Judge(in ArenaSearchView view);
+    JudgeOutcome Judge(in ArenaSearchView view);
     /// <summary>Returns the score of the position the arena holds, from the perspective of the side that moved into
     /// it.</summary>
     /// <param name="view">The scoped arena and the tick pair the score reads as of.</param>
-    /// <returns>The score.</returns>
-    long Score(in ArenaSearchView view);
+    /// <returns>The score as a finite answer; an absence scores zero where the search reads it, and a fault leaves the
+    /// step it met deciding nothing.</returns>
+    Outcome Score(in ArenaSearchView view);
     /// <summary>Decides whether the host behind this judge may run one plan's rules.</summary>
     /// <param name="plan">The plan being installed.</param>
     /// <param name="refusal">Why the plan was refused, or empty on admission.</param>

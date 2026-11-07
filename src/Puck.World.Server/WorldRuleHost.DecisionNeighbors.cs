@@ -86,7 +86,8 @@ public sealed partial class WorldRuleHost {
     }
     private bool DecisionBodyLive(int index, int generation) => ((((uint)index) < ((uint)Host.Population.Capacity)) &&
         Host.Population.IsActive(index: index) && (Host.Population.EntryBody(index: index) is not null) && (Host.Population.Generation(index: index) == generation));
-    private bool DecisionOptionGate(CompiledWorldFactsDecisionOption option, int key, int candidate, string ruleName) {
+    // What one option's gate decided for a candidate.
+    private Verdict DecisionOptionGate(CompiledWorldFactsDecisionOption option, int key, int candidate, string ruleName) {
         var left = m_boundLeft; var right = m_boundRight;
 
         m_boundLeft = ((option.Neighbors is null)
@@ -94,12 +95,26 @@ public sealed partial class WorldRuleHost {
             : key
         ); m_boundRight = candidate;
         try {
-            return (m_evaluator.Decide(
+            return m_evaluator.Decide(
             gate: option.Gate,
             ruleName: ruleName
-        ) is Verdict.Open);
+        );
         } finally { m_boundLeft = left; m_boundRight = right; }
     }
+    // Whether an option's gate opened, noting a fault the decision must hold on.
+    private static bool Opens(Verdict verdict, ref bool faulted) {
+        faulted |= (verdict == Verdict.Faulted);
+
+        return (verdict == Verdict.Open);
+    }
+
+    // What scoring one candidate answered. The zero value is a fault, so a result nothing set holds the decision.
+    private enum DecisionScore : byte {
+        Faulted = 0,
+        Declined,
+        Scored,
+    }
+
     private bool DecisionPerceptible(DecisionPerception image, CompiledWorldFactsDecisionNeighbors neighbors, int observer, int candidate) {
         if (
             (candidate == observer) ||
@@ -136,16 +151,20 @@ public sealed partial class WorldRuleHost {
             toOrientation: image.Orientations[candidate]
         );
     }
-    private int GatherDecisionChoices(DecisionRuntime runtime, int key, in DecisionBinding state, bool lostEligibility) {
+    // The choices the options offer, in the runtime's buffer. A gate or score that faulted decides nothing, so the
+    // caller holds the decision.
+    private int GatherDecisionChoices(DecisionRuntime runtime, int key, in DecisionBinding state, bool lostEligibility, out bool faulted) {
         var policy = runtime.Rule.Decision!;
         var ruleName = runtime.Rule.Name;
         var written = 0;
+
+        faulted = false;
 
         for (var index = 0; (index < policy.Options.Length); index++) {
             var option = policy.Options[index];
 
             if (option.Neighbors is not { } neighbors) {
-                if (TryScoreDecisionChoice(
+                var plain = TryScoreDecisionChoice(
                     policy,
                     index,
                     key,
@@ -155,7 +174,10 @@ public sealed partial class WorldRuleHost {
                     state,
                     lostEligibility,
                     out var choice
-                )) {
+                );
+
+                faulted |= (plain == DecisionScore.Faulted);
+                if (plain == DecisionScore.Scored) {
                     runtime.Choices[written++] = choice;
                 }
                 continue;
@@ -193,16 +215,19 @@ public sealed partial class WorldRuleHost {
                     neighbors: neighbors,
                     observer: key
                 ) &&
-                    DecisionOptionGate(
+                    Opens(
+                    faulted: ref faulted,
+                    verdict: DecisionOptionGate(
                     candidate: state.Candidate,
                     key: key,
                     option: option,
                     ruleName: ruleName
-                )
+                ))
                 ) {
                     incumbent = state.Candidate;
                     retained++;
-                    if (TryScoreDecisionChoice(
+
+                    var kept = TryScoreDecisionChoice(
                         policy,
                         index,
                         key,
@@ -213,7 +238,10 @@ public sealed partial class WorldRuleHost {
                         lostEligibility,
                         out var choice,
                         gateAlreadyOpen: true
-                    )) {
+                    );
+
+                    faulted |= (kept == DecisionScore.Faulted);
+                    if (kept == DecisionScore.Scored) {
                         runtime.Choices[written++] = choice;
                     }
                 }
@@ -274,15 +302,18 @@ public sealed partial class WorldRuleHost {
                         neighbors: neighbors,
                         observer: key
                     ) ||
-                        !DecisionOptionGate(
+                        !Opens(
+                        faulted: ref faulted,
+                        verdict: DecisionOptionGate(
                         candidate: candidate,
                         key: key,
                         option: option,
                         ruleName: ruleName
-                    )
+                    ))
                     ) { continue; }
                     retained++;
-                    if (TryScoreDecisionChoice(
+
+                    var scoredCandidate = TryScoreDecisionChoice(
                         policy,
                         index,
                         key,
@@ -293,7 +324,10 @@ public sealed partial class WorldRuleHost {
                         lostEligibility,
                         out var choice,
                         gateAlreadyOpen: true
-                    )) {
+                    );
+
+                    faulted |= (scoredCandidate == DecisionScore.Faulted);
+                    if (scoredCandidate == DecisionScore.Scored) {
                         runtime.Choices[written++] = choice;
                     }
                 }
@@ -306,7 +340,7 @@ public sealed partial class WorldRuleHost {
         }
         return written;
     }
-    private bool TryScoreDecisionChoice(CompiledWorldFactsDecision policy, int index, int key, int candidate, int generation,
+    private DecisionScore TryScoreDecisionChoice(CompiledWorldFactsDecision policy, int index, int key, int candidate, int generation,
         string ruleName, in DecisionBinding state, bool lostEligibility, out DecisionChoice choice, bool gateAlreadyOpen = false) {
         choice = default;
         var option = policy.Options[index];
@@ -317,24 +351,34 @@ public sealed partial class WorldRuleHost {
             : key
         ); m_boundRight = candidate;
         try {
-            if (
-                !gateAlreadyOpen &&
-                (m_evaluator.Decide(
-                gate: option.Gate,
-                ruleName: ruleName
-            ) is not Verdict.Open)
-            ) { return false; }
-            m_decisionWork = m_decisionWork with { Scored = (m_decisionWork.Scored + 1) };
-            var scoreFrame = new EvaluationFrame(reader: this);
+            if (!gateAlreadyOpen) {
+                switch (m_evaluator.Decide(
+                    gate: option.Gate,
+                    ruleName: ruleName
+                )) {
+                    case Verdict.Faulted:
+                        return DecisionScore.Faulted;
+                    case Verdict.Closed:
+                        return DecisionScore.Declined;
+                }
+            }
 
-            if (
-                !RuleExpressions.Evaluate(
+            m_decisionWork = m_decisionWork with { Scored = (m_decisionWork.Scored + 1) };
+
+            var scoreFrame = new EvaluationFrame(reader: this);
+            var scored = RuleExpressions.Evaluate(
                 frame: ref scoreFrame,
                 kind: policy.ScoreKind,
                 program: option.Score
-            ).TryFinite(raw: out var score) ||
+            );
+
+            if (scored.Case == FaultCase.Faulted) {
+                return DecisionScore.Faulted;
+            }
+            if (
+                !scored.TryFinite(raw: out var score) ||
                 ((policy.Mode == WorldDecisionMode.Weighted) && (score <= 0))
-            ) { return false; }
+            ) { return DecisionScore.Declined; }
             if (
                 (index == state.Selected) &&
                 (candidate == state.Candidate) &&
@@ -352,7 +396,7 @@ public sealed partial class WorldRuleHost {
                 Option: index,
                 Score: score
             );
-            return true;
+            return DecisionScore.Scored;
         } finally { m_boundLeft = left; m_boundRight = right; }
     }
 }
