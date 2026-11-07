@@ -58,21 +58,19 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   ends that fan's attempts. Its reverse edge witnesses share that lifetime:
   a midpoint's nearest old surface and inherited error depend only on its two
   places, material and the prepared fan. `PrepareFrom` clears the witness map,
-  seeds zero-distance witnesses on original edges, and `Pass` stops at its first
-  commit; never retain those answers across it.
-  The triangle's edge vectors and Gram products are prepared once for all of
-  its point queries. A retained original vertex is an exact forward witness;
-  other samples may keep a measured witness no farther than their previous
-  bound instead of searching for the nearest. Every accepted witness still
-  satisfies the material, distance and interpolated-normal limits.
+  and `Pass` stops at its first commit; never retain those answers across it.
+  Forward checks measure the removed vertex's samples first, then every other
+  tracked sample. Each independently chooses its nearest admissible witness;
+  ordering only avoids later work when an early sample refuses the collapse.
 - **Retry refused edges only after their inputs change.** `Collapser.Pass` keys
   each rejection by its directed edge and both endpoint fan revisions. `Commit`
   is the one mutation door for topology, surface and line samples, and inherited
   bounds; it stamps every endpoint of the old fan, including deleted triangles.
   `Run` clears rejections when the distance and normal budgets change. The cache
   only skips failed attempts; every accepted collapse still passes all checks.
-  Distance and acute normal-cone comparisons use squared quantities, avoiding
-  roots and division in forward sample queries.
+  A faster query or a different witness assignment still needs the field audit:
+  tiny arithmetic and ownership changes can alter later collapse choices and
+  uncover surface that the sample-to-mesh bounds alone do not detect.
 - **One contouring.** `SdfSampledLattice` contours a GPU-sampled lattice through
   `SdfDualContouring` over `ISdfContourLattice`; never write a second mesher.
   A final lattice refines the cells its samples cannot resolve
@@ -562,8 +560,8 @@ laws exercise that boundary.
   9% more stored and region bytes. Conservative triangle-box distance bounds
   skip exact measurements that cannot improve the result; they never certify
   acceptance. Reverse edge measurements are shared across targets of an
-  unchanged source fan, and forward witnesses need not be globally nearest
-  when they already meet their previous bound. Judge a changed collapse by
+  unchanged source fan, and unchanged failed edges are not measured again.
+  Judge a changed collapse by
   the field audit at each rendered level, not by equality with earlier meshes.
   Glass skips collapse because its pass uses only
   level zero. The done line counts `levelled=` pieces and
