@@ -169,7 +169,7 @@ public sealed partial class HostProbe(string checkoutRoot) {
 
         var commit = Puck.Hosting.HostMemory.CommitBytes();
 
-        return new HostSample(
+        var sample = new HostSample(
             At: DateTimeOffset.UtcNow,
             CommitChargeGb: (commit is { } charged ? (charged.Charge / 1073741824.0) : double.NaN),
             CommitLimitGb: (commit is { } limited ? (limited.Limit / 1073741824.0) : double.NaN),
@@ -181,5 +181,9 @@ public sealed partial class HostProbe(string checkoutRoot) {
             HeavyTestHolder: heavy,
             Starts: starts
         );
+        // Existing host samplers (including the benchmark recorder) feed the same tracker while starts run,
+        // so a completed/plateaued start teaches later CLI processes its measured peak.
+        _ = HostStartTracker.Session.Judge(sample, HostStartKind.Step, HostLoadThresholds.ThisMachine, TimeProvider.System, reserve: false);
+        return sample;
     }
 }

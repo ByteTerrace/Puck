@@ -5,6 +5,22 @@ namespace Puck.Cli.Tests;
 
 public sealed class MeasureLawTests {
     [Fact]
+    public async Task QuietDefaultsAllowTheWholeIdleSettleAfterCpuSamplerSetup() {
+        var clock = new Puck.Testing.VirtualClock();
+        using var output = new StringWriter();
+        var sample = new Puck.Cli.Host.HostSample(DateTimeOffset.UnixEpoch, 0, 16, 100, null, 0);
+        var settle = TimeSpan.FromSeconds(30);
+        var run = Puck.Cli.Host.HostQuiet.SettleAsync(settle, settle, output, clock, TestContext.Current.CancellationToken,
+            () => Task.FromResult(sample), new Puck.Cli.Host.HostLoadThresholds(60, 5, 2, 10));
+        for (var index = 0; index < 17; index++) {
+            await clock.WhenArmedAsync(count: 1, ct: TestContext.Current.CancellationToken, dueTime: TimeSpan.FromSeconds(2));
+            clock.Advance(TimeSpan.FromSeconds(2));
+        }
+        Assert.Null(await run.WaitAsync(TestContext.Current.CancellationToken));
+        Assert.Contains("idle for 30 seconds", output.ToString());
+    }
+
+    [Fact]
     public void WindowedPointersUseTheSelectedStopsAndPassesBeforeFreezingBuilds() {
         MeasureCommand.ValidateMetric(["bench", "frames"], "/metrics/boot.frames.p99/median");
         var error = Assert.Throws<InvalidDataException>(() => MeasureCommand.ValidateMetric(["bench", "frames"], "/metrics/boot.frames.p95/median"));

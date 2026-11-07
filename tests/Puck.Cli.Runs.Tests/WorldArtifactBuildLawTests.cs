@@ -152,6 +152,24 @@ public sealed class WorldArtifactBuildLawTests {
     }
 
     [Fact]
+    public void BuildGeneratedDeclarationsDoNotDiscardTheBuildOrChangeItsKey() {
+        using var checkout = new Checkout();
+        var generated = Puck.SdfVm.ShaderDeclarations.Of([], Puck.Shaders.RenderGraphPackageCatalog.Engine, []);
+        checkout.Write("src/Puck.SdfVm/Puck.SdfVm.csproj", "<Project />");
+        checkout.Write(WorldArtifactClosure.WorldProject, "<Project><ItemGroup><ProjectReference Include=\"../Puck.SdfVm/Puck.SdfVm.csproj\" /></ItemGroup></Project>");
+        foreach (var declaration in generated) { checkout.Write(declaration.Path, "old generated text"); }
+        checkout.Git("add", "--all");
+        checkout.Commit("generated outputs");
+        var key = checkout.Key();
+        var builder = new CountingBuilder(() => {
+            foreach (var declaration in generated) { checkout.Write(declaration.Path, "regenerated text"); }
+        });
+        using var build = Resolve(checkout, checkout.Store, builder);
+        Assert.Equal(key, checkout.Key());
+        Assert.Equal(1, builder.Builds);
+    }
+
+    [Fact]
     public void TwoResolutionsOfAnUnchangedTreeProduceOneBuild() {
         using var checkout = new Checkout();
         var store = checkout.Store;

@@ -10,7 +10,8 @@ namespace Puck.Cli;
 /// <para>
 /// The key hashes what <see cref="CheckoutContent"/> reads over the <see cref="WorldArtifactClosure"/> roots only:
 /// git's object id for each root in <c>HEAD</c>, and the path, status and on-disk SHA-256 of every changed or untracked
-/// path under a root. Files git ignores are not inputs; every item the World's build names outside <c>bin</c> and
+/// path under a root, excluding changed outputs owned by <c>ShaderDeclarations</c>: the build regenerates those
+/// from model inputs already in the closure. Files git ignores are not inputs; every item the World's build names outside <c>bin</c> and
 /// <c>obj</c> is tracked or untracked, never ignored. The key also carries the runtime identifier of the machine, the
 /// <c>CI</c> environment variable the shared build properties read, and the build's own command line, since each
 /// changes what the same sources build into.
@@ -22,7 +23,7 @@ namespace Puck.Cli;
 /// </summary>
 public static class WorldArtifactKey {
     // The schema name distinguishes the keying rule, so a build keyed under another rule cannot name these inputs.
-    private const string Schema = "puck.world-artifact-key.v1";
+    private const string Schema = "puck.world-artifact-key.v2";
 
     /// <summary>Computes the key of the checkout's current World sources.</summary>
     /// <param name="repositoryRoot">The checkout, which must be a git working tree with a <c>HEAD</c> commit.</param>
@@ -56,7 +57,13 @@ public static class WorldArtifactKey {
             values: buildArguments
         ));
         Append(text: snapshot.Committed);
+        // These files are regenerated before compilation from the model in this closure. Their on-disk drift is
+        // output, not a source edit. Use the generator's one ownership list rather than another filename policy.
+        var generated = Puck.SdfVm.ShaderDeclarations.Of(
+            Puck.SdfVm.ShaderDeclarations.InterfaceFiles(repositoryRoot), Puck.Shaders.RenderGraphPackageCatalog.Engine, [])
+            .Select(declaration => declaration.Path).ToHashSet(StringComparer.Ordinal);
         foreach (var change in snapshot.Changes) {
+            if (generated.Contains(change.Path)) { continue; }
             Append(text: $"{change.Entry}\0{change.Content}");
         }
 

@@ -16,5 +16,6 @@
         <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
         <ProjectReference Include="../Puck.Commands/Puck.Commands.csproj" />
         <ProjectReference Include="../Puck.Launcher/Puck.Launcher.csproj" />
+        <ProjectReference Include="../Puck.SdfVm.Model/Puck.SdfVm.Model.csproj" />
     </ItemGroup>
 </Project>

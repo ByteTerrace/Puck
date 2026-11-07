@@ -18,10 +18,20 @@ public static class HostCommand {
         do {
             var sample = probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1));
             var lines = monitor.Observe(sample: sample);
+            var demands = Enum.GetValues<HostStartKind>().Select(kind => HostStartTracker.Session.Judge(
+                sample, kind, thresholds, TimeProvider.System, reserve: false)).ToArray();
 
             if (records is null) {
                 foreach (var line in lines) {
                     Console.Out.WriteLine(value: line);
+                }
+                if (lines.Count > 0) {
+                    foreach (var demand in demands) {
+                        Console.Out.WriteLine(FormattableString.Invariant($"admission {demand.Kind}: headroom={demand.HeadroomGb:0.0}GB peak={demand.OwnGb:0.0}GB growth={demand.GrowthGb:0.0}GB need={demand.NeedGb:0.0}GB commit-covered={demand.Covered}"));
+                    }
+                    foreach (var start in sample.Starts ?? []) {
+                        Console.Out.WriteLine(FormattableString.Invariant($"start {start.Kind} {start.Id}: private={start.PrivateGb:0.0}GB ready={start.Ready}"));
+                    }
                 }
             } else if (lines.Count > 0) {
                 records.Write(record: new System.Text.Json.Nodes.JsonObject {
@@ -30,6 +40,10 @@ public static class HostCommand {
                     ["freeRamGb"] = Finite(value: sample.FreeRamGb),
                     ["freeDiskGb"] = Finite(value: sample.FreeDiskGb),
                     ["commitPercent"] = Finite(value: sample.CommitPercent),
+                    ["commitChargeGb"] = Finite(sample.CommitChargeGb),
+                    ["commitLimitGb"] = Finite(sample.CommitLimitGb),
+                    ["starts"] = System.Text.Json.JsonSerializer.SerializeToNode(sample.Starts),
+                    ["demands"] = System.Text.Json.JsonSerializer.SerializeToNode(demands),
                     ["reuseNodes"] = sample.ReuseNodes,
                     ["gpuHolder"] = sample.GpuHolder,
                     ["heavyTestHolder"] = sample.HeavyTestHolder,
@@ -52,7 +66,7 @@ public static class HostCommand {
     }
     private static double? Finite(double value) => (double.IsFinite(d: value) ? Math.Round(value: value, digits: 1) : null);
     private static Command CreateLoad() {
-        var jsonOption = CliOptions.Json(description: "Write one JSON object per reading that prints a line: at, cpuPercent (the window's mean), freeRamGb, freeDiskGb, commitPercent, reuseNodes, gpuHolder, heavyTestHolder and admission (PRESSURE with its reasons, CAPACITY, LOADED or null).");
+        var jsonOption = CliOptions.Json(description: "Write one JSON object per transition reading: at, cpuPercent (window mean), freeRamGb, freeDiskGb, commitPercent, commitChargeGb, commitLimitGb, starts, per-kind demands, reuseNodes, gpuHolder, heavyTestHolder and admission.");
         var watchOption = new Option<bool>(name: "--watch") { Description = "Keep reading every --interval seconds and print a line on each transition, until cancelled." };
         var intervalOption = CliOptions.Count(defaultValue: 10, description: "Seconds between readings with --watch.", minimum: 1, name: "--interval");
         var windowOption = CliOptions.Count(defaultValue: 6, description: "Readings the CPU mean covers with --watch; CAPACITY waits until that many exist.", minimum: 1, name: "--window");
@@ -79,6 +93,9 @@ public static class HostCommand {
                                                        readings exist
                 LOADED                                 otherwise, once --window readings exist: capacity ended
               One line per transition: a state that holds prints nothing more.
+              Each transition also reports per-kind commit demand (expected peak plus remaining growth), and each
+              live start's kind, PID, private bytes and readiness. Peaks are measured per machine in the lease root;
+              unused growth tapers away over HostStartTracker.Plateau and returns on renewed allocation.
               PRESSURE wins over CAPACITY within one reading. Defaults scale with the machine: CAPACITY needs free
               RAM above 5/16 of the installed memory (rounded up to whole gigabytes) and three logical processors
               idle, but never fewer than 40% of them nor more than half; PRESSURE is free RAM below 1/8 of the
