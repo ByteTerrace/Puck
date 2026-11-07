@@ -230,8 +230,16 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, ui
         else { meshShadowSecondOptical.GetDimensions(opticalWords, opticalStride); }
         bool opticalPresent = opticalWords >= 3u * passGroup.meshShadowTexels * passGroup.meshShadowTexels;
         SdfMeshCascade c = sdfMeshCascadeAt(cascade);
-        float texelWorld = ((2.0 * c.halfHeight) / texels);
         bool exit = (dot(face, c.forward) > 0.0);
+        // The far cascade's exit layer may hold the camera of the refresh before (its two layers redraw on consecutive
+        // frames, SdfWorldPasses.Rates): the receiver reads it through that camera, the pass block's fourth. The glass
+        // extinction belongs to the depth's camera, so a receiver reading an exit layer from another camera reads none.
+        if (exit && (cascade == 1u)) {
+            SdfMeshCascade drawn = sdfMeshCascadeAt(3u);
+            opticalPresent = (opticalPresent && all(drawn.position == c.position) && all(drawn.forward == c.forward));
+            c = drawn;
+        }
+        float texelWorld = ((2.0 * c.halfHeight) / texels);
         // A receiver facing the light offsets along its face's normal; one turned from it offsets straight toward the
         // light, which moves it off its own exit by the offset alone. Along its face's reversed normal the offset would
         // reach 1 / (n·l) times as far toward the light at a grazing angle and pass a blocker standing that close.

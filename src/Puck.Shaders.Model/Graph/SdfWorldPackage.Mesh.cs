@@ -72,9 +72,10 @@ public static partial class SdfWorldPackage {
     public const int MeshIrradianceLevelCount = 3;
     /// <summary>The second shadow slot's cascade depth, sampled by the surface pass.</summary>
     public const string MeshShadowSecond = "meshShadowSecond";
-    /// <summary>The shadow cascades the frame renders: the key light's near and far cascades, then the second shadow
-    /// slot's one.</summary>
-    public const int MeshShadowCascadeCount = 3;
+    /// <summary>The light cameras the pass block carries: the key light's near and far cascades, the second shadow slot's
+    /// one, then the camera the far cascade's exit layer was drawn from, which trails the far camera by a frame while a
+    /// refresh draws the far cascade's two layers on consecutive frames.</summary>
+    public const int MeshShadowCascadeCount = 4;
     /// <summary>The rows one cascade's light camera takes in <see cref="MeshShadowCascades"/>.</summary>
     public const int MeshShadowCascadeRows = 4;
     /// <summary>The most texels along each side of one shadow cascade's depth, which full shadow quality renders; a lower
