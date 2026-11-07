@@ -362,6 +362,7 @@ touched" includes what consumes it:
   the eval ([evaluate an agent skill](../../../docs/development/documentation.md#evaluate-an-agent-skill));
 - every batch runs `puck docs links`, because two lanes that each pass can still break each other's
   citations, and CI checks only `main`; a failure the batch caused is fixed before the fast-forward;
+- before acting on a lane's report, review or research citations, the lead runs `puck docs links <file>` on that file;
 - every check runs from a CLI and test binaries rebuilt after the merge, never stale copies;
 - never merge into a tree while checks are running against it: `puck test` reads the tree's `.puck` sources
   live, so a mid-run merge pairs new sources with old binaries and fails for no reason in the code. One

@@ -381,6 +381,7 @@ public static class DocsLinksCommand {
         var failures = new List<(string Category, string Message)>();
         var advisories = new List<string>();
         var checkedCount = 0;
+        var codeCitations = new DocsCodeCitations(repositoryRoot);
 
         foreach (var document in documents) {
             var documentPath = Path.Combine(
@@ -395,10 +396,7 @@ public static class DocsLinksCommand {
             }
 
             var documentDirectory = (Path.GetDirectoryName(path: documentPath) ?? repositoryRoot);
-            var relative = document.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            );
+            var relative = Path.GetRelativePath(repositoryRoot, Path.GetFullPath(documentPath)).Replace('\\', '/');
             var enforceBareFileNames = (relative.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: "src/"
@@ -407,8 +405,20 @@ public static class DocsLinksCommand {
                 value: "tests/"
             ));
             var durable = DocsCorpus.IsDurable(relativePath: relative);
+            var corpus = DocsCorpus.IsDocument(relativePath: relative);
             var lines = File.ReadAllLines(path: documentPath);
             string? fence = null;
+
+            var locations = codeCitations.Check(document, lines);
+            foreach (var location in locations) {
+                checkedCount++;
+                var message = $"{document}:{location.DocumentLine}: {location.Status}: {location.Citation} ({location.Detail})";
+                Console.WriteLine(message);
+                if (location.Status != "verified") {
+                    failures.Add(("code-citation", message));
+                }
+            }
+            Console.WriteLine($"citations: {document}: verified {locations.Count(location => location.Status == "verified")}; drifted {locations.Count(location => location.Status == "drifted")}; not found {locations.Count(location => location.Status == "not found")}");
 
             for (var lineNumber = 1; (lineNumber <= lines.Length); lineNumber++) {
                 var line = lines[(lineNumber - 1)];
@@ -418,12 +428,16 @@ public static class DocsLinksCommand {
                     line: line
                 );
 
-                foreach (var (category, message) in rot.Line(
+                foreach (var (category, message) in corpus ? rot.Line(
                     code: code,
                     durable: durable,
                     line: line
-                )) {
-                    failures.Add(item: (category, $"{document}:{lineNumber}: {message}"));
+                ) : []) {
+                    if (category == "file-line") {
+                        advisories.Add($"{document}:{lineNumber}: {message}");
+                    } else {
+                        failures.Add(item: (category, $"{document}:{lineNumber}: {message}"));
+                    }
                 }
 
                 // A fenced block is an example or a transcript, not a citation: its spans are not names.
@@ -448,7 +462,7 @@ public static class DocsLinksCommand {
                             }
                         }
 
-                        if (rot.Branch(span: content) is { } branchMessage) {
+                        if (corpus && rot.Branch(span: content) is { } branchMessage) {
                             failures.Add(item: ("branch", $"{document}:{lineNumber}: {branchMessage}"));
                         }
                     }
@@ -568,7 +582,7 @@ public static class DocsLinksCommand {
             return CliExit.Failed;
         }
 
-        Console.WriteLine(value: "PASS: every link, anchor, cited path and cited symbol in the checked documents resolves, and none shows a rot marker.");
+        Console.WriteLine(value: "PASS: every link, anchor, cited path, symbol and code quotation resolves; no failing rot marker.");
 
         return CliExit.Success;
     }
@@ -578,7 +592,7 @@ public static class DocsLinksCommand {
             Description = "Repository-relative markdown files to check; absent, the whole hand-written corpus.",
         };
         var command = new Command(
-            description: "Check the hand-written documents for broken links, anchors, paths and symbols, and for rot markers.",
+            description: "Check markdown links, paths, symbols, code citations and quotations; check corpus rot markers.",
             name: "links"
         ) { documentsArgument };
 
@@ -608,9 +622,21 @@ public static class DocsLinksCommand {
             run of 7 to 40 hex characters on a line that speaks of commits, merges or tips; a path
             to a concrete entry under .claude/scratch/, a jobs/ directory or AppData/Local/Temp; a
             code span naming a branch (shaped like an existing one, or called a branch) that exists
-            neither locally nor on a remote; and, in a page outside docs/plans/, a file:line or
-            file#Lline citation. Nothing is recorded: every check reads the current tree and refs.
+            neither locally nor on a remote. These policy checks apply only to corpus pages.
+            A line citation in a durable corpus page is advisory: cite a symbol instead.
+            Nothing is recorded: every check reads the current tree and refs.
             Branch names are not checked when no remote-tracking branch exists.
+
+            Every prose path:line, path:start-end and path#Lline citation is checked against HEAD,
+            including in explicitly named reports outside the corpus. Citation revision: <revision>
+            selects a document's source revision; path@revision:line overrides it for one citation.
+            An introduced fenced quote must occur verbatim after whitespace runs are collapsed,
+            starting within five lines of the cited range. A quote elsewhere reports drift and its
+            true line; a missing file, invalid range or absent quote reports not found. Both fail.
+            A citation immediately above a fence (blank lines allowed), or in its owning bullet,
+            introduces the quote. Ellipses are literal. Each citation reports its verdict; locations
+            without a quotation verify only file existence and bounds. Examples inside fences are
+            not read as citations. Scratch reports may carry dates, revisions and scratch paths.
 
             Three controls run before any document (a deliberately nonexistent path must fail
             resolution, a deliberately absent fragment must miss, and this verb's own entry point
