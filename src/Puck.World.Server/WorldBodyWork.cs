@@ -3,25 +3,28 @@ using Puck.Abstractions.Counting;
 namespace Puck.World.Server;
 
 /// <summary>
-/// The deterministic work <see cref="WorldPopulation"/> spends stepping bodies, counted in a
+/// The work <see cref="WorldPopulation"/> spends stepping bodies, counted in a
 /// <see cref="WorkCounterSet"/> and read through <see cref="IWorkCounterSource"/> under the source name
 /// <see cref="SourceName"/>: the bodies a tick advances, the parked rigid bodies a contact-field change woke or left
 /// asleep because the change could not reach them, and the gyroscopic steps rigid bodies took, refused, or took without their rescale.
 /// </summary>
 /// <remarks>Each count is a monotonic total over the ledger's life, never reset; a reader takes a window by reading
-/// twice and subtracting. None is part of simulation state: nothing hashes, exports or checkpoints them. Every kind is
-/// <see cref="WorkClass.Deterministic"/>: the same world and input spend the same work on every run and host.</remarks>
+/// twice and subtracting. None is part of simulation state: nothing hashes, exports or checkpoints them. Each kind
+/// declares its class; neighbour-contact counts depend on untaped delivery timing.</remarks>
 public sealed class WorldBodyWork : IWorkCounterSource {
     /// <summary>The name a counters report heads this source's section with.</summary>
     public const string SourceName = "physics.bodies";
 
     private readonly WorkCounterSet m_counts = new(
-        kinds: [Advances, FieldWakes, FieldObserved, GyroscopicSteps, GyroscopicRefusals, GyroscopicRescaleSkips],
+        kinds: [Advances, FieldWakes, FieldObserved, GyroscopicSteps, GyroscopicRefusals, GyroscopicRescaleSkips, AdjacencyCorrectionClamps],
         name: SourceName
     );
 
     /// <summary>Gets the kind counting simulated body advances: one per non-seat body a tick's integration pass steps.</summary>
     public static WorkKind Advances { get; } = new(name: "physics.bodies.advances", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the number of neighbour-body correction requests shortened or rejected by the local tick
+    /// budget. Delivery timing is not yet taped, so this count is pacing-dependent.</summary>
+    public static WorkKind AdjacencyCorrectionClamps { get; } = new(name: "physics.bodies.adjacency-correction-clamps", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting parked rigid bodies a contact-field change woke.</summary>
     public static WorkKind FieldWakes { get; } = new(name: "physics.bodies.field-wakes", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting parked rigid bodies that observed a bounded contact-field change without waking (a

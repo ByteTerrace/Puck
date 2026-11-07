@@ -588,25 +588,9 @@ Its one caller is the adjacency contact field, for `"physical-contact"`
 (`src/Puck.World.Server/WorldAdjacencyContactField.cs:106-110`; a search for
 `LocalResponds(` over `src/` finds only that call and the definition)
 **[opened]**. The field corrects the local body out of each solid neighbour
-body the pair hash assigns to it, adding the corrections one after another
-**[opened]** (`src/Puck.World.Server/WorldAdjacencyContactField.cs:121-134`):
-
-```csharp
-                if (!FixedDynamicBodyContacts.TryCorrection(
-                    leftPosition: neighbourPosition,
-                    leftOrientation: neighbourOrientation,
-                    leftVolumes: volumes,
-                    rightPosition: remotePosition,
-                    rightOrientation: FixedQuaternion.FromQuaternion(value: neighbour.CurrentOrientation(index: entity)).Normalize(),
-                    rightVolumes: neighbourCollider.Volumes,
-                    tieBreaker: entity,
-                    correction: out var correction
-                )) {
-                    continue;
-                }
-
-                neighbourPosition += correction;
-```
+body the pair hash assigns to it. Corrections now enter through
+`WorldPopulation.BoundAdjacencyCorrection`, sharing a per-body tick budget
+across all projections and sweep retries. See the A10 verdict below.
 
 Neighbour colliders are compiled from the neighbour's delivered definition,
 and positions come from its snapshots (`src/Puck.World.Protocol/Protocol/WorldSessionMirror.cs:479-489`,
@@ -1019,18 +1003,19 @@ instance is reused by name when its document matches
 would let a fresh generation resolve to a restored old instance of the same
 name **[inference]**.
 
-**A10, a per-tick bound on seam correction: confirmed absent.** The field adds
-one `TryCorrection` per solid neighbour body the pair hash assigns locally,
-with no cap (`src/Puck.World.Server/WorldAdjacencyContactField.cs:100-145`)
-**[opened]**. Each correction is the deepest volume overlap between the local
-collider and the neighbour's (`src/Puck.Physics/FixedDynamicBodyContacts.cs:282-322`)
-**[opened]**, so it is bounded by the two colliders' sizes, and the
-neighbour's collider shapes come from the definition the neighbour delivers
-**[inference]** from `WorldSessionMirror`. The correction applies only inside
-the overlap band (`TryMapIntoNeighbour`, `:234-266`) **[opened]**. The pair
-hash is over addresses the neighbour reports, so a neighbour can choose
-generations that assign a pair to the local side **[inference]**. The input is
-also named as not replay-deterministic (`:25-29`) **[opened]**.
+**A10, a per-tick bound on seam correction: implemented.**
+`WorldPopulation.BoundAdjacencyCorrection` admits each dynamic correction
+before application in `WorldAdjacencyContactField.ResolveCore`. The sum of
+admitted lengths cannot exceed the local body's scaled collider reach; each
+request is also limited by the overlap depth minus spent budget. Enlarging the
+remote collider, speed claims, or body count cannot enlarge that local reach.
+`WorldAdjacencyCorrectionLawTests` drives phantom reports at each tick and an
+honest shallow contact through the real server; `WorldBodyWork.AdjacencyCorrectionClamps`
+is visible in `world.counters`. This bounds displacement; it does not prove
+reported bodies exist, prevent repeated bounded shoves or guarantee no
+ownership crossing. Neighbour terrain contact and untaped delivery timing
+remain outside this guarantee; the replay packet is in
+[open items](../open-items.md#transfers-federation-and-server).
 
 **Critique 1.2, group membership proof on the federation wire: confirmed
 absent.** No codec or reservation field carries one, and the resolver names
