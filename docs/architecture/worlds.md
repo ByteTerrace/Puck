@@ -8,6 +8,99 @@ receives signing and sealing P-256 key pairs during onboarding; key identifiers
 include the issuer, subject, algorithm, and SHA-256 public-key hash. An identity
 without keys cannot carry a claim, and an unverifiable claim is refused.
 
+## The idea in plain terms
+
+Most online games are run by one operator from one database. Zones, characters
+and items are records in that operator's system, the rules that move things
+between them are that operator's code, and everyone trusts that operator.
+
+Puck has no such centre. It has one kind of thing, a world, and builds
+everything else from it:
+
+- A zone, a dungeon, a card table and a lobby are each a world.
+- A character is a world: a small document that holds its name, look, progress
+  and possessions. The host that holds the player's account runs it; today that
+  is the Puck process the player launches.
+- A hub, the place a player starts from and returns to, is a world. Its screens
+  show other worlds the player has joined.
+- What other games call a server is a world that many players join and whose
+  authority they accept.
+- An emulated console on a screen runs a game inside a world that the world
+  displays.
+
+Every world is the same kind of document, compiled and simulated the same way.
+Each world chooses three things for itself:
+
+1. **Where it runs.** Its authority can be a studio's server, a cloud silo, a
+   friend's machine or the player's own. Exactly one authority simulates a given
+   body at a time.
+2. **Who may do what in it.** Admission and grants decide who joins and what each
+   visitor may change.
+3. **Whose word it accepts.** A world decides which other worlds' signed claims
+   it honours.
+
+Words this page uses in a plain sense:
+
+- **Authority**: the one running process whose copy of a world is the truth. It
+  steps the simulation; everyone else receives what it sends.
+- **Body**: a presence a world simulates, such as a player's avatar, a companion
+  or a creature. Seeing a world needs no body; acting in it does.
+- **Admission and grants**: a world's rules for who may join and what each
+  visitor may change.
+- **Claim**: a statement one world signs ("this character cleared our dungeon")
+  that any other world can verify came from it unaltered. Attestation is the
+  signing mechanism; the keys come from the platform at onboarding
+  ([signed attestation](#signed-attestation)).
+- **Title**: whose a thing is. **Custody**: which world is holding or simulating
+  it right now. A crossing moves custody, never title.
+- **Epoch**: a counter that rises at every handoff, so a holder that missed a
+  handoff is recognisably out of date and its actions on the thing are refused.
+- **Escrow**: holding a thing on behalf of both sides until both have recorded
+  the transfer, so it is never in two places or none; after a crash the protocol
+  settles on exactly one holder.
+
+Things pass between worlds in a few defined ways. A player can join a world (see
+it), take a body in it (be in it), carry a claim from one world into another (a
+signed statement that one world says they earned something), and write progress
+back to their character (a submission the character's world accepts or refuses).
+Portals show one world inside another and are where bodies cross.
+
+Because each world can be run by a different party, a thing that moves between
+worlds can move between parties that do not trust each other. Escrow, title and
+custody, and attestation are the engine's answers to that. When a companion
+follows its player into a zone that someone else runs, the companion's home keeps
+its title and the zone holds custody under a numbered epoch, so a crash or a
+lost connection cannot duplicate it or lose it, and nothing a host merely asserts
+moves it
+([the custody protocol](../plans/companion-redesign.md#1-vocabulary)).
+
+A worked example. A player clears a dungeon that a studio runs and earns a
+sword. The dungeon writes the sword back to the player's character as a claim
+the dungeon signed. The player then walks into a friend's world, which a
+friend's machine runs. The friend's world reads the character, verifies the
+dungeon's signature, and applies its own policy: it may show the sword, let it
+be wielded with its stats clamped to the friend's rules, or ignore it. The
+studio decides what it vouches for; the friend decides what that is worth in
+their world. Where something must stay unique or tradeable, such as currency or
+a stake at a card table, the world that issued it keeps the record itself and
+escrow and custody move it, so a copied claim gains nothing. Which kinds of value
+use which form is an open design question
+([MMO foundations](../plans/mmo-foundations.md)).
+
+| A single-operator game | Puck |
+|---|---|
+| One operator runs every zone | Each world chooses where its authority runs |
+| A character is a record in the operator's database | A character is a world of its own, with its own durable state |
+| An item is a database row the operator trusts | An item is either a record an authoritative world keeps or a claim another world signed; the receiving world decides what counts |
+| Moving between zones is the operator's internal code | Moving between worlds is a transfer between authorities, guarded by escrow and custody |
+| A minigame is a separate screen | A game inside the game is another world, displayed or entered through a portal |
+
+This lets a character, its look and its progress travel between worlds run by
+different people, lets anyone host a world others join, and makes a game within a
+game ordinary. The cost is that every crossing between authorities needs a
+protocol, and trust is declared per world instead of assumed. The sections below
+give the precise relationships and invariants.
+
 ## Engine flow and boundaries
 
 The engine has a one-way flow with explicit ownership at each boundary:

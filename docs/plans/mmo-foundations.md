@@ -15,8 +15,8 @@ Only what the owner rules after the round is written into
 - Portals are meant to solve many of an MMO's hard problems.
 - The card and board game systems exist to satisfy the "casino fantasy" that
   many RPGs implement poorly.
-- Puck's world model (worlds as worlds: one model for every zone, character and
-  server, with authority placed per world) changes how nearly everything is
+- Puck's world model (every zone, character and server is the same kind of
+  world, with its authority placed per world) changes how nearly everything is
   implemented. Remote servers can and will be authoritative; escrow and the
   related concepts exist because of the tension between worlds of different
   authority.
@@ -25,23 +25,17 @@ Only what the owner rules after the round is written into
 - The design is done properly before anything is committed: a full session that
   reaches consensus, with the homework done.
 
-## The frame: worlds as worlds
+## The frame
 
-[The world model](../architecture/worlds.md#world-relationships) represents
-zones, identities, alternate characters, hubs, games and what would elsewhere be
-called servers with one document model. Where a world's authority runs (a remote
-server, a silo, a player's machine) is a separate choice for each world, and
-remote servers can and will be authoritative. An identity is a world; a zone
-writes progress back to it by submission; a world vouches for a claim with an
-issuer-signed slot another world carries; trust is bilateral, so the engine
-carries proof and enforces capabilities and the receiving world's policy decides
-whether a claim counts ([invariants](../architecture/worlds.md#invariants)).
-
-Escrow, title and custody, and attestation exist because owned things move
-between worlds whose authorities differ and trust each other differently. The
-round studies how well those mechanisms resolve that tension at MMO scale, and
-what each established MMO answer becomes when every zone, character and server is
-a world rather than a row in one operator's database.
+Read [the idea in plain terms](../architecture/worlds.md#the-idea-in-plain-terms)
+first: everything (zones, characters, hubs, tables, servers) is the same kind of
+world; each world chooses where its authority runs, who may act in it and whose
+claims it accepts; remote servers can and will be authoritative; and escrow,
+custody and attestation exist because owned things move between worlds whose
+authorities differ and trust each other differently. The round asks what each
+established MMO answer becomes when every zone, character and server is a world
+rather than a record in one operator's database, and how well those mechanisms
+hold at MMO scale.
 
 ## Questions the round must answer
 

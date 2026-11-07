@@ -296,6 +296,7 @@ slashes too.
 | Read | For |
 |---|---|
 | [Manual](docs/README.md#orientation) | Concepts and area routing. |
+| [The world model in plain terms](docs/architecture/worlds.md#the-idea-in-plain-terms) | What "everything is a world" means; read before designing anything that crosses worlds. |
 | [Project map](docs/project-map.md) | Projects; never hand-edit its generated block. |
 | [Contributing](docs/development/contributing.md) | Code and verification; read before GPU or emulator work. |
 | [Documentation](docs/development/documentation.md) | Prose, navigation, XML docs and skills. |
