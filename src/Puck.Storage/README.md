@@ -1,25 +1,19 @@
 # Puck.Storage
 
 Puck addresses a blob by an object ID and a relative key. The host chooses the
-storage target; the same routed store supports local directories and Azure Blob
-Storage. Callers do not need to know where a blob lives.
+storage target; callers do not need to know where a blob lives. This project
+holds the routed store and the local directory target. A cloud store is a
+provider's target in the provider's own project (Azure Blob's is
+[Puck.Storage.Azure](../Puck.Storage.Azure/README.md)), reached by a host
+through an installed extension's storage provider.
 
-## Route an oid to its storage account
+## Add a store
 
-`IPartitionResolver` answers which storage account owns a user's container.
-`DefaultPartitionResolver` runs `Puck.Maths`' `MonotonicPartitioner` over
-`PartitioningOptions`, so the silo, the edge, and the browser's WASM build all
-land on the same account without coordinating; the monotonic invariant means
-raising `Count` only migrates the users who fall into a new bucket.
-
-`PartitioningOptions.AnchorPartition` is the exception to routing: a user's
-published `public/` content lives in their oid-named container on that partition
-whatever their home partition is, so published URLs survive a migration.
-
-The resolver reports where a user *should* live for the current partition count.
-During a migration the recorded home and the computed partition differ and the
-data is still in the home, so a caller that must reach real bytes resolves
-through the owning grain rather than through this.
+An `ObjectStorageTarget` names the `IObjectBlobStoreBackend` that serves it, so
+the routed `IObjectBlobStore` dispatches through the target and no registration
+step exists for a new provider to forget. A provider adds a target subtype, its
+backend, and a secret-free `Description` for status echoes; the backend keeps
+`IObjectBlobStore`'s read, write, list and access-probe semantics.
 
 ## Give callers a namespace
 

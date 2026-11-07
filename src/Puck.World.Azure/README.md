@@ -37,8 +37,8 @@ dotnet publish src/Puck.World.Azure -c Release -nodeReuse:false -o extensions/Pu
 Publish it again after the engine's sources change: the installation loads
 against the World's own copy of every assembly they share. `AzureWorldExtension` then contributes
 `azure.blob` storage, the `azure.scheduled-events` retirement observer,
-`azure.api-users` authentication, the `azure.resource` operation provider and the
-`/livez/azure` health endpoint. Registration performs no cloud access; a
+`azure.api-users` authentication, the `azure.resource` operation provider, the
+`embedding.azure-openai` embedding provider and the `/livez/azure` health endpoint. Registration performs no cloud access; a
 deployment document selects each one by its key. `world.extensions.catalog`
 confirms what a running host composed.
 
@@ -106,6 +106,40 @@ claim and two bindings at the existing attestation byte ceilings, plus CBOR
 framing, regardless of `Content-Length`. The same 15-second operation deadline
 covers token acquisition, headers and every streamed body read. No shipped host
 currently constructs this resolver.
+
+## Azure Blob storage
+
+`azure.blob` builds a `Puck.Storage.Azure` target, the same contribution for a
+silo document's `store` and a World's `--storage-config-file`. Its settings name
+exactly one of `accountUrl` (an HTTPS service URI the ambient identity
+authenticates to, without credentials, query or fragment) or `connectionString`
+(a development or emulator account whose key the operator holds; it never
+belongs in a committed file). An `accountUrl` may add `edgeNamespace`, the
+platform edge namespace the store is reached through, and `listEndpoint`, a
+direct account connection for listing. A player's per-user store is the edge
+form:
+
+```json
+{ "type": "azure.blob", "settings": { "accountUrl": "https://<edge-host>", "edgeNamespace": "private", "listEndpoint": "https://<account>.blob.core.windows.net" } }
+```
+
+Through the edge, containers are platform-managed (created at onboarding, never
+by this client) and every written blob carries the `CanRead`/`CanWrite` index
+tags the per-user access policy reads. The edge cannot serve a container list
+at all: its path rewrite has no segment for a query-string-only List Blobs
+request, so it 404s before reaching storage. An edge target therefore sends a
+list to `listEndpoint`, and refuses by name, before any network call, when none
+is configured. Going direct addresses a different layout of the same blob: the
+edge maps `/{namespace}/{container}/{rest}` onto container `{container}`, blob
+`{namespace}/{rest}`, so what the edge addresses as container `{namespace}`,
+blob `{objectId}/{key}` is stored as container `{objectId}`, blob
+`{namespace}/{key}`. The direct list enumerates the object's own container
+beneath `{namespace}/` (the only shape the per-user access policy grants) and
+strips that prefix, so both routes yield the same object-relative keys. A 404
+through the direct connection propagates as a refusal; only the raw shape
+(no `edgeNamespace`, self-managed containers) reads a 404 as "nothing written
+yet". `storage.credential` asks the ambient credential for a storage token; a
+connection string answers with its account key.
 
 ## Host composition
 

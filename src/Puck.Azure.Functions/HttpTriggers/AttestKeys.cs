@@ -10,7 +10,7 @@ using System.Text;
 using Puck.Attestation;
 using Puck.Azure.Functions.Middleware;
 using Puck.Azure.Functions.Services;
-using Puck.Storage;
+using Puck.Storage.Azure;
 
 namespace Puck.Azure.Functions.HttpTriggers;
 

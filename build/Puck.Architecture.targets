@@ -38,6 +38,8 @@
             Layer="$(PuckLayer)"
             Layers="@(PuckArchitectureLayer)"
             Profiles="@(PuckArchitectureProfile)"
+            Provider="$(PuckProvider)"
+            ProviderAssemblies="@(PuckArchitectureProviderAssemblies)"
             ProjectFile="$(MSBuildProjectFullPath)"
             ProjectName="$(MSBuildProjectName)"
             References="@(ReferencePathWithRefAssemblies)"

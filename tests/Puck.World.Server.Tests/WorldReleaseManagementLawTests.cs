@@ -8,7 +8,7 @@ namespace Puck.World.Server.Tests;
 
 /// <summary>Laws for release identity, structural qualification, and the guarded group root.</summary>
 public sealed class WorldReleaseManagementLawTests {
-    private static readonly ObjectStorageTarget Target = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: "UseDevelopmentStorage=true");
+    private static readonly ObjectStorageTarget Target = new DirectoryObjectStorageTarget(rootPath: "fake-store");
 
     // These laws exercise the ledger. WorldReleaseCutoverLawTests separately executes real root restoration.
     private static async Task<WorldReleaseGroupOutcome> CompleteBookkeepingRecoveryAsync(WorldReleaseGroupStore groups, WorldReleaseGroupSnapshot current) {

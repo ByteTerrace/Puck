@@ -11,6 +11,10 @@ public sealed record DirectoryObjectStorageTarget : ObjectStorageTarget {
     public int MaximumListEntries { get; }
     /// <summary>Gets the directory every object's blobs are rooted under.</summary>
     public string RootPath { get; }
+    /// <inheritdoc/>
+    public override string Description => $"local directory {RootPath}";
+    /// <inheritdoc/>
+    protected internal override IObjectBlobStoreBackend Backend => DirectoryObjectBlobStoreBackend.Instance;
 
     /// <summary>Initializes the target.</summary>
     /// <param name="rootPath">The root directory, resolved to an absolute path now and created on first write.</param>

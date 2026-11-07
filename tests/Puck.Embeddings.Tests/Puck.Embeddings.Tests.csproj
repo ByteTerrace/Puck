@@ -13,6 +13,7 @@
     <ItemGroup>
         <!-- The embedding generators. -->
         <ProjectReference Include="../../src/Puck.Embeddings/Puck.Embeddings.csproj" />
+        <ProjectReference Include="../../src/Puck.Embeddings.Azure/Puck.Embeddings.Azure.csproj" />
     </ItemGroup>
     <ItemGroup>
 

@@ -1061,16 +1061,24 @@
           "Microsoft.Graph": "[6.*, 7.0.0)",
           "OpenTelemetry.Instrumentation.Http": "[1.*, 2.0.0)",
           "Puck.Azure": "[1.0.0, )",
-          "Puck.Storage": "[1.0.0, )"
+          "Puck.Storage": "[1.0.0, )",
+          "Puck.Storage.Azure": "[1.0.0, )"
         }
       },
       "puck.storage": {
         "type": "Project",
         "dependencies": {
-          "Azure.Identity": "[1.*, )",
-          "Azure.Storage.Blobs": "[12.*, )",
           "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
+      },
+      "puck.storage.azure": {
+        "type": "Project",
+        "dependencies": {
+          "Azure.Identity": "[1.*, )",
+          "Azure.Storage.Blobs": "[12.*, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "Puck.Storage": "[1.0.0, )"
         }
       }
     }

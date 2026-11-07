@@ -303,12 +303,9 @@
       "ByteTerrace.Puck.Embeddings": {
         "type": "Project",
         "dependencies": {
-          "Azure.AI.OpenAI": "[2.9.0-beta.1, )",
-          "Azure.Identity": "[1.21.0, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.AI": "[10.*, )",
-          "Microsoft.Extensions.AI.OpenAI": "[10.*, )"
+          "Microsoft.Extensions.AI": "[10.*, )"
         }
       },
       "ByteTerrace.Puck.Maths": {
@@ -320,6 +317,15 @@
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
+      },
+      "puck.embeddings.azure": {
+        "type": "Project",
+        "dependencies": {
+          "Azure.AI.OpenAI": "[2.9.0-beta.1, )",
+          "Azure.Identity": "[1.21.0, )",
+          "ByteTerrace.Puck.Embeddings": "[0.1.0-alpha, )",
+          "Microsoft.Extensions.AI.OpenAI": "[10.*, )"
         }
       }
     }

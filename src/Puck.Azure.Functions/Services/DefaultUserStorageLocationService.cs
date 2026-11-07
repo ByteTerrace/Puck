@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Caching.Hybrid;
 using Puck.Azure.Functions.Utilities;
-using Puck.Storage;
+using Puck.Storage.Azure;
 
 namespace Puck.Azure.Functions.Services;
 

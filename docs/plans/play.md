@@ -285,7 +285,7 @@ cross-document write-back (an operation id, a precondition, atomic persistence,
 an observable receipt); latency equalisation from a real round-trip source; and
 local `Join`'s pre-allocation as enforceable admission semantics. Cloud-catalog
 discovery is in place: a whole-catalog pull lists the cloud namespace
-through `storage.discoveryEndpoint` and refuses by name when none is authored
+through the configured store and refuses by name when the store cannot list
 (`WorldOwnedWorldSync`, [owned worlds and storage](../../src/Puck.World.Server/README.md#owned-worlds-and-storage)).
 
 **The gated ladder**, each row waiting on the one before: the extension

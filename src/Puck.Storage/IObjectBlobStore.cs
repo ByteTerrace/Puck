@@ -38,10 +38,8 @@ public interface IObjectBlobStore {
     /// object-relative — the same shape <see cref="ObjectBlobAddress.Key"/> carries — so a discovered key addresses a
     /// read directly. Version tokens are deliberately NOT returned: every consumer reads the blob it discovered, and
     /// <see cref="ReadAsync"/> already yields the token with the bytes, so listing one would be a second answer to the
-    /// same question with a wider window for it to be stale in. On the Azure backend, an edge-shaped target (see
-    /// <c>AzureBlobObjectStorageTarget.EdgeNamespace</c>) can never serve LIST through the edge at all — it routes to
-    /// <c>AzureBlobObjectStorageTarget.DirectEndpoint</c> instead, or THROWS by name when that is unset, rather than
-    /// returning an empty result the caller cannot tell from an honestly empty prefix.</summary>
+    /// same question with a wider window for it to be stale in. A target whose store cannot list throws by name
+    /// rather than returning an empty result the caller cannot tell from an honestly empty prefix.</summary>
     /// <param name="target">The storage target the object resolves against.</param>
     /// <param name="objectId">The object (container) id to list within.</param>
     /// <param name="keyPrefix">The key path to list beneath (relative, no dot segments); empty lists every key under
@@ -54,4 +52,24 @@ public interface IObjectBlobStore {
         string keyPrefix,
         CancellationToken cancellationToken = default
     );
+    /// <summary>Probes whether this host could authenticate to <paramref name="target"/>'s store right now, without
+    /// prompting, reading or writing a blob. A target that needs no credential answers available.</summary>
+    /// <param name="target">The storage target to probe.</param>
+    /// <param name="timeout">How long, on <paramref name="clock"/>, to wait before giving up.</param>
+    /// <param name="cancellationToken">A token to observe.</param>
+    /// <param name="clock">The host clock <paramref name="timeout"/> runs on; <see langword="null"/> is
+    /// <see cref="TimeProvider.System"/>.</param>
+    /// <returns>The verdict; a timeout or credential failure is an unavailable verdict, never an exception.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
+    ValueTask<ObjectStorageAccess> ProbeAccessAsync(ObjectStorageTarget target, TimeSpan timeout, CancellationToken cancellationToken = default,
+        TimeProvider? clock = null) {
+        ArgumentNullException.ThrowIfNull(target);
+
+        return target.Backend.ProbeAccessAsync(
+            cancellationToken: cancellationToken,
+            clock: (clock ?? TimeProvider.System),
+            target: target,
+            timeout: timeout
+        );
+    }
 }
