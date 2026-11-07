@@ -21,7 +21,7 @@ public sealed partial class SdfShadeProgram {
     /// <summary>Work of the default post-light composition.</summary>
     public const uint DefaultComposeWork = 256;
     /// <summary>A provisional CPU admission bound. Step 5 measures the dispatch throughput and sets its margin.</summary>
-    public const ulong MaxWork = (1UL << 40);
+    public const ulong MaxWork = (1UL << 32);
 
     // Compile-time proof: even a whole 8x8 group at the largest admitted light walk fits. A false inequality divides by zero.
     private const int WorkBoundProof = (1 / (((MaxRegisters > 0) && ((MaxRegisters & (MaxRegisters - 1)) == 0) && (MaxOps <= MaxWork) &&

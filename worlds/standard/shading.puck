@@ -52,7 +52,7 @@ shade template inset(origin, rotation, depth, ior, softness, amplitude, frequenc
 }
 
 shade template flow(velocity, scale, stretch, cycles, tiltAmount, coverage, softness, color, roughness, metal, seed,
-  structural world = 1, structural velocityLane = -1, structural coverageLane = -1) {
+  structural world = 1, structural velocityLane = -1, structural coverageLane = -1, structural glass = 0) {
   surface {
     let point = world ? surface.position : surface.layerPosition
     let normal = world ? surface.normal : toLayer(surface.normal)
@@ -82,9 +82,9 @@ shade template flow(velocity, scale, stretch, cycles, tiltAmount, coverage, soft
     let revealed = mix(cover, smoothstep(threshold - soft, threshold + soft, 0.5 + 0.5 * shadeClamp(pattern.x, -1, 1)), fade)
     let revealed = cover > 0 ? revealed : 0
     albedo = mix(material.albedo, color, revealed)
-    roughness = mix(material.roughness, roughness, revealed)
-    metal = mix(material.metal, metal, revealed)
-    coat = material.coat * (1 - revealed)
+    roughness = glass ? material.roughness : mix(material.roughness, roughness, revealed)
+    metal = glass ? material.metal : mix(material.metal, metal, revealed)
+    coat = glass ? material.coat : material.coat * (1 - revealed)
     reveal = revealed
     let slope = [pattern.y, pattern.z, pattern.w] * fade
     let slope = slope - along * (dot(slope, along) * squeeze)
@@ -95,11 +95,11 @@ shade template flow(velocity, scale, stretch, cycles, tiltAmount, coverage, soft
   }
 }
 
-function flowed(base, layer, world = 1, velocityLane = -1, coverageLane = -1) = base with {
+function flowed(base, layer, world = 1, velocityLane = -1, coverageLane = -1, glass = 0) = base with {
   flow: layer
   shade: flow(layer.velocity, layer.scale, layer.stretch, floor(4096 / layer.cycle + 0.5), layer.tilt, layer.coverage,
     layer.softness, layer.surface.color, layer.surface.roughness, layer.surface.metal, layer.seed,
-    world: world, velocityLane: velocityLane, coverageLane: coverageLane)
+    world: world, velocityLane: velocityLane, coverageLane: coverageLane, glass: glass)
 }
 
 shade template weathered(under, deposit, seed, scale, linesAmount, settle, edgeAmount, reach, threshold,

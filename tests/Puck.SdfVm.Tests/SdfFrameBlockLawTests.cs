@@ -11,6 +11,21 @@ namespace Puck.SdfVm.Tests;
 /// declares is written, at the offset its generated declaration reads, and the mesh pass's interface lays the same block
 /// out member for member, so it binds the block its node writes.</summary>
 public sealed class SdfFrameBlockLawTests {
+    [Theory]
+    [InlineData("clock", true, false)]
+    [InlineData("lanes.world2", false, true)]
+    [InlineData("material.roughness", false, false)]
+    public void DefaultProgramReadsDriveClockAndLanesAndCarryIdentity(string input, bool clock, bool lanes) {
+        var shade = SdfShadeProgram.Compile(new("default", [], [new(SdfShadePhase.Surface, "roughness", new("input", Name: input))]));
+        var frame = Frame() with { ShadePrograms = true, ShadeDefault = shade, Clock = new(600, 0), WorldLanes = new(1, 2, 3, 4) };
+        var block = new byte[SdfFrameBlock.SizeBytes];
+        SdfFrameBlock.Write(block: block, frame: frame, view: 0, width: 8, height: 8, tables: new(0, 0, 0, 0, ShadeDefaultFirst: 123));
+        int Offset(string member) => (int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member);
+        Assert.Equal(clock, BitConverter.ToSingle(block, Offset(SdfWorldPackage.FlowClock)) != 0);
+        Assert.Equal(lanes ? 3f : 0f, BitConverter.ToSingle(block, Offset(SdfWorldPackage.WorldLanes) + 8));
+        Assert.Equal(123u, BitConverter.ToUInt32(block, Offset(SdfWorldPackage.ShadeDefault)));
+        Assert.Equal(shade.IdentityBytes.ToArray(), block.AsSpan(Offset(SdfWorldPackage.ShadeIdentity), 32).ToArray());
+    }
     [Fact]
     public void StampFadeBelongsToOneViewAndOtherViewsStaySolid() {
         var frame = Frame();
@@ -46,8 +61,11 @@ public sealed class SdfFrameBlockLawTests {
     // base, since each instance renders its one view at row zero, and the mesh path's values, which the pass recorder
     // writes per pass after it.
     private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase, SdfWorldPackage.PreviousView,
+        // This fixture has no clock-reading appearance; the targeted read-flag law covers its nonzero case.
+        SdfWorldPackage.FlowClock,
+        SdfWorldPackage.ShadePrograms, SdfWorldPackage.ShadeDefault, SdfWorldPackage.ShadeIdentity, SdfWorldPackage.ShadeDemand,
         SdfWorldPackage.MeshShadowCascades, SdfWorldPackage.MeshShadowCount, SdfWorldPackage.MeshShadowParameters, SdfWorldPackage.MeshShadowTexels,
-        SdfWorldPackage.MeshIrradianceVolume, SdfWorldPackage.MeshIrradianceLevels,
+        SdfWorldPackage.MeshIrradianceVolume, SdfWorldPackage.MeshIrradianceLevels, SdfWorldPackage.MeshIrradianceSpacings,
         // No exposures are staged here, so the meter has no reading, and a manual exposure adapts nothing locally.
         SdfWorldPackage.MeterLuminance, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance];
     // A camera basis none of whose components is zero.

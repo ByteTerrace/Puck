@@ -137,15 +137,9 @@ checked, which does not establish the surrounding claims.
 - **Severity:** High
 - **Memo section:** `§3.3` ([`docs/plans/author-shaders.md:483-489`](../../../docs/plans/author-shaders.md)), `§3.5` ([`docs/plans/author-shaders.md:547-559`](../../../docs/plans/author-shaders.md)), `§3.7` ([`docs/plans/author-shaders.md:590-601`](../../../docs/plans/author-shaders.md)), `§4` Door 3 ([`docs/plans/author-shaders.md:682-684`](../../../docs/plans/author-shaders.md))
 - **Code citations:**
-  - [`src/Puck.SdfVm/SdfWorldPassRecorder.cs:726-731`](../../../src/Puck.SdfVm/SdfWorldPassRecorder.cs#L726-L731):
-    ```csharp
-    recorder.Dispatch(
-        commandBufferHandle: commandBuffer,
-        groupCountX: x,
-        groupCountY: y,
-        groupCountZ: 1
-    );
-    ```
+  - `SdfWorldPassRecorder.RecordCompute` originally dispatched the full extent directly.
+    Its authored views path now records through `SdfShadeDispatch.Record`; the other
+    compute passes retain their direct dispatch.
   - [`src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-shapes.hlsli:495-498`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-shapes.hlsli#L495-L498), [`531-534`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-shapes.hlsli#L531-L534), [`620-622`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-shapes.hlsli#L620-L622), [`729-751`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-shapes.hlsli#L729-L751):
 - **Failing case:**
   1. **CPU chunking (`SdfShadeDispatch`) vs GPU indirect bin counts:** Memo §3.5 computes per-program pixel counts on the GPU in `views-filter` and dispatches each bin indirectly (`views-shade`, *"one indirect dispatch per bin"*). Memo §3.7 and §4 Door 3 state that `SdfShadeDispatch` on the CPU enforces `pixelCount * staticCost <= MaxWork` by issuing *"consecutive dispatches of at most the bound each, over consecutive ranges of its pixel list"*. When `SdfWorldPassRecorder.RecordCompute` records the command buffer on the CPU, **the GPU has not run `views-filter` yet**, so the CPU does not know any bin's pixel count! Without a CPU-stalling readback, `SdfShadeDispatch` must either budget every bin for the full render extent `width * height` (emitting `ceil((width * height * staticCost) / MaxWork)` indirect dispatches per bin, most of which launch `(0, 1, 1)` groups) or the memo's Door 3 cannot be implemented as stated.

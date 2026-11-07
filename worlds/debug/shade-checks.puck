@@ -1,0 +1,43 @@
+// Focused execution witnesses for the debug world's authored shading.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "shade-checks"
+import "../standard/shading"
+
+render {
+  shade: plain()
+}
+prototypes {
+  prototype "shade-ground" {
+    document {
+      schema: "puck.creation.v1"
+      palette [{ color: "#808080", roughness: 0.8 }]
+      shape Box "ground" {
+        position [0, -0.2, 0]
+        scale [20, 0.2, 20]
+      }
+    }
+  }
+  prototype "shade-sphere" {
+    document {
+      schema: "puck.creation.v1"
+      palette [{ color: "#C9A27E", roughness: 0.6, wrap: 0.35, specular: 0.04 }]
+      shape Sphere "sphere" {
+        position [0, 1, 3]
+        scale [1, 1, 1]
+      }
+    }
+  }
+}
+placements {
+  placement "shade-ground" {
+    prototype: "shade-ground"
+    position [0, 0, 0]
+    solid
+  }
+  placement "shade-sphere" {
+    prototype: "shade-sphere"
+    position [0, 0, 0]
+    solid
+  }
+}

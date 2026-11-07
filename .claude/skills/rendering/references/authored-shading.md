@@ -36,6 +36,9 @@ floors then bitcasts, and `hash` consumes unsigned bits. The shared stage
 sanitizers replace non-finite outputs with defaults, clamp domains and normalize
 normals. `SdfShadeHlsl.Invocation` generates the surface, light and compose doors
 used by both the views and glass kernels. Glass supplies contact and thickness;
+authored roughness drives both its light response and its optical frost and
+environment. The standard water program keeps the underlying glass smooth while
+its reveal supplies foam, selected by the `flow` template's structural glass argument.
 the frame operations share the old layers' slot and transformed-static-draw
 conventions. Each executed instruction increments `sdfWorkSteps`.
 
@@ -97,6 +100,13 @@ under wrap and animated normals, contact foam and static transformed flow, and
 clock/world-lane/no-read cadence separately. `puck mesh identity --against`
 checks that presentation changes leave the bake identity alone. Timing belongs
 to step 2's measurement round.
+
+Wait for `world.wait ready` before submitting simulation-routed setup commands
+under lockstep. `WorldRenderProbe` includes `RenderGraphRuntime.Render` in readiness,
+so it reports the dependency holding a tick, including probe convergence in a routed
+view, instead of declaring a partially completed graph ready. A frame rendering
+while simulation commands wait is not evidence of a device hang; inspect that
+reason and the advancing work counters first.
 
 `latticeGradient` uses `sdfLatticeNoiseGradient3`, shared with the old flow layer.
 `shape` is a coverage-distance operation: within its footprint neighbourhood it

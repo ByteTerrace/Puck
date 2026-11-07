@@ -298,9 +298,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             sdfShadeSet_paint_coverage(shadeStamp, paintCoverage);
             if (shadeBinding.y != 0u) {
                 sdfShadeSurfacePhase(shadeBinding, shadeStamp, material, normal, revealed);
+                roughness = material.roughness;
             } else {
-            normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, layerRotation, frameSlot, draw, (footprint * t), sdfFrameLanes(frameSlot),
-                sdfGlassContact(material, (opaque - t)), material, revealed);
+                normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, layerRotation, frameSlot, draw, (footprint * t), sdfFrameLanes(frameSlot),
+                    sdfGlassContact(material, (opaque - t)), material, revealed);
             }
 
             // The medium's share of what the interface shows over its glass, the rest what lies behind. A lone

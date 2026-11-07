@@ -44,7 +44,7 @@ let waterMaterial = flowed({
   specular: 0.5
   coat: 0.3
   glass: waterGlass
-}, stillFlowLayer)
+}, stillFlowLayer, glass: 1)
 
 // A spatial view of a scalar store. The authoritative store remains the caller's row; these cells supply the
 // ordinary surface and medium queries at the place where visitors meet it. The drawn surface follows the full value as
@@ -121,7 +121,7 @@ let streamFlowLayer = {
 // banks and round the stones, not over the whole bed.
 let streamGlass = waterGlass with { scattering: 0.9, contact { reach: 0.25, coverage: 0.7 } }
 // The stream's surface material: the standard's water wearing the stream's glass and flow.
-let streamMaterial = flowed(waterMaterial with { glass: streamGlass }, streamFlowLayer)
+let streamMaterial = flowed(waterMaterial with { glass: streamGlass }, streamFlowLayer, glass: 1)
 // A falls runs down every sheet at the sheet's own slope: only the velocity's part along a surface moves it. Its velocity
 // and pattern are in world space, so the flow runs down a sheet however the sheet turns. A world that binds a render lane
 // to its discharge thins the foam with it (`coverageLane`, a world lane from 4 to 7: `fallsFlowLayer with { coverageLane:
@@ -245,7 +245,7 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gaug
     document {
       schema: "puck.creation.v1"
       name: id
-      palette [flowed(palette[0] with { glass: glass }, flow, coverageLane: coverageLane)]
+      palette [flowed(palette[0] with { glass: glass }, flow, coverageLane: coverageLane, glass: 1)]
       sizeBy: "visible"
       drivers [
         { name: "fold", signal: $"state.{gauge}", cadence: -1, blendInSeconds: 0, blendOutSeconds: 0 }
@@ -308,7 +308,7 @@ template lakeSurface(id, radius, gauge = "lakeLevel", rest = 0.4, rise = 4, pale
     document {
       schema: "puck.creation.v1"
       name: id
-      palette [flowed(palette[0] with { glass: glass }, flow)]
+      palette [flowed(palette[0] with { glass: glass }, flow, glass: 1)]
       drivers [
         { name: "level", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0 }
       ]
