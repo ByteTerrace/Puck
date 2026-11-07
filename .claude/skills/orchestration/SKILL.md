@@ -1046,7 +1046,9 @@ ahead, changed files, last commit, newest write, log exit, GPU lease state and a
 `STALL` mark, in seconds, read-only, and without walking `bin/` or `obj/`.
 `puck lanes --watch 0` is the stall watcher: run it as the one background
 monitor, and it prints only a lane finishing, stalling or resuming, a lease
-changing, or a lane appearing or leaving. A findings-only lane's launch writes
+changing, or a lane appearing or leaving. Re-arm it only after the previous
+watcher has expired or been stopped (`TaskStop`), so one watcher runs at a time:
+re-arming a narrower filter beside a live one left two watchers running. A findings-only lane's launch writes
 `<worktree>/.claude/scratch/<lane>.task` holding `mode: findings-only` and
 `report: <its findings path>` (a Codex log whose header names a read-only
 sandbox needs none), so `puck lanes` judges it by its log and report rather
