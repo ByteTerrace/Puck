@@ -1,0 +1,107 @@
+# MMO foundations: an open design round
+
+Nothing in this page is decided. It holds the questions a full design session
+must answer before any of them becomes a ruling, the round that answers them,
+and the candidate positions raised so far, each marked as a hypothesis to test.
+Only what the owner rules after the round is written into
+[AGENTS.md](../../AGENTS.md), a decision page and the owning plans.
+
+## What the owner said
+
+- Puck exists to make it possible, eventually, to build an MMO at the scale of
+  World of Warcraft that redefines the genre the way WoW did. The emulators and
+  the screen-within-a-screen work were envisioned as seamless parts of that
+  MMO.
+- Portals are meant to solve many of an MMO's hard problems.
+- The card and board game systems exist to satisfy the "casino fantasy" that
+  many RPGs implement poorly.
+- Puck's players-as-worlds model changes how nearly everything is implemented.
+- Visible portals are the wrong default for shards and layers; hidden seams may
+  fit them.
+- The design is done properly before anything is committed: a full session that
+  reaches consensus, with the homework done.
+
+## The frame: players are worlds
+
+[The world model](../architecture/worlds.md#world-relationships) represents
+zones, identities, alternate characters, hubs and games with one document model.
+An identity is a world the player owns (its durable slots are the character);
+a zone writes progress back to it by submission; a shared world vouches for a
+claim with an issuer-signed slot the identity carries; a "server" is a role any
+world can take, and players hosting their own authoritative worlds is a goal
+([scale and authority](../architecture/worlds.md#scale-and-authority)). Trust is
+bilateral: the engine carries proof and enforces capabilities, and whether a
+claim counts is the receiving world's policy
+([invariants](../architecture/worlds.md#invariants)).
+
+So the questions below are not WoW's questions transplanted. In WoW the server
+owns every character and is the root of trust; here the player owns the bytes
+of their own identity, a character's home may be a world on a machine that is
+offline, and an item a world grants is a signed claim that can be copied. The
+round asks what each established answer becomes under this model.
+
+## Questions the round must answer
+
+1. **The engine's purpose, as the owner wants it recorded**, and how every design
+   round weighs it.
+2. **Player state across author edits.** What survives when an author edits an
+   identity template, a zone or a shared world, given that a character's state
+   lives in its own world and zones write back to it. Where tuning lives (content
+   templates the state references) and how an author deliberately breaks
+   continuity. Relates to [durable images](hub-and-saves.md#durable-images) and
+   its two owner calls.
+3. **Custody of owned things.** Title, custody and epochs already exist for
+   companions ([the custody protocol](companion-redesign.md#1-vocabulary)). What
+   generalizes to characters, items, table stakes and machine saves; who is
+   custodian when the title authority is a player's offline machine; how a
+   crashed place or an inexact image resolves custody; how epochs stay monotonic
+   across restarts (the resolver's generation counter is not persisted:
+   [hazards](../development/hazards.md)).
+4. **Double spending.** A signed claim in a world the player owns can be copied.
+   How an issuer keeps a granted item, currency or stake unique (account-based
+   records at the issuer, serials and spend records, escrow), and what that costs
+   at MMO scale.
+5. **Seams.** Which boundaries are visible portals (instances, hubs, cross-realm
+   travel, nested screens) and which are hidden (spatial shards through
+   adjacency, population layers moved only when the change cannot be observed,
+   groups kept together); how the portal mechanism runs without a frame; how
+   interest management maps onto disclosure tiers.
+6. **The tables.** Escrow for stakes, provable fairness from seeded streams and
+   replay, hidden information under [disclosure](disclosure.md), atomic wagers
+   under [rule faults](rule-faults.md), and the regulatory line if stakes ever
+   touch real money (the owner's call when the economy is designed).
+7. **Order of work.** How the hub steps (H1, H2, H7, H14), the custody protocol,
+   disclosure and federation reorder around the answers.
+
+## The round
+
+| Lane | Family | Focus |
+|---|---|---|
+| A. MMO persistence and live ops | Claude (opens pages) | How WoW, FFXIV, EVE, GW2 and RuneScape store characters, migrate them across patches, separate templates from state, roll back after crashes and dupes. |
+| B. Distributed custody and trust | Codex | Leases and fencing, two-phase commit and presumed abort, sagas, virtual actors, EVE's node failure, cross-realm transfer; digital cash and double-spend prevention for player-held claims. |
+| C. World seams | Antigravity (search; pages copied in) | WoW sharding, layering and phasing, the GW2 megaserver, ESO, Star Citizen's server meshing, SpatialOS's failures, interest management. |
+| D. Economy and table integrity | Claude or Codex | Dupe history, escrow, provable fairness, hidden information, loot-box and gambling regulation. |
+| E. Puck as it is | Claude specialist, code only | Identity worlds, write-back, attestation, adjacency and crossing, federation, the custody protocol, disclosure, durable images: what exists, cited by symbol and `file:line`. |
+
+Each lane separates what it opened and quoted from search summaries and from its
+own inference. A synthesis memo (a principal) states each decision with options
+and evidence, weighs the combinations Puck is placed to make that other engines
+are not (players as worlds, portals and hidden seams, derived products as
+caches, behaviour as authored programs, deterministic replay), and names how the
+debug world would prove each choice. Two other families review it adversarially;
+every finding is answered, and what a bounded prototype or measurement settles is
+settled. The owner then rules on the open calls.
+
+## Hypotheses raised in conversation
+
+These are starting points for the lanes to confirm or refute, not positions.
+
+- Player state carries across an edit by default; content templates hold tuning
+  and state holds references; an authored reset epoch is the deliberate break;
+  dropped player data is set aside where it can be recovered; per-row restore is
+  the common path, since every engine build invalidates an exact continuation.
+- Custody: title at home, a lease or escrow wherever the thing is, monotonic
+  epochs as fencing, a crossing as the custody transaction, a place never
+  asserting custody from an image, and recovery by presumed abort and recall.
+- Seams: hidden for shards and layers, visible where the fiction is travel.
+- Tables: stakes as escrowed custody; fairness by replay.

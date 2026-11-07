@@ -157,6 +157,10 @@ milestone. The owner requested its baseline and implementation plan, which
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
+- The MMO foundations round ([open questions](mmo-foundations.md)): the owner asked
+  for a full design session reaching consensus before anything about the
+  engine's purpose, player state across edits, custody, double spending, seams or
+  the tables is ruled. Nothing in that page is decided.
 - Pushing `main` (owner-only: a push to `main` deploys to Azure). The
   integration branch `lead/velocity` is far ahead of `main`, hundreds of commits.
   Recommendation: push once the milestone's riskiest areas have had a fresh fix
