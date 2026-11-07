@@ -464,9 +464,14 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   boots the merged head headless from its own shell before pushing: a lane's
   environment can hide a dependency (a toolchain on the lane's PATH but not the
   machine's), and lanes merge the local integration branch, so a bad merge is
-  undone before it spreads, and the lane fixes it at the cause. An output-identity gate (a whole mesh store by hash)
-  compares every stored payload: the mesh bake is byte-reproducible from its
-  inputs (three cold bakes per backend match), so any difference is a finding.
+  undone before it spreads, and the lane fixes it at the cause. The mesh bake
+  is reproducible run to run at a fixed code version (three cold bakes per
+  backend match); a store-by-hash comparison across two builds is evidence only
+  for a change meant to change nothing. A brief never makes "output identical
+  to the base" an invariant (AGENTS.md rule 4, the owner's ruling): a change
+  that alters a mesh, an image or a contact answer is judged by the quality of
+  the new output (captures, `puck mesh audit`, counted work, exactness against
+  the true field).
   The hard limits are one heavy integration job and one GPU
   leg at a time. A windowed debug World holds a large share of
   the machine's memory within a minute of boot (`host.memory` reads it), so
