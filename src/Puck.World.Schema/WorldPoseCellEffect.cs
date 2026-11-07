@@ -12,8 +12,13 @@ namespace Puck.World;
 /// <param name="roll">The roll, in radians, a teleport stands the body at.</param>
 /// <param name="pitch">The pitch, in radians, a teleport stands the body at.</param>
 public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, CompiledExpressionToken[] expression, FixedVector3 offset, bool glide = false, FixedQ4816 roll = default, FixedQ4816 pitch = default) : WorldFactEffect(describe: $"poseCell {topology}") {
+    /// <summary>The position of the cell ordinal among the sources.</summary>
+    public const int CellSource = 0;
+
     /// <summary>Gets the addressed body.</summary>
     public WorldBodyRef Body { get; } = body;
+    /// <inheritdoc/>
+    public override EffectSource[] Sources { get; } = [EffectSource.Expression(kind: CellKind.Int, program: expression)];
     /// <summary>Gets the topology name.</summary>
     public string Topology { get; } = topology;
     /// <summary>Gets the cell expression.</summary>

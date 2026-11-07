@@ -259,7 +259,7 @@ public sealed class SdfMeshStore {
         var path = PathOf(identity: identity, key: key);
         var bytes = Encode(key: key, materials: materials, mesh: mesh);
 
-        if (!Quietly(action: () => Puck.Abstractions.AtomicFile.WriteAllBytes(bytes: bytes, path: path))) { return false; }
+        if (!Quietly(action: () => Puck.Confinement.AtomicFile.WriteAllBytes(bytes: bytes, path: path))) { return false; }
         _ = Puck.Abstractions.CacheRetention.EnforceSetsOnWrite(
             bound: new Puck.Abstractions.CacheBound(MaxBytes: CapacityBytes, MaxEntries: MaxSets),
             directory: Directory,
@@ -297,7 +297,7 @@ public sealed class SdfMeshStore {
         foreach (var (member, hash) in identity.Members) {
             text.Append(value: hash.ToString(format: "x32", provider: null)).Append(value: ' ').Append(value: member).Append(value: '\n');
         }
-        if (!Quietly(action: () => Puck.Abstractions.AtomicFile.WriteAllBytes(bytes: System.Text.Encoding.UTF8.GetBytes(s: text.ToString()), path: path))) { return; }
+        if (!Quietly(action: () => Puck.Confinement.AtomicFile.WriteAllBytes(bytes: System.Text.Encoding.UTF8.GetBytes(s: text.ToString()), path: path))) { return; }
         _ = Puck.Abstractions.CacheRetention.Enforce(
             bound: Puck.Abstractions.CacheBound.Entries(maxEntries: RecordedIdentities),
             directory: Directory,

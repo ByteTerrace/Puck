@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using System.Globalization;
 using Puck.Abstractions;
 

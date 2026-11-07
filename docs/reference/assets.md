@@ -272,7 +272,7 @@ release store must.
 
 ## Replacing a file atomically
 
-`AtomicFile` lives in `Puck.Abstractions`, so every layer reaches it; see
+`AtomicFile` lives in the BCL-only `Puck.Confinement` leaf, so every layer reaches it; see
 [Writing and locking files](abstractions.md#writing-and-locking-files). The
 store does not use it for its own writes. It stages in `tmp/` so that
 `ListRefs` never sees a temporary file beside a ref.

@@ -102,6 +102,12 @@ version to start and handles the health-based rollback decision. The
 [release guide](../../docs/development/ci.md) owns the shared publishing
 workflow and its environment requirements.
 
+`ReleaseDecision` separates terminal refusals from transient contention.
+`UpdateService` retires an intent only after a terminal verification or applier
+refusal; sequence-store contention and a backwards clock leave it resumable.
+Both the hosted application and local MCP adapter use `HealthGateFile.ClearHealthyAsync`
+to wait through lock contention; permanent I/O, permission and platform failures end clearing.
+
 The signed attestation carries the canonical unsigned manifest's content pin,
 which authenticates its complete file inventory without putting that inventory
 inside the attestation's bounded payload. Development releases use a separate

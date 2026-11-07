@@ -14,6 +14,9 @@ public sealed partial class WorldInputRuntime {
         public required int Generation;
         public string? KitName;
         public required ushort[] Selection;
+        // The mapping the preparing phase of a state transaction selected for this owner, consumed by the applying
+        // phase once the transaction has committed.
+        public WorldInputMapping? Prepared;
 
         public int[] Facing = [];
 
@@ -481,11 +484,15 @@ public sealed partial class WorldInputRuntime {
     private bool TrySynchronize(Owner owner, ulong activation, out string reason) {
         RefreshPermissions(owner: owner);
         if (!TrySelect(owner, out var mapping, out reason)) { return false; }
+        SynchronizeTo(activation: activation, mapping: mapping!, owner: owner);
+        return true;
+    }
+    private void SynchronizeTo(Owner owner, WorldInputMapping mapping, ulong activation) {
         var generation = ((owner.Body >= 0) ? m_host.Population.Generation(index: owner.Body) : 0);
         var kitName = ((owner.Body >= 0) ? m_host.Population.CandidateKitName(bodyIndex: owner.Body, definition: owner.Definition) : null);
-        var reset = ((generation != owner.Generation) || ((mapping!.Id == owner.Input.Mapping.Id) && (kitName != owner.KitName)));
+        var reset = ((generation != owner.Generation) || ((mapping.Id == owner.Input.Mapping.Id) && (kitName != owner.KitName)));
 
-        if ((mapping!.Id == owner.Input.Mapping.Id) && !reset) { return true; }
+        if ((mapping.Id == owner.Input.Mapping.Id) && !reset) { return; }
         var previous = owner.Input.Mapping;
 
         SaveKitInput(owner: owner);
@@ -493,7 +500,6 @@ public sealed partial class WorldInputRuntime {
         owner.Generation = generation;
         owner.KitName = kitName;
         InstallBodyMapping(owner, previous, reset);
-        return true;
     }
     private bool Permitted(Owner owner, out WorldChannelSelection? reach) {
         reach = null;
@@ -594,8 +600,9 @@ public sealed partial class WorldInputRuntime {
         return true;
     }
     private string Engagement(Principal principal, int body, IReadOnlyList<ControlApplication>? applications = null) {
-        var selected = applications ?? m_host.GrantTable.Applications(principal: principal);
-        for (var index = 0; index < selected.Count; index++) {
+        var selected = (applications ?? m_host.GrantTable.Applications(principal: principal));
+
+        for (var index = 0; (index < selected.Count); index++) {
             var target = selected[index].Target;
 
             if (target.Kind == GrantSubjectKind.Placement) { return "tabletop"; }

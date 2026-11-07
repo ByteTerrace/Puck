@@ -491,7 +491,7 @@ public sealed class WorldSiloLifecycleLawTests {
         );
         var definition = Fixtures.BuildDocument();
 
-        definition = definition with { HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Presentation = WorldHostPresentation.None } };
+        definition = definition with { HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", AuthorityNamespace = "row-authority", Listen = "127.0.0.1:0", Presentation = WorldHostPresentation.None } };
         Assert.True(condition: (await backend.PublishDefinitionAsync(
             identity,
             definition,
@@ -639,30 +639,34 @@ public sealed class WorldSiloLifecycleLawTests {
             WorldDefinitionSerialization.Deserialize(utf8Json: decoded!.Server.DefinitionJson).Metadata!.Title
         );
 
-        var refused = changed with { HostRaw = changed.Host with { Authority = "another-host:7825" } };
+        foreach (var refused in new[] {
+            changed with { HostRaw = changed.Host with { AuthorityNamespace = "another-authority" } },
+            changed with { HostRaw = changed.Host with { Authority = "another-host:7825" } },
+        }) {
 
-        await PublishAsync(
-            definition: refused,
-            host: host,
-            identity: identity
-        );
-        // The refusal needs no step, so it is pumped without one: a stepping pump steps until the task completes, and
-        // under load those steps cross the checkpoint cadence, whose legitimate capture would move the ordinal below.
-        await Assert.ThrowsAsync<InvalidOperationException>(testCode: () => PumpAsync(
-            host,
-            host.ReloadAsync(
-                identity,
-                TestContext.Current.CancellationToken
-            ),
-            step: false
-        ));
-        Assert.Equal(
-            saved.Ordinal,
-            (await backend.LoadLatestAsync(
-                identity,
-                TestContext.Current.CancellationToken
-            ))!.Value.Ordinal
-        );
+            await PublishAsync(
+                definition: refused,
+                host: host,
+                identity: identity
+            );
+            // The refusal needs no step, so it is pumped without one: a stepping pump steps until the task completes, and
+            // under load those steps cross the checkpoint cadence, whose legitimate capture would move the ordinal below.
+            await Assert.ThrowsAsync<InvalidOperationException>(testCode: () => PumpAsync(
+                host,
+                host.ReloadAsync(
+                    identity,
+                    TestContext.Current.CancellationToken
+                ),
+                step: false
+            ));
+            Assert.Equal(
+                saved.Ordinal,
+                (await backend.LoadLatestAsync(
+                    identity,
+                    TestContext.Current.CancellationToken
+                ))!.Value.Ordinal
+            );
+        }
         // Simulate losing the release-marker write after the rebuilt checkpoint became durable.
         await PublishAsync(
             definition: changed,
@@ -792,7 +796,7 @@ public sealed class WorldSiloLifecycleLawTests {
             ? "127.0.0.1:0"
             : null
         );
-        var published = definition with { HostRaw = definition.Host with { Authority = "play.puck.byteterrace.com:7825", Listen = endpoint } };
+        var published = definition with { HostRaw = definition.Host with { Authority = "play.puck.byteterrace.com:7825", AuthorityNamespace = "published-authority", Listen = endpoint } };
 
         Assert.True(condition: (await backend.PublishDefinitionAsync(
             identity,
@@ -827,9 +831,10 @@ public sealed class WorldSiloLifecycleLawTests {
             row!.Server.Definition.Host.Authority
         );
         Assert.Equal(
-            published.Host.Authority,
+            published.Host.AuthorityNamespace,
             row.Federation.Subject
         );
+        Assert.Equal(expected: published.Host.Authority, actual: row.AdvertisedEndpoint);
         Assert.Equal(
             endpoint,
             row.ListenEndpoint

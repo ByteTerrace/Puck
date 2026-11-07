@@ -30,8 +30,8 @@ public enum WorldAdmissionTrustMode : byte {
     /// Subject is exact. No signing key is stored in the world document. Grants still belong to this world.</summary>
     OAuth,
 }
-/// <summary>How much of an authority's document a peer is authorized to receive. Decided once, at the admission
-/// door, and carried on <see cref="WorldAdmissionVerdict.Tier"/>; every remote egress reads it and nothing else
+/// <summary>How much of an authority's document a peer is authorized to receive. Decided by the current admission
+/// door policy, and carried on <see cref="WorldAdmissionVerdict.Tier"/>; every remote egress reads it and nothing else
 /// decides disclosure.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldDisclosureTier>))]
 public enum WorldDisclosureTier : byte {

@@ -688,7 +688,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     /// carries. A surviving name keeps its bit.</summary>
     internal void PruneLatches() {
         m_groupState.Prune(compiled: m_groups);
-        m_interactionGateHeld.Prune(compiled: m_interactions);
-        m_ruleGateHeld.Prune(compiled: m_rules);
+        m_interactionGateHeld.Prune(compiled: m_interactions, journal: Arena.Journal);
+        m_ruleGateHeld.Prune(compiled: m_rules, journal: Arena.Journal);
     }
 }

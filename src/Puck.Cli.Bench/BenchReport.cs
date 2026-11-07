@@ -1,3 +1,4 @@
+using Puck.Abstractions;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -6,7 +7,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
-using Puck.Abstractions;
 
 namespace Puck.Cli.Bench;
 
@@ -178,7 +178,7 @@ public sealed record BenchReport(
     public string Write(string directory) {
         var path = System.IO.Path.Combine(path1: directory, path2: "report.json");
 
-        Puck.Abstractions.AtomicFile.WriteAllText(path: path, contents: (ToJson() + "\n"));
+        Puck.Confinement.AtomicFile.WriteAllText(path: path, contents: (ToJson() + "\n"));
         return path;
     }
     /// <summary>Formats each metric as one line: name, median, p10 and p90 with its unit.</summary>

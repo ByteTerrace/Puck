@@ -169,13 +169,15 @@ public sealed partial class WorldRuleHost {
                 return FireBodyMotion(
                     effect: body,
                     preflight: firing.Preflight,
-                    refusal: out refusal
+                    refusal: out refusal,
+                    values: firing.Values
                 );
             case WorldRigidImpulseEffect impulse:
                 return FireRigidImpulse(
                     effect: impulse,
                     preflight: firing.Preflight,
-                    refusal: out refusal
+                    refusal: out refusal,
+                    values: firing.Values
                 );
             case WorldPaintFieldEffect paint:
                 return FireFieldPaint(
@@ -184,22 +186,25 @@ public sealed partial class WorldRuleHost {
                     refusal: out refusal
                 );
             case WorldPoseCellEffect cellPose:
-                return FirePoseCell(effect: cellPose, preflight: firing.Preflight, refusal: out refusal);
+                return FirePoseCell(effect: cellPose, preflight: firing.Preflight, refusal: out refusal, values: firing.Values);
             case WorldPoseEffect pose:
                 return FirePose(
                     effect: pose,
                     preflight: firing.Preflight,
-                    refusal: out refusal
+                    refusal: out refusal,
+                    values: firing.Values
                 );
             case WorldIdentityFactEffect fact:
                 return FireIdentityFact(
                     effect: fact,
-                    refusal: out refusal
+                    refusal: out refusal,
+                    values: firing.Values
                 );
             case WorldBodyStateEffect bodyState:
                 return FireBodyState(
                     effect: bodyState,
-                    refusal: out refusal
+                    refusal: out refusal,
+                    values: firing.Values
                 );
             case WorldDocumentEffect document:
                 return FireDocument(
@@ -222,53 +227,19 @@ public sealed partial class WorldRuleHost {
 
         return false;
     }
-    // A live body key resolves through the one cell-reference carrier every dynamic key travels in; an indirection
-    // naming no cell reads -1, which names no body. A key whose computation faulted refuses the arm.
-    private bool TryResolveBodyKeyIndex(CellKey key, CompiledCellRef? keyFrom, out int bodyIndex, out EffectRefusal refusal) {
-        var resolved = RuleReads.ResolveKey(
-            keyFrom: keyFrom,
-            literal: key,
-            reader: this
-        );
-
-        resolved.TryNamed(value: out var resolvedKey);
-        bodyIndex = ((RuleReads.TryKeyIndex(
-            keys: Host.Arena.Keys,
-            index: out var index,
-            key: resolvedKey
-        ) && (index >= 0L) && (index <= int.MaxValue))
-            ? ((int)index)
-            : -1
-        );
-        if (resolved.Case == FaultCase.Faulted) {
-            bodyIndex = -1;
-
-            return Refuse(
-                code: RuleEffectRefusal.Arithmetic,
-                reason: RuleReads.KeyFaultReason,
-                refusal: out refusal
-            );
-        }
-
-        refusal = EffectRefusal.None;
-
-        return true;
-    }
-    // A cue names a body only when its key resolves to a live one; its key faulting refuses the cue in preflight, so
-    // the firing never commits around it.
+    // A body key is a declared source the evaluator read: its index, or -1 for a key that names no body. A key whose
+    // computation faulted refused the firing before the arm ran.
+    private static int BodyIndexOf(Outcome source) => ((source.TryFinite(raw: out var index) && (index >= 0L) && (index <= int.MaxValue))
+        ? ((int)index)
+        : -1);
+    // A cue names a body only when its key resolves to a live one.
     private bool FireGameplayCue(WorldCueEffect effect, in EffectFiring firing, out EffectRefusal refusal) {
         int? body = null;
 
         refusal = EffectRefusal.None;
-        if (effect.Body is { } address) {
-            if (!TryResolveBodyKeyIndex(
-                bodyIndex: out var index,
-                key: address.Key,
-                keyFrom: address.KeyFrom,
-                refusal: out refusal
-            )) {
-                return false;
-            }
+        if (effect.Body is not null) {
+            var index = BodyIndexOf(source: firing.Values[WorldCueEffect.BodySource]);
+
             if (Host.Body(index: index) is not null) {
                 body = index;
             }
@@ -298,15 +269,9 @@ public sealed partial class WorldRuleHost {
 
         return true;
     }
-    private bool FireBodyMotion(WorldBodyMotionEffect effect, bool preflight, out EffectRefusal refusal) {
-        if (!TryResolveBodyKeyIndex(
-            bodyIndex: out var bodyIndex,
-            key: effect.Key,
-            keyFrom: effect.KeyFrom,
-            refusal: out refusal
-        )) {
-            return false;
-        }
+    private bool FireBodyMotion(WorldBodyMotionEffect effect, bool preflight, in EffectValues values, out EffectRefusal refusal) {
+        var bodyIndex = BodyIndexOf(source: values[WorldBodyMotionEffect.BodySource]);
+
         if (Host.Body(index: bodyIndex) is not { } body) {
             return Refuse(
                 code: WorldRuleEffectRefusal.BodyInactive,
@@ -342,14 +307,8 @@ public sealed partial class WorldRuleHost {
                 return true;
             }
 
-            if (!TryResolveBodyKeyIndex(
-                bodyIndex: out var targetIndex,
-                key: operation.TargetKey,
-                keyFrom: operation.TargetKeyFrom,
-                refusal: out refusal
-            )) {
-                return false;
-            }
+            var targetIndex = BodyIndexOf(source: values[WorldBodyMotionEffect.TargetSource]);
+
             if (
                 (targetIndex == bodyIndex) ||
                 (Host.Body(index: targetIndex) is null)
@@ -400,7 +359,7 @@ public sealed partial class WorldRuleHost {
 
         return true;
     }
-    private bool FireRigidImpulse(WorldRigidImpulseEffect effect, bool preflight, out EffectRefusal refusal) {
+    private bool FireRigidImpulse(WorldRigidImpulseEffect effect, bool preflight, in EffectValues values, out EffectRefusal refusal) {
         var targetIndex = ResolveWorldBodyRef(bodyRef: effect.Target);
 
         if (Host.Body(index: targetIndex) is not { } target) {
@@ -428,9 +387,7 @@ public sealed partial class WorldRuleHost {
             );
         }
 
-        var magnitudeFact = effect.Magnitude.Read(reader: this);
-
-        if (magnitudeFact.Outcome.Case != FaultCase.Finite) {
+        if (!values[WorldRigidImpulseEffect.MagnitudeSource].TryFinite(raw: out var magnitudeRaw)) {
             return Refuse(
                 code: WorldRuleEffectRefusal.RigidImpulseOutOfRange,
                 reason: "applyRigidImpulse magnitude cell is absent",
@@ -440,7 +397,7 @@ public sealed partial class WorldRuleHost {
 
         refusal = EffectRefusal.None;
 
-        var magnitude = FixedQ4816.FromRawBits(value: magnitudeFact.ToRaw(kind: CellKind.Fixed));
+        var magnitude = FixedQ4816.FromRawBits(value: magnitudeRaw);
         var impulse = (heading.FixedOrientation.Rotate(vector: RigidImpulseLocalForward) * magnitude);
         var accepted = true;
 
@@ -531,7 +488,7 @@ public sealed partial class WorldRuleHost {
     }
     // Body state, not document state: the same WorldBody.Pose door body.pose uses, as the world's own act — no
     // drive-gate or grant check, since a gated body is one a rule still needs to move.
-    private bool FirePoseCell(WorldPoseCellEffect effect, bool preflight, out EffectRefusal refusal) {
+    private bool FirePoseCell(WorldPoseCellEffect effect, bool preflight, in EffectValues values, out EffectRefusal refusal) {
         var index = ResolveWorldBodyRef(bodyRef: effect.Body);
         var topology = WorldTopologyCompilation.Find(definition: Host.Definition, name: effect.Topology);
 
@@ -541,8 +498,7 @@ public sealed partial class WorldRuleHost {
         if (topology is null) {
             return Refuse(code: WorldRuleEffectRefusal.BodyTargetInvalid, reason: "poseCell target is outside its topology", refusal: out refusal);
         }
-        var cellFrame = new EvaluationFrame(reader: this);
-        var evaluatedCell = RuleExpressions.Evaluate(frame: ref cellFrame, kind: CellKind.Int, program: effect.Expression);
+        var evaluatedCell = values[WorldPoseCellEffect.CellSource];
 
         if (!evaluatedCell.TryFinite(raw: out var cell)) {
             return Refuse(code: RuleEffectRefusal.Arithmetic, reason: $"the poseCell cell did not evaluate: {RuleEvaluation.DescribeOutcome(outcome: evaluatedCell)}", refusal: out refusal);
@@ -563,20 +519,11 @@ public sealed partial class WorldRuleHost {
         }
         return true;
     }
-    private bool FirePose(WorldPoseEffect effect, bool preflight, out EffectRefusal refusal) {
-        var bodyIndex = effect.Index;
+    private bool FirePose(WorldPoseEffect effect, bool preflight, in EffectValues values, out EffectRefusal refusal) {
+        var bodyIndex = ((effect.KeyFrom is null)
+            ? effect.Index
+            : BodyIndexOf(source: values[WorldPoseEffect.BodySource]));
 
-        if (
-            (effect.KeyFrom is { } keyFrom) &&
-            !TryResolveBodyKeyIndex(
-            bodyIndex: out bodyIndex,
-            key: default,
-            keyFrom: keyFrom,
-            refusal: out refusal
-        )
-        ) {
-            return false;
-        }
         if (Host.Body(index: bodyIndex) is not { } body) {
             return Refuse(
                 code: WorldRuleEffectRefusal.BodyInactive,
@@ -634,15 +581,9 @@ public sealed partial class WorldRuleHost {
     }
     // The register lives in the arena's participant lane, so the write is rewound by the firing's own scope like any
     // arena write; the body settles it through the register's envelope exactly as a kit action's setState.
-    private bool FireBodyState(WorldBodyStateEffect effect, out EffectRefusal refusal) {
-        if (!TryResolveBodyKeyIndex(
-            bodyIndex: out var bodyIndex,
-            key: effect.Key,
-            keyFrom: effect.KeyFrom,
-            refusal: out refusal
-        )) {
-            return false;
-        }
+    private bool FireBodyState(WorldBodyStateEffect effect, in EffectValues values, out EffectRefusal refusal) {
+        var bodyIndex = BodyIndexOf(source: values[WorldBodyStateEffect.BodySource]);
+
         if (Host.Body(index: bodyIndex) is not { } body) {
             return Refuse(
                 code: WorldRuleEffectRefusal.BodyInactive,
@@ -653,17 +594,11 @@ public sealed partial class WorldRuleHost {
 
         long value;
 
-        if (effect.Source.Expression is { } program) {
-            var frame = new EvaluationFrame(reader: this);
-
-            if (!RuleExpressions.Evaluate(
-                frame: ref frame,
-                kind: CellKind.Fixed,
-                program: program
-            ).TryFinite(raw: out value)) {
+        if (effect.Source.Expression is not null) {
+            if (!values[WorldBodyStateEffect.ValueSource].TryFinite(raw: out value)) {
                 return Refuse(
                     code: WorldRuleEffectRefusal.BodyStateFaulted,
-                    reason: "the value expression faulted",
+                    reason: "the value expression names no number",
                     refusal: out refusal
                 );
             }
@@ -682,15 +617,9 @@ public sealed partial class WorldRuleHost {
     }
     // The lane cell is an arena row, so this arm is rewound by the firing's own scope; only the persisted identity
     // document write waits for the commit.
-    private bool FireIdentityFact(WorldIdentityFactEffect effect, out EffectRefusal refusal) {
-        if (!TryResolveBodyKeyIndex(
-            bodyIndex: out var bodyIndex,
-            key: effect.Key,
-            keyFrom: effect.KeyFrom,
-            refusal: out refusal
-        )) {
-            return false;
-        }
+    private bool FireIdentityFact(WorldIdentityFactEffect effect, in EffectValues values, out EffectRefusal refusal) {
+        var bodyIndex = BodyIndexOf(source: values[WorldIdentityFactEffect.BodySource]);
+
         if (Host.Body(index: bodyIndex) is not { } body) {
             return Refuse(
                 code: WorldRuleEffectRefusal.BodyInactive,
@@ -720,17 +649,11 @@ public sealed partial class WorldRuleHost {
 
         long value;
 
-        if (effect.Expression is { } program) {
-            var frame = new EvaluationFrame(reader: this);
-
-            if (!RuleExpressions.Evaluate(
-                frame: ref frame,
-                kind: CellKind.Int,
-                program: program
-            ).TryFinite(raw: out value)) {
+        if (effect.Expression is not null) {
+            if (!values[WorldIdentityFactEffect.ValueSource].TryFinite(raw: out value)) {
                 return Refuse(
                     code: WorldRuleEffectRefusal.IdentityFactUnwritable,
-                    reason: "the value expression faulted",
+                    reason: "the value expression names no number",
                     refusal: out refusal
                 );
             }

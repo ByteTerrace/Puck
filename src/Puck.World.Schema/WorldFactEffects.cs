@@ -3,6 +3,7 @@ using Puck.Physics.Motion;
 using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
 using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
 using CompiledValueSource = Puck.State.Rules.CompiledValueSource;
+using EffectSource = Puck.State.Rules.EffectSource;
 using IRuleEffect = Puck.State.Rules.IRuleEffect;
 
 namespace Puck.World;
@@ -46,6 +47,8 @@ public abstract class WorldFactEffect : EffectFact<IWorldFacts>, IRuleEffect {
     public IReadOnlyList<IRuleEffect[]> Arms => [];
     /// <inheritdoc/>
     public override EffectNeeds Needs => EffectNeeds.Irreversible;
+    /// <inheritdoc/>
+    public virtual EffectSource[] Sources => [];
 
     /// <inheritdoc/>
     public override bool TryFire(IEffectHost host, IWorldFacts facet, in EffectFiring firing, out EffectRefusal refusal) {
@@ -129,8 +132,19 @@ public sealed class WorldCueEffect : WorldFactEffect {
         Body = body;
         Cue = cue;
         Payload = payload;
+        m_sources = ((body is { } address)
+            ? [EffectSource.Key(keyFrom: address.KeyFrom, literal: address.Key)]
+            : []);
     }
 
+    private readonly EffectSource[] m_sources;
+
+    /// <summary>The position of the addressed body's index among the sources, present only when the cue names a
+    /// body.</summary>
+    public const int BodySource = 0;
+
+    /// <inheritdoc/>
+    public override EffectSource[] Sources => m_sources;
     /// <summary>Gets the cue name.</summary>
     public string Cue { get; }
     /// <summary>Gets the addressed body, or <see langword="null"/> for a cue about no body. One value carries both
@@ -162,8 +176,18 @@ public sealed class WorldPoseEffect : WorldFactEffect {
         KeyFrom = keyFrom;
         Pose = pose;
         SpawnPoint = spawnPoint;
+        m_sources = ((keyFrom is null)
+            ? []
+            : [EffectSource.Key(keyFrom: keyFrom, literal: default)]);
     }
 
+    private readonly EffectSource[] m_sources;
+
+    /// <summary>The position of the addressed body's index among the sources, present only for a live key.</summary>
+    public const int BodySource = 0;
+
+    /// <inheritdoc/>
+    public override EffectSource[] Sources => m_sources;
     /// <summary>Gets the addressed body's literal index, or <c>-1</c>.</summary>
     public int Index { get; }
     /// <summary>Gets the addressed body's live indirection, or <see langword="null"/>.</summary>
@@ -194,7 +218,23 @@ public sealed class WorldBodyMotionEffect : WorldFactEffect {
         Action = action;
         Key = key;
         KeyFrom = keyFrom;
+        m_sources = (DesignatesBody(action: action)
+            ? [EffectSource.Key(keyFrom: keyFrom, literal: key), EffectSource.Key(keyFrom: action.TargetKeyFrom, literal: action.TargetKey)]
+            : [EffectSource.Key(keyFrom: keyFrom, literal: key)]);
     }
+
+    private readonly EffectSource[] m_sources;
+
+    /// <summary>The position of the addressed body's index among the sources.</summary>
+    public const int BodySource = 0;
+    /// <summary>The position of the designated body's index among the sources, present only for a designation of a
+    /// body.</summary>
+    public const int TargetSource = 1;
+
+    /// <inheritdoc/>
+    public override EffectSource[] Sources => m_sources;
+
+    private static bool DesignatesBody(WorldBodyAction action) => ((action.Operation == BodyMotionOp.Designate) && (action.Designation != WorldBodyDesignationKind.Clear));
 
     /// <summary>Gets the compiled action.</summary>
     public WorldBodyAction Action { get; }
@@ -233,8 +273,16 @@ public sealed class WorldRigidImpulseEffect : WorldFactEffect {
         Heading = heading;
         Magnitude = magnitude;
         Target = target;
+        m_sources = [EffectSource.FromOperand(kind: CellKind.Fixed, operand: magnitude)];
     }
 
+    private readonly EffectSource[] m_sources;
+
+    /// <summary>The position of the impulse magnitude among the sources.</summary>
+    public const int MagnitudeSource = 0;
+
+    /// <inheritdoc/>
+    public override EffectSource[] Sources => m_sources;
     /// <summary>Gets the heading body.</summary>
     public WorldBodyRef Heading { get; }
     /// <summary>Gets the live magnitude operand.</summary>
@@ -283,8 +331,20 @@ public sealed class WorldBodyStateEffect : WorldFactEffect {
         KeyFrom = keyFrom;
         Slot = slot;
         Source = source;
+        m_sources = ((source.Expression is { } program)
+            ? [EffectSource.Key(keyFrom: keyFrom, literal: key), EffectSource.Expression(kind: CellKind.Fixed, program: program)]
+            : [EffectSource.Key(keyFrom: keyFrom, literal: key)]);
     }
 
+    private readonly EffectSource[] m_sources;
+
+    /// <summary>The position of the addressed body's index among the sources.</summary>
+    public const int BodySource = 0;
+    /// <summary>The position of the value expression among the sources, present only for a computed value.</summary>
+    public const int ValueSource = 1;
+
+    /// <inheritdoc/>
+    public override EffectSource[] Sources => m_sources;
     /// <summary>Gets the addressed body's literal key, or the invalid default.</summary>
     public CellKey Key { get; }
     /// <summary>Gets the addressed body's live indirection, or <see langword="null"/>.</summary>
@@ -351,8 +411,20 @@ public sealed class WorldIdentityFactEffect : WorldFactEffect {
         KeyFrom = keyFrom;
         LaneOrdinal = laneOrdinal;
         Source = source;
+        m_sources = ((source.Expression is { } program)
+            ? [EffectSource.Key(keyFrom: keyFrom, literal: key), EffectSource.Expression(kind: CellKind.Int, program: program)]
+            : [EffectSource.Key(keyFrom: keyFrom, literal: key)]);
     }
 
+    private readonly EffectSource[] m_sources;
+
+    /// <summary>The position of the addressed body's index among the sources.</summary>
+    public const int BodySource = 0;
+    /// <summary>The position of the value expression among the sources, present only for a computed value.</summary>
+    public const int ValueSource = 1;
+
+    /// <inheritdoc/>
+    public override EffectSource[] Sources => m_sources;
     /// <summary>Gets the compiled numeric expression, or <see langword="null"/>.</summary>
     public CompiledExpressionToken[]? Expression => Source.Expression;
     /// <summary>Gets the fact key on the identity's row.</summary>

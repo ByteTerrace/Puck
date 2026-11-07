@@ -430,7 +430,7 @@ public sealed class RowSelectorLawTests {
         );
         Assert.Equal(
             actual: Assert.Single(collection: faulted.Server.RuleRuntimeDiagnostics()).Refusal,
-            expected: WorldRuleEffectRefusal.BodyStateFaulted
+            expected: RuleEffectRefusal.Arithmetic
         );
         Assert.Equal(
             actual: Register(server: faulted.Server, name: Suit),

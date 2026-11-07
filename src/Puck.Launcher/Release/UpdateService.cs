@@ -1,6 +1,6 @@
+using Puck.Confinement;
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using Puck.Abstractions;
 using Puck.Assets.Documents;
 
 namespace Puck.Launcher.Release;
@@ -163,9 +163,9 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
         var rid = CurrentRid();
         InstallIntent intent;
 
-        UpdateApplyOutcome TerminalRefusal(string detail) {
+        UpdateApplyOutcome Refusal(string detail, ReleaseDecision decision = ReleaseDecision.TerminalRefusal) {
             // Retirement affects only the intent. The verifier's durable replay watermark is never rewound.
-            if (recovering) { File.Delete(path: intentPath); }
+            if (decision == ReleaseDecision.TerminalRefusal) { File.Delete(path: intentPath); }
             return new UpdateApplyOutcome(Applied: false, Detail: detail);
         }
 
@@ -174,18 +174,21 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
                 intent = (JsonSerializer.Deserialize<InstallIntent>(json: File.ReadAllText(path: intentPath), options: DocumentJsonOptions.Shared)
                     ?? throw new JsonException(message: "install intent deserialized to null"));
             } catch (JsonException error) {
-                return TerminalRefusal(detail: $"invalid pending install intent: {error.Message}");
+                return Refusal(detail: $"invalid pending install intent: {error.Message}");
             }
             if ((intent.Manifest is null) || string.IsNullOrWhiteSpace(value: intent.InstalledVersion) ||
-                (intent.Rid != rid) || (intent.Manifest.App != m_options.App) || (intent.Manifest.Channel != m_options.Channel) || (intent.VerifiedAt > now)) {
-                return TerminalRefusal(detail: "pending install intent does not match this app, channel, runtime or authorization time");
+                (intent.Rid != rid) || (intent.Manifest.App != m_options.App) || (intent.Manifest.Channel != m_options.Channel)) {
+                return Refusal(detail: "pending install intent does not match this app, channel or runtime");
+            }
+            if (intent.VerifiedAt > now) {
+                return Refusal(detail: "waiting for the clock to reach the pending install's authorization time", decision: ReleaseDecision.TransientRefusal);
             }
             // A changed current trust policy still refuses the intent. Time alone does not revoke local work
             // already authorized while its signature was valid; no fresh network verification uses this instant.
             var resumed = m_verifier.ReserveInstall(manifest: intent.Manifest, verifiedAt: intent.VerifiedAt, installedVersion: intent.InstalledVersion);
 
             if (!resumed.Accepted) {
-                return TerminalRefusal(detail: $"pending install refused: {resumed.RefusalReason}");
+                return Refusal(detail: $"pending install refused: {resumed.RefusalReason}", decision: resumed.Decision);
             }
         } else {
             var check = await FetchAndVerifyAsync(cancellationToken: cancellationToken, now: now).ConfigureAwait(continueOnCapturedContext: false);
@@ -206,15 +209,15 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
         if (!alreadyCurrent && !string.IsNullOrEmpty(value: current)) {
             if ((manifest.MinimumSupported is { } minimumSupported) &&
                 ReleaseVersion.IsStrictlyGreaterThan(left: minimumSupported, right: current)) {
-                return TerminalRefusal(detail: $"current install '{current}' is below this release's minimumSupported floor '{minimumSupported}'");
+                return Refusal(detail: $"current install '{current}' is below this release's minimumSupported floor '{minimumSupported}'");
             }
             if (!ReleaseVersion.IsStrictlyGreaterThan(left: manifest.Version, right: current)) {
-                return TerminalRefusal(detail: $"version '{manifest.Version}' does not exceed the current install '{current}'");
+                return Refusal(detail: $"version '{manifest.Version}' does not exceed the current install '{current}'");
             }
         }
         if ((!alreadyCurrent && !string.IsNullOrEmpty(value: current) && string.Equals(a: manifest.Version, b: current, comparisonType: StringComparison.OrdinalIgnoreCase)) ||
             (!string.IsNullOrEmpty(value: lastGood) && string.Equals(a: manifest.Version, b: lastGood, comparisonType: StringComparison.OrdinalIgnoreCase))) {
-            return TerminalRefusal(detail: $"version '{manifest.Version}' collides case-insensitively with an active install directory");
+            return Refusal(detail: $"version '{manifest.Version}' collides case-insensitively with an active install directory");
         }
 
         // Never restage the running directory, including when an interrupted apply already swapped current.
@@ -239,7 +242,7 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
         var applied = m_applier.Apply(cacheRoot: root, manifest: manifest, recoverInterruptedApply: recovering, rid: rid);
 
         if (!applied.Applied) {
-            return new UpdateApplyOutcome(Applied: false, Detail: (applied.RefusalReason ?? "apply refused"));
+            return Refusal(detail: (applied.RefusalReason ?? "apply refused"));
         }
 
         // If interrupted before deletion, recovery rehashes the now-current version and completes this cleanup.

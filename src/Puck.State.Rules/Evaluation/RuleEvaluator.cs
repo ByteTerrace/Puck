@@ -814,9 +814,9 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             ? FireRewind(
                 applied: out applied,
                 binding: binding,
+                latch: latch,
                 open: open,
                 rule: rule,
-                state: state,
                 stepTicks: stepTicks,
                 tick: tick
             )
@@ -919,16 +919,26 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         );
     }
     // A rule whose whole effect is rewinding its group restores the world to a turn boundary the undo arena holds, which
-    // no scope can enclose; its edge bit is written plainly and the restore carries the rest.
-    private RuleOutcome FireRewind(CompiledRule rule, RuleLatch.RuleState state, LatchKey binding, bool open, ulong tick, ulong stepTicks, out bool applied) {
-        state.Held[binding] = open;
-
-        return FireRule(
+    // no scope can enclose, so the edge bit cannot ride a scope: it is written after the restore, and only when the
+    // restore landed. A rewind that refuses has not crossed its Edge, so the next tick tries again.
+    private RuleOutcome FireRewind(CompiledRule rule, RuleLatch latch, LatchKey binding, bool open, ulong tick, ulong stepTicks, out bool applied) {
+        var outcome = FireRule(
             applied: out applied,
             rule: rule,
             stepTicks: stepTicks,
             tick: tick
         );
+
+        if (outcome == RuleOutcome.Fired) {
+            latch.Restore(
+                binding: binding,
+                held: open,
+                journal: m_host.Arena.Journal,
+                name: rule.Name
+            );
+        }
+
+        return outcome;
     }
     // A fault decided nothing. A binding that merely could not evaluate (an absence) leaves its entry for the sweep to
     // close, as a closed gate would; one that faulted touches it, so the sweep keeps the verdict the entry last held.

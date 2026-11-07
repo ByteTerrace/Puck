@@ -8,6 +8,9 @@
         "resolved": "11.0.0-rc.3.26522.148",
         "contentHash": "SWnTMx96mhBr9LCOySJg1ETlEFFHVsPGdVT02JnYhtqk1+Vke1J7RU3VkKwEiErBr4FJ42Uu4k7GdOtkRuvs/Q=="
       },
+      "ByteTerrace.Puck.Confinement": {
+        "type": "Project"
+      },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
       }

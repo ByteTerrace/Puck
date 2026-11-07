@@ -311,7 +311,7 @@ internal sealed class RuleDueList {
         }
     }
     /// <summary>Keeps one body of a body sweep due for next tick: its verdict must be judged again.</summary>
-    public void MarkBodyNext(int index, int body) => MarkBody(index: index, body: body);
+    public void MarkBodyNext(int index, int body) => MarkBody(body: body, index: index);
     /// <summary>Records the bodies live as a body sweep's visit begins: the set its bindings are judged over, as a full
     /// sweep snapshots its keys.</summary>
     public void SnapshotLive(int index, List<int> live) {
@@ -333,7 +333,7 @@ internal sealed class RuleDueList {
     /// not live as it began: each one's binding is forgotten as a full sweep's end forgets a key it no longer holds
     /// (already done by that end after a full sweep), and the body stays due only when it is live now, having joined
     /// during the sweep.</summary>
-    public void ForgetUnswept(int index, CellKeyTable keys, RuleLatch latch, RuleLatch.RuleState state, bool swept) {
+    public void ForgetUnswept(int index, ArenaJournal journal, CellKeyTable keys, RuleLatch latch, RuleLatch.RuleState state, bool swept) {
         if ((m_bodies[index] is not { } bodies) || !AnyBody(index: index)) {
             return;
         }
@@ -342,7 +342,7 @@ internal sealed class RuleDueList {
         var gathered = false;
 
         for (var word = 0; (word < bodies.Length); word++) {
-            var bits = (bodies[word] & ~(((live is not null) && (word < live.Length)) ? live[word] : 0UL));
+            var bits = bodies[word] & ~(((live is not null) && (word < live.Length)) ? live[word] : 0UL);
 
             while (bits != 0UL) {
                 var bit = System.Numerics.BitOperations.TrailingZeroCount(value: bits);
@@ -350,7 +350,7 @@ internal sealed class RuleDueList {
 
                 bits &= (bits - 1UL);
                 if (!swept && RuleReads.TryIndexKey(index: body, key: out var key, keys: keys)) {
-                    latch.Forget(binding: new LatchKey(Left: key.Ordinal, Right: -1), state: state);
+                    latch.Forget(binding: new LatchKey(Left: key.Ordinal, Right: -1), journal: journal, state: state);
                 }
                 if (!gathered) {
                     m_liveNow.Clear();

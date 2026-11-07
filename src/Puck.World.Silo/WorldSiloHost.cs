@@ -811,7 +811,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
             // Match WorldServer.AuthorityIdentity for a colocated row: it signs as its stable instance name
             // and has no remote endpoint. The configured row inventory keeps names unique in this host.
-            var subject = (definition.Host.AuthorityNamespace ?? worldRow.World.Value);
+            var subject = FederationSubject(definition: definition, world: worldRow.World);
 
             if (ClosedGroupRewind) {
                 lock (m_rewindAuthoritiesGate) { m_rewindAuthorities.Add(item: subject); }
@@ -851,6 +851,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             return false;
         }
     }
+    private static string FederationSubject(WorldDefinition definition, SafeName world) =>
+        definition.Host.AuthorityNamespace ?? world.Value;
+
     private Puck.Networking.IAuthenticator WrapAuthentication(WorldSiloWorldRow row, Puck.Networking.IAuthenticator federation) =>
         ((row.Federation.Authentication is { } selection)
             ? (m_authentication ?? throw new InvalidOperationException(message: "No authentication provider registry is installed."))(
@@ -1406,6 +1409,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 ConsoleLink = ConsoleLinkFor(link: link, row: identity.World.Value),
                 Door = door,
                 ListenEndpoint = definition.Host.Listen,
+                AdvertisedEndpoint = definition.Host.Authority,
                 Tape = tape,
             };
             var slice = checkpoint?.HostRow;

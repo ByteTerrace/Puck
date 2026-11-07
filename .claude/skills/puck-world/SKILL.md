@@ -479,7 +479,19 @@ and close it through the one door, `RuleEvaluator.Commit`, which switches on a `
 rewind, `Closed` and `Held` commit the bookkeeping alone, `Fires` commits and delivers). A store that is simulation state
 beside the arena's columns implements `IJournalParticipant` and records what it overwrites through
 `ArenaJournal.RecordParticipant` before writing (it throws with no scope open); `StateArena.Rewind` hands the records back
-newest first. `RuleLatch.Restore` refuses inside a scope, since only a firing's writes are recorded.
+newest first. `RuleLatch`'s lifecycle writers (`Restore`, `Clear`, `ClearRule`, `Prune`) take the arena's journal, no default,
+and refuse inside a scope, since only a firing's writes are recorded; `EndSweep`, `Forget` and `Reset` record what they remove
+when a scope is open. A decision's common and option effects are one firing: `FireEffects` proposes the common effects, then
+the `IFiringContinuation`'s effects into the same scope, and the `IFiringPrelude`'s binding rewinds with both. A queued arm
+keeps the host bindings it was queued under (`IEffectHost.CaptureBinding`, `ApplyBinding`) for its preflight and delivery.
+An arm that fires outside the arena evaluates nothing itself: it declares `IRuleEffect.Sources` (a key read as an index, an
+expression program, an operand) and the evaluator reads them with the firing, so a source that faults is a `Faulted`
+firing and an absence is a value the arm answers. The values reach the arm through `EffectFiring.Values`, by the position
+it declared them at, and are the same at the preflight and at the delivery after the commit. A write's destination key
+answers a typed `WriteKey` (`Resolved`, `Faulted`, `Refused`), never a reason to compare. The state transaction's input
+resynchronisation is two phases: `ValidateStateTransaction` prepares each owner's selection (`WorldInputRuntime.TryPrepareBodies`
+and `TryPrepareAll`) while the journal can still rewind, and `CommitStateTransaction` applies them (`ApplyPrepared*`), which cannot
+refuse.
 
 **Narrate through the hub.** Server never writes to `System.Console`; every line
 is a `WorldOutputHub.Narrate` call, bound to stderr (or stdout for answers) by

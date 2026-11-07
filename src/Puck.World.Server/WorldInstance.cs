@@ -53,6 +53,7 @@ public sealed class WorldInstance : IDisposable {
         OwnedMachines = ownedMachines;
         Link = link;
         ListenEndpoint = server.Definition.Host.Listen;
+        AdvertisedEndpoint = server.Definition.Host.Authority;
         Federation = federation;
         Origin = documentOrigin;
         m_ownedAdjacencies = ownedAdjacencies;
@@ -117,6 +118,8 @@ public sealed class WorldInstance : IDisposable {
     /// <summary>The listener configuration for this activation; defaults to the server document. A hosting
     /// composition may supply its current endpoint independently of an older recovered checkpoint.</summary>
     public string? ListenEndpoint { get; init; }
+    /// <summary>The endpoint published for this activation, independent of a recovered checkpoint's host fields.</summary>
+    public string? AdvertisedEndpoint { get; init; }
     /// <summary>The console-facing instance name.</summary>
     public string Name { get; }
     /// <summary>This row's own next transfer id counter — advances by exactly one per transfer this row

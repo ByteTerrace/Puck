@@ -8,6 +8,36 @@ namespace Puck.World.Presentation.Tests;
 /// <summary>Laws for a local seat that follows its traveler across hosts: a source host transfers the traveler over
 /// real federation to a destination behind its door, and the destination hands it on to a third authority.</summary>
 public sealed class FederationOnwardRouteLawTests {
+    [Fact]
+    public void MissingDestinationNamespaceLeavesTheCachedRemoteAndItsCommittedTravelerUsable() {
+        WorldRemoteAuthority? traveler = null;
+        using var hosts = FederatedHosts.Build(travelerRouteStarted: wrapper => traveler = wrapper);
+        hosts.JoinSeat(slot: 0, travelTurn: default);
+        hosts.Source.EnqueueTransfer(actingPrincipal: Principal.Console, destination: hosts.RemoteDestination,
+            scope: WorldInstanceHost.TransferScope.Body, sourceInstance: WorldInstanceHost.BootInstanceName, sourceSlot: 0);
+        hosts.Source.DrainPendingTransfers();
+        Assert.NotNull(@object: traveler);
+        Assert.True(condition: traveler.TryRouteCredential(bodyIndex: -1, credential: out var credential));
+        Assert.True(condition: traveler.TryDescribeRoute(bodyIndex: credential.BodyIndex, route: out var before, reason: out _));
+        var valid = File.ReadAllBytes(path: hosts.DestinationPath);
+        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: valid);
+        File.WriteAllBytes(path: hosts.DestinationPath, bytes: WorldDefinitionSerialization.Serialize(definition: definition with {
+            HostRaw = definition.Host with { AuthorityNamespace = null },
+        }));
+        hosts.JoinSeat(slot: 1, travelTurn: default);
+        hosts.Source.EnqueueTransfer(actingPrincipal: Principal.Console, destination: hosts.RemoteDestination,
+            scope: WorldInstanceHost.TransferScope.Body, sourceInstance: WorldInstanceHost.BootInstanceName, sourceSlot: 1);
+        hosts.Source.DrainPendingTransfers();
+        Assert.True(condition: hosts.SourceRow.Server.Population.IsActive(index: 1));
+        Assert.True(condition: traveler.TryDescribeRoute(bodyIndex: credential.BodyIndex, route: out var after, reason: out var reason), userMessage: reason);
+        Assert.Equal(expected: before.Entity, actual: after.Entity);
+        File.WriteAllBytes(path: hosts.DestinationPath, bytes: valid);
+        hosts.Source.EnqueueTransfer(actingPrincipal: Principal.Console, destination: hosts.RemoteDestination,
+            scope: WorldInstanceHost.TransferScope.Body, sourceInstance: WorldInstanceHost.BootInstanceName, sourceSlot: 1);
+        hosts.Source.DrainPendingTransfers();
+        Assert.False(condition: hosts.SourceRow.Server.Population.IsActive(index: 1));
+    }
+
     // THE LAW: a local seat follows its traveler through three authorities and takes the onward turn exactly once,
     // wherever the onward route's observation falls against the seat's claim. The source host commits the traveler to
     // the destination behind its door, starts a route wrapper for the followed seat, holds the commit's turn and

@@ -815,12 +815,14 @@ public sealed class WorldAdjacencyLawTests {
     }
     [Fact]
     public void FederatedEntityAddressesUseTheDeclaredAuthorityNamespace() {
+        // The advertised endpoint is where peers dial; the namespace is what entity addresses are minted under.
         const string Endpoint = "127.0.0.1:38601";
-        var definition = Fixtures.BuildDocument() with { HostRaw = Fixtures.BuildDocument().Host with { Authority = Endpoint } };
+        const string Namespace = "federated-authority";
+        var definition = Fixtures.BuildDocument() with { HostRaw = Fixtures.BuildDocument().Host with { Authority = Endpoint, AuthorityNamespace = Namespace } };
         using var fixture = Fixtures.FreshServer(definition: definition);
 
         Assert.Equal(
-            Endpoint,
+            Namespace,
             fixture.Server.AuthorityIdentity
         );
     }

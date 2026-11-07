@@ -41,7 +41,7 @@ internal sealed class SelfUpdateHealthGateHostedService(IHostApplicationLifetime
 /// <summary>What <see cref="HealthGateFile.ClearHealthy"/> proved and pruned.</summary>
 /// <param name="Cleared">Whether this process was the selected install and its pending health marker was cleared.</param>
 /// <param name="Pruned">The prune pass that followed clearing, or <see langword="null"/> when nothing was cleared.</param>
-/// <param name="Retryable">A transient lock or I/O failure prevented the decision.</param>
+/// <param name="Retryable">Lock contention prevented the decision; permanent I/O, permissions and platform errors do not retry.</param>
 public sealed record HealthClearResult(bool Cleared, InstallPruneResult? Pruned, bool Retryable = false);
 /// <summary>The health attempt counter's clearing half; see <see cref="SelfUpdateHealthGateHostedService"/>.</summary>
 public static class HealthGateFile {
@@ -97,9 +97,11 @@ public static class HealthGateFile {
                 return new HealthClearResult(Cleared: false, Pruned: null);
             }
             File.Delete(path: Path.Combine(path1: cacheRoot, path2: "state", path3: "health.json"));
-        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
-            // Startup remains unproven if a concurrent update or unavailable install prevents clearing.
+        } catch (IOException error) when (FileLock.IsContention(exception: error)) {
             return new HealthClearResult(Cleared: false, Pruned: null, Retryable: true);
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
+            // Permissions, unsupported hosts and permanent I/O failures cannot be repaired by polling.
+            return new HealthClearResult(Cleared: false, Pruned: null);
         }
         // Pruning takes the publication lease before the update lease, so it runs after this one is released.
         return new HealthClearResult(Cleared: true, Pruned: InstallPruner.Prune(installRoot: cacheRoot, keepVersions: keepVersions));

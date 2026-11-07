@@ -175,7 +175,7 @@ public enum WorldRuleEffectRefusal : byte {
     [Refusal(door: "world.rule.effect", condition: "a rule body/pose/cue effect resolves no active body", kind: RefusalKind.Verdict)]
     BodyInactive,
 
-    [Refusal(door: "world.rule.effect", condition: "a 'setBodyState' effect's value expression faulted", kind: RefusalKind.Verdict)]
+    [Refusal(door: "world.rule.effect", condition: "a 'setBodyState' effect's value expression names no number (a fault refuses the firing as an Arithmetic refusal before the arm runs)", kind: RefusalKind.Verdict)]
     BodyStateFaulted,
 
     [Refusal(door: "world.rule.effect", condition: "a rule designation resolves no valid active target body or target register", kind: RefusalKind.Verdict)]

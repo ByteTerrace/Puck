@@ -1,5 +1,4 @@
 using System.CommandLine;
-
 using Puck.Mcp;
 
 namespace Puck.Cli.Mcp;
@@ -130,7 +129,7 @@ public static class McpCommand {
                 if (!worker) {
                     // The stub counts each launch of a pending version; a front that started proves it as a worker
                     // does, or a client's probe-and-reconnect reaches the attempt ceiling and rolls a good build back.
-                    LocalAdapterInstall.Healthy(install: installRoot);
+                    await LocalAdapterInstall.HealthyAsync(install: installRoot, cancellationToken: stop.Token).ConfigureAwait(continueOnCapturedContext: false);
                     await OperatorMcpFront.RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput(),
                         Path.Combine(path1: installRoot, path2: (OperatingSystem.IsWindows() ? "Puck.Launcher.Stub.exe" : "Puck.Launcher.Stub")),
                         ["mcp", "--profile", "operator", "--worker", "--install-root", installRoot, "--build-source", buildSource,
@@ -138,7 +137,7 @@ public static class McpCommand {
                         token => LocalAdapterInstall.ActivateAsync(build: buildSource, install: installRoot, token: token), stop.Token).ConfigureAwait(continueOnCapturedContext: false);
                     return 0;
                 }
-                LocalAdapterInstall.Healthy(install: installRoot);
+                await LocalAdapterInstall.HealthyAsync(install: installRoot, cancellationToken: stop.Token).ConfigureAwait(continueOnCapturedContext: false);
             }
             if (siloPath is not null) {
                 return await Puck.World.Silo.WorldSiloApplication

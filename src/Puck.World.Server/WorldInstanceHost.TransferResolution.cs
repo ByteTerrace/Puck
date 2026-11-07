@@ -712,6 +712,10 @@ public sealed partial class WorldInstanceHost {
                 resolvedName = (transfer.Destination.Name ?? (transfer.Destination.Site ?? endpoint));
 
                 try {
+                    var authorityNamespace = definition.Host.AuthorityNamespace;
+                    if (string.IsNullOrWhiteSpace(value: authorityNamespace)) {
+                        throw new InvalidOperationException(message: "remote destination requires host.authorityNamespace");
+                    }
                     if (
                         !m_remoteAuthorities.TryGetValue(
                         key: resolvedName,
@@ -723,9 +727,8 @@ public sealed partial class WorldInstanceHost {
                         comparisonType: StringComparison.Ordinal
                     ) || (remote.PeerAuthority != definition.Host.AuthorityNamespace)
                     ) {
-                        remote?.Dispose();
-                        remote = new WorldRemoteAuthority(
-                            expectedAuthority: (definition.Host.AuthorityNamespace ?? throw new InvalidOperationException(message: "remote destination requires host.authorityNamespace")),
+                        var replacement = new WorldRemoteAuthority(
+                            expectedAuthority: authorityNamespace,
                             endpoint: endpoint,
                             placeholder: definition,
                             security: source.Federation.Authenticator,
@@ -734,6 +737,8 @@ public sealed partial class WorldInstanceHost {
                             applicationStopping: m_applicationStopping,
                             narrationHub: m_narration
                         );
+                        remote?.Dispose();
+                        remote = replacement;
                         m_remoteAuthorities[resolvedName] = remote;
                         RegisterRemoteCustodyPeer(remote: remote);
                     }

@@ -44,11 +44,9 @@ public sealed class WorldPairKeyLawTests {
 
         var scope = fixture.Server.Arena.BeginScope();
 
-        Assert.True(condition: pair.TryResolveForWrite(
-            reader: fixture.Server.RuleHost,
-            key: out var admitted,
-            reason: out var reason
-        ), userMessage: reason);
+        var written = pair.ResolveForWrite(reader: fixture.Server.RuleHost);
+
+        Assert.True(condition: written.TryResolved(key: out var admitted), userMessage: written.Reason);
         Assert.True(condition: admitted.IsValid);
         Assert.Equal(expected: (before + 1), actual: fixture.Server.Arena.Keys.Count);
 
