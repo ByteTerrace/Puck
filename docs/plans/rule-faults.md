@@ -234,12 +234,12 @@ is the one loop. Inside it:
   address) and reads through `Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) : Fact`.
   The interpreter resolves every address first; a `Faulted` resolution is
   `Outcome.Faulted` for the token and the operand is not called. The
-  per-operand meaning of `Nothing` (a board origin of -1 at `Operands.cs:554`,
+  per-operand meaning of `Nothing` (a board origin of -1 at `src/Puck.State.Rules/Compiler/Operands.cs:547`,
   a start position of 0 at `Operands.Patterns.cs:361-363`, `$previous` on a
   first token reading the unheld cell at `RuleReads.cs:282-296`) is kept
   where it is authored. The same holds for `CompiledVector`
   (`Operands.Vectors.cs:79-107`), `LiveRow`, text reads
-  (`RuleEvaluation.cs:287-336`) and effect destinations.
+  (`RuleEvaluation.cs:287-329`) and effect destinations.
 - **Host facets answer facts.** `OperandFact<TFacet>.Read` returns a `Fact`
   (`src/Puck.State/OperandFact.cs:37`), so a world fact that cannot answer is
   in-band. Host code evaluates no program and reads no operand: the host
@@ -482,10 +482,10 @@ partition needs.
 ### Pricing
 
 The work sheet charges a `StateCellOperand` one unit whatever its key
-expression (`Operands.cs:51`; `RuleWorkBudget.ExpressionCost` charges an
+expression (`src/Puck.State.Rules/Compiler/Operands.cs:51`; `RuleWorkBudget.ExpressionCost` charges an
 operand through `operand.Cost`, `RuleWorkBudget.cs:95-96`), so a computed key
 such as `cards[sum(values, x -> x)]` is undercharged today. A history age's
-expression is charged inside `HistoryOperand.Cost` (`Operands.cs:405-412`),
+expression is charged inside `HistoryOperand.Cost` (`src/Puck.State.Rules/Compiler/Operands.cs:405-412`),
 and a tuple pattern's token expression inside `PatternOperand.Cost`
 (`Operands.Patterns.cs:411-417`). After lowering, a computed key and a ring age
 are tokens of the enclosing program and `ExpressionCost` prices them once, and

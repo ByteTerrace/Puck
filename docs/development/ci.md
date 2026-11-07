@@ -804,7 +804,7 @@ twice each through Front Door, asserting media type, `Cache-Control`, and an
 serves.
 
 The primary world uses a Flexible VM scale set, `bytrcvmssp000`, at
-`play.puck.byteterrace.com:7825` (PUCK on a telephone keypad). A static public IP and UDP load balancer preserve
+`play.puck.byteterrace.com`, UDP port 7825 (PUCK on a telephone keypad). A static public IP and UDP load balancer preserve
 the endpoint during worker replacement. The release permits exactly one worker,
 with manual application upgrades, automatic guest patching, and automatic
 replacement after sustained simulation failure. It does not claim distributed
