@@ -3687,9 +3687,11 @@ ordinary · Next: new content and art on the owner's call.
     (`LifetimeAuthority` mints `N~1`) and retiring the failed activation drops the
     resolver generation, so later writes stop; some restore refusals
     (`InvalidDataException` from admission) skip the set-aside and clean start;
-    quit skips a frozen row whose final image failed. The fix is a design step
-    first: image identity from (destination, scope, referenced document), stored
-    filesystem-safe, restored onto the current source (the memo's M1 question);
+    quit skips a frozen row whose final image failed. The design is settled
+    ([durable images](hub-and-saves.md#durable-images): identity from the
+    scope key and the referenced document, stored under its content hash,
+    restored onto the current source through one ladder, durable rows kept
+    across an edit); H7a to H7e build it;
   - the deal gate (`WorldDefinitionValidator.TryValidateDealtChildren`) admits a
     solid variant whose shape the load validator refuses (`CreationShapeLaws
     .SolidRefusals` runs only on the template's base prototype), so the sweep can
