@@ -2799,6 +2799,10 @@ every content search in this repo through the checkout's own `puck search` build
 
 ## `puck measure`—queued measurement windows
 
+Under Git Bash on Windows, export `MSYS_NO_PATHCONV=1` before passing a `--metric`
+pointer: MSYS rewrites an argument starting with `/` into a Windows path, and
+`request` then refuses the pointer.
+
 Lanes record timing questions; the lead answers them on a quiet machine. `request` freezes the complete output directory of each `Puck.World.dll`, records the command, numeric metrics and decision criterion, and publishes the request in the main checkout's ignored measurement scratch, shared across worktrees beside the leases. It prints the complete directory; `MeasureCommand` owns its location. Rebuilding the source output or pruning its build store cannot change the copied pair. Use one artifact or commit per side; commit inputs are exported through `AffectedRevisionExport` and built through `WorldArtifactBuild`, including both shader formats, before publication.
 
 ```sh
