@@ -290,19 +290,17 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand, IWordF
     /// <param name="tokenExpression">The per-token value expression, or <see langword="null"/>.</param>
     /// <param name="kind">The pattern's kind, which a value expression evaluates in.</param>
     /// <param name="word">The word buffer.</param>
-    /// <param name="length">The word's length, when it spelled one.</param>
     /// <param name="start">The position the word starts at.</param>
-    /// <returns><see cref="ExpressionFault.None"/> when the word spelled, else what its token letters met — see
+    /// <returns>The word's length as a finite answer when it spelled, else what its token letters met — see
     /// <see cref="RuleExpressions.FoldWord"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-    public static ExpressionFault ReadWord(IStateReader reader, int rowOrdinal, int attributeOrdinal, CompiledExpressionToken[]? tokenExpression, CellKind kind, Span<long> word, out int length, int start = 0) {
+    public static Outcome ReadWord(IStateReader reader, int rowOrdinal, int attributeOrdinal, CompiledExpressionToken[]? tokenExpression, CellKind kind, Span<long> word, int start = 0) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         if (tokenExpression is not null) {
             return RuleExpressions.FoldWord(
                 body: tokenExpression,
                 kind: kind,
-                length: out length,
                 reader: reader,
                 rowOrdinal: rowOrdinal,
                 start: start,
@@ -310,7 +308,7 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand, IWordF
             );
         }
 
-        length = reader.Arena.ReadWord(
+        return Outcome.Finite(raw: reader.Arena.ReadWord(
             attributeOrdinal: ((attributeOrdinal >= 0)
                 ? attributeOrdinal
                 : rowOrdinal
@@ -319,9 +317,7 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand, IWordF
             start: start,
             time: reader.Time,
             word: word
-        ).Length;
-
-        return ExpressionFault.None;
+        ).Length);
     }
     /// <summary>Returns the position the word starts at: 0 for an invalid key, the named token's physical position,
     /// or <see cref="int.MaxValue"/> (an empty word) when the row does not hold the token.</summary>

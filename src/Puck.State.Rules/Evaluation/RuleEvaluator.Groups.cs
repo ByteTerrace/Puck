@@ -42,7 +42,7 @@ public sealed partial class RuleEvaluator {
             if ((m_host is IArenaUndoHost suppressingUndo) && suppressingUndo.UndoGroupSuppressed(group: group.Name, tick: m_host.Tick)) {
                 continue;
             }
-            var armed = Armed(group: group, faulted: out var faulted);
+            var armed = Armed(faulted: out var faulted, group: group);
 
             // A trigger that faulted decided nothing: the group neither runs nor re-arms this tick, and keeps its
             // progress for the tick its trigger decides again.
@@ -98,11 +98,10 @@ public sealed partial class RuleEvaluator {
                 declared: group.Locals,
                 owner: group.Name,
                 tick: m_host.Tick
-            ) && GateOpen(
-                faulted: out _,
+            ) && (Decide(
                 gate: group.Trigger,
                 ruleName: group.Name
-            ));
+            ) is Verdict.Open));
         } finally {
             faulted = (scratch.LeaveFaultScope(scope: scope) != ExpressionFault.None);
         }
@@ -297,15 +296,16 @@ public sealed partial class RuleEvaluator {
         for (var ordinal = 0; (ordinal < declared.Length); ordinal++) {
             var bound = declared[ordinal];
 
-            if (!RuleExpressions.TryEvaluate(
-                fault: out var fault,
+            var frame = new EvaluationFrame(reader: m_host);
+            var evaluated = RuleExpressions.Evaluate(
+                frame: ref frame,
                 kind: bound.CarrierKind,
-                program: bound.Expression,
-                reader: m_host,
-                value: out var value
-            )) {
+                program: bound.Expression
+            );
+
+            if (!evaluated.TryFinite(raw: out var value)) {
                 ReportRefusal(
-                    detail: RuleEvaluation.DescribeFault(fault: fault),
+                    detail: RuleEvaluation.DescribeOutcome(outcome: evaluated),
                     effect: $"binding '{bound.Name}'",
                     refusal: RuleEffectRefusal.Arithmetic,
                     ruleName: owner,

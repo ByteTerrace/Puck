@@ -67,7 +67,7 @@ public sealed class StateKernelMatrixLawTests {
             Values<StateExpressionKernels>(property: nameof(StateExpressionKernels.Tokens))
         );
         Assert.Equal(
-            [KernelRead.Literal, KernelRead.Direct, KernelRead.Indirect],
+            [KernelRead.Literal, KernelRead.Direct, KernelRead.Indirect, KernelRead.ComputedKey],
             Values<StateExpressionKernels>(property: nameof(StateExpressionKernels.Read))
         );
         Assert.Equal(
@@ -100,19 +100,23 @@ public sealed class StateKernelMatrixLawTests {
                         tokens: tokens
                     );
 
+                    // A computed-key site is its address program and its read, so that scenario's token count names its sites.
                     Assert.Equal(
                         tokens,
-                        program.Length
+                        ((read == KernelRead.ComputedKey)
+                            ? Math.Min(
+                                val1: tokens,
+                                val2: program.Length
+                            )
+                            : program.Length)
                     );
                     Assert.Equal(
                         (tokens > 0),
-                        Puck.State.Rules.RuleExpressions.TryEvaluateAlone(
-                            fault: out _,
+                        Puck.State.Rules.RuleExpressions.EvaluateDetached(
                             kind: CellKind.Int,
                             program: program,
-                            reader: reader,
-                            value: out _
-                        )
+                            reader: reader
+                        ).TryFinite(raw: out _)
                     );
                 }
             }

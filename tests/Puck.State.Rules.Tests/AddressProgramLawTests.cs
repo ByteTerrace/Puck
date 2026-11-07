@@ -42,17 +42,13 @@ public sealed class AddressProgramLawTests {
 
         var before = Leased(arena: host.Arena);
 
-        Assert.True(condition: RuleExpressions.TryEvaluate(
-            fault: out var fault,
+        var frame = new EvaluationFrame(reader: host);
+
+        Assert.True(condition: RuleExpressions.Evaluate(
+            frame: ref frame,
             kind: CellKind.Int,
-            program: program,
-            reader: host,
-            value: out _
-        ));
-        Assert.Equal(
-            actual: fault,
-            expected: ExpressionFault.None
-        );
+            program: program
+        ).TryFinite(raw: out _));
         Assert.Equal(
             actual: (Leased(arena: host.Arena) - before),
             expected: (2L * program.Length)

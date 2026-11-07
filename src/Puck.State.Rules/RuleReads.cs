@@ -300,30 +300,30 @@ public static class RuleReads {
         if (reference.FeedProgram is not { } program) {
             return true;
         }
-        if (RuleExpressions.TryEvaluate(
-            fault: out var fault,
+
+        var frame = new EvaluationFrame(reader: reader);
+        var outcome = RuleExpressions.Evaluate(
+            frame: ref frame,
             kind: CellKind.Int,
-            program: program,
-            reader: reader,
-            value: out var value
-        )) {
+            program: program
+        );
+
+        // An absence the program read names no cell; a fault is the caller's.
+        if (outcome.TryFinite(raw: out var value)) {
             feed = new AddressFeed(
                 Absent: false,
                 Value: value
             );
-
-            return true;
-        }
-        if (fault == ExpressionFault.Absent) {
+        } else if (outcome.Case == FaultCase.Absent) {
             feed = new AddressFeed(
                 Absent: true,
                 Value: 0L
             );
-
-            return true;
+        } else {
+            return false;
         }
 
-        return false;
+        return true;
     }
     /// <summary>Resolves one live key indirection once the program it resolves through has left its value.</summary>
     /// <param name="reader">The evaluation in flight.</param>

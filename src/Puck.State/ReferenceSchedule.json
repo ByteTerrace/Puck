@@ -857,7 +857,7 @@
         },
         {
             "id": "state.expression.program",
-            "entryPoint": "Puck.State.Rules.RuleExpressions.TryEvaluate(IStateReader?, ReadOnlySpan<CompiledExpressionToken>, CellKind, out long, out ExpressionFault)",
+            "entryPoint": "Puck.State.Rules.RuleExpressions.Evaluate(ref EvaluationFrame, ReadOnlySpan<CompiledExpressionToken>, CellKind)",
             "symbol": "Puck_State_Rules_Puck_State_Rules_RuleExpressions__Run",
             "sources": [{"path": "src/Puck.State.Rules/RuleExpressions.cs"}],
             "formula": "setup + MaxExpressionTokens * (dispatch + the maximum arm) + teardown; the arm maximum is unresolved while the function kernel is",

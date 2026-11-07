@@ -45,13 +45,11 @@ public sealed class OperatorTableLawTests {
             verb: "law"
         );
 
-        return (RuleExpressions.TryEvaluate(
-            fault: out _,
+        return (RuleExpressions.EvaluateDetached(
             kind: kind,
             program: compiled,
-            reader: null,
-            value: out var value
-        )
+            reader: null
+        ).TryFinite(raw: out var value)
             ? value
             : null
         );

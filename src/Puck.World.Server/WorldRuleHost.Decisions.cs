@@ -186,16 +186,15 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
         var generation = state.Generation;
 
         if (!m_evaluator.EvaluateBindings(rule: rule)) { return false; }
-        var interruptOpen = ((policy.Interrupt is { } interrupt) && m_evaluator.GateOpen(
-            faulted: out _,
+        // A faulted gate decided nothing; the scope this binding runs in holds the fault for the checks below.
+        var interruptOpen = ((policy.Interrupt is { } interrupt) && (m_evaluator.Decide(
             gate: interrupt,
             ruleName: rule.Name
-        ));
-        var open = m_evaluator.GateOpen(
-            faulted: out _,
+        ) is Verdict.Open));
+        var open = (m_evaluator.Decide(
             gate: rule.Gate,
             ruleName: rule.Name
-        );
+        ) is Verdict.Open);
         var lostEligibility = (open && (state.Selected >= 0) &&
             (((state.Candidate >= 0) && (!DecisionBodyLive(
             generation: state.Generation,

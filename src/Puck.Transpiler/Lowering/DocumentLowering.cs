@@ -316,7 +316,7 @@ public static partial class DocumentLowering {
                     var arm = scope.Vocabulary.CallContext(callName: call.Name, context: context);
                     // A call filling a declared document arm constructs that arm. Only calls outside such a
                     // position are compile-time builtins, even when the two vocabularies share a name.
-                    if (((context is null) || (arm is null)) && DocumentBuiltins.TryEvaluate(
+                    if (((context is null) || (arm is null)) && DocumentBuiltins.TryFold(
                         call: call,
                         fieldKey: fieldKey,
                         result: out var builtin,
@@ -1381,7 +1381,7 @@ public static partial class DocumentLowering {
                 for (var index = 0; (index < obj.Count); index++) {
                     var member = obj.GetAt(index: index).Value;
 
-                    if (Canonicalize(node: member) is var canonical && !ReferenceEquals(objA: canonical, objB: member)) {
+                    if ((Canonicalize(node: member) is var canonical) && !ReferenceEquals(objA: canonical, objB: member)) {
                         obj.SetAt(index: index, value: canonical);
                     }
                 }
@@ -1392,7 +1392,7 @@ public static partial class DocumentLowering {
                 for (var index = 0; (index < arr.Count); index++) {
                     var element = arr[index];
 
-                    if (Canonicalize(node: element) is var canonical && !ReferenceEquals(objA: canonical, objB: element)) {
+                    if ((Canonicalize(node: element) is var canonical) && !ReferenceEquals(objA: canonical, objB: element)) {
                         arr[index] = canonical;
                     }
                 }

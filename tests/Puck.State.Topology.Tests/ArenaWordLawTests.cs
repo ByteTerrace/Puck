@@ -214,7 +214,7 @@ public sealed class ArenaWordLawTests {
             rowOrdinal: TopologyArenaFixture.Board,
             values: scratch
         ));
-        Assert.True(condition: ArenaBoards.TryEvaluate(
+        Assert.True(condition: ArenaBoards.TryQuery(
             arena: arena,
             query: query,
             reason: out var reason,
@@ -232,7 +232,7 @@ public sealed class ArenaWordLawTests {
                 values: scratch
             )
         );
-        Assert.False(condition: ArenaBoards.TryEvaluate(
+        Assert.False(condition: ArenaBoards.TryQuery(
             arena: arena,
             query: query,
             reason: out var refusal,

@@ -679,7 +679,7 @@ public sealed class BrowserSession {
     /// <param name="value">The computed value on success.</param>
     /// <param name="error">Why evaluation refused, or empty.</param>
     /// <returns><see langword="true"/> when the expression parsed, compiled, and evaluated.</returns>
-    public bool TryEvaluate(string expression, CellKind kind, ulong tick, out long value, out string error) {
+    public bool TryEvaluateText(string expression, CellKind kind, ulong tick, out long value, out string error) {
         value = 0L;
 
         ExpressionProgram parsed;
@@ -713,14 +713,14 @@ public sealed class BrowserSession {
             tick: tick
         );
 
-        if (!Puck.State.Rules.RuleExpressions.TryEvaluateAlone(
-            fault: out var fault,
+        var evaluated = Puck.State.Rules.RuleExpressions.EvaluateDetached(
             kind: kind,
             program: compiled,
-            reader: m_host,
-            value: out value
-        )) {
-            error = $"the expression could not be evaluated against the current state: {RuleEvaluation.DescribeFault(fault: fault)}.";
+            reader: m_host
+        );
+
+        if (!evaluated.TryFinite(raw: out value)) {
+            error = $"the expression could not be evaluated against the current state: {RuleEvaluation.DescribeOutcome(outcome: evaluated)}.";
 
             return false;
         }
