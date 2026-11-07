@@ -608,17 +608,19 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   hashes the actual mask/bake kernel bytes. The bake/dresser, view/bake parameter
   and sample-input/transport boundaries now exclude the observed unrelated
   renderer edits; remaining program-packing coupling belongs to
-  [dense landscapes](#dense-landscapes). Before replacing kernel-byte identity
-  with a source identity or sharing backend products, prove the intended output
-  equivalence, including compiler changes and skin/material/refinement behavior.
-  The latest native forest legs have different aggregate triangle counts, so
-  source equality alone is not proof of identical products or a halved cold cost.
+  [dense landscapes](#dense-landscapes). A source identity or a product shared
+  across backends is judged by whether every backend's mesh is correct
+  (`puck mesh audit`), not by byte equality with today's per-backend products
+  (AGENTS.md rule 4). The latest native forest legs have different aggregate
+  triangle counts, so source equality alone does not show a halved cold cost.
 - The cold bake has not met the one-minute bar on either backend. The CPU
   stages remain the target after removing the repeated refinement-index walk,
   fine-cell sign scan and collapse fan preparation. `SdfMeshCollapse.Levels`
   still dominates `land`; its `Measure` and `MeasureReverse` checks are the
-  next profile-led cuts. Preserve their sample order, exact distances and
-  acceptance bounds. The overall CPU-halving target remains open. Queue
+  next profile-led cuts. A cheaper collapse that produces different but
+  equally good meshes (same or better geometric error against the field,
+  coverage and triangle budget in `puck mesh audit`) is a valid cut; equality
+  with today's output is not required. The overall CPU-halving target remains open. Queue
   `bench startup worlds/debug --bake --backend <backend>` through `puck measure`
   for the quiet wall-time comparison. The stage log's `cpu` fields sum worker
   elapsed intervals, including descheduling and GC/profiler suspension; they
