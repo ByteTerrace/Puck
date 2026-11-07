@@ -427,6 +427,8 @@ public sealed partial class SdfMeshPathBake {
     // A changed landed product is acknowledged only after the dresser has published its draws and ownership claims.
     private long m_productRevision;
     private long m_dressedRevision = -1;
+    // The library's lost revision this bake last restarted at.
+    private long m_lostRevision;
 
     // This is the only door from presentation to the bake's live groups. Preparation and reading share one gate;
     // workers cannot replace/release a landed mesh before the dresser has claimed it. No bake entry calls presentation.
@@ -435,7 +437,10 @@ public sealed partial class SdfMeshPathBake {
         using (EnterFrameGate()) {
             m_preparedFrames++;
             // The bake reads only the baked handles: a frame whose height fields' heights alone moved changes nothing here.
-            if (!ReferenceEquals(frame.Program, m_program)) {
+            // A lost mesh (SdfMeshLibrary.Lose) restarts the bake on the same program, which bakes again only the groups
+            // whose meshes were lost (Keeps).
+            if (!ReferenceEquals(frame.Program, m_program) || (Library.LostRevision != m_lostRevision)) {
+                m_lostRevision = Library.LostRevision;
                 Restart(frame);
             } else if (!ReferenceEquals(frame.Sampled.Baked, m_sampled)) {
                 Resample(frame);
@@ -926,7 +931,7 @@ public sealed partial class SdfMeshPathBake {
                 triangles += mesh.TriangleCount;
                 vertices += mesh.Positions.Length;
                 bytes += ((((((long)mesh.Positions.Length) + mesh.Normals.Length) * 3) * sizeof(float))
-                    + ((((long)mesh.Indices.Length) + mesh.TriangleMaterials.Length) * sizeof(uint)));
+                    + (((3L * mesh.TriangleCount) + mesh.TriangleMaterials.Length) * sizeof(uint)));
             }
 
             return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} merged={m_merged} loaded={m_loaded} skinned={m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }))} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
@@ -1329,7 +1334,7 @@ public sealed partial class SdfMeshPathBake {
     // settle away from the pose it was baked at (Settle). A group the previous program planned under another bake identity
     // holds a product of other code or kernels, so it is never kept.
     private static bool Keeps(Group group, Group old, UInt128 identity) {
-        if (old.Failed || (old.Identity != identity) || (old.Slot != group.Slot) || !old.MaterialOrder.AsSpan().SequenceEqual(other: group.MaterialOrder)) { return false; }
+        if (old.Failed || (old.Mesh is { Lost: true }) || (old.Identity != identity) || (old.Slot != group.Slot) || !old.MaterialOrder.AsSpan().SequenceEqual(other: group.MaterialOrder)) { return false; }
 
         return ((old.Sealed == group.Sealed) || (old.Dynamic && group.Dynamic && (old.Form == group.Form) && ((old.Mesh is not null) || !old.Done)));
     }

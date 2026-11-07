@@ -78,9 +78,20 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> or <paramref name="materials"/> is
     /// <see langword="null"/>.</exception>
     /// <returns>An owned mesh claim. The caller releases it after its last borrowed view ends.</returns>
+    /// <remarks>A library with a native allocator and a store publishes the mesh the store reads back, so a mesh baked
+    /// in this run draws what a later run loads, and its normals and coarser levels can be let go and restored from the
+    /// entry (<see cref="SdfMesh.DescribeRestores"/>); a write the store refuses publishes the baked mesh, which keeps
+    /// them.</remarks>
     public SdfMesh Store(SdfMeshGeometry geometry, SdfMesh mesh, int[] materials, UInt128 identity = default, UInt128? form = null) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
         ArgumentNullException.ThrowIfNull(argument: materials);
+
+        if ((Allocator is not null) && (Disk is { } disk) && !HoldsAny(geometry: geometry, identity: identity) &&
+            disk.Write(geometry: geometry, identity: identity, materials: materials, mesh: mesh) &&
+            TryLoad(form: form, geometry: geometry, identity: identity, materials: materials, mesh: out var stored, refusal: out _) &&
+            (stored is not null)) {
+            return stored;
+        }
 
         var owned = mesh.NativeCopy(Allocator, Account);
 
@@ -90,6 +101,9 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             }
             return owned;
         } catch { owned.Release(); throw; }
+    }
+    private bool HoldsAny(SdfMeshGeometry geometry, UInt128 identity) {
+        lock (m_gate) { return m_meshes.ContainsKey(key: (identity, geometry)); }
     }
     /// <summary>Takes the latest mesh the library holds of a dynamic group's form, baked at whatever pose its other slots
     /// stood in (<see cref="SdfMeshGeometryBuilder.Form"/>): the same shapes, which the mesh's skin carries through each
@@ -184,25 +198,17 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         }
         try {
             if (result.Mesh is null) { StoreEmpty(geometry: geometry, identity: identity); return true; }
-            // The copy runs outside the gate the frame thread takes; the first copy held wins, and a later one is
-            // released.
-            if (!TryTake(geometry, result.Materials, out var owned, identity)) {
-                var copy = result.Mesh.NativeCopy(Allocator, Account);
+            if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh)) { return true; }
+            // The decode takes the group's ids before the native copy, so the published storage holds one set of triangle
+            // materials rather than the store's canonical set beside a renumbered variant. The copy runs outside the gate
+            // the frame thread takes; the first copy held wins, and a later one is released.
+            var source = (result.Materials.AsSpan().SequenceEqual(other: materials) ? result.Mesh : RenumberManaged(from: result.Materials, mesh: result.Mesh, to: materials));
+            var copy = source.NativeCopy(Allocator, Account, restore: (this, identity, geometry));
 
-                if (Hold(geometry, identity, copy, result.Materials, form)) {
-                    owned = copy;
-                } else if (TryTake(geometry, result.Materials, out owned, identity)) {
-                    copy.Release();
-                } else {
-                    owned = copy;
-                }
-            }
-            if (result.Materials.AsSpan().SequenceEqual(other: materials)) { mesh = owned; return true; }
-            try {
-                if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh)) { return true; }
-                mesh = Renumber(owned, result.Materials, materials);
-                return true;
-            } finally { owned.Release(); }
+            if (Hold(geometry, identity, copy, materials, form)) { mesh = copy; return true; }
+            if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh)) { copy.Release(); return true; }
+            mesh = copy;
+            return true;
         } finally { _ = m_reads.TryRemove(item: new KeyValuePair<(UInt128, SdfMeshGeometry), Lazy<StoredMesh>>(key: key, value: pending)); }
     }
     /// <summary>Takes the mesh of a geometry for a group whose shapes carry <paramref name="materials"/>: the stored mesh
@@ -291,16 +297,38 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             m_usage.Add(key: key, value: (bytes, m_age.AddLast(value: key)));
         }
         m_retainedBytes += bytes;
-        while ((m_retainedBytes > ByteBudget) && (m_age.First is { } oldest)) {
-            var victim = oldest.Value;
+        while ((m_retainedBytes > ByteBudget) && (m_age.First is { } oldest)) { Evict(key: oldest.Value); }
+    }
+    // Drops a geometry's cache claims, its pending read and the forms it answers, under the gate.
+    private void Evict((UInt128 Identity, SdfMeshGeometry Geometry) key) {
+        if (m_usage.Remove(key: key, value: out var usage)) {
+            m_retainedBytes -= usage.Bytes;
+            m_age.Remove(node: usage.Node);
+        }
+        if (m_meshes.Remove(key: key, value: out var variants)) {
+            foreach (var variant in variants) { variant.Mesh.Release(cached: true); }
+        }
+        _ = m_reads.TryRemove(key: key, value: out _);
+        foreach (var form in m_forms.Where(predicate: entry => ((entry.Key.Identity == key.Identity) && entry.Value.Equals(other: key.Geometry))).Select(selector: entry => entry.Key).ToArray()) { m_forms.Remove(key: form); }
+    }
 
-            m_retainedBytes -= m_usage[victim].Bytes;
-            m_usage.Remove(key: victim);
-            foreach (var variant in m_meshes[victim]) { variant.Mesh.Release(cached: true); }
-            m_meshes.Remove(key: victim);
-            _ = m_reads.TryRemove(key: victim, value: out _);
-            m_age.RemoveFirst();
-            foreach (var form in m_forms.Where(predicate: entry => ((entry.Key.Identity == victim.Identity) && entry.Value.Equals(other: victim.Geometry))).Select(selector: entry => entry.Key).ToArray()) { m_forms.Remove(key: form); }
+    /// <summary>Gets a count that moves each time a published mesh's store entry could not restore its normals and
+    /// levels (<see cref="Lose"/>): a bake holding the library restarts when it moves, baking again each group whose
+    /// mesh is lost.</summary>
+    public long LostRevision => Interlocked.Read(location: ref m_lostRevision);
+    private long m_lostRevision;
+
+    /// <summary>Forgets a geometry whose store entry could not restore a published mesh's normals and levels, so the
+    /// next group of it misses the library and the store and bakes, and moves <see cref="LostRevision"/>.</summary>
+    /// <param name="geometry">The geometry.</param>
+    /// <param name="identity">The bake identity it was held under.</param>
+    internal void Lose(SdfMeshGeometry geometry, UInt128 identity) {
+        lock (m_gate) { Evict(key: (identity, geometry)); }
+        var lost = Interlocked.Increment(location: ref m_lostRevision);
+
+        // An evicted set loses every geometry it held at once: the first and each doubling are named.
+        if ((lost & (lost - 1)) == 0) {
+            Console.Error.WriteLine(value: $"[sdf.mesh-bake] lost identity={identity:x32} geometry={geometry.Hash:x32} lost={lost}: the store no longer restores its normals and levels; its groups bake again");
         }
     }
 
@@ -327,9 +355,10 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     }
     // The mesh with each triangle material that `from` holds at a place renumbered to what `to` holds there; one neither
     // list reaches keeps its id. The geometry's equality makes the two lists the same length.
-    private SdfMesh Renumber(SdfMesh mesh, int[] from, int[] to) {
-        if (Allocator is { } native) { return mesh.RenumberNative(from, to, native, Account); }
-        if (mesh.Chunks.Count != 0) { return SdfMeshChunks.Join(chunks: mesh.Chunks.Select(selector: chunk => Renumber(from: from, mesh: chunk, to: to)).ToArray()); }
+    private SdfMesh Renumber(SdfMesh mesh, int[] from, int[] to) => ((Allocator is { } native) ? mesh.RenumberNative(from, to, native, Account) : RenumberManaged(from: from, mesh: mesh, to: to));
+    // A managed mesh renumbered into new managed arrays: an offline library's variants, and a decode before its native copy.
+    private static SdfMesh RenumberManaged(SdfMesh mesh, int[] from, int[] to) {
+        if (mesh.Chunks.Count != 0) { return SdfMeshChunks.Join(chunks: mesh.Chunks.Select(selector: chunk => RenumberManaged(from: from, mesh: chunk, to: to)).ToArray()); }
         var levels = new SdfMeshLevel[mesh.Levels.Count];
 
         for (var level = 0; (level < levels.Length); level++) {

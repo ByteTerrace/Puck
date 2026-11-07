@@ -82,6 +82,8 @@ public sealed partial class SdfWorldTables {
         // Publish submission only after the fence has been armed by the queue. Before this point an initially
         // signaled fence must not satisfy geometry staged for the next upload.
         m_uploads = checked(m_uploads + 1UL);
+        // The flush above staged the moved meshes' words.
+        ReleaseUploadNeeds();
         m_uploadedBindingRevision = m_bindingRevision;
         m_backgroundProgram = m_liveProgram;
     }

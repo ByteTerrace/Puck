@@ -14,8 +14,9 @@ namespace Puck.SdfVm;
 public sealed partial record SdfMesh {
     /// <summary>The actual contour lattice spacing in object space; zero for an authored triangle mesh.</summary>
     public Vector3 BakeCell { get; init; }
-    /// <summary>Gets the independently drawn pieces of a large static union; empty for a single mesh. The mesh's own
-    /// triangles concatenate their merged surfaces for whole-group queries; only the pieces enter the mesh region.</summary>
+    /// <summary>Gets the independently drawn pieces of a large static union; empty for a single mesh. Only the pieces
+    /// enter the mesh region, the irradiance scene and the store. An offline mesh's own triangles concatenate their merged
+    /// surfaces for whole-group queries; a published one keeps no joined indices (<see cref="Indices"/>).</summary>
     public IReadOnlyList<SdfMesh> Chunks { get; init; } = [];
     /// <summary>Gets whether the triangles are outward-wound pieces of closed surfaces, so a face turned from a light is
     /// where that light leaves a solid: true for every baked mesh, and for an authored mesh whose triangles close a volume
@@ -133,7 +134,8 @@ public sealed partial record SdfMesh {
         Positions = positions;
         PositionLow = low;
         PositionHigh = high;
-        Indices = indices;
+        m_indices = indices;
+        m_triangleCount = (indices.Length / 3);
         Normals = normals;
         TriangleMaterials = triangleMaterials;
         Members = members;
@@ -150,7 +152,11 @@ public sealed partial record SdfMesh {
     public const byte NoMember = byte.MaxValue;
 
     /// <summary>Gets three vertex indices per triangle.</summary>
-    public ReadOnlyMemory<uint> Indices { get; }
+    /// <exception cref="InvalidOperationException">The mesh is a published chunked mesh, which keeps no joined indices:
+    /// its chunks hold its triangles, and only they are drawn, traced and stored.</exception>
+    public ReadOnlyMemory<uint> Indices => (m_joinedIndicesOmitted
+        ? throw new InvalidOperationException(message: "A published chunked mesh keeps no joined indices; read its chunks' triangles.")
+        : m_indices);
     /// <summary>Gets one object-space normal per vertex, or none.</summary>
     public ReadOnlyMemory<Vector3> Normals { get; }
     /// <summary>Gets the object-space vertex positions.</summary>
@@ -159,8 +165,8 @@ public sealed partial record SdfMesh {
     public Vector3 PositionLow { get; }
     /// <summary>Gets the greatest corner of the box the positions span, object space.</summary>
     public Vector3 PositionHigh { get; }
-    /// <summary>Gets the triangle count.</summary>
-    public int TriangleCount => (Indices.Length / 3);
+    /// <summary>Gets the triangle count; a chunked mesh's is its chunks' together.</summary>
+    public int TriangleCount => m_triangleCount;
     /// <summary>Gets one palette entry per triangle, added to its draw's material, or none.</summary>
     public ReadOnlyMemory<uint> TriangleMaterials { get; }
     /// <summary>Gets the slots besides its draw's frame slot whose motion carries some of its vertices, or none.</summary>
@@ -234,6 +240,10 @@ public sealed partial record SdfMesh {
     private readonly IReadOnlyList<SdfMeshLevel> m_levels = [];
     // The mesh's and its levels' triangles together, set with the levels.
     private readonly int m_levelledTriangleCount;
+    private readonly ReadOnlyMemory<uint> m_indices;
+    private readonly int m_triangleCount;
+    // Whether this is a published chunked mesh, whose joined indices were never copied (SdfMesh.Storage.cs).
+    private readonly bool m_joinedIndicesOmitted;
 
     private static void RequireAttribute(int count, int expected, string name, string per) {
         if ((count != 0) && (count != expected)) {

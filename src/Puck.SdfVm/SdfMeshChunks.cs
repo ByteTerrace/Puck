@@ -113,7 +113,8 @@ public static class SdfMeshChunks {
     /// <summary>Joins chunks' merged surfaces for whole-group queries. Only chunks are stored and drawn; the joined
     /// arrays are a CPU query view, never another resident GPU mesh. The joined mesh holds the vertex and triangle
     /// attributes once: its chunks are views of its positions, normals and triangle materials, in order, each keeping its
-    /// own indices and levels, and a native copy keeps that sharing (<see cref="SdfMesh.StorageBytes"/>).</summary>
+    /// own indices and levels, and a native copy keeps that sharing and drops the joined indices
+    /// (<see cref="SdfMesh.StorageBytes"/>, <see cref="SdfMesh.Indices"/>).</summary>
     /// <param name="chunks">The nonempty list of chunks, none of them skinned.</param>
     /// <returns>The whole-group mesh.</returns>
     public static SdfMesh Join(IReadOnlyList<SdfMesh> chunks) {

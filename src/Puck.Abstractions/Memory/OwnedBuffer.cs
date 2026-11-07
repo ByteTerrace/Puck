@@ -105,6 +105,24 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
             m_length = length;
         }
     }
+    /// <summary>Frees the storage after every borrow has ended, keeping the owner usable: its length and capacity become
+    /// zero, a span of a memory view taken earlier throws <see cref="ArgumentOutOfRangeException"/> as one past the
+    /// owner's length does, and a later <see cref="Resize"/> allocates again, after which those views read the new
+    /// storage.</summary>
+    /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
+    public void Free() {
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        FreeStorage();
+    }
+    private void FreeStorage() {
+        var bytes = checked((((long)m_capacity) * sizeof(T)));
+
+        if (allocator is not null) { allocator.Free(ptr: m_pointer); }
+        m_managed = null;
+        m_pointer = null;
+        m_capacity = m_length = 0;
+        observer?.Change(bytes: -bytes);
+    }
     /// <summary>Replaces the logical contents after earlier borrows have ended.</summary>
     /// <param name="source">The source elements, borrowed through the copy.</param>
     public void CopyFrom(ReadOnlySpan<T> source) {
@@ -125,13 +143,7 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
     protected override void Dispose(bool disposing) {
         if (m_disposed) { return; }
         m_disposed = true;
-        var bytes = checked((((long)m_capacity) * sizeof(T)));
-
-        if (allocator is not null) { allocator.Free(ptr: m_pointer); }
-        m_managed = null;
-        m_pointer = null;
-        m_capacity = m_length = 0;
-        observer?.Change(bytes: -bytes);
+        FreeStorage();
     }
 
     /// <summary>Releases the owned storage after its last borrow ends.</summary>
