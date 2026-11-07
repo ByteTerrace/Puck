@@ -1,27 +1,32 @@
 using System.Numerics;
+using Puck.Abstractions.Counting;
 using Puck.Hosting;
 using Puck.Maths;
 
 namespace Puck.SdfVm;
 
-// The far cascade's rate (SdfUpdateRates.ShadowFar): a view holds its far cascade's depth and fit while a refresh at
+// The far cascade's rate (SdfUpdateRates.ShadowFar): a view holds its far cascade's layers and fit while a refresh at
 // least 30 times a second of presentation time allows (SdfUpdateRateTiers.Holds), so the shadow-far pass stands between
-// refreshes whatever else of the frame renders, and every
-// pass of the view reads that depth through the camera it was drawn from. A hold ends early when the fit it stands for
-// no longer covers what the view shows: the light turns or the camera turns or moves past the tiers' tolerances, the
-// cascade's extent or texels change, the camera cuts, or a capture converges. A sun on a day clock turns every frame, by
-// far less than its tolerance over a 30th of a second, so it holds as a still light does.
+// refreshes whatever else of the frame renders. A hold ends early when the fit it stands for no longer covers what the
+// view shows: the light turns by more than the far camera's depth span moves a shadow one texel, the camera turns or
+// moves past the tiers' tolerances, the cascade's extent or texels change, the camera cuts, the instance follows another
+// view or residency, or a capture converges. A sun on a day clock turns every frame, by less than that in a 30th of a
+// second, so it holds as a still light does.
 //
-// A refresh the rate alone calls for (the fit still covers the view) draws the cascade's two layers on consecutive frames,
-// the depth first and the exit layer next, which holds the depth (SdfFarLayers): a 60 Hz view pays half a refresh every
-// frame rather than a whole one every other frame, each layer still refreshing 30 times a second, and a slower view never
-// pays a whole refresh on every frame, the cost that kept it slow, at the price of a depth interval one frame longer. The exit
-// layer's camera then trails the depth's for one frame, and the surface pass reads the exit layer through that camera
-// (the cascades' fourth). Which camera each layer holds is committed only where the recorder draws that layer
-// (RecordFar), so a pass that stands never moves a camera.
+// A refresh the rate alone calls for (the fit still covers the view) draws the cascade's two layers on consecutive frames
+// when two frames fit in the rate's period: the depth (with its glass extinction) first, then the exit layer on a frame
+// that holds the depth (SdfFarLayers). A 60 Hz view then pays half a refresh every frame rather than a whole one every
+// other frame, and each layer still refreshes 30 times a second; a slower view redraws both layers whenever it refreshes.
+// The exit layer's camera trails the depth's for the one frame between, and the surface pass reads the exit layer through
+// that camera (the cascades' fourth).
+//
+// Each layer is read through the camera it was drawn from. One door enforces it: the recorder asks RecordFar which layers
+// it draws, which stages the cameras those layers are drawn from for this frame's readers, and SubmittedFar commits them
+// once the frame's submission succeeds. A pass that stands, skips or whose recording is abandoned commits nothing, and a
+// layer the recorder has not drawn in its current graph is always drawn (RecordFar answers both).
 public sealed partial class SdfWorldPasses {
     /// <summary>Returns the cascades a pass of an instance draws and reads this frame: the frame's own fit, its far
-    /// cascade held from the frame that last refreshed it while the frame rates it.</summary>
+    /// cascade's layers through the cameras they were drawn from.</summary>
     /// <param name="instance">The instance's name.</param>
     /// <param name="frame">The frame its residency holds.</param>
     /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>, clamped to the frame's views.</param>
@@ -37,12 +42,29 @@ public sealed partial class SdfWorldPasses {
 
         var entry = Refresh(instance: instance);
 
-        if ((entry.FarDecided != m_frame) || (entry.FarHeld && (entry.FarTexels != cascades.Texels))) {
+        if (entry.FarDecided != m_frame) {
             DecideFar(cascades: in cascades, entry: entry, frame: frame, view: view);
         }
 
-        // Until the pass first draws the exit layer it holds no camera, and reads through the depth's.
-        return cascades.WithFar(far: entry.FarCamera, exit: ((entry.FarExitCamera.HalfHeight > 0f) ? entry.FarExitCamera : entry.FarCamera));
+        var (depth, exit) = FarCamerasOf(entry: entry);
+
+        // A layer no frame has drawn yet reads through the frame's own fit.
+        depth = ((depth.HalfHeight > 0f) ? depth : cascades[1]);
+
+        return cascades.WithFar(far: depth, exit: ((exit.HalfHeight > 0f) ? exit : depth));
+    }
+    // The cameras the far layers hold for this frame's readers: those this frame's recording drew from once the recorder
+    // has asked (RecordFar), otherwise those the last submitted recording committed.
+    private (SdfMeshShadowCamera Depth, SdfMeshShadowCamera Exit) FarCamerasOf(Entry entry) {
+        if (entry.FarPendingFrame != m_frame) {
+            return (entry.FarCamera, entry.FarExitCamera);
+        }
+
+        return entry.FarPendingLayers switch {
+            SdfFarLayers.Depth => (entry.FarPendingCamera, entry.FarExitCamera),
+            SdfFarLayers.Exit => (entry.FarCamera, entry.FarCamera),
+            _ => (entry.FarPendingCamera, entry.FarPendingCamera),
+        };
     }
     // Whether the instance's far cascade pass stands this frame, deciding it when no pass has yet: held, with no layer owed.
     private bool HoldsFar(string instance, SdfFrame frame, int view) {
@@ -50,23 +72,57 @@ public sealed partial class SdfWorldPasses {
 
         return (Refresh(instance: instance).FarLayers == SdfFarLayers.None);
     }
-    /// <summary>Returns the far cascade layers the shadow-far pass draws this frame, and commits the camera each drawn
-    /// layer now holds: the one door through which a layer's camera changes, so the surface pass, recorded after it,
-    /// reads each layer through the camera it was drawn from.</summary>
+    /// <summary>Returns the far cascade layers the shadow-far pass draws this frame and stages the cameras they are drawn
+    /// from for this frame's readers (<see cref="CascadesOf"/>); <see cref="SubmittedFar"/> commits them.</summary>
     /// <param name="instance">The instance's name.</param>
+    /// <param name="fresh">The far camera fitted to the cascade depth the pass binds, which a drawn depth is drawn from.</param>
+    /// <param name="written">Whether the recorder has drawn both layers of the target it binds in its current graph: an
+    /// unwritten layer has no contents, so a recording draws both.</param>
+    /// <param name="counts">The frame's rate counters, or <see langword="null"/>.</param>
     /// <returns>The layers to draw: both unless a split refresh draws one of them.</returns>
-    internal SdfFarLayers RecordFar(string instance) {
+    internal SdfFarLayers RecordFar(string instance, in SdfMeshShadowCamera fresh, bool written, WorkCounterSet? counts) {
         var entry = Refresh(instance: instance);
-        var layers = ((entry.FarLayers == SdfFarLayers.None) ? SdfFarLayers.Both : entry.FarLayers);
+        var layers = (((entry.FarLayers == SdfFarLayers.None) || !written) ? SdfFarLayers.Both : entry.FarLayers);
 
-        entry.FarExitOwed = (layers == SdfFarLayers.Depth);
-        if (layers != SdfFarLayers.Depth) {
-            entry.FarExitCamera = entry.FarCamera;
-        }
+        entry.FarPendingFrame = m_frame;
+        entry.FarPendingLayers = layers;
+        // An exit layer alone is drawn from the camera its depth was drawn from.
+        entry.FarPendingCamera = ((layers == SdfFarLayers.Exit) ? entry.FarCamera : fresh);
+        counts?.Count(kind: ((layers == SdfFarLayers.Both) ? SdfUpdateRateCounts.ShadowFarRendered : SdfUpdateRateCounts.ShadowFarSplit));
 
         return layers;
     }
-    // Decides once a frame whether the far cascade holds, and latches the fresh fit when it refreshes.
+    /// <summary>Commits the cameras the instance's last far cascade recording drew its layers from, once its frame's
+    /// submission succeeded.</summary>
+    /// <param name="instance">The instance's name.</param>
+    internal void SubmittedFar(string instance) {
+        var entry = Refresh(instance: instance);
+
+        if (entry.FarPendingFrame < 0) {
+            return;
+        }
+
+        var camera = entry.FarPendingCamera;
+
+        switch (entry.FarPendingLayers) {
+            case SdfFarLayers.Depth:
+                entry.FarCamera = camera;
+                entry.FarExitOwed = true;
+                break;
+            case SdfFarLayers.Exit:
+                entry.FarExitCamera = camera;
+                entry.FarExitOwed = false;
+                break;
+            default:
+                entry.FarCamera = camera;
+                entry.FarExitCamera = camera;
+                entry.FarExitOwed = false;
+                break;
+        }
+
+        entry.FarPendingFrame = -1;
+    }
+    // Decides once a frame whether the far cascade holds, and latches the fit a refresh stands for.
     private void DecideFar(Entry entry, SdfFrame frame, int view, in SdfMeshShadowCascades cascades) {
         var fresh = cascades[1];
         var snapshot = frame.Views[Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1))];
@@ -76,21 +132,26 @@ public sealed partial class SdfWorldPasses {
         var continuous = (entry.FarDecided == (m_frame - 1));
         var elapsed = (continuous ? (entry.FarElapsedSeconds + m_context.FrameDeltaSeconds) : 0d);
         var rate = PresentationRate.Of(context: in m_context);
+        var drawn = entry.FarCamera;
         // The fit still covers what the view shows: only the rate can call for a refresh.
         var covers = (
             rated &&
             continuous &&
+            (drawn.HalfHeight > 0f) &&
             (entry.FarTexels == cascades.Texels) &&
-            (Vector3.Dot(vector1: entry.FarCamera.Forward, vector2: fresh.Forward) >= MathF.Cos(x: SdfUpdateRateTiers.ShadowFarLightTurnRadians)) &&
-            (entry.FarCamera.HalfHeight == fresh.HalfHeight) &&
-            (entry.FarCamera.Far == fresh.Far) &&
+            // The chord between unit directions is their angle to well under a part in a million at these turns, where a
+            // float cosine would round to one.
+            (Vector3.Distance(value1: drawn.Forward, value2: fresh.Forward) <= SdfUpdateRateTiers.ShadowFarLightTurnRadians(camera: in fresh, texels: cascades.Texels)) &&
+            (drawn.HalfHeight == fresh.HalfHeight) &&
+            (drawn.Far == fresh.Far) &&
             (entry.FarCut == snapshot.CutRevision) &&
+            (entry.FarBindings == entry.Bindings) &&
             (Vector3.Dot(vector1: camera.Forward, vector2: entry.FarForward) >= MathF.Cos(x: SdfUpdateRateTiers.ShadowFarTurnRadians)) &&
             (Vector3.DistanceSquared(value1: camera.Position, value2: entry.FarEye) <= (SdfUpdateRateTiers.ShadowFarMoveMetres * SdfUpdateRateTiers.ShadowFarMoveMetres)) &&
             (entry.Convergence is not { IsActive: true })
         );
-        // A split refresh's exit layer is drawn on the frame after its depth, which holds the depth whatever the rate: a
-        // frame never pays for both layers of one refresh.
+        // A split refresh's exit layer is drawn on the frame after its depth, which holds the depth: the split was taken
+        // only where two frames fit in the rate's period.
         var held = (covers && (entry.FarExitOwed || SdfUpdateRateTiers.Holds(elapsedSeconds: elapsed, frameSeconds: m_context.FrameDeltaSeconds, hertz: SdfUpdateRateTiers.ShadowFarHertz, rate: rate)));
 
         entry.FarDecided = m_frame;
@@ -108,42 +169,52 @@ public sealed partial class SdfWorldPasses {
             frame.RateIntervals?.Record(hertz: SdfUpdateRateTiers.ShadowFarHertz, lever: SdfUpdateRates.ShadowFar, seconds: elapsed);
         }
 
-        // The rate alone calls for this refresh, the exit layer has a camera of its own to be read through until the next
-        // frame redraws it, and a frame fits in the rate's period: draw the depth now and the exit layer then. Anything
-        // else redraws both.
+        // The rate alone calls for this refresh, the exit layer has a camera to be read through until the next frame
+        // redraws it, and two frames fit in the rate's period: draw the depth now and the exit layer then. Anything else
+        // redraws both.
         entry.FarLayers = ((
             covers &&
             (entry.FarExitCamera.HalfHeight > 0f) &&
-            SdfUpdateRateTiers.Holds(elapsedSeconds: 0d, frameSeconds: m_context.FrameDeltaSeconds, hertz: SdfUpdateRateTiers.ShadowFarHertz, rate: rate)
+            rate.Fits(frames: 2, frameSeconds: m_context.FrameDeltaSeconds, hertz: SdfUpdateRateTiers.ShadowFarHertz)
         ) ? SdfFarLayers.Depth : SdfFarLayers.Both);
         entry.FarElapsedSeconds = 0d;
-        entry.FarCamera = fresh;
         entry.FarTexels = cascades.Texels;
         entry.FarEye = camera.Position;
         entry.FarForward = camera.Forward;
         entry.FarCut = snapshot.CutRevision;
+        entry.FarBindings = entry.Bindings;
         entry.FarRefreshFrame = m_frame;
-        entry.FarSignature = null;
     }
-    // The shadow-far pass's signature: the one its refresh recorded while the cascade holds, so the pass stands; on a
-    // refresh, the pass's own, or one of this frame alone when the frame forces every pass, so it records and the holds
-    // that follow stand for it.
+    // The shadow-far pass's signature. While the cascade holds, the one its last recording returned, so the pass stands.
+    // On a split refresh's exit frame, one of that frame alone, so it records. On a refresh, the pass's own, or one of this
+    // frame alone when the frame forces every pass; a refresh whose signature is the one both layers were last drawn under
+    // returns the recorded signature instead and draws nothing, since the cascade drawn then still stands.
     private ulong? FarSignatureOf(Entry entry, ulong? signature) {
         if ((entry.FarLayers == SdfFarLayers.None) && entry.FarHeld && (entry.FarSignature is { } held)) {
             return held;
         }
-        // A split refresh's exit frame records whatever the scene's signature: its depth recorded under the last one.
         if (entry.FarLayers == SdfFarLayers.Exit) {
             var exit = Fnv1aHash.Create();
 
             exit.Add(value: entry.FarSignature ?? 0UL);
             exit.Add(value: unchecked((ulong)entry.FarRefreshFrame));
             exit.Add(value: ((ulong)SdfFarLayers.Exit));
+            entry.FarExitSceneSignature = signature;
             entry.FarSignature = exit.Value;
 
             return exit.Value;
         }
+        if (
+            (signature is { } scene) &&
+            !entry.FarExitOwed &&
+            (entry.FarSignature is { } recorded) &&
+            (entry.FarDepthSignature == scene) &&
+            (entry.FarExitSceneSignature == scene)
+        ) {
+            entry.FarLayers = SdfFarLayers.None;
 
+            return recorded;
+        }
         if (signature is null) {
             var hash = Fnv1aHash.Create();
 
@@ -152,27 +223,39 @@ public sealed partial class SdfWorldPasses {
             signature = hash.Value;
         }
 
+        entry.FarDepthSignature = signature;
+        // A whole refresh draws the exit layer under the same signature as the depth.
+        entry.FarExitSceneSignature = ((entry.FarLayers == SdfFarLayers.Both) ? signature : null);
         entry.FarSignature = signature;
 
         return signature;
     }
 
     private sealed partial class Entry {
-        // The camera the far depth was drawn from (latched by each refresh), and the one the exit layer was drawn from.
+        // The cameras the far depth and the far exit layer were drawn from, as the last submitted recording committed
+        // them (SubmittedFar), and whether a split refresh drew the depth and still owes the exit layer.
         public SdfMeshShadowCamera FarCamera { get; set; }
         public SdfMeshShadowCamera FarExitCamera { get; set; }
-        // Whether a split refresh drew the depth and still owes the exit layer, and which layers this frame draws.
         public bool FarExitOwed { get; set; }
+        // What this frame's recording drew and from which camera, until its submission commits it (RecordFar).
+        public long FarPendingFrame { get; set; } = -1;
+        public SdfFarLayers FarPendingLayers { get; set; }
+        public SdfMeshShadowCamera FarPendingCamera { get; set; }
+        // The layers this frame draws, and the fit the last refresh stands for.
         public SdfFarLayers FarLayers { get; set; }
         public Vector3 FarEye { get; set; }
         public Vector3 FarForward { get; set; }
         public long FarCut { get; set; }
+        public long FarBindings { get; set; } = -1;
         public long FarDecided { get; set; } = -1;
         // The presentation time from the frame that last refreshed the far cascade to the latest frame that decided it.
         public double FarElapsedSeconds { get; set; }
         public bool FarHeld { get; set; }
         public long FarRefreshFrame { get; set; } = -1;
+        // The signature the pass last returned, and the scene signatures its depth and exit layer were last drawn under.
         public ulong? FarSignature { get; set; }
+        public ulong? FarDepthSignature { get; set; }
+        public ulong? FarExitSceneSignature { get; set; }
         public int FarTexels { get; set; }
     }
 }

@@ -70,6 +70,24 @@ public readonly record struct PresentationRate(int DisplayHertz, double GridHert
 
         return ((elapsedSeconds + (Math.Max(val1: 0d, val2: frameSeconds) * FramesHeld)) <= ((1d / hertz) + ToleranceSeconds));
     }
+    /// <summary>Returns whether a number of frames of the latest frame's span fit in a floor's period: an update spread
+    /// over that many frames still completes at least <paramref name="hertz"/> times a second.</summary>
+    /// <param name="frames">The frames, at least one.</param>
+    /// <param name="frameSeconds">The latest frame's span, the estimate of each frame's.</param>
+    /// <param name="hertz">The floor, in updates a second; zero or less fits nothing.</param>
+    /// <returns><see langword="true"/> when the frames fit in the period; never on a host not paced to a display.</returns>
+    public bool Fits(int frames, double frameSeconds, int hertz) {
+        if (!IsPaced || (hertz <= 0)) {
+            return false;
+        }
+        if (GridHertz > 0d) {
+            var frame = Math.Max(val1: 1d, val2: Math.Round(value: (frameSeconds * GridHertz), mode: MidpointRounding.AwayFromZero));
+
+            return ((frame * frames) <= GridSteps(hertz: hertz));
+        }
+
+        return ((Math.Max(val1: 0d, val2: frameSeconds) * frames) <= ((1d / hertz) + ToleranceSeconds));
+    }
     /// <summary>Returns the longest interval between updates a floor allows: a whole number of grid steps on a fixed grid,
     /// otherwise the floor's own period.</summary>
     /// <param name="hertz">The floor, in updates a second, at least one.</param>

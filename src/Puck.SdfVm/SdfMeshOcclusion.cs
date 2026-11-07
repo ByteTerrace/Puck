@@ -94,7 +94,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     }
 
     // Each pass uploads constant-sized controls. The residency already uploaded each changed draw once.
-    public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false, Puck.Abstractions.Cameras.CameraSnapshot camera = default) {
+    // A cascade that draws one layer of a split refresh (skipsDepth, skipsExit) emits and counts commands for that layer
+    // alone, so its counted draws and vertices are the work it draws.
+    public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false, bool skipsDepth = false, bool skipsExit = false, Puck.Abstractions.Cameras.CameraSnapshot camera = default) {
         if (occlude && splitExit) { throw new ArgumentException(message: "A selection cannot combine depth occlusion and exit partitioning."); }
         // The recording slot's fence has completed before Stage. Retire replacements only on its next reuse, after all
         // preceding submissions and this slot's history copy have completed.
@@ -117,7 +119,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         words[0] = count;
         words[1] = m_levels;
         words[2] = (occlude ? 1u : 0u) | (splitExit ? 2u : 0u) | (m_argumentPhases << 2);
-        words[3] = (glass ? 1u : 0u);
+        words[3] = (glass ? 1u : 0u) | (skipsDepth ? 2u : 0u) | (skipsExit ? 4u : 0u);
         detail.WriteGpu(rows: rows[1..4], held: held);
         cull.WriteGpu(rows: rows[4..]);
         EnsureBuffers(depth: occlude, draws: count);

@@ -81,10 +81,16 @@ public static class SdfUpdateRateTiers {
     public const float ShadowFarTurnRadians = 0.0087f;
     /// <summary>The camera move, in metres, past which a held far cascade refreshes at once.</summary>
     public const float ShadowFarMoveMetres = 0.5f;
-    /// <summary>The light turn, in radians, past which a held far cascade refreshes at once: a shadow cast 120 m moves
-    /// about one far texel (12 cm). A sun on a day clock turns far less in the hold's 30th of a second (a 24-minute day
-    /// turns it 0.15 milliradians), so only a light that jumps ends a hold.</summary>
-    public const float ShadowFarLightTurnRadians = 0.001f;
+    /// <summary>Returns the light turn, in radians, past which a held far cascade refreshes at once: the turn that moves
+    /// the shadow of a caster at the far end of the cascade's depth span (<see cref="SdfMeshShadowCamera.Far"/>, its
+    /// sphere and the casters' reach toward the light) by one of its texels. A sun on a day clock turns less in a 30th of a
+    /// second (a 24-minute day turns it 0.15 milliradians, against about 0.3 for the debug world's far cascade), so a
+    /// steadily moving sun holds and a light that jumps ends a hold.</summary>
+    /// <param name="camera">The far cascade's camera.</param>
+    /// <param name="texels">The texels along each side of its depth.</param>
+    /// <returns>The turn, in radians.</returns>
+    public static float ShadowFarLightTurnRadians(in SdfMeshShadowCamera camera, int texels) =>
+        (((2f * camera.HalfHeight) / Math.Max(val1: texels, val2: 1)) / Math.Max(val1: camera.Far, val2: 1f));
 
     /// <summary>Returns the rate a posed creation (a body, or a placed creation) updates at for its largest pixels per
     /// metre over the views that may see it and the fastest its parts move relative to its root: the slowest tier at
@@ -326,8 +332,10 @@ public static class SdfUpdateRateCounts {
     public static readonly WorkKind PlacementsPosed = new(name: "sdf.rates.placements.posed", unit: "placements", workClass: WorkClass.Pacing);
     /// <summary>Counts each animated placed creation's pose a frame held.</summary>
     public static readonly WorkKind PlacementsHeld = new(name: "sdf.rates.placements.held", unit: "placements", workClass: WorkClass.Pacing);
-    /// <summary>Counts each frame a view rendered its far cascade.</summary>
+    /// <summary>Counts each frame a view rendered both layers of its far cascade.</summary>
     public static readonly WorkKind ShadowFarRendered = new(name: "sdf.rates.shadow-far.rendered", unit: "frames", workClass: WorkClass.Pacing);
+    /// <summary>Counts each frame a view rendered one layer of its far cascade, half of a split refresh.</summary>
+    public static readonly WorkKind ShadowFarSplit = new(name: "sdf.rates.shadow-far.split", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a view held its far cascade.</summary>
     public static readonly WorkKind ShadowFarHeld = new(name: "sdf.rates.shadow-far.held", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a nested view was shown at a reduced rate.</summary>
@@ -338,7 +346,7 @@ public static class SdfUpdateRateCounts {
     /// <summary>Counts each frame a screen's source was shown at a reduced rate.</summary>
     public static readonly WorkKind ScreensRated = new(name: "sdf.rates.screens.rated", unit: "footprints", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, PlacementsPosed, PlacementsHeld, ShadowFarRendered, ShadowFarHeld, ViewsRated, ViewsHeld, ScreensRated];
+    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, PlacementsPosed, PlacementsHeld, ShadowFarRendered, ShadowFarSplit, ShadowFarHeld, ViewsRated, ViewsHeld, ScreensRated];
 
     /// <summary>Creates the counters a host's frames count into.</summary>
     /// <returns>A set over every kind this class declares, in report order, every count zero.</returns>

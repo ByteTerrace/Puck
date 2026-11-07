@@ -667,16 +667,18 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             if ((m_owed || drain) && (m_scene is not null) && (m_lighting is not null) && (m_worker is null or { IsCompleted: true }) && (Granted || drain)) {
                 m_yield = false;
                 m_gpuDraining = drain && GpuTrace is not null;
-                m_worker = Task.Run(action: () => {
-                    try { if (drain && GpuTrace is not null) { Drain(); } else { Work(); } }
-                    catch (OperationCanceledException) when (GpuTrace is not null) { m_listed = false; }
-                });
+                m_worker = StartWorker(drain: drain);
             }
             Publish(layout: layout, write: write);
         }
         ScheduleGpuMeters(frame);
         return m_published;
     }
+    // Starts the trace worker. Apart from Stage, whose every call would otherwise allocate the closure over `drain`.
+    private Task StartWorker(bool drain) => Task.Run(action: () => {
+        try { if (drain && GpuTrace is not null) { Drain(); } else { Work(); } }
+        catch (OperationCanceledException) when (GpuTrace is not null) { m_listed = false; }
+    });
     // What a drain's light is a function of: the geometry, the lighting, the windows and the layout.
     private (int Geometry, int Lighting, int Windows, Layout Layout) DrainKey() => (m_geometry, m_lightingVersion, m_windowVersion, m_layout);
     // Whether the worker may do any work this frame: an unbounded part of the budget, or credit left in either part.
