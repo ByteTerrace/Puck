@@ -39,88 +39,108 @@ experimental worlds have that it lacks is ported into it
 milestone. The owner requested its baseline and implementation plan, which
 [the plan](dense-landscapes.md) holds.
 
-0. [Dense landscapes](#dense-landscapes) [high, the first landscape milestone]:
+1. [high, first] A GPU hang (`DXGI_ERROR_DEVICE_HUNG`, 0x887A0006) on Direct3D 12
+   during a quiet `bench frames` tour of the debug world, detected at the
+   background GPU work's fence (`SdfGpuWork.Poll`, `SdfGpuWork.cs:354`) after
+   about 12,000 ticks, at the stop posing the body near (60, 0.05, -28); and
+   device-loss recovery then crashing the World with "An item with the same key
+   has already been added. Key: 1" (`DirectXSurfacePresenter.RecoverFromDeviceLoss`
+   via `DeviceLossRecovery.TryRecover`), so a hang is fatal instead of
+   recovered. Two causes, two fixes: name the hung kernel (DRED breadcrumbs and
+   page-fault data, the background work's in-flight job) and fix it; make
+   recovery rebuild without duplicate registration. Evidence: the window's
+   `frames-tour` run under the main checkout's ignored scratch.
+2. The frame bar [high]: 60 FPS steady state on the lead machine is not met.
+   A quiet `bench frames` tour of all 59 sweep stops (Direct3D 12, 1280x720,
+   one complete sample) passes p99 at 3 stops; p50 is at the display rate at
+   about 34, and the worst stops run at 15 FPS (`studio` p50 67 / p99 90 ms,
+   `finding-teal-roof` 69 / 77, `gather-teal-door-near` 67 / 88,
+   `gather-stairwell-flight-b-1` 67 / 75, `finding-wall-slivers` 61 / 67;
+   the granaries and wing doors near 30). Lead: most stops' `-indirect` twin
+   (the same camera under `world.debug-view indirect`, run right after) holds
+   16.7 ms where the plain view is 2-4x slower, so either the passes the indirect
+   view skips cost the frame or the first stop at a place pays a settling cost;
+   read per-pass GPU time (`bench frames --gpu-pass`) at the five worst stops
+   before choosing. Then fix the worst at their causes
+   ([frame-time findings](#other-frame-time-findings)). The disclosure leaks,
+   transmission's exit-layer highs, the lockstep relight under a moving sun and
+   the tour's and cold bake's memory are open highs in their own packets, not
+   owner decisions.
+3. [Dense landscapes](#dense-landscapes) [high, the first landscape milestone]:
    continuous forest, roads, shrubs and grass at the performance target; lead
    with counted query/motion work and the shared instance contract. The fresh
    [baseline and implementation order](dense-landscapes.md) keep CPU field
    queries first and connect static-copy sharing, retained updates, GPU
    instancing, geometry/shadow work and memory to one proving landscape.
-1. The frame bar [high]: 60 FPS steady state on the lead machine is not met
-   (every sweep stop fails it, with p99 hitches of 23-50 ms; see
-   [frame-time findings](#other-frame-time-findings)). Measure every stop's
-   p50/p99 in a quiet [measurement window](#measurement-window), then fix the
-   worst stops at their causes. The disclosure leaks, transmission's exit-layer
-   highs, the lockstep relight under a moving sun and the tour's and cold
-   bake's memory are open highs in their own packets, not owner decisions.
-2. [Memory](#memory-on-the-deck-tier) [high, the Deck]: the debug world's
+4. [Memory](#memory-on-the-deck-tier) [high, the Deck]: the debug world's
    process plus GPU memory at or under 10 GB on the Deck tier, attribution
    first.
-3. [Lighting and GI](#lighting-and-gi) [high]: the
+5. [Lighting and GI](#lighting-and-gi) [high]: the
    [graphics architecture plan](graphics-architecture.md)'s G1 acceptance work:
    reduce the landed GPU trace/relight's lockstep drain to a frame's work;
    the authored capture grid bounds when changing lighting owes a drain,
    while each boundary still needs the same full convergence.
-4. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
+6. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
    M1 read, after the draw-identity fix R2's review found
    ([GPU robustness](#vulkan-regressions-and-gpu-robustness)).
-5. [Transmission](transmission.md) [high]: its implementation lanes in order,
+7. [Transmission](transmission.md) [high]: its implementation lanes in order,
    once the owner's look calls are answered or the design's choices stand.
-6. [Bake proportional to change](#bake-proportional-to-change) [high, the
+8. [Bake proportional to change](#bake-proportional-to-change) [high, the
    cold-bake bar]: a static copy bakes in its prototype's frame and is shared,
    bake grouping and detail derive from meaning rather than spelling, then
    narrow the closure and share one store across both backends.
-7. [Disclosure](disclosure.md#the-build-order) [high, the long pole before
+9. [Disclosure](disclosure.md#the-build-order) [high, the long pole before
    `main`]: steps 1-6 behind the harness, step 0b's principals, and the
    owner's search-output decision.
-8. [Rule faults](rule-faults.md) [high, before `main`]: build the designed
-   outcome type, single interpreter and journal-backed firing in its steps,
-   each reviewed.
-9. [Engine job system](#engine-job-system) [high]: scheduling, the
-   garbage-collection cuts, then J1; the replay burst's tick budget and F17 as
-   ordinary work.
-10. [Water feature build](#water) ([plan](water.md#the-lanes)) [ordinary]: the
+10. [Rule faults](rule-faults.md) [high, before `main`]: build the designed
+    outcome type, single interpreter and journal-backed firing in its steps,
+    each reviewed.
+11. [Engine job system](#engine-job-system) [high]: scheduling, the
+    garbage-collection cuts, then J1; the replay burst's tick budget and F17 as
+    ordinary work.
+12. [Water feature build](#water) ([plan](water.md#the-lanes)) [ordinary]: the
     chain as the arc has landed (the hidden chain still draws, see the packet);
     A2 to A5 in parallel next, then R3, P1 last. The owner accepted the
     plan's three taste calls; the carved channel has landed.
-11. [Certified field contact](#certified-field-contact): box and ellipsoid
+13. [Certified field contact](#certified-field-contact): box and ellipsoid
     bodies, then clearance on slopes within a third of a metre.
-12. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
+14. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
     to 10.
-13. [Language and authoring](#language-and-authoring) and [author leaks to the
+15. [Language and authoring](#language-and-authoring) and [author leaks to the
     standard](#author-leaks-to-the-standard): what lang-2 leaves of S11, the
     cost corpus, the overlay text advance.
-14. Antigravity's coding trial ([agent tooling](#agent-tooling-and-skills)),
+16. Antigravity's coding trial ([agent tooling](#agent-tooling-and-skills)),
     once the current batch has landed.
-15. [Delivery](#delivery-launcher-and-ci): the production deploy, CI's steady
+17. [Delivery](#delivery-launcher-and-ci): the production deploy, CI's steady
     state, the shader cache and the GC-hole retirement.
-16. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
+18. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
     the meadow (lane 9) now; then the second seat, the authored passes and the
     quilt, each ahead of the job-system step it proves.
-17. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
+19. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
     the boot's JSON round trip in `BindLive`, then a reboot for an edit outside
     `PuckHotReload`; measure the cold and warm builds.
-18. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
+20. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
     meter), with steps 2, 3, 6 and step 4's bound fix in parallel.
-19. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
+21. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
     growth path with the uniform view limit enforced there, the two overlay
     writers, the survey's remaining groups.
-20. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups sharp
+22. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups sharp
     boxes left worse.
-21. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
+23. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
     levels or the sky term the moment a view arrives; the rest after the image
     meter.
-22. [Test runner and replay](#test-runner-and-replay): profile what recording
+24. [Test runner and replay](#test-runner-and-replay): profile what recording
     still folds whole every tick before choosing the next segment.
-23. [Bake detail](#bake-detail): measure the static round-section term.
-24. [Residency and streaming](#residency-and-streaming): step 2 after the memo
+25. [Bake detail](#bake-detail): measure the static round-section term.
+26. [Residency and streaming](#residency-and-streaming): step 2 after the memo
     names GI's work units.
-25. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
+27. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
     the crossing frame and the pixel-pass gap.
-26. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
+28. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
     schema switch; the stale lease holder.
-27. [Tests (suspended)](#tests-suspended): triage the failing Windows shards by
+29. [Tests (suspended)](#tests-suspended): triage the failing Windows shards by
     cause.
-28. [Card tables](#card-tables-in-the-board-game-room) (the windowed look, then
+30. [Card tables](#card-tables-in-the-board-game-room) (the windowed look, then
     Spider), [Debug tools](#debug-tools) (windowed checks and exhibits),
     [Sweep](#sweep-and-visual-checks) (the paired tour) and
     [Temporal](#temporal-shimmer-and-cadence-flicker) (the blink re-measure).
@@ -620,9 +640,14 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   (`puck mesh audit`), not by byte equality with today's per-backend products
   (AGENTS.md rule 4). The latest native forest legs have different aggregate
   triangle counts, so source equality alone does not show a halved cold cost.
-- The cold bake has not met the one-minute bar on either backend. The CPU
-  stages remain the target after removing the repeated refinement-index walk,
-  fine-cell sign scan and collapse fan preparation. `SdfMeshCollapse` now reuses
+- [high] The cold bake sits at the one-minute bar on Direct3D 12 and just past
+  it on Vulkan (quiet paired `bench startup --bake`, paused lockstep). Its wall
+  time no longer follows the worker stages: a 38% cut in summed `land` worker
+  time moved wall time within noise. Name the bake's critical path before more
+  stage work: what runs serially or waits between the first take and the last
+  residency's completion (planning, admission, GPU dispatch and readback,
+  landing, the store's publish decode, idle worker gaps), from a trace of one
+  cold bake's timeline rather than summed stage seconds. `SdfMeshCollapse` now reuses
   reverse edge witnesses across an unchanged source fan, skips refused directed
   edges until an endpoint fan changes, and tests the removed vertex's samples
   first. Reverse searches resume only when their witness can raise the triangle's
@@ -1236,10 +1261,10 @@ are what the plan defers or the water strained in a system beside it.
   `water.speed` if the chain's numbers are speed-invariant (prove it with the
   chain twin first), or profile what the full world ticks per step that the
   chain does not. Until then H1's full-world verdict is unproven.
-- [low] The glass passes' GPU time is owed: read it per pass at the pool, the
-  falls and the lake through [the measurement window](#measurement-window); the
-  plan's budget table holds counts only, so no frame-bar claim about the glass
-  rests on a time yet.
+- [medium] The water views hold the display rate at p50 but the pool and the
+  falls hitch (p99 near 50-57 ms in a quiet window) while the lake does not; the
+  glass passes are a small share of the frame there, so the hitches lie
+  elsewhere. Attribute them with the frame bar's per-pass reading (Next item 1).
 - [low] The glass kernel's register count is owed (a GPU shader profile on the
   RTX 2060). It decides whether a third interface or a heavier tint fits the
   occupancy the kernel has today.
@@ -1252,7 +1277,8 @@ are what the plan defers or the water strained in a system beside it.
 
 ### Measurement window
 
-Owner: the lead (one quiet window) · ordinary · Next: drain the queued windowed controls.
+Owner: the lead (one quiet window) with the measure-harness owner · ordinary ·
+Next: the harness's residency wait below, then rerun its two refused pairs.
 
 Evidence here is timing, so it waits for a window with no other lane building or
 running a World ([orchestration](../../.claude/skills/orchestration/SKILL.md)).
@@ -1271,22 +1297,21 @@ GPU passes use repeated `--gpu-pass <node/pass>` and pointers such as
 `/metrics/pool.gpu.world~1sdf.world$glass-shade/median`. Missing passes fail;
 filing refuses unsupported pointers before it copies builds.
 
-The remaining questions are machine-local `puck measure` requests, each with the
-integration-tip build frozen on both sides as a control. Drain by name/ID from
-`puck measure list`, with `puck measure run <id> --repeats 5 --timeout-seconds 7200`:
+A tip-only reading needs no paired request: run `puck lease quiet --wait 600 --
+puck bench frames …` directly (the tour and water-view readings feed Next item 1
+and the Water packet).
 
-- **Glass passes at the water views** ([water](#water)):
-  `bench frames --plan worlds/debug/measure-water.json --gpu-pass 'world/sdf.world$glass' --gpu-pass 'world/sdf.world$glass-shade'`;
-  the three stops' `.gpu.` medians compare each pass in ms, with paired IQR
-  establishing the noise before judging two glass interfaces per pixel.
-- **Sweep tour frame percentiles** ([sweep](#sweep-and-visual-checks)):
-  `bench frames --plan worlds/debug/sweep.json`; select every stop's
-  `.frames.p50/median` and `.frames.p99/median`, in ms, to judge the sky staging
-  change against the control's paired differences and IQR.
-- **Water-view host frames**, for [P1](water.md#p1-the-tour-and-the-budget):
-  `bench frames --plan worlds/debug/measure-water.json`; select the pool,
-  falls and lake's `.frames.p50/median` and `.frames.p99/median` and read them
-  against the frame bar and the control's IQR.
+- [medium] `bench frames` waits only 20 s for residency at a stop
+  (`world.wait residency 20`), so a frozen build measured with a fresh cache,
+  which owes a whole cold bake of about a minute first, is refused before its
+  first window: the glass-shadow falls pair (9cb9d6df) and the meadow-rates pair
+  (0166da71) failed that way. Wait for the boot's bakes to settle under a bound
+  that covers a cold bake (or prewarm each side's cache) before the per-stop
+  settle, then rerun both pairs.
+- [low] Two field-query readings stay unread: the field-queries change's probe
+  counts under `world.lockstep` at the meadow and the forest road (a rendered
+  World, before and after), and gc-churn's gen2 count and pause per 45 s settled
+  (standing and walking) against its frozen base.
 
 ### Author shaders
 
@@ -3716,6 +3741,11 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [medium] `puck lease quiet` with its defaults (`--wait 0`, `--settle 30`)
+  can never run: the wait beyond the settle is zero, so it refuses with "the
+  machine was not idle for 30 seconds within 30" even on an idle machine. The
+  settle needs its own time; `--wait` should bound only the extra wait for
+  load to clear. Seen running the lead's frame-bar window.
 - [low · unconfirmed] `puck measure request --after-commit` built the World
   but Windows refused `WorldArtifactStore.Publish`'s directory rename after its
   retries (`src/Puck.Cli.Harness/WorldArtifactStore.cs:183`, `Directory.Move`),
