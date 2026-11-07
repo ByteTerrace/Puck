@@ -131,12 +131,10 @@ bool sdfInstanceMaskHasSummary(uint instanceMaskBase) {
 }
 
 // The SEGMENT directory's element offset in sdfWords: instruction data -> shape-bound table -> segment directory.
-// KEEP IN SYNC with SdfProgram's offset math (SdfProgram.Layout).
 uint sdfSegmentDirectoryOffset() {
     uint4 header = sdfProgramWord(0);
-    uint instructions = SDF_PROGRAM_INSTRUCTION_COUNT(header);
 
-    return ((SDF_PROGRAM_DATA_OFFSET(header) + (SDF_INSTRUCTION_DATA_VECTORS * instructions)) + (SDF_BOUND_RECORD_VECTORS * instructions));
+    return (SDF_PROGRAM_BOUNDS_OFFSET(header) + (SDF_BOUND_RECORD_VECTORS * SDF_PROGRAM_INSTRUCTION_COUNT(header)));
 }
 // The INSTANCE directory's element offset, given a caller that ALREADY resolved the segment directory
 // (sdfLoadProgramLayout has both in hand). DXC's SPIR-V backend runs no GVN over StructuredBuffer loads, so

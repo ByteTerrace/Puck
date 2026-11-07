@@ -1,6 +1,13 @@
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgram {
+    /// <summary>Returns the vector the per-shape bound table starts at: right after the instruction data. The one C#
+    /// statement of the bound table's place; the kernels read the same sum as <c>SDF_PROGRAM_BOUNDS_OFFSET</c>, which
+    /// <c>SdfIsaHlsl</c> generates beside the lanes and counts it adds.</summary>
+    /// <param name="dataOffset">The data table's vector (the header's data offset lane).</param>
+    /// <param name="instructions">The instruction count (the header's instruction count lane).</param>
+    /// <returns>The bound table's first vector.</returns>
+    public static int BoundsVectorOf(int dataOffset, int instructions) => (dataOffset + (InstructionDataVectors * instructions));
     // The packed stream's field sections in vectors, from the counts that size them: the one statement of the field's
     // layout. The constructor packs at these offsets from a program's exact counts, and SdfProgramBuilder.MeasureCapacity
     // bounds PartCompilationWordCapacity from upper counts it reads off the builder, so a capacity probe never packs. No
@@ -16,7 +23,7 @@ public sealed partial class SdfProgram {
         int PathEdges
     ) {
         public int DataOffset => (ProgramHeaderVectors + Instructions);
-        public int BoundsOffset => (DataOffset + (InstructionDataVectors * Instructions));
+        public int BoundsOffset => BoundsVectorOf(dataOffset: DataOffset, instructions: Instructions);
         public int SegmentOffset => (BoundsOffset + (BoundRecordVectors * Instructions));
         public int InstanceOffset => ((SegmentOffset + DirectoryHeaderVectors) + (BoundRecordVectors * Segments));
         public int WorldSegmentOffset => ((InstanceOffset + DirectoryHeaderVectors) + (BoundRecordVectors * Instances));

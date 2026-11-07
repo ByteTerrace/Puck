@@ -147,8 +147,8 @@ SdfProgramLayout sdfLoadProgramLayout() {
     uint instructions = SDF_PROGRAM_INSTRUCTION_COUNT(header);
     if (!sdfProgramRange(SDF_PROGRAM_HEADER_VECTORS, instructions, 1u)
         || !sdfProgramRange(SDF_PROGRAM_DATA_OFFSET(header), instructions, SDF_INSTRUCTION_DATA_VECTORS)) { return layout; }
-    // The bound table follows the instruction data; the appearance section lies past every table the field reads.
-    uint boundsOffset = (SDF_PROGRAM_DATA_OFFSET(header) + (SDF_INSTRUCTION_DATA_VECTORS * instructions));
+    // The appearance section lies past every table the field reads.
+    uint boundsOffset = SDF_PROGRAM_BOUNDS_OFFSET(header);
     if (!sdfProgramRange(boundsOffset, instructions, SDF_BOUND_RECORD_VECTORS)) { return layout; }
     uint segmentOffset = (boundsOffset + (SDF_BOUND_RECORD_VECTORS * SDF_PROGRAM_INSTRUCTION_COUNT(header)));
     if (segmentOffset >= vectors) { return layout; }

@@ -11,8 +11,9 @@
 //   x 51 .. 69.7, level 2     the board game room: the chess, Go and Reversi tables
 //
 // Every piece of the shell is a box: walls with door and window openings and floors with stair and shaft holes are
-// unions of boxes, never a subtraction, because the analytic contact provider collides a carved shape as its whole
-// bounding box. The shell, floors, stairs and shaft are solid, so the Moth walks the floors and climbs the stairs (each
+// unions of boxes. A subtraction would collide as drawn too (a carved creation collides as its composed field wherever
+// a carve reaches a body, and as its own boxes elsewhere), but a doorway every visitor walks through would then cost a
+// field solve each step where its boxes stay analytic. The shell, floors, stairs and shaft are solid, so the Moth walks the floors and climbs the stairs (each
 // riser 0.25 m, under her 0.3 m step height) and the chase camera's clearance keeps the eye inside the rooms. The
 // ceiling light strips are emissive and not solid. The debug world imports this file after companion.puck and before
 // chess.puck: below the board game room's stones and discs (go.puck, reversi.puck), which take the population's top
