@@ -80,13 +80,16 @@ public sealed class ShadeLoweringTests {
         var length = ((uint)(program.Words.Length / 4));
 
         foreach (var phase in program.Phases) {
+            var types = new SdfShadeType?[SdfShadeProgram.MaxRegisters];
+
             foreach (var op in phase) {
                 Assert.All(op.Operands, operand => {
-                    Assert.InRange(operand.Index, 0, (op.Result.Index - 1));
-                    Assert.Equal(phase[operand.Index].Result.Type, operand.Type);
+                    Assert.InRange(operand.Index, 0, (SdfShadeProgram.MaxRegisters - 1));
+                    Assert.Equal(types[operand.Index], operand.Type);
                 });
+                types[op.Result.Index] = op.Result.Type;
                 if (op.Op is SdfShadeOp.Constant or SdfShadeOp.Shape) {
-                    Assert.True(condition: SdfShadeProgram.ContainsRange(length, op.Immediate, ((op.Op == SdfShadeOp.Shape) ? 4u : 1u)));
+                    Assert.True(condition: SdfShadeProgram.ContainsRange(length, op.Immediate, ((op.Op == SdfShadeOp.Shape) ? 6u : 1u)));
                 }
             }
         }
@@ -96,6 +99,25 @@ public sealed class ShadeLoweringTests {
         var invalid = new SdfShadeDefinition("invalid", [], [new(SdfShadePhase.Surface, "roughness", new("component", [new("input", Name: "surface.position")], Name: "3"))]);
 
         Assert.Equal("PUCK127", Assert.Throws<SdfShadeException>(testCode: () => SdfShadeProgram.Compile(definition: invalid)).Code);
+    }
+    [Fact]
+    public void RegistersAreAllocatedByLivenessAndExcessPressureIsRefused() {
+        var chain = "clock";
+
+        for (var i = 0; (i < 40); i++) { chain = $"sin({chain})"; }
+        var admitted = Compile(text: World($"roughness = {chain}"));
+
+        Assert.True(condition: (admitted.Phases[0].Count > SdfShadeProgram.MaxRegisters));
+        Assert.All(admitted.Phases[0], instruction => Assert.InRange(instruction.Result.Index, 0, (SdfShadeProgram.MaxRegisters - 1)));
+        Assert.Equal(admitted.Identity, SdfShadeProgram.Compile(definition: admitted.Definition).Identity);
+        var values = string.Join(separator: "\n", values: Enumerable.Range(count: 9, start: 0).Select(selector: i => $"let a{i} = sin(clock + {i})"));
+        var outputs = ("\nalbedo [a0,a1,a2]\nfill [a3,a4,a5]\nnormal [a6,a7,a8]\nroughness = " + string.Join(separator: " + ", values: Enumerable.Range(count: 9, start: 0).Select(selector: i => $"a{i}")));
+        var refused = WorldCompiler.Compile(World((values + outputs)), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Contains(collection: refused.Diagnostics, filter: diagnostic => ((diagnostic.Code == "PUCK129") && diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "live registers")));
+        var gradient = Compile(text: World("roughness = latticeGradient(surface.position, seed).x", "seed", "7"));
+
+        Assert.Contains(collection: gradient.Phases[0], filter: instruction => (instruction.Op == SdfShadeOp.LatticeGradient));
     }
     [Fact]
     public void RangeAndWorkArithmeticAreClosedAtEdges() {

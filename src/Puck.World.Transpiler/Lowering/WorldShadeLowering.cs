@@ -179,7 +179,7 @@ internal sealed class WorldShadeLowering {
                 return new("shape", [Expression(shape.Arguments[1].Value, scope)], Shape: parsed);
             case CallExpressionNode call:
                 return new(call.Name, call.Arguments.Select(selector: (a, i) => Expression(a.Value, scope,
-                    (((call.Name is "lattice" or "lines") && (i == 1)) ? SdfShadeType.UInt : null))).ToArray());
+                    (((call.Name is "lattice" or "latticeGradient" or "lines") && (i == 1)) ? SdfShadeType.UInt : null))).ToArray());
             default: throw new SdfShadeException(code: "PUCK126", message: "Expression is outside the shade vocabulary.");
         }
     }

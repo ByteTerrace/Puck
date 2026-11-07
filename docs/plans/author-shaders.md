@@ -508,7 +508,7 @@ The vocabulary, and what each piece lowers to:
   `smoothstep`, `step`, `pow`, `exp2`, `log2`, the trigonometric functions,
   `dot`, `cross`, `normalize`, `length`, quaternion rotate and inverse-rotate,
   `hash` (`sdfPcg3d` over quantized operands), `lattice` (`sdfLatticeNoise3`),
-  `lines` (`sdfLineCoverage`), `latticeGradient` (`sdfFlowNoise`, the lattice's
+  `lines` (`sdfLineCoverage`), `latticeGradient` (`sdfLatticeNoiseGradient3`, the lattice's
   value and analytic gradient in one pass, which the flow's normal tilt needs),
   `shape` (one `evaluateShape` over a shape descriptor stored in the program's
   slice, keeping the bound-box early-out `sdfApplyPaints` takes today, so a hit
@@ -1344,7 +1344,7 @@ stand as written.
    evaluation and the equivalence corpus cover every discontinuity, `hash` and
    `floor` included, and a language without `step` would still have them.
 2. **The flow's analytic-gradient noise and the static copy's draw-space
-   velocity had no op.** True: `sdfFlowNoise` returns the value and gradient in
+   velocity had no op.** True: `sdfLatticeNoiseGradient3` (extracted from the flow helper) returns the value and gradient in
    one pass, and `sdfShadeFlow` turns an object-frame velocity through
    `sdfMeshCarryDirection` when no slot owns the hit. Resolved by the
    `latticeGradient` op and the `drawDirection` frame op (section 3.2); the

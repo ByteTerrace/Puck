@@ -9,7 +9,9 @@ public sealed partial class SdfShadeProgram {
     /// <summary>The maximum weighted instruction work across the three explicit phases.</summary>
     public const uint MaxOps = 16384;
     /// <summary>The static register-file capacity per phase.</summary>
-    public const int MaxRegisters = 256;
+    public const int MaxRegisters = 8;
+    /// <summary>The maximum number of runtime slots; slots are data, not simultaneously live registers.</summary>
+    public const int MaxParameters = 256;
     /// <summary>The maximum light walk, including bound screens, admitted by the work model.</summary>
     public const uint MaxLights = (SdfLights.MaxLights + SdfProgramBuilder.MaxScreenSurfaces);
     /// <summary>Fixed stage work: filtering, probe gather, output sanitization and composition plumbing.</summary>
@@ -22,7 +24,7 @@ public sealed partial class SdfShadeProgram {
     public const ulong MaxWork = (1UL << 32);
 
     // Compile-time proof: even a whole 8x8 group at the largest admitted light walk fits. A false inequality divides by zero.
-    private const int WorkBoundProof = (1 / (((MaxOps <= MaxWork) &&
+    private const int WorkBoundProof = (1 / (((MaxRegisters > 0) && ((MaxRegisters & (MaxRegisters - 1)) == 0) && (MaxOps <= MaxWork) &&
         ((64UL * ((((MaxOps * (MaxLights + 2UL)) + (MaxLights * DefaultLightWork)) + DefaultComposeWork) + EngineWork)) <= MaxWork)) ? 1 : 0));
 
     private readonly uint[] m_words;

@@ -10,7 +10,7 @@ public enum SdfShadeOp {
     Equal, Less, LessEqual, Select, Saturate, Mix, Smoothstep, Step,
     Pow, Exp2, Log2, Sin, Cos, Tan, Asin, Acos, Atan, Sqrt,
     Dot, Cross, Normalize, Length, Rotate, InverseRotate, Quantize, Hash,
-    Lattice, Lines, Reflect, Refract, Tilt, ToLayer, ToWorld, DrawDirection, Shape,
+    Lattice, LatticeGradient, Lines, Reflect, Refract, Tilt, ToLayer, ToWorld, DrawDirection, Shape,
 }
 /// <summary>One op's complete description. Template placeholders are a, b, c and result, never author text.</summary>
 public sealed record SdfShadeOpInfo(SdfShadeOp Op, string Name, int Arity, uint Work, string Template, bool Commutative = false);
@@ -19,6 +19,9 @@ public sealed record SdfShadeInput(string Name, SdfShadeType Type, SdfShadePhase
 /// <summary>The one shade vocabulary and semantics. Every intermediate is binary32 or uint32; only exact IEEE
 /// arithmetic folds on the host. The template result is precise, and neither tier contracts or reassociates ops.</summary>
 public static class SdfShadeOps {
+    /// <summary>Per-instruction bound for decoding, named-register selection and immediate output writes.</summary>
+    public const uint DispatchWork = 256;
+
     /// <summary>All op descriptions in opcode order.</summary>
     public static IReadOnlyList<SdfShadeOpInfo> Table { get; } = Array.AsReadOnly(array: new[] {
         D(SdfShadeOp.Constant, "constant", 0, 1, "sdfShadeConstant(slice, immediate)"),
@@ -65,6 +68,7 @@ public static class SdfShadeOps {
         D(SdfShadeOp.Quantize, "quantize", 1, 2, "asuint(floor(a))"),
         D(SdfShadeOp.Hash, "hash", 1, 48, "sdfPcg3d(a)"),
         D(SdfShadeOp.Lattice, "lattice", 2, 512, "sdfLatticeNoise3(a, b)"),
+        D(SdfShadeOp.LatticeGradient, "latticeGradient", 2, 640, "sdfLatticeNoiseGradient3(a, b)"),
         D(SdfShadeOp.Lines, "lines", 3, 128, "sdfLineCoverage(a, b, c)"),
         D(SdfShadeOp.Reflect, "reflect", 2, 12, "reflect(a, b)"),
         D(SdfShadeOp.Refract, "refract", 3, 32, "refract(a, b, c)"),
@@ -72,7 +76,7 @@ public static class SdfShadeOps {
         D(SdfShadeOp.ToLayer, "toLayer", 1, 30, "sdfShadeToLayer(stamp, a)"),
         D(SdfShadeOp.ToWorld, "toWorld", 1, 30, "sdfShadeToWorld(stamp, a)"),
         D(SdfShadeOp.DrawDirection, "drawDirection", 1, 48, "sdfShadeDrawDirection(stamp, a)"),
-        D(SdfShadeOp.Shape, "shape", 1, 0, "sdfShadeShape(slice, immediate, a)"),
+        D(SdfShadeOp.Shape, "shape", 1, 0, "sdfShadeShape(slice, immediate, a, asfloat(sdfShadeInput(stamp, SDF_SHADE_INPUT_SURFACE_FOOTPRINT)).x)"),
     });
     /// <summary>The fixed stamp. Indices are generated from this table, never supplied as author addresses.</summary>
     public static IReadOnlyList<SdfShadeInput> Inputs { get; } = Array.AsReadOnly(array: new[] {
@@ -141,6 +145,6 @@ public static class SdfShadeOps {
         }
         return Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: text.ToString())));
     }
-    private static SdfShadeOpInfo D(SdfShadeOp op, string name, int arity, uint work, string template, bool commutative = false) => new(Arity: arity, Commutative: commutative, Name: name, Op: op, Template: template, Work: work);
+    private static SdfShadeOpInfo D(SdfShadeOp op, string name, int arity, uint work, string template, bool commutative = false) => new(Arity: arity, Commutative: commutative, Name: name, Op: op, Template: template, Work: checked((work + DispatchWork)));
     private static SdfShadeInput I(string name, SdfShadeType type = SdfShadeType.Float, SdfShadePhase? phase = null, SdfShadeReads reads = SdfShadeReads.None) => new(name, type, phase, reads);
 }

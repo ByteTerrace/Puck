@@ -15,8 +15,24 @@ public static class SdfShadeHlsl {
 
         text.Append(value: "// Op semantics and helper content: ").Append(value: SdfShadeOps.Fingerprint).Append(value: '\n');
         text.Append(value: "#define SDF_SHADE_MAX_REGISTERS ").Append(value: SdfShadeProgram.MaxRegisters).Append(value: "u\n");
+        text.Append(value: "#define SDF_SHADE_MAX_OPS ").Append(value: SdfShadeProgram.MaxOps).Append(value: "u\n");
         foreach (var op in SdfShadeOps.Table) { text.Append(value: "#define SDF_SHADE_").Append(value: op.Op.ToString().ToUpperInvariant()).Append(value: ' ').Append(value: ((uint)op.Op)).Append(value: "u\n"); }
-        text.Append(value: "struct SdfShadeStamp { uint4 values[").Append(value: SdfShadeOps.Inputs.Count).Append(value: "]; float4 layerRotation; float3x3 drawDirection; };\n");
+        text.Append(value: "struct SdfShadeStamp { ");
+        for (var i = 0; (i < SdfShadeOps.Inputs.Count); i++) { text.Append(value: "uint4 i").Append(value: i).Append(value: "; "); }
+        text.Append(value: "float4 layerRotation; float3x3 drawDirection; };\n");
+        text.Append(value: "struct SdfShadeRegisters { ");
+        for (var i = 0; (i < SdfShadeProgram.MaxRegisters); i++) { text.Append(value: "uint4 r").Append(value: i).Append(value: "; "); }
+        text.Append(value: "};\nstruct SdfShadeOutputs { uint assigned; ");
+        for (var i = 0; (i < SdfShadeProgram.OutputCapacity); i++) { text.Append(value: "uint4 o").Append(value: i).Append(value: "; "); }
+        text.Append(value: "};\nuint4 sdfShadeInput(SdfShadeStamp stamp, uint index) { switch(index) {\n");
+        for (var i = 0; (i < SdfShadeOps.Inputs.Count); i++) { text.Append(value: "case ").Append(value: i).Append(value: "u: return stamp.i").Append(value: i).Append(value: ";\n"); }
+        text.Append(value: "default: return 0u; } }\nuint4 sdfShadeRegister(SdfShadeRegisters regs, uint index) { switch(index & (SDF_SHADE_MAX_REGISTERS - 1u)) {\n");
+        for (var i = 0; (i < SdfShadeProgram.MaxRegisters); i++) { text.Append(value: "case ").Append(value: i).Append(value: "u: return regs.r").Append(value: i).Append(value: ";\n"); }
+        text.Append(value: "default: return 0u; } }\nvoid sdfShadeWriteRegister(inout SdfShadeRegisters regs, uint index, uint4 value) { switch(index & (SDF_SHADE_MAX_REGISTERS - 1u)) {\n");
+        for (var i = 0; (i < SdfShadeProgram.MaxRegisters); i++) { text.Append(value: "case ").Append(value: i).Append(value: "u: regs.r").Append(value: i).Append(value: " = value; break;\n"); }
+        text.Append(value: "} }\nvoid sdfShadeWriteOutputs(inout SdfShadeOutputs outputs, uint mask, uint4 value) {\noutputs.assigned |= mask;\n");
+        for (var i = 0; (i < SdfShadeProgram.OutputCapacity); i++) { text.Append(value: "if ((mask & ").Append(value: (1u << i)).Append(value: "u) != 0u) outputs.o").Append(value: i).Append(value: " = value;\n"); }
+        text.Append(value: "}\n");
         for (var i = 0; (i < SdfShadeOps.Inputs.Count); i++) {
             text.Append(value: "#define SDF_SHADE_INPUT_").Append(value: SdfShadeOps.Inputs[i].Name.Replace(newChar: '_', oldChar: '.').ToUpperInvariant()).Append(value: ' ').Append(value: i).Append(value: "u\n");
         }
@@ -40,26 +56,30 @@ public static class SdfShadeHlsl {
         }
         text.Append(value: """
 
-void sdfShadeInterpret(uint2 slice, uint2 parameters, uint phase, SdfShadeStamp stamp, out uint4 registers[SDF_SHADE_MAX_REGISTERS]) {
-    [unroll] for (uint r = 0u; r < SDF_SHADE_MAX_REGISTERS; r++) registers[r] = 0u;
+void sdfShadeInterpret(uint2 slice, uint2 parameters, uint phase, SdfShadeStamp stamp, out SdfShadeOutputs outputs) {
+    SdfShadeRegisters regs = (SdfShadeRegisters)0;
+    outputs = (SdfShadeOutputs)0;
     if (phase >= 3u) return;
     uint4 header = sdfShadeRead(slice, phase);
-    uint count = min(header.y, SDF_SHADE_MAX_REGISTERS);
+    uint count = min(header.y, SDF_SHADE_MAX_OPS);
+    if (header.x > slice.y || count > (slice.y - header.x) / 3u) return;
     [loop] for (uint i = 0u; i < count; i++) {
         uint offset = header.x + i * 3u;
         uint4 op = sdfShadeRead(slice, offset);
         uint4 indices = sdfShadeRead(slice, offset + 1u);
         uint4 types = sdfShadeRead(slice, offset + 2u);
-        if (op.y >= SDF_SHADE_MAX_REGISTERS || any(indices >= SDF_SHADE_MAX_REGISTERS)) return;
-        uint4 a = registers[indices.x], b = registers[indices.y], c = registers[indices.z], d = registers[indices.w];
+        indices &= SDF_SHADE_MAX_REGISTERS - 1u;
+        op.y &= SDF_SHADE_MAX_REGISTERS - 1u;
+        uint4 a = sdfShadeRegister(regs, indices.x), b = sdfShadeRegister(regs, indices.y);
+        uint4 c = sdfShadeRegister(regs, indices.z), d = sdfShadeRegister(regs, indices.w);
         uint signature = types.x | (types.y << 4u) | (types.z << 8u) | (types.w << 12u);
         uint4 value = 0u;
         switch (op.x) {
         case SDF_SHADE_CONSTANT: value = sdfShadeRead(slice, op.w); break;
         case SDF_SHADE_PARAMETER: value = sdfShadeRead(parameters, op.w); break;
-        case SDF_SHADE_INPUT: if (op.w < SDF_SHADE_STAMP_COUNT) value = stamp.values[op.w]; break;
-        case SDF_SHADE_COMPONENT: if (op.w < 4u) value.x = a[op.w]; break;
-""".Replace("SDF_SHADE_STAMP_COUNT", $"{SdfShadeOps.Inputs.Count}u", StringComparison.Ordinal));
+        case SDF_SHADE_INPUT: value = sdfShadeInput(stamp, op.w); break;
+        case SDF_SHADE_COMPONENT: value.x = op.w == 0u ? a.x : op.w == 1u ? a.y : op.w == 2u ? a.z : op.w == 3u ? a.w : 0u; break;
+""");
         foreach (var (op, variants) in signatures) {
             text.Append(value: "        case SDF_SHADE_").Append(value: op.ToString().ToUpperInvariant()).Append(value: ": switch (signature) {\n");
             foreach (var (args, result) in variants) {
@@ -71,7 +91,7 @@ void sdfShadeInterpret(uint2 slice, uint2 parameters, uint phase, SdfShadeStamp 
             }
             text.Append(value: "        } break;\n");
         }
-        text.Append(value: "        }\n        registers[op.y] = value;\n    }\n}\n#endif\n");
+        text.Append(value: "        }\n        sdfShadeWriteRegister(regs, op.y, value);\n        sdfShadeWriteOutputs(outputs, op.z >> 8u, value);\n    }\n}\n#endif\n");
         return text.ToString();
     }
     /// <summary>Emits one admitted phase as precise locals using exactly the interpreter's generated op functions.</summary>
@@ -79,18 +99,25 @@ void sdfShadeInterpret(uint2 slice, uint2 parameters, uint phase, SdfShadeStamp 
         ArgumentNullException.ThrowIfNull(program);
         var text = new StringBuilder();
 
+        text.Append(value: "SdfShadeRegisters regs = (SdfShadeRegisters)0;\nSdfShadeOutputs outputs = (SdfShadeOutputs)0;\n");
+        var ordinal = 0;
+
         foreach (var instruction in program.Phases[((int)phase)]) {
             var result = instruction.Result;
-            var args = instruction.Operands.Select(selector: a => $"r{a.Index}").ToArray();
+            var args = instruction.Operands.Select(selector: a => Decode($"regs.r{a.Index}", a.Type)).ToArray();
             var value = instruction.Op switch {
                 SdfShadeOp.Constant => Decode($"sdfShadeRead(slice, {instruction.Immediate}u)", result.Type),
                 SdfShadeOp.Parameter => Decode($"sdfShadeRead(parameters, {instruction.Immediate}u)", result.Type),
-                SdfShadeOp.Input => Decode($"stamp.values[{instruction.Immediate}u]", result.Type),
+                SdfShadeOp.Input => Decode($"stamp.i{instruction.Immediate}", result.Type),
                 SdfShadeOp.Component => $"{args[0]}[{instruction.Immediate}u]",
                 _ => $"{Function(op: instruction.Op, types: instruction.Operands.Select(selector: a => a.Type).ToArray())}(slice, stamp, {instruction.Immediate}u, {string.Join(", ", args)})",
             };
 
-            text.Append(value: "precise ").Append(value: Type(type: result.Type)).Append(value: " r").Append(value: result.Index).Append(value: " = ").Append(value: value).Append(value: ";\n");
+            var local = $"v{ordinal++}";
+
+            text.Append(value: "precise ").Append(value: Type(type: result.Type)).Append(value: ' ').Append(value: local).Append(value: " = ").Append(value: value).Append(value: ";\n");
+            text.Append(value: "regs.r").Append(value: result.Index).Append(value: " = ").Append(value: Encode(local, result.Type)).Append(value: ";\n");
+            if (instruction.OutputMask != 0) { text.Append(value: "sdfShadeWriteOutputs(outputs, ").Append(value: instruction.OutputMask).Append(value: "u, regs.r").Append(value: result.Index).Append(value: ");\n"); }
         }
         return text.ToString();
     }
@@ -126,13 +153,20 @@ precise float3 sdfShadeTilt(float3 normal, float3 slope, float angle) {
     precise float theta = min(atan(magnitude), clamp(angle, 0.0, 3.14159265358979323846));
     return magnitude > 0.0 ? normalize(normal * cos(theta) + (tangent / magnitude) * sin(theta)) : normal;
 }
-precise float sdfShadeShape(uint2 slice, uint relative, float3 position) {
-    if (relative > slice.y || slice.y - relative < 4u) return 0.0;
+precise float sdfShadeShape(uint2 slice, uint relative, float3 position, float footprint) {
+    if (relative > slice.y || slice.y - relative < 6u) return 0.0;
     uint4 header = sdfShadeRead(slice, relative);
     precise float4 data0 = asfloat(sdfShadeRead(slice, relative + 1u));
     precise float4 data1 = asfloat(sdfShadeRead(slice, relative + 2u));
     precise float4 scale = asfloat(sdfShadeRead(slice, relative + 3u));
-    uint table = relative + 4u;
+    precise float3 center = asfloat(sdfShadeRead(slice, relative + 4u)).xyz;
+    precise float3 extent = asfloat(sdfShadeRead(slice, relative + 5u)).xyz;
+    // Like paints, only the footprint neighbourhood needs the expensive exact field. Outside the bound the
+    // positive box lower bound preserves coverage; shape is a coverage-distance op, not a geometry query.
+    precise float3 outside = abs(position - center) - extent;
+    precise float bound = max(outside.x, max(outside.y, outside.z));
+    if (header.z == 0u && bound > max(footprint, 0.0)) return bound;
+    uint table = relative + 6u;
     uint vectors = (header.y + 3u) / 4u;
     if (header.y > SDF_MAX_CONVEX_VERTICES * 2u || table > slice.y || vectors > slice.y - table || !sdfProgramRange(slice.x, slice.y, 1u)) return 0.0;
     // The existing helpers receive an absolute address only after the complete owned side table passes this door.

@@ -11,6 +11,7 @@ shade template program() {
 prototypes {
   prototype "p" {
     document {
+      schema: "puck.creation.v1"
       palette [{ color: "#808080", shade: program() }]
       shape Box "box" {
         scale [1, 1, 1]

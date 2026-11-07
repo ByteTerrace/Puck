@@ -22,7 +22,7 @@ public sealed partial class SdfShadeProgram {
 
         public SdfShadeProgram Compile() {
             ArgumentNullException.ThrowIfNull(source);
-            if ((source.Parameters.Count > MaxRegisters) || (source.Outputs.Count > 32)) { Fail(code: "PUCK129", message: "Shade program exceeds its static capacity."); }
+            if ((source.Parameters.Count > MaxParameters) || (source.Outputs.Count > 32)) { Fail(code: "PUCK129", message: "Shade program exceeds its static capacity."); }
             if (source.Parameters.Select(selector: p => p.Name).Distinct(comparer: StringComparer.Ordinal).Count() != source.Parameters.Count) {
                 Fail(code: "PUCK127", message: "Duplicate shade parameter.");
             }
@@ -78,7 +78,7 @@ public sealed partial class SdfShadeProgram {
                     if (registers.TryGetValue(key: node.Key, value: out var found)) { return found; }
                     var args = node.Args.Select(selector: Emit).ToArray();
 
-                    if (instructions.Count >= MaxRegisters) { Fail(code: "PUCK129", message: $"Shade register count exceeds {MaxRegisters}."); }
+                    if (instructions.Count >= MaxOps) { Fail(code: "PUCK129", message: $"Shade instruction count exceeds {MaxOps}."); }
                     var result = new SdfShadeOperand(index: instructions.Count, type: node.Type);
                     var immediate = node.Immediate;
 
@@ -96,10 +96,13 @@ public sealed partial class SdfShadeProgram {
                     if (node.Shape is { } shape) {
                         immediate = ((uint)(m_constants.Count / 4));
                         m_shapes.Add(item: (shape, ((int)immediate)));
-                        m_constants.AddRange(collection: [((uint)shape.Type), ((uint)shape.Table.Count), 0u, 0u]);
-                        AddVector(vector: shape.Data0At(tableVector: (((int)immediate) + 4)));
+                        m_constants.AddRange(collection: [((uint)shape.Type), ((uint)shape.Table.Count), (shape.Bound.IsUnbounded ? 1u : 0u), 0u]);
+                        AddVector(vector: shape.Data0At(tableVector: (((int)immediate) + 6)));
                         AddVector(vector: shape.Data1);
                         AddVector(vector: new(value: shape.Scale, w: MathF.Min(x: shape.Scale.X, y: MathF.Min(x: shape.Scale.Y, y: shape.Scale.Z))));
+                        AddVector(vector: new(value: shape.Bound.Center, w: 0f));
+                        AddVector(vector: new(value: shape.Bound.HalfExtents, w: 0f));
+                        m_reads |= SdfShadeReads.Footprint;
                         m_constants.AddRange(collection: shape.Table.Select(selector: BitConverter.SingleToUInt32Bits));
                         while ((m_constants.Count % 4) != 0) { m_constants.Add(item: 0); }
                     }
@@ -108,11 +111,14 @@ public sealed partial class SdfShadeProgram {
 
                     instructions.Add(item: op); registers.Add(key: node.Key, value: result);
                     m_canonicalValues.Add(item: new(((SdfShadePhase)phase), $"r{result.Index}", Canonical(args: args, node: node)));
-                    costs[phase] = checked((costs[phase] + ((node.Shape is { } costShape) ? SdfShadeCost.Shape(shape: costShape) : SdfShadeOps.Get(op: node.Op).Work)));
+                    costs[phase] = checked(((costs[phase] + SdfShadeOps.Get(op: node.Op).Work) + ((node.Shape is { } costShape) ? SdfShadeCost.Shape(shape: costShape) : 0u)));
                     if (checked(((costs[0] + costs[1]) + costs[2])) > MaxOps) { Fail(code: "PUCK129", message: $"Shade work exceeds {MaxOps}."); }
                     return result;
                 }
             }
+            var canonicalOutputs = bindings.Select(selector: o => new SdfShadeOutput(o.Phase, o.Name, new("value", Name: $"r{o.Value.Index}"))).ToArray();
+
+            for (var phase = 0; (phase < phases.Length); phase++) { phases[phase] = Allocate(phases[phase], ((SdfShadePhase)phase), bindings); }
             // Header: instruction ranges for each phase, constant and layout ranges. Every range is vector relative.
             const int HeaderVectors = 4;
             const int InstructionVectors = 3;
@@ -124,7 +130,7 @@ public sealed partial class SdfShadeProgram {
                 foreach (var op in phases[phase]) {
                     var start = words.Count;
 
-                    words.AddRange(collection: [((uint)op.Op), ((uint)op.Result.Index), ((uint)op.Result.Type), op.Immediate]);
+                    words.AddRange(collection: [((uint)op.Op), ((uint)op.Result.Index), ((uint)op.Result.Type) | (op.OutputMask << 8), op.Immediate]);
                     for (var arg = 0; (arg < 4); arg++) { words.Add(item: ((arg < op.Operands.Count) ? (uint)op.Operands[arg].Index : 0u)); }
                     for (var arg = 0; (arg < 4); arg++) { words.Add(item: ((arg < op.Operands.Count) ? (uint)op.Operands[arg].Type : 0u)); }
                     if (op.Op is SdfShadeOp.Constant or SdfShadeOp.Shape) { m_relocations.Add(item: (op, (start + 3))); }
@@ -135,11 +141,11 @@ public sealed partial class SdfShadeProgram {
             words[12] = constantsOffset; words[13] = ((uint)(m_constants.Count / 4));
             words.AddRange(collection: m_constants);
             foreach (var (shape, relative) in m_shapes) {
-                var data0 = shape.Data0At(tableVector: checked(((((int)constantsOffset) + relative) + 4)));
+                var data0 = shape.Data0At(tableVector: checked(((((int)constantsOffset) + relative) + 6)));
                 var start = checked((((((int)constantsOffset) + relative) + 1) * 4));
 
                 words[start] = BitConverter.SingleToUInt32Bits(value: data0.X);
-                RequireRange(((uint)(words.Count / 4)), checked(((constantsOffset + ((uint)relative)) + 4)), ((uint)((shape.Table.Count + 3) / 4)));
+                RequireRange(((uint)(words.Count / 4)), checked(((constantsOffset + ((uint)relative)) + 6)), ((uint)((shape.Table.Count + 3) / 4)));
             }
             foreach (var (_, word) in m_relocations) { words[word] = checked((words[word] + constantsOffset)); }
             words[14] = ((uint)(words.Count / 4)); words[15] = ((uint)m_parameters.Count);
@@ -165,12 +171,12 @@ public sealed partial class SdfShadeProgram {
                 for (var i = 0; (i < phases[phase].Length); i++) {
                     var op = phases[phase][i];
 
-                    phases[phase][i] = new(op.Op, op.Result, op.Operands.ToArray(), words[(((((int)words[(phase * 4)]) * 4) + (i * 12)) + 3)]);
+                    phases[phase][i] = new(op.Op, op.Result, op.Operands.ToArray(), words[(((((int)words[(phase * 4)]) * 4) + (i * 12)) + 3)], op.OutputMask);
                 }
             }
             var canonical = new SdfShadeDefinition(source.Name,
                 Array.AsReadOnly(array: m_parameters.Select(selector: (p, i) => new SdfShadeParameter($"p{i}", p.Type, Array.AsReadOnly(array: p.Bits.ToArray()))).ToArray()),
-                Array.AsReadOnly(array: bindings.Select(selector: o => new SdfShadeOutput(o.Phase, o.Name, new("value", Name: $"r{o.Value.Index}"))).ToArray()),
+                Array.AsReadOnly(array: canonicalOutputs),
                 Array.AsReadOnly(array: m_canonicalValues.ToArray()));
 
             return new SdfShadeProgram(canonical, words.ToArray(), parameterWords.ToArray(), m_parameters.Select(selector: p => p.Type).ToArray(),
@@ -188,6 +194,46 @@ public sealed partial class SdfShadeProgram {
                 m_shapeDefinitions.GetValueOrDefault(key: node.Key));
         }
 
+        // Linear scan over the canonical SSA order. Outputs are written at their defining instruction, so they
+        // never pin a temporary until phase exit. Source operands are read before a dying slot becomes the result.
+        private static SdfShadeInstruction[] Allocate(SdfShadeInstruction[] instructions, SdfShadePhase phase, List<SdfShadeBinding> bindings) {
+            var last = Enumerable.Range(0, instructions.Length).ToArray();
+
+            for (var i = 0; (i < instructions.Length); i++) {
+                foreach (var operand in instructions[i].Operands) { last[operand.Index] = i; }
+            }
+            var slots = new int[instructions.Length];
+            var available = ((1u << MaxRegisters) - 1u);
+            var allocated = new SdfShadeInstruction[instructions.Length];
+
+            for (var i = 0; (i < instructions.Length); i++) {
+                var instruction = instructions[i];
+                var operands = instruction.Operands.Select(selector: a => new SdfShadeOperand(index: slots[a.Index], type: a.Type)).ToArray();
+
+                foreach (var operand in instruction.Operands) {
+                    if (last[operand.Index] == i) { available |= (1u << slots[operand.Index]); }
+                }
+                if (available == 0) { Fail(code: "PUCK129", message: $"Shade program needs more than {MaxRegisters} live registers."); }
+                var slot = System.Numerics.BitOperations.TrailingZeroCount(value: available);
+
+                available &= ~(1u << slot); slots[i] = slot;
+                var outputMask = 0U;
+
+                for (var binding = 0; (binding < bindings.Count); binding++) {
+                    var output = bindings[binding];
+
+                    if ((output.Phase == phase) && (output.Value.Index == i)) { outputMask |= (1u << ((int)OutputIndex(phase, output.Name))); }
+                }
+                allocated[i] = new(instruction.Op, new(index: slot, type: instruction.Result.Type), operands, instruction.Immediate, outputMask);
+                if (last[i] == i) { available |= (1u << slot); }
+            }
+            for (var binding = 0; (binding < bindings.Count); binding++) {
+                var output = bindings[binding];
+
+                if (output.Phase == phase) { bindings[binding] = output with { Value = new(index: slots[output.Value.Index], type: output.Value.Type) }; }
+            }
+            return allocated;
+        }
         private void AddVector(System.Numerics.Vector4 vector) => m_constants.AddRange(collection: [
             BitConverter.SingleToUInt32Bits(value: vector.X), BitConverter.SingleToUInt32Bits(value: vector.Y),
             BitConverter.SingleToUInt32Bits(value: vector.Z), BitConverter.SingleToUInt32Bits(value: vector.W)]);
@@ -231,7 +277,8 @@ public sealed partial class SdfShadeProgram {
                     type = TypeOf(info.Op, args.Select(selector: a => a.Type).ToArray());
                     try { shape = (expression.Shape ?? throw new SdfShadeException(code: "PUCK127", message: "shape requires a structural descriptor.")).Capture(); } catch (ArgumentException error) { throw new SdfShadeException(code: "PUCK127", message: error.Message); }
                     var shapeWords = new List<uint> { ((uint)shape.Type) };
-                    foreach (var v in new[] { shape.Data0At(tableVector: 0), shape.Data1, new System.Numerics.Vector4(value: shape.Scale, w: 0) }) {
+                    foreach (var v in new[] { shape.Data0At(tableVector: 0), shape.Data1, new System.Numerics.Vector4(value: shape.Scale, w: 0),
+                        new System.Numerics.Vector4(value: shape.Bound.Center, w: (shape.Bound.IsUnbounded ? 1f : 0f)), new System.Numerics.Vector4(value: shape.Bound.HalfExtents, w: 0f) }) {
                         shapeWords.AddRange(collection: [BitConverter.SingleToUInt32Bits(value: v.X), BitConverter.SingleToUInt32Bits(value: v.Y), BitConverter.SingleToUInt32Bits(value: v.Z), BitConverter.SingleToUInt32Bits(value: v.W)]);
                     }
                     shapeWords.AddRange(collection: shape.Table.Select(selector: BitConverter.SingleToUInt32Bits)); bits = shapeWords.ToArray(); break;
@@ -263,6 +310,9 @@ public sealed partial class SdfShadeProgram {
         ["albedo", "roughness", "metal", "specular", "coat", "sheen", "wrap", "fill", "emissive", "normal", "reveal"],
         ["diffuse", "rim", "specular", "attenuation"], ["color"],
     ];
+
+    /// <summary>The largest named output set of any phase, used by the shared generator.</summary>
+    public static int OutputCapacity => OutputNames.Max(selector: static names => names.Length);
 
     /// <summary>Returns the required output type, refusing a name outside its phase.</summary>
     public static SdfShadeType OutputType(SdfShadePhase phase, string name) {

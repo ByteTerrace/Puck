@@ -166,6 +166,10 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
 
             render += string.Create(CultureInfo.InvariantCulture, $", worst shadow demand {worstDemand.Program.Demand.Cosine(baseWrap: worstDemand.Wrap):G6} ({worstDemand.Program.Name})");
             render += $", authors [{string.Join(separator: ", ", values: shadeMaterials.Select(selector: static material => material.Program.Name).Distinct(comparer: StringComparer.Ordinal))}]";
+            var emissive = shadeMaterials.Where(predicate: static material => material.Program.Outputs.Any(predicate: static output =>
+                ((output.Phase == Puck.SignedDistance.SdfShadePhase.Surface) && (output.Name == "emissive"))))
+                .Select(selector: static material => material.Program.Name).Distinct(comparer: StringComparer.Ordinal).ToArray();
+            if (emissive.Length != 0) { render += $", probes and meter use base response for emissive programs [{string.Join(separator: ", ", values: emissive)}]"; }
         }
 
         if (renderProbe?.Residency is { } rendered) {

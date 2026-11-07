@@ -14,7 +14,7 @@ public static class SdfShadeCost {
         // Each gap includes the strand frame, trigonometry, Bezier evaluation, length and radius.
         SdfShapeType.Sweep => checked((((((uint)shape.Data0.Y) *
             ((uint)((SdfFieldEvaluator.SweepSamples + 3) + (2 * SdfFieldEvaluator.SweepRounds)))) * 256u) + 256u)),
-        SdfShapeType.Sphere => 16u,
+        SdfShapeType.Sphere => 64u,
         _ => 512u,
     };
 }

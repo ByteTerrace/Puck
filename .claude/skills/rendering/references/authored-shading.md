@@ -15,6 +15,14 @@ and the live semantics fingerprint determine identity. Author names are reportin
 metadata. Canonical documents retain a flat dependency-ordered value graph, so
 common expressions do not expand exponentially when serialized.
 
+The canonical SSA order receives a linear-scan allocation into the small named
+set bounded by `MaxRegisters`; dying operands may share the result slot. Output
+masks write phase outputs at their defining instruction, before a temporary is
+reused. Too much live pressure is refused, never spilled. The generated stamp,
+registers and outputs are named fields selected by constant-index helpers; every
+decoded register field is masked. CPU compilation does not prove zero driver
+spill, which still needs step 2's measurements.
+
 `SdfShadeOps.Table` owns the op names, arities, helper-closed work and HLSL
 templates. `SdfShadeHlsl` derives both the interpreter switch and straight-line
 emission from the same typed functions. Results and shared float helper returns
@@ -57,3 +65,10 @@ The pairs compare canonical documents, program words, identities and costs.
 `puck shaders generate --check` checks generated-table drift. CPU shader
 compilation can check both backend formats; it cannot establish GPU tier
 equivalence or the planner's work bound.
+
+`latticeGradient` uses `sdfLatticeNoiseGradient3`, shared with the old flow layer.
+`shape` is a coverage-distance operation: within its footprint neighbourhood it
+evaluates the admitted primitive, and outside its bounding box it returns the
+positive box lower bound, as the paint path skips that exterior. It is not an
+exact outside-distance query. Its op records a footprint read, packs the bounds
+with the descriptor, and charges the full helper even when the early-out wins.

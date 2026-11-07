@@ -155,4 +155,35 @@ precise float sdfCellDistanceGrad(float3 q, uint seed, uint mode, float randomne
 // times per frame while programs build once, and a shared multiply keeps both DXC targets on the identical operation
 // (a varying-numerator divide contracted differently is a cross-backend fuzz-signature risk).
 
+// The value-noise lattice the weathering reads (sdfLatticeNoise3: the same corners, the quintic blend) with its analytic
+// gradient: (value in [-1, 1], its derivative along each lattice axis).
+precise float4 sdfLatticeNoiseGradient3(float3 q, uint seed) {
+    uint3 seeds = sdfLatticeSeeds(seed);
+    float3 cellFloor = floor(q);
+    int3 cell = int3(cellFloor);
+    float3 f = (q - cellFloor);
+    float3 u = (((f * f) * f) * ((f * ((f * 6.0) - 15.0)) + 10.0));
+    float3 du = (((30.0 * f) * f) * ((f * (f - 2.0)) + 1.0));
+    float c000 = sdfNoiseCorner3(cell, seeds);
+    float c100 = sdfNoiseCorner3((cell + int3(1, 0, 0)), seeds);
+    float c010 = sdfNoiseCorner3((cell + int3(0, 1, 0)), seeds);
+    float c110 = sdfNoiseCorner3((cell + int3(1, 1, 0)), seeds);
+    float c001 = sdfNoiseCorner3((cell + int3(0, 0, 1)), seeds);
+    float c101 = sdfNoiseCorner3((cell + int3(1, 0, 1)), seeds);
+    float c011 = sdfNoiseCorner3((cell + int3(0, 1, 1)), seeds);
+    float c111 = sdfNoiseCorner3((cell + int3(1, 1, 1)), seeds);
+    float k1 = (c100 - c000);
+    float k2 = (c010 - c000);
+    float k3 = (c001 - c000);
+    float k4 = (((c110 - c010) - c100) + c000);
+    float k5 = (((c101 - c001) - c100) + c000);
+    float k6 = (((c011 - c001) - c010) + c000);
+    float k7 = (((((((c111 - c011) - c101) - c110) + c100) + c010) + c001) - c000);
+    float value = (((c000 + (k1 * u.x)) + (k2 * u.y)) + (k3 * u.z)) + (((k4 * u.x) * u.y) + ((k5 * u.x) * u.z)) + (((k6 * u.y) * u.z) + (((k7 * u.x) * u.y) * u.z));
+    float3 gradient = (du * float3(
+        (((k1 + (k4 * u.y)) + (k5 * u.z)) + ((k7 * u.y) * u.z)),
+        (((k2 + (k4 * u.x)) + (k6 * u.z)) + ((k7 * u.x) * u.z)),
+        (((k3 + (k5 * u.x)) + (k6 * u.y)) + ((k7 * u.x) * u.y))));
+    return (float4(value, gradient) * 2.0) - float4(1.0, 0.0, 0.0, 0.0);
+}
 #endif

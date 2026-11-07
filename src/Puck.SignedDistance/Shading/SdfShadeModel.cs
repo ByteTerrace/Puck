@@ -52,8 +52,8 @@ public readonly record struct SdfShadeOperand {
 }
 /// <summary>An immutable instruction admitted by the compiler, in dependency order.</summary>
 public sealed class SdfShadeInstruction {
-    internal SdfShadeInstruction(SdfShadeOp op, SdfShadeOperand result, SdfShadeOperand[] operands, uint immediate) {
-        Op = op; Result = result; Operands = Array.AsReadOnly(array: operands); Immediate = immediate;
+    internal SdfShadeInstruction(SdfShadeOp op, SdfShadeOperand result, SdfShadeOperand[] operands, uint immediate, uint outputMask = 0) {
+        Op = op; Result = result; Operands = Array.AsReadOnly(array: operands); Immediate = immediate; OutputMask = outputMask;
     }
 
     /// <summary>Gets the table operation.</summary>
@@ -64,6 +64,8 @@ public sealed class SdfShadeInstruction {
     public ReadOnlyCollection<SdfShadeOperand> Operands { get; }
     /// <summary>Gets the typed op's static selector or slice-relative constant offset.</summary>
     public uint Immediate { get; }
+    /// <summary>Gets the phase outputs written immediately by this instruction, before its register is reused.</summary>
+    public uint OutputMask { get; }
 }
 /// <summary>A shade admission refusal with the diagnostic the author sees.</summary>
 public sealed class SdfShadeException(string code, string message) : ArgumentException(message) {

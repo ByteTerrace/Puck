@@ -18,6 +18,7 @@ public sealed partial class SdfShadeProgram {
                 return ((a == SdfShadeType.Float) ? SdfShadeType.UInt : SdfShadeType.UInt3);
             case SdfShadeOp.Hash when (a == SdfShadeType.UInt3): return SdfShadeType.UInt3;
             case SdfShadeOp.Lattice when ((a == SdfShadeType.Float3) && (b == SdfShadeType.UInt)): return SdfShadeType.Float;
+            case SdfShadeOp.LatticeGradient when ((a == SdfShadeType.Float3) && (b == SdfShadeType.UInt)): return SdfShadeType.Float4;
             case SdfShadeOp.Vector2 or SdfShadeOp.Vector3 or SdfShadeOp.Vector4 when args.All(predicate: t => (t == SdfShadeType.Float)):
                 return ((SdfShadeType)args.Length);
             case SdfShadeOp.Select when ((a == SdfShadeType.Float) && (b == c)): return b;
