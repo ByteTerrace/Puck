@@ -235,7 +235,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         // A culled draw can retain another mesh's level in history; its current table may have fewer levels.
         uint level = min(state.y, d.w);
         if (step == SdfOcclusionEarly) {
-            kept = (splitExit || (((a.w >> 1u) & 1u) == header.w)) && (unboxed || sdfSelectionKeeps(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz)));
+            kept = (splitExit || (((a.w >> 1u) & 1u) == (header.w & 1u))) &&(unboxed || sdfSelectionKeeps(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz)));
             if (kept) {
                 level = sdfSelectionLevel(record, state, unboxed);
                 state.y = level;
@@ -254,16 +254,22 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         bool glass = (a.w & 2u) != 0u;
         emit = emit && !(splitExit && glass && !optical);
         bool opaqueEmit = emit && !(splitExit && glass);
-        sdfOcclusionEmit(((step == SdfOcclusionLate) ? 1u : 0u), id.x, (draw | (level << SDF_MESH_LEVEL_SHIFT)), count, opaqueEmit);
+        // A cascade drawing one layer of a split refresh (SdfMeshOcclusion.Stage) emits and counts that layer's commands
+        // alone: the depth's entry and glass phases, or the exit phases.
+        bool depthLayer = (header.w & 2u) == 0u;
+        bool exitLayer = (header.w & 4u) == 0u;
+        sdfOcclusionEmit(((step == SdfOcclusionLate) ? 1u : 0u), id.x, (draw | (level << SDF_MESH_LEVEL_SHIFT)), count, opaqueEmit && depthLayer);
         if (splitExit && step == SdfOcclusionEarly) {
             bool encloses = (a.w & 4u) != 0u;
             uint identity = draw | (level << SDF_MESH_LEVEL_SHIFT);
-            sdfOcclusionEmit(1u, id.x, identity, count, opaqueEmit && encloses);
-            sdfOcclusionEmit(2u, id.x, identity, count, opaqueEmit && !encloses);
-            if (optical) { sdfOcclusionEmit(3u, id.x, identity, count, emit && glass); }
-            exitDraws = opaqueEmit ? 1u : 0u;
-            exitVertices = opaqueEmit ? count : 0u;
+            bool exitEmit = opaqueEmit && exitLayer;
+            sdfOcclusionEmit(1u, id.x, identity, count, exitEmit && encloses);
+            sdfOcclusionEmit(2u, id.x, identity, count, exitEmit && !encloses);
+            if (optical) { sdfOcclusionEmit(3u, id.x, identity, count, emit && glass && depthLayer); }
+            exitDraws = exitEmit ? 1u : 0u;
+            exitVertices = exitEmit ? count : 0u;
         }
+        emit = emit && depthLayer;
         draws = emit ? 1u : 0u;
         vertices = emit ? count : 0u;
     }

@@ -1452,9 +1452,26 @@ passes, and every pass of the view reads that depth through the camera it was
 drawn from, so a static caster's shadow is exact on a held frame and only a
 dynamic caster beyond the near cascade lags, by under one of the far cascade's
 texels at walking speed. A hold ends early when the fit no longer covers what
-the view shows: the light's direction, the cascade's extent or texels change,
-the camera cuts, turns past half a degree or moves half a metre, or a capture
-converges. Frames that come at or below 30 a second hold nothing.
+the view shows: the light turns far enough to move the shadow of a caster at
+the far end of the cascade's depth span by one texel
+(`SdfUpdateRateTiers.ShadowFarLightTurnRadians`, so a sun on a day clock still
+holds), the cascade's extent or texels change, the camera cuts, turns past half
+a degree or moves half a metre, the view follows another residency, or a
+capture converges. Frames that come at or below 30 a second hold nothing.
+
+A refresh the rate alone calls for is split over two frames where both fit in
+the 30 Hz period (`PresentationRate.Fits`): the first draws the depth and its
+glass extinction, the second draws the exit layer and holds the depth
+(`SdfFarLayers`), so a 60 Hz view draws one layer a frame and each still
+refreshes 30 times a second; a slower view, or any refresh that ends a hold,
+redraws both. For the frame between, the exit layer keeps the camera of the
+refresh before, and the surface pass reads it through the pass block's fourth
+camera row, without glass extinction for those receivers. The shadow-far pass
+asks `SdfWorldPasses.RecordFar` which layers to draw, which answers both while
+a layer of its current graph has never been drawn; the cameras it draws from
+are committed when the frame's submission succeeds (`SubmittedFar`), so each
+layer is always read through the camera it was drawn from. `world.rates`
+counts `shadow-far.rendered` (both layers), `.split` (one) and `.held`.
 
 A shadow handoff (`SdfShadowHandoff`) is a pass value: while one runs, the
 outgoing light fades from its stable slot's cascade by the handoff's weight, and

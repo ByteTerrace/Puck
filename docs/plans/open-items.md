@@ -47,7 +47,10 @@ milestone. The owner requested its baseline and implementation plan, which
    (`SdfFarLayers`), so those stops run at the display rate at p50 but still
    miss vsync on some frames (p99 one 30 Hz period): the root view's GPU time
    stays just under a 60 Hz frame, mostly `views` and `resolve`, which
-   `world.debug-view indirect` skips. Next: the views shading's and the
+   `world.debug-view indirect` skips. Below 60 FPS two frames no longer fit in
+   the 30 Hz floor, so every refresh redraws both far layers, the frame stays
+   slow, and a view that drops below 60 there tends to stay below it until the
+   far cascade itself costs less. Next: the views shading's and the
    temporal resolve's own cost per pixel (registers, occupancy, the history
    window's reads; [gpu cost](../../.claude/skills/rendering/references/gpu-cost.md)),
    then the far cascade's caster count. It keeps about three quarters of the

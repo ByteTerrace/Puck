@@ -925,16 +925,20 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   sun, at each mesh's coarsest level whose error fits a texel, in two layers,
   so a view facing the debug world's lawn, forest and studio draws many times
   the mesh pass's vertices there (`world.counters gpu pass sdf.world$shadow-far
-  counter vertices`). `world.counters sdf.rates` counts
-  `shadow-far.rendered` against `.held`: a far cascade that never holds pays
-  that on every frame. The hold tolerates the light turning by
+  counter vertices`, which counts only the layers a frame draws).
+  `world.counters sdf.rates` counts `shadow-far.rendered` (both layers),
+  `.split` (one layer of a split refresh) and `.held`: a 60 Hz view that splits
+  shows `.split` on every frame; one that shows `.rendered` on every frame pays
+  a whole refresh each frame. The hold tolerates the light turning by
   `SdfUpdateRateTiers.ShadowFarLightTurnRadians` (a day clock's sun turns every
-  frame), and a timed refresh draws the depth on one frame and the exit layer
-  on the next (`SdfFarLayers`, `SdfWorldPasses.RecordFar`), which commits each
-  layer's camera; the surface pass reads the exit layer through the pass
-  block's fourth camera. Compare `world.gpu-timing`'s `sdf.world$shadow-far`
-  with `world.debug-view indirect`, which keeps the cascades but drops the
-  views shading's cost and the temporal resolve.
+  frame); a timed refresh where two frames fit in the 30 Hz period draws the
+  depth on one frame and the exit layer on the next (`SdfFarLayers`). The pass
+  asks `SdfWorldPasses.RecordFar`, which answers both for a layer its graph has
+  not drawn, and `SubmittedFar` commits each drawn layer's camera; the surface
+  pass reads the exit layer through the pass block's fourth camera. Compare
+  `world.gpu-timing`'s `sdf.world$shadow-far` with `world.debug-view indirect`,
+  which keeps the cascades but drops the views shading's cost and the temporal
+  resolve.
 - **A window whose extent swings rebuilds on a backoff.** A window a moving
   camera crosses (the endless fall's floor and ceiling paintings) requests a new
   extent every few frames; a resize build the request outran is discarded, and

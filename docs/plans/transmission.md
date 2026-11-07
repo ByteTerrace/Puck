@@ -148,8 +148,11 @@ compares the whole word. The rules:
   (`SdfWorldPasses.Rates`, bounded by `SdfUpdateRateTiers.ShadowFarHertz`),
   a V5 static cache's, and V1's history by instance generation. Each hold
   records the frame it was drawn; an index freed at frame F is reusable only
-  once every hold drawn at or before F has been redrawn. Until then a held
-  cascade's B1 stays a true statement about the bodies it saw.
+  once every hold drawn at or before F has been redrawn. The far cascade's
+  two layers are two holds: a split refresh draws its depth and its exit layer
+  on consecutive frames (`SdfFarLayers`), so each layer records its own frame
+  and the older bounds reuse. Until then a held cascade's B1 stays a true
+  statement about the bodies it saw.
 - **Reuse advances the generation**, so a word from a cascade or history
   older than the table accounts for can never equal a live body's word. The
   hold rule makes the mismatch impossible; the generation makes an
