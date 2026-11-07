@@ -621,9 +621,10 @@ rule "search-judge-fault" {
 
 // W9: a delivery runs after its firing's commit, and a firing whose rows change the document installs that document
 // before any delivery. Here the firing removes an inhabited placement, so the install leaves the active population one
-// smaller, and the cue key that divided by one when the firing checked it divides by zero when the cue is delivered:
-// the delivery is refused and counted, and the committed firing stands. The install rule reads the population the
-// tick began with because rules run in document order.
+// smaller. The cue key divides by one with the population the firing proposed, and the evaluator reads it once, with
+// the firing: the delivery after the install evaluates nothing, so the smaller population cannot make it divide by
+// zero, and the committed firing stands. The install rule reads the population the tick began with because rules run
+// in document order.
 rule "population-drop" {
   when $tick == 14
   mode: Level
@@ -742,7 +743,7 @@ test "W8 a failure after a nested success is still the gate's fault" {
   }
 }
 
-test "W9 a delivery that faults after its firing installs a document is refused, not thrown" {
+test "W9 a delivery after a firing installs a document evaluates nothing" {
   when {
     ticks 16
   }

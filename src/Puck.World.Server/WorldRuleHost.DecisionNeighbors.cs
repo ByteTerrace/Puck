@@ -365,9 +365,7 @@ public sealed partial class WorldRuleHost {
 
             m_decisionWork = m_decisionWork with { Scored = (m_decisionWork.Scored + 1) };
 
-            var scoreFrame = new EvaluationFrame(reader: this);
-            var scored = RuleExpressions.Evaluate(
-                frame: ref scoreFrame,
+            var scored = m_evaluator.Score(
                 kind: policy.ScoreKind,
                 program: option.Score
             );

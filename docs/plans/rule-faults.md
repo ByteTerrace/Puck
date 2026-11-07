@@ -578,7 +578,7 @@ read: `FlockLawTests.AFaultingAffinityIsACountedFailureThatWeighsNothing`) and L
 
 ## Implementation steps
 
-Steps 6 to 9 remain (steps 1 to 5 have landed. Step 1, the representation: `Outcome`, `Fact`, `Resolved<T>`, `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` are in `Puck.State`, `Fact` and `Resolved<T>` carry every operand read and key resolution, and the witnesses exist. Step 2, addresses as program: the lowering above, `IRuleOperand.Addresses` and `Read(reader, keys)`, and the pricing below. Step 3, the interpreter and the gate: `Run` answers an `Outcome`; `RuleExpressions.Evaluate(ref EvaluationFrame, ...)` and `EvaluateDetached` are the entries; `RuleEvaluation.Decide` answers a `Verdict`, folding the text conjuncts in, with `RuleEvaluation.ReadSource` beside it. Step 4, verdicts at every deciding place: the register is gone, and a rule's judgement, a group trigger and its fixpoint pass, a decision, an interaction and a search step each read the `Outcome`, `Verdict`, `BindingsResult`, `RuleOutcome` or `JudgeOutcome` they were handed; every evaluator-side effect answers a `Step` of `Faulted`, `Refused` or `Done`. Step 5, journal participants: `IJournalParticipant` and the journal's participant records, which `StateArena.Rewind` dispatches; `RuleLatch` and a decision binding write through them, and a firing closes only through `RuleEvaluator.Commit`, switching on `FiringDecision`). Each is a vertically coherent slice: one producer and every consumer
+Steps 7 to 9 remain (steps 1 to 6 have landed. Step 1, the representation: `Outcome`, `Fact`, `Resolved<T>`, `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` are in `Puck.State`, `Fact` and `Resolved<T>` carry every operand read and key resolution, and the witnesses exist. Step 2, addresses as program: the lowering above, `IRuleOperand.Addresses` and `Read(reader, keys)`, and the pricing below. Step 3, the interpreter and the gate: `Run` answers an `Outcome`; `RuleExpressions.Evaluate(ref EvaluationFrame, ...)` and `EvaluateDetached` are the entries; `RuleEvaluation.Decide` answers a `Verdict`, folding the text conjuncts in, with `RuleEvaluation.ReadSource` beside it. Step 4, verdicts at every deciding place: the register is gone, and a rule's judgement, a group trigger and its fixpoint pass, a decision, an interaction and a search step each read the `Outcome`, `Verdict`, `BindingsResult`, `RuleOutcome` or `JudgeOutcome` they were handed; every evaluator-side effect answers a `Step` of `Faulted`, `Refused` or `Done`. Step 5, journal participants: `IJournalParticipant` and the journal's participant records, which `StateArena.Rewind` dispatches; `RuleLatch` and a decision binding write through them, and a firing closes only through `RuleEvaluator.Commit`, switching on `FiringDecision`. Step 6, arms read once: an arm declares `IRuleEffect.Sources` (a key as an index, an expression program, an operand), the evaluator reads them with the firing and hands the values through `EffectFiring.Values`, the same at the preflight and at the delivery; a source that faults is a faulted firing; `IRuleKey.ResolveForWrite` answers a typed `WriteKey`; the input resynchronisation is `TryPrepareBodies`/`TryPrepareAll` before the arena commit and `ApplyPreparedBodies`/`ApplyPreparedAll` after it. Not built: arms carrying the population generation of a body target, and the host scratch inside the evaluator's proposal). Each is a vertically coherent slice: one producer and every consumer
 it affects land together, every bridge is named with the step that removes
 it, and the check proves what the step establishes. Each step builds what it
 touches (`dotnet build <project> -c Release -m:2 -nodeReuse:false`) and lands
@@ -592,19 +592,6 @@ since a test block cannot read the counters they need. A name check uses a
 word-boundary form, which `puck search` spells
 `(^|[^A-Za-z])(Name)([^A-Za-z]|$)` (it rejects `\b`).
 
-6. **Arms prepared once; host reads as sources.** `Prepare(values, keys)` on
-   arms with generation-carrying targets; the five host reads become declared
-   `Sources` (until then an arm that evaluates in the host and meets a fault
-   answers a refusal, so its firing is `Refused` where a fault in the
-   evaluator's own effects is `Faulted`); the host's preflight scratch moves
-   into the proposal; the input resynchronisation split into prepare (before the
-   arena commit, can refuse) and apply (after, cannot). Check: W5, W9 green; `puck references
-   RuleExpressions.Evaluate` and `IRuleOperand.Read` outside `Puck.State.Rules`
-   list only the detached table's entries; a fault-injection run with a host
-   that refuses input synchronisation in prepare shows the firing refused and
-   rewound, and the `throw` at `WorldServer.StateTransactions.cs:37` has no
-   caller path that can reach it (`puck references Input.TrySynchronizeBodies`
-   shows the prepare/apply pair).
 7. **The decision as one firing.** Common and option effects in one scope,
    the liveness step against the proposed population, no-choice in the same
    proposal. Check: W11 extended to faulting neighbour candidates, common,

@@ -95,11 +95,9 @@ public sealed class WorldFactEffectFiringLawTests {
             actual: host.Arena.Keys.Count,
             expected: before
         );
-        Assert.True(condition: pair.TryResolveForWrite(
-            key: out var admitted,
-            reader: host,
-            reason: out var reason
-        ), userMessage: reason);
+        var written = pair.ResolveForWrite(reader: host);
+
+        Assert.True(condition: written.TryResolved(key: out var admitted), userMessage: written.Reason);
         Assert.True(condition: admitted.IsValid);
         Assert.Equal(
             actual: host.Arena.Keys.Count,

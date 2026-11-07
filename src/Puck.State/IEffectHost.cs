@@ -258,7 +258,9 @@ public readonly record struct EffectRefusal(Enum? Code, string Reason) {
 /// <param name="Preflight">Whether the host should validate what it can without acting. An irreversible arm is
 /// preflighted against the state the firing proposes to commit, so a refusal it can see rewinds the firing instead
 /// of landing outward after the commit.</param>
-public readonly record struct EffectFiring(string RuleName, ulong Tick, ulong EngineTick, ulong StepTicks, bool Preflight = false);
+/// <param name="Values">What the evaluator read for the arm's declared sources, the same values at the preflight and at
+/// the delivery after the commit.</param>
+public readonly record struct EffectFiring(string RuleName, ulong Tick, ulong EngineTick, ulong StepTicks, bool Preflight = false, EffectValues Values = default);
 /// <summary>What a firing effect writes through: the reader every operand answers from, widened with the one
 /// mutation door the library's own effects install by, the arm door for an effect the library compiled but does not
 /// itself apply, and the notification a host installs its own side of a committed firing on.</summary>

@@ -145,23 +145,22 @@ public interface IRuleKey : ICompiledFact {
     /// <param name="feed">The value the key's program left.</param>
     /// <returns>The index, as <see cref="ResolveIndex(IStateReader)"/> answers.</returns>
     Resolved<long> ResolveIndex(IStateReader reader, in AddressFeed feed) => ResolveIndex(reader: reader);
-    /// <summary>Attempts to resolve a key for a state-writing effect. A dynamic key family may explicitly admit a
-    /// runtime key here; ordinary reads never do so. A key whose computation faulted refuses.</summary>
+    /// <summary>Resolves a key for a state-writing effect. A dynamic key family may explicitly admit a runtime key
+    /// here; ordinary reads never do so.</summary>
     /// <param name="reader">The evaluation in flight.</param>
-    /// <param name="key">The resolved key, or the invalid default when the fact names no cell.</param>
-    /// <param name="reason">Why a required runtime-key admission failed, or empty on success.</param>
-    /// <returns><see langword="true"/> when evaluation may continue; <see langword="false"/> makes the enclosing
-    /// firing refuse and rewind.</returns>
-    bool TryResolveForWrite(IStateReader reader, out CellKey key, out string reason) {
+    /// <returns>The key (the invalid default when the fact names no cell), <see cref="WriteKeyCase.Faulted"/> when
+    /// computing it faulted, or <see cref="WriteKeyCase.Refused"/> when a required runtime-key admission failed; the
+    /// last two make the enclosing firing rewind.</returns>
+    WriteKey ResolveForWrite(IStateReader reader) {
         var resolved = Resolve(reader: reader);
-        var faulted = (resolved.Case == FaultCase.Faulted);
 
-        resolved.TryNamed(value: out key);
-        reason = (faulted
-            ? RuleReads.KeyFaultReason
-            : string.Empty);
+        if (resolved.Case == FaultCase.Faulted) {
+            return WriteKey.Faulted();
+        }
 
-        return !faulted;
+        _ = resolved.TryNamed(value: out var key);
+
+        return WriteKey.Resolved(key: key);
     }
     /// <summary>Resolves the key as an integer index — a live zone's table index, a static table's key.</summary>
     /// <param name="reader">The evaluation in flight.</param>
@@ -232,6 +231,10 @@ public interface IRuleEffect : ICompiledFact, IEffectNeeds {
     IReadOnlyList<IRuleEffect[]> Arms { get; }
     /// <summary>Gets the authored spelling, for the rules read-back.</summary>
     string Describe { get; }
+    /// <summary>Gets the values the evaluator reads before the arm runs, in the order the arm consumes them through
+    /// <see cref="EffectFiring.Values"/>: an arm that fires outside the arena evaluates nothing itself, so a source
+    /// that faults refuses the firing as faulted. Empty for an effect the evaluator applies itself.</summary>
+    EffectSource[] Sources => [];
     /// <summary>Gets a value indicating whether firing submits a state mutation — an effect that only emits (a cue,
     /// a pose, a save) reads back as emitted rather than as a skipped write.</summary>
     bool SubmitsMutation { get; }
