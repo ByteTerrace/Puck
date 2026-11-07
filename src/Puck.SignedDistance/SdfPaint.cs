@@ -19,6 +19,17 @@ namespace Puck.SignedDistance;
 /// <param name="Bound">The box the shape lies in, in its local frame and the paint frame's units; unbounded for a plane.
 /// The views pass evaluates the shape only where the hit lies within the box widened by the stroke and the pixel.</param>
 public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Data1, IReadOnlyList<float> Table, Vector3 Scale, SdfSolidBounds Bound) {
+    /// <summary>Relocates this descriptor's side-table reference into the caller's address space. A shade slice
+    /// supplies a slice-relative vector; ordinary paint packing supplies its absolute vector.</summary>
+    public Vector4 Data0At(int tableVector) => Type switch {
+        SdfShapeType.ConvexPolygon => Data0 with {
+            X = BitConverter.UInt32BitsToSingle(value: SdfPrismProfile.PackConvexReference(
+                count: (((int)(BitConverter.SingleToUInt32Bits(value: Data0.X) & ((1u << SdfPrismProfile.ConvexCountBits) - 1u))) + 1),
+                tableVector: tableVector)),
+        },
+        SdfShapeType.Sweep => Data0 with { X = BitConverter.UInt32BitsToSingle(value: ((uint)tableVector)) },
+        _ => Data0,
+    };
     /// <summary>Captures the shape <see cref="SdfSolidGeometry.AppendScaledPrimitive"/> emits for a document
     /// primitive: the one emission path a creation's shapes take, so a paint covers exactly the solid a shape with the
     /// same fields would.</summary>
@@ -56,6 +67,7 @@ public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Dat
 
         return builder.CapturePaintShape(bound: BoundOf(curve: curve, lift: lift, scale: scale, type: type));
     }
+
     // The primitive's local box: a sweep's control points widened by its thickest reach, a revolved prism's reach on
     // every axis, and otherwise the canonical bounds at the scale.
     private static SdfSolidBounds BoundOf(SdfSolidPrimitive type, Vector3 scale, SdfLift lift, SdfSweepParameters? curve) {
@@ -64,7 +76,7 @@ public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Dat
         if ((type == SdfSolidPrimitive.Sweep) && (curve is { } sweep)) {
             var low = Vector3.Min(value1: sweep.A, value2: Vector3.Min(value1: sweep.B, value2: sweep.C));
             var high = Vector3.Max(value1: sweep.A, value2: Vector3.Max(value1: sweep.B, value2: sweep.C));
-            var thickness = new Vector3(value: (MathF.Max(x: sweep.RadiusStart, y: sweep.RadiusEnd) + MathF.Abs(x: sweep.Bulge) + sweep.StrandOffset));
+            var thickness = new Vector3(value: ((MathF.Max(x: sweep.RadiusStart, y: sweep.RadiusEnd) + MathF.Abs(x: sweep.Bulge)) + sweep.StrandOffset));
 
             return new SdfSolidBounds(Center: (((low + high) * 0.5f) * magnitude.X), HalfExtents: ((((high - low) * 0.5f) + thickness) * magnitude.X));
         }
@@ -79,7 +91,6 @@ public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Dat
             : new SdfSolidBounds(Center: (canonical.Center * magnitude), HalfExtents: (canonical.HalfExtents * magnitude)));
     }
 }
-
 /// <summary>A paint: a <see cref="SdfPaintShape"/> placed in a frame, whose inside gives the surface of its material
 /// <see cref="Color"/>, with an edge antialiased over the pixel's footprint. The views pass evaluates it at the hit
 /// alone, so it never changes the field or the bake and its edge is as sharp as the pixel. With
@@ -101,8 +112,7 @@ public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Ro
     /// region and a screen slab are refused.</summary>
     /// <param name="type">The packed shape.</param>
     /// <returns><see langword="true"/> when a paint can carry it.</returns>
-    public static bool Admits(SdfShapeType type) => type is not (SdfShapeType.Path or SdfShapeType.Glyph or SdfShapeType.SampledRegion or SdfShapeType.ScreenSlab);
-
+    public static bool Admits(SdfShapeType type) => (type is not (SdfShapeType.Path or SdfShapeType.Glyph or SdfShapeType.SampledRegion or SdfShapeType.ScreenSlab));
     /// <summary>Returns whether a paint's values are admissible.</summary>
     /// <param name="paint">The paint.</param>
     /// <returns><see langword="true"/> when every value is finite and in range.</returns>

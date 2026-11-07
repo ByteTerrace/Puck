@@ -1,0 +1,32 @@
+// Equivalent authored shading: shade-cse.
+schema: "puck.world.definition.v1"
+documentId: "shade-pair"
+shade template program() {
+  surface {
+    let x = material.roughness * 0.5
+    roughness: x + x
+  }
+}
+prototypes {
+  prototype "p" {
+    document {
+      palette [{ color: "#808080", shade: program() }]
+      shape Box "box" {
+        scale [1, 1, 1]
+      }
+    }
+  }
+}
+
+state {
+  world {
+    table shadeCheck {
+      admitted = 1
+    }
+  }
+}
+test "shade admission" {
+  expect {
+    shadeCheck.admitted == 1
+  }
+}

@@ -30,7 +30,7 @@
             ]
           },
           "value": {
-            "$ref": "./common.schema.json#/$defs/ShapeNonNullable50"
+            "$ref": "./common.schema.json#/$defs/ShapeNonNullable56"
           },
           "cells": {
             "description": "The row\u0027s current cells (default empty). Refused past its effective capacity, and on a duplicate key, by name \u2014 unless Evicts is set, in which case a write that would grow past capacity evicts the oldest cell instead of refusing (see Evicts). A slot-shaped row (see IsSlot) holds exactly one cell keyed SlotKey; a keyed row may hold any author-chosen keys except SlotKey itself, which is reserved for the value sugar and refused as an authored cell key.",
@@ -42,7 +42,7 @@
                   "type": "string"
                 },
                 "value": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable50"
+                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable56"
                 },
                 "advance": {
                   "$ref": "./common.schema.json#/$defs/StateAdvance"
@@ -61,7 +61,7 @@
                   ]
                 },
                 "clock": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable51"
+                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable57"
                 },
                 "visibility": {
                   "$ref": "./common.schema.json#/$defs/StateVisibility"
@@ -412,7 +412,7 @@
             "$ref": "./common.schema.json#/$defs/StateCycle"
           },
           "clock": {
-            "$ref": "./common.schema.json#/$defs/ShapeNonNullable51"
+            "$ref": "./common.schema.json#/$defs/ShapeNonNullable57"
           },
           "space": {
             "description": "The vector space this row belongs to; required for Vector, refused for every other kind.",
@@ -763,22 +763,8 @@
                       "type": "object",
                       "properties": {
                         "type": {
-                          "description": "The primitive, read as a shape\u0027s type: every primitive but a path profile.",
-                          "enum": [
-                            "Sphere",
-                            "Box",
-                            "Torus",
-                            "Cylinder",
-                            "Capsule",
-                            "Ellipsoid",
-                            "RoundCone",
-                            "Plane",
-                            "Cone",
-                            "Prism",
-                            "Superellipsoid",
-                            "Sweep"
-                          ],
-                          "title": "SdfSolidPrimitive"
+                          "$ref": "./common.schema.json#/$defs/SdfSolidPrimitive",
+                          "description": "The primitive, read as a shape\u0027s type: every primitive but a path profile."
                         },
                         "color": {
                           "description": "The paint\u0027s color, #RRGGBB or a state binding.",
@@ -824,231 +810,9 @@
                           "default": null
                         },
                         "profile": {
+                          "$ref": "./common.schema.json#/$defs/SdfPrismProfile",
                           "description": "Prism only: the cross-section; a path profile is refused.",
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "properties": {
-                            "kind": {
-                              "description": "The profile family.",
-                              "enum": [
-                                "Trapezoid",
-                                "RoundedRectangle",
-                                "Polygon",
-                                "Ellipse",
-                                "ChamferedRectangle",
-                                "Convex",
-                                "Path"
-                              ],
-                              "title": "SdfPrismProfileKind"
-                            },
-                            "cornerRadius": {
-                              "description": "A fraction in [0, 1]: the profile\u0027s smaller half-extent for RoundedRectangle\u0027s corner radius or ChamferedRectangle\u0027s chamfer radius; the scaled polygon\u0027s conservative inradius (ConvexPolygonInradius) for Convex\u0027s uniform corner rounding, also clamped to the extrusion half-depth when extruded.",
-                              "type": "number",
-                              "default": 0.15
-                            },
-                            "sides": {
-                              "description": "Polygon side count, from 3 through 32.",
-                              "type": "integer",
-                              "default": 6
-                            },
-                            "vertices": {
-                              "description": "Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.",
-                              "type": [
-                                "array",
-                                "null"
-                              ],
-                              "default": null,
-                              "items": {
-                                "type": "array",
-                                "items": {
-                                  "type": "number"
-                                },
-                                "minItems": 2,
-                                "maxItems": 2
-                              }
-                            },
-                            "path": {
-                              "description": "Required only for Path; its points are normalized profile coordinates.",
-                              "type": [
-                                "object",
-                                "null"
-                              ],
-                              "properties": {
-                                "contours": {
-                                  "type": "array",
-                                  "items": {
-                                    "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.",
-                                    "type": "object",
-                                    "properties": {
-                                      "start": {
-                                        "type": "array",
-                                        "items": {
-                                          "type": "number"
-                                        },
-                                        "minItems": 2,
-                                        "maxItems": 2
-                                      },
-                                      "segments": {
-                                        "type": "array",
-                                        "items": {
-                                          "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame.",
-                                          "type": "object",
-                                          "properties": {
-                                            "end": {
-                                              "type": "array",
-                                              "items": {
-                                                "type": "number"
-                                              },
-                                              "minItems": 2,
-                                              "maxItems": 2
-                                            },
-                                            "control": {
-                                              "default": null,
-                                              "type": "array",
-                                              "items": {
-                                                "type": "number"
-                                              },
-                                              "minItems": 2,
-                                              "maxItems": 2
-                                            },
-                                            "control2": {
-                                              "default": null,
-                                              "type": "array",
-                                              "items": {
-                                                "type": "number"
-                                              },
-                                              "minItems": 2,
-                                              "maxItems": 2
-                                            },
-                                            "arcCenter": {
-                                              "default": null,
-                                              "type": "array",
-                                              "items": {
-                                                "type": "number"
-                                              },
-                                              "minItems": 2,
-                                              "maxItems": 2
-                                            },
-                                            "clockwise": {
-                                              "type": "boolean",
-                                              "default": false
-                                            }
-                                          },
-                                          "required": [
-                                            "end"
-                                          ],
-                                          "additionalProperties": false,
-                                          "title": "SdfPathSegment"
-                                        }
-                                      },
-                                      "closed": {
-                                        "type": "boolean",
-                                        "default": false
-                                      }
-                                    },
-                                    "required": [
-                                      "start",
-                                      "segments"
-                                    ],
-                                    "additionalProperties": false,
-                                    "title": "SdfPathContour"
-                                  }
-                                },
-                                "tolerance": {
-                                  "type": "number",
-                                  "default": 0.001
-                                },
-                                "stroke": {
-                                  "type": [
-                                    "object",
-                                    "null"
-                                  ],
-                                  "properties": {
-                                    "radiusStart": {
-                                      "type": "number"
-                                    },
-                                    "radiusEnd": {
-                                      "type": "number"
-                                    },
-                                    "smooth": {
-                                      "type": "boolean",
-                                      "default": false
-                                    },
-                                    "from": {
-                                      "type": "number",
-                                      "default": 0
-                                    },
-                                    "to": {
-                                      "type": "number",
-                                      "default": 1
-                                    }
-                                  },
-                                  "required": [
-                                    "radiusStart",
-                                    "radiusEnd"
-                                  ],
-                                  "additionalProperties": false,
-                                  "default": null,
-                                  "title": "SdfPathStroke"
-                                },
-                                "shear": {
-                                  "type": [
-                                    "object",
-                                    "null"
-                                  ],
-                                  "properties": {
-                                    "linear": {
-                                      "type": "number"
-                                    },
-                                    "quadratic": {
-                                      "type": "number",
-                                      "default": 0
-                                    },
-                                    "cubic": {
-                                      "type": "number",
-                                      "default": 0
-                                    },
-                                    "offset": {
-                                      "type": "number",
-                                      "default": 0
-                                    },
-                                    "from": {
-                                      "type": "number",
-                                      "default": -1
-                                    },
-                                    "to": {
-                                      "type": "number",
-                                      "default": 1
-                                    },
-                                    "target": {
-                                      "type": "integer",
-                                      "default": 0
-                                    }
-                                  },
-                                  "required": [
-                                    "linear"
-                                  ],
-                                  "additionalProperties": false,
-                                  "default": null,
-                                  "title": "SdfPathShear"
-                                }
-                              },
-                              "required": [
-                                "contours"
-                              ],
-                              "additionalProperties": false,
-                              "default": null,
-                              "title": "SdfPathProfile"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false,
-                          "default": null,
-                          "title": "SdfPrismProfile"
+                          "default": null
                         },
                         "lift": {
                           "description": "Prism only: extrude or revolve.",
@@ -1482,6 +1246,108 @@
                     "additionalProperties": false,
                     "default": null,
                     "title": "PaletteFlowDocument"
+                  },
+                  "shade": {
+                    "description": "The authored presentation program and runtime parameters.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "parameters": {
+                        "type": "array",
+                        "items": {
+                          "description": "A runtime slot\u0027s type and initial data. Names bind source references and do not enter program identity.",
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "$ref": "./common.schema.json#/$defs/SdfShadeType"
+                            },
+                            "bits": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer"
+                              }
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "type",
+                            "bits"
+                          ],
+                          "additionalProperties": false,
+                          "title": "SdfShadeParameter"
+                        }
+                      },
+                      "outputs": {
+                        "type": "array",
+                        "items": {
+                          "description": "An output expression; omitted outputs retain the stage\u0027s default.",
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "$ref": "./common.schema.json#/$defs/SdfShadePhase"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "$ref": "./common.schema.json#/$defs/SdfShadeExpressionNonNullable"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "name",
+                            "value"
+                          ],
+                          "additionalProperties": false,
+                          "title": "SdfShadeOutput"
+                        }
+                      },
+                      "values": {
+                        "type": [
+                          "array",
+                          "null"
+                        ],
+                        "items": {
+                          "description": "A dependency-ordered value in the canonical document. Reads may name only earlier values of this phase.",
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "$ref": "./common.schema.json#/$defs/SdfShadePhase"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "$ref": "./common.schema.json#/$defs/SdfShadeExpressionNonNullable"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "name",
+                            "value"
+                          ],
+                          "additionalProperties": false,
+                          "title": "SdfShadeValue"
+                        },
+                        "default": null
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "parameters",
+                      "outputs"
+                    ],
+                    "additionalProperties": false,
+                    "default": null,
+                    "title": "SdfShadeDefinition"
                   }
                 },
                 "required": [

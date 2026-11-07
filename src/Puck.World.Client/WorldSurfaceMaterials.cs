@@ -29,7 +29,8 @@ internal static class WorldSurfaceMaterials {
                 EmissiveLane: entry?.EmissiveLane,
                 Glass: entry?.Glass?.ToGlass(resolve: colors.LayerColor, scale: scale),
                 Toon: (((entry?.ToonSelect is { } select) ? select.CaseOf(value: colors.ResolveWhole(token: select.State)) : null) ?? entry?.Toon)?.ToToon(),
-                Flow: entry?.Flow?.ToFlow(resolve: colors.LayerColor, scale: scale)
+                Flow: entry?.Flow?.ToFlow(resolve: colors.LayerColor, scale: scale),
+                Shade: ((entry?.Shade is { } shade) ? SdfShadeProgram.Compile(definition: shade) : null)
             );
 
 }

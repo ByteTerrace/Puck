@@ -327,6 +327,14 @@ public sealed partial class DocumentScope {
         Constants[name] = expression;
         m_arguments[name] = caller;
     }
+
+    /// <summary>Reads a deferred binding together with its lexical scope, for vocabulary compilers that lower
+    /// expressions rather than evaluate document values. Locals still take precedence at the caller.</summary>
+    public bool TryGetExpression(string name, out ExpressionNode? expression, out DocumentScope lexical) {
+        lexical = (m_arguments.GetValueOrDefault(key: name) ?? ForConstant());
+        return Constants.TryGetValue(key: name, value: out expression);
+    }
+
     internal DocumentScope TemplateDefinitionScope(string name) => m_templateScopes.GetValueOrDefault(
         defaultValue: this,
         key: name

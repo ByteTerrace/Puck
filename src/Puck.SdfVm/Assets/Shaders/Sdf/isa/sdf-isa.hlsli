@@ -182,10 +182,11 @@
 #define SDF_TRANSFORM_SLOT_UNPACK(word) ((int)(word) + SDF_TRANSFORM_SLOT_NONE)
 
 // The field's shared constants: the chamfer bevel's scale (SdfProgram.SqrtHalf), the smooth blends' radius floor (SdfProgram.SmoothRadiusMin) and the sweep search (SdfFieldEvaluator).
-#define SDF_SQRT_HALF         0.70710677
-#define SDF_SMOOTH_RADIUS_MIN 0.0001
-#define SDF_SWEEP_SAMPLES     32u
-#define SDF_SWEEP_ROUNDS      12u
+#define SDF_SQRT_HALF          0.70710677
+#define SDF_SMOOTH_RADIUS_MIN  0.0001
+#define SDF_SWEEP_SAMPLES      32u
+#define SDF_SWEEP_ROUNDS       12u
+#define SDF_ELLIPSE_ROOT_STEPS 96u
 
 // The integer hash (Pcg3dLatticeNoise): PCG3D's LCG step, the stream decorrelators, the 3D value noise's seed streams, and the R2 lattice's increments (LowDiscrepancy).
 #define SDF_PCG_MULTIPLIER      0x0019660Du

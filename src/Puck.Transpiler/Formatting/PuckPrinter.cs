@@ -583,11 +583,12 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case TemplateNode template: {
-                        m_builder.Append(value: (template.IsModule ? "module" : (template.IsRuleBody ? "rule template" : "template")));
+                        m_builder.Append(value: (template.IsShade ? "shade template" : (template.IsModule ? "module" : (template.IsRuleBody ? "rule template" : "template"))));
                         InlineHeader(trivia: template.Trivia);
                         m_builder.Append(value: ' ').Append(value: template.Name).Append(value: '(');
                         for (var index = 0; (index < template.Parameters.Count); index++) {
                             if (index > 0) { m_builder.Append(value: ", "); }
+                            if (template.Parameters[index].IsStructural) { m_builder.Append(value: "structural "); }
                             m_builder.Append(value: template.Parameters[index].Name);
                             if (template.Parameters[index].Kind is { } kind) {
                                 m_builder.Append(value: ": ").Append(value: kind);

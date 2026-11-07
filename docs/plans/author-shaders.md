@@ -280,13 +280,15 @@ look (the owner's rulings on authors, the standard and one implementation).
 
 Symbols are named so a reader checks the current code rather than this prose.
 
-- **Materials are 32-vector rows read by one decoder.** `SdfAppearance.Pack`
+- **Materials use a generated stride and one base decoder.** `SdfAppearance.Pack`
   writes each `SdfMaterial` as `SdfAppearance.MaterialVectorsPerEntry` float4s
   into the program's word stream after every table the field reads (its class
   comment states that nothing in it enters the mesh bake's identity);
   `sdfMaterialLoad` in `shade/sdf-material.hlsli` is "the ONE material decode
   point", reading rows 0 to 31 into `SdfMaterialData`: base response, inset,
-  paints' range, weathering's four rows, glass, cel style, flow.
+  paints' range, weathering's four rows, glass, cel style, flow. The admitted
+  shade program's ranges, demand and flags occupy the tail rows described in
+  [the CPU shading contract](../../.claude/skills/rendering/references/authored-shading.md).
 - **The layers run in a fixed order in fixed-function HLSL.** `sdfLightStage`
   (`passes/sdf-light-stage.hlsli`) evaluates, for every opaque hit: the paints
   (`sdfApplyPaints`, before the material loads, to keep the material out of the
@@ -1001,23 +1003,6 @@ final set:
   is a quality-versus-bar trade the memo does not make: it goes to the owner
   with the readings.
 
-0. **The op table, the lowering, the semantics and the cost** (CPU).
-   `SdfShadeOp` and its per-op template with the IR semantics of section 3.3;
-   `SdfShadeProgram` (validated slice, typed operands, runtime and structural
-   parameters, read flags, checked cost, shadow demand); the `shade` block in
-   `Puck.World.Transpiler` with its stamp, refusals and canonicalization;
-   `puck shaders generate` writing `isa/sdf-shade.hlsli` (declarations,
-   interpreter bodies, emitter template); `world.budget`'s `shading programs`
-   clause (count, interpreted, specialized, pending, quarantined, worst static
-   cost, worst shadow demand, each with its author's name). Check: the
-   spelling-equivalence corpus holds ten shade pairs that compile to identical
-   canonical streams and costs (`puck test` of the corpus); a seed or colour
-   edit keeps a program's identity and an `octaves` edit changes it; a
-   recursive call, a runtime-bounded loop, a stamp name outside the interface, a
-   runtime value in a structural position, a read of an undefined register and
-   a program over the cap are each refused by their `PUCKnnn` code;
-   `puck shaders generate --check` is clean; `MaxOps <= MaxWork` is checked
-   where the constants are declared.
 1. **The interpreter, all three phases, both kernels, the standard's programs
    beside the old layers** (GPU). The rolled loops in `sdf-light-stage.hlsli`
    and `sdf-glass.comp.hlsl` through one generated entry; the light and

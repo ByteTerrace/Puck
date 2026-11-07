@@ -1,7 +1,7 @@
 // Generic coverage masks; every surface color and response comes from the material.
 #ifndef SDF_SHADE_WEATHERING_HLSLI
 #define SDF_SHADE_WEATHERING_HLSLI
-float sdfLineCoverage(float2 uv, uint seed, float footprint) {
+precise float sdfLineCoverage(float2 uv, uint seed, float footprint) {
     float2 cell = floor(uv);
     float2 local = frac(uv) - 0.5;
     uint3 hash = sdfPcg3d(uint3(asuint(cell.x), asuint(cell.y), seed));

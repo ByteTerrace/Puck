@@ -1,0 +1,33 @@
+// Equivalent authored shading: shade-dead.
+schema: "puck.world.definition.v1"
+documentId: "shade-pair"
+shade template program() {
+  surface {
+    let unused = clock * 2
+    roughness: clock
+    roughness: material.roughness
+  }
+}
+prototypes {
+  prototype "p" {
+    document {
+      palette [{ color: "#808080", shade: program() }]
+      shape Box "box" {
+        scale [1, 1, 1]
+      }
+    }
+  }
+}
+
+state {
+  world {
+    table shadeCheck {
+      admitted = 1
+    }
+  }
+}
+test "shade admission" {
+  expect {
+    shadeCheck.admitted == 1
+  }
+}

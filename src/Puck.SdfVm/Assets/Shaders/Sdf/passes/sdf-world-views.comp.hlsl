@@ -3,5 +3,6 @@
 // draw, so the kernel calls no field query and the interpreter the world modules declare compiles out of it; a material's
 // paints (sdfApplyPaints) each evaluate one shape through evaluateShape, never the program.
 #include "sdf-pixel-pass.hlsli"
+#include "../isa/sdf-shade.hlsli"
 #include "sdf-views-stage.hlsli"
 #include "sdf-pixel-entry.hlsli"

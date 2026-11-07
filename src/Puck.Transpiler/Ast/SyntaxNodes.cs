@@ -222,6 +222,8 @@ public sealed record TemplateNode(
 ) {
     /// <summary>Gets whether this declaration was authored as a typed <c>module</c>.</summary>
     public bool IsModule { get; init; }
+    /// <summary>Gets whether this template declares a presentation shading program.</summary>
+    public bool IsShade { get; init; }
     /// <summary>Gets whether this declaration was authored as a <c>rule template</c>: its body is rule-body statements
     /// (locals, a gate, effects), spliced into the rule body that calls it as a rule-body <c>for</c> is.</summary>
     public bool IsRuleBody { get; init; }
@@ -250,6 +252,8 @@ public sealed record TemplateParameterNode(
 ) {
     /// <summary>Gets the optional module parameter kind.</summary>
     public string? Kind { get; init; }
+    /// <summary>Gets whether this shade parameter shapes the program rather than its runtime data.</summary>
+    public bool IsStructural { get; init; }
     /// <summary>Gets the exports a <c>Module</c> argument must provide.</summary>
     public IReadOnlyList<string> RequiredExports { get; init; } = [];
 }

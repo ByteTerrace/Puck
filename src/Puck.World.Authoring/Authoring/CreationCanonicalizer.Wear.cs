@@ -41,9 +41,9 @@ public static partial class CreationCanonicalizer {
                 var shapeIndex = lookup.Find(name: parent);
 
                 if (shapeIndex < 0) {
-                    Refuse(message: $"parent '{parent}' names no shape in this creation.", field: "parent");
+                    Refuse(field: "parent", message: $"parent '{parent}' names no shape in this creation.");
                 } else if (shapes[shapeIndex].Domain is { Count: > 0 }) {
-                    Refuse(message: $"parent '{parent}' carries a domain fold, whose slot does not carry its own frame.", field: "parent");
+                    Refuse(field: "parent", message: $"parent '{parent}' carries a domain fold, whose slot does not carry its own frame.");
                 }
             }
             if (!Enum.IsDefined(value: paint.Type)) {
@@ -52,13 +52,13 @@ public static partial class CreationCanonicalizer {
                 return null;
             }
             if (paint.Profile is { Kind: SdfPrismProfileKind.Path }) {
-                Refuse(message: "a paint cannot cover a path profile.", field: "profile");
+                Refuse(field: "profile", message: "a paint cannot cover a path profile.");
             }
             if ((paint.Stroke is { } stroke) && (!float.IsFinite(f: stroke) || (stroke < 0f))) {
-                Refuse(message: "stroke must be finite and non-negative.", field: "stroke");
+                Refuse(field: "stroke", message: "stroke must be finite and non-negative.");
             }
             if ((paint.Type == SdfSolidPrimitive.Sweep) != (paint.Curve is not null)) {
-                Refuse(message: "a Sweep paint requires a curve, and only a Sweep paint carries one.", field: "curve");
+                Refuse(field: "curve", message: "a Sweep paint requires a curve, and only a Sweep paint carries one.");
             }
             if (
                 (paint.Type != SdfSolidPrimitive.Sweep) &&
@@ -74,7 +74,7 @@ public static partial class CreationCanonicalizer {
                     type: paint.Type
                 )
             ) {
-                Refuse(message: $"the primitive cannot be emitted: {refusal}.", field: "scale");
+                Refuse(field: "scale", message: $"the primitive cannot be emitted: {refusal}.");
             }
             if (refused) {
                 return null;
@@ -122,6 +122,9 @@ public static partial class CreationCanonicalizer {
         }
     }
     private static void ValidatePaletteShading(PaletteEntryDocument entry, List<DocumentValidationError> errors, int index) {
+        if (entry.Shade is { } shade) {
+            try { _ = SdfShadeProgram.Compile(definition: shade); } catch (SdfShadeException error) { errors.Add(item: new(Message: $"{error.Code}: {error.Message}", Path: $"palette[{index}].shade")); }
+        }
         ValidateUnitRange(
             value: entry.Wrap,
             name: "wrap",
