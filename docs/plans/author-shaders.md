@@ -809,13 +809,14 @@ system has:
   mechanism, the per-op template that generates both tiers, is what the field
   ISA should have had and may adopt later.
 
-## Needs you
+## The owner's rulings
 
-- Whether the **light hook** (section 3.1, step 7) should ship: it lets an
-  author change how a material responds to each light, which is expression the
-  deferred engines withhold, and it also lets a world break the valley's
-  consistent lighting. The surface hook does not need the decision.
-- Whether authors may bring **image data** a program samples (a `sample` op
-  over an authored texture). The interface is designed so the op can be added;
-  nothing else in this memo depends on it.
-- The **screen effect hook** (step 8): wanted in this round, or later.
+- The **light hook** (section 3.1, step 7) ships: an author may change how a
+  material responds to each light. The standard package keeps the valley's
+  consistent lighting by default; a world that replaces it does so as its
+  author's choice (AGENTS.md, "Authors rule").
+- **Image data** a program samples (a `sample` op over an authored texture)
+  comes after tier 2, so a texture's cost is charged in `world.budget` like
+  every other op; the interface keeps room for it from the start.
+- The **screen effect hook** (step 8) is deferred to the next round, after the
+  surface hook and the interpreter and binning measurements land.
