@@ -10,11 +10,14 @@ public readonly record struct WorldDecisionCheckpoint(
     ulong PeriodRemaining, ulong CommitmentRemaining, ulong RandomState, ulong DrawCount,
     ulong Reconsiderations, long LastScore, int Candidate = -1, int CandidateGeneration = 0
 );
-public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
+public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalParticipant {
     private DecisionRuntime[] m_decisions = [];
     private readonly Dictionary<string, DecisionRuntime> m_decisionsByName = new(comparer: StringComparer.Ordinal);
 
     private sealed class DecisionRuntime(CompiledWorldFactsRule rule) {
+        // Where the host lists the runtime: what a journal record names it by.
+        public int Ordinal;
+
         public CompiledWorldFactsRule Rule = rule;
         public readonly Dictionary<int, DecisionBinding> Bindings = [];
         // Sorted active binding keys also supply the canonical hash/checkpoint order, without per-tick sorting allocations.
@@ -60,12 +63,69 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
         }
         m_decisions = next.ToArray();
         m_decisionsByName.Clear();
-        foreach (var runtime in m_decisions) {
+        for (var ordinal = 0; (ordinal < m_decisions.Length); ordinal++) {
+            var runtime = m_decisions[ordinal];
+
+            runtime.Ordinal = ordinal;
             m_decisionsByName.Add(
             key: runtime.Rule.Name,
             value: runtime
         );
         }
+    }
+
+    // What a decision's firing scope restores on a rewind: the binding as the decision found it, so a firing whose effects
+    // refuse has chosen nothing and the decision picks again.
+    private sealed class DecisionPrelude(WorldRuleHost host) : IFiringPrelude {
+        public DecisionRuntime? Runtime;
+        public int Key;
+        public DecisionBinding Before;
+
+        public void Record(ArenaJournal journal) {
+            var before = Before;
+            Span<long> words = [
+                Runtime!.Ordinal,
+                Key,
+                before.Generation,
+                before.Selected,
+                before.Candidate,
+                before.CandidateGeneration,
+                (before.Evaluated ? 1L : 0L),
+                (before.InterruptHeld ? 1L : 0L),
+                unchecked((long)before.PeriodRemaining),
+                unchecked((long)before.CommitmentRemaining),
+                unchecked((long)before.RandomState),
+                unchecked((long)before.DrawCount),
+                unchecked((long)before.Reconsiderations),
+                before.LastScore,
+            ];
+
+            journal.RecordParticipant(
+                participant: host,
+                words: words
+            );
+        }
+    }
+
+    private DecisionPrelude? m_decisionPrelude;
+
+    void IJournalParticipant.Undo(ReadOnlySpan<long> words) {
+        var runtime = m_decisions[((int)words[0])];
+
+        runtime.Bindings[((int)words[1])] = new DecisionBinding {
+            Generation = ((int)words[2]),
+            Selected = ((int)words[3]),
+            Candidate = ((int)words[4]),
+            CandidateGeneration = ((int)words[5]),
+            Evaluated = (words[6] != 0),
+            InterruptHeld = (words[7] != 0),
+            PeriodRemaining = unchecked((ulong)words[8]),
+            CommitmentRemaining = unchecked((ulong)words[9]),
+            RandomState = unchecked((ulong)words[10]),
+            DrawCount = unchecked((ulong)words[11]),
+            Reconsiderations = unchecked((ulong)words[12]),
+            LastScore = words[13],
+        };
     }
 
     private RuleOutcome EvaluateDecisionRule(CompiledWorldFactsRule rule, ulong stepTicks, out bool applied) {
@@ -183,8 +243,12 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
         var rule = runtime.Rule;
         var policy = rule.Decision!;
         var generation = state.Generation;
+        var prelude = (m_decisionPrelude ??= new DecisionPrelude(host: this));
 
         applied = false;
+        prelude.Runtime = runtime;
+        prelude.Key = key;
+        prelude.Before = state;
 
         var bound = m_evaluator.EvaluateBindings(rule: rule);
 
@@ -399,6 +463,7 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
     private RuleOutcome FireDecisionEffects(IRuleEffect[] effects, string ruleName, ulong stepTicks, out bool applied) => m_evaluator.FireEffects(
         applied: out applied,
         effects: effects,
+        prelude: m_decisionPrelude,
         ruleName: ruleName,
         stepTicks: stepTicks,
         tick: Tick

@@ -8,9 +8,8 @@
 // only the fault keeps the others shut.
 //
 // Each block is one finding of the rule-faults design, named W1 to W13 (L1, its nested-scope law, is a C# law beside
-// the latch laws). W1 to W9, W12 and W13 pin behavior the interpreter and the gate's verdict already provide and are
-// green; W10 and W11 each state a finding still open, so they are red until the firing's latch and decision state
-// rewind with its scope.
+// the latch laws). Every block is green: W1 to W9, W12 and W13 pin what the interpreter and the gate's verdict provide,
+// and W10 and W11 pin that a firing's latch bit and decision state rewind with its scope.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
