@@ -1332,18 +1332,22 @@ and the Water packet).
 
 ### Author shaders
 
-Owner: rendering (design first, `principal`) · ordinary · Next: a design memo.
+Owner: rendering · ordinary · Next: [step 0 of the design memo](author-shaders.md#6-implementation-steps),
+the shading op table, the `shade` block's lowering and its cost in `world.budget`.
 The owner's ruling (AGENTS.md, "Authors rule"): authors may bring their own
-shaders, so a look is never limited to what the engine's shading offers. The
-memo settles where an authored shader plugs in (a material's surface response,
-a weathering or pattern layer, a post or screen effect), the language and how
-it compiles on both backends (DXIL and SPIR-V, the shader cache, hot reload),
-how it is costed and bounded in `world.budget` like every authored program,
-what it may read and write (the interface stamp, no simulation state, no
-cross-world access), and how the engine's own layers become the first authored
-shaders rather than a second path. Search first: the material layers
-(`SdfMaterialLayers`, `PaletteLayersDocument`), the shader interface generator
-and the `Puck.Shaders` package graph may already hold most of the mechanism.
+shaders, so a look is never limited to what the engine's shading offers.
+[The design memo](author-shaders.md) answers the owner's questions from
+[the research record](author-shaders/README.md) and the code, and settles the
+design: a `shade` program in `.puck` over a fixed surface interface, lowered to
+one canonical op stream the views kernel interprets at once and the engine
+specializes in the background as an input-identified cache; materials binned by
+program; pipeline state engine-owned; a hard per-dispatch work bound; a
+device-loss quarantine; and the engine's layers (paints, inset, weathering,
+flow, cel banding) rewritten as the standard package's first programs. Steps 2
+and 4 are GPU legs (the interpreter's cost and registers on the bar devices,
+then binning's payoff) that decide specialization's scope before the layers
+migrate. Three product calls wait on the owner under
+[owner decisions](#owner-decisions).
 
 ### Edit to running, hot reload and boot
 
