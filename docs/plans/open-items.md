@@ -3511,8 +3511,11 @@ brief's priorities ([security review](../development/security-review.md)).
   (`src/Puck.World.Azure/EntraWorldAuthenticator.cs:137`,
   `src/Puck.World.Server/WorldRemoteAuthority.cs:1225`): the challenge and
   session are compared but not signed by the bearer, so replay across challenges
-  needs a still-valid bearer token; the client pins its remote transport key. No
-  bypass was reproduced.
+  needs a still-valid bearer token; the client pins its remote transport key. On
+  a pinned transport the destination's server proof is not checked
+  (`WorldRemoteAuthority`'s `pinnedTransport` branch), so the authority name
+  compared with the pin is whatever the key holder sends; decide whether the
+  transport pin alone is the intended authority proof. No bypass was reproduced.
 - Azure deployment policy, independent of Front Door: the API-host storage
   condition omits tag and queue-message actions
   (`src/Puck.Azure.Resources/abacConditions.bicep:50`); establish the identity's
