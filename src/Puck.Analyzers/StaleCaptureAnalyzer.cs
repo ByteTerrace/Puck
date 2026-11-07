@@ -22,7 +22,8 @@ namespace Puck.Analyzers;
 /// implements, or to a method of the same compilation that reaches such a call through its own calls. A call inside a
 /// lambda runs when the delegate's receiver decides, so it neither counts toward what the enclosing method reaches nor
 /// is ordered against its reads. Constructing an object is not a replacement: whatever its constructor swaps belongs to the new object, which no one
-/// holds yet. The roots are types, not instances, so a call that replaces some other instance of the root (a shadow
+/// holds yet; a static factory that builds an object and restores into it carries <c>[Constructs]</c> for the same reason, and a
+/// call to it is not recorded. The roots are types, not instances, so a call that replaces some other instance of the root (a shadow
 /// server's arena, a search candidate's) counts too; a read that can only name an instance the call leaves alone is a
 /// false positive, suppressed at the read with its reason.
 /// </para>
@@ -54,6 +55,7 @@ public sealed class StaleCaptureAnalyzer : DiagnosticAnalyzer {
     private const string Category = "Puck.Replacement";
     private const string ReplaceableName = "Puck.ReplaceableAttribute";
     private const string ReplacesName = "Puck.ReplacesAttribute";
+    private const string ConstructsName = "Puck.ConstructsAttribute";
 
     /// <summary>STALE001: a captured reference read after a call that can replace it.</summary>
     public static readonly DiagnosticDescriptor Stale001ReadAfterReplacement = new(
@@ -433,6 +435,11 @@ public sealed class StaleCaptureAnalyzer : DiagnosticAnalyzer {
         // whose marks say it replaces. A call into another assembly without a mark replaces nothing the rule can see.
         private void AddCall(IMethodSymbol target, ImmutableArray<IArgumentOperation> arguments, SyntaxNode syntax, IMethodSymbol owner, bool inLambda) {
             target = (target.ReducedFrom ?? target).OriginalDefinition;
+            // A factory marked [Constructs] restores state into the object it builds, as a constructor does: nothing a
+            // caller holds is replaced.
+            if (target.GetAttributes().Any(predicate: static attribute => Named(attribute: attribute, name: ConstructsName))) {
+                return;
+            }
             // A lambda runs when whoever receives the delegate decides, most often after the method that built it has
             // returned (a command handler, a callback), so its calls are neither ordered against the method's reads nor
             // counted toward what the method replaces.
