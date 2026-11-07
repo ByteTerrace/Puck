@@ -15,30 +15,33 @@ Only what the owner rules after the round is written into
 - Portals are meant to solve many of an MMO's hard problems.
 - The card and board game systems exist to satisfy the "casino fantasy" that
   many RPGs implement poorly.
-- Puck's players-as-worlds model changes how nearly everything is implemented.
+- Puck's world model (worlds as worlds: one model for every zone, character and
+  server, with authority placed per world) changes how nearly everything is
+  implemented. Remote servers can and will be authoritative; escrow and the
+  related concepts exist because of the tension between worlds of different
+  authority.
 - Visible portals are the wrong default for shards and layers; hidden seams may
   fit them.
 - The design is done properly before anything is committed: a full session that
   reaches consensus, with the homework done.
 
-## The frame: players are worlds
+## The frame: worlds as worlds
 
 [The world model](../architecture/worlds.md#world-relationships) represents
-zones, identities, alternate characters, hubs and games with one document model.
-An identity is a world the player owns (its durable slots are the character);
-a zone writes progress back to it by submission; a shared world vouches for a
-claim with an issuer-signed slot the identity carries; a "server" is a role any
-world can take, and players hosting their own authoritative worlds is a goal
-([scale and authority](../architecture/worlds.md#scale-and-authority)). Trust is
-bilateral: the engine carries proof and enforces capabilities, and whether a
-claim counts is the receiving world's policy
-([invariants](../architecture/worlds.md#invariants)).
+zones, identities, alternate characters, hubs, games and what would elsewhere be
+called servers with one document model. Where a world's authority runs (a remote
+server, a silo, a player's machine) is a separate choice for each world, and
+remote servers can and will be authoritative. An identity is a world; a zone
+writes progress back to it by submission; a world vouches for a claim with an
+issuer-signed slot another world carries; trust is bilateral, so the engine
+carries proof and enforces capabilities and the receiving world's policy decides
+whether a claim counts ([invariants](../architecture/worlds.md#invariants)).
 
-So the questions below are not WoW's questions transplanted. In WoW the server
-owns every character and is the root of trust; here the player owns the bytes
-of their own identity, a character's home may be a world on a machine that is
-offline, and an item a world grants is a signed claim that can be copied. The
-round asks what each established answer becomes under this model.
+Escrow, title and custody, and attestation exist because owned things move
+between worlds whose authorities differ and trust each other differently. The
+round studies how well those mechanisms resolve that tension at MMO scale, and
+what each established MMO answer becomes when every zone, character and server is
+a world rather than a row in one operator's database.
 
 ## Questions the round must answer
 
@@ -53,14 +56,17 @@ round asks what each established answer becomes under this model.
 3. **Custody of owned things.** Title, custody and epochs already exist for
    companions ([the custody protocol](companion-redesign.md#1-vocabulary)). What
    generalizes to characters, items, table stakes and machine saves; who is
-   custodian when the title authority is a player's offline machine; how a
+   custodian when a title authority is unreachable; how a
    crashed place or an inexact image resolves custody; how epochs stay monotonic
    across restarts (the resolver's generation counter is not persisted:
    [hazards](../development/hazards.md)).
-4. **Double spending.** A signed claim in a world the player owns can be copied.
-   How an issuer keeps a granted item, currency or stake unique (account-based
-   records at the issuer, serials and spend records, escrow), and what that costs
-   at MMO scale.
+4. **Value across trust boundaries.** Which classes of value (currency, items,
+   stakes, appearance, progress) an authoritative world keeps records of, which
+   travel as claims, and where escrow and attestation must hold so nothing is
+   duplicated or lost when a thing crosses between worlds that trust each other
+   differently; the known limits at that edge (a copied claim, a dishonest host,
+   a host that sees hidden state, an owner restoring an old copy) and how the
+   existing mechanisms answer each.
 5. **Seams.** Which boundaries are visible portals (instances, hubs, cross-realm
    travel, nested screens) and which are hidden (spatial shards through
    adjacency, population layers moved only when the change cannot be observed,
@@ -78,7 +84,7 @@ round asks what each established answer becomes under this model.
 | Lane | Family | Focus |
 |---|---|---|
 | A. MMO persistence and live ops | Claude (opens pages) | How WoW, FFXIV, EVE, GW2 and RuneScape store characters, migrate them across patches, separate templates from state, roll back after crashes and dupes. |
-| B. Distributed custody and trust | Codex | Leases and fencing, two-phase commit and presumed abort, sagas, virtual actors, EVE's node failure, cross-realm transfer; digital cash and double-spend prevention for player-held claims. |
+| B. Distributed custody and trust | Codex | Leases and fencing, two-phase commit and presumed abort, sagas, virtual actors, EVE's node failure, cross-realm transfer; escrow and claims that cross between authorities of different trust. |
 | C. World seams | Antigravity (search; pages copied in) | WoW sharding, layering and phasing, the GW2 megaserver, ESO, Star Citizen's server meshing, SpatialOS's failures, interest management. |
 | D. Economy and table integrity | Claude or Codex | Dupe history, escrow, provable fairness, hidden information, loot-box and gambling regulation. |
 | E. Puck as it is | Claude specialist, code only | Identity worlds, write-back, attestation, adjacency and crossing, federation, the custody protocol, disclosure, durable images: what exists, cited by symbol and `file:line`. |
