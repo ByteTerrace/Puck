@@ -116,17 +116,12 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
 
     bool indirectSky = (probed && ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u));
     float3 radiance = (indirectSky ? float3(0.0, 0.0, 0.0) : worldSkyIrradiance(normal));
-    uint count = sdfLightCount();
+    SdfLightWalk walk = sdfLightWalkStart();
+    SdfLightSource light;
 
     highlights = float3(0.0, 0.0, 0.0);
     [loop]
-    for (uint index = 0u; (index < count); index++) {
-        SdfLightSource light;
-
-        if (!sdfLightAt(index, light)) {
-            continue;
-        }
-
+    while (sdfLightNext(walk, light)) {
         SdfLightResponse response = sdfLightResponse(light, surface);
 
         radiance += response.diffuse;

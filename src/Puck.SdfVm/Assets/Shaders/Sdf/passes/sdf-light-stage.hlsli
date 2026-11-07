@@ -179,16 +179,11 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             float3 rim = float3(0.0, 0.0, 0.0);
             float3 specular = float3(0.0, 0.0, 0.0);
             float attenuation = 1.0;
-            uint lightCount = sdfLightCount();
+            SdfLightWalk walk = sdfLightWalkStart();
+            SdfLightSource light;
 
             [loop]
-            for (uint lightIndex = 0u; (lightIndex < lightCount); lightIndex++) {
-                SdfLightSource light;
-
-                if (!sdfLightAt(lightIndex, light)) {
-                    continue;
-                }
-
+            while (sdfLightNext(walk, light)) {
                 SdfLightResponse response = sdfLightResponse(light, shadeSurface);
 
                 radiance += response.diffuse;

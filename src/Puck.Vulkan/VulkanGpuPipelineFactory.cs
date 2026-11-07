@@ -90,8 +90,21 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
             name: in name
         );
 
+        if (CapturesStatistics(device: deviceContext.LogicalDevice.Commands)) {
+            VulkanPipelineStatistics.Report(
+                device: deviceContext.LogicalDevice.Commands,
+                name: name.ToString(),
+                pipelineHandle: pipeline.Handle
+            );
+        }
+
         return pipeline;
     }
+
+    // A compute pipeline keeps its driver statistics while the device names its objects (debug layers or a capture tool),
+    // the diagnostic mode in which they are reported.
+    private bool CapturesStatistics(VulkanDeviceCommands device) =>
+        (naming.IsEnabled && VulkanPipelineStatistics.IsAvailable(device: device));
 
     private VulkanGpuComputePipeline CreateCompute(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
         ArgumentNullException.ThrowIfNull(computeShaderModule);
@@ -116,7 +129,8 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
                     PipelineLayoutHandle: groups.PipelineLayoutHandle,
                     PushConstantSize: 0,
                     PushConstantStageFlags: 0,
-                    ShaderModuleHandle: computeShaderModule.Handle
+                    ShaderModuleHandle: computeShaderModule.Handle,
+                    CaptureStatistics: CapturesStatistics(device: device)
                 )
             );
 
@@ -168,7 +182,8 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
                 DescriptorBindings: descriptorBindings,
                 PipelineCache: logicalDevice.PipelineCache,
                 PushConstantSize: (pushConstantBinding?.Size ?? 0u),
-                PushConstantStageFlags: ((uint)(pushConstantBinding?.StageFlags ?? GpuShaderStage.None))
+                PushConstantStageFlags: ((uint)(pushConstantBinding?.StageFlags ?? GpuShaderStage.None)),
+                CaptureStatistics: CapturesStatistics(device: device)
             ),
             descriptorSetLayoutHandle: out var setLayout,
             pipelineLayoutHandle: out var pipelineLayout,

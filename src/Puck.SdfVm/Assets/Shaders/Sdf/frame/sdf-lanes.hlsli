@@ -7,16 +7,13 @@
 #define SDF_LANES_HLSLI
 
 #include "../isa/sdf-render.hlsli"
+#include "sdf-component.hlsli"
 
-// A float4's component chosen by comparison, never a dynamic index (kernels.md: index local arrays by constants only).
-float sdfLaneComponent(float4 lanes, uint component) {
-    return ((component == 0u) ? lanes.x : ((component == 1u) ? lanes.y : ((component == 2u) ? lanes.z : lanes.w)));
-}
 // The value of render lane `lane` in [0, SDF_LANE_COUNT); `slotLanes` are the surface's frame-slot lanes.
 float sdfLane(float4 slotLanes, uint lane) {
     return ((lane < SDF_FIRST_WORLD_LANE)
-        ? sdfLaneComponent(slotLanes, lane)
-        : sdfLaneComponent(passGroup.worldLanes, (lane - SDF_FIRST_WORLD_LANE)));
+        ? sdfComponent(slotLanes, lane)
+        : sdfComponent(passGroup.worldLanes, (lane - SDF_FIRST_WORLD_LANE)));
 }
 
 #endif

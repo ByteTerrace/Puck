@@ -81,6 +81,7 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
         var createInfo = new VkComputePipelineCreateInfo {
             BasePipelineHandle = 0,
             BasePipelineIndex = -1,
+            Flags = (request.CaptureStatistics ? VulkanPipelineStatistics.CaptureStatisticsBit : 0u),
             Layout = pipelineLayoutHandle,
             PNext = ((nint)(&feedbackInfo)),
             SType = StructureTypeComputePipelineCreateInfo,

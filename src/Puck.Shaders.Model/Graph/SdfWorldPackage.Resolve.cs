@@ -19,7 +19,8 @@ public static partial class SdfWorldPackage {
     public const string HistoryColor = "historyColor";
     /// <summary>The history color the resolve writes for the next frame.</summary>
     public const string HistoryColorWritten = "historyColorRW";
-    /// <summary>The preceding frame's history surface: per output pixel <see cref="HistorySurfaceWords"/> words, the
+    /// <summary>The preceding frame's history surface: <see cref="HistorySurfaceWords"/> words an output pixel, stored as
+    /// that many planes of one word a pixel (<c>sdfHistoryWord</c> in <c>passes/sdf-resolve.comp.hlsl</c>): the
     /// receiver's visibility identity, then its tangent-plane distance along the output ray and the gathered weight
     /// as two half floats, the distance low, then the accumulated surface transport's two
     /// words as <see cref="Parts.Transport"/> packs them, then the sub-pixel feature the pixel's footprint last showed:

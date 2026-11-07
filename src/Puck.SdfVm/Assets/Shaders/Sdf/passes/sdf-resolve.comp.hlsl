@@ -40,8 +40,10 @@
 #include "../shade/sdf-transport.hlsli"
 #include "../../../../../Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli"
 
-// The history surface holds SDF_HISTORY_SURFACE_WORDS an output pixel (SdfWorldPackage.HistorySurfaceWords): the identity
-// of the receiver, then its tangent-plane distance along the output ray and gathered weight as two half floats (the
+// The history surface holds SDF_HISTORY_SURFACE_WORDS an output pixel (SdfWorldPackage.HistorySurfaceWords), in planes:
+// word w of every output pixel lies in plane w, extent.x * extent.y words long (sdfHistoryWord), so a wave's lanes read
+// or write one word of adjacent pixels in one coalesced transaction; with a pixel's words adjacent instead, every lane
+// of every access touches its own sector. The words are: the identity of the receiver, then its tangent-plane distance along the output ray and gathered weight as two half floats (the
 // distance low; the far limit 8192 and the weight cap stay normal halves, each within a relative 2^-11, far inside
 // SdfHistoryDepthTolerance), then the accumulated transport's two words (sdfPackTransport), then the remembered feature:
 // its YCoCg as three half floats, Y low and Co high in the fifth word, Cg low in the sixth with the frames the memory has
@@ -66,6 +68,11 @@ static const float SdfResolveFeatureTravel = 0.05;
 
 uint2 sdfResolveClamp(int2 pixel, uint2 dims) {
     return (uint2)clamp(pixel, int2(0, 0), (int2(dims) - 1));
+}
+// The address of history surface word `word` of output pixel `pixel` (its row-major index) in an output of `extent`: the
+// one place the surface's planar layout is spelled.
+uint sdfHistoryWord(uint pixel, uint word, uint2 extent) {
+    return ((word * (extent.x * extent.y)) + pixel);
 }
 float3 sdfToYCoCg(float3 color) {
     return float3(
@@ -129,9 +136,9 @@ void sdfHistoryAt(float2 position, uint2 dims, out float4 color, out float4 tran
             uint2 texel = sdfResolveClamp((corner + int2(x, y)), dims);
 
             rowColor += (wx[x] * historyColor.Load(int3(texel, 0)));
-            uint word = ((SDF_HISTORY_SURFACE_WORDS * ((texel.y * dims.x) + texel.x)) + 2u);
+            uint pixel = ((texel.y * dims.x) + texel.x);
 
-            rowTransport += (wx[x] * sdfUnpackTransport(uint2(historySurface[word], historySurface[word + 1u])));
+            rowTransport += (wx[x] * sdfUnpackTransport(uint2(historySurface[sdfHistoryWord(pixel, 2u, dims)], historySurface[sdfHistoryWord(pixel, 3u, dims)])));
         }
         color += (wy[y] * rowColor);
         transport += (wy[y] * rowTransport);
@@ -341,7 +348,8 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
 
     accepted = false;
     complete = false;
-    uint historyWord = (SDF_HISTORY_SURFACE_WORDS * ((id.y * extent.x) + id.x));
+    uint pixelIndex = ((id.y * extent.x) + id.x);
+    uint historyPixel = pixelIndex;
     float2 historyPosition = float2(0.0, 0.0);
     float historyWeightGathered = 0.0;
     uint receiverIdentity = 0u;
@@ -386,13 +394,12 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             travel = length(motion * float2(extent));
             if (all(historyPosition >= -0.5) && all(historyPosition <= (float2(extent) - 0.5))) {
                 uint2 texel = sdfResolveClamp(int2(floor(historyPosition + 0.5)), extent);
-                uint word = (SDF_HISTORY_SURFACE_WORDS * ((texel.y * extent.x) + texel.x));
-                historyWord = word;
-                uint historyIdentity = historySurface[word];
-                uint distanceAndWeight = historySurface[word + 1u];
+                historyPixel = ((texel.y * extent.x) + texel.x);
+                uint historyIdentity = historySurface[sdfHistoryWord(historyPixel, 0u, extent)];
+                uint distanceAndWeight = historySurface[sdfHistoryWord(historyPixel, 1u, extent)];
                 float historyT = f16tof32(distanceAndWeight & 0xFFFFu);
-                uint featureWordA = historySurface[word + 4u];
-                uint featureWordB = historySurface[word + 5u];
+                uint featureWordA = historySurface[sdfHistoryWord(historyPixel, 4u, extent)];
+                uint featureWordB = historySurface[sdfHistoryWord(historyPixel, 5u, extent)];
 
                 // A receiver-plane distance in the preceding view, shifted by the camera's move along the nearest hit.
                 float shift = (hit ? (previousT - hitT) : 0.0);
@@ -448,7 +455,6 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     total = (historyWeight + weightSum);
     accumulated = (((history * historyWeight) + sum) / max(total, 1.0e-6));
     accumulatedTransport = (((historyTransport * historyWeight) + transportSum) / max(total, 1.0e-6));
-    uint word = (SDF_HISTORY_SURFACE_WORDS * ((id.y * extent.x) + id.x));
     // Stationary receivers retain one bounded window, not an ever older history. This also follows changes in lighting:
     // every phase is replaced within a period, without clamping its other phases to a neighborhood that jitter moved.
     // Moving or reactive receivers restart the window and keep the ordinary clipped, reprojected resolve while it fills.
@@ -482,7 +488,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
         centerT = receiverT;
     }
     bool sampleValid = ((reactive <= 0.0) && (weightSum > 1.0e-6) && isfinite(weightSum) && all(isfinite(sum)) && all(isfinite(transportSum)));
-    uint mask = (stationary ? (historySurface[historyWord + maskWord] & fullMask) : 0u);
+    uint mask = (stationary ? (historySurface[sdfHistoryWord(historyPixel, maskWord, extent)] & fullMask) : 0u);
     mask = (sampleValid ? (mask | (1u << phase)) : 0u);
     float4 windowColor = 0.0;
     float4 windowTransport = 0.0;
@@ -506,7 +512,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             packed[4] = f32tof16(weightSum);
         } else if (present) {
             [unroll] for (uint component = 0u; component < SDF_HISTORY_SAMPLE_WORDS; component++) {
-                packed[component] = historySurface[historyWord + offset + component];
+                packed[component] = historySurface[sdfHistoryWord(historyPixel, (offset + component), extent)];
             }
         }
         // Decode the new phase too: using its unrounded sum while the other phases use halves would itself pulse.
@@ -520,7 +526,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             windowTransport += (weight * sdfUnpackTransport(uint2(packed[2], packed[3])));
             windowWeight += weight;
             [unroll] for (uint component = 0u; component < SDF_HISTORY_SAMPLE_WORDS; component++) {
-                historySurfaceRW[word + offset + component] = packed[component];
+                historySurfaceRW[sdfHistoryWord(pixelIndex, (offset + component), extent)] = packed[component];
             }
         }
     }
@@ -536,7 +542,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     // The working history is half-float. A non-finite current sample contributes no reusable history, and a finite
     // reconstruction must remain representable when stored, so one bright transient cannot poison later frames.
     bool reusable = (all(isfinite(accumulated)) && all(isfinite(accumulatedTransport)) && isfinite(total));
-    historySurfaceRW[word + maskWord] = (reusable ? mask : 0u);
+    historySurfaceRW[sdfHistoryWord(pixelIndex, maskWord, extent)] = (reusable ? mask : 0u);
     // The feature the pixel carries on: this frame's sighting for a whole period, or the accepted history's with one
     // frame less, which the jitter comes round to before it runs out; a restarted history remembers none.
     float3 writtenFeature = (sighted ? sightedYCoCg : featureYCoCg);
@@ -546,14 +552,14 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
         writtenLife = 0u;
     }
     historyColorRW[id.xy] = (reusable ? clamp(accumulated, -65504.0, 65504.0) : float4(0.0, 0.0, 0.0, 0.0));
-    historySurfaceRW[word] = centerIdentity;
-    historySurfaceRW[word + 1u] = (f32tof16(centerT) | (f32tof16(reusable ? min(total, weightCap) : 0.0) << 16u));
+    historySurfaceRW[sdfHistoryWord(pixelIndex, 0u, extent)] = centerIdentity;
+    historySurfaceRW[sdfHistoryWord(pixelIndex, 1u, extent)] = (f32tof16(centerT) | (f32tof16(reusable ? min(total, weightCap) : 0.0) << 16u));
     uint2 historyTransportWords = sdfPackTransport(reusable ? accumulatedTransport : float4(0.0, 0.0, 0.0, 0.0));
 
-    historySurfaceRW[word + 2u] = historyTransportWords.x;
-    historySurfaceRW[word + 3u] = historyTransportWords.y;
-    historySurfaceRW[word + 4u] = (f32tof16(writtenFeature.x) | (f32tof16(writtenFeature.y) << 16u));
-    historySurfaceRW[word + 5u] = (f32tof16(writtenFeature.z) | (writtenLife << 16u));
+    historySurfaceRW[sdfHistoryWord(pixelIndex, 2u, extent)] = historyTransportWords.x;
+    historySurfaceRW[sdfHistoryWord(pixelIndex, 3u, extent)] = historyTransportWords.y;
+    historySurfaceRW[sdfHistoryWord(pixelIndex, 4u, extent)] = (f32tof16(writtenFeature.x) | (f32tof16(writtenFeature.y) << 16u));
+    historySurfaceRW[sdfHistoryWord(pixelIndex, 5u, extent)] = (f32tof16(writtenFeature.z) | (writtenLife << 16u));
 }
 
 [numthreads(8, 8, 1)]

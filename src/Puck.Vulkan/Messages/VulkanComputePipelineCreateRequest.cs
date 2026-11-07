@@ -17,6 +17,9 @@ namespace Puck.Vulkan.Messages;
 /// <param name="PipelineLayoutHandle">A native <c>VkPipelineLayout</c> the caller created and owns, which the pipeline
 /// is created with instead of a layout over <paramref name="DescriptorBindings"/> and the push-constant range; zero to
 /// create that layout. With a layout given, the bindings are empty and the push-constant size zero.</param>
+/// <param name="CaptureStatistics">Whether the driver keeps the pipeline's executable statistics
+/// (<c>VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR</c>) for <see cref="VulkanPipelineStatistics"/> to read; requires
+/// <c>VK_KHR_pipeline_executable_properties</c>.</param>
 public readonly record struct VulkanComputePipelineCreateRequest(
     VulkanDeviceCommands Device,
     nint ShaderModuleHandle,
@@ -24,5 +27,6 @@ public readonly record struct VulkanComputePipelineCreateRequest(
     uint PushConstantSize,
     uint PushConstantStageFlags,
     VulkanPipelineCache? PipelineCache,
-    nint PipelineLayoutHandle = 0
+    nint PipelineLayoutHandle = 0,
+    bool CaptureStatistics = false
 );
