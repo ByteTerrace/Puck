@@ -117,7 +117,7 @@ float sdfLightVisibility(int lightIndex, float4 stable, float ambientOcclusion) 
         SdfShadowHandoff handoff = sdfShadowHandoffs[fade];
         if (handoff.Slot < 0 || (uint)handoff.Slot >= SDF_MAX_SHADOW_SLOTS) { continue; }
         if (lightIndex == handoff.Outgoing) {
-            return (1.0 - ((1.0 - stable[handoff.Slot]) * (1.0 - handoff.Weight)));
+            return (1.0 - ((1.0 - sdfComponent(stable, (uint)handoff.Slot)) * (1.0 - handoff.Weight)));
         }
         if (lightIndex == handoff.Incoming) {
             return 1.0;
@@ -126,8 +126,8 @@ float sdfLightVisibility(int lightIndex, float4 stable, float ambientOcclusion) 
     [loop]
     for (uint shadowSlot = 0u; shadowSlot < SDF_MAX_SHADOW_SLOTS; shadowSlot++) {
         if (shadowSlot >= worldShadowStableCount()) { break; }
-        if (lightIndex == passGroup.shadowSlots[shadowSlot]) {
-            return stable[shadowSlot];
+        if (lightIndex == sdfComponent(passGroup.shadowSlots, shadowSlot)) {
+            return sdfComponent(stable, shadowSlot);
         }
     }
     return ambientOcclusion;
@@ -142,28 +142,48 @@ struct SdfLightResponse {
     float attenuation;
 };
 
-// The lights the stage walks: the lights table's, then one slot per screen up to the highest bound one while screen
-// lights are on.
-uint sdfLightCount() {
-    uint count = worldLightCount();
-#ifdef SDF_SCREEN_SOURCES
-    if (!worldScreenLightsDisabled()) {
-        count += min(screenLightLoopBound(), SDF_MAX_SCREEN_SURFACES);
-    }
-#endif
-    return count;
+// The lights a shading walk visits, in order: the lights table's the view shades, by the set bits of its light mask
+// (SdfLightSelection), then while screen lights are on each screen slot up to the highest bound one. The mask is the
+// pass block's, uniform over a dispatch, so every lane of a wave takes the same steps, and a light the view leaves out
+// costs nothing: the walk never visits it.
+struct SdfLightWalk {
+    // The mask word the walk is reading and its bits still to visit; past the last word, the table is done.
+    uint word;
+    uint bits;
+    // The next screen slot.
+    uint screen;
+};
+SdfLightWalk sdfLightWalkStart() {
+    SdfLightWalk walk;
+
+    walk.word = 0u;
+    walk.bits = sdfComponent(passGroup.lightMask, 0u);
+    walk.screen = 0u;
+
+    return walk;
 }
-// The light at `index` of the walk, or false for a table light the view does not shade (worldLightSelected) or a screen
-// slot whose source is not bound this frame.
-bool sdfLightAt(uint index, out SdfLightSource light) {
+// The walk's next light in `light`, or false once every light is visited.
+bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
     light = (SdfLightSource)0;
     light.index = -1;
 
     uint tableCount = worldLightCount();
+    uint words = ((tableCount + 31u) / 32u);
 
-    if (index < tableCount) {
-        if (!worldLightSelected(index)) {
-            return false;
+    [loop]
+    while (walk.word < words) {
+        if (walk.bits == 0u) {
+            walk.word++;
+            walk.bits = ((walk.word < words) ? sdfComponent(passGroup.lightMask, walk.word) : 0u);
+            continue;
+        }
+
+        uint index = ((walk.word * 32u) + firstbitlow(walk.bits));
+
+        walk.bits &= (walk.bits - 1u);
+        if (index >= tableCount) {
+            walk.word = words;
+            break;
         }
 
         SdfLight record = sdfLights[index];
@@ -182,7 +202,10 @@ bool sdfLightAt(uint index, out SdfLightSource light) {
     }
 
 #ifdef SDF_SCREEN_SOURCES
-    uint screenIndex = (index - tableCount);
+    if (worldScreenLightsDisabled()) {
+        return false;
+    }
+
     uint surfaceRows;
     uint mappingRows;
     uint emissionRows;
@@ -190,30 +213,33 @@ bool sdfLightAt(uint index, out SdfLightSource light) {
     screenSurfaces.GetDimensions(surfaceRows, stride);
     screenMappings.GetDimensions(mappingRows, stride);
     sdfScreenLights.GetDimensions(emissionRows, stride);
-    if (screenIndex >= min(screenLightLoopBound(), SDF_MAX_SCREEN_SURFACES)
-        || screenIndex >= surfaceRows / WorldScreenSurfaceRows
-        || screenIndex >= mappingRows / WorldScreenMappingRows
-        || screenIndex >= emissionRows) { return false; }
+    uint screens = min(min(screenLightLoopBound(), SDF_MAX_SCREEN_SURFACES),
+        min((surfaceRows / WorldScreenSurfaceRows), min((mappingRows / WorldScreenMappingRows), emissionRows)));
 
-    if (!screenSourceBound(screenIndex)) {
-        return false;
+    [loop]
+    while (walk.screen < screens) {
+        uint screenIndex = walk.screen;
+
+        walk.screen++;
+        if (!screenSourceBound(screenIndex)) {
+            continue;
+        }
+
+        // right and up are orthonormal (SdfScreenSurface); the normalize absorbs upload drift.
+        ScreenSurfaceData surface = worldScreenSurface(screenIndex);
+
+        light.kind = SdfLightScreen;
+        // The face's mean luminance, in nits (sdf-screen-emission.comp.hlsl).
+        light.color = sdfScreenLights[screenIndex].rgb;
+        light.param = ((4.0 * surface.right.w) * surface.up.w);
+        light.weight = (light.param / SDF_PI);
+        light.position = surface.origin.xyz;
+        light.facing = normalize(cross(surface.right.xyz, surface.up.xyz));
+
+        return true;
     }
-
-    // right and up are orthonormal (SdfScreenSurface); the normalize absorbs upload drift.
-    ScreenSurfaceData surface = worldScreenSurface(screenIndex);
-
-    light.kind = SdfLightScreen;
-    // The face's mean luminance, in nits (sdf-screen-emission.comp.hlsl).
-    light.color = sdfScreenLights[screenIndex].rgb;
-    light.param = ((4.0 * surface.right.w) * surface.up.w);
-    light.weight = (light.param / SDF_PI);
-    light.position = surface.origin.xyz;
-    light.facing = normalize(cross(surface.right.xyz, surface.up.xyz));
-
-    return true;
-#else
-    return false;
 #endif
+    return false;
 }
 // What `light` adds at `surface`:
 // - a directional its wrapped Lambert term and its own GGX lobe under its shadow visibility: its cascades', or in a view

@@ -4,6 +4,7 @@
 #ifndef FRAME_SDF_LIGHTS_HLSLI
 #define FRAME_SDF_LIGHTS_HLSLI
 #include "sdf-environment.hlsli"
+#include "sdf-component.hlsli"
 
 // Both the declared count and the actual bound buffer constrain a read.
 uint worldLightCount() {
@@ -72,10 +73,4 @@ float sdfPointReach(SdfLight light, float3 lightPosition, float3 surfacePosition
 
     return (((window * window) * (cone * cone)) / max(distanceSquared, (SDF_LIGHT_MINIMUM_DISTANCE * SDF_LIGHT_MINIMUM_DISTANCE)));
 }
-// Whether the view shades the light at a table index: its bit of the view's light mask (SdfLightSelection), which
-// leaves out every light that cannot reach a surface the view shows.
-bool worldLightSelected(uint index) {
-    return ((index < (uint)SDF_MAX_LIGHTS) &&((passGroup.lightMask[index >> 5u] & (1u << (index & 31u))) != 0u));
-}
-
 #endif

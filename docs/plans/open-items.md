@@ -45,15 +45,21 @@ milestone. The owner requested its baseline and implementation plan, which
    after its `-indirect` twin is as slow as on arrival. With box-only cascade
    selection, the far shadow cascade holds under the day clock's sun and splits each refresh over two frames
    (`SdfFarLayers`), so those stops run at the display rate at p50 but still
-   miss vsync on some frames (p99 one 30 Hz period): the root view's GPU time
-   stays just under a 60 Hz frame, mostly `views` and `resolve`, which
-   `world.debug-view indirect` skips. Below 60 FPS two frames no longer fit in
+   miss vsync on some frames: the pool now holds p99 at the display rate, while
+   the teal roof and the studio still reach about 25 and 22 ms at p99. With the
+   resolve's history surface planar it no longer saturates L2 and costs about
+   1 ms at 1280×720, so `views` (about 2.3 ms) and the far cascade lead the root
+   view. Below 60 FPS two frames no longer fit in
    the 30 Hz floor, so every refresh redraws both far layers, the frame stays
    slow, and a view that drops below 60 there tends to stay below it until the
-   far cascade itself costs less. Next: the views shading's and the
-   temporal resolve's own cost per pixel (registers, occupancy, the history
-   window's reads; [gpu cost](../../.claude/skills/rendering/references/gpu-cost.md)),
-   then the remaining caster geometry after receiver and light-space culling.
+   far cascade itself costs less. Next: the views pass's live state. It is
+   register-limited on both backends (128 registers with spills on Vulkan,
+   near 97 % register allocation at a quarter of the warps on Direct3D 12), and
+   the irradiance gather (`sdfMeshProbesAt`, whose sixteen addresses and
+   weights stay live through the light walk, the indirect and the reflection)
+   is a third of it on Vulkan by `world.indirect off`; then the remaining caster
+   geometry after receiver and light-space culling
+   ([gpu cost](../../.claude/skills/rendering/references/gpu-cost.md#pucks-open-cases)).
    The far cascade now classifies through `SdfMeshOcclusion`'s current receiver
    mask and two-phase entry depth; its exit list remains independent of entry
    visibility. Receiver-conditioned depth refreshes both layers on changes,
@@ -2871,15 +2877,6 @@ editor E6's.
   derived face (a creation's own screen) does not name the placement it belongs
   to: `WorldStaticSceneEmit` registers no pick target for either. A pick on the
   group of the program's segments no instance owns names nothing.
-- [low] A kernel's registers and local memory are read only through RenderDoc,
-  Nsight or PIX ([gpu cost](../../.claude/skills/rendering/references/gpu-cost.md#read-a-kernels-registers-and-occupancy)),
-  though Vulkan's `VK_KHR_pipeline_executable_properties` is enabled
-  (`VulkanLogicalDeviceFactory.cs:229-234`) and its entry points bound
-  (`VulkanDeviceCommands.cs:180-183`): no pipeline is created with
-  `VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR` and nothing calls
-  `vkGetPipelineExecutableStatisticsKHR`. Wire a verb that prints each kernel's
-  driver statistics on Vulkan, so a register or spill change reads without a
-  capture.
 - Restore and inspect the remaining developer exhibits: the rate range (LoD and
   rate tiers), the traversal course's geometry and the kinematics scope
   (position and measurement). Clean bot verdicts do not show that they look or

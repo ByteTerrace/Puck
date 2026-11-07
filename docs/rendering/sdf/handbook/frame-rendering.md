@@ -831,6 +831,9 @@ demands nothing of its writer, and device loss starts from none.
   footprint last showed, its YCoCg as three half floats with the frames the
   memory has left, zero for none. A phase mask follows, then eight phase samples,
   each holding color/coverage and transport as halves and its Gaussian weight.
+  The words lie in planes, one word of every pixel per plane (`sdfHistoryWord`),
+  so a wave reads or writes one word of adjacent pixels in one transaction. A
+  complete stationary window shows its own mean and reads no reprojected history.
 
 The views pass also writes a one-channel **reactivity** buffer at the render
 extent, which only the resolve reads: one where a display screen's picture covers the

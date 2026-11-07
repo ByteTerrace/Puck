@@ -165,14 +165,16 @@ public sealed class SdfResolveDeviceLawTests {
 
         if (seededHistory) {
             for (var pixel = 0; (pixel < (width * height)); pixel++) {
+                // The surface is planar (sdfHistoryWord): word w of every pixel lies in plane w.
+                int Address(uint word) => checked((int)((((word * width) * height) + pixel) * sizeof(uint)));
                 // A miss's identity and ray distance are zero; its eight samples of finite history have full weight.
-                var offset = checked((int)(((pixel * SdfWorldPackage.HistorySurfaceWords) + 1) * sizeof(uint)));
+                var offset = Address(word: 1u);
 
                 BinaryPrimitives.WriteUInt32LittleEndian(destination: historyInputBytes.AsSpan(start: offset),
                     value: (((uint)BitConverter.HalfToUInt16Bits(value: ((Half)8f))) << 16));
                 if (stationaryPhase.HasValue) {
                     void Write(uint word, uint value) => BinaryPrimitives.WriteUInt32LittleEndian(
-                        destination: historyInputBytes.AsSpan(start: checked((int)(((pixel * SdfWorldPackage.HistorySurfaceWords) + word) * sizeof(uint)))), value: value);
+                        destination: historyInputBytes.AsSpan(start: Address(word: word)), value: value);
                     var tap = MathF.Exp(x: -4.08f);
                     var weight = ((1f + (2f * tap)) * (1f + (2f * tap)));
 
