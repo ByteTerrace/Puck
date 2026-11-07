@@ -72,10 +72,12 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         return Submit(new Job(scene.Acquire(), origins) { CacheSlots = cacheSlots, HitCapacity = hitCapacity, Reuse = reuse });
     }
     // The origins and input are read before this returns, so a caller may overwrite the arrays its memories view at once.
+    // `rays` is the job's predicted ray count (SdfMeshIrradiance.RelightRaysPerJob bounds it), which its GPU time is
+    // estimated from until its timestamps measure it.
     internal Result Relight(SdfMeshIrradianceScene scene, Memory<Vector4> origins, ReadOnlyMemory<uint> input, Vector4[] lighting,
-        int volumeWords, in Deltas updates, uint hitCapacity, uint[]? reuse = null) {
+        int volumeWords, in Deltas updates, uint hitCapacity, long rays, uint[]? reuse = null) {
         var job = new Job(scene.Acquire(), origins) {
-            Input = input, Lighting = lighting, VolumeWords = volumeWords, Updates = updates, HitCapacity = hitCapacity, Reuse = reuse,
+            Input = input, Lighting = lighting, VolumeWords = volumeWords, Updates = updates, HitCapacity = hitCapacity, Reuse = reuse, Rays = rays,
         };
         var words = Submit(job);
         return new Result(words, job.Output!, job.HeldReadback!);
@@ -193,7 +195,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             m_pending.Dequeue();
             m_inFlight = true;
             job = pending;
-            estimatedSeconds = pending.Origins.Length * (pending.Selection ? 1e-8 : SdfMeshProbeDepth.HitCount * 1e-8);
+            estimatedSeconds = ((pending.Rays > 0) ? (pending.Rays * 1e-8) : (pending.Origins.Length * (pending.Selection ? 1e-8 : SdfMeshProbeDepth.HitCount * 1e-8)));
             return true;
         }
     }
@@ -460,7 +462,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             most = Math.Max(most, near);
             total += near;
         }
-        return FormattableString.Invariant($" valid={valid} reused={reused} shadowing-points-in-range-max={most} mean={((valid > reused) ? (total / (double)(valid - reused)) : 0.0):0.0} max-slot={slots}");
+        return FormattableString.Invariant($" rays={query.Rays} valid={valid} reused={reused} shadowing-points-in-range-max={most} mean={((valid > reused) ? (total / (double)(valid - reused)) : 0.0):0.0} max-slot={slots}");
     }
     private static GpuObjectName Name(string part, int index = GpuObjectName.NoIndex) =>
         new(index: index, owner: SdfWorldTables.ObjectOwner, part: $"probe-trace {part}");
@@ -525,6 +527,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         public ReadOnlyMemory<int> Destinations;
         public uint[]? CacheSlots;
         public uint[]? Reuse;
+        public long Rays;
         public uint HitCapacity;
         public int Geometry;
         public int Window;
