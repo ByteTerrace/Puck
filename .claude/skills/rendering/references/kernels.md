@@ -351,7 +351,10 @@ exactness off its lowering without a GPU.
   capture also needs an answered UAC prompt, which is the owner's to grant. Pass timestamps are recorded only under
   `world.gpu-timing`; read pass times there, beside the capture.
 - **Device faults.** A removed Direct3D 12 device prints its DRED record as
-  `[d3d12-dred]` lines; `gpu.faults remove` removes one on purpose. A lost
+  `[d3d12-dred]` lines; `gpu.faults remove` removes one on purpose. The record
+  names lists and allocations by their `GpuObjectName`, so a GPU object created
+  with `name: default` reads `(unnamed)` there. The fence that reports a removal
+  is only the first call after it, never evidence of which work hung. A lost
   Vulkan device reports `VK_EXT_device_fault` and its last pass checkpoints
   (`VK_NV_device_diagnostic_checkpoints`) in the loss's message.
 - **Validation layers.** Under `--debug-layers`, any `[vulkan-debug]

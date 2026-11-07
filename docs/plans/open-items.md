@@ -42,14 +42,15 @@ milestone. The owner requested its baseline and implementation plan, which
 1. [high, first] A GPU hang (`DXGI_ERROR_DEVICE_HUNG`, 0x887A0006) on Direct3D 12
    during a quiet `bench frames` tour of the debug world, detected at the
    background GPU work's fence (`SdfGpuWork.Poll`, `SdfGpuWork.cs:354`) after
-   about 12,000 ticks, at the stop posing the body near (60, 0.05, -28); and
-   device-loss recovery then crashing the World with "An item with the same key
-   has already been added. Key: 1" (`DirectXSurfacePresenter.RecoverFromDeviceLoss`
-   via `DeviceLossRecovery.TryRecover`), so a hang is fatal instead of
-   recovered. Two causes, two fixes: name the hung kernel (DRED breadcrumbs and
-   page-fault data, the background work's in-flight job) and fix it; make
-   recovery rebuild without duplicate registration. Evidence: the window's
-   `frames-tour` run under the main checkout's ignored scratch.
+   about 12,000 ticks, at the stop posing the body near (60, 0.05, -28), right
+   after its `view.recenter` cut. The fence that saw it names no culprit: it is
+   only the first call after the removal. Recovery holds (the removal record
+   keeps several labels at one breadcrumb, and names its allocations and command
+   lists on every Direct3D 12 run). Next: reproduce on the tour and read
+   the `[d3d12-dred]` lines for the unfinished list and any page fault, then fix
+   that kernel or the work it was handed. The tour cannot currently pass its
+   first stop's `world.wait residency` on a head whose code settled it before
+   (the mesh release/restore findings below are the lead to check first).
 2. The frame bar [high]: 60 FPS steady state on the lead machine is not met.
    A quiet `bench frames` tour of all 59 sweep stops (Direct3D 12, 1280x720,
    one complete sample) passes p99 at 3 stops; p50 is at the display rate at
