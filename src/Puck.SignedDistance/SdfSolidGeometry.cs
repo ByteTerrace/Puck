@@ -187,7 +187,8 @@ public static class SdfSolidGeometry {
             smooth,
             detail: detail
         );
-    private static Vector3 EffectiveScale(Vector3 scale) =>
+    /// <summary>The positive, nonzero magnitudes used by primitive emission and its canonical descriptors.</summary>
+    public static Vector3 EffectiveScale(Vector3 scale) =>
         Vector3.Max(
             value1: Vector3.Abs(value: scale),
             value2: new Vector3(value: MinimumScale)

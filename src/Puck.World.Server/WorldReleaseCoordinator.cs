@@ -66,7 +66,7 @@ public interface IWorldReleaseQualificationRunner {
 public interface IWorldReleaseBootstrapQualificationRunner {
     Task<WorldReleaseQualificationResult> RunAsync(WorldReleaseManifest target, CancellationToken cancellationToken = default);
 }
-/// <summary>Result returned by a local or Azure release runtime driver.</summary>
+/// <summary>Result returned by a release runtime driver, local or a hosting provider's.</summary>
 public readonly record struct WorldReleaseRuntimeResult(
     bool Succeeded,
     string Detail,

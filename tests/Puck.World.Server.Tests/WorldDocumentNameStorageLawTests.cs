@@ -37,7 +37,7 @@ public sealed class WorldDocumentNameStorageLawTests {
         var origin = new WorldHostedOrigin(
             owner: Container,
             store: new FakeObjectBlobStore(),
-            target: AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: "UseDevelopmentStorage=true"),
+            target: new DirectoryObjectStorageTarget(rootPath: "fake-store"),
             world: SafeName.Parse(candidate: "hub")
         );
 

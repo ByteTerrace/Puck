@@ -6,10 +6,10 @@ using Azure.Identity;
 using Microsoft.Extensions.AI;
 using OpenAI.Embeddings;
 
-namespace Puck.Embeddings;
+namespace Puck.Embeddings.Azure;
 
 /// <summary>Options for configuring an Azure OpenAI embedding generator using identity credentials.</summary>
-public sealed class OpenAiEmbeddingOptions {
+public sealed class AzureOpenAiEmbeddingOptions {
     /// <summary>The base endpoint URI (e.g. https://account.openai.azure.com/).</summary>
     public required Uri Endpoint { get; init; }
     /// <summary>The model or deployment name.</summary>
@@ -32,11 +32,11 @@ public sealed class OpenAiEmbeddingOptions {
     public AzureOpenAIClientOptions? ClientOptions { get; init; }
 }
 /// <summary>Factory to create configured Azure OpenAI embedding generators using identity authentication.</summary>
-public static class OpenAiEmbeddingGeneratorFactory {
+public static class AzureOpenAiEmbeddingGeneratorFactory {
     /// <summary>Creates a configured <see cref="IEmbeddingGenerator{TInput, TEmbedding}"/> for Azure OpenAI endpoints.</summary>
     /// <param name="options">The generator configuration options.</param>
     /// <returns>A configured embedding generator.</returns>
-    public static IEmbeddingGenerator<string, Embedding<float>> Create(OpenAiEmbeddingOptions options) {
+    public static IEmbeddingGenerator<string, Embedding<float>> Create(AzureOpenAiEmbeddingOptions options) {
         ArgumentNullException.ThrowIfNull(argument: options);
         ArgumentNullException.ThrowIfNull(argument: options.Endpoint);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: options.Model);

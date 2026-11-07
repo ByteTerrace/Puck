@@ -1095,18 +1095,14 @@ public static class WorldBootComposition {
             services.AddHostedService(implementationFactory: static sp => new WorldControlBootStart(control: sp.GetRequiredService<WorldControlCommandModule>()));
         }
 
-        // The storage host-section: the world doc's endpoint + user-id + discovery endpoint, overlaid by the
-        // --storage-uri / --user-id / --storage-discovery-uri CLI reflection. The identity resolver maps an explicit
-        // user-id to a per-user container Guid, or DECLINES (local-only). Endpoint plus resolved identity wires the
-        // owned-world sync engine (storage.push / storage.pull); anything less leaves the catalog local-only, and
-        // storage.status names which half declined. The discovery endpoint only matters when the resolved endpoint is
-        // edge-shaped — the platform edge cannot serve container LIST at all, so cloud-world discovery refuses by name
-        // without one.
+        // The per-user store: the provider-built target from --storage-config-file, and the world doc's user-id
+        // overlaid by --user-id. The identity resolver maps an explicit user-id to a per-user container Guid, or
+        // declines (local-only). A store plus a resolved identity wires the owned-world sync engine (storage.push /
+        // storage.pull); anything less leaves the catalog local-only, and storage.status names which half declined.
         var storageSettings = WorldStorageSettings.Resolve(
             defaults: worldSource.Definition.Storage,
-            endpointOverride: inputs.StorageEndpoint,
-            userIdOverride: inputs.StorageUserId,
-            discoveryEndpointOverride: inputs.StorageDiscoveryEndpoint
+            target: inputs.StorageTarget,
+            userIdOverride: inputs.StorageUserId
         );
 
         services.AddSingleton(implementationInstance: storageSettings);

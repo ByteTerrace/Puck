@@ -14,7 +14,7 @@ bool sdfShadeHas(uint4 binding, uint phase) { return binding.y != 0u && sdfShade
 float3 sdfShadeDiagnostic(int material, int mode) {
     uint4 binding = sdfShadeBinding(material);
     if (mode == SDF_DEBUG_VIEW_SHADE_TIER) return binding.y != 0u ? float3(0.0, 0.8, 1.0) : 0.15;
-    float work = float(sdfShadeRead(binding.xy, 0u).z + sdfShadeRead(binding.xy, 1u).z + sdfShadeRead(binding.xy, 2u).z) / float(SDF_SHADE_MAX_OPS);
+    float work = float(sdfShadeRead(binding.xy, 0u).z + sdfShadeRead(binding.xy, 1u).z + sdfShadeRead(binding.xy, 2u).z) / float(SDF_SHADE_MAX_PHASE_WORK);
     return float3(work, work * work, 0.0);
 }
 SdfShadeStamp sdfShadeStamp(SdfMaterialData material, float3 position, float3 layerPosition, float3 normal,

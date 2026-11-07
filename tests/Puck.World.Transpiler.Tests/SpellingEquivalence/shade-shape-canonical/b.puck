@@ -1,0 +1,9 @@
+// Equivalent authored shading: shade-shape-canonical.
+schema: "puck.world.definition.v1"
+documentId: "shade-pair"
+shade template program() { surface { roughness: shape({ type: Sphere, x: 2 }, surface.position) } }
+prototypes { prototype "p" { document {
+  schema: "puck.creation.v1"
+  palette [{ color: "#808080", shade: program() }]
+  shape Box "box" { scale [1, 1, 1] }
+} } }

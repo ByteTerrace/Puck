@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 
 namespace Puck.State.Rules;
 
@@ -253,7 +254,10 @@ public sealed partial class RuleEvaluator {
             return sequence;
         }
 
-        if ((continuation is not null) && (continuation.Next() is { } next)) {
+        if ((continuation is not null) && (continuation.Next(
+            firing: in firing,
+            queued: CollectionsMarshal.AsSpan(list: m_deferred)[queued..]
+        ) is { } next)) {
             try {
                 sequence = FireSequence(
                     applied: ref applied,

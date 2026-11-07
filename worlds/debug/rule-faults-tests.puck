@@ -9,8 +9,9 @@
 //
 // Each block is one finding of the rule-faults design, named W1 to W15 (L1, its nested-scope law, is a C# law beside
 // the latch laws). Every block is green: W1 to W9, W12 and W13 pin what the interpreter and the gate's verdict provide,
-// W10 and W11 pin that a firing's latch bit and decision state rewind with its scope, and W14 and W15 that a decision's
-// common and option effects are one firing.
+// W10 and W11 pin that a firing's latch bit and decision state rewind with its scope (W11 for its option, no-choice and
+// neighbour effects, and for the liveness step reading the population its firing installs), and W14 and W15 that a
+// decision's common and option effects are one firing.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -298,6 +299,67 @@ state {
       value: 0
     }
 
+    // W11's no-choice and neighbour cases. The observer is body 6 (`rule-faults-observer`), with body 5
+    // (`rule-faults-kept`) a metre east and body 4 (`rule-faults-removed`) a metre south: the inhabited placements take
+    // the numbers from the top of the capacity down, in document order. `meetScore` scores only body 5 and
+    // `removedScore` only body 4, so every other neighbour's score is absent and declines.
+    row {
+      name: "observer"
+      kind: "Int"
+      cells [{ key: "6", value: 1 }]
+    }
+    row {
+      name: "meetScore"
+      kind: "Int"
+      cells [{ key: "5", value: 1 }]
+    }
+    row {
+      name: "removedScore"
+      kind: "Int"
+      cells [{ key: "4", value: 1 }]
+    }
+    // W11's cell-driven cases. Body 3 is `rule-faults-unrelated`; the cell-driven counts are admitted after every
+    // literal one, so `rule-faults-counted` (its count `countedSize`) is body 2 and `rule-faults-counted-alone` (its
+    // count `aloneSize`) is body 1.
+    row {
+      name: "countedScore"
+      kind: "Int"
+      cells [{ key: "2", value: 1 }]
+    }
+    row {
+      name: "aloneScore"
+      kind: "Int"
+      cells [{ key: "1", value: 1 }]
+    }
+    row {
+      name: "countedSize"
+      kind: "Int"
+      value: 1
+    }
+    row {
+      name: "aloneSize"
+      kind: "Int"
+      value: 1
+    }
+    table decided {
+      noChoicePicked = 0
+      noChoiceLanded = 0
+      noChoiceSink = 0
+      emptyLanded = 0
+      emptySink = 0
+      scoreLanded = 0
+      scoreEmpty = 0
+      effectLanded = 0
+      effectSink = 0
+      untakenLanded = 0
+      removedCommon = 0
+      removedOption = 0
+      countedCommon = 0
+      countedOption = 0
+      aloneCommon = 0
+      aloneOption = 0
+    }
+
     // W12: a one-token search whose judge faults while `searchFault` holds (before tick 30). `searchBest.score`
     // stays -1 until the job lands an answer, and `searchAtTwenty` is what it held at tick 20.
     row {
@@ -338,18 +400,15 @@ state {
   }
 }
 
-placements {
-  placement "rule-faults-inhabited" {
+// An idle stand-in placement inhabited by `count` bodies, a literal or a count cell.
+template standIns(name, at, count) {
+  placement name {
     prototype: "standIn"
-    position [0, 0.05, 0]
+    position: at
     inhabit {
-      count: 1
+      count: count
       distribution {
-        fill {
-          name: "additive"
-          offset: 0
-          step: 0.001
-        }
+        fill { name: "additive", offset: 0, step: 0.001 }
         region: disc(radius: 0.01)
       }
       kit: "walker"
@@ -357,6 +416,16 @@ placements {
       source: "Idle"
     }
   }
+}
+
+placements {
+  standIns("rule-faults-inhabited", [0, 0.05, 0], 1)
+  standIns("rule-faults-observer", [4, 0.05, 0], 1)
+  standIns("rule-faults-kept", [5, 0.05, 0], 1)
+  standIns("rule-faults-removed", [4, 0.05, 1], 1)
+  standIns("rule-faults-unrelated", [3, 0.05, 0], 1)
+  standIns("rule-faults-counted", [5, 0.05, 1], { row: "countedSize" })
+  standIns("rule-faults-counted-alone", [5, 0.05, -1], { row: "aloneSize" })
 }
 
 search {
@@ -661,6 +730,204 @@ rule "common-faults-option-lands" {
   }
 }
 
+// W11, no-choice: the gate closes on tick 2 and the onNoChoice effect faults until tick 3. Clearing the choice and
+// running onNoChoice are one firing, so the faulted firing keeps the choice and onNoChoice runs again, landing once.
+rule "no-choice-effect-fault" {
+  when $tick < 2
+  mode: Level
+  decision {
+    periodSeconds: 1s
+    mode: HighestScore
+    scoreKind: Fixed
+    option "only" {
+      score: 1
+      decided.noChoicePicked += 1
+    }
+    onNoChoice {
+      decided.noChoiceLanded += 1
+      decided.noChoiceSink = 1 / choiceDivisor
+    }
+  }
+}
+
+// W11, no option offered: the first evaluation has no choice to make and runs onNoChoice, which faults until tick 3. The
+// faulted firing leaves the decision unevaluated, so it evaluates again and onNoChoice lands once.
+rule "empty-choice-effect-fault" {
+  mode: Level
+  decision {
+    periodSeconds: 1s
+    mode: HighestScore
+    scoreKind: Fixed
+    option "never" {
+      when b == 0
+      score: 1
+      decided.emptySink = 0
+    }
+    onNoChoice {
+      decided.emptyLanded += 1
+      decided.emptySink = 1 / choiceDivisor
+    }
+  }
+}
+
+// W11, a neighbour whose score faults: the decision holds, so it neither picks another nor runs onNoChoice, and picks
+// the neighbour once its score stops faulting.
+rule "neighbour-score-fault" {
+  mode: Level
+  forEach: observer
+  decision {
+    periodSeconds: 1s
+    mode: HighestScore
+    scoreKind: Int
+    option "meet" {
+      score: meetScore[$right] / choiceDivisor
+      decided.scoreLanded += 1
+      neighbors {
+        candidateBudget: 8
+        halfAngleDegrees: 180
+        maxCandidates: 4
+        range: 10
+        requiresLineOfSight: false
+        retainCurrent: true
+      }
+    }
+    onNoChoice {
+      decided.scoreEmpty += 1
+    }
+  }
+}
+
+// W11, a neighbour whose option effect faults: the pair's firing rewinds with its choice, and lands once.
+rule "neighbour-effect-fault" {
+  mode: Level
+  forEach: observer
+  decision {
+    periodSeconds: 1s
+    mode: HighestScore
+    scoreKind: Int
+    option "meet" {
+      score: meetScore[$right]
+      decided.effectLanded += 1
+      decided.effectSink = meetScore[$right] / choiceDivisor
+      neighbors {
+        candidateBudget: 8
+        halfAngleDegrees: 180
+        maxCandidates: 4
+        range: 10
+        requiresLineOfSight: false
+        retainCurrent: true
+      }
+    }
+  }
+}
+
+// W11, liveness read against the proposed population: a removal under a branch the common effects do not take leaves
+// the neighbour in the population the firing installs, so the option runs.
+rule "liveness-untaken-removal" {
+  mode: Level
+  forEach: observer
+  if b == 0 {
+    removePlacement(id: `rule-faults-kept`)
+  }
+  decision {
+    periodSeconds: 1s
+    mode: HighestScore
+    scoreKind: Int
+    option "meet" {
+      score: meetScore[$right]
+      decided.untakenLanded += 1
+      neighbors {
+        candidateBudget: 8
+        halfAngleDegrees: 180
+        maxCandidates: 4
+        range: 10
+        requiresLineOfSight: false
+        retainCurrent: true
+      }
+    }
+  }
+}
+
+// W11, a common effect that removes the chosen neighbour: the option is not proposed and the common effects stand.
+rule "liveness-removal" {
+  mode: Level
+  forEach: observer
+  decided.removedCommon += 1
+  removePlacement(id: `rule-faults-removed`)
+  decision {
+    periodSeconds: 1s
+    mode: HighestScore
+    scoreKind: Int
+    option "meet" {
+      score: removedScore[$right]
+      decided.removedOption += 1
+      neighbors {
+        candidateBudget: 8
+        halfAngleDegrees: 180
+        maxCandidates: 4
+        range: 10
+        requiresLineOfSight: false
+        retainCurrent: true
+      }
+    }
+  }
+}
+
+// W11, a common effect that zeroes the chosen neighbour's count cell with no document row: the counts settle from the
+// firing's writes, which retire the neighbour, so the option is not proposed and the common effects stand.
+rule "liveness-count-alone" {
+  when $tick == 2
+  mode: Level
+  forEach: observer
+  decided.aloneCommon += 1
+  aloneSize = 0
+  decision {
+    periodSeconds: 1s
+    mode: HighestScore
+    scoreKind: Int
+    option "meet" {
+      score: aloneScore[$right]
+      decided.aloneOption += 1
+      neighbors {
+        candidateBudget: 8
+        halfAngleDegrees: 180
+        maxCandidates: 4
+        range: 10
+        requiresLineOfSight: false
+        retainCurrent: true
+      }
+    }
+  }
+}
+
+// W11, a common effect that zeroes the chosen neighbour's count cell and removes another placement: the install
+// rebuilds the population and its cell-driven reconcile retires the neighbour, so the option is not proposed.
+rule "liveness-count-install" {
+  when $tick == 2
+  mode: Level
+  forEach: observer
+  decided.countedCommon += 1
+  countedSize = 0
+  removePlacement(id: `rule-faults-unrelated`)
+  decision {
+    periodSeconds: 1s
+    mode: HighestScore
+    scoreKind: Int
+    option "meet" {
+      score: countedScore[$right]
+      decided.countedOption += 1
+      neighbors {
+        candidateBudget: 8
+        halfAngleDegrees: 180
+        maxCandidates: 4
+        range: 10
+        requiresLineOfSight: false
+        retainCurrent: true
+      }
+    }
+  }
+}
+
 // W12: the judge accepts every relocation, then faults while the window holds. A candidate whose judge faults is a
 // faulted candidate and not a scored one, so the step restarts and no answer lands until the window closes.
 rule "search-accept" {
@@ -818,12 +1085,27 @@ test "W10 an effect that faults leaves the Edge crossing unconsumed" {
   }
 }
 
-test "W11 an option effect that faults leaves no choice installed" {
+test "W11 a decision firing that faults decides nothing, and an option reads the population its firing installs" {
   when {
     ticks 10
   }
   expect {
     choiceLanded == 1
+    decided.noChoicePicked == 1
+    decided.noChoiceLanded == 1
+    decided.emptyLanded == 1
+    decided.scoreLanded == 1
+    decided.scoreEmpty == 0
+    decided.effectLanded == 1
+    decided.untakenLanded == 1
+    decided.removedCommon == 1
+    decided.removedOption == 0
+    decided.aloneCommon == 1
+    decided.aloneOption == 0
+    aloneSize == 0
+    decided.countedCommon == 1
+    decided.countedOption == 0
+    countedSize == 0
   }
 }
 

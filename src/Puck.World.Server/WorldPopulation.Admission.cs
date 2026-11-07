@@ -1,4 +1,5 @@
 using Puck.Commands;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -678,105 +679,50 @@ public sealed partial class WorldPopulation {
         }
     }
 
-    /// <summary>Reconciles the inhabited-body registrations against the delivered definition (called from the server's
-    /// Install after <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>): a placement's inhabit facet joins bodies
-    /// into the peer slice over the loopback link — an inhabitant is a <see cref="PopulationKind.NetworkPeer"/> whose entry
-    /// carries a placement back-reference, holding a normal <see cref="WorldBody"/> under the resolved kit and driven by
-    /// its kit's sensing steering producer. Bodies claim the highest free slots (capacity minus one downward) so an existing inhabitant never
-    /// renumbers; admission is bounded only by the table itself and rejects loudly when it is genuinely full — there is no
-    /// census-fit reservation. Diff-by-placement: retire an entry whose row vanished, lost its facet, or changed
-    /// creation/kit; keep a matching one (its pose survives an unrelated placement edit); admit new bodies at the highest
-    /// free slots — except a facet whose <see cref="WorldPlacementInhabit.Count"/> names a cell
-    /// (<see cref="WorldPlacementInhabitCount.Row"/>), which this pass never grows: it starts at zero and is
-    /// admitted only by <c>WorldPopulation.Step.cs</c>'s <c>ReconcileInhabitCounts</c>, tracking the cell's own
-    /// live value. The census ceiling (<see cref="MaxSimulated"/>) follows all non-census physical occupancy, and the
-    /// census is re-clamped without renumbering an inhabitant or transferred entity.</summary>
-    /// <param name="definition">The delivered definition (its placements, creations, kits, and look table).</param>
-    /// <param name="admitted">Optional sink for the peer generations admitted by the reconciliation.</param>
-    /// <param name="disconnected">Optional sink for the peer generations disconnected by the reconciliation.</param>
-    public void ReconcileInhabitants(WorldDefinition definition, List<WorldPeerEventEntry>? admitted = null, List<WorldPeerEventEntry>? disconnected = null) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
+    // The placement an inhabitant binds to in a definition, and its kit: false when the placement is gone, carries no
+    // inhabit facet, or names a kit that does not resolve, which retires the inhabitant.
+    private bool TryFindBindable(WorldDefinition definition, string placementId, [NotNullWhen(returnValue: true)] out WorldPlacement? placement, out byte kitIndex) {
+        placement = FindInhabited(
+            definition: definition,
+            placementId: placementId
+        );
+        kitIndex = 0;
 
-        // Pass 1 — retire inhabited slots whose placement/facet/creation-kit binding no longer holds. A surviving slot
-        // keeps its body (pose preserved); a kit change recompiles in place. An inhabited entry is a peer carrying a
-        // placement back-reference; a plain census peer (no PlacementId) is left untouched.
-        for (var index = (Capacity - 1); (index >= LocalSeatCount); index--) {
-            var entry = m_entries[index];
+        if (
+            (placement is null) ||
+            (InhabitKit(
+            definition: definition,
+            placement: placement
+        ) is not { } kit)
+        ) {
+            placement = null;
 
-            if (entry.PlacementId is null) {
-                continue;
-            }
-
-            if (
-                (entry.PlacementId is not { } placementId) ||
-                (FindInhabited(
-                definition: definition,
-                placementId: placementId
-            ) is not { } placement) ||
-                (ResolveInhabitKit(
-                definition: definition,
-                placement: placement
-            ) is not { } kitName) ||
-                (ResolveKitOrNull(name: kitName) is not { } kitIndex)
-            ) {
-                disconnected?.Add(item: PeerEventEntry(index: index));
-                RetireInhabitant(index: index);
-
-                continue;
-            }
-
-            BindInhabitant(
-                entry: entry,
-                kitIndex: kitIndex,
-                placement: placement
-            );
+            return false;
         }
 
-        // Pass 2 — grow/shrink each LITERAL-count inhabited placement to its declared count, at the highest free
-        // slots (document order). A cell-driven count (Count.Row set) is skipped here on purpose: it starts at
-        // zero live bodies through every structural install (boot included) and is grown/shrunk exclusively by the
-        // per-tick WorldPopulation.Step.cs.ReconcileInhabitCounts, gated on the bound cell's own value actually
-        // moving — a structural edit that leaves the cell untouched must not silently re-fan a live census.
-        foreach (var placement in definition.Placements) {
-            if (
-                (placement.Inhabit is not { } inhabit) ||
-                (inhabit.Count?.Row is not null) ||
-                (ResolveInhabitKit(
-                definition: definition,
-                placement: placement
-            ) is not { } kitName) ||
-                (ResolveKitOrNull(name: kitName) is not { } kitIndex)
-            ) {
-                continue;
-            }
+        kitIndex = kit;
 
-            var desired = Math.Clamp(
-                value: (inhabit.ResolvedCount.Literal ?? 1),
-                min: 0,
-                max: PeerCapacity
-            );
-
-            ReconcileOneInhabitedCount(
-                admitted: admitted,
-                definition: definition,
-                desired: desired,
-                disconnected: disconnected,
-                inhabit: inhabit,
-                kitIndex: kitIndex,
-                placement: placement
-            );
-        }
-
-        // Re-clamp the census against every entity-table slot now owned by an inhabitant or transferred authority.
-        _ = SetSimulatedCount(count: m_simulatedCount);
-        RebuildPlacementOrdinalTable(definition: definition);
-        // A structural install can reorder or replace placements at a fixed ordinal without changing their count
-        // (WorldPopulation.Step.cs.ReconcileInhabitCounts' own cache resize gate misses that), so every structural
-        // pass invalidates the whole cache — the next per-tick reconcile re-resolves each cell-driven facet fresh
-        // rather than trusting a raw value that may now belong to a different row entirely.
-        InvalidateInhabitCountCache();
-        m_revision++;
+        return true;
     }
+    // The kit row an inhabited placement resolves in the definition's own kit rows, or null when it names none that
+    // resolves. An install compiles its kit table from those rows, so a forecast over a proposed document resolves what
+    // that install would.
+    private static byte? InhabitKit(WorldDefinition definition, WorldPlacement placement) => ((ResolveInhabitKit(
+        definition: definition,
+        placement: placement
+    ) is { } kitName)
+        ? ResolveRowIndex(
+            name: kitName,
+            nameOf: KitRowName,
+            rows: definition.Kits
+        )
+        : null);
+    // The census a literal-count inhabit facet asks for.
+    private int LiteralInhabitants(WorldPlacementInhabit inhabit) => Math.Clamp(
+        value: (inhabit.ResolvedCount.Literal ?? 1),
+        min: 0,
+        max: PeerCapacity
+    );
 
     /// <summary>Gets or sets what holds an empty body index for a body that may come back to it (a companion whose title
     /// is away or whose hop is pending, or a body a departure in doubt left), answering the placement the held body
@@ -803,9 +749,12 @@ public sealed partial class WorldPopulation {
         if (
             (((uint)(slot - LocalSeatCount)) >= PeerCapacity) ||
             !m_entries[slot].Active ||
-            (FindInhabited(definition: definition, placementId: placementId) is not { } placement) ||
-            (ResolveInhabitKit(definition: definition, placement: placement) is not { } kitName) ||
-            (ResolveKitOrNull(name: kitName) is not { } kitIndex)
+            !TryFindBindable(
+            definition: definition,
+            kitIndex: out var kitIndex,
+            placement: out var placement,
+            placementId: placementId
+        )
         ) {
             return false;
         }
@@ -848,75 +797,6 @@ public sealed partial class WorldPopulation {
                 holds: m_kits[kitIndex].Holds,
                 tether: m_kits[kitIndex].Tether
             );
-    }
-    // Grows or shrinks one inhabited placement's live census to `desired`: growth claims the highest free slots in
-    // document order (HighestFreeSlot's own remarks — the first body admitted always lands at the highest index), and
-    // shrink retires the lowest surviving index that is not currently a seat's own claimed body (Entry.IsRemoteHuman)
-    // — since admission always fills the highest slot first, the lowest index is always the first one admitted, and
-    // skipping a human-occupied one here is what keeps a possessed inhabitant standing through a shrink instead of
-    // being torn out from under its player. Shared by the structural (literal-count) pass above and the cell-driven
-    // per-tick reconcile (WorldPopulation.Step.cs.ReconcileInhabitCounts).
-    private void ReconcileOneInhabitedCount(WorldDefinition definition, WorldPlacement placement, WorldPlacementInhabit inhabit, byte kitIndex, int desired, List<WorldPeerEventEntry>? admitted, List<WorldPeerEventEntry>? disconnected) {
-        var live = CountInhabitants(placementId: placement.Id);
-
-        for (var ordinal = live; (ordinal < desired); ordinal++) {
-            var slot = HighestFreeSlot();
-
-            if (slot < 0) {
-                if (NarrationHub is { HasNarrationSink: true }) {
-                    NarrationHub?.Narrate(
-                        channel: "world.placement",
-                        text: $"[world.placement: inhabited '{placement.Id}' has no free entity slot — the {Capacity}-slot table is full]"
-                    );
-                }
-
-                return;
-            }
-
-            ActivateInhabitant(
-                definition: definition,
-                desiredCount: desired,
-                index: slot,
-                inhabit: inhabit,
-                kitIndex: kitIndex,
-                ordinal: ordinal,
-                placement: placement
-            );
-            admitted?.Add(item: PeerEventEntry(index: slot));
-        }
-
-        for (var extra = desired; (extra < live); extra++) {
-            var slot = LowestRetirableInhabitant(placementId: placement.Id);
-
-            if (slot < 0) {
-                // Every remaining inhabitant is seat-driven — nothing left this pass can retire.
-                return;
-            }
-
-            disconnected?.Add(item: PeerEventEntry(index: slot));
-            RetireInhabitant(index: slot);
-        }
-    }
-    // The shrink half of ReconcileOneInhabitedCount's own retire loop — lowest-index match that is not a seat's own
-    // claimed body, never LowestInhabitant's plain scan (which would retire a possessed inhabitant out from under
-    // its player).
-    private int LowestRetirableInhabitant(string placementId) {
-        for (var index = LocalSeatCount; (index < Capacity); index++) {
-            var entry = m_entries[index];
-
-            if (
-                !entry.IsRemoteHuman &&
-                string.Equals(
-                a: entry.PlacementId,
-                b: placementId,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return index;
-            }
-        }
-
-        return -1;
     }
     // The placement:<id> body-reference token's ordinal table — see m_placementOrdinalToBody's own remarks. Rebuilt
     // here rather than incrementally: ReconcileInhabitants already walks every inhabited placement in the SAME

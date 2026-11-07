@@ -3,11 +3,12 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Azure.Core;
+using Puck.Embeddings.Azure;
 using Xunit;
 
 namespace Puck.Embeddings.Tests;
 
-public sealed class OpenAiEmbeddingGeneratorTests {
+public sealed class AzureOpenAiEmbeddingGeneratorTests {
     [Fact]
     public async Task RequestShapeAndIdentityBearerTokenMatchSpecificationAsync() {
         var port = GetFreePort();
@@ -54,7 +55,7 @@ public sealed class OpenAiEmbeddingGeneratorTests {
                 context.Response.Close();
             });
 
-        var options = new OpenAiEmbeddingOptions {
+        var options = new AzureOpenAiEmbeddingOptions {
             Credential = new MockTokenCredential(token: "test-identity-token"),
             Dimensions = 3,
             Endpoint = new Uri(uriString: prefix),
@@ -62,7 +63,7 @@ public sealed class OpenAiEmbeddingGeneratorTests {
             OmitDimensions = false,
         };
 
-        using var generator = OpenAiEmbeddingGeneratorFactory.Create(options: options);
+        using var generator = AzureOpenAiEmbeddingGeneratorFactory.Create(options: options);
         var result = await generator.GenerateAsync(values: ["hello world"], cancellationToken: TestContext.Current.CancellationToken);
 
         await serverTask;
@@ -109,7 +110,7 @@ public sealed class OpenAiEmbeddingGeneratorTests {
                 context.Response.Close();
             });
 
-        var options = new OpenAiEmbeddingOptions {
+        var options = new AzureOpenAiEmbeddingOptions {
             Credential = new MockTokenCredential(token: "mock-token"),
             Dimensions = 2,
             Endpoint = new Uri(uriString: prefix),
@@ -117,7 +118,7 @@ public sealed class OpenAiEmbeddingGeneratorTests {
             OmitDimensions = true,
         };
 
-        using var generator = OpenAiEmbeddingGeneratorFactory.Create(options: options);
+        using var generator = AzureOpenAiEmbeddingGeneratorFactory.Create(options: options);
 
         await generator.GenerateAsync(values: ["hello"], cancellationToken: TestContext.Current.CancellationToken);
 
@@ -128,13 +129,13 @@ public sealed class OpenAiEmbeddingGeneratorTests {
     }
     [Fact]
     public void FactoryCreatesGeneratorWithDefaultAzureCredentialWhenNoneProvided() {
-        var options = new OpenAiEmbeddingOptions {
+        var options = new AzureOpenAiEmbeddingOptions {
             Dimensions = 128,
             Endpoint = new Uri(uriString: "https://example-resource.openai.azure.com/"),
             Model = "text-embedding-3-small",
         };
 
-        using var generator = OpenAiEmbeddingGeneratorFactory.Create(options: options);
+        using var generator = AzureOpenAiEmbeddingGeneratorFactory.Create(options: options);
 
         Assert.NotNull(@object: generator);
     }
@@ -168,14 +169,14 @@ public sealed class OpenAiEmbeddingGeneratorTests {
                 context.Response.Close();
             });
 
-        var options = new OpenAiEmbeddingOptions {
+        var options = new AzureOpenAiEmbeddingOptions {
             Credential = new MockTokenCredential(token: "test-token"),
             Dimensions = 2,
             Endpoint = new Uri(uriString: prefix),
             Model = "test-model",
         };
 
-        using var generator = OpenAiEmbeddingGeneratorFactory.Create(options: options);
+        using var generator = AzureOpenAiEmbeddingGeneratorFactory.Create(options: options);
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             testCode: () => generator.GenerateAsync(values: ["first", "second"], cancellationToken: TestContext.Current.CancellationToken)
         );
@@ -214,14 +215,14 @@ public sealed class OpenAiEmbeddingGeneratorTests {
                 context.Response.Close();
             });
 
-        var options = new OpenAiEmbeddingOptions {
+        var options = new AzureOpenAiEmbeddingOptions {
             Credential = new MockTokenCredential(token: "test-token"),
             Dimensions = 2,
             Endpoint = new Uri(uriString: prefix),
             Model = "test-model",
         };
 
-        using var generator = OpenAiEmbeddingGeneratorFactory.Create(options: options);
+        using var generator = AzureOpenAiEmbeddingGeneratorFactory.Create(options: options);
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             testCode: () => generator.GenerateAsync(values: ["test"], cancellationToken: TestContext.Current.CancellationToken)
         );
@@ -261,14 +262,14 @@ public sealed class OpenAiEmbeddingGeneratorTests {
                 context.Response.Close();
             });
 
-        var options = new OpenAiEmbeddingOptions {
+        var options = new AzureOpenAiEmbeddingOptions {
             Credential = new MockTokenCredential(token: "test-token"),
             Dimensions = 2,
             Endpoint = new Uri(uriString: prefix),
             Model = "test-model",
         };
 
-        using var generator = OpenAiEmbeddingGeneratorFactory.Create(options: options);
+        using var generator = AzureOpenAiEmbeddingGeneratorFactory.Create(options: options);
         var result = await generator.GenerateAsync(values: ["first", "second"], cancellationToken: TestContext.Current.CancellationToken);
 
         await serverTask;
@@ -304,7 +305,7 @@ public sealed class OpenAiEmbeddingGeneratorTests {
                 context.Response.Close();
             });
 
-        var options = new OpenAiEmbeddingOptions {
+        var options = new AzureOpenAiEmbeddingOptions {
             Credential = new MockTokenCredential(token: secretToken),
             Dimensions = 2,
             Endpoint = new Uri(uriString: prefix),
@@ -312,7 +313,7 @@ public sealed class OpenAiEmbeddingGeneratorTests {
             Model = "test-model",
         };
 
-        using var generator = OpenAiEmbeddingGeneratorFactory.Create(options: options);
+        using var generator = AzureOpenAiEmbeddingGeneratorFactory.Create(options: options);
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             testCode: () => generator.GenerateAsync(values: ["hello"], cancellationToken: TestContext.Current.CancellationToken)
         );

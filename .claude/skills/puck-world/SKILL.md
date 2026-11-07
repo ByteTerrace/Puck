@@ -482,7 +482,13 @@ beside the arena's columns implements `IJournalParticipant` and records what it 
 newest first. `RuleLatch`'s lifecycle writers (`Restore`, `Clear`, `ClearRule`, `Prune`) take the arena's journal, no default,
 and refuse inside a scope, since only a firing's writes are recorded; `EndSweep`, `Forget` and `Reset` record what they remove
 when a scope is open. A decision's common and option effects are one firing: `FireEffects` proposes the common effects, then
-the `IFiringContinuation`'s effects into the same scope, and the `IFiringPrelude`'s binding rewinds with both. A queued arm
+the `IFiringContinuation`'s effects into the same scope, and the `IFiringPrelude`'s binding rewinds with both; a decision's
+no-choice effects are one firing with the binding they clear the same way. The continuation is handed the arms the common
+effects queued and skips the option when the population a reconcile of the firing's proposal produces no longer holds its
+pair: the queued document rows compose against the proposed document, and `WorldPopulation.ReconcileKeeps` runs the
+install's own reconcile (structural when `WorldDocument.RebuildsPopulation` says the unit rebuilds the population, then the
+cell-driven counts from the open arena, then the census re-clamp) over a scratch slot table. The reconcile is written once,
+generic over the slot table, so a new retire rule in it reaches the forecast. A decision reads every gate and score before it writes its binding, so a fault writes nothing. A queued arm
 keeps the host bindings it was queued under (`IEffectHost.CaptureBinding`, `ApplyBinding`) for its preflight and delivery.
 An arm that fires outside the arena evaluates nothing itself: it declares `IRuleEffect.Sources` (a key read as an index, an
 expression program, an operand) and the evaluator reads them with the firing, so a source that faults is a `Faulted`

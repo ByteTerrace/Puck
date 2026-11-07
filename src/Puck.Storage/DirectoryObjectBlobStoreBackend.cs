@@ -11,6 +11,9 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
 
     private static readonly TimeSpan LockWait = TimeSpan.FromSeconds(seconds: 5);
 
+    /// <summary>Gets the one backend every directory target shares; it holds no state.</summary>
+    internal static DirectoryObjectBlobStoreBackend Instance { get; } = new();
+
     private static ObjectBlobContent? Read(ConfinedDirectory directory, string name, int maximum) {
         using var stream = directory.OpenFile(name);
 
@@ -139,7 +142,20 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
             local.MaximumBlobBytes
         ));
     }
-    public bool Supports(ObjectStorageTarget target) => (target is DirectoryObjectStorageTarget);
+    public ValueTask<ObjectStorageAccess> ProbeAccessAsync(ObjectStorageTarget target, TimeSpan timeout, TimeProvider clock,
+        CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
+        _ = ObjectStorageTarget.Require<DirectoryObjectStorageTarget>(
+            description: "a directory target",
+            target: target
+        );
+
+        return ValueTask.FromResult(result: new ObjectStorageAccess(
+            Available: true,
+            Detail: "a local directory needs no credential",
+            ExpiresOn: null
+        ));
+    }
     public ValueTask<ObjectBlobWriteResult> WriteAsync(ObjectStorageTarget target, ObjectBlobAddress address,
         ReadOnlyMemory<byte> content, ObjectBlobWriteMode mode, string? ifMatchVersion = null,
         CancellationToken cancellationToken = default) {

@@ -7,7 +7,7 @@ public static class SdfShadeCost {
     /// <summary>Prices a shape including bounded internal helper loops, never only the dispatch opcode.</summary>
     public static uint Shape(SdfShadeShape descriptor) => Shape(shape: descriptor.Capture());
 
-    internal static uint Shape(SdfPaintShape shape) => shape.Type switch {
+    internal static uint Shape(SdfPaintShape shape) => checked(40u + (shape.Type switch {
         SdfShapeType.ConvexPolygon => checked(((64u * ((uint)SdfPrismProfile.MaxConvexVertices)) + 128u)),
         SdfShapeType.Ellipse => checked(((32u * SdfFieldEvaluator.EllipseRootSteps) + 128u)),
         // Samples includes both endpoints, two initial refinement probes, and at most two gaps per round.
@@ -16,5 +16,5 @@ public static class SdfShadeCost {
             ((uint)((SdfFieldEvaluator.SweepSamples + 3) + (2 * SdfFieldEvaluator.SweepRounds)))) * 256u) + 256u)),
         SdfShapeType.Sphere => 64u,
         _ => 512u,
-    };
+    }));
 }

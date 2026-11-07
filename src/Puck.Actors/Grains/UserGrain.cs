@@ -2,7 +2,7 @@ using Azure;
 using Microsoft.AspNetCore.DataProtection;
 using System.Security.Cryptography;
 using Puck.Actors.Services;
-using Puck.Storage;
+using Puck.Storage.Azure;
 
 namespace Puck.Actors.Grains;
 

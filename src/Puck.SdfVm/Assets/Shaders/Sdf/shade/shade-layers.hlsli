@@ -34,7 +34,8 @@ void sdfApplyPaints(float3 worldPoint, float3 layerPoint, float footprint, uint 
         float3 local = rotatePointByInverseQuaternion((p - frame.xyz), asfloat(sdfWords[base + 1u]));
         if (any(abs(local - slotCenter.yzw) > (asfloat(sdfWords[base + 7u]).xyz + (colorStroke.w + footprint)))) continue;
         float4 scale = asfloat(sdfWords[base + 2u]);
-        float d = (evaluateShape(asuint(frame.w), (local / scale.xyz), asfloat(sdfWords[base + 3u]), asfloat(sdfWords[base + 4u])) * scale.w);
+        float3 primitivePoint = rotatePointByInverseQuaternion(local / scale.xyz, asfloat(sdfWords[base + 8u]));
+        float d = (evaluateShape(asuint(frame.w), primitivePoint, asfloat(sdfWords[base + 3u]), asfloat(sdfWords[base + 4u])) * scale.w);
         if (colorStroke.w > 0.0) d = (abs(d) - colorStroke.w);
         float reveal = 1.0 - smoothstep(-edge, edge, d);
         if (deferLast && i + 1u == count) coverage = reveal;

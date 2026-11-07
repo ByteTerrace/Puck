@@ -178,8 +178,9 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   mirror of the front ([rendering plan](rendering.md)).
 - Whether the engine ships or requires the GameInput redistributable
   ([input](#input-channels)).
-- Whether proof of possession is a product requirement for Entra bearer tokens
-  and for initial binding issuance ([security](#security-review)).
+- Whether proof of possession is a product requirement for the identity
+  provider's bearer tokens (Entra's today) and for initial binding issuance
+  ([security](#security-review)).
 - Looks in the transmission design ([transmission](transmission.md)), each
   with the design's choice first:
   - A body's own overhangs and hollows shadow its wrapped dark side (the
@@ -915,6 +916,32 @@ custodian reaches a remote home only through a remote authority its host
 already opened. The debug world's faerie declares no role yet, so it does not
 travel.
 
+Neighbour contact replay packet (independent of companion custody):
+
+- [high] Tape fixed neighbour inputs at their local admission tick. The dynamic
+  correction budget is enforced by `WorldPopulation.BoundAdjacencyCorrection`,
+  but `WorldAdjacencyFields.Handle.Pin` (`src/Puck.World.Server/WorldAdjacencyFields.cs:669`)
+  copies the latest presentation snapshot and discards `sourceTick`;
+  `WorldAdjacencyContactField.ResolveCore`
+  (`src/Puck.World.Server/WorldAdjacencyContactField.cs:25`) still quantizes floats
+  after delivery. `WorldReplayTickInput`
+  (`src/Puck.World.Server/WorldReplaySnapshot.cs:218`) carries authority events
+  and intents, not the neighbour image. Build a fixed-point neighbour record
+  containing authority/generation, source tick, document/geometry revision,
+  active entity addresses, poses, colliders and contact modes. The local tick
+  owner admits an immutable image once before simulation, chooses and records
+  stale/missing/late-image handling, and tapes that image's local admission
+  tick (source ticks alone cannot align different simulation rates). Record
+  the initial pinned image for recordings begun mid-session and the geometry
+  revisions those records reference. Both shadow and live replay install those
+  inputs through one simulation-facing source with live delivery disconnected;
+  rendering may keep interpolated floats. Check reordered, delayed and missing
+  deliveries, mixed rates, a mid-session recording and a document change:
+  replaying the same admitted records must produce identical local state and
+  clamp counts. This is a transport/admission/tape change, beyond the bounded
+  depenetration fix; the bound does not claim replay determinism or prove a
+  neighbour's bodies exist.
+
 Still open from the companion build:
 
 - [medium] The silo's deactivation (`WorldSiloHost.DeactivateCoreAsync`) writes
@@ -1089,6 +1116,62 @@ retirement.
   the defect ([toolchain cautions](../development/contributing.md#hardware-and-toolchain-cautions));
   on each SDK bump, scan a running World's jitted methods for the pattern before
   removing the attribute. Reporting it to dotnet/runtime is the owner's.
+
+### Provider independence
+
+Owner: delivery lane · medium · Next: the CLI's Azure verbs. AGENTS.md's
+"Puck is provider-independent" ruling: Azure and Entra are one replaceable
+implementation behind Puck's own abstractions. A provider project declares
+`<PuckProvider>`; the architecture gate (PUCKARCH009, `PuckArchitectureGate`'s
+`CheckProviders`) refuses a provider project or a provider's SDK assemblies
+(`PuckArchitectureProviderAssemblies` in `build/Architecture.props`) in any
+other ranked project's closure. Terminal kinds are exempt, and that exemption
+is what the first item below narrows.
+
+- [high] The CLI's Azure deployment verbs live in the provider-neutral
+  `Puck.Cli.Release` (`src/Puck.Cli.Release/Azure/`, namespace `Puck.Cli.Azure`),
+  which therefore references `Puck.Storage.Azure` and the Azure SDK. The generic
+  `puck world release` verbs call them directly
+  (`src/Puck.Cli.Release/Automation/WorldReleaseCommand.cs`: `AzureCommand`
+  calls for status, finalize, resume, deploy, rollback, capture and restore), and
+  `OfficialWorldDocumentScanner.RootDocumentName` reads
+  `AzureCommand.HostedWorldName`. Abstraction: a release host, the driver
+  `WorldReleaseCoordinator`'s runtime results already come from; move the Azure
+  verbs into a `Puck.Cli.Azure` provider project selected through it, then drop
+  the gate's Tool exemption so only tests compose providers by reference. The
+  other Tool edge is `puck embed`: `Puck.Cli.Worlds`' `EmbedCommand` builds an
+  `AzureOpenAiEmbeddingGeneratorFactory` generator directly, so the CLI
+  references `Puck.Embeddings.Azure`; it should select an embedding provider
+  type (`WorldExtensionEmbeddingProviderType`) from installed extensions as a
+  World host does.
+- [medium] Player storage identity is an authored user id
+  (`storage.userId` / `--user-id`, `ExplicitOverridePlayerStorageIdentityResolver`),
+  which today is an Entra `oid` used as the container name. Abstraction: the
+  authentication provider already returns the client's verified subject
+  (`WorldAuthenticationProvider.Client`); resolve the storage identity from the
+  configured identity provider the way the store is resolved from its
+  provider, and keep the container mapping a store concern.
+- [medium] `Puck.Actors` (declared `<PuckProvider>Azure</PuckProvider>`) is the
+  Azure deployment's onboarding tier through and through: Entra `oid` grain
+  keys, Microsoft Graph directory provisioning, on-behalf-of blob containers,
+  App Configuration and Orleans Azure Storage clustering
+  (`src/Puck.Actors/Program.cs`, `src/Puck.Actors/Extensions.cs`). Nothing
+  references it. Name it for its provider (a `Puck.Azure` prefix) once the MMO
+  round's research pages, which cite its paths, are synthesized; a non-Azure
+  deployment needs a provisioning abstraction (identity, storage, keys) before
+  it can onboard users.
+- [medium] The dashboard portal and host sign in through MSAL and talk to Azure
+  Blob directly (`src/Puck.Dashboard/src/host/src/tokenCredential.ts`,
+  `@azure/msal-browser`, `@azure/storage-blob`;
+  `isByteTerraceStorageUrl` and `resolveStorageEndpoint` in
+  `src/Puck.Dashboard/src/portal/src/clients/resolveStorageEndpoint.ts`). The
+  architecture gate does not see `npm` projects. Abstraction: a sign-in and a
+  store seam the portal is handed, with the Azure pair as one implementation.
+- [low] Remote MCP's OIDC options encode Entra's claim shape: `SubjectClaim`
+  accepts only `sub` or `oid`, and `oid` requires `TenantId`, an exact `tid`
+  claim (`RemoteMcpOptions.Validate`, `RemoteMcpCaller.TenantId`). Abstraction:
+  a subject claim name plus a map of required exact claims, so `tid` is one
+  configured claim rather than a field.
 
 ### Author leaks to the standard
 
@@ -1348,36 +1431,13 @@ and the Water packet).
 
 ### Author shaders
 
-Owner: rendering · ordinary · Next: the step-0 review's findings below, then
+Owner: rendering · ordinary · Next:
 [step 2 of the design memo](author-shaders.md#6-implementation-steps) (the
 interpreter's cost and registers on the bar devices). Steps 0 and 1 have
 landed; step 1's GPU lifetimes (retained identity lists through fence
 retirement in `SdfWorldResidency`, the bounded `SdfShadeDispatch` records) owe
 an adversarial review.
 
-- [high] `SdfShadeHlsl.Emit` subscripts a scalar for `SdfShadeOp.Component` on
-  a width-1 operand (`clock.x` emits `asfloat(regs.r0).x[0u]`), which DXC
-  rejects, so tier 2 cannot specialize a program tier 1 admits.
-- [high] `WorldShadeLowering` types runtime parameters from one expected type:
-  `hash` never asks for `UInt3`, `select` arms and user `function` bodies drop
-  the expectation, and `ParameterType` rewrites a slot in place when one
-  parameter is used as float and uint, failing later as an internal mismatch.
-- [high] Canonical identity depends on spelling: `==` and `!=` are not ordered
-  as commutative, and `SdfShadeProgram.Compiler` fills its parameter slots in
-  declaration order, so dead parameters stay and two equivalent programs get
-  different `Identity`, layout and cost.
-- [high] `WrapSignatureOf` (`SdfWorldTables.ProgramUpload.cs`) ignores
-  `material.Shade.Demand`, so a palette-only edit that widens shadow demand
-  never re-runs the Surface pass. Check against step 1's upload changes first.
-- [medium] `shape(...)` in a shade program skips the document's member checks
-  and `TryValidateScaledPrimitive`, keeps uncanonicalized fields in the
-  program's definition, and drops an elliptic cylinder's rotation
-  (`CapturePaintShape` ignores `SdfOp.Rotate`).
-- [medium] `MaxOps` counts dispatch-scaled work as instructions, capping a
-  program near 63 instructions and refusing any multi-strand `Sweep` shape.
-- [medium] A `let` outside a phase block is not bound as a shade expression.
-- [low] Raw JSON shade definitions reach `Compile` without null or overflow
-  guards.
 The owner's ruling (AGENTS.md, "Authors rule"): authors may bring their own
 shaders, so a look is never limited to what the engine's shading offers.
 [The design memo](author-shaders.md) answers the owner's questions from
@@ -3408,6 +3468,16 @@ step's completion criteria; C1 to C7 are in.
 Owner: an independent reviewer (Argon) · unconfirmed · Next: the researcher
 brief's priorities ([security review](../development/security-review.md)).
 
+- [medium] The deployed debug world hands its whole document to every
+  authenticated authority: `worlds/debug/debug.puck`, `garden.puck` and
+  `night.puck` author a `FederatedAuthority` admission row with domain `"*"`
+  and `disclosure: Replica` (deliberate, so a returning traveller's windows
+  observe the world whole). With `azure.api-users` deployed, that is every
+  member of the configured Entra group, hidden draw secrets included
+  (inference; [Puck today](mmo-foundations/puck-today.md), the MMO round's
+  lane E). Decide whether a returning traveller's window needs `Replica` or
+  whether `Presentation` serves it, and narrow the row to the debug world's
+  own authorities if `Replica` stays.
 - [low, latent API hazard] The verified review's 1.4 is not a reproduced player
   escalation. `WorldRemoteAuthority.TryRouteCredential` still selects the lowest
   body's credential for an unbound, body-agnostic request. Production seat routes
@@ -3541,7 +3611,9 @@ brief's priorities ([security review](../development/security-review.md)).
   public key under their own prefix and trigger issuance when `binding.cbor` is
   absent; the subject is that caller. Establish the proof-of-possession policy
   and a concrete authority crossing before classifying it.
-- The Entra bearer-token trust model
+- The bearer-token admission trust model, asked of the authentication provider
+  contract (`WorldAuthenticationProvider`) and checked against today's
+  implementation, the Entra authenticator
   (`src/Puck.World.Azure/EntraWorldAuthenticator.cs:137`,
   `src/Puck.World.Server/WorldRemoteAuthority.cs:1225`): the challenge and
   session are compared but not signed by the bearer, so replay across challenges
@@ -3710,6 +3782,10 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
+- [medium] `world.decisions` reports 0 policies in the debug world's boot
+  instance, so the pond's decisions may not be running there (seen by the
+  rule-faults step 7 lane on a headless boot; unchecked). Read why before
+  treating it as a defect.
 - [high] Player-state defects found grounding the hub design. The design memo
   ([hub and saves](hub-and-saves.md)) decides the shape; these are defects
   whatever it decides:

@@ -1,14 +1,8 @@
 using Azure.Core;
 using Azure.Identity;
 
-namespace Puck.Storage;
+namespace Puck.Storage.Azure;
 
-/// <summary>The verdict of an ambient-credential probe: whether a storage token could be issued, when it expires, and
-/// one line of detail a console verb can echo.</summary>
-/// <param name="Available">Whether the ambient credential issued a storage token.</param>
-/// <param name="Detail">The credential type that answered, or the first line of why none could.</param>
-/// <param name="ExpiresOn">The token's expiry when one was issued; <see langword="null"/> otherwise.</param>
-public readonly record struct AzureBlobCredentialStatus(bool Available, string Detail, DateTimeOffset? ExpiresOn);
 /// <summary>
 /// Asks the ambient Azure credential — the same <c>DefaultAzureCredential</c> chain
 /// <see cref="AzureBlobObjectBlobStoreBackend"/> authenticates its service-URI targets with — whether it can issue a
@@ -54,7 +48,7 @@ public static class AzureBlobCredentialProbe {
     /// <param name="credential">The credential to ask; <see langword="null"/> builds a fresh
     /// <c>DefaultAzureCredential</c> for this probe alone. A supplied credential stays the caller's.</param>
     /// <returns>The verdict.</returns>
-    public static async ValueTask<AzureBlobCredentialStatus> ProbeAsync(TimeSpan timeout, CancellationToken cancellationToken = default, TimeProvider? clock = null,
+    public static async ValueTask<ObjectStorageAccess> ProbeAsync(TimeSpan timeout, CancellationToken cancellationToken = default, TimeProvider? clock = null,
         TokenCredential? credential = null) {
         using var expiry = new CancellationTokenSource(
             delay: timeout,
@@ -77,13 +71,13 @@ public static class AzureBlobCredentialProbe {
                 requestContext: new TokenRequestContext(scopes: StorageScopes)
             );
 
-            return new AzureBlobCredentialStatus(
+            return new ObjectStorageAccess(
                 Available: true,
                 Detail: "the ambient credential issued a storage token",
                 ExpiresOn: token.ExpiresOn
             );
         } catch (OperationCanceledException) {
-            return new AzureBlobCredentialStatus(
+            return new ObjectStorageAccess(
                 Available: false,
                 Detail: (cancellationToken.IsCancellationRequested
                 ? "canceled"
@@ -93,7 +87,7 @@ public static class AzureBlobCredentialProbe {
         } catch (Exception exception) {
             // The chain reports every attempted credential in one multi-line message; the first line is the verdict
             // and the rest is a per-credential transcript nobody wants inside a console echo.
-            return new AzureBlobCredentialStatus(
+            return new ObjectStorageAccess(
                 Available: false,
                 Detail: Summarize(message: exception.Message),
                 ExpiresOn: null

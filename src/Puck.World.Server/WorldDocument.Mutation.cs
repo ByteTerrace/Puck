@@ -381,10 +381,10 @@ public sealed partial class WorldDocument {
                     arena: prepared.Arena,
                     definition: candidate,
                     compilation: prepared.Compilation,
-                    rebuildPopulation: (AffectsPopulation(mutation: mutation) || RefreshesLookAssignment(
+                    rebuildPopulation: RecompilesPopulation(
                     candidate: candidate,
                     mutation: mutation
-                ) || (prepared.SolidAffecting && WorldContactSelection.RequiresField(collision: candidate.Collision)))
+                )
                 );
             }
 
@@ -496,6 +496,34 @@ public sealed partial class WorldDocument {
     private static bool HasSubmitter(WorldMutation mutation) => (mutation.Principal != Principal.World);
     // A state-value mutation can reuse every compiled product only while it keeps the catalog identity and does
     // not rebind a population look. All other mutations install a replacement prepared alongside the document.
+    /// <summary>Returns whether installing <paramref name="mutation"/>, composed into <paramref name="candidate"/> over
+    /// <paramref name="previous"/>, rebuilds the population: the full install with the population's rebuild, which runs
+    /// the structural reconcile of the inhabited placements before the cell-driven counts. Every other install settles
+    /// only the cell-driven counts.</summary>
+    /// <param name="mutation">The mutation.</param>
+    /// <param name="candidate">The document the mutation composes.</param>
+    /// <param name="previous">The document it composes over.</param>
+    /// <returns><see langword="true"/> when the install rebuilds the population.</returns>
+    internal bool RebuildsPopulation(WorldMutation mutation, WorldDefinition candidate, WorldDefinition previous) => (
+        RequiresFullInstall(
+            candidate: candidate,
+            mutation: mutation,
+            previous: previous
+        ) &&
+        RecompilesPopulation(
+            candidate: candidate,
+            mutation: mutation
+        )
+    );
+    // Whether a full install of the mutation recompiles the population (Rebuild, then the reconciles).
+    private bool RecompilesPopulation(WorldMutation mutation, WorldDefinition candidate) => (
+        AffectsPopulation(mutation: mutation) ||
+        RefreshesLookAssignment(
+            candidate: candidate,
+            mutation: mutation
+        ) ||
+        (AffectsSolidField(mutation: mutation) && WorldContactSelection.RequiresField(collision: candidate.Collision))
+    );
     private bool RequiresFullInstall(WorldDefinition candidate, WorldMutation mutation, WorldDefinition previous) => !(
         IsValueMutation(candidate: candidate, mutation: mutation, previous: previous) &&
         ReferenceEquals(objA: candidate.StateCatalog, objB: previous.StateCatalog) &&

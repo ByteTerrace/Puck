@@ -18,8 +18,8 @@ public sealed class SdfAppearance {
     public const int MaterialVectorsPerEntry = 34;
     /// <summary>The paint table's float4 stride, read by the views pass's paint layer (<c>SDF_PAINT_VECTORS_PER_ENTRY</c>):
     /// the frame origin and shape, the rotation, the residual scale, the shape's two data vectors, the color and stroke,
-    /// the slot and bound center, the bound half-extents, then <see cref="PaintTableVectors"/> of side table.</summary>
-    public const int PaintVectorsPerEntry = (8 + PaintTableVectors);
+    /// the slot and bound center, the bound half-extents, the primitive rotation, then <see cref="PaintTableVectors"/> of side table.</summary>
+    public const int PaintVectorsPerEntry = (9 + PaintTableVectors);
     /// <summary>The side-table vectors a paint carries inline: a convex polygon's eight vertices or a sweep's curve
     /// (<c>SDF_PAINT_TABLE_VECTORS</c>).</summary>
     public const int PaintTableVectors = 4;
@@ -469,11 +469,12 @@ public sealed class SdfAppearance {
     private static uint LanePlusOne(int? lane) => ((lane is { } index) ? (((uint)index) + 1u) : 0u);
     // PaintVectorsPerEntry float4 rows. KEEP IN SYNC with sdfApplyPaints in shade/shade-layers.hlsli.
     // 0 frame origin, shape type (uint bits); 1 frame rotation; 2 residual scale, its smallest component;
-    // 3..4 the shape's data vectors, a side-table shape's offset naming row 8; 5 color, stroke;
-    // 6 (dynamic slot as uint bits, bound center); 7 (bound half-extents, infinite when unbounded, 0); 8.. the side table.
+    // 3..4 the shape's data vectors, a side-table shape's offset naming row 9; 5 color, stroke;
+    // 6 (dynamic slot as uint bits, bound center); 7 (bound half-extents, infinite when unbounded, 0);
+    // 8 primitive rotation; 9.. the side table.
     private static void PackPaint(SdfPaint paint, int paintVector, uint[] words) {
         var shape = paint.Shape;
-        var tableVector = (paintVector + 8);
+        var tableVector = (paintVector + 9);
         var data0 = shape.Data0At(tableVector: tableVector);
         var rotation = Quaternion.Normalize(value: paint.Rotation);
         var minimumScale = MathF.Min(x: shape.Scale.X, y: MathF.Min(x: shape.Scale.Y, y: shape.Scale.Z));
@@ -499,6 +500,7 @@ public sealed class SdfAppearance {
             w: shape.Bound.Center.Z
         ));
         Row(row: 7, value: new(value: (shape.Bound.IsUnbounded ? new Vector3(value: float.PositiveInfinity) : shape.Bound.HalfExtents), w: 0f));
+        Row(row: 8, value: new(shape.Rotation.X, shape.Rotation.Y, shape.Rotation.Z, shape.Rotation.W));
         for (var index = 0; (index < shape.Table.Count); index++) {
             words[((tableVector * WordsPerVector) + index)] = BitConverter.SingleToUInt32Bits(value: shape.Table[index]);
         }

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Storage;
+using Puck.Storage.Azure;
 using Puck.World.Server;
 
 namespace Puck.Cli.Azure;

@@ -3,12 +3,12 @@
 This engine services extension connects runtime text embedding generation to
 Puck worlds through the host's declarative service extension composition.
 
-It registers two provider types into the host extension registry:
-
-- **`embedding.fixture`**: Offline, deterministic embedding generator using SHA-256
-  for repeatable tests, development, and air-gapped execution.
-- **`embedding.azure-openai`**: Live Azure OpenAI embedding generator using
-  passwordless `TokenCredential` / `DefaultAzureCredential` authentication.
+It registers the provider-neutral **`embedding.fixture`** type into the host
+extension registry: an offline, deterministic embedding generator using SHA-256
+for repeatable tests, development, and air-gapped execution. A hosted model's
+type comes from its provider's extension: `Puck.World.Azure` registers
+**`embedding.azure-openai`**, a live Azure OpenAI generator authenticated by the
+ambient Azure credential.
 
 ## Layering and Dependencies
 

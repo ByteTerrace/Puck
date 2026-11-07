@@ -432,8 +432,9 @@ about, and what invariant 1 implies.
   (`src/Puck.World.Protocol/Codecs/WorldAttestedAuthenticator.cs:36-38`)
   **[checked]**.
 - **Gain:** a banned player keeps hosting and visiting until the issuing
-  binding's own window closes; the length of that window is the platform's
-  issuance policy, not read here **[unverified]**.
+  binding's own window closes; the length of that window is the issuer's
+  issuance policy (a property of the issuer abstraction, whichever provider
+  implements it today), not read here **[unverified]**.
 - **Severity:** high at scale (moderation has no revocation lever below expiry);
   the alternative of short-lived bindings is an issuance policy, not an engine
   change **[general]**.
@@ -449,11 +450,12 @@ about, and what invariant 1 implies.
   side, the local body is corrected out of the phantom
   (`src/Puck.World.Server/WorldAdjacencyContactField.cs:100-144`) **[checked]**.
   Report them moving into the seam each tick.
-- **Gain:** push visitors across the plane into the attacker's world (then
-  A2, A3), pin them against the boundary, or launch them; the correction's
-  magnitude is whatever `FixedDynamicBodyContacts.TryCorrection` returns for
-  the overlap (`src/Puck.Physics/FixedDynamicBodyContacts.cs:282`) and no
-  per-tick bound was read **[unverified]**.
+- **Gain:** repeated phantom contacts can still shove or pin visitors, and a
+  bounded shove can cross an ownership plane. The formerly unbounded
+  displacement is now limited by `WorldPopulation.BoundAdjacencyCorrection`:
+  all dynamic corrections for one body share its local collider reach per
+  tick, with each request also limited by the overlap depth minus spent budget.
+  `WorldAdjacencyCorrectionLawTests` witnesses the cap and its counter.
 - **Today:** the overlap depth takes the larger of both sides' reaches and the
   sum of both speed ceilings (`src/Puck.World.Schema/WorldAdjacencies.cs:649-657`)
   **[checked]**, so a neighbour can widen the shared strip but never shrink
@@ -647,10 +649,12 @@ Each question names the attack that raises it and the lane the round assigned
    consequence (A13); whether a seam correction is bounded per tick (A10);
    whether group membership proof exists on the federation wire (critique 1.2);
    whether the avatar cost measurement precedes the bake (A12); and how the
-   Azure path issues identity keys and binding lifetimes
+   issuer issues identity keys and sets binding lifetimes. The question is
+   asked of Puck's issuer abstraction (a key's lifetime and revocation), not
+   of one provider's settings: Azure and Entra are today's implementation
    (`src/Puck.World.Azure/EntraWorldAuthenticator.cs`,
    `src/Puck.World.Azure/WorldApiCounterpartResolver.cs`, not read by this
-   pass).
+   pass), and whatever the answer requires must hold for any replacement.
 8. **What does a visited world get to write?** (A2.) Lane A. How WoW, FFXIV
    and EVE partition character state between the realm that earned it and the
    character record, and what they do when a realm is rolled back after the

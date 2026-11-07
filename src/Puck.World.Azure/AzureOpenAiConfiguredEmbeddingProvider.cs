@@ -2,20 +2,21 @@ using System.Text.Json;
 using Azure.Identity;
 using Microsoft.Extensions.AI;
 using Puck.Embeddings;
+using Puck.Embeddings.Azure;
 using Puck.State;
 using Puck.World.Server;
 
-namespace Puck.World.Embeddings;
+namespace Puck.World.Azure;
 
 /// <summary>Configured Azure OpenAI embedding provider authenticating strictly via passwordless TokenCredential (DefaultAzureCredential).</summary>
 public sealed class AzureOpenAiConfiguredEmbeddingProvider : IWorldConfiguredEmbeddingProvider {
-    private readonly OpenAiEmbeddingOptions m_options;
+    private readonly AzureOpenAiEmbeddingOptions m_options;
     private readonly EmbeddingIdentity m_identity;
 
     /// <summary>Initializes a new instance of <see cref="AzureOpenAiConfiguredEmbeddingProvider"/>.</summary>
     /// <param name="options">Options for Azure OpenAI.</param>
     /// <param name="identity">Embedding space identity.</param>
-    public AzureOpenAiConfiguredEmbeddingProvider(OpenAiEmbeddingOptions options, EmbeddingIdentity identity) {
+    public AzureOpenAiConfiguredEmbeddingProvider(AzureOpenAiEmbeddingOptions options, EmbeddingIdentity identity) {
         m_options = options;
         m_identity = identity;
     }
@@ -59,7 +60,7 @@ public sealed class AzureOpenAiConfiguredEmbeddingProvider : IWorldConfiguredEmb
 
         var omitDimensions = (settings.TryGetProperty(propertyName: "omitDimensions", value: out var omitEl) && omitEl.GetBoolean());
 
-        var options = new OpenAiEmbeddingOptions {
+        var options = new AzureOpenAiEmbeddingOptions {
             Endpoint = endpoint,
             Model = (deployment ?? model),
             Dimensions = dimensions,
@@ -73,7 +74,7 @@ public sealed class AzureOpenAiConfiguredEmbeddingProvider : IWorldConfiguredEmb
     }
     /// <inheritdoc />
     public IWorldEmbeddingSource BindEmbedding(JsonElement settings) {
-        var generator = OpenAiEmbeddingGeneratorFactory.Create(options: m_options);
+        var generator = AzureOpenAiEmbeddingGeneratorFactory.Create(options: m_options);
 
         return new AzureOpenAiEmbeddingSource(generator: generator, identity: m_identity);
     }

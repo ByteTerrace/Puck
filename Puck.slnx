@@ -30,6 +30,7 @@
         <Project Path="src/Puck.DirectX.Presentation/Puck.DirectX.Presentation.csproj" />
         <Project Path="src/Puck.DirectX/Puck.DirectX.csproj" />
         <Project Path="src/Puck.Embeddings/Puck.Embeddings.csproj" />
+        <Project Path="src/Puck.Embeddings.Azure/Puck.Embeddings.Azure.csproj" />
         <Project Path="src/Puck.Machines/Puck.Machines.csproj" />
         <Project Path="src/Puck.GamingBricks.Forge/Puck.GamingBricks.Forge.csproj" />
         <Project Path="src/Puck.Machines.Post/Puck.Machines.Post.csproj" />
@@ -67,6 +68,7 @@
         <Project Path="src/Puck.State.Vectors/Puck.State.Vectors.csproj" />
         <Project Path="src/Puck.State/Puck.State.csproj" />
         <Project Path="src/Puck.Storage/Puck.Storage.csproj" />
+        <Project Path="src/Puck.Storage.Azure/Puck.Storage.Azure.csproj" />
         <Project Path="src/Puck.Text/Puck.Text.csproj" />
         <Project Path="src/Puck.Vulkan.Presentation/Puck.Vulkan.Presentation.csproj" />
         <Project Path="src/Puck.Vulkan/Puck.Vulkan.csproj" />

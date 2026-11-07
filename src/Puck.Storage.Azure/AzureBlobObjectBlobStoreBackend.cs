@@ -4,7 +4,7 @@ using Azure.Identity;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 
-namespace Puck.Storage;
+namespace Puck.Storage.Azure;
 
 /// <summary>
 /// The Azure Blob backend. Its version token is the blob ETag — the download ETag on a read, and a
@@ -14,14 +14,17 @@ namespace Puck.Storage;
 /// listed keys, in the same object-relative key space a read/write address carries; an edge-shaped target routes List
 /// to <see cref="AzureBlobObjectStorageTarget.DirectEndpoint"/> instead of the edge (see that property's remarks —
 /// the edge cannot serve List at all), addressing the account's stored layout rather than the edge's view of it (see
-/// <see cref="GetContainerProjection"/>), and refusing by name when none is authored. <see cref="IDisposable"/> because it
-/// owns the lazily-created credential, which is also the credential a whole session's cloud access rides on: one
+/// <see cref="GetContainerProjection"/>), and refusing by name when none is authored. One process-wide instance owns the
+/// lazily-created credential and the service-client cache for the process's lifetime: one
 /// <c>DefaultAzureCredential</c> covers both deployment shapes without an app registration — a player's machine signs
 /// in ambiently (developer tooling, the OS broker, a shared token cache) and a hosted server runs as a user-assigned
 /// managed identity.
 /// </summary>
-internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend, IDisposable {
+internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend {
     private static readonly BlobClientOptions BlobClientOptionsField = new(version: BlobClientOptions.ServiceVersion.V2025_11_05);
+
+    /// <summary>Gets the backend every Azure Blob target shares.</summary>
+    internal static AzureBlobObjectBlobStoreBackend Instance { get; } = new();
 
     // NOTE: initializer order is load-bearing; do not alphabetize.
     private readonly ConcurrentDictionary<string, BlobServiceClient> m_blobServiceClients = new(comparer: StringComparer.Ordinal);
@@ -141,19 +144,6 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend,
         );
     }
 
-    public void Dispose() {
-        // The service clients hold no unmanaged handles; the credential can (managed-identity/broker token pipes), so
-        // dispose it when it was ever materialized. Guarded on IDisposable so a credential type that is not disposable
-        // (the common case) is a harmless no-op.
-        if (
-            m_defaultAzureCredential.IsValueCreated &&
-            (m_defaultAzureCredential.Value is IDisposable disposable)
-        ) {
-            disposable.Dispose();
-        }
-
-        m_blobServiceClients.Clear();
-    }
     public async ValueTask<IReadOnlyList<string>> ListAsync(
         ObjectStorageTarget target,
         Guid objectId,
@@ -224,10 +214,28 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend,
             return null;
         }
     }
-    public bool Supports(ObjectStorageTarget target) {
-        ArgumentNullException.ThrowIfNull(target);
+    // A service-URI target authenticates with the ambient credential, so the probe asks that credential (fresh, so a
+    // cached token never answers for the present). A connection string authenticates with the account key it carries.
+    public async ValueTask<ObjectStorageAccess> ProbeAccessAsync(ObjectStorageTarget target, TimeSpan timeout, TimeProvider clock,
+        CancellationToken cancellationToken = default) {
+        var azureTarget = ObjectStorageTarget.Require<AzureBlobObjectStorageTarget>(
+            description: "an Azure Blob target",
+            target: target
+        );
 
-        return (target is AzureBlobObjectStorageTarget);
+        if (azureTarget.ServiceUri is null) {
+            return new ObjectStorageAccess(
+                Available: true,
+                Detail: "a connection string authenticates with the account key it carries",
+                ExpiresOn: null
+            );
+        }
+
+        return await AzureBlobCredentialProbe.ProbeAsync(
+            cancellationToken: cancellationToken,
+            clock: clock,
+            timeout: timeout
+        );
     }
     public async ValueTask<ObjectBlobWriteResult> WriteAsync(
         ObjectStorageTarget target,

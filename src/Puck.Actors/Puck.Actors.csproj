@@ -6,6 +6,7 @@
         <Nullable>enable</Nullable>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Composition roots</PuckLayer>
+        <PuckProvider>Azure</PuckProvider>
         <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
         <RootNamespace>Puck.Actors</RootNamespace>
         <TargetFramework>net11.0</TargetFramework>
@@ -23,6 +24,7 @@
         <ProjectReference Include="../Puck.Azure/Puck.Azure.csproj" />
         <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
         <ProjectReference Include="../Puck.Storage/Puck.Storage.csproj" />
+        <ProjectReference Include="../Puck.Storage.Azure/Puck.Storage.Azure.csproj" />
     </ItemGroup>
 
     <ItemGroup>

@@ -12,7 +12,7 @@ using Puck.Actors;
 using Puck.Actors.Grains;
 using Puck.Actors.Services;
 using Puck.Azure;
-using Puck.Storage;
+using Puck.Storage.Azure;
 
 using Constants = Puck.Actors.Constants;
 

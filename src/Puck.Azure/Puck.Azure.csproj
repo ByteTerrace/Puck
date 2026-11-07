@@ -6,6 +6,7 @@
         <IsAotCompatible>false</IsAotCompatible>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Leaf contracts and data</PuckLayer>
+        <PuckProvider>Azure</PuckProvider>
         <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
         <RootNamespace>Puck.Azure</RootNamespace>
     </PropertyGroup>

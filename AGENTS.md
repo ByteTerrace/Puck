@@ -64,6 +64,16 @@ agent works in that mode by default, without asking:
   programs' expense. Puck's own scheduler, memory account and job system sit
   on top of those primitives. Replacing them is only for Puck's own bare-metal
   host ([runtime decision](docs/decisions/runtime-and-delivery.md#the-runtime)).
+- Puck is provider-independent (the owner's ruling). Azure and Entra are
+  today's deployment and identity providers, never part of an engine,
+  protocol or trust contract. Hosting, storage, identity, signing keys and
+  configuration sit behind Puck's own abstractions (an issuer, a key's
+  lifetime and revocation, a store, a host), and the provider is one
+  replaceable implementation. A design question is asked of the abstraction,
+  never of one provider's settings; a provider type or assumption outside the
+  provider's own project is a leak, fixed when found. A provider project
+  declares `<PuckProvider>`, and the architecture gate (PUCKARCH009) refuses
+  a provider project or SDK in any other ranked project's closure.
 - Puck is independent work (the owner's ruling). For an external protocol,
   format or device, consult several independent sources as second opinions
   (vendor documentation, kernel drivers, community reverse engineering, other

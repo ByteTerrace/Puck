@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
 using Puck.Maths;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -292,9 +293,26 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
         }
 
         var interruptOpen = (interruptVerdict == Verdict.Open);
+        var interrupted = (interruptOpen && !state.InterruptHeld);
+        var reconsiders = (open && (!state.Evaluated || interrupted || lostEligibility ||
+            ((state.PeriodRemaining == 0) && (state.CommitmentRemaining == 0))));
+        var choiceCount = 0;
 
-        var interruptWasHeld = state.InterruptHeld;
-        var interrupted = (interruptOpen && !interruptWasHeld);
+        // Every read comes before the first write, so a fault while gathering (an option gate or score) decides nothing
+        // and leaves the binding as the decision found it, its interrupt edge included.
+        if (reconsiders) {
+            choiceCount = GatherDecisionChoices(
+                faulted: out var gatherFaulted,
+                key: key,
+                lostEligibility: lostEligibility,
+                runtime: runtime,
+                state: state
+            );
+
+            if (gatherFaulted) {
+                return HoldDecision(rule: rule);
+            }
+        }
 
         state.InterruptHeld = interruptOpen;
         if (!open) {
@@ -316,27 +334,7 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
                 )
                 : RuleOutcome.Idle);
         }
-        if (
-            state.Evaluated &&
-            !interrupted &&
-            !lostEligibility &&
-            ((state.PeriodRemaining != 0) || (state.CommitmentRemaining != 0))
-        ) { return RuleOutcome.Idle; }
-
-        var choiceCount = GatherDecisionChoices(
-            faulted: out var gatherFaulted,
-            key: key,
-            lostEligibility: lostEligibility,
-            runtime: runtime,
-            state: state
-        );
-
-        // An option gate or score that faulted while gathering decides nothing either, so the interrupt edge read this
-        // tick is put back too.
-        if (gatherFaulted) {
-            state.InterruptHeld = interruptWasHeld;
-            return HoldDecision(rule: rule);
-        }
+        if (!reconsiders) { return RuleOutcome.Idle; }
 
         var winner = -1;
         var winnerScore = long.MinValue;
@@ -423,7 +421,6 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
         var continuation = (m_decisionContinuation ??= new DecisionContinuation(host: this));
 
         continuation.Arm(
-            common: rule.Effects,
             generation: generation,
             key: key,
             option: policy.Options[selected.Option].Effects,
@@ -442,9 +439,9 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
     }
 
     // What a decision proposes into its firing after its common effects: the chosen option's effects, bound to the
-    // pair they score, unless the common effects would remove a body the option reads.
+    // pair they score, unless the population the firing's commit installs no longer holds that pair. The option is then
+    // not proposed and the common effects stand; the firing is not refused for it.
     private sealed class DecisionContinuation(WorldRuleHost host) : IFiringContinuation {
-        private IRuleEffect[] m_common = [];
         private IRuleEffect[] m_option = [];
         private DecisionChoice m_selected;
         private int m_generation;
@@ -452,20 +449,23 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
         private int m_savedLeft;
         private int m_savedRight;
 
-        public void Arm(IRuleEffect[] common, IRuleEffect[] option, DecisionChoice selected, int key, int generation) {
-            m_common = common;
+        public void Arm(IRuleEffect[] option, DecisionChoice selected, int key, int generation) {
             m_option = option;
             m_selected = selected;
             m_key = key;
             m_generation = generation;
         }
-        public IRuleEffect[]? Next() {
+        public IRuleEffect[]? Next(in EffectFiring firing, ReadOnlySpan<IRuleEffect> queued) {
             if (
                 (m_selected.Candidate >= 0) &&
-                (host.CommonRemovesBody(body: m_key, effects: m_common) ||
-                host.CommonRemovesBody(effects: m_common, body: m_selected.Candidate) ||
-                !host.DecisionBodyLive(generation: m_generation, index: m_key) ||
-                !host.DecisionBodyLive(generation: m_selected.Generation, index: m_selected.Candidate))
+                !host.ProposedPairLive(
+                candidate: m_selected.Candidate,
+                candidateGeneration: m_selected.Generation,
+                firing: in firing,
+                key: m_key,
+                keyGeneration: m_generation,
+                queued: queued
+            )
             ) { return null; }
 
             m_savedLeft = host.m_boundLeft;
@@ -486,20 +486,69 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
 
     private DecisionContinuation? m_decisionContinuation;
 
-    // Whether an effect sequence removes the placement a body inhabits: the only way effects deactivate a body, since the
-    // removal installs with the firing's commit, after the option's liveness would be read.
-    private bool CommonRemovesBody(IRuleEffect[] effects, int body) {
-        foreach (var effect in effects) {
-            if (
-                (effect is WorldDocumentEffect { Write: WorldDocumentWrite.RemovePlacement } removal) &&
-                (Host.Population.BodyForPlacementOrdinal(ordinal: Host.PlacementOrdinalOf(id: removal.Id)) == body)
-            ) { return true; }
-            foreach (var arm in effect.Arms) {
-                if (CommonRemovesBody(body: body, effects: arm)) { return true; }
+    private readonly List<WorldMutation> m_proposedRows = [];
+
+    // Whether an option's pair is still the same two live bodies in the population a reconcile of what the firing
+    // proposes produces. Until the commit no arm has run, and the only queued arm that changes the population when it
+    // lands is a document row, so the rows the firing queued so far are composed against the document it proposes, as
+    // its preflight composes them. The population then forecasts the reconcile the install of that unit runs (the
+    // structural pass when the unit rebuilds the population, then the cell-driven counts read from the arena the scope
+    // holds open), through the same code the install runs. With no row queued, the counts settle from the firing's
+    // writes at the tick's publication, and the forecast answers as if they settled at the commit. A composition that
+    // refuses keeps nothing: the preflight composes the same rows and refuses the firing.
+    private bool ProposedPairLive(in EffectFiring firing, ReadOnlySpan<IRuleEffect> queued, int key, int keyGeneration, int candidate, int candidateGeneration) {
+        if (
+            !DecisionBodyLive(generation: keyGeneration, index: key) ||
+            !DecisionBodyLive(generation: candidateGeneration, index: candidate)
+        ) {
+            return false;
+        }
+
+        m_proposedRows.Clear();
+        foreach (var arm in queued) {
+            if (arm is WorldDocumentEffect { Write: not WorldDocumentWrite.Save } row) {
+                m_proposedRows.Add(item: DocumentRow(effect: row));
             }
         }
 
-        return false;
+        try {
+            var proposed = Host.Document.Definition;
+            var structural = false;
+
+            if (m_proposedRows.Count != 0) {
+                var current = Host.MaterializeArena();
+                var unit = DocumentUnit(rows: m_proposedRows);
+
+                if (!WorldDocument.TryCompose(
+                    candidate: out proposed,
+                    current: current,
+                    engineTick: firing.EngineTick,
+                    evictedKey: out _,
+                    instanceIdentity: Host.InstanceIdentity,
+                    mutation: unit,
+                    reason: out _,
+                    tick: firing.Tick
+                )) {
+                    return false;
+                }
+
+                structural = Host.Document.RebuildsPopulation(
+                    candidate: proposed,
+                    mutation: unit,
+                    previous: current
+                );
+            }
+
+            return Host.Population.ReconcileKeeps(
+                arena: Host.Arena,
+                bodies: [key, candidate],
+                definition: proposed,
+                structural: structural,
+                tick: Host.NextInputTick
+            );
+        } finally {
+            m_proposedRows.Clear();
+        }
     }
 
     /// <inheritdoc/>

@@ -6,9 +6,10 @@ using Puck.World.Server;
 namespace Puck.World.Azure;
 
 /// <summary>
-/// Contributes the Azure world-hosting providers: <c>azure.blob</c> persistence, the <c>azure.scheduled-events</c>
+/// Contributes the Azure world-hosting providers: <c>azure.blob</c> storage, the <c>azure.scheduled-events</c>
 /// retirement observer, <c>azure.api-users</c> connection authentication, the <c>azure.resource</c> operation provider,
-/// and the <c>/livez/azure</c> health endpoint. Registration performs no cloud access.
+/// the <c>embedding.azure-openai</c> embedding provider, and the <c>/livez/azure</c> health endpoint. Registration
+/// performs no cloud access.
 /// </summary>
 public sealed class AzureWorldExtension : IPuckExtension {
     /// <inheritdoc/>
@@ -22,6 +23,10 @@ public sealed class AzureWorldExtension : IPuckExtension {
         registry.AddRetirement(provider: AzureSiloExtensions.Retirement);
         registry.AddAuthentication(provider: AzureSiloExtensions.Authentication);
         registry.AddOperation(provider: AzureConfiguredProvider.Registration);
+        registry.AddEmbedding(provider: new WorldExtensionEmbeddingProviderType(
+            Create: AzureOpenAiConfiguredEmbeddingProvider.Create,
+            Type: "embedding.azure-openai"
+        ));
         registry.AddHealthCheck(check: new(
             Path: "/livez/azure",
             Respond: static live => ("application/json", AzureApplicationHealth.Response(live: live))

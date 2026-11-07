@@ -1,4 +1,4 @@
-namespace Puck.Actors.Grains;
+namespace Puck.World.Silo;
 
 /// <summary>Orleans' own activation-lifecycle door onto one hosted row — the grain's key (owner oid + world id
 /// extension) already names which row, so no member here repeats it. Every silo verb that touches a row's
