@@ -232,7 +232,7 @@ public sealed class WorldPeerHost : IDisposable {
             }
         }
     }
-    // The tier a federated peer's own authority namespace is authored at, decided once per connection through the
+    // The tier a federated peer's own authority namespace is authored at, read at reply encoding through the
     // same admission arm that decides what an arriving traveler is minted. A namespace no admission row names
     // receives no document. A cryptographic identity alone authorizes no public federation disclosure.
     private WorldDisclosureTier DisclosureFor(string sourceAuthority) =>
@@ -531,7 +531,6 @@ public sealed class WorldPeerHost : IDisposable {
                         await ServeFederationAsync(
                             stream: stream,
                             sourceAuthority: federationAuthority,
-                            tier: DisclosureFor(sourceAuthority: federationAuthority),
                             credential: credential,
                             ct: credential.Token
                         ).ConfigureAwait(continueOnCapturedContext: false);
@@ -1071,7 +1070,7 @@ public sealed class WorldPeerHost : IDisposable {
     // A federation connection is a persistent authenticated lane. Requests ride it strictly request-then-response
     // and in order, which is what lets the peer omit a correlation id. Observe and IntentStream take the connection
     // over and stream on it until it closes.
-    private async Task ServeFederationAsync(Stream stream, string sourceAuthority, WorldDisclosureTier tier, Credential credential, CancellationToken ct) {
+    private async Task ServeFederationAsync(Stream stream, string sourceAuthority, Credential credential, CancellationToken ct) {
         while (!ct.IsCancellationRequested) {
             var frame = await WorldFederationCodec.ReadRequestAsync(
                 ct: ct,
@@ -1096,7 +1095,6 @@ public sealed class WorldPeerHost : IDisposable {
             if (!await ServeFederationRequestAsync(
                 stream: stream,
                 sourceAuthority: sourceAuthority,
-                tier: tier,
                 credential: credential,
                 kind: ((WorldFederationRequest)frame.Kind),
                 body: frame.Body,
@@ -1107,7 +1105,7 @@ public sealed class WorldPeerHost : IDisposable {
         }
     }
     // Returns whether the lane stays open for another request.
-    private async Task<bool> ServeFederationRequestAsync(Stream stream, string sourceAuthority, WorldDisclosureTier tier, Credential credential, WorldFederationRequest kind, ReadOnlyMemory<byte> body, CancellationToken ct) {
+    private async Task<bool> ServeFederationRequestAsync(Stream stream, string sourceAuthority, Credential credential, WorldFederationRequest kind, ReadOnlyMemory<byte> body, CancellationToken ct) {
         switch (kind) {
             case WorldFederationRequest.Reserve:
                 return await ServeReserveAsync(
@@ -1115,8 +1113,7 @@ public sealed class WorldPeerHost : IDisposable {
                     credential: credential,
                     ct: ct,
                     sourceAuthority: sourceAuthority,
-                    stream: stream,
-                    tier: tier
+                    stream: stream
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
             case WorldFederationRequest.Commit:
@@ -1180,11 +1177,11 @@ public sealed class WorldPeerHost : IDisposable {
 
             case WorldFederationRequest.Route:
                 return await ServeRouteAsync(
+                    credential: credential,
                     body: body,
                     ct: ct,
                     sourceAuthority: sourceAuthority,
-                    stream: stream,
-                    tier: tier
+                    stream: stream
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
             case WorldFederationRequest.Prototype:
@@ -1193,7 +1190,7 @@ public sealed class WorldPeerHost : IDisposable {
                     return true;
                 }
                 var prototype = WorldProjectionPrototypeFetch.Fetch(server: m_server, pin: pin,
-                    sourceAuthority: sourceAuthority, ceiling: tier, traveler: traveler);
+                    sourceAuthority: sourceAuthority, ceiling: DisclosureFor(sourceAuthority: sourceAuthority), traveler: traveler);
                 if (prototype is null) {
                     await WriteFederationRefusal(ct: ct, detail: "the current projection does not disclose this prototype", refusal: WorldFederationRefusal.PrototypeUndisclosed, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
                 } else {
@@ -1230,14 +1227,14 @@ public sealed class WorldPeerHost : IDisposable {
                 }
                 observation = observation with {
                     Ceiling = ((WorldDisclosureTier)Math.Min(
-                    val1: ((byte)tier),
+                    val1: ((byte)DisclosureFor(sourceAuthority: sourceAuthority)),
                     val2: ((byte)observation.Ceiling)
                 )),
                 };
                 var refusal = await WorldTravelerProjection.StreamAsync(
                     m_server,
                     observation,
-                    m_server.AuthorityIdentity,
+                    (m_server.Definition.Host.Authority ?? ListenEndpoint ?? m_server.AuthorityIdentity),
                     stream,
                     ct
                 ).ConfigureAwait(continueOnCapturedContext: false);
@@ -1256,8 +1253,7 @@ public sealed class WorldPeerHost : IDisposable {
                     credential: credential,
                     ct: ct,
                     sourceAuthority: sourceAuthority,
-                    stream: stream,
-                    tier: tier
+                    stream: stream
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
                 return false;
@@ -1294,7 +1290,11 @@ public sealed class WorldPeerHost : IDisposable {
                 return false;
         }
     }
-    private async Task<bool> ServeReserveAsync(Stream stream, string sourceAuthority, WorldDisclosureTier tier, Credential credential, ReadOnlyMemory<byte> body, CancellationToken ct) {
+    // The one document-reply door: current credentials, current policy and encoding share the authority gate.
+    private byte[] EncodeFederationReply(string sourceAuthority, Credential credential, Func<WorldDisclosureTier, byte[]> encode) =>
+        ExecuteAuthenticated(credential: credential, operation: () => encode(DisclosureFor(sourceAuthority: sourceAuthority)));
+
+    private async Task<bool> ServeReserveAsync(Stream stream, string sourceAuthority, Credential credential, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (
             !WorldFederationCodec.TryDecodeReservation(
             body: body.Span,
@@ -1336,19 +1336,19 @@ public sealed class WorldPeerHost : IDisposable {
         await WorldFederationCodec.WriteResponseAsync(
             stream: stream,
             kind: WorldFederationResponse.Reservation,
-            body: WorldFederationCodec.EncodeReservationReply(
+            body: EncodeFederationReply(sourceAuthority: sourceAuthority, credential: credential, encode: tier => WorldFederationCodec.EncodeReservationReply(
                 reply: reply,
                 tier: tier,
                 authority: m_server.AuthorityIdentity,
                 revision: m_server.Population.Revision,
                 time: m_server.DeliveryTime
-            ),
+            )),
             ct: ct
         ).ConfigureAwait(continueOnCapturedContext: false);
 
         return true;
     }
-    private async Task<bool> ServeRouteAsync(Stream stream, string sourceAuthority, WorldDisclosureTier tier, ReadOnlyMemory<byte> body, CancellationToken ct) {
+    private async Task<bool> ServeRouteAsync(Stream stream, string sourceAuthority, Credential credential, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (!WorldFederationCodec.TryDecodeRouteCredential(
             body: body.Span,
             failure: out var failure,
@@ -1442,13 +1442,13 @@ public sealed class WorldPeerHost : IDisposable {
         await WorldFederationCodec.WriteResponseAsync(
             stream: stream,
             kind: WorldFederationResponse.Route,
-            body: WorldFederationCodec.EncodeRoute(
+            body: EncodeFederationReply(sourceAuthority: sourceAuthority, credential: credential, encode: tier => WorldFederationCodec.EncodeRoute(
                 route: in route,
                 tier: tier,
                 authority: m_server.AuthorityIdentity,
                 revision: m_server.Population.Revision,
                 time: m_server.DeliveryTime
-            ),
+            )),
             ct: ct
         ).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -1880,10 +1880,10 @@ public sealed class WorldPeerHost : IDisposable {
     }
     // The lane authenticated a source authority's namespace, which names no body here, so it observes as the public
     // observer. A seat reads its own disclosure through ObserveTraveler, whose credential resolves to its principal.
-    private async Task StreamProjectionAsync(Stream stream, string sourceAuthority, WorldDisclosureTier tier, Credential credential, CancellationToken ct) {
+    private async Task StreamProjectionAsync(Stream stream, string sourceAuthority, Credential credential, CancellationToken ct) {
         var policy = m_server.Definition.Admission;
 
-        tier = ((WorldDisclosureTier)Math.Min(val1: ((byte)tier), val2: ((byte)DisclosureFor(sourceAuthority: sourceAuthority))));
+        var tier = DisclosureFor(sourceAuthority: sourceAuthority);
         if (tier == WorldDisclosureTier.Frames) {
             await WriteFederationRefusal(ct: ct, detail: "no public federation document disclosure is authorized",
                 refusal: WorldFederationRefusal.AuthenticationFailed, stream: stream).ConfigureAwait(continueOnCapturedContext: false);

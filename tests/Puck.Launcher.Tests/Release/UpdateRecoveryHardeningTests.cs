@@ -7,6 +7,24 @@ namespace Puck.Launcher.Tests.Release;
 
 public sealed class UpdateRecoveryHardeningTests : IDisposable {
     [Fact]
+    public async Task PermanentHealthMarkerFailureDoesNotRetry() {
+        Directory.CreateDirectory(path: Version(version: "1.0.1"));
+        var path = Path.Combine(Version(version: "1.0.1"), "app.dll");
+        File.WriteAllText(path: path, contents: "selected");
+        PendingHealth();
+        File.Delete(path: Marker);
+        Directory.CreateDirectory(path: Marker);
+        using var image = new MappedImage(path: path);
+        using var registration = image.Register(installRoot: m_root.RootPath);
+        var clearing = HealthGateFile.ClearHealthyAsync(cacheRoot: m_root.RootPath, version: "1.0.1",
+            registration: registration, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(condition: clearing.IsCompleted);
+        var result = await clearing;
+        Assert.False(condition: result.Cleared);
+        Assert.False(condition: result.Retryable);
+    }
+
+    [Fact]
     public void InterruptedPublicationPreservesTheStillSelectedVersionsAttempts() {
         Directory.CreateDirectory(path: m_root.RootPath);
         File.WriteAllText(path: Current, contents: "1.0.1");

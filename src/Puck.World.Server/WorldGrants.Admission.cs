@@ -196,6 +196,7 @@ public sealed partial class WorldGrants {
             Host.Population.TryResumeParkedPeer(
             identityDomain: decision.IdentityDomain,
             identitySubject: decision.IdentitySubject,
+            admissionTrust: decision.TrustIdentity,
             admitted: out admitted
         )
         ) {

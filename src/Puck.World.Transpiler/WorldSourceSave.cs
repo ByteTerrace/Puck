@@ -245,7 +245,7 @@ public static class WorldSourceSave {
         var bytes = Encoding.UTF8.GetBytes(s: text);
 
         if (bom) { bytes = [.. Encoding.UTF8.Preamble, .. bytes]; }
-        Puck.Abstractions.AtomicFile.WriteAllBytes(path: path, bytes: bytes);
+        Puck.Confinement.AtomicFile.WriteAllBytes(path: path, bytes: bytes);
         return bytes.LongLength;
     }
 

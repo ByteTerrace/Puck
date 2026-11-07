@@ -1409,9 +1409,10 @@ public sealed partial class WorldPopulation {
     /// resuming on so ambiguous a key would hand a reconnecting peer whichever parked body happened to sort
     /// first.</param>
     /// <param name="identitySubject">The reconnecting peer's verified admission identity subject.</param>
+    /// <param name="admissionTrust">The exact trust identity the admission door verified; it must equal the parked body's.</param>
     /// <param name="admitted">The resumed peer's own admission row on success.</param>
     /// <returns><see langword="true"/> when a matching parked peer was found and resumed.</returns>
-    public bool TryResumeParkedPeer(string identityDomain, string identitySubject, out WorldPeerEventEntry admitted) {
+    public bool TryResumeParkedPeer(string identityDomain, string identitySubject, WorldAdmissionTrustIdentity? admissionTrust, out WorldPeerEventEntry admitted) {
         admitted = default;
 
         if (identityDomain.Length == 0) {
@@ -1421,6 +1422,7 @@ public sealed partial class WorldPopulation {
         for (var index = LocalSeatCount; (index < Capacity); index++) {
             if (
                 !IsParked(index: index) ||
+                (m_entries[index].AdmissionTrust != admissionTrust) ||
                 !string.Equals(
                 a: m_entries[index].IdentityDomain,
                 b: identityDomain,

@@ -1,4 +1,4 @@
-using Puck.Abstractions;
+using Puck.Confinement;
 using Puck.World;
 using Puck.World.Machines;
 using Puck.World.Transpiler.Composition;

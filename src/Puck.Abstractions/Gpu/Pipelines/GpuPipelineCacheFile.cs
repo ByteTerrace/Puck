@@ -1,3 +1,4 @@
+using Puck.Confinement;
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>

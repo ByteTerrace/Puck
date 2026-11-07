@@ -1,4 +1,4 @@
-using Puck.Abstractions;
+using Puck.Confinement;
 using Puck.Storage;
 using System.Text;
 using System.Text.Json;

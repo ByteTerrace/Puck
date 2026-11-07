@@ -3,7 +3,8 @@
 Puck.Launcher.Stub is the small executable that starts an installed application
 version. It reads the installation's current and last-good pointers, records
 launch attempts, and uses the health policy to decide whether to retry or
-roll back. It stays outside the application's self-update mechanism.
+roll back. It stays outside the application's self-update mechanism. Its only Puck dependency
+is the BCL-only `Puck.Confinement` leaf, which also supplies `AtomicFile` to the updater.
 
 ## Usage
 

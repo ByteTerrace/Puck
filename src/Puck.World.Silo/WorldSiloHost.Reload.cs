@@ -98,8 +98,9 @@ public sealed partial class WorldSiloHost {
                         ) { throw new InvalidOperationException(message: "World is inactive or retiring."); }
                         // Compare the activation's binding: a recovered checkpoint may advertise the prior deployment.
                         if (
-                            (row.Federation.Subject != (definition.Host.Authority ?? identity.World.Value)) ||
-                            (row.ListenEndpoint != definition.Host.Listen)
+                            (row.Federation.Subject != FederationSubject(definition: definition, world: identity.World)) ||
+                            (row.ListenEndpoint != definition.Host.Listen) ||
+                            (row.AdvertisedEndpoint != definition.Host.Authority)
                         ) {
                             throw new InvalidOperationException(message: "Changing a world's network binding requires a fresh activation.");
                         }

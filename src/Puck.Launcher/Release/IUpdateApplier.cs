@@ -6,7 +6,7 @@ namespace Puck.Launcher.Release;
 /// first install. Recorded as the new <c>last-good</c> whenever it is not <see langword="null"/>.</param>
 /// <param name="RefusalReason">Why apply refused, when <paramref name="Applied"/> is <see langword="false"/>.</param>
 public sealed record UpdateApplyResult(bool Applied, string? PreviousVersion, string? RefusalReason) {
-    /// <summary>Builds a refused result.</summary>
+    /// <summary>Builds a terminal refusal. Temporary filesystem unavailability throws, retaining any pending intent.</summary>
     public static UpdateApplyResult Refuse(string reason) => new(
         Applied: false,
         PreviousVersion: null,

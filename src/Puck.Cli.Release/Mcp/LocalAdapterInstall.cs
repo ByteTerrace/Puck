@@ -45,9 +45,11 @@ internal static class LocalAdapterInstall {
         }
     }
     // Proves health with the registration the CLI's entry point took before it loaded anything else.
-    public static void Healthy(string install) {
+    public static async Task HealthyAsync(string install, CancellationToken cancellationToken) {
         var version = new DirectoryInfo(path: AppContext.BaseDirectory).Name;
-        var cleared = HealthGateFile.ClearHealthy(cacheRoot: install, registration: InstallRegistration.RegisterProcess(cancellationToken: CancellationToken.None), version: version);
+        var cleared = await HealthGateFile.ClearHealthyAsync(cacheRoot: install,
+            registration: InstallRegistration.RegisterProcess(cancellationToken: cancellationToken), version: version,
+            cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 
         if (cleared.Pruned is { } pruned) {
             Console.Error.WriteLine(value: ((pruned.Skipped is { } skipped)

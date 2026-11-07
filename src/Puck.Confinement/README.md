@@ -8,6 +8,13 @@ so what a caller reaches stays below the held directory whatever is renamed or
 replaced on the paths around it. It references only the BCL, so the launcher
 stub can use it without the rest of the engine.
 
+## Atomic replacement
+
+`AtomicFile` provides flushed temp-then-rename file replacement and reads that
+share delete access with concurrent publication. It is the shared writer for
+the launcher stub and updater, without an engine dependency. Unlike
+`ConfinedDirectory`, it operates on trusted paths rather than held directories.
+
 ## Usage
 
 `ConfinedDirectory.Open` walks a path from its volume root and refuses a link in
