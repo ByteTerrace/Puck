@@ -78,9 +78,20 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> or <paramref name="materials"/> is
     /// <see langword="null"/>.</exception>
     /// <returns>An owned mesh claim. The caller releases it after its last borrowed view ends.</returns>
+    /// <remarks>A library with a native allocator and a store publishes the mesh the store reads back, so a mesh baked
+    /// in this run draws what a later run loads, and its normals and coarser levels can be let go and restored from the
+    /// entry (<see cref="SdfMesh.DescribeRestores"/>); a write the store refuses publishes the baked mesh, which keeps
+    /// them.</remarks>
     public SdfMesh Store(SdfMeshGeometry geometry, SdfMesh mesh, int[] materials, UInt128 identity = default, UInt128? form = null) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
         ArgumentNullException.ThrowIfNull(argument: materials);
+
+        if ((Allocator is not null) && (Disk is { } disk) && !HoldsAny(geometry: geometry, identity: identity) &&
+            disk.Write(geometry: geometry, identity: identity, materials: materials, mesh: mesh) &&
+            TryLoad(form: form, geometry: geometry, identity: identity, materials: materials, mesh: out var stored, refusal: out _) &&
+            (stored is not null)) {
+            return stored;
+        }
 
         var owned = mesh.NativeCopy(Allocator, Account);
 
@@ -90,6 +101,9 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             }
             return owned;
         } catch { owned.Release(); throw; }
+    }
+    private bool HoldsAny(SdfMeshGeometry geometry, UInt128 identity) {
+        lock (m_gate) { return m_meshes.ContainsKey(key: (identity, geometry)); }
     }
     /// <summary>Takes the latest mesh the library holds of a dynamic group's form, baked at whatever pose its other slots
     /// stood in (<see cref="SdfMeshGeometryBuilder.Form"/>): the same shapes, which the mesh's skin carries through each
@@ -187,7 +201,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             // The copy runs outside the gate the frame thread takes; the first copy held wins, and a later one is
             // released.
             if (!TryTake(geometry, result.Materials, out var owned, identity)) {
-                var copy = result.Mesh.NativeCopy(Allocator, Account);
+                var copy = result.Mesh.NativeCopy(Allocator, Account, restore: (this, identity, geometry));
 
                 if (Hold(geometry, identity, copy, result.Materials, form)) {
                     owned = copy;
@@ -291,17 +305,35 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             m_usage.Add(key: key, value: (bytes, m_age.AddLast(value: key)));
         }
         m_retainedBytes += bytes;
-        while ((m_retainedBytes > ByteBudget) && (m_age.First is { } oldest)) {
-            var victim = oldest.Value;
-
-            m_retainedBytes -= m_usage[victim].Bytes;
-            m_usage.Remove(key: victim);
-            foreach (var variant in m_meshes[victim]) { variant.Mesh.Release(cached: true); }
-            m_meshes.Remove(key: victim);
-            _ = m_reads.TryRemove(key: victim, value: out _);
-            m_age.RemoveFirst();
-            foreach (var form in m_forms.Where(predicate: entry => ((entry.Key.Identity == victim.Identity) && entry.Value.Equals(other: victim.Geometry))).Select(selector: entry => entry.Key).ToArray()) { m_forms.Remove(key: form); }
+        while ((m_retainedBytes > ByteBudget) && (m_age.First is { } oldest)) { Evict(key: oldest.Value); }
+    }
+    // Drops a geometry's cache claims, its pending read and the forms it answers, under the gate.
+    private void Evict((UInt128 Identity, SdfMeshGeometry Geometry) key) {
+        if (m_usage.Remove(key: key, value: out var usage)) {
+            m_retainedBytes -= usage.Bytes;
+            m_age.Remove(node: usage.Node);
         }
+        if (m_meshes.Remove(key: key, value: out var variants)) {
+            foreach (var variant in variants) { variant.Mesh.Release(cached: true); }
+        }
+        _ = m_reads.TryRemove(key: key, value: out _);
+        foreach (var form in m_forms.Where(predicate: entry => ((entry.Key.Identity == key.Identity) && entry.Value.Equals(other: key.Geometry))).Select(selector: entry => entry.Key).ToArray()) { m_forms.Remove(key: form); }
+    }
+
+    /// <summary>Gets a count that moves each time a published mesh's store entry could not restore its normals and
+    /// levels (<see cref="Lose"/>): a bake holding the library restarts when it moves, baking again each group whose
+    /// mesh is lost.</summary>
+    public long LostRevision => Interlocked.Read(location: ref m_lostRevision);
+    private long m_lostRevision;
+
+    /// <summary>Forgets a geometry whose store entry could not restore a published mesh's normals and levels, so the
+    /// next group of it misses the library and the store and bakes, and moves <see cref="LostRevision"/>.</summary>
+    /// <param name="geometry">The geometry.</param>
+    /// <param name="identity">The bake identity it was held under.</param>
+    internal void Lose(SdfMeshGeometry geometry, UInt128 identity) {
+        lock (m_gate) { Evict(key: (identity, geometry)); }
+        _ = Interlocked.Increment(location: ref m_lostRevision);
+        Console.Error.WriteLine(value: $"[sdf.mesh-bake] lost identity={identity:x32} geometry={geometry.Hash:x32}: the store no longer restores its normals and levels; its groups bake again");
     }
 
     /// <summary>Evicts cache claims; live residency and scene claims keep their payloads.</summary>
