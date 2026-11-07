@@ -24,9 +24,9 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         return checked((long)owner.Record(index: ((int)index)).Id);
     }
     /// <inheritdoc/>
-    public RuleFact Read(WorldInputOperand operand) {
+    public Fact Read(WorldInputOperand operand) {
         if (!TryInputOwner(operand.Owner, out var principal, out var owner)) {
-            return ((operand.Facet is WorldInputFacet.Edge or WorldInputFacet.Match) ? RuleFact.Finite(kind: CellKind.Bool, value: 0) : RuleFact.Absent(kind: operand.ValueKind));
+            return ((operand.Facet is WorldInputFacet.Edge or WorldInputFacet.Match) ? Fact.Finite(kind: CellKind.Bool, value: 0) : Fact.Absent(kind: operand.ValueKind));
         }
         var policy = (Host.Document.Definition.InputHistory?.Judgement ?? WorldInputJudgement.Capture);
 
@@ -40,35 +40,35 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
                     if ((matchedRecord.Id >= match.First) && (matchedRecord.Id <= match.Last)) { Host.Input.ObserveActivation(principal, matchedRecord.Event.Activation); }
                 }
             }
-            if (operand.Facet == WorldInputFacet.Match) { return RuleFact.Finite(kind: CellKind.Bool, value: (matched ? 1 : 0)); }
-            if (!matched) { return RuleFact.Absent(kind: operand.ValueKind); }
+            if (operand.Facet == WorldInputFacet.Match) { return Fact.Finite(kind: CellKind.Bool, value: (matched ? 1 : 0)); }
+            if (!matched) { return Fact.Absent(kind: operand.ValueKind); }
             return operand.Facet switch {
-                WorldInputFacet.MatchFirst => RuleFact.Finite(checked((long)match.First), CellKind.Int),
-                WorldInputFacet.MatchLast => RuleFact.Finite(checked((long)match.Last), CellKind.Int),
-                WorldInputFacet.MatchFirstTick => RuleFact.Finite(checked((long)match.FirstTick), CellKind.Int),
-                WorldInputFacet.MatchLastTick => RuleFact.Finite(checked((long)match.LastTick), CellKind.Int),
-                WorldInputFacet.MatchFirstTime => RuleFact.Finite(value: match.FirstTime),
-                WorldInputFacet.MatchLastTime => RuleFact.Finite(value: match.LastTime),
-                _ => RuleFact.Absent(kind: operand.ValueKind),
+                WorldInputFacet.MatchFirst => Fact.Finite(checked((long)match.First), CellKind.Int),
+                WorldInputFacet.MatchLast => Fact.Finite(checked((long)match.Last), CellKind.Int),
+                WorldInputFacet.MatchFirstTick => Fact.Finite(checked((long)match.FirstTick), CellKind.Int),
+                WorldInputFacet.MatchLastTick => Fact.Finite(checked((long)match.LastTick), CellKind.Int),
+                WorldInputFacet.MatchFirstTime => Fact.Finite(value: match.FirstTime),
+                WorldInputFacet.MatchLastTime => Fact.Finite(value: match.LastTime),
+                _ => Fact.Absent(kind: operand.ValueKind),
             };
         }
         if (operand.Facet is WorldInputFacet.HeldSince or WorldInputFacet.HeldPress) {
-            if (!owner!.TryHeld(channel: operand.Channel, hold: out var hold)) { return RuleFact.Absent(kind: operand.ValueKind); }
+            if (!owner!.TryHeld(channel: operand.Channel, hold: out var hold)) { return Fact.Absent(kind: operand.ValueKind); }
             Host.Input.ObserveActivation(principal, hold.Origin.Event.Activation);
             return ((operand.Facet == WorldInputFacet.HeldSince)
-                ? RuleFact.Finite(value: hold.Origin.Time(policy: policy)) : RuleFact.Finite(checked((long)hold.Press), CellKind.Int));
+                ? Fact.Finite(value: hold.Origin.Time(policy: policy)) : Fact.Finite(checked((long)hold.Press), CellKind.Int));
         }
         var found = TryInputRecord(operand: operand, owner: owner!, record: out var record);
 
         if (found) { Host.Input.ObserveActivation(principal, record.Event.Activation); }
-        if (operand.Facet == WorldInputFacet.Edge) { return RuleFact.Finite(kind: CellKind.Bool, value: (found ? 1 : 0)); }
-        if (!found) { return RuleFact.Absent(kind: operand.ValueKind); }
+        if (operand.Facet == WorldInputFacet.Edge) { return Fact.Finite(kind: CellKind.Bool, value: (found ? 1 : 0)); }
+        if (!found) { return Fact.Absent(kind: operand.ValueKind); }
         return operand.Facet switch {
-            WorldInputFacet.Time => RuleFact.Finite(value: record.Time(policy: policy)),
-            WorldInputFacet.Age => RuleFact.Finite(value: (Host.Input.Interval.Time(default) - record.Time(policy: policy))),
-            WorldInputFacet.Tick => RuleFact.Finite(checked((long)record.Admission.Tick), CellKind.Int),
-            WorldInputFacet.Value => RuleFact.Finite(record.Event.RawValue, operand.ValueKind),
-            _ => RuleFact.Absent(kind: operand.ValueKind),
+            WorldInputFacet.Time => Fact.Finite(value: record.Time(policy: policy)),
+            WorldInputFacet.Age => Fact.Finite(value: (Host.Input.Interval.Time(default) - record.Time(policy: policy))),
+            WorldInputFacet.Tick => Fact.Finite(checked((long)record.Admission.Tick), CellKind.Int),
+            WorldInputFacet.Value => Fact.Finite(record.Event.RawValue, operand.ValueKind),
+            _ => Fact.Absent(kind: operand.ValueKind),
         };
     }
 
@@ -289,12 +289,12 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         }
     }
     /// <inheritdoc/>
-    public RuleFact Read(PopulationOperand operand) => RuleFact.Finite(
+    public Fact Read(PopulationOperand operand) => Fact.Finite(
         kind: CellKind.Int,
         value: Host.Population.ActiveCount()
     );
     /// <inheritdoc/>
-    public RuleFact Read(PhysicsQuiescentOperand operand) => RuleFact.Finite(
+    public Fact Read(PhysicsQuiescentOperand operand) => Fact.Finite(
         kind: CellKind.Bool,
         value: (((operand.PlacementOrdinals is { } ordinals)
         ? Host.Population.RigidPlacementsQuiescent(placementOrdinals: ordinals)
@@ -303,32 +303,32 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         : 0L)
     );
     /// <inheritdoc/>
-    public RuleFact Read(ClockOperand operand) {
-        if (operand.Input is not { } input) { return RuleFact.Finite(Host.ReadClockPhaseError(), CellKind.Int); }
+    public Fact Read(ClockOperand operand) {
+        if (operand.Input is not { } input) { return Fact.Finite(Host.ReadClockPhaseError(), CellKind.Int); }
         if (!TryInputOwner(input.Owner, out _, out var owner) || !TryInputRecord(operand: input, owner: owner!, record: out var record)) {
-            return RuleFact.Absent(kind: CellKind.Fixed);
+            return Fact.Absent(kind: CellKind.Fixed);
         }
         var capture = ((Host.Document.Definition.InputHistory?.Judgement ?? WorldInputJudgement.Capture) == WorldInputJudgement.Capture);
         var interval = (capture ? record.Capture : record.Admission);
 
         return ((interval.Music is { } music)
-            ? RuleFact.Finite(value: music.PhaseError((capture ? record.Event.Offset : default), (capture ? record.Calibration : default)))
-            : RuleFact.Absent(kind: CellKind.Fixed));
+            ? Fact.Finite(value: music.PhaseError((capture ? record.Event.Offset : default), (capture ? record.Calibration : default)))
+            : Fact.Absent(kind: CellKind.Fixed));
     }
     /// <inheritdoc/>
-    public RuleFact Read(RegionOccupancyOperand operand) {
+    public Fact Read(RegionOccupancyOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Int,
             value: Host.Events.OccupantCount(placementId: operand.PlacementId)
         );
     }
     /// <inheritdoc/>
-    public RuleFact Read(MachineMemoryOperand operand) {
+    public Fact Read(MachineMemoryOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Int,
             value: (Host.Machines.TryPeek(
                 address: operand.Address,
@@ -340,10 +340,10 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
-    public RuleFact Read(ArgBodyOperand operand) {
+    public Fact Read(ArgBodyOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Int,
             value: Host.ResolveArgBodyOrdinal(
                 filterRowOrdinal: ((operand.FilterRow is not null)
@@ -355,19 +355,19 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
-    public RuleFact Read(BodyDistanceOperand operand) {
+    public Fact Read(BodyDistanceOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        return RuleFact.Finite(value: ReadBodyDistance(
+        return Fact.Finite(value: ReadBodyDistance(
             bodyA: ResolveBodyRef(bodyRef: operand.BodyA),
             bodyB: ResolveBodyRef(bodyRef: operand.BodyB)
         ));
     }
     /// <inheritdoc/>
-    public RuleFact Read(LineOfSightOperand operand) {
+    public Fact Read(LineOfSightOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Bool,
             value: (ReadBodyLineOfSight(
                 indexA: ResolveBodyRef(bodyRef: operand.BodyA),
@@ -378,31 +378,31 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
-    public RuleFact Read(ParkedOperand operand) {
+    public Fact Read(ParkedOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
         return ((Host.Population.ParkedRemainingTicks(
             index: ResolveBodyRef(bodyRef: operand.BodyA),
             tick: Tick
         ) is { } remaining)
-            ? RuleFact.Finite(
+            ? Fact.Finite(
                 kind: CellKind.Int,
                 value: remaining
             )
-            : RuleFact.Forever(kind: CellKind.Int)
+            : Fact.Forever(kind: CellKind.Int)
         );
     }
     /// <inheritdoc/>
-    public RuleFact Read(UprightOperand operand) {
+    public Fact Read(UprightOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        return RuleFact.Finite(value: ReadBodyUpright(index: ResolveBodyRef(bodyRef: operand.BodyA)));
+        return Fact.Finite(value: ReadBodyUpright(index: ResolveBodyRef(bodyRef: operand.BodyA)));
     }
     /// <inheritdoc/>
-    public RuleFact Read(BodyFactOperand operand) {
+    public Fact Read(BodyFactOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Int,
             value: (((Host.Body(index: ResolveBodyRef(bodyRef: operand.Body)) is { } factBody) && BodyFactVocabulary.Holds(
                 facts: factBody.Facts,
@@ -413,26 +413,26 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
-    public RuleFact Read(BodyPositionOperand operand) {
+    public Fact Read(BodyPositionOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
         if (Host.Body(index: ResolveBodyRef(bodyRef: operand.Body)) is not { } body) {
-            return RuleFact.Finite(value: FixedQ4816.Zero);
+            return Fact.Finite(value: FixedQ4816.Zero);
         }
 
         var position = body.FixedPosition;
 
-        return RuleFact.Finite(value: operand.Axis switch {
+        return Fact.Finite(value: operand.Axis switch {
             0 => position.X,
             1 => position.Y,
             _ => position.Z,
         });
     }
     /// <inheritdoc/>
-    public RuleFact Read(EngagedOperand operand) {
+    public Fact Read(EngagedOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Int,
             value: (Host.Engagement.Applies(
                 bodyIndex: ResolveBodyRef(bodyRef: operand.Body),
@@ -443,10 +443,10 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
-    public RuleFact Read(BodyStateOperand operand) {
+    public Fact Read(BodyStateOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Fixed,
             value: WorldBodyStateReads.Presented(
                 kind: operand.Kind,
@@ -458,37 +458,37 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
-    public RuleFact Read(LinkStalenessOperand operand) {
+    public Fact Read(LinkStalenessOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Int,
             value: Host.Events.LinkStalenessTicks(adjacencyName: operand.AdjacencyName)
         );
     }
     /// <inheritdoc/>
-    public RuleFact Read(ChannelOperand operand) {
+    public Fact Read(ChannelOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        return RuleFact.Finite(value: ReadChannelValue(
+        return Fact.Finite(value: ReadChannelValue(
             ordinal: operand.ChannelOrdinal,
             seat: operand.Seat
         ));
     }
     /// <inheritdoc/>
-    public RuleFact Read(PointerOperand operand) {
+    public Fact Read(PointerOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: operand.ValueKind,
             value: ReadPointer(operand: operand)
         );
     }
     /// <inheritdoc/>
-    public RuleFact Read(NearestOperand operand) {
+    public Fact Read(NearestOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Int,
             value: ResolveNearestBody(
                 origin: ResolveBodyRef(bodyRef: operand.BodyA),
@@ -497,10 +497,10 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
-    public RuleFact Read(NavigationOperand operand) {
+    public Fact Read(NavigationOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Int,
             value: Host.Population.NavigationFact(
                 facet: operand.Facet,
@@ -509,12 +509,12 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
-    public RuleFact Read(BoardCellOfOperand operand) {
+    public Fact Read(BoardCellOfOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
         var index = ResolveBodyRef(bodyRef: operand.BodyA);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Int,
             value: (((Host.Body(index: index) is { } body) && operand.Topology.TryCellOf(
                 cell: out var cell,
@@ -525,10 +525,10 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
-    public RuleFact Read(BoardSeatOperand operand) {
+    public Fact Read(BoardSeatOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Int,
             value: ReadBoardSeat(operand: operand)
         );

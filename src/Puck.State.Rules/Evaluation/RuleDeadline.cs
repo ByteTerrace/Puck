@@ -45,14 +45,14 @@ public sealed record RuleDeadline(int Token, bool TickOnLeft, bool Strict, long 
     /// <see cref="ulong.MaxValue"/> when it never will: X absent, or forever.</summary>
     /// <param name="x">X as the comparison reads it, in the comparison's kind.</param>
     /// <returns>The tick.</returns>
-    public ulong FirstHoldingTick(in RuleFact x) {
-        if (x.IsAbsent || x.IsForever) {
+    public ulong FirstHoldingTick(in Fact x) {
+        if (!x.Outcome.TryFinite(raw: out var raw)) {
             return ulong.MaxValue;
         }
 
         var first = (Strict
-            ? (Puck.Maths.BinaryIntegerFunctions.FloorDivide(value: x.Value, divisor: Scale) + 1L)
-            : Puck.Maths.BinaryIntegerFunctions.CeilingDivide(value: x.Value, divisor: Scale));
+            ? (Puck.Maths.BinaryIntegerFunctions.FloorDivide(value: raw, divisor: Scale) + 1L)
+            : Puck.Maths.BinaryIntegerFunctions.CeilingDivide(value: raw, divisor: Scale));
 
         return ((first <= 0L) ? 0UL : (ulong)first);
     }

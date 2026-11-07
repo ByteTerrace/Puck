@@ -228,19 +228,19 @@ public sealed partial class WorldRuleHost {
         var resolved = RuleReads.ResolveKey(
             keyFrom: keyFrom,
             literal: key,
-            naming: out var naming,
             reader: this
         );
 
+        resolved.TryNamed(value: out var resolvedKey);
         bodyIndex = ((RuleReads.TryKeyIndex(
             keys: Host.Arena.Keys,
             index: out var index,
-            key: resolved
+            key: resolvedKey
         ) && (index >= 0L) && (index <= int.MaxValue))
             ? ((int)index)
             : -1
         );
-        if (naming == KeyNaming.Fault) {
+        if (resolved.Case == FaultCase.Faulted) {
             bodyIndex = -1;
 
             return Refuse(
@@ -430,10 +430,7 @@ public sealed partial class WorldRuleHost {
 
         var magnitudeFact = effect.Magnitude.Read(reader: this);
 
-        if (
-            magnitudeFact.IsAbsent ||
-            magnitudeFact.IsForever
-        ) {
+        if (magnitudeFact.Outcome.Case != FaultCase.Finite) {
             return Refuse(
                 code: WorldRuleEffectRefusal.RigidImpulseOutOfRange,
                 reason: "applyRigidImpulse magnitude cell is absent",

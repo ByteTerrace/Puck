@@ -146,8 +146,8 @@ public static class RuleExpressions {
 
                     var fact = token.Operand!.Read(reader: reader);
 
-                    if (fact.IsForever || fact.IsFaulted) {
-                        fault = (fact.IsFaulted
+                    if (fact.Outcome.Case is FaultCase.Forever or FaultCase.Faulted) {
+                        fault = ((fact.Outcome.Case == FaultCase.Faulted)
                             ? ExpressionFault.Domain
                             : ExpressionFault.Forever);
                         value = 0L;
@@ -155,8 +155,10 @@ public static class RuleExpressions {
                         return false;
                     }
 
-                    absent[top] = fact.IsAbsent;
-                    stack[top++] = (fact.IsAbsent
+                    var factAbsent = (fact.Outcome.Case == FaultCase.Absent);
+
+                    absent[top] = factAbsent;
+                    stack[top++] = (factAbsent
                         ? 0L
                         : fact.ToRaw(kind: token.CarrierKind ?? kind)
                     );

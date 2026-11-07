@@ -11,12 +11,16 @@ public static class RuleEvaluation {
     /// <summary>Formats a fact for a trace: <c>absent</c>, <c>forever</c>, a fixed-point value, or an integer.</summary>
     /// <param name="fact">The fact.</param>
     /// <returns>The spelling.</returns>
-    public static string DescribeFact(in RuleFact fact) => DescribeFact(
-        isAbsent: fact.IsAbsent,
-        isForever: fact.IsForever,
-        kind: fact.Kind,
-        value: fact.Value
-    );
+    public static string DescribeFact(in Fact fact) {
+        fact.Outcome.TryFinite(raw: out var raw);
+
+        return DescribeFact(
+            isAbsent: (fact.Outcome.Case is FaultCase.Absent or FaultCase.Faulted),
+            isForever: (fact.Outcome.Case == FaultCase.Forever),
+            kind: fact.Kind,
+            value: raw
+        );
+    }
     /// <summary>Formats a raw value for a trace.</summary>
     /// <param name="value">The raw value.</param>
     /// <param name="kind">Its encoding.</param>
@@ -128,12 +132,14 @@ public static class RuleEvaluation {
             var leftSource = predicate.LeftSource;
             var rightSource = predicate.RightSource;
             if (predicate.ValueKind == CellKind.Text) {
-                var leftText = leftSource.Text;
-                var rightText = rightSource.Text;
-                var leftNaming = (leftText is not null) ? KeyNaming.Cell : ReadText(reader, leftSource.Operand, out leftText);
-                var rightNaming = (rightText is not null) ? KeyNaming.Cell : ReadText(reader, rightSource.Operand, out rightText);
+                var leftResolved = ((leftSource.Text is { } leftLiteral) ? Resolved<string>.Named(leftLiteral) : ReadText(reader, leftSource.Operand));
+                var rightResolved = ((rightSource.Text is { } rightLiteral) ? Resolved<string>.Named(rightLiteral) : ReadText(reader, rightSource.Operand));
+                var leftNamed = leftResolved.TryNamed(out var leftValue);
+                var rightNamed = rightResolved.TryNamed(out var rightValue);
+                var leftText = (leftValue ?? string.Empty);
+                var rightText = (rightValue ?? string.Empty);
                 var equal = string.Equals(leftText, rightText, StringComparison.Ordinal);
-                var textHolds = (leftNaming == KeyNaming.Cell) && (rightNaming == KeyNaming.Cell) &&
+                var textHolds = leftNamed && rightNamed &&
                     (predicate.Comparison == ExpressionOp.Equal ? equal : !equal);
                 stack[top++] = textHolds;
                 trace?.Add($"{predicate.Describe}: \"{leftText}\" {predicate.Comparison.Symbol()} \"{rightText}\" -> {Spell(textHolds)}");
@@ -159,17 +165,23 @@ public static class RuleEvaluation {
 
             // An absent side names no cell, so no comparison holds against it — not even NotEqual: "the top card is
             // not a king" must not read as true of an empty pile. Absence converts to false at a gate.
-            var absent = (left.IsAbsent || right.IsAbsent);
+            var absent = (
+                (left.Outcome.Case is FaultCase.Absent or FaultCase.Faulted) ||
+                (right.Outcome.Case is FaultCase.Absent or FaultCase.Faulted)
+            );
+
+            left.Outcome.TryFinite(raw: out var leftRaw);
+            right.Outcome.TryFinite(raw: out var rightRaw);
 
             var holds = (
                 leftRead &&
                 rightRead &&
                 !absent &&
                 predicate.Comparison.Holds(
-                expected: FixedQ4816.FromRawBits(value: right.Value),
-                expectedIsForever: right.IsForever,
-                value: FixedQ4816.FromRawBits(value: left.Value),
-                valueIsForever: left.IsForever
+                expected: FixedQ4816.FromRawBits(value: rightRaw),
+                expectedIsForever: (right.Outcome.Case == FaultCase.Forever),
+                value: FixedQ4816.FromRawBits(value: leftRaw),
+                valueIsForever: (left.Outcome.Case == FaultCase.Forever)
             )
             );
 
@@ -201,25 +213,24 @@ public static class RuleEvaluation {
     /// <param name="fact">The fact, on success.</param>
     /// <param name="fault">Why the read did not answer, or <see cref="ExpressionFault.None"/>. An operand answering
     /// the absent fact faults <see cref="ExpressionFault.Absent"/>, and one whose address computation faulted
-    /// (<see cref="RuleFact.IsFaulted"/>) faults <see cref="ExpressionFault.Domain"/>; one answering <c>forever</c> does not fault, since
+    /// (<see cref="FaultCase.Faulted"/>) faults <see cref="ExpressionFault.Domain"/>; one answering <c>forever</c> does not fault, since
     /// a fact comparison answers it under infinity semantics. <see cref="ExpressionFault.Forever"/> comes only from an
     /// expression, whose numeric evaluation cannot read infinity.</param>
     /// <returns><see langword="true"/> when the source answered. An operand answering the absent or forever fact
     /// still answers: the caller decides what an absence means where it sits.</returns>
-    public static bool TryReadSource(IStateReader reader, in CompiledValueSource source, CellKind kind, out RuleFact fact, out ExpressionFault fault) {
+    public static bool TryReadSource(IStateReader reader, in CompiledValueSource source, CellKind kind, out Fact fact, out ExpressionFault fault) {
         fault = ExpressionFault.None;
 
         if (source.Operand is { } operand) {
             ArgumentNullException.ThrowIfNull(argument: reader);
 
             fact = operand.Read(reader: reader);
-            fault = (fact.IsFaulted
-                ? ExpressionFault.Domain
-                : (fact.IsAbsent
-                    ? ExpressionFault.Absent
-                    : ExpressionFault.None)
-            );
-            if (fact.IsFaulted) {
+            fault = (fact.Outcome.Case switch {
+                FaultCase.Faulted => ExpressionFault.Domain,
+                FaultCase.Absent => ExpressionFault.Absent,
+                _ => ExpressionFault.None,
+            });
+            if (fact.Outcome.Case == FaultCase.Faulted) {
                 reader.Scratch.RaiseFault(fault: ExpressionFault.Domain);
             }
 
@@ -240,12 +251,12 @@ public static class RuleEvaluation {
                 reader: reader,
                 value: out var computed
             )) {
-                fact = RuleFact.Absent(kind: kind);
+                fact = Fact.Absent(kind: kind);
 
                 return false;
             }
 
-            fact = RuleFact.Finite(
+            fact = Fact.Finite(
                 kind: kind,
                 value: ((kind == CellKind.Bool)
                 ? ((computed != 0L)
@@ -257,7 +268,7 @@ public static class RuleEvaluation {
             return true;
         }
 
-        fact = RuleFact.Finite(
+        fact = Fact.Finite(
             kind: kind,
             value: source.RawValue
         );
@@ -269,30 +280,28 @@ public static class RuleEvaluation {
         ? "true"
         : "false"
     );
-    private static string Spell(in RuleFact fact, bool read) => (read
+    private static string Spell(in Fact fact, bool read) => (read
         ? DescribeFact(fact: in fact)
         : "refused"
     );
     /// <summary>Reads a live Text operand through the same addresses used by text-copy effects and gates.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="source">The compiled text operand.</param>
-    /// <param name="text">The text, or empty on a missing read.</param>
-    /// <returns><see cref="KeyNaming.Cell"/> when a Text cell was read, <see cref="KeyNaming.Fault"/> when computing
-    /// its row or key faulted, and <see cref="KeyNaming.Nothing"/> when no Text cell answered.</returns>
-    public static KeyNaming ReadText(IStateReader reader, IRuleOperand? source, out string text) {
+    /// <returns>The text when a Text cell was read, <see cref="FaultCase.Faulted"/> when computing its row or key
+    /// faulted, and <see cref="FaultCase.Absent"/> when no Text cell answered.</returns>
+    public static Resolved<string> ReadText(IStateReader reader, IRuleOperand? source) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        var naming = ReadTextCore(reader: reader, source: source, text: out text);
+        var resolved = ReadTextCore(reader: reader, source: source);
 
-        if (naming == KeyNaming.Fault) {
+        if (resolved.Case == FaultCase.Faulted) {
             reader.Scratch.RaiseFault(fault: ExpressionFault.Domain);
         }
 
-        return naming;
+        return resolved;
     }
 
-    private static KeyNaming ReadTextCore(IStateReader reader, IRuleOperand? source, out string text) {
-        text = string.Empty;
+    private static Resolved<string> ReadTextCore(IStateReader reader, IRuleOperand? source) {
         CellValue carried;
 
         switch (source) {
@@ -300,19 +309,22 @@ public static class RuleEvaluation {
                     var ordinal = cell.RowOrdinal;
 
                     if (cell.RowFrom is { } live) {
-                        var selected = live.Resolve(reader: reader, rowOrdinal: out ordinal);
+                        var selected = live.Resolve(reader: reader);
 
-                        if (selected != KeyNaming.Cell) {
-                            return selected;
+                        if (!selected.TryNamed(value: out ordinal)) {
+                            return ((selected.Case == FaultCase.Faulted)
+                                ? Resolved<string>.Faulted
+                                : Resolved<string>.Nothing);
                         }
                     }
-                    var key = RuleReads.ResolveKey(keyFrom: cell.KeyFrom, literal: cell.Key, naming: out var naming, reader: reader);
 
-                    if (naming == KeyNaming.Fault) {
-                        return KeyNaming.Fault;
+                    var resolved = RuleReads.ResolveKey(keyFrom: cell.KeyFrom, literal: cell.Key, reader: reader);
+
+                    if (resolved.Case == FaultCase.Faulted) {
+                        return Resolved<string>.Faulted;
                     }
-                    if (!key.IsValid || !reader.Arena.TryRead(key: key, rowOrdinal: ordinal, value: out carried)) {
-                        return KeyNaming.Nothing;
+                    if (!resolved.TryNamed(value: out var key) || !key.IsValid || !reader.Arena.TryRead(key: key, rowOrdinal: ordinal, value: out carried)) {
+                        return Resolved<string>.Nothing;
                     }
                     break;
                 }
@@ -320,25 +332,25 @@ public static class RuleEvaluation {
                     var bindings = reader.InstanceBindings;
 
                     if ((((uint)field.BindingSlot) >= ((uint)bindings.Length)) || (bindings[field.BindingSlot].PoolOrdinal != field.Pool.Ordinal) || !reader.Arena.TryReadLive(handle: bindings[field.BindingSlot], fieldOrdinal: field.Field.Ordinal, time: reader.Time, value: out carried)) {
-                        return KeyNaming.Nothing;
+                        return Resolved<string>.Nothing;
                     }
                     break;
                 }
             case StaticInstanceFieldOperand field: {
                     if (!reader.Arena.TryResolvePoolSlot(poolOrdinal: field.Pool.Ordinal, slot: field.Handle.Slot, handle: out var handle) ||
                         !reader.Arena.TryReadLive(handle: handle, fieldOrdinal: field.Field.Ordinal, time: reader.Time, value: out carried)) {
-                        return KeyNaming.Nothing;
+                        return Resolved<string>.Nothing;
                     }
                     break;
                 }
             default:
-                return KeyNaming.Nothing;
+                return Resolved<string>.Nothing;
         }
 
         if (carried.Kind != CellKind.Text) {
-            return KeyNaming.Nothing;
+            return Resolved<string>.Nothing;
         }
-        text = carried.AsText;
-        return KeyNaming.Cell;
+
+        return Resolved<string>.Named(value: carried.AsText);
     }
 }

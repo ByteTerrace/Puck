@@ -3395,7 +3395,7 @@ brief's priorities ([security review](../development/security-review.md)).
     DISC001 over module declarations, the public-surface law,
     `WorldStateDisclosure` deleted. Step 7, the red-team extension.
 - [low] Three consumers still turn an absent expression into a number, which
-  `RuleFact`'s contract says an absence never is: a search job's score reads 0
+  `Fact`'s contract says an absence never is: a search job's score reads 0
   (`src/Puck.State.Search/RuleArenaSearchJudge.cs`, `Score`), a flock affinity
   reads zero affinity and counts a failure
   (`src/Puck.World.Server/WorldPopulation.FlockAffinities.cs`,

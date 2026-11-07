@@ -461,6 +461,10 @@ fault. A new place that evaluates rule expressions opens a scope
 `RuleExpressions.TryEvaluateAlone`; a fault raised outside every scope throws.
 `Absent` is a value each consumer answers, never raised
 ([expressions](../../../docs/reference/state/expressions.md#constant-folding-and-faults)).
+An operand read answers a `Fact` (an `Outcome`, a case of `Faulted`, `Finite`, `Absent` or `Forever`, beside its cell
+kind) and an address resolves to a `Resolved<T>`; both default to the faulted case and give their value only through
+`TryFinite` or `TryNamed`. `Verdict`, `FiringDecision` and `RuleOutcome.Faulted` exist for the design in
+[rule faults](../../../docs/plans/rule-faults.md) and nothing produces them yet.
 
 **Narrate through the hub.** Server never writes to `System.Console`; every line
 is a `WorldOutputHub.Narrate` call, bound to stderr (or stdout for answers) by

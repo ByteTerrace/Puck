@@ -20,7 +20,7 @@ public interface IRuleOperand : ICompiledFact {
     /// <summary>Reads the operand's live fact for the evaluation in flight.</summary>
     /// <param name="reader">The evaluation in flight, which is also the host serving every facet it advertises.</param>
     /// <returns>The fact.</returns>
-    RuleFact Read(IStateReader reader);
+    Fact Read(IStateReader reader);
 }
 /// <summary>A read operand that answers from the arena alone. Case types are classes, never records or structs:
 /// nothing at runtime compares two operands for equality, so a generated structural <c>Equals</c> would be a hazard
@@ -40,7 +40,7 @@ public abstract class RuleOperand : IRuleOperand {
     /// <inheritdoc/>
     public abstract RuleWork Cost(IRuleCostContext context);
     /// <inheritdoc/>
-    public abstract RuleFact Read(IStateReader reader);
+    public abstract Fact Read(IStateReader reader);
 }
 /// <summary>Shared shape for the operand cases that address a row through a (row ordinal, key-or-indirection) pair,
 /// so a caller that must accept any of them can read the row and the live key without enumerating every case.</summary>
@@ -50,17 +50,6 @@ public interface IStateAddressedOperand {
     /// <summary>Gets the live key indirection, or <see langword="null"/> for a literal key.</summary>
     CompiledCellRef? KeyFrom { get; }
 }
-/// <summary>What a live key or row address named for the evaluation in flight.</summary>
-public enum KeyNaming : byte {
-    /// <summary>The address named nothing (an empty zone's endpoint, a pointer spelling no cell name); a read through
-    /// it is absent.</summary>
-    Nothing,
-    /// <summary>The address named a cell, which may be one no row holds and so reads zero.</summary>
-    Cell,
-    /// <summary>Computing the address faulted (overflow, a divide by zero, a value with no number); a read through it
-    /// faults as arithmetic and a write through it refuses.</summary>
-    Fault,
-}
 /// <summary>A cell key a compiled rule resolves live: the engine's own (a zone endpoint, a binding) or a document
 /// project's case on <see cref="KeyFact{TFacet}"/>. The key is interned, never a string.</summary>
 public interface IRuleKey : ICompiledFact {
@@ -69,13 +58,11 @@ public interface IRuleKey : ICompiledFact {
     void CollectReads(List<CellAccess> into);
     /// <summary>Resolves the key for the evaluation in flight, and what it named.</summary>
     /// <param name="reader">The evaluation in flight.</param>
-    /// <param name="naming">What the fact named. A fact naming a cell no key table interns answers
-    /// <see cref="KeyNaming.Cell"/> beside the invalid key: no row holds that cell, and it reads zero. A fact naming
-    /// nothing (an empty zone's endpoint) answers <see cref="KeyNaming.Nothing"/>, and reads absent; one whose
-    /// computation faulted answers <see cref="KeyNaming.Fault"/>.</param>
-    /// <returns>The interned key, or the invalid default unless <paramref name="naming"/> is
-    /// <see cref="KeyNaming.Cell"/>.</returns>
-    CellKey Resolve(IStateReader reader, out KeyNaming naming);
+    /// <returns>The interned key. A fact naming a cell no key table interns is named with the invalid key: no row holds
+    /// that cell, and it reads zero. A fact naming nothing (an empty zone's endpoint) is
+    /// <see cref="FaultCase.Absent"/>, and reads absent; one whose computation faulted is
+    /// <see cref="FaultCase.Faulted"/>.</returns>
+    Resolved<CellKey> Resolve(IStateReader reader);
     /// <summary>Attempts to resolve a key for a state-writing effect. A dynamic key family may explicitly admit a
     /// runtime key here; ordinary reads never do so. A key whose computation faulted refuses.</summary>
     /// <param name="reader">The evaluation in flight.</param>
@@ -84,19 +71,21 @@ public interface IRuleKey : ICompiledFact {
     /// <returns><see langword="true"/> when evaluation may continue; <see langword="false"/> makes the enclosing
     /// firing refuse and rewind.</returns>
     bool TryResolveForWrite(IStateReader reader, out CellKey key, out string reason) {
-        key = Resolve(naming: out var naming, reader: reader);
-        reason = ((naming == KeyNaming.Fault)
+        var resolved = Resolve(reader: reader);
+        var faulted = (resolved.Case == FaultCase.Faulted);
+
+        resolved.TryNamed(value: out key);
+        reason = (faulted
             ? RuleReads.KeyFaultReason
             : string.Empty);
 
-        return (naming != KeyNaming.Fault);
+        return !faulted;
     }
     /// <summary>Resolves the key as an integer index — a live zone's table index, a static table's key.</summary>
     /// <param name="reader">The evaluation in flight.</param>
-    /// <param name="index">The index when the key names a cell spelling an integer.</param>
-    /// <returns><see cref="KeyNaming.Cell"/> when the key spells an integer, <see cref="KeyNaming.Fault"/> when
-    /// computing it faulted, and <see cref="KeyNaming.Nothing"/> otherwise.</returns>
-    KeyNaming ResolveIndex(IStateReader reader, out long index);
+    /// <returns>The index when the key names a cell spelling an integer, <see cref="FaultCase.Faulted"/> when computing
+    /// it faulted, and <see cref="FaultCase.Absent"/> otherwise.</returns>
+    Resolved<long> ResolveIndex(IStateReader reader);
 }
 /// <summary>A live cell key that answers from the arena alone.</summary>
 public abstract class RuleKeyFact : IRuleKey {
@@ -106,36 +95,36 @@ public abstract class RuleKeyFact : IRuleKey {
     /// <inheritdoc/>
     public virtual void CollectReads(List<CellAccess> into) { }
     /// <inheritdoc/>
-    public abstract CellKey Resolve(IStateReader reader, out KeyNaming naming);
+    public abstract Resolved<CellKey> Resolve(IStateReader reader);
     /// <summary>Resolves the key as an integer index. The default reads the key's interned name as an integer.</summary>
     /// <param name="reader">The evaluation in flight.</param>
-    /// <param name="index">The index when the key spells an integer.</param>
-    /// <returns><see cref="KeyNaming.Cell"/> when the key spells an integer, <see cref="KeyNaming.Fault"/> when
-    /// resolving it faulted, and <see cref="KeyNaming.Nothing"/> otherwise.</returns>
-    public virtual KeyNaming ResolveIndex(IStateReader reader, out long index) {
+    /// <returns>The index when the key spells an integer, <see cref="FaultCase.Faulted"/> when resolving it faulted,
+    /// and <see cref="FaultCase.Absent"/> otherwise.</returns>
+    public virtual Resolved<long> ResolveIndex(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        var key = Resolve(
-            naming: out var naming,
-            reader: reader
-        );
+        var resolved = Resolve(reader: reader);
 
-        index = 0L;
-        if (naming == KeyNaming.Fault) {
-            return KeyNaming.Fault;
+        if (resolved.Case == FaultCase.Faulted) {
+            return Resolved<long>.Faulted;
         }
-
-        return ((reader.Arena.Keys.TryGetName(
-            key: key,
-            name: out var name
-        ) && long.TryParse(
+        if (
+            resolved.TryNamed(value: out var key) &&
+            reader.Arena.Keys.TryGetName(
+                key: key,
+                name: out var name
+            ) &&
+            long.TryParse(
                 provider: System.Globalization.CultureInfo.InvariantCulture,
-                result: out index,
+                result: out var index,
                 s: name.Value,
                 style: System.Globalization.NumberStyles.Integer
-            ))
-            ? KeyNaming.Cell
-            : KeyNaming.Nothing);
+            )
+        ) {
+            return Resolved<long>.Named(value: index);
+        }
+
+        return Resolved<long>.Nothing;
     }
 }
 /// <summary>One compiled effect of a rule, whatever declares it: the library's own cases, or a document project's

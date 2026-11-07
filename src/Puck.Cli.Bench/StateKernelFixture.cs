@@ -96,7 +96,7 @@ public sealed class StateKernelDirectOperand : RuleOperand {
     }
 
     public override RuleWork Cost(IRuleCostContext context) => 1L;
-    public override RuleFact Read(IStateReader reader) => RuleFact.Finite(
+    public override Fact Read(IStateReader reader) => Fact.Finite(
         kind: CellKind.Int,
         value: ((long)RuleReads.ReadFixed(
             key: m_key,
@@ -120,14 +120,14 @@ public sealed class StateKernelIndirectOperand : RuleOperand {
     }
 
     public override RuleWork Cost(IRuleCostContext context) => 2L;
-    public override RuleFact Read(IStateReader reader) {
+    public override Fact Read(IStateReader reader) {
         var selected = ((long)RuleReads.ReadFixed(
             key: m_selector,
             reader: reader,
             rowOrdinal: m_cursor
         ).Value);
 
-        return RuleFact.Finite(
+        return Fact.Finite(
             kind: CellKind.Int,
             value: ((long)RuleReads.ReadFixed(
                 key: m_keys[((int)(((ulong)selected) % ((ulong)m_keys.Count)))],
