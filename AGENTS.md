@@ -374,7 +374,13 @@ settles a question, decide by that principle and say why.
    current source, document or measurement it rests on, and cite it
    (`file:line`, the command and its output). A recollection, an earlier
    session's summary, a skill's prose or a lane's report is a lead to check,
-   not a fact; when in doubt, look it up first.
+   not a fact; when in doubt, look it up first. Every model family invents
+   plausible code details (the owner's observation), so a citation is pasted,
+   never retyped: quoted code comes from the tool output that showed it, a
+   number carries the command or capture that produced it, and a premise no
+   one has checked is marked unverified, never stated as fact. Durable
+   documents cite by symbol, which a check resolves, rather than by line, which
+   drifts; a line number belongs in a hand-back or a commit at one revision.
 8. **Line endings are LF and are never a topic.** `.gitattributes`
    (`* text=auto eol=lf`) and `.editorconfig` hold the contract, with
    `*.bat`/`*.cmd` and `*.slnx` pinned CRLF in both. Never investigate, report,
