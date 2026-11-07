@@ -3726,6 +3726,13 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [medium] `puck lease quiet` holds what it has while it waits for the rest:
+  a frame-measuring lane's quiet acquisition held the build and heavy leases
+  while queued behind another lane's GPU leg, so a third lane's heavy test
+  waited on a lease nobody was using. Acquire the three all at once or not at
+  all (take none until all are free, in one admission decision), so a quiet
+  waiter never idles a resource another lane could use.
+
 - [low · unconfirmed] `puck measure request --after-commit` built the World
   but Windows refused `WorldArtifactStore.Publish`'s directory rename after its
   retries (`src/Puck.Cli.Harness/WorldArtifactStore.cs:183`, `Directory.Move`),
