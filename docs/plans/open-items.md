@@ -3169,6 +3169,16 @@ still changes a fraction of a percent of pixels, not exactly zero.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] A rule `local` costs more than the expression it names: with
+  computed keys lowered into the program (rule-faults step 2),
+  `local k = a + 1` then `cards[k]` prices the gate at 6 plus the local's 3 tokens
+  (one unit more than `cards[a + 1]`, 8), because the key program reads the
+  local instead of being the same tokens (`world.budget.rules --why`). Under
+  "Ergonomic is optimal" (AGENTS.md) that is a compiler defect: lower a local
+  read into the canonical form (inline its tokens, or price the read at nothing),
+  and add the pair to the spelling-equivalence corpus.
+  `docs/reference/state/rules.md:638-644` also claims an `$expr:` key compiles
+  into an implicit local, which the code has never done.
 - [medium] Two walls the water channel lane hit: template `let`s inside a
   `prototypes` block are refused (PUCK036), and `with` takes only an object
   literal, so a shared view material became a required field and helper
