@@ -23,7 +23,7 @@ public sealed class WorldRecipientView(Func<WorldDefinition> definition, Func<St
     public WorldDefinition Definition {
         get {
             if (!Observes) { return WorldProjection.Undisclosed; }
-            if (Unrestricted) { return WorldStateReader.Export(Source, Arena); }
+            if (Unrestricted && ceiling == WorldDisclosureTier.Replica) { return WorldStateReader.Export(Source, Arena); }
             if (ceiling == WorldDisclosureTier.Replica) { return images.Definition(this); }
             var projection = Project();
             return WorldProjection.TryToDefinition(projection!, out var hydrated, out var reason)

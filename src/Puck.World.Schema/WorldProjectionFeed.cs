@@ -84,11 +84,20 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
         delta = m_tree is null ? null : WorldProjectionDelta.Diff(m_tree, tree);
         m_anchors.Retain(projection.Timeline?.Clocks ?? []);
         if (delta is null) { return Whole(projection, tree, payload); }
-        // Retain state only as shared typed row images, never as a JSON tree per spectator. JSON state exists only
-        // while encoding an actual delivery, whose observation array is a replacement in the common merge format.
-        if (observationsChanged) { delta["observations"] = nextObservations; }
+        // Retain state only as shared typed row images, never as a JSON tree per spectator. The common document
+        // merge keys arrays by name/key, so a new observation array is not a replacement: diff the transient state
+        // trees too, including removal markers for clocks, traits and cells that disappeared.
         var previousObservations = observationsChanged && m_held?.Observations is { } previous
             ? JsonSerializer.SerializeToNode(previous.ToArray(), WorldJsonContext.Default.WorldObservedRowArray) : null;
+        if (observationsChanged) {
+            var before = new JsonObject();
+            var after = new JsonObject();
+            if (previousObservations is not null) { before["observations"] = previousObservations.DeepClone(); }
+            if (nextObservations is not null) { after["observations"] = nextObservations.DeepClone(); }
+            var stateDelta = WorldProjectionDelta.Diff(before, after);
+            if (stateDelta is null) { return Whole(projection, tree, payload); }
+            foreach (var (name, value) in stateDelta) { delta[name] = value?.DeepClone(); }
+        }
         var valuesOnly = WorldProjectionDelta.IsValuesOnly(delta, previousObservations, nextObservations);
         m_held = projection; m_tree = tree;
         return Partial(projection, delta, valuesOnly);

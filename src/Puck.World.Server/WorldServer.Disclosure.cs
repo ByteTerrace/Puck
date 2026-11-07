@@ -26,7 +26,7 @@ public sealed partial class WorldServer {
         if (streams.Count == 0) { m_deliveryCursors.Remove(actor); }
     }
     internal WorldDocumentVersion RecipientVersion(Principal recipient) {
-        if (WorldGrants.IsTrusted(recipient)) { return DocumentVersion; }
+        if (recipient.Kind is PrincipalKind.Console or PrincipalKind.World) { return DocumentVersion; }
         // A submission with no unambiguous observation stream has received no version. Never substitute an
         // authority install count, or another stream's potentially higher-fidelity delivery count.
         var sequence = m_deliveryCursors.TryGetValue(recipient, out var streams) && streams.Count == 1 ? streams[0].Sequence : 0;

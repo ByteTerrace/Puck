@@ -1,5 +1,6 @@
 using Puck.World.Protocol;
 using Puck.Commands;
+using System.Buffers.Binary;
 using Xunit;
 
 namespace Puck.World.Server.Tests;
@@ -33,7 +34,22 @@ public sealed class WorldProjectionBackpressureLawTests {
             sink.DeliverDefinition(fixture.Server.Definition, fixture.Server.DocumentVersion);
             using var wire = new ProjectionWire();
             await sink.StreamAsync(wire, TestContext.Current.CancellationToken);
-            return wire.ToArray();
+            // Apply the harness's sole nonce normalization to the actual wire leaves. Preserve all payload bytes,
+            // frame kinds, lengths, delivery order and recipient sequence numbers.
+            using var read = new MemoryStream(wire.ToArray());
+            using var normalized = new MemoryStream();
+            var transcript = new WorldDisclosureTranscript(() => 0);
+            while (read.Position < read.Length) {
+                var frame = await WorldFederationCodec.ReadResponseAsync(read, TestContext.Current.CancellationToken);
+                Assert.True(frame.Ok);
+                var body = frame.Body.ToArray();
+                if (frame.Kind is (byte)WorldFederationResponse.Definition or (byte)WorldFederationResponse.ProjectionDelta) {
+                    var version = new WorldDocumentVersion(new Guid(body.AsSpan(1, 16)), BinaryPrimitives.ReadInt64LittleEndian(body.AsSpan(17)));
+                    transcript.Nonce(version).Activation.TryWriteBytes(body.AsSpan(1, 16));
+                }
+                await WorldFederationCodec.WriteResponseAsync(normalized, (WorldFederationResponse)frame.Kind, body, TestContext.Current.CancellationToken);
+            }
+            return normalized.ToArray();
         }
         Assert.Equal(await Received(false), await Received(true));
     }

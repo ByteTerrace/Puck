@@ -98,6 +98,7 @@ public sealed partial class SessionObservationLawTests {
         using var fixture = Fixtures.FreshServer(definition: Document(tier: WorldDisclosureTier.Replica));
         var sink = new WorldFederationProjectionSink(
             authority: fixture.Server.AuthorityIdentity,
+            server: fixture.Server,
             disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)),
             tier: WorldDisclosureTier.Replica
         );

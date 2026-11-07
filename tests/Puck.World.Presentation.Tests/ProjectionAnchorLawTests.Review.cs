@@ -177,7 +177,7 @@ public sealed partial class ProjectionAnchorLawTests {
         Assert.Equal(expected: 1L, actual: work.Read(kind: WorldProjectionWork.AnchorRowsReleased));
     }
     [Fact]
-    public void A_composition_that_does_not_flatten_faults_rather_than_detaching_as_a_disclosure_refusal() {
+    public void A_sink_reads_its_live_view_rather_than_an_uninstalled_definition_argument() {
         using var fixture = Fixtures.FreshServer(definition: Document(row: Row(raw: 0L)));
         var sink = new WorldFederationProjectionSink(
             authority: "boot",
@@ -197,16 +197,17 @@ public sealed partial class ProjectionAnchorLawTests {
             )],
         });
 
-        var fault = Assert.Throws<InvalidOperationException>(testCode: () => sink.DeliverDefinition(definition: unflattenable, version: fixture.Server.DocumentVersion));
-
-        Assert.Contains(actualString: fault.Message, expectedSubstring: "could not be flattened");
+        var pending = sink.PendingDeliveries;
+        sink.DeliverDefinition(definition: unflattenable, version: fixture.Server.DocumentVersion);
+        Assert.Equal(pending, sink.PendingDeliveries);
         Assert.Null(@object: sink.DetachReason);
 
-        // Red leg: a disclosure refusal through the same door detaches by name.
+        // An uninstalled policy cannot change the live capability either.
         var hidden = installed.WithWorldState(rows: [.. installed.State.Where(predicate: static row => (row.Name.Value != Clock)), Row(raw: 0L, visibility: new StateVisibility(Readers: ["seat1"]))]);
 
         sink.DeliverDefinition(definition: hidden, version: fixture.Server.DocumentVersion);
-        Assert.Equal(expected: WorldFederationProjectionSink.DisclosureDetachReason, actual: sink.DetachReason);
+        Assert.Equal(pending, sink.PendingDeliveries);
+        Assert.Null(sink.DetachReason);
     }
     [InlineData(false)]
     [InlineData(true)]

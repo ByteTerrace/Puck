@@ -50,6 +50,22 @@ public sealed class StateChangeDisclosureLawTests(ITestOutputHelper output) {
     }
 
     [Fact]
+    public void ASeatReceiptWithoutAnObservationStreamNeverCarriesTheAuthoritySequence() {
+        using var fixture = Fixtures.FreshServer(Document());
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateRow(Principal.Console, Document().AuthoredState[0]));
+        fixture.Step();
+        var seat = Principal.Seat(1);
+        var results = new List<WorldSubmissionResult>();
+        fixture.Server.Submit(new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId,
+            SessionGeneration: 0, Sequence: 1, CorrelationId: 1, Principal: seat, OperationId: Guid.NewGuid(),
+            Payload: new WorldSubmissionPayload.Mutation(new WorldMutation.RemoveStateCell(seat, "hand", "absent"))), results.Add);
+        fixture.Step();
+        var outcome = Assert.IsType<WorldSubmissionResult.Mutation>(Assert.Single(results)).Outcome;
+        Assert.True(fixture.Server.DocumentVersion.Sequence > 0);
+        Assert.Equal(0, outcome.Version.Sequence);
+    }
+
+    [Fact]
     public void AReplicaPrimesCountMetadataThenKeepsItLiveWithoutResendingHiddenValues() {
         var document = Document();
         document = document.WithWorldState([document.AuthoredState[0] with { Visibility = new StateVisibility(Hidden: HiddenCells.Count) }]);
