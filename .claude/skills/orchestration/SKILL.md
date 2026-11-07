@@ -1003,7 +1003,11 @@ checks each `file:line` it gives before the plan uses it.
 
 Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden
-a small direction into a quota or an always rule.
+a small direction into a quota or an always rule. Using two families is not the
+check: at each batch, ask whether its Argon-fit work (a security pass, an
+independent area audit, portal or UI work, a synthesis voice) went to Argon, and
+name the reason when it did not. A day of GPU and measurement work once left
+Argon unused while the security packet it owns sat untouched.
 
 A finding too large for its pass goes into a
 [work packet](../../../docs/plans/open-items.md#work-packets) in the open items
