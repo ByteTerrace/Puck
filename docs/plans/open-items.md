@@ -622,9 +622,16 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   triangle counts, so source equality alone does not show a halved cold cost.
 - The cold bake has not met the one-minute bar on either backend. The CPU
   stages remain the target after removing the repeated refinement-index walk,
-  fine-cell sign scan and collapse fan preparation. `SdfMeshCollapse.Levels`
-  still dominates `land`; its `Measure` and `MeasureReverse` checks are the
-  next profile-led cuts. A cheaper collapse that produces different but
+  fine-cell sign scan and collapse fan preparation. `SdfMeshCollapse` now reuses
+  reverse edge witnesses across an unchanged source fan, skips refused directed
+  edges until an endpoint fan changes, and tests the removed vertex's samples
+  first. Reverse searches resume only when their witness can raise the triangle's
+  maximum error; retained original vertices witness themselves, and rejected
+  distances skip normal interpolation. Planar merging precedes spatial splitting
+  so artificial seams do not keep flat contour rows through every level.
+  The paired cold-start measurement requests own the remaining timing question;
+  fewer queries and loaded-machine profiles alone do not establish either bar.
+  A cheaper collapse that produces different but
   equally good meshes (same or better geometric error against the field,
   coverage and triangle budget in `puck mesh audit`) is a valid cut; equality
   with today's output is not required. The overall CPU-halving target remains open. Queue
@@ -671,9 +678,14 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   `--profile gc-verbose` in the same leg as the memory split above, then write
   each into storage its worker owns: one `float` buffer filled once, appends
   without the wrapper, and a projection workspace per worker.
-- Next cuts: the exact forward/reverse sample checks in `SdfMeshCollapse`
-  (skipping unchanged neighbourhoods previously cut tries without a measured
-  CPU gain); the frame thread's `SdfWorldResidency.Capture` and the render
+- Next cuts: re-rank `SdfMeshCollapse` after the witness reuse, including
+  `Collapser.Pass`'s candidate traversal, `Kind`'s fan classification and the
+  constructor's per-mesh scratch allocations, beside the forward/reverse checks
+  (judge changed witnesses with the field audit at each rendered level: bounds
+  against the preceding mesh alone can miss uncovered field surface; the audit's
+  level-zero median-edge threshold also changes when planar merging changes, so
+  compare raw millimetre errors beside threshold counts); the
+  frame thread's `SdfWorldResidency.Capture` and the render
   graph's per-view recording while hundreds of views stand. The crossed-cell
   masks already flow from `CrossingEdges` to `ExtractRefined`; do not introduce
   a second topology scan there.

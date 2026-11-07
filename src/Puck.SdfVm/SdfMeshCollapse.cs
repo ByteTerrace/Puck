@@ -132,6 +132,14 @@ public static class SdfMeshCollapse {
         private readonly int[] m_filled;
         private readonly int[] m_touched;
         private readonly int[] m_changed;
+        // Rejected directed edges stay rejected until an endpoint fan changes. Commit stamps every old fan endpoint;
+        // Run clears the cache for a new distance and normal budget. No cached result ever accepts a collapse.
+        private readonly int[] m_revisions;
+        private readonly Dictionary<(int From, int To), (int From, int To)> m_rejected = [];
+        private int m_revision;
+        // Midpoint searches are shared only while PrepareFrom's source fan is unchanged. A search may stop once its
+        // witness cannot raise the current triangle's bound; Next resumes it when another target needs a tighter bound.
+        private readonly Dictionary<(long Edge, uint Material), (double Distance, int Next)> m_reverseEdges = [];
         private readonly int[] m_stamp;
         private readonly byte[] m_kind;
         private readonly double m_lineLimit;
@@ -212,6 +220,7 @@ public static class SdfMeshCollapse {
             m_filled = new int[m_places];
             m_touched = new int[m_places];
             m_changed = new int[m_places];
+            m_revisions = new int[m_places];
             m_stamp = new int[m_places];
             m_kind = new byte[m_places];
             m_candidateCosts = new double[m_places];
@@ -265,6 +274,7 @@ public static class SdfMeshCollapse {
 
         // Collapses until no pass takes enough within the bounds, then returns the level the alive triangles make.
         public SdfMeshLevel Run(double error, double cosine) {
+            m_rejected.Clear();
             for (var pass = 0; (pass < MaxPasses); pass++) {
                 // The constructor's lists and kinds stand for the first pass; later, a place no collapse changed keeps its
                 // triangles and its kind.
@@ -348,10 +358,14 @@ public static class SdfMeshCollapse {
                 if (m_targets.Count == 0) { continue; }
                 PrepareFrom(place: place);
                 foreach (var (_, target) in m_targets) {
+                    var edge = (place, target);
+                    var revision = (m_revisions[place], m_revisions[target]);
+                    if (m_rejected.TryGetValue(key: edge, value: out var rejected) && (rejected == revision)) { continue; }
                     if (TryCollapse(cosine: cosine, error: error, from: place, to: target)) {
                         taken++;
                         break;
                     }
+                    m_rejected[edge] = revision;
                 }
             }
 
@@ -604,11 +618,7 @@ public static class SdfMeshCollapse {
             if (!MeasureReverse(error: error, fan: fan)) { return false; }
             if (!MeasureLines(error: Math.Min(val1: error, val2: m_lineLimit), fan: fan, from: from, to: to)) { return false; }
 
-            CommitLines(from: from, to: to);
             Commit(fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond);
-            for (var at = 0; (at < m_strays.Count); at++) {
-                m_stray[m_measured[at].Triangle] = m_strays[at];
-            }
 
             return true;
         }
@@ -616,6 +626,7 @@ public static class SdfMeshCollapse {
         // reverse checks; Pass stops trying neighbours immediately after the first commit changes it.
         private void PrepareFrom(int place) {
             var fan = Alive(fan: m_from, place: place);
+            m_reverseEdges.Clear();
 
             if (m_measured.Length < fan.Count) {
                 m_measured = new Candidate[(2 * fan.Count)];
@@ -655,7 +666,9 @@ public static class SdfMeshCollapse {
                 ref readonly var candidate = ref m_measured[at];
                 var bound = 0.0;
 
-                for (var point = 0; (point < 4); point++) {
+                // Shared edges establish the maximum first. The centroid often needs only one witness below it.
+                for (var order = 0; (order < 4); order++) {
+                    var point = ((order + 1) % 4);
                     var (px, py, pz) = point switch {
                         0 => (candidate.Cx, candidate.Cy, candidate.Cz),
                         1 => ((0.5 * (candidate.Ax + candidate.Bx)), (0.5 * (candidate.Ay + candidate.By)), (0.5 * (candidate.Az + candidate.Bz))),
@@ -663,8 +676,22 @@ public static class SdfMeshCollapse {
                         _ => ((0.5 * (candidate.Ex + candidate.Ax)), (0.5 * (candidate.Ey + candidate.Ay)), (0.5 * (candidate.Ez + candidate.Az))),
                     };
                     var nearest = double.PositiveInfinity;
+                    var edge = point switch {
+                        1 => Key(a: candidate.Pa, b: candidate.Pb),
+                        2 => Key(a: candidate.Pb, b: candidate.Pc),
+                        _ => Key(a: candidate.Pc, b: candidate.Pa),
+                    };
+                    var key = (edge, candidate.Material);
+                    var next = 0;
+                    if ((point != 0) && m_reverseEdges.TryGetValue(key: key, value: out var cached)) {
+                        nearest = cached.Distance;
+                        next = cached.Next;
+                    }
 
-                    for (var oldAt = 0; (oldAt < fan.Count); oldAt++) {
+                    // An upper witness no greater than the maximum already measured cannot change that maximum.
+                    // Otherwise finish the exact nearest search, resuming in the same order after any cached prefix.
+                    for (var oldAt = next; (nearest > bound) && (oldAt < fan.Count); oldAt++) {
+                        next = (oldAt + 1);
                         ref readonly var old = ref m_previous[oldAt].Surface;
 
                         if (old.Material != candidate.Material) { continue; }
@@ -679,6 +706,7 @@ public static class SdfMeshCollapse {
                         nearest = Math.Min(val1: nearest, val2: (Math.Sqrt(d: (((dx * dx) + (dy * dy)) + (dz * dz))) + stray));
                     }
 
+                    if (point != 0) { m_reverseEdges[key] = (nearest, next); }
                     bound = Math.Max(val1: bound, val2: nearest);
                     // The bound only grows. A later point cannot rescue a refused triangle.
                     if (!(bound <= error)) { return false; }
@@ -806,38 +834,53 @@ public static class SdfMeshCollapse {
             var candidates = Lay(fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, toFirst: toFirst, toSecond: toSecond);
 
             m_laidCount = candidates;
-            for (var index = 0; (index < fan.Count); index++) {
-                // A sample's own triangle, where it stays, is measured first: it is most often the nearest, and the
-                // others then fall to the bound on the nearest yet.
-                var laid = m_laid[index];
+            // The removed vertex is often the first sample that refuses a target. Test its samples first, then all
+            // remaining samples; each still chooses its exact nearest admissible witness independently of the others.
+            for (var phase = 0; (phase < 2); phase++) {
+                for (var index = 0; (index < fan.Count); index++) {
+                    // A sample's own triangle, where it stays, is measured first: it is most often the nearest, and the
+                    // others then fall to the bound on the nearest yet.
+                    var laid = m_laid[index];
 
-                for (var sample = m_tracked[fan[index]]; (sample >= 0); sample = m_sampleNext[sample]) {
-                    var vertex = m_sampleVertex[sample];
-                    var place = m_placeOf[vertex];
-
-                    var (px, py, pz) = (m_x[place], m_y[place], m_z[place]);
-                    var own = m_normals[vertex];
-                    var ownLength = Math.Sqrt(d: (((own.X * ((double)own.X)) + (own.Y * ((double)own.Y))) + (own.Z * ((double)own.Z))));
-                    var material = m_sampleMaterial[sample];
-                    var best = -1;
-                    var bestDistance = double.PositiveInfinity;
-                    var bestCosine = -1.0;
-
-                    if (laid >= 0) {
-                        Offer(at: laid, best: ref best, bestCosine: ref bestCosine, bestDistance: ref bestDistance, cosine: cosine, error: error, material: material, own: own, ownLength: ownLength, px: px, py: py, pz: pz);
-                    }
-                    for (var at = 0; (at < candidates); at++) {
-                        if (at != laid) {
-                            Offer(at: at, best: ref best, bestCosine: ref bestCosine, bestDistance: ref bestDistance, cosine: cosine, error: error, material: material, own: own, ownLength: ownLength, px: px, py: py, pz: pz);
+                    for (var sample = m_tracked[fan[index]]; (sample >= 0); sample = m_sampleNext[sample]) {
+                        var vertex = m_sampleVertex[sample];
+                        if ((m_placeOf[vertex] == from) != (phase == 0)) { continue; }
+                        // An original vertex retained by its tracked triangle has exactly its original position,
+                        // normal and material. Its own corner is a zero-distance witness without a nearest search.
+                        if ((laid >= 0) && (m_normals[vertex] != Vector3.Zero)) {
+                            ref readonly var retained = ref m_measured[laid];
+                            if ((vertex == retained.Va) || (vertex == retained.Vb) || (vertex == retained.Vc)) {
+                                m_samples.Add(item: sample);
+                                m_choices.Add(item: (retained.Triangle, 0.0));
+                                continue;
+                            }
                         }
+                        var place = m_placeOf[vertex];
+
+                        var (px, py, pz) = (m_x[place], m_y[place], m_z[place]);
+                        var own = m_normals[vertex];
+                        var ownLength = Math.Sqrt(d: (((own.X * ((double)own.X)) + (own.Y * ((double)own.Y))) + (own.Z * ((double)own.Z))));
+                        var material = m_sampleMaterial[sample];
+                        var best = -1;
+                        var bestDistance = double.PositiveInfinity;
+                        var bestCosine = -1.0;
+
+                        if (laid >= 0) {
+                            Offer(at: laid, best: ref best, bestCosine: ref bestCosine, bestDistance: ref bestDistance, cosine: cosine, error: error, material: material, own: own, ownLength: ownLength, px: px, py: py, pz: pz);
+                        }
+                        for (var at = 0; (at < candidates); at++) {
+                            if (at != laid) {
+                                Offer(at: at, best: ref best, bestCosine: ref bestCosine, bestDistance: ref bestDistance, cosine: cosine, error: error, material: material, own: own, ownLength: ownLength, px: px, py: py, pz: pz);
+                            }
+                        }
+                        if (best < 0) { return false; }
+
+                        m_samples.Add(item: sample);
+                        m_choices.Add(item: (m_measured[best].Triangle, bestDistance));
                     }
-                    if (best < 0) { return false; }
-
-                    m_samples.Add(item: sample);
-                    m_choices.Add(item: (m_measured[best].Triangle, bestDistance));
                 }
-            }
 
+            }
             return true;
         }
         // Measures a sample against one laid-out triangle of its material, keeping it where it is the nearest within the
@@ -853,7 +896,7 @@ public static class SdfMeshCollapse {
 
             if ((reach > error) || (reach > bestDistance)) { return; }
 
-            var (distance, cos) = Nearest(candidate: in candidate, own: own, ownLength: ownLength, px: px, py: py, pz: pz);
+            var (distance, cos) = Nearest(candidate: in candidate, limit: Math.Min(val1: error, val2: bestDistance), own: own, ownLength: ownLength, px: px, py: py, pz: pz);
 
             if ((distance <= error) && (cos >= cosine) && ((distance < bestDistance) || ((distance == bestDistance) && (cos > bestCosine)))) {
                 best = at;
@@ -905,6 +948,8 @@ public static class SdfMeshCollapse {
                     Cy = cy,
                     Cz = cz,
                     Radius = (radius * (1.0 + 1e-9)),
+                    Pa = pa, Pb = pb, Pc = pc,
+                    Va = a, Vb = b, Vc = c,
                     Na = m_normals[a],
                     Nb = m_normals[b],
                     Nc = m_normals[c],
@@ -937,11 +982,14 @@ public static class SdfMeshCollapse {
         }
         // A sample's distance to a laid-out triangle, and the cosine between its own normal and the triangle's interpolated
         // normal at the nearest point.
-        private static (double Distance, double Cosine) Nearest(in Candidate candidate, double px, double py, double pz, Vector3 own, double ownLength) {
+        private static (double Distance, double Cosine) Nearest(in Candidate candidate, double px, double py, double pz, Vector3 own, double ownLength, double limit) {
             var (u, v, w) = Closest(ax: candidate.Ax, ay: candidate.Ay, az: candidate.Az, bx: candidate.Bx, by: candidate.By, bz: candidate.Bz, cx: candidate.Ex, cy: candidate.Ey, cz: candidate.Ez, px: px, py: py, pz: pz);
             var dx = ((((u * candidate.Ax) + (v * candidate.Bx)) + (w * candidate.Ex)) - px);
             var dy = ((((u * candidate.Ay) + (v * candidate.By)) + (w * candidate.Ey)) - py);
             var dz = ((((u * candidate.Az) + (v * candidate.Bz)) + (w * candidate.Ez)) - pz);
+
+            var distance = Math.Sqrt(d: (((dx * dx) + (dy * dy)) + (dz * dz)));
+            if (distance > limit) { return (distance, -1.0); }
 
             var (na, nb, nc) = (candidate.Na, candidate.Nb, candidate.Nc);
             var nx = (((u * na.X) + (v * nb.X)) + (w * nc.X));
@@ -950,12 +998,16 @@ public static class SdfMeshCollapse {
             var length = (Math.Sqrt(d: (((nx * nx) + (ny * ny)) + (nz * nz))) * ownLength);
             var cosine = ((length > 0.0) ? ((((nx * own.X) + (ny * own.Y)) + (nz * own.Z)) / length) : -1.0);
 
-            return (Math.Sqrt(d: (((dx * dx) + (dy * dy)) + (dz * dz))), cosine);
+            return (distance, cosine);
         }
         // Takes a collapse: the edge's two triangles go, the rest about the place take the neighbour's vertices, every
         // measured sample is tracked to its chosen triangle, and the neighbour takes the place's planes.
         private void Commit(List<int> fan, int from, int to, int first, int second, int fromFirst, int toFirst, int toSecond) {
+            m_revision++;
             foreach (var triangle in fan) {
+                for (var corner = (3 * triangle); (corner < ((3 * triangle) + 3)); corner++) {
+                    m_revisions[m_placeOf[m_corners[corner]]] = m_revision;
+                }
                 m_tracked[triangle] = -1;
             }
 
@@ -981,6 +1033,10 @@ public static class SdfMeshCollapse {
 
                 m_sampleDistance[m_samples[index]] = distance;
                 Track(sample: m_samples[index], triangle: triangle);
+            }
+            CommitLines(from: from, to: to);
+            for (var at = 0; (at < m_strays.Count); at++) {
+                m_stray[m_measured[at].Triangle] = m_strays[at];
             }
             for (var term = 0; (term < 10); term++) {
                 m_quadrics[((10 * to) + term)] += m_quadrics[((10 * from) + term)];
@@ -1113,6 +1169,7 @@ public static class SdfMeshCollapse {
         private struct Candidate {
             public double Ax, Ay, Az, Bx, By, Bz, Ex, Ey, Ez, Cx, Cy, Cz, Radius;
             public double LowX, LowY, LowZ, HighX, HighY, HighZ;
+            public int Pa, Pb, Pc, Va, Vb, Vc;
             public Vector3 Na, Nb, Nc;
             public uint Material;
             public int Triangle;

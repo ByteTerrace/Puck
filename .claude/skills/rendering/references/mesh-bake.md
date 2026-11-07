@@ -55,7 +55,31 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
 - **Reuse a collapse's source fan until commit.** `SdfMeshCollapse.Collapser.PrepareFrom`
   lays out the unchanged source triangles once for all attempted neighbours.
   A refused neighbour mutates no source geometry; the first accepted neighbour
-  ends that fan's attempts. Keep that lifetime explicit when changing `Pass`.
+  ends that fan's attempts. Its reverse edge witnesses share that lifetime:
+  a midpoint's nearest old surface and inherited error depend only on its two
+  places, material and the prepared fan. `PrepareFrom` clears the witness map,
+  and `Pass` stops at its first commit; never retain those answers across it.
+  `MeasureReverse` computes a maximum of point errors: once a point has a
+  witness no farther than the maximum established by preceding points, a nearer
+  witness cannot change the result. The cached distance is an upper bound plus
+  the next old triangle to visit, not necessarily the exact nearest distance.
+  A tighter later target resumes that search; only a completed search may raise
+  the maximum. Shared edge midpoints precede the unshared centroid.
+  Forward checks measure the removed vertex's samples first, then every other
+  tracked sample. An original vertex retained by its tracked triangle witnesses
+  its own position, normal and material exactly; the other samples choose their
+  nearest admissible witness. Ordering avoids later work when an early sample
+  refuses the collapse. A nearest point already beyond the current distance
+  limit needs no interpolated-normal calculation.
+- **Retry refused edges only after their inputs change.** `Collapser.Pass` keys
+  each rejection by its directed edge and both endpoint fan revisions. `Commit`
+  is the one mutation door for topology, surface and line samples, and inherited
+  bounds; it stamps every endpoint of the old fan, including deleted triangles.
+  `Run` clears rejections when the distance and normal budgets change. The cache
+  only skips failed attempts; every accepted collapse still passes all checks.
+  A faster query or a different witness assignment still needs the field audit:
+  tiny arithmetic and ownership changes can alter later collapse choices and
+  uncover surface that the sample-to-mesh bounds alone do not detect.
 - **One contouring.** `SdfSampledLattice` contours a GPU-sampled lattice through
   `SdfDualContouring` over `ISdfContourLattice`; never write a second mesher.
   A final lattice refines the cells its samples cannot resolve
@@ -286,8 +310,10 @@ laws exercise that boundary.
   group's far ground cut at 8 m makes 160,000 draws, too many to cull and
   level on the CPU for every pass, so `frame/sdf-mesh-selection.hlsli` selects them through the existing counted indirect
   path; chunk sizing still controls retained geometry and candidate work.
-  `SdfMeshChunks` partitions the finished contour's triangles by their
-  centroid into 8 m bins before merging and collapse. It never clips a triangle: each chunk's box includes its whole
+  `SdfMeshChunks` merges the contour's planar regions first, then partitions the
+  merged triangles by centroid into 8 m bins before collapse. Splitting first
+  locks artificial rows of contour vertices along otherwise flat faces and
+  makes every later level keep them. It never clips a triangle: each chunk's box includes its whole
   triangles. The merge keeps every open-edge vertex and the collapse locks them, so every level shares the exact seam
   edges with its neighbours. `SdfMesh.Chunks` holds the separately levelled draws; the parent holds the joined vertex
   and triangle attributes the chunks view, and never enters the GPU region. The store writes only the chunks; an offline
@@ -544,10 +570,12 @@ laws exercise that boundary.
   triangle through a thin rod the samples straddle. On the debug world's stored
   set it keeps 11% of the triangles at the first level and 6% at the second, for
   9% more stored and region bytes. Conservative triangle-box distance bounds
-  skip exact measurements that cannot improve the result, and the old fan's
-  coordinates are cached per proposal: the same 1,406 meshes take 206.1 CPU
-  seconds instead of 215.7 with identical indices, materials and recorded errors,
-  spread across `Land`'s tasks. Glass skips collapse because its pass uses only
+  skip exact measurements that cannot improve the result; they never certify
+  acceptance. Reverse edge measurements are shared across targets of an
+  unchanged source fan, and unchanged failed edges are not measured again.
+  Judge a changed collapse by
+  the field audit at each rendered level, not by equality with earlier meshes.
+  Glass skips collapse because its pass uses only
   level zero. The done line counts `levelled=` pieces and
   the triangles every mesh draws at `level1=` and `level2=`;
   `SdfMeshCollapseLawTests` measures each level's contract by brute force.
@@ -961,6 +989,12 @@ definition carries prepared font assets. Keep this offline scene path aligned wi
   crossings and open edges; a cutter that is only a lower bound (a stretched
   ellipsoid, a non-uniform `Scale`, a flare) as a slope deficit, attributed to
   the shape whose own field is loosest there.
+- **Audit changed collapse levels explicitly.** `--level 1` and `--level 2`
+  select the triangles those forced render levels draw, clamped per chunk to
+  its last level. Only referenced vertices count. The field coverage lattice
+  and error thresholds retain level zero's bounds and cell; a coarser mesh
+  must not buy a cleaner report by enlarging its error budget. `--images`
+  draws the selected level too. The default still audits level zero.
 - **What it cannot read.** The render reading interprets every warp, fold and
   relief the renderer draws, a non-uniform scale, a sweep of any strand count
   and a path's edge table, each a sync pair with its `mapCore` case

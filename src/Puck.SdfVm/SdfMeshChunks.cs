@@ -2,35 +2,38 @@ using System.Numerics;
 
 namespace Puck.SdfVm;
 
-/// <summary>Partitions a static contour along its existing edges before planar merging and collapse. Every piece's
-/// open edges stay fixed through both operations, including every collinear seam vertex, so independently chosen levels
+/// <summary>Merges a static contour's planar regions, then partitions it along existing edges before collapse. Every piece's
+/// open edges stay fixed through collapse, including every collinear seam vertex, so independently chosen levels
 /// meet edge for edge. No new surface or clipping plane is introduced.</summary>
 public static class SdfMeshChunks {
     /// <summary>The side of a spatial bin in metres. Triangles belong to their centroid's bin; its box includes their
     /// complete extent, so bin boundaries never clip a triangle.</summary>
     public const float Side = 8f;
-    /// <summary>The contour triangles past which one static shape's mesh is chunked as a union's is, so its merge and
-    /// collapse run in pieces at once rather than on one worker for seconds. Below it a chunk's locked seams would only
+    /// <summary>The contour triangles past which one static shape's mesh is chunked as a union's is, so its collapse
+    /// runs in pieces at once rather than on one worker for seconds. Below it a chunk's locked seams would only
     /// add triangles to its coarser levels (a terrain sector's first level tripled).</summary>
     public const int WholeTriangles = 131_072;
     /// <summary>The most chunks one mesh is cut into: a mesh that would fill more bins of <see cref="Side"/> takes bins of
     /// twice the side, until it fills no more.</summary>
     public const int MostChunks = 64;
 
-    /// <summary>Merges and levels a static group, a union or one shape of at least <see cref="WholeTriangles"/>, in spatial
-    /// pieces when it spans more than one chunk, the pieces at once.</summary>
+    /// <summary>Merges a static group's planar regions before introducing spatial seams, then levels its pieces at once
+    /// when it spans more than one chunk.</summary>
     /// <param name="mesh">The contour, with its actual bake cell.</param>
     /// <param name="preserveFeatures">Whether coarser levels limit crease and material-edge error to the largest bake-cell dimension divided by 8.</param>
     /// <returns>The merged mesh, holding independently levelled chunks when larger than one chunk.</returns>
     public static SdfMesh Bake(SdfMesh mesh, bool preserveFeatures = false) {
         ArgumentNullException.ThrowIfNull(mesh);
-        if (mesh.TriangleCount == 0) { return Merge(mesh: mesh, preserveFeatures: preserveFeatures); }
+        // A split introduces open edges that must remain fixed for independent levels. Merge the original planar
+        // surface first, so a flat face does not retain an artificial row of contour vertices at every spatial seam.
+        mesh = SdfMeshPlanarMerge.Merge(mesh: mesh);
+        if (mesh.TriangleCount == 0) { return mesh; }
         var positions = mesh.Positions.Span;
         var low = mesh.PositionLow;
         var size = (mesh.PositionHigh - low);
 
         if (MathF.Max(x: size.X, y: MathF.Max(x: size.Y, y: size.Z)) <= Side) {
-            return Merge(mesh: mesh, preserveFeatures: preserveFeatures);
+            return SdfMeshCollapse.Levels(mesh: mesh, preserveFeatures: preserveFeatures);
         }
 
         var bins = new Dictionary<(int X, int Y, int Z), List<int>>();
@@ -53,7 +56,7 @@ public static class SdfMeshChunks {
             }
             if (bins.Values.Sum(selector: static triangles => triangles.Count) == mesh.TriangleCount) { break; }
         }
-        if (bins.Count == 1) { return Merge(mesh: mesh, preserveFeatures: preserveFeatures); }
+        if (bins.Count == 1) { return SdfMeshCollapse.Levels(mesh: mesh, preserveFeatures: preserveFeatures); }
 
         var parts = new List<SdfMesh>(capacity: bins.Count);
 
@@ -83,11 +86,11 @@ public static class SdfMeshChunks {
             parts.Add(item: new SdfMesh(positions: points.ToArray(), indices: triangles, normals: normals.ToArray(), triangleMaterials: materials) { BakeCell = mesh.BakeCell });
         }
 
-        // Each piece's open edges stay fixed, so the pieces merge and level independently, at once, each into its own
+        // Each piece's open edges stay fixed, so the pieces level independently, at once, each into its own
         // place in the bins' order.
         var chunks = new SdfMesh[parts.Count];
 
-        _ = Parallel.For(fromInclusive: 0, toExclusive: parts.Count, body: index => chunks[index] = Merge(mesh: parts[index], preserveFeatures: preserveFeatures));
+        _ = Parallel.For(fromInclusive: 0, toExclusive: parts.Count, body: index => chunks[index] = SdfMeshCollapse.Levels(mesh: parts[index], preserveFeatures: preserveFeatures));
 
         return Join(chunks: chunks);
     }

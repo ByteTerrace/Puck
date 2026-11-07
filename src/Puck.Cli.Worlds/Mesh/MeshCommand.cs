@@ -48,10 +48,11 @@ public static class MeshCommand {
         var imagesOption = new Option<string?>(name: "--images") { Description = "A directory to write a PNG of each cluster of the closing list into: the mesh around its worst sample from three sides, shading normals beside face normals." };
         var historyOption = new Option<bool>(name: "--history") { Description = "Also audit, for each selected group, every mesh the store holds under any bake identity whose vertices lie on the group's field, oldest first: how earlier builds' bakes of the same geometry compare. Needs --group." };
         var cpuOption = new Option<bool>(name: "--cpu") { Description = "Bake each selected group offline on the CPU, the bake's own lattices answered through the field evaluator (MeshCpuBake), and audit that mesh in place of a stored one: a bake change measured with no device. Reads no store." };
+        var levelOption = CliOptions.Count(defaultValue: 0, description: "Measure this rendered level, clamped to each piece's last available level. Keeps level zero's error thresholds and coverage lattice.", minimum: 0, name: "--level");
         var command = new Command(
             description: "Measures each baked mesh a World stored for a world against the field it was baked from: off-surface error at vertices, centroids and edge midpoints, face and shading normal error against the field gradient, folds, flips, slivers, open edges and uncovered surface, then each group's worst defect clusters with their rest-pose positions and the shapes nearest them. Reads the store, or with --cpu bakes offline; never writes the store.",
             name: "audit"
-        ) { worldOption, prototypeOption, groupOption, cacheOption, buildOption, identityOption, backendOption, topOption, worstOption, imagesOption, historyOption, cpuOption };
+        ) { worldOption, prototypeOption, groupOption, cacheOption, buildOption, identityOption, backendOption, topOption, worstOption, imagesOption, historyOption, cpuOption, levelOption };
 
         command.SetAction(action: parseResult => Run(request: new AuditRequest(
             Backend: parseResult.GetValue(option: backendOption)!,
@@ -62,6 +63,7 @@ public static class MeshCommand {
             History: parseResult.GetValue(option: historyOption),
             Identity: parseResult.GetValue(option: identityOption),
             Images: parseResult.GetValue(option: imagesOption),
+            Level: parseResult.GetValue(option: levelOption),
             Prototype: parseResult.GetValue(option: prototypeOption),
             Top: parseResult.GetValue(option: topOption),
             World: parseResult.GetValue(option: worldOption)!,
@@ -104,7 +106,7 @@ public static class MeshCommand {
         var farDistance = WorldRenderFarDistance.Resolve(defaults: definition.Render);
         var groups = SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: farDistance, program: scene.Program, transforms: scene.Transforms);
         var store = new SdfMeshStore(directory: meshes);
-        var options = new SdfMeshAuditOptions { Clusters = Math.Max(val1: request.Top, val2: request.Worst) };
+        var options = new SdfMeshAuditOptions { Clusters = Math.Max(val1: request.Top, val2: request.Worst), Level = request.Level };
         var results = new Outcome?[groups.Count];
         var selected = groups.Where(predicate: group => Selected(group: group, request: request, scene: scene)).ToArray();
         var baked = (request.Cpu
@@ -129,6 +131,7 @@ public static class MeshCommand {
         var output = new StringBuilder();
 
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"mesh audit: {CliPaths.ToDisplay(fullPath: fullPath)}, {considered} group(s) of {groups.Count}: {audited} audited, {(considered - stored)} with no stored mesh, {(stored - audited)} refused\n");
+        if (request.Level > 0) { output.Append(provider: CultureInfo.InvariantCulture, handler: $"  rendered level {request.Level}, thresholds from level zero\n"); }
         output.Append(value: (request.Cpu
             ? "  baked offline on the CPU through the field evaluator\n"
             : string.Create(provider: CultureInfo.InvariantCulture, handler: $"  store {meshes}, bake identity {identity:x32} ({((request.Identity is null) ? $"{request.Backend}, build {buildDirectory}" : "named")})\n")));
@@ -146,7 +149,7 @@ public static class MeshCommand {
             }
         }
 
-        WriteWorst(images: request.Images, ordered: ordered, output: output, results: results, worst: request.Worst);
+        WriteWorst(images: request.Images, level: request.Level, ordered: ordered, output: output, results: results, worst: request.Worst);
         Console.Out.Write(value: output.ToString());
 
         if ((stored == 0) && request.Cpu) {
@@ -270,7 +273,7 @@ public static class MeshCommand {
         }
     }
     // The worst clusters across every group, each with its image when a directory is named.
-    private static void WriteWorst(Outcome?[] results, int[] ordered, int worst, string? images, StringBuilder output) {
+    private static void WriteWorst(Outcome?[] results, int[] ordered, int worst, string? images, int level, StringBuilder output) {
         var clusters = ordered
             .Where(predicate: ordinal => (results[ordinal]!.Report is not null))
             .SelectMany(selector: ordinal => results[ordinal]!.Report!.Clusters.Select(selector: cluster => (Ordinal: ordinal, Cluster: cluster)))
@@ -291,7 +294,7 @@ public static class MeshCommand {
                 _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
                 // The window spans eight cells either way of the worst sample, so a few cells of the defect and the surface
                 // beside it are seen.
-                MeshAuditImage.Write(axis: cluster.Axis, center: cluster.Worst, halfWidth: Math.Clamp(value: (8f * report.Cell), min: 0.02f, max: 0.08f), mesh: mesh, path: path, toward: SdfMeshAudit.Gradient(field: field, point: cluster.Worst, step: 0.004f));
+                MeshAuditImage.Write(axis: cluster.Axis, center: cluster.Worst, halfWidth: Math.Clamp(value: (8f * report.Cell), min: 0.02f, max: 0.08f), mesh: SdfMeshAudit.Surface(mesh: mesh, level: level), path: path, toward: SdfMeshAudit.Gradient(field: field, point: cluster.Worst, step: 0.004f));
                 output.Append(provider: CultureInfo.InvariantCulture, handler: $"      image {CliPaths.ToDisplay(fullPath: path)}\n");
             }
         }
@@ -322,7 +325,7 @@ public static class MeshCommand {
     private static string Direction(Vector3 direction) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({direction.X:0.00}, {direction.Y:0.00}, {direction.Z:0.00})");
 
     // What the verb was asked: the world, which groups, which store and identity, and what to report.
-    private sealed record AuditRequest(string World, string? Prototype, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History, bool Cpu);
+    private sealed record AuditRequest(string World, string? Prototype, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History, bool Cpu, int Level);
     // A group's audit: its report, or why there is none, with its label, the map from its frame to world space, and the
     // mesh and fields it was measured with.
     private sealed record Outcome(string Label, string? Refusal, SdfMeshAuditReport? Report, bool Stored, Func<Vector3, Vector3> ToWorld, RestBody? Owner, SdfMesh? Mesh, SdfFieldEvaluator? Field);

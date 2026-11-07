@@ -8,6 +8,9 @@ namespace Puck.SdfVm;
 
 /// <summary>The thresholds a mesh audit (<see cref="SdfMeshAudit"/>) flags a sample past and how it groups them.</summary>
 public sealed record SdfMeshAuditOptions {
+    /// <summary>Gets the rendered mesh level to measure, zero for the merged surface. Each chunk uses its last
+    /// available level when it has fewer levels. Thresholds retain the merged surface's cell.</summary>
+    public int Level { get; init; }
     /// <summary>Gets the distance off the field's surface, in the mesh's cells, past which a vertex, triangle centroid or
     /// edge midpoint is flagged.</summary>
     public float ErrorCells { get; init; } = 0.25f;
@@ -130,6 +133,41 @@ public sealed record SdfMeshAuditReport(
 /// the mesh, the fields and the options, so a later run over the same inputs prints the same report.</para>
 /// </summary>
 public static class SdfMeshAudit {
+    /// <summary>Returns the surface a forced level draws, with only its referenced vertices. Chunk boundaries keep
+    /// their coincident positions, which the audit welds before measuring topology.</summary>
+    /// <param name="mesh">The stored mesh.</param>
+    /// <param name="level">The requested level, zero for the merged surface; clamped per piece to its last level.</param>
+    /// <returns>The selected surface.</returns>
+    public static SdfMesh Surface(SdfMesh mesh, int level) {
+        ArgumentNullException.ThrowIfNull(mesh);
+        ArgumentOutOfRangeException.ThrowIfNegative(level);
+        if (level == 0) { return mesh; }
+        if (mesh.Chunks.Count > 0) {
+            return SdfMeshChunks.Join(mesh.Chunks.Select(chunk => Surface(mesh: chunk, level: level)).ToArray());
+        }
+        var selected = Math.Min(val1: level, val2: mesh.Levels.Count);
+        var indices = ((selected == 0) ? mesh.Indices : mesh.Levels[(selected - 1)].Indices);
+        var materials = ((selected == 0) ? mesh.TriangleMaterials : mesh.Levels[(selected - 1)].TriangleMaterials);
+        var remap = new int[mesh.Positions.Length];
+        Array.Fill(array: remap, value: -1);
+        var positions = new List<Vector3>();
+        var normals = new List<Vector3>();
+        var members = new List<byte>();
+        var compact = new uint[indices.Length];
+        for (var at = 0; (at < indices.Length); at++) {
+            var vertex = ((int)indices.Span[at]);
+            if (remap[vertex] < 0) {
+                remap[vertex] = positions.Count;
+                positions.Add(item: mesh.Positions.Span[vertex]);
+                if (!mesh.Normals.IsEmpty) { normals.Add(item: mesh.Normals.Span[vertex]); }
+                if (!mesh.VertexMembers.IsEmpty) { members.Add(item: mesh.VertexMembers.Span[vertex]); }
+            }
+            compact[at] = ((uint)remap[vertex]);
+        }
+        return new SdfMesh(positions: positions.ToArray(), indices: compact, normals: normals.ToArray(), triangleMaterials: materials,
+            members: mesh.Members, vertexMembers: members.ToArray()) { BakeCell = mesh.BakeCell, Encloses = mesh.Encloses };
+    }
+
     // A crossing's position is refined by this many halvings of its lattice edge.
     private const int Bisections = 10;
     // Two triangles sharing an edge fold when their normals' dot product falls below this: a turn past 120 degrees.
@@ -218,12 +256,15 @@ public static class SdfMeshAudit {
         ArgumentNullException.ThrowIfNull(argument: shapes);
         ArgumentNullException.ThrowIfNull(argument: options);
 
+        var reference = mesh;
+        var referenceCell = ((options.Level == 0) ? 0f : MedianEdge(edges: Edges(indices: mesh.Indices.Span, welded: Weld(positions: mesh.Positions.Span)), positions: mesh.Positions.Span));
+        mesh = Surface(mesh: mesh, level: options.Level);
         var positions = mesh.Positions.Span;
         var indices = mesh.Indices.Span;
         var triangles = mesh.TriangleCount;
         var welded = Weld(positions: positions);
         var edges = Edges(indices: indices, welded: welded);
-        var cell = MedianEdge(edges: edges, positions: positions);
+        var cell = ((options.Level == 0) ? MedianEdge(edges: edges, positions: positions) : referenceCell);
         var threshold = (options.ErrorCells * cell);
         var flagged = new List<Sample>();
 
@@ -335,7 +376,7 @@ public static class SdfMeshAudit {
             }
         }
 
-        var (crossings, missing) = Missing(cell: cell, field: field, flagged: flagged, indices: indices, mesh: mesh, options: options, positions: positions);
+        var (crossings, missing) = Missing(cell: cell, field: field, flagged: flagged, indices: indices, mesh: reference, options: options, positions: positions);
         var clusters = Cluster(cell: cell, flagged: flagged)
             .Take(count: options.Clusters)
             .Select(selector: cluster => cluster with { Shapes = Nearest(count: options.Shapes, probes: cluster.Probes, shapes: shapes) })
