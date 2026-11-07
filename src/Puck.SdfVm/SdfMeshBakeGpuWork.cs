@@ -1,6 +1,7 @@
-using System.Buffers;
 using System.Numerics;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
+using Puck.Hosting.Jobs;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -143,14 +144,14 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         }
         // The slot keeps the table its last job wrote: a batch of the same snapshots at the same handles rewrites nothing.
         if (sampledReplaced || !SameSampled(batch: batch, slot: slot)) {
-            var words = ArrayPool<uint>.Shared.Rent(minimumLength: batch.SampledWords);
+            // The table lives only through this write: native storage from the bake's allocator, charged while it lasts,
+            // rather than a pooled array a large table would allocate afresh and drop.
+            using var owner = MemoryAccount.Shared.CreateOwner(name: "mesh-bake-sampled");
+            using var words = new OwnedBuffer<uint>(allocator: m_bake.Library.Allocator, observer: owner);
 
-            try {
-                batch.WriteSampled(table: words);
-                slot.Sampled.Write<uint>(data: words.AsSpan(start: 0, length: batch.SampledWords));
-            } finally {
-                ArrayPool<uint>.Shared.Return(array: words);
-            }
+            words.Resize(length: batch.SampledWords, clear: false, preserve: false);
+            batch.WriteSampled(table: words.GetSpan());
+            slot.Sampled.Write<uint>(data: words.GetSpan());
             slot.SampledHandles = batch.SampledHandles;
             slot.SampledWritten = batch.Sampled;
         }
@@ -187,21 +188,22 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
 
         SdfMeshPathBake.RunFirst(work: () => {
             var length = readback.Length;
-            byte[]? bytes = null;
+            // The copy belongs to this answer alone: native storage from the bake's allocator, charged while it lasts
+            // (the shared pool allocates anything past a mebibyte afresh and drops it, which the samples are).
+            using var owner = MemoryAccount.Shared.CreateOwner(name: "mesh-bake-readback");
+            using var bytes = new OwnedBuffer<byte>(allocator: m_bake.Library.Allocator, observer: owner);
 
             try {
                 try {
-                    bytes = ArrayPool<byte>.Shared.Rent(minimumLength: Math.Max(val1: 1, val2: length));
-                    readback.Read(destination: bytes.AsSpan(start: 0, length: length));
+                    bytes.Resize(length: length, clear: false, preserve: false);
+                    readback.Read(destination: bytes.GetSpan());
                 } finally {
                     readback.Release();
                 }
-                m_bake.Complete(batch: batch, samples: bytes.AsSpan(start: 0, length: length));
+                m_bake.Complete(batch: batch, samples: bytes.GetSpan());
             } catch {
                 m_bake.Abandon(batch: batch);
                 throw;
-            } finally {
-                if (bytes is not null) { ArrayPool<byte>.Shared.Return(array: bytes); }
             }
         });
     }

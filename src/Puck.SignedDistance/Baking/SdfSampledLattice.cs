@@ -308,6 +308,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // The fine key of the low corner of each crossed fine cell of a refined cell, in the order CrossingEdges reads the
     // cells, which GradientPoints reads again rather than measuring every fine cell's corners a second time.
     private readonly OwnedBuffer<SdfCrossedCell> m_crossedFineCells;
+    // The round of points Refine, CrossingPoints or GradientPoints last returned, with weight one, in one owned block the
+    // next of them rewrites: a round's answers all land before the caller asks for the next.
+    private readonly OwnedBuffer<Vector4> m_points;
 
     private bool m_crossingsPrepared;
     private bool m_rootsPrepared;
@@ -382,6 +385,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_refined = new(allocator: allocator, observer: observer);
         m_fineKeys = new(allocator: allocator, observer: observer);
         m_gradientKeys = new(allocator: allocator, observer: observer);
+        m_points = new(allocator: allocator, observer: observer);
         m_crossingKeys = new(allocator: allocator, observer: observer);
         m_crossedFineCells = new(allocator: allocator, observer: observer);
         m_pendingCrossings = new(allocator: allocator, observer: observer);
@@ -396,7 +400,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     public void Dispose() {
         m_valueHandle.Dispose(); m_materialHandle.Dispose();
         m_measured.Dispose(); m_thin.Dispose(); m_refined.Dispose(); m_fineKeys.Dispose();
-        m_gradientKeys.Dispose(); m_crossingKeys.Dispose(); m_crossedFineCells.Dispose(); m_pendingCrossings.Dispose();
+        m_gradientKeys.Dispose(); m_points.Dispose(); m_crossingKeys.Dispose(); m_crossedFineCells.Dispose(); m_pendingCrossings.Dispose();
         m_gradients.Dispose();
         m_closedValues.Dispose();
         m_signKnown.Dispose();
@@ -434,12 +438,13 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// the samples put it: the parts of a union whose own detail is finer than the lattice. Empty for none. Where every
     /// region's cells would measure more fine samples than the refinement's budget, the regions covering the fewest cells
     /// are refined and the rest contour at the lattice's own spacing.</param>
-    /// <returns>The fine samples to measure, in the lattice's frame, in the order <see cref="AnswerRefinement"/> takes
-    /// their answers; empty when no cell needs refining or even two fine cells a side would measure too many, and the
-    /// lattice then contours at its own spacing.</returns>
+    /// <returns>The fine samples to measure, in the lattice's frame, with weight one, in the order
+    /// <see cref="AnswerRefinement"/> takes their answers; empty when no cell needs refining or even two fine cells a
+    /// side would measure too many, and the lattice then contours at its own spacing. The memory is the lattice's, valid
+    /// until the next round of points is asked for or the lattice is disposed.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="factor"/> is less than two.</exception>
     /// <exception cref="InvalidOperationException">The lattice is already refined.</exception>
-    public Vector3[] Refine(int factor, ReadOnlySpan<SdfLatticeRegion> regions = default) {
+    public ReadOnlyMemory<Vector4> Refine(int factor, ReadOnlySpan<SdfLatticeRegion> regions = default) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: factor, other: 2);
 
         if (m_factor != 1) {
@@ -728,7 +733,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         }
 
         if (!any) {
-            return [];
+            return ReadOnlyMemory<Vector4>.Empty;
         }
 
         // The split and the regions the fine-sample budget serves. The cells the samples cannot resolve (a sheet, a gap, two
@@ -851,7 +856,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         }
 
         if (chosen is null) {
-            return [];
+            return ReadOnlyMemory<Vector4>.Empty;
         }
         measured = chosen;
         factor = chosenSplit;
@@ -994,16 +999,18 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_fineValues.Resize(fineSamples);
         m_fineMaterials.Resize(fineSamples);
 
-        var points = new Vector3[fineSamples];
+        m_points.Resize(length: fineSamples, clear: false, preserve: false);
+
+        var points = m_points.GetSpan();
         var fine = ContourCell;
 
         for (var slot = 0; (slot < fineSamples); slot++) {
             var (fx, fy, fz) = FineCoordinates(key: m_fineKeys[slot]);
 
-            points[slot] = (m_origin + (new Vector3(x: fx, y: fy, z: fz) * fine));
+            points[slot] = new Vector4(value: (m_origin + (new Vector3(x: fx, y: fy, z: fz) * fine)), w: 1f);
         }
 
-        return points;
+        return m_points.Memory;
     }
 
     /// <summary>Returns the most fine samples <see cref="Refine"/> measures in a lattice: every cell split
@@ -1306,8 +1313,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// <summary>Returns the next points for locating each sign-changing edge's zero along that edge. After refinement,
     /// repeatedly answer these points with <see cref="AnswerCrossings"/> until this returns no points, then measure
     /// <see cref="GradientPoints"/>. Closed thin sheets and gaps keep their lattice crossings.</summary>
-    /// <returns>The next round's points in the order <see cref="AnswerCrossings"/> takes their values.</returns>
-    public Vector3[] CrossingPoints() {
+    /// <returns>The next round's points, with weight one, in the order <see cref="AnswerCrossings"/> takes their values.
+    /// The memory is the lattice's, valid until the next round of points is asked for or the lattice is disposed.</returns>
+    public ReadOnlyMemory<Vector4> CrossingPoints() {
         PrepareCrossings();
         if (!m_rootsPrepared) {
             var roots = new List<CrossingRoot>(capacity: m_crossingKeys.Length);
@@ -1350,16 +1358,18 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         Array.Resize(array: ref m_pendingRoots, newSize: kept);
 
         // Two trials a root, the root's first then its second.
-        var points = new Vector3[(2 * kept)];
+        m_points.Resize(length: (2 * kept), clear: false, preserve: false);
+
+        var points = m_points.GetSpan();
 
         for (var index = 0; (index < kept); index++) {
             ref readonly var root = ref m_crossingRoots[m_pendingRoots[index]];
 
-            points[(2 * index)] = CrossingPoint(key: m_pendingCrossings[index], fraction: root.First);
-            points[((2 * index) + 1)] = CrossingPoint(key: m_pendingCrossings[index], fraction: root.Second);
+            points[(2 * index)] = new Vector4(value: CrossingPoint(key: m_pendingCrossings[index], fraction: root.First), w: 1f);
+            points[((2 * index) + 1)] = new Vector4(value: CrossingPoint(key: m_pendingCrossings[index], fraction: root.Second), w: 1f);
         }
 
-        return points;
+        return m_points.Memory;
     }
     /// <summary>Answers a chunk of the current <see cref="CrossingPoints"/> round with field values. Every root remains
     /// on its own edge, bracketed, and its search ends once the bracket is an 8,192th of the edge wide, the root within an
@@ -1382,9 +1392,10 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// the coarse corners of every refined cell, whose gradients its unmeasured fine samples interpolate, and the measured
     /// corners of every crossed fine cell, which its vertex normals interpolate; then the crossing of every sign-changing
     /// edge a vertex is placed by. Call it once the refinement, if any, is answered.</summary>
-    /// <returns>The samples, in the lattice's frame, in the order <see cref="AnswerGradients"/> takes their
-    /// answers.</returns>
-    public Vector3[] GradientPoints() {
+    /// <returns>The samples, in the lattice's frame, with weight one, in the order <see cref="AnswerGradients"/> takes
+    /// their answers. The memory is the lattice's, valid until the next round of points is asked for or the lattice is
+    /// disposed.</returns>
+    public ReadOnlyMemory<Vector4> GradientPoints() {
         PrepareCrossings();
 
         var keys = new List<int>();
@@ -1448,13 +1459,15 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         _ = m_fineGradients.EnsureCapacity(capacity: keys.Count);
         _ = m_crossingGradients.EnsureCapacity(capacity: m_crossingKeys.Length);
 
-        var points = new Vector3[(keys.Count + m_crossingKeys.Length)];
+        m_points.Resize(length: (keys.Count + m_crossingKeys.Length), clear: false, preserve: false);
+
+        var points = m_points.GetSpan();
         var fine = ContourCell;
 
         for (var index = 0; (index < keys.Count); index++) {
             var (fx, fy, fz) = FineCoordinates(key: keys[index]);
 
-            points[index] = (m_origin + (new Vector3(x: fx, y: fy, z: fz) * fine));
+            points[index] = new Vector4(value: (m_origin + (new Vector3(x: fx, y: fy, z: fz) * fine)), w: 1f);
         }
         for (var index = 0; (index < m_crossingKeys.Length); index++) {
             var (start, axis, length) = CrossingEdge(key: m_crossingKeys[index]);
@@ -1462,10 +1475,10 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             var position = new Vector3(x: fx, y: fy, z: fz);
             var step = ((axis == 0) ? Vector3.UnitX : ((axis == 1) ? Vector3.UnitY : Vector3.UnitZ));
 
-            points[(keys.Count + index)] = (m_origin + ((position + (step * (Crossing(axis: axis, length: length, x: fx, y: fy, z: fz) * length))) * fine));
+            points[(keys.Count + index)] = new Vector4(value: (m_origin + ((position + (step * (Crossing(axis: axis, length: length, x: fx, y: fy, z: fz) * length))) * fine)), w: 1f);
         }
 
-        return points;
+        return m_points.Memory;
     }
 
     // Closes the sheets thinner than the fine cell in the cells Refine saw one cross, which the fine samples alone leave

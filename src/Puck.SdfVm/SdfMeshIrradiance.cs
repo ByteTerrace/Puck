@@ -1862,8 +1862,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         for (var index = 0; (index < count); index++) { traces |= candidates[(first + index)].Trace; }
 
-        // A whole batch's hit block even for a short batch, so every block is large enough for the large object heap.
-        var hits = (traces ? new ProbeBlock(count: Math.Max(BatchProbes, count)) : null);
+        // A whole batch's hit block even for a short batch, so every block is large enough for the large object heap. On
+        // the GPU the hit words only pass through the batch (ReleaseHits), so the block borrows the worker's scratch
+        // array rather than holding one of its own.
+        var blockProbes = Math.Max(BatchProbes, count);
+        var borrowed = (traces && (GpuTrace is not null));
+        if (borrowed) { GrowScratch(array: ref m_gpuHits, length: (blockProbes * SdfMeshProbeDepth.HitWords)); }
+        var hits = (traces ? new ProbeBlock(count: blockProbes, hits: (borrowed ? m_gpuHits : null)) : null);
         var lights = new LightBlock(count: count);
         var feedback = (lighting.Feedback && snapshot.Layout.Bounce && (pass != 0));
         var layout = snapshot.Layout;
@@ -1871,7 +1876,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var scene = snapshot.Scene;
         var geometry = snapshot.Geometry;
         var sweep = snapshot.Sweep;
-        var fresh = new uint[count];
+        GrowScratch(array: ref m_gpuFresh, length: count);
+        var fresh = m_gpuFresh;
         var prepared = traces ? PlaceBatch(candidates, first, count, layout, lows, scene, geometry, hits!, parallel, fresh) : null;
         SdfMeshProbeGpuWork.Result? relitOutput = null;
 
@@ -1884,14 +1890,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             });
             relitOutput = GpuTrace is not null ? RelightGpu(candidates, first, count, results, lights, lighting, in snapshot, feedback) : null;
         } finally {
-            if (traces && (GpuTrace is not null)) { FreeUnadoptedGpuHits(candidates: candidates, first: first, fresh: fresh); }
+            if (traces && (GpuTrace is not null)) { FreeUnadoptedGpuHits(candidates: candidates, first: first, fresh: fresh.AsSpan(start: 0, length: count)); }
         }
 
         using var gpuResult = relitOutput;
-        if (GpuTrace is not null) { hits?.ReleaseHits(); }
+        if (borrowed || (GpuTrace is not null)) { hits?.ReleaseHits(); }
 
         if (gpuResult is not null) {
-            var destinations = new int[count];
+            GrowScratch(array: ref m_gpuDestinations, length: count);
+            var destinations = m_gpuDestinations;
             lock (m_gate) {
                 if (!Stands(in snapshot)) { m_gpuVolume = null; Array.Clear(results, 0, count); return; }
                 for (var i = 0; i < count; i++) {
@@ -1899,7 +1906,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     destinations[i] = results[i].Hits is null ? -1 : VolumeSlot(candidate.Level, candidate.Cell);
                 }
             }
-            try { GpuTrace!.Commit(snapshot.Scene, snapshot.Geometry, snapshot.WindowVersion, gpuResult, destinations); }
+            try { GpuTrace!.Commit(snapshot.Scene, snapshot.Geometry, snapshot.WindowVersion, gpuResult, destinations.AsMemory(start: 0, length: count)); }
             catch (OperationCanceledException) { lock (m_gate) { m_gpuVolume = null; } throw; }
         }
 
@@ -2633,11 +2640,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
     // The geometry words of one trace batch's probes, each probe's at its index: six sky shares, the packed octahedral
     // surface map and curvature, then the hit buffer, held as the floats' bits so a batch is one allocation.
-    private sealed class ProbeBlock(int count) {
+    // `hits`, when given, is an array of at least count * HitWords words the block borrows until ReleaseHits; its words
+    // are read only after the batch wrote them.
+    private sealed class ProbeBlock(int count, uint[]? hits = null) {
         public const int FloatsPerProbe = 6 + SdfMeshIrradianceProbe.DepthWords;
 
         private readonly float[] m_floats = new float[(count * FloatsPerProbe)];
-        private uint[]? m_hits = new uint[count * SdfMeshProbeDepth.HitWords];
+        private uint[]? m_hits = (hits ?? new uint[count * SdfMeshProbeDepth.HitWords]);
 
         public long Bytes => (((long)m_floats.Length) * sizeof(float)) + (m_hits?.LongLength ?? 0) * sizeof(uint);
         public void ReleaseHits() => m_hits = null;

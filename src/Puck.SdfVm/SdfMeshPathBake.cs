@@ -1627,7 +1627,7 @@ public sealed partial class SdfMeshPathBake {
     // Builds a group's sampled lattice from its final lattice and chooses the cells it refines: their fine samples are
     // measured next, or, with none, the gradients the contour reads.
     private void Prepare(Group group, FinalLattice final) {
-        Vector3[]? points = null;
+        ReadOnlyMemory<Vector4> points = default;
         string? refusal = null;
         var started = Stopwatch.GetTimestamp();
 
@@ -1651,7 +1651,7 @@ public sealed partial class SdfMeshPathBake {
             if (factor >= 2) {
                 points = final.Sampled.Refine(factor: factor, regions: final.Regions);
             }
-            if ((points is null) || (points.Length == 0)) {
+            if (points.Length == 0) {
                 points = ChooseCrossingPoints(final: final);
             } else {
                 final.Stage = FinalStage.Refinement;
@@ -1659,16 +1659,16 @@ public sealed partial class SdfMeshPathBake {
         } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
             refusal = exception.Message;
         }
-        Account(detail: $"dims={final.Lattice.Dims} factor={final.Sampled?.Refinement} measured={final.Sampled?.MeasuredCells} points={points?.Length}", group: group, since: started, stage: BakeStage.Prepare);
+        Account(detail: $"dims={final.Lattice.Dims} factor={final.Sampled?.Refinement} measured={final.Sampled?.MeasuredCells} points={points.Length}", group: group, since: started, stage: BakeStage.Prepare);
 
-        var empty = ((refusal is not null) || (points is null) || (points.Length == 0));
+        var empty = ((refusal is not null) || (points.Length == 0));
 
         if (empty) {
             if (refusal is not null) { Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {refusal}"); } else { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
         } else {
             // The refinement now names its fine samples, so the admission narrows from their bound to their count.
-            _ = group.Memory.TryReserve(peak: PeakOf(final: final, fineSamples: ((final.Stage == FinalStage.Refinement) ? points!.Length : 0)));
-            final.SetPoints(points: points);
+            _ = group.Memory.TryReserve(peak: PeakOf(final: final, fineSamples: ((final.Stage == FinalStage.Refinement) ? points.Length : 0)));
+            final.Points = points;
         }
 
         FinalLattice? emptied = null;
@@ -1762,7 +1762,7 @@ public sealed partial class SdfMeshPathBake {
     }
     // Locates zeroes along the lattice edges before measuring their tangent planes. An off-edge normal projection of a
     // linear estimate can instead land on a different face of a corner, supplying the contour with the wrong plane.
-    private static Vector3[] ChooseCrossingPoints(FinalLattice final) {
+    private static ReadOnlyMemory<Vector4> ChooseCrossingPoints(FinalLattice final) {
         var points = final.Sampled!.CrossingPoints();
 
         final.Stage = ((points.Length > 0) ? FinalStage.Crossings : FinalStage.Gradients);
@@ -1774,7 +1774,7 @@ public sealed partial class SdfMeshPathBake {
         var points = ChooseCrossingPoints(final: final);
 
         Account(detail: $"dims={final.Lattice.Dims} factor={final.Sampled!.Refinement} measured={final.Sampled.MeasuredCells} points={points.Length}", group: group, since: started, stage: BakeStage.Crossings);
-        final.SetPoints(points: points);
+        final.Points = points;
 
         lock (m_gate) {
             group.Contouring = false;
@@ -2514,18 +2514,12 @@ public sealed partial class SdfMeshPathBake {
         public SdfSampledLattice? Sampled { get; set; }
         public FinalStage Stage { get; set; }
 
-        // All chunks of a round finish before the next round writes or grows this owned storage, which the group's
-        // running stage does on its worker before the gate publishes the round's first chunk.
-        private readonly OwnedBuffer<Vector4> m_points = new(allocator: allocator, observer: owner);
+        // The current round, the lattice's own storage (SdfSampledLattice.Refine): all chunks of a round finish before the
+        // lattice writes the next, which the group's running stage does on its worker before the gate publishes the
+        // round's first chunk.
+        public ReadOnlyMemory<Vector4> Points { get; set; }
 
-        public ReadOnlyMemory<Vector4> Points { get; private set; }
-
-        public void SetPoints(ReadOnlySpan<Vector3> points) {
-            m_points.Resize(points.Length, clear: false, preserve: false);
-            for (var index = 0; (index < points.Length); index++) { m_points[index] = new Vector4(value: points[index], w: 1f); }
-            Points = m_points.Memory;
-        }
-        public void Dispose() { Sampled?.Dispose(); m_values.Dispose(); m_materials.Dispose(); m_points.Dispose(); }
+        public void Dispose() { Sampled?.Dispose(); m_values.Dispose(); m_materials.Dispose(); }
 
         public int Answered { get; set; }
         // A union's refinement: the fine cells a coarse cell splits into (zero for the FineCell rule) and the members'

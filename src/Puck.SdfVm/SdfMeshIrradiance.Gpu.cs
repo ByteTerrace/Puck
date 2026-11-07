@@ -33,6 +33,19 @@ public sealed partial class SdfMeshIrradiance {
     // completion. Its GPU feedback is exactly the preceding completed batches, independent of display uploads.
     private readonly HashSet<int> m_gpuDirty = [];
     private uint[]? m_gpuVolume;
+    // The worker's GPU scratch, grown and kept across its batches. Only the worker task's body touches it, and a worker
+    // starts only once the last one completed, so it takes no gate; a job reads the origins, input and updates before
+    // Submit returns, and the readback arrays are read before the next job is submitted.
+    private Vector4[] m_gpuOrigins = [];
+    private uint[] m_gpuInput = [];
+    private uint[] m_gpuAnswer = [];
+    private uint[] m_gpuHits = [];
+    private uint[] m_gpuSavedHits = [];
+    private uint[] m_gpuFresh = [];
+    private int[] m_gpuDestinations = [];
+    private Vector4[]? m_gpuLightingRows;
+    private int[] m_gpuUpdateAt = [];
+    private uint[] m_gpuUpdateData = [];
     private bool m_gpuDraining;
     // Set by a device reattach; cleared once a completed job carried the volume's full snapshot into the new feedback.
     private bool m_republishOwed;
@@ -97,7 +110,7 @@ public sealed partial class SdfMeshIrradiance {
     }
 
     // Frees each fresh slot a batch placed whose relight never adopted it (a dropped or cancelled batch).
-    private void FreeUnadoptedGpuHits(List<Candidate> candidates, int first, uint[] fresh) {
+    private void FreeUnadoptedGpuHits(List<Candidate> candidates, int first, ReadOnlySpan<uint> fresh) {
         for (var i = 0; i < fresh.Length; i++) {
             if (fresh[i] == NoGpuHits) { continue; }
             var candidate = candidates[first + i];
@@ -114,8 +127,12 @@ public sealed partial class SdfMeshIrradiance {
             if (!Stands(in snapshot)) { throw new OperationCanceledException(); }
             records = m_volume;
         }
-        var origins = new Vector4[layout.TotalCount];
-        var input = new uint[layout.TotalCount * SdfMeshProbeRelight.SelectionInputWords];
+        // The loop below writes every origin and every word of every row, so the reused arrays need no clearing.
+        var inputWords = (layout.TotalCount * SdfMeshProbeRelight.SelectionInputWords);
+        GrowScratch(array: ref m_gpuOrigins, length: layout.TotalCount);
+        GrowScratch(array: ref m_gpuInput, length: inputWords);
+        var origins = m_gpuOrigins;
+        var input = m_gpuInput;
         FitGpuHits(layout: layout);
         TrimGpuHits(layout: layout, lows: snapshot.Lows);
         var now = Stopwatch.GetTimestamp();
@@ -169,10 +186,11 @@ public sealed partial class SdfMeshIrradiance {
             else { foreach (var box in boxes) { changes.Add(new(box.Low, BitConverter.Int32BitsToSingle(geometry))); changes.Add(new(box.High, 0)); } }
         }
         changes[1] = changes[1] with { Y = (changes.Count - SdfMeshProbeRelight.SelectionHeaderRows) / 2 };
-        var selected = GpuTrace!.Select(snapshot.Scene, origins, input, [.. changes], GpuHitCapacity);
+        var selected = GpuTrace!.Select(snapshot.Scene, origins.AsMemory(start: 0, length: layout.TotalCount), input.AsMemory(start: 0, length: inputWords), [.. changes], GpuHitCapacity, reuse: m_gpuAnswer);
+        m_gpuAnswer = selected;
         var take = 0;
         var stale = false;
-        for (var i = 0; i < selected.Length; i++) {
+        for (var i = 0; i < layout.TotalCount; i++) {
             stale |= (selected[i] & 4) != 0;
             if ((selected[i] & 2) != 0) { candidates[take++] = candidates[i] with { Trace = (selected[i] & 1) != 0 }; }
         }
@@ -181,9 +199,21 @@ public sealed partial class SdfMeshIrradiance {
         return stale;
     }
 
-    private static Vector4[] LightingRows(Lighting lighting, in Snapshot snapshot, bool feedback) {
-        var rows = new Vector4[SdfMeshProbeRelight.HeaderRows + (lighting.Materials.Length + 1) * SdfMeshProbeRelight.MaterialRows +
-            (lighting.Lights.Length + lighting.Points.Length) * SdfMeshProbeRelight.LightRows];
+    // Grows an array to hold at least `length` entries, never shrinking it. The entries a caller does not write keep an
+    // earlier use's values.
+    private static void GrowScratch<T>(ref T[] array, int length) {
+        if (array.Length < length) { array = new T[length]; }
+    }
+
+    // The relight's lighting rows, exactly sized: the array `rows` holds is rewritten and returned when it already has
+    // the length, so batches under one lighting share one array. A null `rows` always allocates; a caller that keeps the
+    // returned array owns it and passes it back.
+    private static Vector4[] LightingRows(Lighting lighting, in Snapshot snapshot, bool feedback, Vector4[]? rows = null) {
+        var length = SdfMeshProbeRelight.HeaderRows + (lighting.Materials.Length + 1) * SdfMeshProbeRelight.MaterialRows +
+            (lighting.Lights.Length + lighting.Points.Length) * SdfMeshProbeRelight.LightRows;
+
+        if (rows is null || (rows.Length != length)) { rows = new Vector4[length]; }
+        else { Array.Clear(rows); }
         rows[0] = new(lighting.Materials.Length + 1, lighting.Lights.Length, lighting.Points.Length, snapshot.Layout.Reach);
         rows[1] = new(lighting.Direct ? 1 : 0, lighting.Emission ? 1 : 0, feedback ? 1 : 0, lighting.Sky ? 1 : 0);
         rows[2] = new(lighting.Gains.Lights, lighting.Gains.Emission, lighting.Gains.Feedback, lighting.Gains.Sky);
@@ -221,9 +251,16 @@ public sealed partial class SdfMeshIrradiance {
 
     private SdfMeshProbeGpuWork.Result RelightGpu(List<Candidate> candidates, int first, int count, ProbeData[] probes, LightBlock lights,
         Lighting lighting, in Snapshot snapshot, bool feedback) {
-        var rows = LightingRows(lighting, in snapshot, feedback);
-        var input = new uint[count * SdfMeshProbeRelight.InputWords];
-        var origins = new Vector4[count];
+        var rows = (m_gpuLightingRows = LightingRows(lighting, in snapshot, feedback, rows: m_gpuLightingRows));
+        var inputWords = (count * SdfMeshProbeRelight.InputWords);
+        GrowScratch(array: ref m_gpuOrigins, length: count);
+        GrowScratch(array: ref m_gpuInput, length: inputWords);
+        // A probe without hits leaves its row and origin untouched, and Compose and the row writes below skip words, so
+        // the batch starts from zeros as a new array would.
+        Array.Clear(array: m_gpuOrigins, index: 0, length: count);
+        Array.Clear(array: m_gpuInput, index: 0, length: inputWords);
+        var input = m_gpuInput;
+        var origins = m_gpuOrigins;
         for (var i = 0; i < count; i++) {
             var candidate = candidates[first + i];
             var probe = probes[i];
@@ -251,27 +288,35 @@ public sealed partial class SdfMeshIrradiance {
                 previous.Lights.CopyTo(row[(SdfMeshProbeRelight.PreviousWord + 36)..]);
             }
         }
-        (int Word, uint[] Words)[] updates;
+        SdfMeshProbeGpuWork.Deltas updates;
         int volumeWords;
         uint[]? snapshotOf = null;
         lock (m_gate) {
             volumeWords = m_volume.Length;
             if (!ReferenceEquals(m_gpuVolume, m_volume)) {
-                updates = [(0, (uint[])m_volume.Clone())];
+                updates = new(Words: new int[] { 0 }, Data: (uint[])m_volume.Clone(), Count: 1, Length: m_volume.Length);
                 m_gpuVolume = m_volume;
                 snapshotOf = m_volume;
             } else {
-                updates = new (int, uint[])[m_gpuDirty.Count];
+                var dirty = m_gpuDirty.Count;
+                GrowScratch(array: ref m_gpuUpdateAt, length: dirty);
+                GrowScratch(array: ref m_gpuUpdateData, length: (dirty * SdfMeshIrradianceProbe.ProbeWords));
                 var i = 0;
                 foreach (var slot in m_gpuDirty) {
                     var word = slot * SdfMeshIrradianceProbe.ProbeWords;
-                    updates[i++] = (word, m_volume.AsSpan(word, SdfMeshIrradianceProbe.ProbeWords).ToArray());
+                    m_gpuUpdateAt[i] = word;
+                    m_volume.AsSpan(word, SdfMeshIrradianceProbe.ProbeWords).CopyTo(m_gpuUpdateData.AsSpan(i * SdfMeshIrradianceProbe.ProbeWords, SdfMeshIrradianceProbe.ProbeWords));
+                    i++;
                 }
+                updates = new(Words: m_gpuUpdateAt, Data: m_gpuUpdateData, Count: dirty, Length: SdfMeshIrradianceProbe.ProbeWords);
             }
             m_gpuDirty.Clear();
         }
         SdfMeshProbeGpuWork.Result output;
-        try { output = GpuTrace!.Relight(snapshot.Scene, origins, input, rows, volumeWords, updates, GpuHitCapacity); }
+        try {
+            output = GpuTrace!.Relight(snapshot.Scene, origins.AsMemory(start: 0, length: count), input.AsMemory(start: 0, length: inputWords), rows, volumeWords, in updates, GpuHitCapacity, reuse: m_gpuAnswer);
+            m_gpuAnswer = output.Words;
+        }
         catch (OperationCanceledException) {
             // Admission cancellation consumed no delta. Re-send a full snapshot on the next accepted job.
             lock (m_gate) { m_gpuVolume = null; }

@@ -20,7 +20,7 @@ public sealed record WorldPickTarget(string? Placement, int? BodyIndex) {
 public sealed class WorldPickMapBuilder {
     private readonly Dictionary<int, WorldPickTarget> m_instances = [];
     private readonly List<WorldPickTarget?> m_meshes = [];
-    private readonly Dictionary<(string Prototype, int Material), string> m_materials = [];
+    private readonly Dictionary<(string Prototype, int Material), int> m_materials = [];
 
     private WorldPickMap? m_snapshot;
     private IReadOnlyList<WorldPickTarget?>? m_pool;
@@ -64,7 +64,7 @@ public sealed class WorldPickMapBuilder {
             var key = (prototype, ids[slot]);
 
             if (!m_materials.ContainsKey(key: key)) {
-                m_materials[key] = $"{prototype}.palette[{slot}]";
+                m_materials[key] = slot;
                 m_snapshot = null;
             }
         }
@@ -77,14 +77,15 @@ public sealed class WorldPickMapBuilder {
         if ((m_snapshot is null) || !ReferenceEquals(objA: m_pool, objB: pool)) {
             m_pool = pool;
             m_snapshot = new WorldPickMap(instances: new Dictionary<int, WorldPickTarget>(dictionary: m_instances),
-                meshes: [.. m_meshes, .. pool], materials: new Dictionary<(string Prototype, int Material), string>(dictionary: m_materials));
+                meshes: [.. m_meshes, .. pool], materials: new Dictionary<(string Prototype, int Material), int>(dictionary: m_materials));
         }
         return m_snapshot;
     }
 
-    private sealed class WorldPickMap(Dictionary<int, WorldPickTarget> instances, WorldPickTarget?[] meshes, Dictionary<(string Prototype, int Material), string> materials) : ISdfPickMap {
-        public string? MaterialName(uint identity, int material) => ((Resolve(identity: identity) is WorldPickTarget { Prototype: { } prototype })
-            ? materials.GetValueOrDefault(key: (prototype, material)) : null);
+    private sealed class WorldPickMap(Dictionary<int, WorldPickTarget> instances, WorldPickTarget?[] meshes, Dictionary<(string Prototype, int Material), int> materials) : ISdfPickMap {
+        // The label is formatted when a pick asks for it; a rebuilt emission stores only the palette slot.
+        public string? MaterialName(uint identity, int material) => (((Resolve(identity: identity) is WorldPickTarget { Prototype: { } prototype }) && materials.TryGetValue(key: (prototype, material), value: out var slot))
+            ? $"{prototype}.palette[{slot}]" : null);
         public object? Resolve(uint identity) {
             var source = SdfVisibility.SourceOf(identity: identity);
 

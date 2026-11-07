@@ -45,10 +45,13 @@ milestone. The owner requested its baseline and implementation plan, which
    [baseline and implementation order](dense-landscapes.md) keep CPU field
    queries first and connect static-copy sharing, retained updates, GPU
    instancing, geometry/shadow work and memory to one proving landscape.
-1. [Measurement window](#measurement-window) [the frame bar's evidence]: the
-   harness for the questions no `puck measure` report reads yet (windowed boot
-   frames, glass-pass GPU time, the tour's frame percentiles, `host.frames` at
-   the water views), then a window that answers them.
+1. The frame bar [high]: 60 FPS steady state on the lead machine is not met
+   (every sweep stop fails it, with p99 hitches of 23-50 ms; see
+   [frame-time findings](#other-frame-time-findings)). Measure every stop's
+   p50/p99 in a quiet [measurement window](#measurement-window), then fix the
+   worst stops at their causes. The disclosure leaks, transmission's exit-layer
+   highs, the lockstep relight under a moving sun and the tour's and cold
+   bake's memory are open highs in their own packets, not owner decisions.
 2. [Memory](#memory-on-the-deck-tier) [high, the Deck]: the debug world's
    process plus GPU memory at or under 10 GB on the Deck tier, attribution
    first.
@@ -126,13 +129,6 @@ milestone. The owner requested its baseline and implementation plan, which
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
-- Deferred by the owner, not resolved, and first in Next: the disclosure leaks the harness shows
-  ([disclosure](disclosure.md#the-build-order)); transmission's remaining
-  exit-layer highs ([transmission](transmission.md)); the lockstep relight
-  under a moving sun ([lighting](#lighting-and-gi)); the tour's and the cold
-  bake's memory ([memory](#memory-on-the-deck-tier),
-  [sweep](#sweep-and-visual-checks)); and the frame bar failing at every stop
-  ([frame-time findings](#other-frame-time-findings)).
 - Pushing `main` (owner-only: a push to `main` deploys to Azure). The
   integration branch `lead/velocity` is far ahead of `main`, hundreds of commits.
   Recommendation: push once the milestone's riskiest areas have had a fresh fix
@@ -305,21 +301,34 @@ landed geometry).
   scale (`WorldEffectorSolver.cs:28`). The surface probe also runs while the
   effector's gate is shut and its weight at rest
   (`WorldCreationInstances.Effectors.cs:82-93`).
-- [high] Remaining managed allocation churn, read by `gc-cuts` on the Release
-  debug World, before any custom runtime. Zero steady gen0 is not reached. The
-  steady frame's remaining sites are irradiance probe blocks
-  (`SdfMeshIrradiance`), dressed-pick arrays (`SdfDressedPickMap.cs:24-25`) and
-  dressed motion identities (`SdfMeshPathBake.cs:408, :425`; the `Dress` item
-  under [other frame-time findings](#other-frame-time-findings)); scene
-  emission's residue includes pick material labels (`WorldPickMap.cs:64`) and
-  shape-specific materials. A cold bake's remaining sites are the pooled
-  readback-copy byte arrays (`SdfMeshBakeGpuWork.Complete`), point rounds
-  (`SdfSampledLattice.CrossingPoints`, `SdfSampledLattice.GradientPoints`) and
-  contour merge doubles (`SdfDualContouring.Merge`). Refinement indexes already
-  fill owned storage directly; their managed growth/copy path is gone. Continue
-  with owned storage, through
-  `IAllocator` and `MimallocAllocator` where it goes native; a shared
-  cross-thread pool belongs to the memo.
+- [high] Remaining managed allocation churn, read on the windowed Release
+  debug World with `dotnet-trace --profile gc-verbose` (sampled allocation
+  ticks by type and first `Puck.*` frame), before any custom runtime. Zero
+  steady gen0 is not reached. The relight batch's GPU scratch, the trace and
+  selection answers, the bake readback copies, the point rounds, the follow
+  scan's closures and the pick material labels no longer allocate per call; the
+  contour merge fills exact arrays. What remains, in measured order:
+  - Steady frame: the landed probe blocks (`SdfMeshIrradiance.Batch`'s
+    `ProbeBlock` and `LightBlock` floats) are the probe cache's own storage,
+    which readers outside the gate hold whole, so recycling one needs an epoch
+    or a slab with per-entry ownership; then `SdfMeshDresser.BuildDrawTopology`
+    draw bindings, the dressed `SdfFrame` copies and the view-snapshot
+    enumerators. The dressed-pick arrays (`SdfDressedPickMap`) are immutable
+    because a delayed GPU pick holds the map of its frame; they rebuild only
+    when draw identities change, as do the dressed motion identities
+    (`SdfMeshPathBake.IndexCopies`), and neither allocated in a steady window.
+  - Cold bake: `SdfMeshPathBake.ContourProjection`'s triangles,
+    `SdfContour.SplitAtCreases`, `SdfDualContouring.ExtractRefined`'s vertex
+    lists (which feed `Merge`), `SdfMeshCollapse.Collapser`,
+    `SdfMeshPlanarMerge.Merger`, `SdfMeshMaterialCut`, the encode path
+    (`SdfMeshStoreCodec`), and the lattice's gradient and crossing
+    dictionaries and `CrossingRoot[]`. The piece, dictionary and plane
+    bookkeeping inside `Merge` is still managed.
+  - Remaining GPU-side churn: `SdfMeshProbeGpuWork` recreates a slot's origins
+    buffer whenever the batch size changes.
+
+  Continue with owned storage, through `IAllocator` and `MimallocAllocator`
+  where it goes native; a shared cross-thread pool belongs to the memo.
 - Open from the allocation cuts:
   - [medium] The cold-bake pause comparison needs at least three alternating
     A/B runs on a quiet machine, with GC events read from the trace; loaded runs
@@ -370,12 +379,15 @@ the account itself is described in the
 The custom no-GC runtime port stays later work, on the
 [memory-pooling page](memory-pooling.md). Still open from the memory review:
 
-- [medium] Managed working memory per admitted group (contour lists,
-  refinement masks and `Vector3[]` point rounds: `SdfSampledLattice.cs:439`
-  onward, `SdfMeshPathBake.cs` `ChooseCrossingPoints`) is not in a group's
-  peak, so the account cannot pace the collections it causes. The cure is the
-  next native movers (the contour and the refinement's per-cell masks), not a
-  count cap.
+- [medium] Managed working memory per admitted group (the contour's lists
+  and per-vertex arrays, the refinement's per-cell masks, and the lattice's
+  gradient and crossing dictionaries and root array: `SdfSampledLattice.cs`
+  `Refine`, `CrossingPoints`, `GradientPoints`) is not in a group's peak, so
+  the account cannot pace the collections it causes. The point rounds
+  themselves are owned storage now. The cure is the next native movers (the
+  contour and the refinement's per-cell masks), not a count cap; the
+  [allocation churn item](#engine-job-system) lists the cold bake's measured
+  managed sites in order.
 - [low] A chunked mesh stores its triangles' indices twice: the parent's
   joined indices for whole-group queries and each chunk's own
   (`SdfMesh.Storage.cs`, `NativeCopy`). Dropping the parent's needs its readers
@@ -2705,7 +2717,10 @@ shards by cause.
   "cache retention lists again"; `SdfWorldPassesLawTests.AViewAllocatesEachScratchBufferOnce`
   and `CadenceCanBeDisabledAndDoesNotAllocateOnAStillView`, a per-frame
   closure allocation in `SdfMeshIrradiance`; and
-  `AViewSizesItsCascadesByItsShadowResolution…` timing out at 5 minutes.
+  `AViewSizesItsCascadesByItsShadowResolution…` timing out at 5 minutes; and
+  `SdfMeshIrradianceLawTests.RemovingTheLastStaticDrawReplacesItsSceneAndProbeMeasurements`
+  failing on `volume.Settling` (`SdfMeshIrradianceLawTests.cs:390`), which the
+  gc-churn lane saw on its base files too.
   Each is a defect in the code or the law; fix or delete it, never keep it red.
 
 The suite target (100 % line coverage plus the keep-list) and CI's `coverage` job
