@@ -151,7 +151,10 @@ and the source-read timing choice; these are not guarantees the current implemen
 - **Disclosure is checked at every read.** Every untrusted read and delivery
   asks the recipient view again; caching a bound address never caches
   permission. Recipient mutations and guards require whole-row admission before
-  grants or cell lookup. `cellVisibility` reserves cell-policy storage on empty rows;
+  grants or cell lookup, over every row the outcome reads: a keyed row's token
+  domain, every row a transform resolves to (`RuleCompiler.TryCollectTransformRows`),
+  and, for a spatial guard, every placement that can enter a census. A
+  `readersFrom` audience admits only while every recipient reads it whole. `cellVisibility` reserves cell-policy storage on empty rows;
   row-level visibility alone does not, so an owner's private inbox reads whole.
 
 ## Where each contract is enforced

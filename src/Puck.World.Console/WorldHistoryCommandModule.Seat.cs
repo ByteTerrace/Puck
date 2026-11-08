@@ -63,7 +63,7 @@ public sealed partial class WorldHistoryCommandModule {
             return CommandResult.None;
         }
 
-        return Seek(target: tick, verb: "drag");
+        return Seek(target: tick, verb: "drag", principal: context.Principal);
     }
     private CommandResult Row() {
         Span<ulong> keyframes = stackalloc ulong[WorldHistory.RowKeyframes];
@@ -119,7 +119,7 @@ public sealed partial class WorldHistoryCommandModule {
 
         return new CommandResult(Output: $"[world.history: saved branch '{name}' as tape '{tape}' ({path}) | forked from '{WorldHistory.SavedBranchParent}' | re-drive {verdict.Describe()}]") { IsError = !verdict.Match };
     }
-    private CommandResult Scrub(WireArgs args) {
+    private CommandResult Scrub(WireArgs args, Principal principal) {
         if (
             (args.Count != 2) ||
             !args.TryFloat(index: 1, value: out var fraction) ||
@@ -132,8 +132,8 @@ public sealed partial class WorldHistoryCommandModule {
 
         // With no window there is no tick to name; the seek names why.
         return (m_history.TryTickAt(fraction: fraction, tick: out var tick)
-            ? Seek(target: tick, verb: "scrub")
-            : Seek(target: 0UL, verb: "scrub"));
+            ? Seek(target: tick, verb: "scrub", principal: principal)
+            : Seek(target: 0UL, verb: "scrub", principal: principal));
     }
     private CommandResult Switch(WireArgs args) {
         if (args.Count != 2) {

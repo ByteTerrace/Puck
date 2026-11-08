@@ -111,22 +111,34 @@ public sealed partial class WorldRecipientView {
         return true;
     }
 
-    /// <summary>Checks a named placement's dependencies without reading its current values.</summary>
+    /// <summary>Checks a named placement's dependencies without reading its current values. An id spelling a dealt
+    /// child (<see cref="WorldPlacementDeal.TrySplitChildId"/>) depends on its template whether or not the child exists
+    /// now, since whether it exists is the deal row's membership.</summary>
     public bool AdmitsPlacement(string id, out string row) {
         row = string.Empty;
-        return WorldDefinitionRows.FindPlacement(Source.Placements, id) is not { } placement || AdmitsPlacement(placement, out row);
+        if (Unrestricted) { return true; }
+        var visited = Writes.GetValue(this, static _ => new()).Placements;
+        visited.Clear();
+        return AdmitsChain(WorldDefinitionRows.FindPlacement(Source.Placements, id), visited, out row) && AdmitsTemplateOf(id, visited, out row);
     }
-    /// <summary>Checks an incoming placement's complete state dependency declaration and its parent chain's. A batch
-    /// composes members without validating between them, so the chain may close on itself; each placement is checked
-    /// once and the walk ends there.</summary>
+    /// <summary>Checks an incoming placement's complete state dependency declaration and its parent chain's, and the
+    /// template its id spells as a dealt child. A batch composes members without validating between them, so the chain
+    /// may close on itself; each placement is checked once and the walk ends there.</summary>
     public bool AdmitsPlacement(WorldPlacement placement, out string row) {
         row = string.Empty;
         if (Unrestricted) { return true; }
-        var scratch = Writes.GetValue(this, static _ => new());
-        var reads = scratch.Rows;
-        var visited = scratch.Placements;
+        var visited = Writes.GetValue(this, static _ => new()).Placements;
         visited.Clear();
-        var next = placement;
+        return AdmitsChain(placement, visited, out row) && AdmitsTemplateOf(placement.Id, visited, out row);
+    }
+    private bool AdmitsTemplateOf(string id, HashSet<string> visited, out string row) {
+        row = string.Empty;
+        return !WorldPlacementDeal.TrySplitChildId(id, out var template, out _) ||
+            AdmitsChain(WorldDefinitionRows.FindPlacement(Source.Placements, template), visited, out row);
+    }
+    private bool AdmitsChain(WorldPlacement? next, HashSet<string> visited, out string row) {
+        row = string.Empty;
+        var reads = Writes.GetValue(this, static _ => new()).Rows;
         while (next is not null && visited.Add(next.Id)) {
             reads.Clear();
             WorldDefinitionFingerprint.CollectPlacementStateInputs(next, reads);

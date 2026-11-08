@@ -117,6 +117,24 @@ public sealed class RecipientOracleLawTests {
         Assert.Equal(outcomes[0], outcomes[1]);
     }
 
+    // Whether a dealt child exists is its deal row's membership; its id is admitted alike either way.
+    [Fact]
+    public void ADealtChildIdIsAdmittedAlikeWhetherTheChildExists() {
+        var answers = new List<(bool Admits, string Withheld)>();
+        foreach (var dealt in new[] { false, true }) {
+            var pile = new WorldStateRow(CellName.Parse("pile"), CellKind.Int, Visibility: new StateVisibility(Readers: []),
+                Cells: dealt ? [new StateCell(CellName.Parse("x"), CellValue.Int(1))] : []);
+            var template = new WorldPlacement("tmpl", "piece", new DocumentVector3(0, 0, 0), 0, 1, Deal: new WorldPlacementDeal("pile"));
+            var child = new WorldPlacement(WorldPlacementDeal.ChildId("tmpl", "x"), "piece", new DocumentVector3(0, 0, 0), 0, 1, Parent: "tmpl", DealSlot: 0);
+            var document = new WorldDefinition(StateRaw: new WorldStateSection(World: [pile]),
+                PlacementsRaw: new WorldPlacementsSection(dealt ? [template, child] : [template]));
+            var view = WorldRecipientView.ForComposition(document, Principal.Seat(0));
+            answers.Add((view.Admits(new WorldMutation.RemovePlacement(Principal.Seat(0), child.Id), out var withheld), withheld));
+        }
+        Assert.Equal(answers[0], answers[1]);
+        Assert.False(answers[0].Admits);
+    }
+
     [Fact]
     public void ABatchWhoseMembersCloseAParentCycleIsAnsweredNotOverflowed() {
         var document = Fixtures.BuildDocument() with { CreationsRaw = [CreationFixtures.Sphere(id: "piece", scale: 0.2f)] };
