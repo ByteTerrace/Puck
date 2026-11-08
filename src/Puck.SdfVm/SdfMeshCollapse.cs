@@ -94,9 +94,8 @@ public static class SdfMeshCollapse {
         private const int SlideTargets = 4;
 
         private readonly int[] m_placeOf;
-        private readonly double[] m_x;
-        private readonly double[] m_y;
-        private readonly double[] m_z;
+        // Each place's position, in doubles.
+        private readonly Point[] m_point;
         private readonly Vector3[] m_normals;
         private readonly int[] m_corners;
         // Each corner's place, m_placeOf of its vertex, which Commit keeps beside m_corners.
@@ -206,13 +205,9 @@ public static class SdfMeshCollapse {
             }
 
             m_places = first.Count;
-            m_x = new double[m_places];
-            m_y = new double[m_places];
-            m_z = new double[m_places];
+            m_point = new Point[m_places];
             for (var vertex = 0; (vertex < vertices); vertex++) {
-                m_x[m_placeOf[vertex]] = positions[vertex].X;
-                m_y[m_placeOf[vertex]] = positions[vertex].Y;
-                m_z[m_placeOf[vertex]] = positions[vertex].Z;
+                m_point[m_placeOf[vertex]] = new Point { X = positions[vertex].X, Y = positions[vertex].Y, Z = positions[vertex].Z };
             }
 
             m_normals = mesh.Normals.ToArray();
@@ -283,8 +278,8 @@ public static class SdfMeshCollapse {
                 for (var at = 0; (at < m_lineNeighbours.Count); at++) {
                     var other = m_lineNeighbours[at];
 
-                    if (at == 0) { AddLine(a: place, b: other, x: m_x[place], y: m_y[place], z: m_z[place]); }
-                    if (place < other) { AddLine(a: place, b: other, x: (0.5 * (m_x[place] + m_x[other])), y: (0.5 * (m_y[place] + m_y[other])), z: (0.5 * (m_z[place] + m_z[other]))); }
+                    if (at == 0) { AddLine(a: place, b: other, x: m_point[place].X, y: m_point[place].Y, z: m_point[place].Z); }
+                    if (place < other) { AddLine(a: place, b: other, x: (0.5 * (m_point[place].X + m_point[other].X)), y: (0.5 * (m_point[place].Y + m_point[other].Y)), z: (0.5 * (m_point[place].Z + m_point[other].Z))); }
                 }
             }
             for (var triangle = 0; (triangle < m_triangles); triangle++) {
@@ -626,7 +621,7 @@ public static class SdfMeshCollapse {
 
             if ((fromFirst == fromSecond) && (toFirst != toSecond)) { return Outcome.Refused; }
 
-            var (tx, ty, tz) = (m_x[to], m_y[to], m_z[to]);
+            var (tx, ty, tz) = (m_point[to].X, m_point[to].Y, m_point[to].Z);
 
             for (var index = 0; (index < fan.Count); index++) {
                 if ((index == firstAt) || (index == secondAt)) { continue; }
@@ -730,9 +725,9 @@ public static class SdfMeshCollapse {
                             Sample = sample,
                             Index = index,
                             Vertex = vertex,
-                            Px = m_x[at],
-                            Py = m_y[at],
-                            Pz = m_z[at],
+                            Px = m_point[at].X,
+                            Py = m_point[at].Y,
+                            Pz = m_point[at].Z,
                             Own = own,
                             OwnLength = Math.Sqrt(d: (((own.X * ((double)own.X)) + (own.Y * ((double)own.Y))) + (own.Z * ((double)own.Z)))),
                             Material = m_sampleMaterial[sample],
@@ -899,8 +894,8 @@ public static class SdfMeshCollapse {
         }
         // A line sample's distance to the segment between two places.
         private double Segment(int a, int b, int sample) {
-            var (ax, ay, az) = (m_x[a], m_y[a], m_z[a]);
-            var (ex, ey, ez) = ((m_x[b] - ax), (m_y[b] - ay), (m_z[b] - az));
+            var (ax, ay, az) = (m_point[a].X, m_point[a].Y, m_point[a].Z);
+            var (ex, ey, ez) = ((m_point[b].X - ax), (m_point[b].Y - ay), (m_point[b].Z - az));
             var (px, py, pz) = ((m_lineX[sample] - ax), (m_lineY[sample] - ay), (m_lineZ[sample] - az));
             var length = (((ex * ex) + (ey * ey)) + (ez * ez));
             var along = ((length > 0.0) ? Math.Clamp(max: 1.0, min: 0.0, value: ((((px * ex) + (py * ey)) + (pz * ez)) / length)) : 0.0);
@@ -1024,25 +1019,25 @@ public static class SdfMeshCollapse {
                 if (pb == from) { (b, pb) = (Mapped(fromFirst: fromFirst, toFirst: toFirst, toSecond: toSecond, vertex: b), to); }
                 if (pc == from) { (c, pc) = (Mapped(fromFirst: fromFirst, toFirst: toFirst, toSecond: toSecond, vertex: c), to); }
 
-                var (cx, cy, cz) = ((((m_x[pa] + m_x[pb]) + m_x[pc]) / 3.0), (((m_y[pa] + m_y[pb]) + m_y[pc]) / 3.0), (((m_z[pa] + m_z[pb]) + m_z[pc]) / 3.0));
+                var (cx, cy, cz) = ((((m_point[pa].X + m_point[pb].X) + m_point[pc].X) / 3.0), (((m_point[pa].Y + m_point[pb].Y) + m_point[pc].Y) / 3.0), (((m_point[pa].Z + m_point[pb].Z) + m_point[pc].Z) / 3.0));
                 var radius = 0.0;
 
                 foreach (var p in ((ReadOnlySpan<int>)[pa, pb, pc])) {
-                    var (dx, dy, dz) = ((m_x[p] - cx), (m_y[p] - cy), (m_z[p] - cz));
+                    var (dx, dy, dz) = ((m_point[p].X - cx), (m_point[p].Y - cy), (m_point[p].Z - cz));
 
                     radius = Math.Max(val1: radius, val2: Math.Sqrt(d: (((dx * dx) + (dy * dy)) + (dz * dz))));
                 }
 
                 m_measured[count++] = new Candidate {
-                    Ax = m_x[pa],
-                    Ay = m_y[pa],
-                    Az = m_z[pa],
-                    Bx = m_x[pb],
-                    By = m_y[pb],
-                    Bz = m_z[pb],
-                    Ex = m_x[pc],
-                    Ey = m_y[pc],
-                    Ez = m_z[pc],
+                    Ax = m_point[pa].X,
+                    Ay = m_point[pa].Y,
+                    Az = m_point[pa].Z,
+                    Bx = m_point[pb].X,
+                    By = m_point[pb].Y,
+                    Bz = m_point[pb].Z,
+                    Ex = m_point[pc].X,
+                    Ey = m_point[pc].Y,
+                    Ez = m_point[pc].Z,
                     Cx = cx,
                     Cy = cy,
                     Cz = cz,
@@ -1151,7 +1146,7 @@ public static class SdfMeshCollapse {
             var b = m_cornerPlace[((3 * triangle) + 1)];
             var c = m_cornerPlace[((3 * triangle) + 2)];
 
-            return (m_x[a], m_y[a], m_z[a], m_x[b], m_y[b], m_z[b], m_x[c], m_y[c], m_z[c]);
+            return (m_point[a].X, m_point[a].Y, m_point[a].Z, m_point[b].X, m_point[b].Y, m_point[b].Z, m_point[c].X, m_point[c].Y, m_point[c].Z);
         }
         private static (double X, double Y, double Z) Cross(double ax, double ay, double az, double bx, double by, double bz, double cx, double cy, double cz) {
             var (ux, uy, uz) = ((bx - ax), (by - ay), (bz - az));
@@ -1161,7 +1156,7 @@ public static class SdfMeshCollapse {
         }
         // The cost of moving a place's planes to a neighbour: the summed squared distances of both places' planes there.
         private double Cost(int from, int to) {
-            var (x, y, z) = (m_x[to], m_y[to], m_z[to]);
+            var (x, y, z) = (m_point[to].X, m_point[to].Y, m_point[to].Z);
 
             return (Evaluate(place: from, x: x, y: y, z: z) + Evaluate(place: to, x: x, y: y, z: z));
         }
@@ -1203,13 +1198,13 @@ public static class SdfMeshCollapse {
         private void AddEdge(int place, int other, int triangle) {
             var (ax, ay, az, bx, by, bz, cx, cy, cz) = Positions(triangle: triangle);
             var (fx, fy, fz) = Cross(ax: ax, ay: ay, az: az, bx: bx, by: by, bz: bz, cx: cx, cy: cy, cz: cz);
-            var (ex, ey, ez) = ((m_x[other] - m_x[place]), (m_y[other] - m_y[place]), (m_z[other] - m_z[place]));
+            var (ex, ey, ez) = ((m_point[other].X - m_point[place].X), (m_point[other].Y - m_point[place].Y), (m_point[other].Z - m_point[place].Z));
             var (nx, ny, nz) = (((ey * fz) - (ez * fy)), ((ez * fx) - (ex * fz)), ((ex * fy) - (ey * fx)));
             var length = Math.Sqrt(d: (((nx * nx) + (ny * ny)) + (nz * nz)));
 
             if (!(length > 0.0)) { return; }
 
-            AddPlane(nx: (nx / length), ny: (ny / length), nz: (nz / length), place: place, px: m_x[place], py: m_y[place], pz: m_z[place], weight: (FeatureWeight * (((ex * ex) + (ey * ey)) + (ez * ez))));
+            AddPlane(nx: (nx / length), ny: (ny / length), nz: (nz / length), place: place, px: m_point[place].X, py: m_point[place].Y, pz: m_point[place].Z, weight: (FeatureWeight * (((ex * ex) + (ey * ey)) + (ez * ez))));
         }
         // The barycentric weights of the point of a triangle nearest a point (Ericson, Real-Time Collision Detection 5.1.5).
         private static (double U, double V, double W) Closest(double ax, double ay, double az, double bx, double by, double bz, double cx, double cy, double cz, double px, double py, double pz) {
@@ -1266,6 +1261,9 @@ public static class SdfMeshCollapse {
 
         // A triangle about a collapsing place as it will be: its corners, its centroid and the radius about it that holds
         // them, its corners' normals and its material.
+        private struct Point {
+            public double X, Y, Z;
+        }
         private struct Candidate {
             public double Ax, Ay, Az, Bx, By, Bz, Ex, Ey, Ez, Cx, Cy, Cz, Radius;
             public double LowX, LowY, LowZ, HighX, HighY, HighZ;
