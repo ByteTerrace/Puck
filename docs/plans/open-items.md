@@ -67,9 +67,17 @@ milestone. The owner requested its baseline and implementation plan, which
    warps on views at 24 % against the interpreter kernel's 15 %
    ([author shaders](author-shaders.md) step 3; the timing is a queued
    measurement, not a claim). The plain kernel still spills 176 bytes a
-   thread to local memory on Vulkan, and a frame with programs runs a
-   specialized set at 168 registers, so binning (step 4) is what takes the
-   arms' registers out of the pixels that run no program. The gather's
+   thread to local memory on Vulkan. A frame with programs now shades in bins
+   (author shaders step 4): tiles with no program on a plain shading kernel and
+   the rest on the set's binned specialization, both at 128 registers (16
+   warps) with the filter's gather moved into a 40-register pass of its own,
+   against the unsplit set's 168 (12); the plain bin spills 16 bytes a thread
+   where the unsplit plain kernel spills 176. Its timing against the unsplit
+   path is the queued `shade-4-bins` measurement, which decides whether bins
+   stay the default. Under the provisional `MaxWork` the debug world's `cel`
+   program prices a job at about 20 tiles, so a programmed frame records about
+   900 views dispatches on either path until step 5 calibrates the bound; a
+   frame with no program records one. The gather's
    weights still spill to local memory on Direct3D 12, and `world.indirect
    off` still removes a third of views on Vulkan as the gather's work. Then the
    remaining caster geometry after receiver and light-space culling

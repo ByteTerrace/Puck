@@ -22,6 +22,35 @@ public sealed class SdfShadeDispatchTests {
         Assert.Equal(((8193u + 7) / 8) * ((4321u + 7) / 8), end);
     }
 
+    // A bin's count exists only on the GPU, so each bin records enough jobs to hold every tile of the extent, and each job
+    // of a bin that may run a program fits the bound; tiles with no program, and an extent with no program, run only the
+    // engine's fixed stage and are one dispatch within the group-count limit.
+    [Fact]
+    public void EveryBinHoldsTheExtentAndEveryAuthoredJobFits() {
+        var shade = SdfShadeProgram.Compile(new("clock", [], [new(SdfShadePhase.Surface, "roughness", new("input", Name: "clock"))]));
+        var tiles = ((1920u + 7) / 8) * ((1080u + 7) / 8);
+        var plan = SdfShadeDispatch.PlanBins(1920, 1080, [shade], SdfShadeProgram.MaxLights);
+
+        Assert.True(plan.Binned);
+        Assert.Empty(plan.Jobs);
+        Assert.Equal([shade.Identity], plan.Identities);
+        Assert.Equal(2, plan.Bins.Count);
+        Assert.Equal(1u, plan.Bins[0].Jobs);
+        Assert.Equal(65535u, plan.Bins[0].Width);
+        Assert.Equal(64UL * shade.PixelWork(SdfShadeProgram.MaxLights), plan.Bins[1].TileWork);
+        Assert.InRange(plan.Bins[1].Width * plan.Bins[1].TileWork, 1UL, SdfShadeProgram.MaxWork);
+        foreach (var bin in plan.Bins) {
+            Assert.InRange(bin.Jobs, 1u, tiles);
+            Assert.True((ulong)bin.Jobs * bin.Width >= tiles);
+            Assert.True((ulong)(bin.Jobs - 1u) * bin.Width < tiles);
+        }
+
+        var job = Assert.Single(SdfShadeDispatch.Plan(1920, 1080, [], SdfShadeProgram.MaxLights, glass: false).Jobs);
+
+        Assert.Equal(0u, job.FirstGroup);
+        Assert.Equal(tiles, job.Groups);
+    }
+
     [Fact]
     public void SelectedProgramsAloneSupplyCadenceReads() {
         SdfShadeProgram Read(string name) => SdfShadeProgram.Compile(new(name, [], [new(SdfShadePhase.Surface, "roughness", new("input", Name: name))]));

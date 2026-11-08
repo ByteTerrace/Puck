@@ -16,8 +16,9 @@ namespace Puck.SdfVm;
 /// a second boot of an unchanged world runs no tool.
 /// </summary>
 public sealed class SdfShadeKernels {
-    /// <summary>The kernels a set specializes, each with its plain counterpart a frame with no program renders with.</summary>
-    public static IReadOnlyList<SdfKernel> Specialized { get; } = [SdfKernel.Views, SdfKernel.Glass];
+    /// <summary>The kernels a set specializes, each with its plain counterpart that shades no program: the unsplit views
+    /// and glass kernels, and the binned views kernel that shades a binned view's tiles with programs.</summary>
+    public static IReadOnlyList<SdfKernel> Specialized { get; } = [SdfKernel.Views, SdfKernel.Glass, SdfKernel.ViewsShade];
 
     private readonly SdfShadeProgram[] m_programs;
     private readonly HashSet<string> m_identities;

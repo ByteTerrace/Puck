@@ -275,7 +275,7 @@ lanes masked. Control flow that ends at a barrier must be reached by every lane.
 
 - **Done right.** The views gather runs on every lane of the group, a lane past
   the render extent included, because it ends at the group's barrier
-  (`sdfViewsGatherFilter` in [`sdf-views-stage.hlsli`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-views-stage.hlsli)).
+  (`sdfViewsGatherFilter` in [`sdf-views-filter.hlsli`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-views-filter.hlsli)).
   The bake maps adjacent threads to adjacent lattice samples
   (the lattice search in [`sdf-mesh-bake.comp.hlsl`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-mesh-bake.comp.hlsl)),
   so a wave's instance masks and `mapCore` walks agree where the field is
@@ -320,7 +320,7 @@ different words of one bank serialize.
 
 - **Done right.** The views filter tile stores each field in its own array
   (`float4` positions, `uint` shadows, `uint` normals,
-  `sdfViewsFilterTile`, `sdfViewsFilterShadows` and `sdfViewsFilterNormals` in [`sdf-views-stage.hlsli`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-views-stage.hlsli)),
+  `sdfViewsFilterTile`, `sdfViewsFilterShadows` and `sdfViewsFilterNormals` in [`sdf-views-filter.hlsli`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-views-filter.hlsli)),
   so no array is a struct of fields a lane reads one of.
 - **Not conflict-free.** The tile is 11 words wide and an 8×8 group's warp is
   eight lanes by four rows, so a `uint` read at `(lane.y + y) * 11 + lane.x + x`

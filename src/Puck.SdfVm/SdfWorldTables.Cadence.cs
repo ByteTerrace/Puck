@@ -131,7 +131,10 @@ public sealed partial class SdfWorldTables {
                 break;
             // The glass shading pass lights the glass and reads the lit image; the clear and the glass raster are
             // geometry alone, one signature, so a standing raster never accumulates onto a clear it did not see.
+            // A binned view's filter and bins passes are views' own work and stand or render with it.
             case SdfWorldPackage.Parts.Views:
+            case SdfWorldPackage.Parts.ViewsFilter:
+            case SdfWorldPackage.Parts.ViewsBins:
             case SdfWorldPackage.Parts.GlassShade:
             case SdfWorldPackage.Resolve:
                 hash.Add(value: lighting.Value);

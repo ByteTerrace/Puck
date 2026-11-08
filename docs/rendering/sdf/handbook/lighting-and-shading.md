@@ -376,7 +376,7 @@ on the pixel grid, and a surface farther than the radius in front casts no halo.
 The estimate is decorrelated per pixel and filtered. Each pixel turns and
 spaces its taps by its cell of a 4×4 ordered-dither tile (`sdfMeshPattern`),
 and a temporal view steps the pattern within the tile's strata by its sample
-index. Views (`sdfViewsFilter` in `passes/sdf-views-stage.hlsli`) averages the 4×4 window
+index. Views (`sdfViewsFilter` in `passes/sdf-views-filter.hlsli`) averages the 4×4 window
 around each pixel, which holds all sixteen patterns once, keeping only
 neighbors on the pixel's tangent plane, so no screen-locked pattern survives
 with temporal reconstruction off, and a converged temporal view averages 128

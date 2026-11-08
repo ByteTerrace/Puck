@@ -1,0 +1,24 @@
+{
+  "note": "The authored-shading decision matrix's stops (docs/plans/author-shaders.md, section 6): the debug sweep's slowest stops and the meadow with authored programs on, each shaded unsplit and in bins (world.shaders.bins), for puck bench frames and puck measure. A stop's pair differs only in the bins lever, so a stop's binned frames and views passes read beside its unsplit twin in one build.",
+  "tour": {
+    "note": "Each stop turns authored programs on and sets the bins lever before its pose; the warmup produces the view's rebuilt graph before frames are read.",
+    "prelude": ["world.lockstep on", "world.row.set hud.defaults enabled false", "world.binding-bar off 1", "world.inspect off", "console off 1", "view.annotate off", "world.state.cell.set chessDemo enabled 0", "world.shade programs", "world.wait 300"],
+    "reset": ["body.stop 0", "world.debug-view off", "view.override camera auto", "view.override layout play"],
+    "frame": ["view.recenter 1", "view.reseed 0"],
+    "settle": 45,
+    "levelTolerance": 16,
+    "amberFraction": 0.02,
+    "columns": 4,
+    "cellWidth": 480,
+    "stops": [
+      { "name": "teal-roof-unsplit", "group": "unsplit", "lines": ["world.shaders.bins off", "body.pose -2 0 18 0 0 0"] },
+      { "name": "teal-roof-binned", "group": "binned", "lines": ["world.shaders.bins on", "body.pose -2 0 18 0 0 0"] },
+      { "name": "flight-b-1-unsplit", "group": "unsplit", "lines": ["world.shaders.bins off", "body.pose 16 4.55 30 0 0 0", "view.override camera look 12.6 8.3 39.3 13 9.4 35"] },
+      { "name": "flight-b-1-binned", "group": "binned", "lines": ["world.shaders.bins on", "body.pose 16 4.55 30 0 0 0", "view.override camera look 12.6 8.3 39.3 13 9.4 35"] },
+      { "name": "studio-unsplit", "group": "unsplit", "lines": ["world.shaders.bins off", "debug.go hero"] },
+      { "name": "studio-binned", "group": "binned", "lines": ["world.shaders.bins on", "debug.go hero"] },
+      { "name": "meadow-unsplit", "group": "unsplit", "lines": ["world.shaders.bins off", "debug.go meadow", "view.override camera look 124 2 -60 119.5 0.3 -55.3 55"] },
+      { "name": "meadow-binned", "group": "binned", "lines": ["world.shaders.bins on", "debug.go meadow", "view.override camera look 124 2 -60 119.5 0.3 -55.3 55"] }
+    ]
+  }
+}

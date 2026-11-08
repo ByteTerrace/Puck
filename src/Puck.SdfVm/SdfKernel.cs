@@ -30,6 +30,18 @@ public enum SdfKernel {
     Views,
     /// <summary>The views kernel with authored interpretation absent, for frames with no active program.</summary>
     ViewsPlain,
+    /// <summary>A binned view's filter pass: the views filter's averages into the filter record and each tile's bin into
+    /// the shade bins. Acquired only by a binned view.</summary>
+    ViewsFilter,
+    /// <summary>A binned view's bins pass: each bin's offset, its jobs' indirect arguments and the tile list sorted by
+    /// bin. Acquired only by a binned view.</summary>
+    ViewsBins,
+    /// <summary>A binned view's shading of the tiles whose pixels have programs, reading the filter record. Acquired only
+    /// by a binned view.</summary>
+    ViewsShade,
+    /// <summary>The binned shading kernel with authored interpretation absent, for the tiles no pixel of which has a
+    /// program. Acquired only by a binned view.</summary>
+    ViewsShadePlain,
     /// <summary>The sky's field runs, evaluated where the lit image's coverage is below one.</summary>
     Sky,
     /// <summary>The composite: the sky's runs, the lit image over them by its coverage, the fog and the bounded media.</summary>

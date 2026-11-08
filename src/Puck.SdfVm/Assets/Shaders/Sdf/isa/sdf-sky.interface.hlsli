@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/efb34eccc23c11dddb8e91bdc91f403f8f994a1f7c8eff4c29ec28312e28de7c). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/cf672dfe57cfe8d2e2edab94c1e35c947df73d0d2740b8a235ee03a99f29a54f). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -202,48 +202,49 @@ struct SdfSkyPass {
     [[vk::offset(852)]] uint screenCount;
     [[vk::offset(856)]] float screenFidelity;
     [[vk::offset(860)]] uint _pad860;
-    [[vk::offset(864)]] uint4 shadeDefault;
-    [[vk::offset(880)]] float4 shadeDemand;
-    [[vk::offset(896)]] uint4 shadeIdentity[2];
-    [[vk::offset(928)]] uint shadePrograms;
-    [[vk::offset(932)]] uint shadowFadeCount;
-    [[vk::offset(936)]] uint shadowSlotCount;
-    [[vk::offset(940)]] uint _pad940;
-    [[vk::offset(944)]] int4 shadowSlots;
-    [[vk::offset(960)]] uint2 skyFieldExtent;
-    [[vk::offset(968)]] float skyPeakLuminance;
-    [[vk::offset(972)]] uint _pad972;
-    [[vk::offset(976)]] float4 skyViews[40];
-    [[vk::offset(1616)]] float3 stampFade;
-    [[vk::offset(1628)]] float tanHalfFieldOfView;
-    [[vk::offset(1632)]] uint temporal;
-    [[vk::offset(1636)]] uint _pad1636;
-    [[vk::offset(1640)]] uint _pad1640;
-    [[vk::offset(1644)]] uint _pad1644;
-    [[vk::offset(1648)]] float4 toonBands;
-    [[vk::offset(1664)]] float4 toonInk;
-    [[vk::offset(1680)]] float4 toonOutline;
-    [[vk::offset(1696)]] float4 toonShadow;
-    [[vk::offset(1712)]] uint viewBase;
-    [[vk::offset(1716)]] uint _pad1716;
-    [[vk::offset(1720)]] uint _pad1720;
-    [[vk::offset(1724)]] uint _pad1724;
-    [[vk::offset(1728)]] float3 viewForward;
+    [[vk::offset(864)]] uint4 shadeBinWidths;
+    [[vk::offset(880)]] uint4 shadeDefault;
+    [[vk::offset(896)]] float4 shadeDemand;
+    [[vk::offset(912)]] uint4 shadeIdentity[2];
+    [[vk::offset(944)]] uint shadePrograms;
+    [[vk::offset(948)]] uint shadowFadeCount;
+    [[vk::offset(952)]] uint shadowSlotCount;
+    [[vk::offset(956)]] uint _pad956;
+    [[vk::offset(960)]] int4 shadowSlots;
+    [[vk::offset(976)]] uint2 skyFieldExtent;
+    [[vk::offset(984)]] float skyPeakLuminance;
+    [[vk::offset(988)]] uint _pad988;
+    [[vk::offset(992)]] float4 skyViews[40];
+    [[vk::offset(1632)]] float3 stampFade;
+    [[vk::offset(1644)]] float tanHalfFieldOfView;
+    [[vk::offset(1648)]] uint temporal;
+    [[vk::offset(1652)]] uint _pad1652;
+    [[vk::offset(1656)]] uint _pad1656;
+    [[vk::offset(1660)]] uint _pad1660;
+    [[vk::offset(1664)]] float4 toonBands;
+    [[vk::offset(1680)]] float4 toonInk;
+    [[vk::offset(1696)]] float4 toonOutline;
+    [[vk::offset(1712)]] float4 toonShadow;
+    [[vk::offset(1728)]] uint viewBase;
+    [[vk::offset(1732)]] uint _pad1732;
+    [[vk::offset(1736)]] uint _pad1736;
     [[vk::offset(1740)]] uint _pad1740;
-    [[vk::offset(1744)]] float3 viewPosition;
+    [[vk::offset(1744)]] float3 viewForward;
     [[vk::offset(1756)]] uint _pad1756;
-    [[vk::offset(1760)]] float3 viewRight;
+    [[vk::offset(1760)]] float3 viewPosition;
     [[vk::offset(1772)]] uint _pad1772;
-    [[vk::offset(1776)]] float3 viewUp;
-    [[vk::offset(1788)]] uint viewportCount;
-    [[vk::offset(1792)]] uint workCounterRow;
-    [[vk::offset(1796)]] uint workCounterRowDetail;
-    [[vk::offset(1800)]] uint _pad1800;
-    [[vk::offset(1804)]] uint _pad1804;
-    [[vk::offset(1808)]] float4 worldLanes;
+    [[vk::offset(1776)]] float3 viewRight;
+    [[vk::offset(1788)]] uint _pad1788;
+    [[vk::offset(1792)]] float3 viewUp;
+    [[vk::offset(1804)]] uint viewportCount;
+    [[vk::offset(1808)]] uint workCounterRow;
+    [[vk::offset(1812)]] uint workCounterRowDetail;
+    [[vk::offset(1816)]] uint _pad1816;
+    [[vk::offset(1820)]] uint _pad1820;
+    [[vk::offset(1824)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsa04412181 : register(b0, space3);
-#define passGroup passGroupIsa04412181
+[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsa772E5949 : register(b0, space3);
+#define passGroup passGroupIsa772E5949
 [[vk::binding(1, 3)]] Texture2D<float4> skyViewImages[8] : register(t1, space3);
 [[vk::binding(9, 3)]] Texture2D<float4> lit : register(t9, space3);
 [[vk::binding(10, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t10, space3);

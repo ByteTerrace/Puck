@@ -335,7 +335,9 @@ target: normal, screen-space AO, the cascades' soft shadows into K;
 program with a glass shape (`SdfProgram.HasGlass`) inserts `glass-clear` →
 `glass` (graphics, the glass draws alone) → `glass-shade` after `views`
 (`SdfWorldPackage.WithGlass`), and every later pass reads `glassLit` in the
-lit image's place. The surface and
+lit image's place. A view of a frame that runs authored programs inserts
+`views-filter` → `views-bins` before `views`, which then shades in bins
+(`SdfWorldPackage.WithBins`, [authored shading](references/authored-shading.md#the-three-views-and-glass-kernels)). The surface and
 views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
 `passes/sdf-pixel-entry.hlsli`) and call no field query. The table in
 [kernels](references/kernels.md#the-frame) says what each writes.
@@ -355,7 +357,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   views.** The estimates (`sdfMeshAmbient`, `sdfMeshShadow` and their shared
   4×4 tap pattern `sdfMeshPattern`, `passes/sdf-surface-stage.hlsli`) are the
   surface pass's, written into the visibility record; views only averages them
-  over a 4×4 window (`sdfViewsFilter`, `passes/sdf-views-stage.hlsli`) before
+  over a 4×4 window (`sdfViewsFilter`, `passes/sdf-views-filter.hlsli`) before
   shading. A wrong occlusion or shadow value (a dark band, a missing crease,
   acne) is the estimate's, so an edit to the views lighting code changes
   nothing; the window and the pattern's tile are a pair. A side is queried

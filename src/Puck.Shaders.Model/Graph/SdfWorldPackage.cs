@@ -324,6 +324,7 @@ public static partial class SdfWorldPackage {
         Value(name: ShadeDefault, type: ShaderValueType.Uint4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: ShadeIdentity, type: ShaderValueType.Uint4, length: 2),
         Value(name: ShadeDemand, type: ShaderValueType.Float4),
+        Value(name: ShadeBinWidths, type: ShaderValueType.Uint4),
         Value(name: ToonShadow, type: ShaderValueType.Float4),
         Value(name: ToonOutline, type: ShaderValueType.Float4),
         Value(name: ToonInk, type: ShaderValueType.Float4),
@@ -466,6 +467,11 @@ public static partial class SdfWorldPackage {
         Read(element: ShaderValueType.Uint, name: MeshShadowSecondOptical),
         Read(element: ShaderValueType.Uint, name: MeshPyramid),
         Written(element: ShaderValueType.Uint, name: MeshPyramidWritten),
+        Read(element: ShaderValueType.Uint, name: ViewsFilterRecords),
+        Written(element: ShaderValueType.Uint, name: ViewsFilterRecordsWritten),
+        Read(element: ShaderValueType.Uint, name: ShadeTiles),
+        Written(element: ShaderValueType.Uint, name: ShadeTilesWritten),
+        Written(element: ShaderValueType.Uint, name: ShadeArgumentsWritten),
         .. Tables,
     ];
     /// <summary>Gets the fragment a native view runs as: one view's dispatch set, its scratch retained and counted, its

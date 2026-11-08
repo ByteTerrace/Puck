@@ -291,6 +291,10 @@ public sealed record ShaderPipelineCountTerm(
 /// <param name="Width">The frame extent's width in pixels.</param>
 /// <param name="Height">The frame extent's height in pixels.</param>
 public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Height) {
+    /// <summary>The edge, in pixels, of the square tile <see cref="ShaderPipelineCountBasis.ExtentTiles"/> and
+    /// <see cref="ShaderPipelineCountBasis.RenderExtentTiles"/> count.</summary>
+    public const uint TileEdge = 8;
+
     /// <summary>Gets the allocated render width, or zero when it equals the output width.</summary>
     public uint RenderWidth { get; init; }
     /// <summary>Gets the allocated render height, or zero when it equals the output height.</summary>
@@ -313,6 +317,8 @@ public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Heigh
     public ulong UnitsOf(ShaderPipelineCountBasis basis) => basis switch {
         ShaderPipelineCountBasis.Extent => (((ulong)Width) * Height),
         ShaderPipelineCountBasis.RenderExtent => (((ulong)((RenderWidth == 0) ? Width : RenderWidth)) * ((RenderHeight == 0) ? Height : RenderHeight)),
+        ShaderPipelineCountBasis.ExtentTiles => Tiles(width: Width, height: Height),
+        ShaderPipelineCountBasis.RenderExtentTiles => Tiles(width: ((RenderWidth == 0) ? Width : RenderWidth), height: ((RenderHeight == 0) ? Height : RenderHeight)),
         ShaderPipelineCountBasis.Instances => Instances,
         ShaderPipelineCountBasis.ProgramWords => ProgramWords,
         ShaderPipelineCountBasis.Viewports => Viewports,
@@ -324,6 +330,9 @@ public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Heigh
             paramName: nameof(basis)
         ),
     };
+
+    private static ulong Tiles(uint width, uint height) =>
+        (((((ulong)width) + TileEdge) - 1UL) / TileEdge) * (((((ulong)height) + TileEdge) - 1UL) / TileEdge);
 }
 /// <summary>How a compute or package pass chooses its workgroup counts.</summary>
 /// <param name="Kind">The dispatch shape.</param>

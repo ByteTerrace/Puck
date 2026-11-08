@@ -54,6 +54,8 @@ public sealed partial class SdfWorldPasses {
         public ulong? SurfaceSignature { get; set; }
         public long CadenceFrame { get; set; } = -1;
         public long SampleRevision { get; set; }
+        // The plan a binned view's passes share (ShadePlanOf).
+        public SdfShadeDispatch? ShadePlan { get; set; }
         public long SampleRenderedFrame { get; set; } = -1;
         public long UnreadFrames { get; set; }
     }

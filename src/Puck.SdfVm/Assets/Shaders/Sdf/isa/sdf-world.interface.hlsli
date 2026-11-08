@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/5dbc8cba028e4b545a1cb5b785c4ab08e4204ae6469d9c94fb6738be957a1a0e). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/038093f1ec7d8818d1cb113df4f34a7a44326fe6bcbaadd2e0407e61284352ca). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -202,48 +202,49 @@ struct SdfWorldPass {
     [[vk::offset(852)]] float screenFidelity;
     [[vk::offset(856)]] uint _pad856;
     [[vk::offset(860)]] uint _pad860;
-    [[vk::offset(864)]] uint4 shadeDefault;
-    [[vk::offset(880)]] float4 shadeDemand;
-    [[vk::offset(896)]] uint4 shadeIdentity[2];
-    [[vk::offset(928)]] uint shadePrograms;
-    [[vk::offset(932)]] uint shadowFadeCount;
-    [[vk::offset(936)]] uint shadowSlotCount;
-    [[vk::offset(940)]] uint _pad940;
-    [[vk::offset(944)]] int4 shadowSlots;
-    [[vk::offset(960)]] float skyPeakLuminance;
-    [[vk::offset(964)]] uint _pad964;
-    [[vk::offset(968)]] uint _pad968;
-    [[vk::offset(972)]] uint _pad972;
-    [[vk::offset(976)]] float3 stampFade;
-    [[vk::offset(988)]] float tanHalfFieldOfView;
-    [[vk::offset(992)]] uint temporal;
-    [[vk::offset(996)]] uint _pad996;
-    [[vk::offset(1000)]] uint _pad1000;
-    [[vk::offset(1004)]] uint _pad1004;
-    [[vk::offset(1008)]] float4 toonBands;
-    [[vk::offset(1024)]] float4 toonInk;
-    [[vk::offset(1040)]] float4 toonOutline;
-    [[vk::offset(1056)]] float4 toonShadow;
-    [[vk::offset(1072)]] uint viewBase;
-    [[vk::offset(1076)]] uint _pad1076;
-    [[vk::offset(1080)]] uint _pad1080;
-    [[vk::offset(1084)]] uint _pad1084;
-    [[vk::offset(1088)]] float3 viewForward;
+    [[vk::offset(864)]] uint4 shadeBinWidths;
+    [[vk::offset(880)]] uint4 shadeDefault;
+    [[vk::offset(896)]] float4 shadeDemand;
+    [[vk::offset(912)]] uint4 shadeIdentity[2];
+    [[vk::offset(944)]] uint shadePrograms;
+    [[vk::offset(948)]] uint shadowFadeCount;
+    [[vk::offset(952)]] uint shadowSlotCount;
+    [[vk::offset(956)]] uint _pad956;
+    [[vk::offset(960)]] int4 shadowSlots;
+    [[vk::offset(976)]] float skyPeakLuminance;
+    [[vk::offset(980)]] uint _pad980;
+    [[vk::offset(984)]] uint _pad984;
+    [[vk::offset(988)]] uint _pad988;
+    [[vk::offset(992)]] float3 stampFade;
+    [[vk::offset(1004)]] float tanHalfFieldOfView;
+    [[vk::offset(1008)]] uint temporal;
+    [[vk::offset(1012)]] uint _pad1012;
+    [[vk::offset(1016)]] uint _pad1016;
+    [[vk::offset(1020)]] uint _pad1020;
+    [[vk::offset(1024)]] float4 toonBands;
+    [[vk::offset(1040)]] float4 toonInk;
+    [[vk::offset(1056)]] float4 toonOutline;
+    [[vk::offset(1072)]] float4 toonShadow;
+    [[vk::offset(1088)]] uint viewBase;
+    [[vk::offset(1092)]] uint _pad1092;
+    [[vk::offset(1096)]] uint _pad1096;
     [[vk::offset(1100)]] uint _pad1100;
-    [[vk::offset(1104)]] float3 viewPosition;
+    [[vk::offset(1104)]] float3 viewForward;
     [[vk::offset(1116)]] uint _pad1116;
-    [[vk::offset(1120)]] float3 viewRight;
+    [[vk::offset(1120)]] float3 viewPosition;
     [[vk::offset(1132)]] uint _pad1132;
-    [[vk::offset(1136)]] float3 viewUp;
-    [[vk::offset(1148)]] uint viewportCount;
-    [[vk::offset(1152)]] uint workCounterRow;
-    [[vk::offset(1156)]] uint workCounterRowDetail;
-    [[vk::offset(1160)]] uint _pad1160;
-    [[vk::offset(1164)]] uint _pad1164;
-    [[vk::offset(1168)]] float4 worldLanes;
+    [[vk::offset(1136)]] float3 viewRight;
+    [[vk::offset(1148)]] uint _pad1148;
+    [[vk::offset(1152)]] float3 viewUp;
+    [[vk::offset(1164)]] uint viewportCount;
+    [[vk::offset(1168)]] uint workCounterRow;
+    [[vk::offset(1172)]] uint workCounterRowDetail;
+    [[vk::offset(1176)]] uint _pad1176;
+    [[vk::offset(1180)]] uint _pad1180;
+    [[vk::offset(1184)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa04412181 : register(b0, space3);
-#define passGroup passGroupIsa04412181
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa772E5949 : register(b0, space3);
+#define passGroup passGroupIsa772E5949
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<float> reactivityRW : register(u3, space3);
@@ -262,6 +263,11 @@ struct SdfWorldPass {
 [[vk::binding(47, 3)]] StructuredBuffer<uint> meshShadowSecondOptical : register(t47, space3);
 [[vk::binding(48, 3)]] StructuredBuffer<uint> sdfMeshPyramid : register(t48, space3);
 [[vk::binding(49, 3)]] RWStructuredBuffer<uint> sdfMeshPyramidRW : register(u49, space3);
+[[vk::binding(50, 3)]] StructuredBuffer<uint> sdfViewsFilterRecords : register(t50, space3);
+[[vk::binding(51, 3)]] RWStructuredBuffer<uint> sdfViewsFilterRecordsRW : register(u51, space3);
+[[vk::binding(52, 3)]] StructuredBuffer<uint> sdfShadeTiles : register(t52, space3);
+[[vk::binding(53, 3)]] RWStructuredBuffer<uint> sdfShadeTilesRW : register(u53, space3);
+[[vk::binding(54, 3)]] RWStructuredBuffer<uint> sdfShadeArgumentsRW : register(u54, space3);
 
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
 struct SdfWorldPushedIndex {

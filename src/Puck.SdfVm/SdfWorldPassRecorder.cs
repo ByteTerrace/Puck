@@ -18,13 +18,16 @@ namespace Puck.SdfVm;
 // occlusion (SdfMeshOcclusion), which orders its own buffers and moves the mesh target between its two phases, leaving it
 // in its attachment layout as the planner expects.
 internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
-    // Views attribute analytic sky lighting by layer.
+    // Views attribute analytic sky lighting by layer; the bins pass counts each bin's tiles (sdf-world-views-bins.comp.hlsl),
+    // a row for every bin a plan gives a width (SdfShadeDispatch.PlanBins).
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_part switch {
         SdfWorldPackage.Parts.Views => m_view.Residency.SkyDetails.Labels,
         SdfWorldPackage.Parts.ShadowFar => CasterDetails,
+        SdfWorldPackage.Parts.ViewsBins => BinDetails,
         _ => [],
     };
     private static readonly string[] CasterDetails = ["receiver-rejected", "entry-rejected"];
+    private static readonly string[] BinDetails = ["no-program", "program"];
 
     // The world interface's scratch buffer members, each bound to the dummy unless a port binds it.
     private static readonly string[] ScratchMembers = [
@@ -36,6 +39,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.MeshShadowNearOptical,
         SdfWorldPackage.MeshShadowFarOptical,
         SdfWorldPackage.MeshShadowSecondOptical,
+        SdfWorldPackage.ViewsFilterRecords,
+        SdfWorldPackage.ViewsFilterRecordsWritten,
+        SdfWorldPackage.ShadeTiles,
+        SdfWorldPackage.ShadeTilesWritten,
+        SdfWorldPackage.ShadeArgumentsWritten,
     ];
     // Each cascade layer's storage and the binding the surface pass samples it at.
     private static readonly (string Version, uint Binding)[] CascadeBindings = [
@@ -59,6 +67,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly bool m_temporal;
 
     private readonly bool m_resolved;
+    // Whether the views pass's graph shades in bins (SdfWorldPasses.ShadesInBins); it records unsplit on a frame whose
+    // plan does not bin.
+    private readonly bool m_binned;
     private bool HasShadowOptical => IsShadowCascade && m_outputs.Length == 3;
 
     // The view the pass records, followed in place when the instance resolves another its passes can record
@@ -148,6 +159,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         m_temporal = fragment.Resources.Any(predicate: static resource => resource.History);
         m_resolved = m_outputs.Contains(value: SdfWorldPackage.CurrentColor);
+        m_binned = SdfWorldPasses.ShadesInBins(context: context);
 
         DeclareScreens(residency: view.Residency);
 
@@ -417,6 +429,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                     m_owner.Begin(residency: m_view.Residency);
                     return (m_view.Residency.Staged(context: in context).MeshDrawCount == 0);
                 }
+            // The filter and bins passes skip a frame whose views do not shade in bins (SdfWorldResidency.ShadesInBins).
+            case SdfWorldPackage.Parts.ViewsFilter:
+            case SdfWorldPackage.Parts.ViewsBins: {
+                    Follow();
+                    m_owner.Begin(residency: m_view.Residency);
+                    return !m_view.Residency.ShadesInBins;
+                }
             case SdfWorldPackage.Parts.ShadowNear:
             case SdfWorldPackage.Parts.ShadowFar:
             case SdfWorldPackage.Parts.ShadowSecond: {
@@ -600,6 +619,14 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         m_occlusion?.Completed(slot: slot);
     }
 
+    private int OutputIndexOf(string member) {
+        for (var index = 0; (index < m_outputs.Length); index++) {
+            if (WrittenMemberOf(version: m_outputs[index]) == member) {
+                return index;
+            }
+        }
+        throw new InvalidOperationException(message: $"Pass '{m_context.Pass}' has no output written through '{member}'.");
+    }
     private int InputIndexOf(string member) {
         for (var index = 0; (index < m_inputs.Length); index++) {
             if (ReadMemberOf(version: m_inputs[index]) == member) {
@@ -653,16 +680,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var set = m_sets!.PassSet(slot: slot);
         var recorder = recording.Recorder;
         var commandBuffer = recording.CommandBuffer;
-        IGpuComputePipeline pipeline;
-
-        if (m_part == SdfWorldPackage.Parts.Views) {
-            // The views kernel is the residency's shading selection, pinned for this recording's submission.
-            m_shadePlan = SdfShadeDispatch.For(m_shadePlan, m_view.Residency.Frame!, recording.Width, recording.Height,
-                tables.PassValues.ScreenCount, glass: false);
-            pipeline = m_shade.RecordPipeline(kernel: SdfKernel.Views, plan: m_shadePlan, residency: m_view.Residency, slot: slot);
-        } else {
-            pipeline = tables.Pipeline(kernel: ((m_part == SdfWorldPackage.Parts.Pyramid) ? SdfKernel.MeshPyramid : SdfKernel.Surface));
-        }
+        var residency = m_view.Residency;
 
         BindPorts(
             recording: in recording,
@@ -679,41 +697,116 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             set: set,
             tables: tables
         );
-        recorder.BindPipeline(
+
+        switch (m_part) {
+            case SdfWorldPackage.Parts.Views: {
+                    // The views kernels are the residency's shading selection, pinned for this recording's submission. A
+                    // binned graph's plan is the one its filter and bins passes record with this frame (ShadePlanOf).
+                    m_shadePlan = (m_binned
+                        ? m_owner.ShadePlanOf(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount)
+                        : SdfShadeDispatch.For(m_shadePlan, residency.Frame!, recording.Width, recording.Height, tables.PassValues.ScreenCount, glass: false));
+                    var selection = m_shade.RecordSelection(plan: m_shadePlan, residency: residency, slot: slot);
+
+                    if (!m_shadePlan.Binned) {
+                        var pipeline = selection.Pipeline(kernel: SdfKernel.Views);
+
+                        BindCompute(pipeline: pipeline, recording: in recording, tables: tables);
+                        m_shadePlan.Record(in recording, pipeline);
+                        return;
+                    }
+                    // Bin zero's tiles hold no program, so the plain kernel shades them; every other bin's take the
+                    // selection's kernel, which shades every program the frame runs.
+                    for (var bin = 0; (bin < m_shadePlan.Bins.Count); bin++) {
+                        if (m_shadePlan.Bins[bin].Jobs == 0) { continue; }
+                        var pipeline = ((bin == 0) ? selection.Plain(kernel: SdfKernel.ViewsShade) : selection.Pipeline(kernel: SdfKernel.ViewsShade));
+
+                        BindCompute(pipeline: pipeline, recording: in recording, tables: tables);
+                        m_shadePlan.RecordBin(in recording, bin, pipeline);
+                    }
+                    return;
+                }
+            case SdfWorldPackage.Parts.ViewsFilter: {
+                    // The filter runs no program: one job of views' groups, whose pushed ordinal its entry remaps as views'
+                    // does. The bins' counts start from zero before any group adds to them.
+                    m_shadePlan = SdfShadeDispatch.ForEngine(previous: m_shadePlan, width: recording.Width, height: recording.Height);
+                    var bins = recording.Outputs[OutputIndexOf(member: SdfWorldPackage.ShadeTilesWritten)].Buffer!;
+                    var pipeline = tables.Pipeline(kernel: SdfKernel.ViewsFilter);
+
+                    recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: bins.BufferHandle,
+                        sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
+                        destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+                    recorder.ClearStorageBuffer(commandBuffer, bins.BufferHandle, bins.SizeBytes);
+                    recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: bins.BufferHandle,
+                        sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
+                        destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+                    BindCompute(pipeline: pipeline, recording: in recording, tables: tables);
+                    m_shadePlan.Record(in recording, pipeline);
+                    return;
+                }
+            case SdfWorldPackage.Parts.ViewsBins: {
+                    // Step zero (one group) turns the counts into offsets and writes every job's arguments at the plan's
+                    // widths; step one (an invocation a tile) scatters the tiles once every offset is written.
+                    var plan = m_owner.ShadePlanOf(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount);
+                    var bins = recording.Outputs[OutputIndexOf(member: SdfWorldPackage.ShadeTilesWritten)].Buffer!;
+                    var pipeline = tables.Pipeline(kernel: SdfKernel.ViewsBins);
+                    var tiles = (recording.Width.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels) * recording.Height.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels));
+                    Span<byte> step = stackalloc byte[sizeof(uint)];
+
+                    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(step, 0u);
+                    SdfFrameBlock.WriteShadeBins(block: recording.PassBlock, plan: plan);
+                    BindCompute(pipeline: pipeline, recording: in recording, tables: tables);
+                    recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, data: step, offset: 0,
+                        pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
+                    recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
+                    recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: bins.BufferHandle,
+                        sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
+                        destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+                    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(step, 1u);
+                    recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, data: step, offset: 0,
+                        pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
+                    recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: Math.Max(1u, tiles.CeilingDivide(divisor: 64u)), groupCountY: 1, groupCountZ: 1);
+                    return;
+                }
+            default: {
+                    var pipeline = tables.Pipeline(kernel: ((m_part == SdfWorldPackage.Parts.Pyramid) ? SdfKernel.MeshPyramid : SdfKernel.Surface));
+                    var (x, y) = m_part switch {
+                        // One invocation a texel of the pyramid's first level, half the extent rounded up.
+                        SdfWorldPackage.Parts.Pyramid => (recording.Width.CeilingDivide(divisor: 2u).CeilingDivide(divisor: 8u), recording.Height.CeilingDivide(divisor: 2u).CeilingDivide(divisor: 8u)),
+                        _ => (recording.Width.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels), recording.Height.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels)),
+                    };
+
+                    BindCompute(pipeline: pipeline, recording: in recording, tables: tables);
+                    recorder.Dispatch(
+                        commandBufferHandle: commandBuffer,
+                        groupCountX: x,
+                        groupCountY: y,
+                        groupCountZ: 1
+                    );
+                    return;
+                }
+        }
+    }
+    // Binds a compute kernel with the slot's pass set and the residency's World set. A pipeline bind can drop the bound
+    // sets (Direct3D 12 sets the kernel's root signature again), so the sets follow every bind.
+    private void BindCompute(IGpuComputePipeline pipeline, in RenderGraphPackageRecording recording, SdfWorldTables tables) {
+        recording.Recorder.BindPipeline(
             bindPoint: GpuBindPoint.Compute,
-            commandBufferHandle: commandBuffer,
+            commandBufferHandle: recording.CommandBuffer,
             pipelineHandle: pipeline.Handle
         );
-        m_sets.Bind(
+        m_sets!.Bind(
             bindPoint: GpuBindPoint.Compute,
-            commandBuffer: commandBuffer,
+            commandBuffer: recording.CommandBuffer,
             pipelineLayout: pipeline.LayoutHandle,
-            recorder: recorder,
-            slot: slot
+            recorder: recording.Recorder,
+            slot: recording.Slot
         );
-        recorder.BindDescriptorSet(
+        recording.Recorder.BindDescriptorSet(
             bindPoint: GpuBindPoint.Compute,
-            commandBufferHandle: commandBuffer,
+            commandBufferHandle: recording.CommandBuffer,
             descriptorSetHandle: tables.WorldSet(slot: tables.CurrentSlot),
             group: ((uint)ShaderInterfaceGroup.World),
             pipelineLayoutHandle: pipeline.LayoutHandle
-        );
-
-        var (x, y) = m_part switch {
-            // One invocation a texel of the pyramid's first level, half the extent rounded up.
-            SdfWorldPackage.Parts.Pyramid => (recording.Width.CeilingDivide(divisor: 2u).CeilingDivide(divisor: 8u), recording.Height.CeilingDivide(divisor: 2u).CeilingDivide(divisor: 8u)),
-            _ => (recording.Width.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels), recording.Height.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels)),
-        };
-
-        if (m_part == SdfWorldPackage.Parts.Views) {
-            m_shadePlan!.Record(in recording, pipeline);
-            return;
-        }
-        recorder.Dispatch(
-            commandBufferHandle: commandBuffer,
-            groupCountX: x,
-            groupCountY: y,
-            groupCountZ: 1
         );
     }
     // Selects draws and levels on the GPU, then draws one indirect phase (two for opaque occlusion), pulling triangles
@@ -1031,6 +1124,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.Parts.ShadowNearOptical => SdfWorldPackage.MeshShadowNearOptical,
         SdfWorldPackage.Parts.ShadowFarOptical => SdfWorldPackage.MeshShadowFarOptical,
         SdfWorldPackage.Parts.ShadowSecondOptical => SdfWorldPackage.MeshShadowSecondOptical,
+        SdfWorldPackage.Parts.Filter => SdfWorldPackage.ViewsFilterRecords,
+        SdfWorldPackage.Parts.ShadeTiles or SdfWorldPackage.Parts.ShadeBinned => SdfWorldPackage.ShadeTiles,
         _ => null,
     };
     // The member a pass writes a fragment buffer through, or null for one it writes through no member.
@@ -1038,6 +1133,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.Parts.Visibility => SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.Parts.Reactivity => SdfWorldPackage.ReactivityWritten,
         SdfWorldPackage.Parts.MeshPyramid => SdfWorldPackage.MeshPyramidWritten,
+        SdfWorldPackage.Parts.Filter => SdfWorldPackage.ViewsFilterRecordsWritten,
+        SdfWorldPackage.Parts.ShadeTiles or SdfWorldPackage.Parts.ShadeBinned => SdfWorldPackage.ShadeTilesWritten,
+        SdfWorldPackage.Parts.ShadeArguments => SdfWorldPackage.ShadeArgumentsWritten,
         _ => null,
     };
 }

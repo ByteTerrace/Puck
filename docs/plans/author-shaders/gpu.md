@@ -123,11 +123,11 @@ For a hot edit, keeping the previous material until the replacement is ready is 
 
 | Observation from this checkout | Source |
 |---|---|
-| `views` runs one invocation/pixel in an 8×8 workgroup, loading a surface record. | `src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-pixel-entry.hlsli:1`; `passes/sdf-views-stage.hlsli:124` |
-| It gathers a spatial tile with an apron, reaches a group barrier, and applies a 4×4 AO/shadow filter before lighting. | `passes/sdf-views-stage.hlsli:12`, `:24`, `:65`, `:118`, `:135` |
+| `views` runs one invocation/pixel in an 8×8 workgroup, loading a surface record. | `src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-pixel-entry.hlsli:1`; `passes/sdf-views-stage.hlsli:36` |
+| It gathers a spatial tile with an apron, reaches a group barrier, and applies a 4×4 AO/shadow filter before lighting. | `passes/sdf-views-filter.hlsli:23`, `:35`, `:76`, `passes/sdf-views-stage.hlsli:29`, `:52` |
 | Material decode exposes rows 0–31 and optional paint, weathering, flow, toon and glass data. | `shade/sdf-material.hlsli:9`, `:106` |
 | Paint evaluation already precedes the full material load, expressly shortening live state. Flow, emissive, lighting and indirect/specular paths follow. | `passes/sdf-light-stage.hlsli:132`, `:136`, `:142`, `:188`, `:209`, `:232`; `shade/sdf-material.hlsli:172` |
-| Views includes debug selection and atmospheric transmittance after light evaluation. | `passes/sdf-views-stage.hlsli:140`, `:141`, `:153` |
+| Views includes debug selection and atmospheric transmittance after light evaluation. | `passes/sdf-views-stage.hlsli:58`, `:59`, `:71` |
 | Shader compilation targets DXIL SM 6.6 and SPIR-V Vulkan 1.3, with source closure/options/compiler identity. | `src/Puck.Shaders.Model/Compiler/ShaderCompiler.Identity.cs:8`, `:36`, `:82` |
 | Both device-cache mechanisms already exist; DirectX handles same-name loads with a lock, Vulkan validates cache identity and coordinates serialization. | `src/Puck.DirectX/Interop/DirectXPipelineLibrary.cs:10`, `:53`, `:285`; `src/Puck.Vulkan/Interop/VulkanPipelineCache.cs:7`, `:69`, `:105` |
 | Reload builds are already prepared in the background and taken for installation. | `src/Puck.SdfVm/SdfWorldResidency.ShaderReload.cs:33`, `:91`, `:95`, `:258` |

@@ -72,18 +72,21 @@ public sealed class SdfShadeSlots {
         ArgumentNullException.ThrowIfNull(plan);
         Capture(pipelines: null, plan: plan, residency: residency, slot: slot);
     }
-    // The one door through which a views or glass recording takes its kernel: the residency's shading selection, pinned
-    // by the capture before its native handle reaches the recorder, so the pin travels with the submission even if a later
-    // frame publishes another set or this recorder follows another residency. With no published set it is the fixed
-    // interpreter kernel, or the plain one for a frame with no active program.
-    internal IGpuComputePipeline RecordPipeline(int slot, SdfWorldResidency residency, SdfShadeDispatch plan, SdfKernel kernel) {
+    // The one door through which a views or glass recording takes its kernels: the residency's shading selection, pinned
+    // by the capture before any native handle reaches the recorder, so the pin travels with the submission even if a later
+    // frame publishes another set or this recorder follows another residency. The selection answers every kernel of the
+    // recording from that one capture.
+    internal SdfShadeSelection RecordSelection(int slot, SdfWorldResidency residency, SdfShadeDispatch plan) {
         ArgumentNullException.ThrowIfNull(residency);
         ArgumentNullException.ThrowIfNull(plan);
         var pipelines = residency.ShadeSelection;
 
         Capture(pipelines: pipelines, plan: plan, residency: residency, slot: slot);
-        return (pipelines?.Pipeline(kernel: kernel) ?? residency.ShadeFallback(kernel: kernel));
+        return new SdfShadeSelection(pipelines: pipelines, residency: residency);
     }
+    // A recording of one shading kernel through the door above.
+    internal IGpuComputePipeline RecordPipeline(int slot, SdfWorldResidency residency, SdfShadeDispatch plan, SdfKernel kernel) =>
+        RecordSelection(plan: plan, residency: residency, slot: slot).Pipeline(kernel: kernel);
     /// <summary>Reports the slot's recording submitted: its capture enters the recording residency's in-flight set. A slot
     /// with no capture since its last submission submits nothing.</summary>
     /// <param name="slot">The submitted frame slot.</param>
@@ -107,6 +110,15 @@ public sealed class SdfShadeSlots {
             m_slots.Record(slot: slot, result: new SdfShadeSubmission(identities: plan.Identities, pipelines: pipelines, residency: residency));
         }
     }
+}
+
+// The kernels one recording shades with, as SdfShadeSlots.RecordSelection captured them: a published set's
+// specialization of a kernel, or with none the residency's fixed kernel (the interpreter, or the plain one for a frame
+// with no active program); and a kernel's plain counterpart, which shades no program whatever the selection. Valid only
+// for the recording that captured it, whose capture pins the set.
+internal readonly struct SdfShadeSelection(SdfShadePipelines? pipelines, SdfWorldResidency residency) {
+    internal IGpuComputePipeline Pipeline(SdfKernel kernel) => (pipelines?.Pipeline(kernel: kernel) ?? residency.ShadeFallback(kernel: kernel));
+    internal IGpuComputePipeline Plain(SdfKernel kernel) => residency.ShadePlain(kernel: kernel);
 }
 
 /// <summary>The shading submissions of a package's released recorders. A render node releases a recorder only after the
