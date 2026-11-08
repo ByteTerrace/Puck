@@ -39,7 +39,7 @@ public static class CliPaths {
     public static bool Same(string left, string right) => string.Equals(
         a: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: left)),
         b: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: right)),
-        comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+        comparisonType: Puck.Abstractions.PuckPaths.Comparison
     );
     // The default display base is the working directory.
     public static string ToDisplay(string fullPath) =>

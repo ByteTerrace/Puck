@@ -240,11 +240,11 @@ public static class CompareCommand {
     public static Command CreateCollect() {
         var destination = new Argument<string>(name: "directory") { Description = "The directory to copy into, outside the repository's walk (such as under artifacts/)." };
         var command = new Command(
-            description: """
+            description: $"""
             Copy every compiled SPIR-V module into one directory at its repository path.
 
-            Walks the checkout as puck shaders compare does, skipping artifacts, bin, obj, .git, .tmp
-            and node_modules, so the collected tree lines up path for path with another host's checkout.
+            Walks the checkout as puck shaders compare does, skipping {string.Join(separator: ", ", values: CliTreeFiles.SkippedDirectories.Order(comparer: StringComparer.OrdinalIgnoreCase))},
+            so the collected tree lines up path for path with another host's checkout.
             DXIL is not collected: only a Windows build compiles it, so no other host compares it.
             CI collects the Windows build's SPIR-V into an artifact this way. Exit 0 copied, 2 the
             checkout holds no SPIR-V or the directory cannot be written.
@@ -267,10 +267,10 @@ public static class CompareCommand {
         var build = new Option<bool>("--build") { Description = "First compile the checkout's shaders through each shader project's CompileShaders target, into an empty shader cache." };
         var cache = new Option<string?>("--cache") { Description = "With --build, compile into this absent or empty directory and keep it, rather than a temporary cache removed afterwards." };
         var command = new Command(
-            description: """
+            description: $"""
             Compare every compiled SPIR-V module with another tree's byte for byte.
 
-            Walks both trees for .spv files, skipping artifacts, bin, obj, .git, .tmp and node_modules,
+            Walks both trees for .spv files, skipping {string.Join(separator: ", ", values: CliTreeFiles.SkippedDirectories.Order(comparer: StringComparer.OrdinalIgnoreCase))},
             and matches them by relative path: a module in one tree only, or one whose bytes differ,
             fails by name with its first differing byte. DXIL is no part of it: Direct3D 12 alone
             reads DXIL, so only a Windows build compiles it, and a .dxil file in either tree is ignored.

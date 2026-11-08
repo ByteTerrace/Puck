@@ -674,9 +674,10 @@ missing shader tool, or a source edited while it was read is a refusal: exit 2,
 reported as `puck shaders <verb>: <path>: <why>`.
 
 `compare` holds every compiled SPIR-V module (`.spv`) in one tree to the same
-file in another, byte for byte. Both trees are walked for SPIR-V, skipping
-`artifacts`, `bin`, `obj`, `.git`, `.tmp` and `node_modules`, and matched by
-relative path; a module only one tree holds, or one whose bytes differ (named
+file in another, byte for byte. Both trees are walked for SPIR-V, omitting
+generated, vendored and published output directories; `puck shaders compare --help`
+lists the shared pruning set. Files are matched by relative path; a module only
+one tree holds, or one whose bytes differ (named
 with its first differing byte), fails with exit 1, and a tree holding no SPIR-V
 is refused with exit 2. DXIL is no part of the comparison, and a `.dxil` file in
 either tree is ignored: Direct3D 12 is its one reader, so the shader build
