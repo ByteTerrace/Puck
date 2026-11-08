@@ -384,6 +384,12 @@ public sealed partial class WorldBody {
         public ContactResolution Sweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
             SweepContact(entityIndex: m_entityIndex, field: m_field, orientation: in m_orientation, position: ref position,
                 previousPosition: in previousPosition, up: in m_axis, velocity: ref velocity, volumes: m_volumes);
+        public ContactResolution SweepSupport(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
+            ((m_field is IEntityContactField entityField)
+                ? entityField.ResolveEntitySupportSweep(entityIndex: m_entityIndex, orientation: in m_orientation,
+                    position: ref position, previousPosition: in previousPosition, up: in m_axis,
+                    velocity: ref velocity, volumes: m_volumes)
+                : Sweep(previousPosition: in previousPosition, position: ref position, velocity: ref velocity));
     }
     // The one dispatch every sweep that moves a body goes through: an entity-aware field learns which local body it
     // moves, so what a neighbour answers is admitted against that body (WorldPopulation.AdmitAdjacencyResponse). A probe

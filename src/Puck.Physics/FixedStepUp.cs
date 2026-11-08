@@ -14,6 +14,14 @@ public interface IFixedContactStep {
     /// removed.</param>
     /// <returns>The move's resolution.</returns>
     ContactResolution Sweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity);
+    /// <summary>Resolves a support-driven landing. Fields composing untrusted support can admit the descent as
+    /// part of the response rather than treating it as the body's own integrated motion.</summary>
+    /// <param name="previousPosition">The position before the descent.</param>
+    /// <param name="position">The proposed landing, then its admitted position.</param>
+    /// <param name="velocity">The incoming velocity, then its admitted response.</param>
+    /// <returns>The admitted landing's contact verdict.</returns>
+    ContactResolution SweepSupport(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
+        Sweep(previousPosition: in previousPosition, position: ref position, velocity: ref velocity);
     /// <summary>Finds how far the body descends along its up axis from <paramref name="start"/> before anything the
     /// sweep resolves against first comes within the contact skin, as <see cref="IContactField.TrySupportDistance"/>
     /// does.</summary>
@@ -74,7 +82,7 @@ public static class FixedStepUp {
         }
         var landed = (start - (up * (descent + LandingDepth)));
         var moved = velocity;
-        var landing = step.Sweep(position: ref landed, previousPosition: in start, velocity: ref moved);
+        var landing = step.SweepSupport(position: ref landed, previousPosition: in start, velocity: ref moved);
 
         if ((landing.Refusal != ContactRefusal.None) || !landing.Uncertainty.IsWithin(earlier: uncertain) || !landing.Grounded) {
             return false;

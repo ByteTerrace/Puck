@@ -169,6 +169,113 @@ public sealed class WorldAdjacencyCorrectionLawTests {
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RepeatedNeighbourResponsesCannotCancelWalkingAway(bool refuses) {
+        using var control = Fixtures.FreshServer(definition: Document());
+        using var attacked = Fixtures.FreshServer(definition: Document());
+        var free = Seat(control, z: -0.1f);
+        var body = Seat(attacked, z: -0.1f);
+        var field = new RefusingField();
+        IWorldAdjacencyNeighbour neighbour = refuses ? new ReportedField(field)
+            : new ReportedBodies(1, 0.5f, Remote(localResponds: true));
+        attacked.Server.Adjacencies = new Reports(body, neighbour, 100f, 0f, axis: -FixedVector3.UnitZ);
+        for (var tick = 0; tick < 64; tick++) {
+            var intent = default(PlayerIntent).WithChannel(ordinal: 0, value: FixedQ4816.One);
+            free.SubmitIntent(intent);
+            body.SubmitIntent(intent);
+            control.Step();
+            attacked.Step();
+            Assert.Equal(free.FixedPosition, body.FixedPosition);
+        }
+        Assert.True(body.FixedPosition.Z < FixedQ4816.FromDouble(-1));
+        if (refuses) { Assert.True(field.Refusals > 0); }
+    }
+
+    [Theory]
+    [InlineData(0.05f, false, false)]
+    [InlineData(1f, true, false)]
+    [InlineData(1f, false, true)]
+    public void NeighbourSupportLandingPassesTheDoor(float depth, bool honest, bool floorFace) {
+        var document = Document();
+        if (floorFace) {
+            var adjacency = document.Adjacencies![0];
+            var boundary = adjacency.Boundary with { OutwardPitchDegrees = -90f };
+            document = document with { Adjacencies = [adjacency with { Boundary = boundary }] };
+            var threshold = WorldAdjacencyPolicy.OwnershipFaces(document).Single().Threshold;
+            document = document with { Adjacencies = [adjacency with {
+                Boundary = boundary with { Center = new Vector3(0f, (float)(double)threshold - 0.1f, 0f) },
+            }] };
+        }
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var body = Seat(fixture, z: 0.01f);
+        var floor = new DescendingFloor();
+        fixture.Server.Adjacencies = new Reports(body, new ReportedField(floor), depth, 0f, axis: FixedVector3.UnitX);
+        fixture.Step();
+        Assert.True(body.Grounded);
+        var start = body.FixedPosition;
+        Assert.True(Face(fixture).Owns(start));
+        floor.Height = FixedQ4816.FromDouble(-0.2);
+        fixture.Step();
+        var descent = start.Y - body.FixedPosition.Y;
+        Assert.True(descent <= FixedQ4816.FromDouble(depth), $"support moved {descent} through budget {depth}");
+        Assert.True(Face(fixture).Owns(body.FixedPosition), "support crossed the ownership face");
+        if (honest) {
+            Assert.True(descent > FixedQ4816.FromDouble(0.19), $"honest snap did not land: {descent}");
+            Assert.True(body.Grounded);
+        }
+    }
+
+    private sealed class RefusingField : IContactField {
+        public int Refusals { get; private set; }
+        public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity,
+            in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) => default;
+        public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
+            in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
+            Refusals++;
+            position = previousPosition;
+            return new ContactResolution(false, FixedVector3.Zero, Refusal: ContactRefusal.UnrepresentableSweep);
+        }
+        public bool TrySupportDistance(in FixedVector3 position, in FixedQuaternion orientation,
+            ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) {
+            descent = default;
+            return false;
+        }
+        public bool TryUp(in FixedVector3 position, out FixedVector3 up) { up = FixedVector3.UnitY; return true; }
+    }
+
+    private sealed class DescendingFloor : IContactField {
+        public FixedQ4816 Height { get; set; }
+        public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity,
+            in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
+            if (position.Y > Height) { return default; }
+            position = position with { Y = Height };
+            velocity = velocity with { Y = FixedQ4816.Zero };
+            return new ContactResolution(true, FixedVector3.Zero, GroundNormal: FixedVector3.UnitY);
+        }
+        public bool TrySupportDistance(in FixedVector3 position, in FixedQuaternion orientation,
+            ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) {
+            descent = FixedQ4816.Max(FixedQ4816.Zero, position.Y - Height);
+            return descent <= reach;
+        }
+        public bool TryUp(in FixedVector3 position, out FixedVector3 up) { up = FixedVector3.UnitY; return true; }
+    }
+
+    private sealed class ReportedField(IContactField field) : Reported {
+        public override string Authority => Remote(localResponds: true);
+        public override WorldDefinition Definition => Document();
+        public override int EntityCapacity => 0;
+        public override WorldEntityAddress EntityAddress(int index) => default;
+        public override Vector3 CurrentPosition(int index) => default;
+        public override FixedWorldCollider? Collider(int index) => null;
+        public override bool TryGetSolidField(out IContactField? result, out string reason) {
+            result = field;
+            reason = string.Empty;
+            return true;
+        }
+    }
+
     // A .puck document cannot forge the neighbour's delivered poses. This source freezes an intentionally faulty
     // image at the real tick ingress, then drives the production population/contact wrapper without internal access.
     private sealed class Reports : IWorldAdjacencySource {
@@ -226,7 +333,7 @@ public sealed class WorldAdjacencyCorrectionLawTests {
         public byte CatalogRig(int index) => 0;
         public abstract FixedWorldCollider? Collider(int index);
         public WorldBodyContactMode BodyContact(int index) => WorldBodyContactMode.Solid;
-        public abstract bool TryGetSolidField(out WorldSolidField? field, out string reason);
+        public abstract bool TryGetSolidField(out IContactField? field, out string reason);
     }
 
     private sealed class ReportedBodies : Reported {
@@ -249,7 +356,7 @@ public sealed class WorldAdjacencyCorrectionLawTests {
         public override WorldEntityAddress EntityAddress(int index) => new(Authority, m_generation, index);
         public override Vector3 CurrentPosition(int index) => Positions[index];
         public override FixedWorldCollider? Collider(int index) => m_collider;
-        public override bool TryGetSolidField(out WorldSolidField? field, out string reason) {
+        public override bool TryGetSolidField(out IContactField? field, out string reason) {
             field = null;
             reason = "bodies only";
             return false;
@@ -284,7 +391,7 @@ public sealed class WorldAdjacencyCorrectionLawTests {
             };
             Assert.True(WorldSolidField.TryBuild(built: out m_field, definition: m_definition, reason: out var reason), reason);
         }
-        public override bool TryGetSolidField(out WorldSolidField? field, out string reason) {
+        public override bool TryGetSolidField(out IContactField? field, out string reason) {
             field = m_field;
             reason = string.Empty;
             return (field is not null);

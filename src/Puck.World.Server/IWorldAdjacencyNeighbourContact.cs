@@ -1,7 +1,9 @@
+using Puck.Physics;
+
 namespace Puck.World.Server;
 
 /// <summary>The Server-only narrowing of <see cref="IWorldAdjacencyNeighbour"/> that adds the compiled solid
-/// contact field — <see cref="WorldSolidField"/> is not nameable from <c>Puck.World.Protocol</c>, so a contact
+/// contact field — <see cref="IContactField"/> is not nameable from <c>Puck.World.Protocol</c>, so a contact
 /// resolver pattern-matches to this interface rather than the seam carrying it for every consumer.</summary>
 public interface IWorldAdjacencyNeighbourContact : IWorldAdjacencyNeighbour {
     /// <summary>Attempts to resolve a solid contact field compiled over <see cref="IWorldAdjacencyNeighbour.Definition"/> —
@@ -11,5 +13,5 @@ public interface IWorldAdjacencyNeighbourContact : IWorldAdjacencyNeighbour {
     /// <param name="reason">The named compile failure (an op the warp-free evaluator cannot interpret), when this
     /// returns <see langword="false"/>.</param>
     /// <returns><see langword="true"/> when the field is available.</returns>
-    bool TryGetSolidField(out WorldSolidField? field, out string reason);
+    bool TryGetSolidField(out IContactField? field, out string reason);
 }

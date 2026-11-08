@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics;
 using Puck.World.Client;
 using Puck.World.Server;
 
@@ -675,7 +676,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         /// <inheritdoc/>
         /// <remarks>The verdict is about the field this call hands out, never about a different one: a caller that
         /// trusts a true answer must receive a field, and a caller told false must be told which image refused.</remarks>
-        public bool TryGetSolidField(out WorldSolidField? field, out string reason) {
+        public bool TryGetSolidField(out IContactField? field, out string reason) {
             field = (m_hasPin
                 ? m_pinnedField
                 : m_field

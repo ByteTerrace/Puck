@@ -41,6 +41,7 @@ public sealed partial class WorldPopulation {
     // - For every ownership face the body is still owned behind (WorldOwnershipFace.Owns, the test the crossing sweep
     //   applies to a step's end), the admitted end is owned behind it too, and the body's outward speed through it does
     //   not grow. A crossing the sweep reports therefore comes from the body's own motion, never from a neighbour's push.
+    //   While its incoming velocity retreats from a face, no outward correction or reduction of that retreat is admitted.
     // A body index with no local body admits nothing. No budget is refunded on a failed retry.
     internal void AdmitAdjacencyResponse(int entityIndex, FixedQ4816 overlapDepth, ref FixedVector3 position, ref FixedVector3 velocity,
         FixedVector3 displacement, FixedVector3 proposedVelocity) {
@@ -55,15 +56,17 @@ public sealed partial class WorldPopulation {
         foreach (var face in faces) {
             if (!face.Owns(point: start)) { continue; }
             var normal = face.Frame.Normal;
+            var outwardSpeed = FixedVector3.Dot(left: velocity, right: normal);
 
             admitted = Below(
                 normal: normal,
-                room: FixedQ4816.Max(x: FixedQ4816.Zero, y: ((face.Threshold - face.Outward(point: start)) - OwnershipGuard)),
+                room: ((outwardSpeed < FixedQ4816.Zero) ? FixedQ4816.Zero
+                    : FixedQ4816.Max(x: FixedQ4816.Zero, y: ((face.Threshold - face.Outward(point: start)) - OwnershipGuard))),
                 value: admitted
             );
             admittedVelocity = Below(
                 normal: normal,
-                room: FixedQ4816.Max(x: FixedQ4816.Zero, y: FixedVector3.Dot(left: velocity, right: normal)),
+                room: outwardSpeed,
                 value: admittedVelocity
             );
         }
@@ -89,8 +92,7 @@ public sealed partial class WorldPopulation {
         position = (start + admitted);
         velocity = admittedVelocity;
     }
-    // Removes the part of value's component along a unit normal that exceeds a non-negative room. The result is no
-    // longer than value, and its component along the normal is room, to rounding.
+    // Removes the part of value's component along a unit normal that exceeds room.
     private static FixedVector3 Below(FixedVector3 normal, FixedQ4816 room, FixedVector3 value) {
         var along = FixedVector3.Dot(left: value, right: normal);
 
