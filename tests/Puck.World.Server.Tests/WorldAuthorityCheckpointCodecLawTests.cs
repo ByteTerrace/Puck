@@ -14,7 +14,7 @@ namespace Puck.World.Server.Tests;
 /// <summary>Round-trip and refusal laws for <see cref="WorldAuthorityCheckpointCodec"/>, then the hermetic wiring
 /// through <see cref="WorldAuthorityBlobStore"/> over <see cref="FakeObjectBlobStore"/>.</summary>
 public sealed partial class WorldAuthorityCheckpointCodecLawTests {
-    private static readonly ObjectStorageTarget Target = new DirectoryObjectStorageTarget(rootPath: "fake-store");
+    private static readonly ObjectStorageTarget Target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: "fake-store");
     // Capturing boots a server and steps it; the checkpoint is an immutable record, so one capture serves every law.
     private static readonly Lazy<WorldAuthorityCheckpoint> Captured = new(valueFactory: static () => Capture());
 
