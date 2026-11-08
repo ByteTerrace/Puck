@@ -2,6 +2,9 @@ using System.CommandLine;
 using System.Text.Json.Nodes;
 using Puck.World;
 using Puck.World.Transpiler.Composition;
+using Puck.SdfVm;
+using Puck.Shaders;
+using Puck.SignedDistance;
 
 namespace Puck.Cli.Automation;
 
@@ -38,6 +41,7 @@ public static class WorldPrepareCommand {
         var visited = new HashSet<string>(comparer: StringComparer.Ordinal);
         var names = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
         var needs = new PlayerDerivedProducts.Needs();
+        var shadeSets = new List<SdfShadeProgram[]>();
 
         pending.Enqueue(item: Path.Combine(
             path1: root,
@@ -127,6 +131,11 @@ public static class WorldPrepareCommand {
                 throw new InvalidDataException(message: $"Cannot validate {relative}: {reason}");
             }
             needs.Note(definition: definition!, documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: path));
+            var shades = definition!.Creations.SelectMany(p => p.Document.Palette ?? [])
+                .Concat(definition.FieldRegions.SelectMany(r => r.Fields).Where(f => f.Material is not null).Select(f => f.Material!))
+                .Select(m => m.Shade).Append(definition.Render.Shade).Where(s => s is not null)
+                .Select(s => SdfShadeProgram.Compile(s!)).DistinctBy(s => s.Identity).ToArray();
+            shadeSets.Add(shades);
             File.WriteAllBytes(
                 Path.Combine(
                     path1: output,
@@ -136,8 +145,25 @@ public static class WorldPrepareCommand {
             );
         }
         PlayerDerivedProducts.Prepare(output: output, agbBios: needs.AgbBios, guests: [.. needs.Guests]);
+        PrepareShading(shadeSets, output);
         Console.WriteLine(value: $"Prepared {visited.Count} hosted world definitions, with {primaryName} as the primary world.");
         return 0;
+    }
+
+    private static void PrepareShading(IReadOnlyList<SdfShadeProgram[]> sets, string output) {
+        var compiler = new ShaderCompiler(ShaderCompiler.DefaultCacheDirectory);
+        foreach (var target in new[] { ShaderTarget.Dxil, ShaderTarget.Spirv }) {
+            var kernels = SdfKernelSet.Load(target == ShaderTarget.Dxil ? ".dxil" : ".spv");
+            var requests = sets.Select(s => new SdfShadeKernels(s, kernels))
+                .Concat(sets.SelectMany(s => s).Select(s => new SdfShadeKernels([s], kernels, fallback: false)))
+                .Append(new SdfShadeKernels([], kernels, fallback: false)).DistinctBy(r => r.Identity);
+            foreach (var request in requests) {
+                _ = request.CompileAsync(compiler, target, SdfKernelSet.DeployedTree).GetAwaiter().GetResult();
+                foreach (var (_, plan) in request.Plan(compiler, target, SdfKernelSet.DeployedTree)) {
+                    compiler.ExportPrepared(plan, Path.Combine(output, "derived"));
+                }
+            }
+        }
     }
 
     public static Command Create() {

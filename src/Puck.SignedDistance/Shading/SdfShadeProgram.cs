@@ -51,6 +51,11 @@ public sealed partial class SdfShadeProgram {
         }
         m_identityBytes = hash.GetHashAndReset();
         Identity = Convert.ToHexStringLower(inArray: m_identityBytes);
+        // The two identity vectors are zero while hashing, then carry the complete identity for GPU dispatch.
+        // Only this admission door can write them; they never include runtime parameter values.
+        for (var i = 0; i < 8; i++) {
+            m_words[16 + i] = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(m_identityBytes.AsSpan(i * 4, 4));
+        }
     }
 
     /// <summary>Gets the author name for cost attribution, excluded from identity.</summary>

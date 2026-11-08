@@ -680,6 +680,17 @@ identity, kernel and bin; an `octaves` edit changes all three.
 
 ### 3.4 The two tiers, generated from one table
 
+**Step 3 implementation invariants.** Publication happens in the residency's
+once-per-frame preparation, before any recorder reads its shading selection.
+A recording retains the selected pipeline through `SdfShadeSlots`; its lease
+is released only by that slot's completion proof, abandonment before submission,
+or device teardown. Replacing the residency's selection cannot free a pipeline
+already captured by a recorder. Background results carry the exact requested
+program set and interpreter content identity; only the current request may
+publish. Compilation, reflection and driver pipeline creation stay off the
+frame thread. Publication changes neither scene revisions nor render history.
+These are implementation obligations, not yet GPU evidence.
+
 **Tier 1, the interpreter.** The views kernel gains one rolled `[loop]` over
 the program's ops with a `switch` over the op table, one per phase, running in
 the slots where the layers, the light response and the composition run today,

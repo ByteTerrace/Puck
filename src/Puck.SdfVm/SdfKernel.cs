@@ -28,6 +28,8 @@ public enum SdfKernel {
     Surface,
     /// <summary>Shading the visibility records into the lit image, with no field query.</summary>
     Views,
+    /// <summary>The views kernel with authored interpretation absent, for frames with no active program.</summary>
+    ViewsPlain,
     /// <summary>The sky's field runs, evaluated where the lit image's coverage is below one.</summary>
     Sky,
     /// <summary>The composite: the sky's runs, the lit image over them by its coverage, the fog and the bounded media.</summary>
@@ -35,6 +37,8 @@ public enum SdfKernel {
     /// <summary>The glass shading pass: the lit image written again with each glass pixel shaded over the opaque image
     /// behind it, run between views and the sky only by a view of a program that holds glass.</summary>
     Glass,
+    /// <summary>The glass kernel with authored interpretation absent, for frames with no active program.</summary>
+    GlassPlain,
     /// <summary>The sky's environment map, the gradient in every texel's direction, dispatched by the residency's
     /// <c>sdf.environment</c> graph producer when lighting-visible irradiance crosses one display code.</summary>
     SkyEnvironment,

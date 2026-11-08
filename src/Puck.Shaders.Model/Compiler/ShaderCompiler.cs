@@ -106,13 +106,14 @@ public sealed partial class ShaderCompiler {
     /// <param name="stage">The stage source.</param>
     /// <param name="target">The output's target.</param>
     /// <param name="tier">The quality tier, or <see langword="null"/> for the variant no tier names.</param>
+    /// <param name="generated">Generated includes indexed by full path, replacing only those inputs in the closure.</param>
     /// <returns>The plan.</returns>
     /// <exception cref="ShaderClosureRefusedException">The closure is refused; the code names why.</exception>
-    public ShaderOutputPlan Plan(ShaderStageSource stage, ShaderTarget target, QualityTier? tier = null) {
+    public ShaderOutputPlan Plan(ShaderStageSource stage, ShaderTarget target, QualityTier? tier = null, IReadOnlyDictionary<string, string>? generated = null) {
         ArgumentNullException.ThrowIfNull(argument: stage);
 
         var work = Prepare(
-            generated: null,
+            generated: generated,
             readInclude: null,
             stage: stage,
             tier: tier
@@ -165,6 +166,10 @@ public sealed partial class ShaderCompiler {
             function: async () => {
                 Work.Count(kind: Requests);
                 var started = Stopwatch.GetTimestamp();
+                if (ReadPrepared(plan) is { } prepared) {
+                    Work.Count(kind: CacheHits);
+                    return new ShaderOutputResult(prepared, [], false, Stopwatch.GetElapsedTime(started));
+                }
                 var outcome = await CompileStageAsync(
                     cancellationToken: cancellationToken,
                     plannedKeys: [plan.Key],

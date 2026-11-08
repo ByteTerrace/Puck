@@ -687,6 +687,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             SdfWorldPackage.Parts.Surface => SdfKernel.Surface,
             _ => SdfKernel.Views,
         });
+        if (m_part == SdfWorldPackage.Parts.Views) {
+            m_shadePlan = SdfShadeDispatch.For(m_shadePlan, m_view.Residency.Frame!, recording.Width, recording.Height,
+                tables.PassValues.ScreenCount, glass: false);
+            pipeline = m_shade.RecordPipeline(slot, m_view.Residency, m_shadePlan, SdfKernel.Views);
+        }
 
         BindPorts(
             recording: in recording,
@@ -730,10 +735,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         };
 
         if (m_part == SdfWorldPackage.Parts.Views) {
-            m_shadePlan = SdfShadeDispatch.For(m_shadePlan, m_view.Residency.Frame!, recording.Width, recording.Height,
-                tables.PassValues.ScreenCount, glass: false);
-            m_shadePlan.Record(in recording, pipeline);
-            m_shade.Recorded(slot: slot, residency: m_view.Residency, plan: m_shadePlan);
+            m_shadePlan!.Record(in recording, pipeline);
             return;
         }
         recorder.Dispatch(

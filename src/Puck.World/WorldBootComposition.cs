@@ -1270,6 +1270,7 @@ public static class WorldBootComposition {
             pipelines: sp.GetRequiredService<GpuPassPipelineCache>()
         ));
         services.TryAddSingleton(implementationFactory: static sp => new SdfWorldPipelineCatalog(
+            compiler: sp.GetRequiredService<ShaderCompiler>(),
             meshRaster: sp.GetRequiredService<SdfMeshRasterPass>(),
             regionCopy: sp.GetRequiredService<GpuRegionCopyPass>()
         ));
@@ -1286,7 +1287,7 @@ public static class WorldBootComposition {
     /// <param name="services">The service collection a presentation shape composes.</param>
     private static void AddWorldShaderWork(IServiceCollection services) {
         services.TryAddSingleton(implementationFactory: static sp => new ShaderCompiler(
-            cacheDirectory: sp.GetRequiredService<WorldStateRoot>().PathOf(name: "pipelines"),
+            cacheDirectory: ShaderCompiler.DefaultCacheDirectory,
             toolchainDirectory: sp.GetRequiredService<WorldDefinition>().Views.ShaderToolchain
         ));
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<ShaderCompiler>().Work);

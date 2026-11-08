@@ -15,13 +15,21 @@ namespace Puck.World;
 /// <param name="compiler">The World's shader compiler, whose toolchain a carried kernel source compiles with.</param>
 internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProbe, ShaderCompiler compiler) : ICommandModule {
     private static readonly CommandForms WorldShadersReloadForms = CommandForms.Of(verb: "world.shaders.reload", "[tree]");
-    private readonly Lazy<ShaderCompiler> m_kernelCompiler = new(valueFactory: () => new ShaderCompiler(
-        cacheDirectory: ShaderCompiler.DefaultCacheDirectory,
-        toolchain: compiler.Toolchain
-    ));
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.shaders.tier",
+            description: "Selects automatic specialization or the interpreter for tier equivalence checks: [automatic|interpreted]. Compilation continues in either mode.",
+            handler: (_, args) => {
+                if (renderProbe.Residency is not { } node) { return new CommandResult(Output: "[world.shaders.tier: renderer not ready]"); }
+                if (args.Count > 1 || (args.Count == 1 && args[0] is not ("automatic" or "interpreted"))) {
+                    return CommandResult.Error(output: "[world.shaders.tier: automatic|interpreted]");
+                }
+                if (args.Count == 1) { node.InterpretShade = args[0] == "interpreted"; }
+                return new CommandResult(Output: $"[world.shaders.tier: {(node.InterpretShade ? "interpreted" : "automatic")}]");
+            });
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.shaders.reload",
@@ -32,7 +40,7 @@ internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProb
                     return CommandResult.Error(output: "[world.shaders.reload: renderer not ready]");
                 }
                 try {
-                    if (!node.RequestShaderReload(compiler: m_kernelCompiler.Value, tree: ((args.Count == 0)
+                    if (!node.RequestShaderReload(compiler: compiler, tree: ((args.Count == 0)
                         ? null
                         : args.Tail(start: 0)))) {
                         return CommandResult.Error(output: "[world.shaders.reload: another request is pending — world.shaders.status]");
@@ -67,10 +75,12 @@ internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProb
                 if (renderProbe.Residency is not { } node) {
                     return new CommandResult(Output: "[world.shaders.status: renderer not ready]");
                 }
-                return Describe(
+                var reload = Describe(
                     status: node.ShaderReloadStatus,
                     verb: "world.shaders.status"
                 );
+                return reload with { Output = reload.Output + "\n" + string.Join("\n", node.ShadeStatus.Select(p =>
+                    $"[world.shaders.program: identity={p.Identity} name={p.Name} state={p.State}{(p.Error is null ? string.Empty : $" error={p.Error}")} ]")) };
             }
         );
     }

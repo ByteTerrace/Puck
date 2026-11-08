@@ -172,15 +172,9 @@ public sealed class SdfKernelTreeLoad : IDisposable {
 
         // Shortest first: the kernels a compile delivers quickly install while the heavy ones still run. A plan with no
         // recorded duration (a kernel this cache has never compiled) goes last, as the slowest.
-        using var turns = new SemaphoreSlim(
-            initialCount: Environment.ProcessorCount,
-            maxCount: Environment.ProcessorCount
-        );
         var compiles = plans.OrderBy(keySelector: static plan => (plan.Plan.RecordedDuration ?? TimeSpan.MaxValue)).Select(selector: async plan => {
-            await turns.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-
-            try {
-                var result = await compiler.CompileOutputAsync(
+                var result = await ShaderCompileTurns.CompileAsync(
+                    compiler: compiler,
                     cancellationToken: cancellationToken,
                     plan: plan.Plan
                 ).ConfigureAwait(continueOnCapturedContext: false);
@@ -200,9 +194,6 @@ public sealed class SdfKernelTreeLoad : IDisposable {
                     kind: SdfKernelSet.BytecodeBytes
                 );
                 m_ready.Enqueue(item: (plan.Kernel, result.Bytecode));
-            } finally {
-                turns.Release();
-            }
         }).ToArray();
 
         await Task.WhenAll(tasks: compiles).ConfigureAwait(continueOnCapturedContext: false);
