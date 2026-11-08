@@ -247,6 +247,14 @@ builds, tests and GPU legs off the machine while one runs
 owner's frame-time floor (landing bar step 4) is the one wall-clock reading that
 gates, and it is read in the integration lane's sweep on that quiet machine.
 
+A change that is not about performance still owes a cost check when it puts
+work on a per-tick or per-frame path (delivery, disclosure, snapshot, rule
+evaluation, a recorder): read the debug world's allocated bytes and the counts
+of the work it adds per tick, before and after, from a headless boot. Disclosure
+step 1 passed every correctness check and review while re-serializing the whole
+21.7 MB definition every tick, which took the debug world to about 6 FPS; one
+allocation reading per tick would have shown it.
+
 ## Run verbs from your own CLI copy
 
 Build `src/Puck.Cli` in Release in your worktree, copy

@@ -14,28 +14,31 @@ public static class WorldDiagnosticGeometry {
     /// <param name="epsilon">Arithmetic uncertainty in metres.</param>
     /// <returns>True only for opposing face interiors, never for an exposed edge or corner.</returns>
     public static bool SharedInteriorFace(FixedStaticCollider first, FixedStaticCollider second, Vector3 point, double epsilon) =>
-        PlanarFace(first, point, epsilon, out var a) && PlanarFace(second, point, epsilon, out var b) && (Vector3.Dot(a, b) < -0.99999f);
+        (PlanarFace(collider: first, epsilon: epsilon, normal: out var a, point: point) && PlanarFace(collider: second, epsilon: epsilon, normal: out var b, point: point) && (Vector3.Dot(vector1: a, vector2: b) < -0.99999f));
 
     private static bool PlanarFace(FixedStaticCollider collider, Vector3 point, double epsilon, out Vector3 normal) {
         normal = default;
         if (collider.Kind is not (FixedStaticColliderKind.AxisAlignedBox or FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.RoundedBox)) { return false; }
-        var rotated = collider.Kind is FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.RoundedBox;
-        var relative = FixedVector3.FromVector3(value: point) - collider.Center;
+        var rotated = (collider.Kind is FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.RoundedBox);
+        var relative = (FixedVector3.FromVector3(value: point) - collider.Center);
         var local = (rotated ? collider.Rotation.RotateInverse(vector: relative) : relative).ToVector3();
         var extent = collider.Extent.ToVector3();
         var radius = ((collider.Kind == FixedStaticColliderKind.RoundedBox) ? (float)collider.Radius : 0f);
-        for (var axis = 0; axis < 3; axis++) {
-            var next = (axis + 1) % 3;
-            var last = (axis + 2) % 3;
-            if ((Math.Abs(Math.Abs(local[axis]) - extent[axis] - radius) <= epsilon) &&
-                (Math.Abs(local[next]) < extent[next] - epsilon) && (Math.Abs(local[last]) < extent[last] - epsilon)) {
-                normal[axis] = Math.Sign(local[axis]);
+
+        for (var axis = 0; (axis < 3); axis++) {
+            var next = ((axis + 1) % 3);
+            var last = ((axis + 2) % 3);
+
+            if ((Math.Abs(value: ((Math.Abs(value: local[axis]) - extent[axis]) - radius)) <= epsilon) &&
+                (Math.Abs(value: local[next]) < (extent[next] - epsilon)) && (Math.Abs(value: local[last]) < (extent[last] - epsilon))) {
+                normal[axis] = Math.Sign(value: local[axis]);
                 if (rotated) { normal = collider.Rotation.Rotate(vector: FixedVector3.FromVector3(value: normal)).ToVector3(); }
                 return true;
             }
         }
         return false;
     }
+
     /// <summary>Whether a boundary witness opens onto free space that a contour sampled at <paramref name="resolution"/>
     /// draws: some ball of that radius, clear of every collider, touches the boundary within that radius of the
     /// witness. A witness without one lies in a seam or crevice the solids enclose, such as the groove left along an
@@ -47,11 +50,22 @@ public static class WorldDiagnosticGeometry {
     /// <param name="point">The boundary witness.</param>
     /// <param name="normal">The outward direction at the witness, tried beside the lattice directions.</param>
     /// <param name="resolution">The drawn surface's precision at the witness: its bake cell's half diagonal.</param>
+    /// <param name="token">Cancels a diagnostic between geometry queries.</param>
     /// <returns>True when a free ball of the resolution's radius reaches the witness.</returns>
-    public static bool OpensOnto(IEnumerable<FixedStaticCollider> colliders, Vector3 point, Vector3 normal, double resolution) {
-        var radius = (float)resolution;
-        var near = colliders.Where(predicate: c => ((c.Kind == FixedStaticColliderKind.HalfSpace) ||
-            ((Vector3.Distance(value1: c.Center.ToVector3(), value2: point) - Reach(collider: c)) <= (3 * radius)))).ToArray();
+    public static bool OpensOnto(IEnumerable<FixedStaticCollider> colliders, Vector3 point, Vector3 normal, double resolution, CancellationToken token = default) {
+        var radius = ((float)resolution);
+        var near = new List<FixedStaticCollider>();
+
+        foreach (var collider in colliders) {
+            token.ThrowIfCancellationRequested();
+            // The solver's padded world bounds, including unbounded fields, are the broadphase authority.
+            if (collider.WorldHalfExtent() is { } extent) {
+                var gap = (Vector3.Abs(value: (point - collider.Center.ToVector3())) - extent.ToVector3());
+
+                if (Math.Max(val1: gap.X, val2: Math.Max(val1: gap.Y, val2: gap.Z)) > (3 * radius)) { continue; }
+            }
+            near.Add(item: collider);
+        }
         var directions = new List<Vector3>(capacity: 27);
 
         if (normal.LengthSquared() > 0) { directions.Add(item: Vector3.Normalize(value: normal)); }
@@ -62,23 +76,52 @@ public static class WorldDiagnosticGeometry {
                 }
             }
         }
-        foreach (var direction in directions) {
-            foreach (var scale in Scales) {
-                var center = (point + (direction * (radius * scale)));
+        var centers = directions.SelectMany(selector: direction => Scales.Select(selector: scale => (point + (direction * (radius * scale))))).ToArray();
 
-                if (near.All(predicate: c => (SignedDistance(collider: c, point: center) >= (Exact(collider: c) ? (radius * (1 - 1e-3)) : 0)))) { return true; }
+        for (var index = (near.Count - 1); (index >= 0); index--) {
+            token.ThrowIfCancellationRequested();
+            var collider = near[index];
+
+            if ((collider.Kind != FixedStaticColliderKind.Field) || (collider.Field?.Bounds is not { } bounds)) { continue; }
+            // Enclose the actual quantized query points in the field's own frame. A certified sign for this one
+            // box answers every candidate centre; only an interval crossing zero needs point readings.
+            var local = centers.Select(selector: center => FixedFieldColliderContact.ToLocal(collider: in collider, world: FixedVector3.FromVector3(value: center))).ToArray();
+            var lower = local[0];
+            var upper = lower;
+
+            foreach (var value in local) {
+                lower = new(X: FixedQ4816.Min(x: lower.X, y: value.X), Y: FixedQ4816.Min(x: lower.Y, y: value.Y), Z: FixedQ4816.Min(x: lower.Z, y: value.Z));
+                upper = FixedVector3.Max(left: upper, right: value);
             }
+            if (!bounds.TryDistanceBounds(FixedPosition.FromLocal(local: lower), FixedPosition.FromLocal(local: upper), out var interval) || interval.IsUnbounded) { continue; }
+            interval = FixedInterval.RoundedProduct(interval, collider.Field.BoundScale);
+            if (interval.IsUnbounded) { continue; }
+            if (interval.Lower >= FixedQ4816.Zero) { near.RemoveAt(index: index); } else if (interval.Upper < FixedQ4816.Zero) { return false; }
+        }
+        foreach (var center in centers) {
+            var clear = true;
+
+            foreach (var collider in near) {
+                token.ThrowIfCancellationRequested();
+                if (SignedDistance(collider: collider, point: center) < (Exact(collider: collider) ? (radius * (1 - 1e-3)) : 0)) {
+                    clear = false;
+                    break;
+                }
+            }
+            if (clear) { return true; }
         }
         return false;
     }
+
     // A free ball's centre one, one and a half and two radii out: the last reaches a right-angled concave corner's
     // inscribed ball from a witness on its fillet.
     private static readonly float[] Scales = [1f, 1.5f, 2f];
 
     // Kinds whose SignedDistance is the exact Euclidean distance outside; a lower bound would close a void that is open.
-    private static bool Exact(FixedStaticCollider collider) => collider.Kind is FixedStaticColliderKind.AxisAlignedBox or
+    private static bool Exact(FixedStaticCollider collider) => (collider.Kind is FixedStaticColliderKind.AxisAlignedBox or
         FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.RoundedBox or FixedStaticColliderKind.Sphere or
-        FixedStaticColliderKind.Cylinder or FixedStaticColliderKind.HalfSpace;
+        FixedStaticColliderKind.Cylinder or FixedStaticColliderKind.HalfSpace);
+
     /// <summary>Returns a radius about the collider's centre that contains the whole solid, so a point farther from
     /// the centre than this is outside it and on none of its faces.</summary>
     /// <param name="collider">The compiled surface.</param>
@@ -87,12 +130,14 @@ public static class WorldDiagnosticGeometry {
     public static float? Bound(FixedStaticCollider collider) =>
         (((collider.Kind == FixedStaticColliderKind.HalfSpace) || ((collider.Kind == FixedStaticColliderKind.Field) && (collider.Field?.Bounded != true)))
             ? null : Reach(collider: collider));
+
     // A radius about the centre containing the collider.
     private static float Reach(FixedStaticCollider collider) => collider.Kind switch {
         FixedStaticColliderKind.Sphere => collider.Extent.ToVector3().X,
         FixedStaticColliderKind.Cylinder => new Vector2(x: collider.Extent.ToVector3().X, y: collider.Extent.ToVector3().Y).Length(),
-        _ => (collider.Extent.ToVector3().Length() + (float)collider.Radius),
+        _ => (collider.Extent.ToVector3().Length() + ((float)collider.Radius)),
     };
+
     /// <summary>Names a signed boundary contradiction only outside the check's explained uncertainty.</summary>
     /// <param name="separation">Positive in authored air, negative inside the authored solid.</param>
     /// <param name="budget">The check's precision components.</param>
@@ -114,7 +159,7 @@ public static class WorldDiagnosticGeometry {
         if (collider.Kind == FixedStaticColliderKind.Field) {
             // The field's own reading: exact in sign and a lower bound in magnitude, like a superellipsoid's, so a point
             // deep inside a field neighbour reads inside it; a point the field does not answer reads as far.
-            return (FixedFieldColliderContact.TryRead(collider: in collider, distance: out var read, material: out _, normal: out _, point: FixedVector3.FromVector3(value: point))
+            return (FixedFieldColliderContact.TryReadValue(collider: in collider, distance: out var read, material: out _, point: FixedVector3.FromVector3(value: point))
                 ? (double)read
                 : double.PositiveInfinity);
         }
@@ -155,8 +200,9 @@ public static class WorldDiagnosticGeometry {
     }
     /// <summary>Enumerates deterministic boundary witnesses of the compiled collider.</summary>
     /// <param name="collider">The compiled surface.</param>
+    /// <param name="token">Cancels a diagnostic between projected surface queries.</param>
     /// <returns>World-space samples; this is a sampled audit, not a surface proof.</returns>
-    public static IEnumerable<Vector3> SurfaceSamples(FixedStaticCollider collider) {
+    public static IEnumerable<Vector3> SurfaceSamples(FixedStaticCollider collider, CancellationToken token = default) {
         var extent = collider.Extent.ToVector3();
         var center = collider.Center.ToVector3();
 
@@ -169,6 +215,7 @@ public static class WorldDiagnosticGeometry {
             // surface solve reaches no surface from is no witness.
             foreach (var primitive in (collider.Field?.Bases ?? [])) {
                 foreach (var witness in SurfaceSamples(collider: primitive)) {
+                    token.ThrowIfCancellationRequested();
                     if (FixedFieldColliderContact.TryNearest(collider: in collider, normal: out _, point: out var projected, probe: FixedVector3.FromVector3(value: witness))) {
                         yield return projected.ToVector3();
                     }

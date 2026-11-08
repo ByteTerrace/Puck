@@ -126,7 +126,7 @@ public sealed class BoxPlacementColliderLawTests {
         // The probe measures the Euclidean distance to the drawn solid, which the collider's numerical budget bounds.
         var budget = WorldDiagnosticGeometry.Numerical(collider: collider);
 
-        foreach (var point in WorldDiagnosticGeometry.SurfaceSamples(collider: collider)) {
+        foreach (var point in WorldDiagnosticGeometry.SurfaceSamples(collider: collider, token: TestContext.Current.CancellationToken)) {
             Assert.True(condition: field!.Probe(FixedVector3.FromVector3(value: point), out var distance, out _, out _));
             Assert.InRange(actual: ((double)distance), high: budget, low: -budget);
         }
@@ -147,7 +147,7 @@ public sealed class BoxPlacementColliderLawTests {
         Assert.True(condition: WorldSolidField.TryBuild(definition, out var field, out var reason), userMessage: reason);
         var budget = WorldDiagnosticGeometry.Numerical(collider: collider);
 
-        foreach (var point in WorldDiagnosticGeometry.SurfaceSamples(collider: collider)) {
+        foreach (var point in WorldDiagnosticGeometry.SurfaceSamples(collider: collider, token: TestContext.Current.CancellationToken)) {
             Assert.True(condition: field!.Evaluator.TryDistance(FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point)), out var distance, out _));
             Assert.InRange(actual: ((double)distance), high: budget, low: -budget);
         }
@@ -171,7 +171,7 @@ public sealed class BoxPlacementColliderLawTests {
 
         Assert.InRange(row.ConservativeInset, (bound - 0.0001), (bound + 0.0001));
         Assert.True(condition: WorldSolidField.TryBuild(definition, out var field, out var reason), userMessage: reason);
-        foreach (var point in WorldDiagnosticGeometry.SurfaceSamples(collider: row.Collider)) {
+        foreach (var point in WorldDiagnosticGeometry.SurfaceSamples(collider: row.Collider, token: TestContext.Current.CancellationToken)) {
             Assert.True(condition: field!.Probe(FixedVector3.FromVector3(value: point), out var distance, out _, out _));
             var budget = new WorldDiagnosticBudget(0, 0, WorldDiagnosticGeometry.Numerical(collider: row.Collider)) { ConservativeInset = row.ConservativeInset };
 

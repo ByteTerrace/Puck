@@ -865,13 +865,20 @@ authored field. A witness's separation is the field's own reading there, scaled
 by the evaluator's certified step scale: exact in sign and never more than the
 distance to the authored surface, so a red finding is one the field proves. A
 witness inside another collider, a field collider included, is buried and not
-compared. The reads run on half the processors. A call that owes its caller an answer before
-they finish (a control attachment's deadline) answers an unfinished report
-instead: one unknown finding, `coverage.pending` naming the colliders still to
-read, nothing retained. The reads already taken are kept, and the next
-`report colliders` call resumes them and, once none remain, answers the report
-one uninterrupted call would have. A collider-set or field edit in between
-starts the reads over.
+compared. Reports evaluate captured authority inputs on workers; the overlay
+polls them and the console holds only its issuing session. Witness reads use
+at most half the processors. The existing text-session hold releases at
+`TextAnswerDeadline`, naming that deadline if analysis is unfinished; stdin
+uses a five-second fallback and prints pending followed by its final answer.
+The following console line can then run. An unfinished report has unknown
+coverage and is never retained as a completed audit. Completed witness reads
+are kept for the next request against the same collider set and authored field;
+edits invalidate those reads. Each view has at most one outstanding analysis.
+Mesh scenes stay under an acquired claim until the worker exits; findings are
+published on the host thread against the captured snapshot's tick and revision.
+The free-space check uses the solver's padded world bounds, then one certified
+field interval enclosing the candidate ball centres. Only an inconclusive
+interval needs scalar point reads; sign tests never evaluate gradient taps.
 
 `world.debug-view colliders` or `world.debug-view contacts` keeps the beauty
 image and adds at most sixteen causal pins, exterior marks and support calipers.
