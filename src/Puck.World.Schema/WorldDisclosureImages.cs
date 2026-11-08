@@ -56,6 +56,8 @@ public sealed class WorldDisclosureImages {
         public WorldDefinition Composed { get; } = composed;
         public WorldStateDisclosure.DisclosedFields? Fields { get; } = fields;
         public bool[] FrameRows { get; } = frameRows;
+        // The ordinals FrameRows marks, in row order: the only rows whose images can move the frame.
+        public int[] FrameRowOrdinals { get; } = [.. Enumerable.Range(0, frameRows.Length).Where(row => frameRows[row])];
         public WorldStateRow[] Rows { get; } = rows;
         public WorldRecipientImage[] Images { get; } = images;
         public ulong[] Versions { get; } = versions;
@@ -255,7 +257,21 @@ public sealed class WorldDisclosureImages {
     internal ContentPin DefinitionIdentity(WorldRecipientView view) => Current(view).Identity;
     // The content identity of the recipient's disclosed document less its state rows: placements and every other
     // section a row snapshot does not carry. A value-only delivery owes the document again exactly when it moved.
-    internal ContentPin FrameIdentity(WorldRecipientView view) => Current(view).Frame;
+    // Only the source, the audience and the images of the rows the placements read (FrameRows) move it, so only those
+    // rows are imaged here: every other changed row waits for the definition's own identity (Current), which a session
+    // sink's per-tick check never asks for.
+    internal ContentPin FrameIdentity(WorldRecipientView view) {
+        var audience = Audience(view);
+        if (!m_definitions.TryGetValue(audience, out var entry) || !ReferenceEquals(entry.Source, view.Source)) { return Compose(view, audience).Frame; }
+        var arena = view.Arena;
+        foreach (var row in entry.FrameRowOrdinals) {
+            // The entry's row record changes only in Current, which refreshes skeletons with it; here a row whose image
+            // stands is left to Current, and the image table answers its repeated reads from its own cache.
+            if ((arena.RowVersion(row) == entry.Versions[row]) && (DependencyVersions(arena, row) == entry.Dependencies[row])) { continue; }
+            if (!Image(view, row, audience).Digest.AsSpan().SequenceEqual(entry.Images[row].Digest)) { return Compose(view, audience).Frame; }
+        }
+        return entry.Frame;
+    }
     // The recipient's disclosed definition, assembled from its current rows only after its identity moved.
     internal WorldDefinition Definition(WorldRecipientView view) {
         var entry = Current(view);
