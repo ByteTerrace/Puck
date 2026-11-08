@@ -42,8 +42,7 @@ milestone. The owner requested its baseline and implementation plan, which
 0. [Duplication audit](#refactoring-campaign) [high, the owner's priority]: the
    seven-lane audit's drifted copies and boundary duplicates are fixed first
    (tooling's architecture, identity, release, lease, path, lock and deletion
-   copies; physics and world contact responses and the remote-response gate;
-   rendering's readback state machines), then its live copies as a batch, and
+   copies; rendering's readback state machines), then its live copies as a batch, and
    small helpers ride along. Each audit lane's remaining findings are filed in
    the refactoring packet as its fix lane lands. Duplicates are fixed when found
    (AGENTS.md); this item is the backlog the audit surfaced.
@@ -1876,6 +1875,19 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   version. The stake is about 7 % of a long recording (go-tests), the share of
   resting bodies; a version that also covers moving bodies' unchanged
   fields would not help, since a moving body's pose changes every tick.
+- [medium] Navigation enumerates its neighbour stencil four times:
+  `NavigationRuntime.Domain.Predecessors` (`src/Puck.Physics/Navigation/NavigationRuntime.Shared.cs`)
+  and three loops in `NavigationRuntime.cs` repeat axis counting, connectivity
+  and coordinate bounds. One `Domain` enumerator yielding offset, node and cost
+  serves them; reverse traversal keeps its own `predecessor -> settled` check.
+- [low] `CertifiedLowDiscrepancy.FromQuadraticIrrational` and
+  `QuadraticInflation.FromQuadraticIrrational` (`src/Puck.Maths/Research/`) each
+  grow continued-fraction scratch by catching `ContinuedFraction.Expand`'s
+  short-terms refusal and doubling. Give `ContinuedFraction` the storage-owning
+  expansion.
+- [low] `AzureScheduledEvents.ReadAsync` parses the instance-metadata body with
+  no byte budget, unlike every ARM read, which passes `AzureArmPipeline.ReadJsonAsync`.
+  Decide whether the link-local metadata endpoint needs the same bound.
 - [low] `IAllocator`'s documentation names a `NativeMemory`-backed implementation
   that `src` does not have (the test allocators are now one, `tests/Shared/HeapAllocator.cs`).
 - Duplicates the clone scan's type and expression passes found (the

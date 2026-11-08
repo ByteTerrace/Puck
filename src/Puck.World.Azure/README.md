@@ -16,7 +16,11 @@ provider still decides which methods, API versions, and JSON shapes it accepts.
 
 The implementation uses `ArmResource`'s authenticated SDK pipeline with raw
 JSON. The typed `GenericResource` CRUD surface cannot express arbitrary POST
-actions or preserve every provider-specific field. Authentication, credential
+actions or preserve every provider-specific field. The operation provider, the
+inventory and the metrics source share one `AzureArmPipeline`: the HTTPS ARM
+origin check, a default transport that never follows redirects, SDK logging and
+tracing off, unbuffered JSON requests, and the one reader that refuses a response
+body past its byte budget before it is parsed. Authentication, credential
 refresh, cloud selection, and HTTP transport remain Azure SDK responsibilities.
 See Microsoft's [generic resource API](https://learn.microsoft.com/en-us/dotnet/api/azure.resourcemanager.resources.genericresource)
 and [ARM resource pipeline](https://learn.microsoft.com/en-us/dotnet/api/azure.resourcemanager.armresource.pipeline).
