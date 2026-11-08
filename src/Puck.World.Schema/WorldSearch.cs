@@ -1552,6 +1552,8 @@ public static class WorldSearchCompilation {
             return false;
         }
 
+        var resolvedPlans = new ArenaSearchPlan[rows.Count];
+
         // Validate and compile each job before resolving its dependency rows. Upkeep is shared by every job,
         // whereas position keys are priced from the rows that particular job actually folds.
         for (var index = 0; (index < rows.Count); index++) {
@@ -1589,6 +1591,7 @@ public static class WorldSearchCompilation {
             plans[index] = plan!;
             scores[index] = compiledScore;
             if (!ArenaSearchPlan.TryResolve(plan!, definition.StateCatalog, out var resolved, out reason)) { return false; }
+            resolvedPlans[index] = resolved!;
             try {
                 RuleCompiler.RequireEnclosedAudience(
                     resolved.Dependencies(RuleDataflow.KeyRows(judges[index], compiledScore)), resolved.Outputs(),
@@ -1601,11 +1604,8 @@ public static class WorldSearchCompilation {
 
         var outputs = new HashSet<int>();
 
-        var resolvedPlans = new ArenaSearchPlan[plans.Length];
-        for (var index = 0; index < plans.Length; index++) {
-            if (!ArenaSearchPlan.TryResolve(plans[index], definition.StateCatalog, out var resolved, out reason)) { return false; }
-            resolvedPlans[index] = resolved!;
-            outputs.UnionWith(resolvedPlans[index].Outputs());
+        foreach (var resolved in resolvedPlans) {
+            outputs.UnionWith(resolved.Outputs());
         }
         var positions = new long[plans.Length];
         var upkeep = 0L;

@@ -213,10 +213,21 @@ scoring, checked before execution and before landing against live policy.
 The compiler wall against new authority-reading callers remains step 5.
 
 Authority diagnostics (`world.budget.rules`, `world.inspect`, `world.cost`,
-`world.contacts`, `world.collision.status`, `world.rigid`, `world.debug-view`
-and diagnostic finding picks) are operator reads. Their counts, work and
-revisions cannot be reconstructed from a recipient's view. Standard seat
-controls no longer bind the operator inspector and debug-view commands.
+`world.contacts`, `world.collision.status`, `world.rigid`, `world.explain`,
+`world.debug-view report` and `goto`, and diagnostic finding picks) are
+operator reads. Their counts, work and revisions cannot be reconstructed from
+a recipient's view. A `world.debug-view` mode stays bindable for anyone: it
+selects what the shared screen draws, the operator's own presentation, and a
+seat's `colliders` or `contacts` selection answers the mode without the
+report's summary (the debug world's `gallery.view` and `range.tiers` commands
+call it). Standard seat controls no longer bind the operator inspector or the
+debug view.
+The journal and the save snapshot are the authority's edit history and its
+whole document: `world.save` is an operator verb (it writes the authority
+document, withheld cells included, to a host path and answers its byte
+count), and a recipient's `world.status` omits `session-drift` and `dirty`,
+whose journal length moves with an operator's hidden-only edit.
+`Principal.IsAuthority` is the one spelling of "the operator or the world".
 
 **Puck builds:** `WorldRecipientView`, the one object every per-recipient
 answer is derived from: reads, write admission and refusal, placements and

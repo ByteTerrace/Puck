@@ -749,6 +749,11 @@ at its admission ceiling. Sessions reuse `WorldSessionObservation.View`, includi
 live Observe admission; a missing or ended session sees the undisclosed document.
 `WorldStateReadView` is the console adapter over this capability until the final
 cleanup in the disclosure plan. It never reads authority state separately.
+What a view cannot reconstruct is the operator's (`Principal.IsAuthority`): the
+authority diagnostics, `world.debug-view report` and `goto` (a mode stays
+bindable, since it only selects the shared screen's presentation),
+`world.save`, and `world.status`'s `session-drift` and `dirty`, which a
+recipient's status omits.
 Placements come from the view; restricted dealt slots are still step 4's work.
 `world.state`,
 `world.row`, `world.tabletop`, `world.hud.template` and `world.placements` read through it; `world.match`
