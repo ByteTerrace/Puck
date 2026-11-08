@@ -70,9 +70,6 @@ public static class PuckRootCommand {
     }
     // A bootstrap binary cannot start a consumer of the deliberately absent model table.
     public static RootCommand Create(TimeProvider clock, bool schemaBootstrap) {
-        // Every verb below the gate that starts a World or a heavy test host waits on the admission the gate itself uses.
-        WorldAdmission.Install(admit: HostAdmission.ForWorlds(clock: clock));
-
         Command[] verbs = (schemaBootstrap ? [SchemaCommand.Create(clock: clock)] : [
             AffectedCommand.Create(),
             AgentsCommand.Create(),

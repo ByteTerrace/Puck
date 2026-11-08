@@ -2172,10 +2172,9 @@ confirmed the AV1 item in the code; the rest are unconfirmed):
    GB/GBC checkpoint whose snapshot has `ExternalRamDirty == false` after an
    earlier flush leaves the un-rewound save on disk `[medium]`; HGB writes saves
    with `File.WriteAllBytes`, not `AtomicFile` `[low]`.
-2. `WorldCompileCache.ComputeCompilerIdentity` and `Trim`
-   (`Puck.World.Transpiler/Composition/WorldCompileCache.cs:186`, `494`) repeat
-   `AssemblyReach.Of` (`Puck.Assets/AssemblyReach.cs:18`),
-   and `CacheRetention.EnforceOnWrite`,
+2. `WorldCompileCache.Trim`
+   (`Puck.World.Transpiler/Composition/WorldCompileCache.cs`) repeats
+   `CacheRetention.EnforceOnWrite`,
    skipping its per-process write tally (it lists only once its own writes pass
    the bound, or a minute on) on every cache write (S) `[low]`.
 3. Camera plane validation and L8/BGRA packing:
@@ -4189,7 +4188,7 @@ failing case marked "argued" is read from source, not run.
 - [low] An old-protocol CLI that already holds a lease keeps it. The grant door
   refuses a lower protocol, and `puck lease` checks the recorded stamp
   (`LeaseCommand.cs:82`), but `HostAdmission.Wait`
-  (`src/Puck.Cli.Gate/Host/HostAdmission.cs:98`, `:163`) does not read
+  (`HostAdmission`, `src/Puck.Cli.Harness/Host/HostAdmission.cs`) does not read
   `CliLease.RecordedProtocol` (`src/Puck.Cli.Core/CliLease.cs:193`), so a copy
   speaking an older protocol still passes admission beside newer holders. Check
   it in `Wait`.
@@ -4236,8 +4235,8 @@ Launch and process lifecycles:
   shares one entry per (root, holder, lane) and nothing replaces an entry whose
   lease completed unsuccessfully. Replace it.
 - [low] Under a shared hold the requeue loop logs "released it" while the lease
-  stays held over an idle GPU (`WorldLaunch.cs:228-256`, `gpu.Dispose()` at
-  `:252`): `Share.Dispose` releases only when the last share goes. Have it
+  stays held over an idle GPU (`LeasedAdmission.AcquireAsync`):
+  `WorldGpuHold`'s share releases only when the last share goes. Have it
   report whether it released, and say so.
 - [low] `WorldReadiness.Observe` (`src/Puck.Cli.Core/WorldReadiness.cs:52-64`)
   sets its marked flag before the mark write, so a failed write is never
@@ -4246,11 +4245,6 @@ Launch and process lifecycles:
   `world.wait` forms (`src/Puck.World.Console/WorldWaitCommandModule.cs:253`),
   so admission over-reserves. Have the World print its own readiness line once
   ready, and set the flag after the write.
-- [low] `puck lease gpu --wait 3600` takes the lease and then waits for memory,
-  so the GPU idles under it (`LeaseCommand.cs:49-72`), while `WorldLaunch`
-  waits for headroom first, takes the lease, and judges again
-  (`WorldLaunch.cs:225-257`): two implementations of one admit, lease and
-  rejudge order. Share the one helper.
 - [low] The sweep's budget pause exists twice and canary has neither:
   `SweepBudget.Pause` (`src/Puck.Cli.Runs/Sweep/SweepBudget.cs:41-52`) and
   `WorldOffscreenLeg.Pause` (`src/Puck.Cli.Harness/WorldOffscreenLeg.cs:229-235`)
@@ -4288,10 +4282,6 @@ CLI maturity remainders (each a [low]):
   (`src/Puck.Cli.Runs/Counters/CountersCommand.cs`) and always builds the
   checkout's current sources, so a before/after counter comparison across
   builds cannot be made with it.
-- The standalone `Puck.Cli.Worlds` apphost never installs World admission
-  (`src/Puck.Cli.Worlds/Program.cs`; `puck` does at
-  `src/Puck.Cli/PuckRootCommand.cs:75`), so boots through it skip host
-  admission.
 - `puck compile --watch` watches `*.puck` under the source's own directory only
   (`src/Puck.Cli.Worlds/Transpiler/CompileCommand.cs:307-310`), though its help
   promises the imported dependencies.

@@ -70,20 +70,8 @@ public static class WorldCodeWarmer {
     /// <exception cref="ArgumentNullException"><paramref name="entry"/> is <see langword="null"/>.</exception>
     /// <exception cref="FileNotFoundException">A referenced <c>Puck</c> assembly is not deployed.</exception>
     public static IReadOnlyList<Assembly> PuckClosure(Assembly entry) {
-        ArgumentNullException.ThrowIfNull(argument: entry);
-
-        var found = new List<Assembly> { entry };
-        var seen = new HashSet<string>(comparer: StringComparer.Ordinal) { (entry.GetName().Name ?? string.Empty) };
-
-        for (var index = 0; (index < found.Count); index++) {
-            foreach (var reference in found[index].GetReferencedAssemblies()) {
-                if ((reference.Name is { } name) && name.StartsWith(value: "Puck", comparisonType: StringComparison.Ordinal) && seen.Add(item: name)) {
-                    found.Add(item: Assembly.Load(assemblyRef: reference));
-                }
-            }
-        }
-
-        return found;
+        var reached = Puck.Assets.AssemblyReach.Of(root: entry);
+        return [entry, .. reached.Values.Where(assembly => assembly != entry)];
     }
     /// <summary>Prepares every method and constructor with IL of its own that the non-generic types of the assemblies
     /// declare: an abstract, generic, runtime-implemented or platform-invoke one has none.</summary>

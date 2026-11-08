@@ -10,7 +10,13 @@ namespace Puck.Cli.Gate;
 /// and deleted paths, and what <c>puck affected</c> chooses for them.</summary>
 public sealed record GateChange(string Target, string MergeBase, IReadOnlyList<string> Changed, IReadOnlySet<string> Deleted, AffectedPlan Affected);
 /// <summary>One step's outcome: its exit code and everything it wrote, both streams together.</summary>
-public sealed record GateStepResult(int ExitCode, string Output);
+public sealed record GateStepResult(int ExitCode, string Output) {
+    /// <summary>Preserves both streams' observed order and annotates a captured process timeout.</summary>
+    public static GateStepResult Captured(CliProcessResult run, TimeSpan timeout) => new(
+        ExitCode: (run.TimedOut ? CliExit.Refused : run.ExitCode),
+        Output: (string.Join(separator: '\n', values: run.OutputLines.Select(selector: static line => line.Line)) + (run.TimedOut ? $"\n(timed out after {timeout})" : string.Empty))
+    );
+}
 /// <summary>Runs the gate's steps. <see cref="ProcessGateRunner"/> is the real one; the laws over <see cref="GateRun"/>
 /// substitute their own, so no law builds the solution or touches a GPU.</summary>
 public interface IGateRunner {
