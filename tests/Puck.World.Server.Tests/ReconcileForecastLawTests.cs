@@ -12,8 +12,9 @@ namespace Puck.World.Server.Tests;
 /// witness in <c>worlds/debug/rule-faults-tests.puck</c>.</remarks>
 public sealed class ReconcileForecastLawTests {
     private const string Prototype = "stand-in";
+    private const string CountRow = "count";
 
-    private static WorldPlacement Inhabited(string id, float x) => new(
+    private static WorldPlacement Inhabited(string id, float x, WorldPlacementInhabitCount? count = null) => new(
         Id: id,
         PrototypeId: Prototype,
         Position: new Puck.Assets.Documents.DocumentVector3(value: new Vector3(
@@ -27,7 +28,7 @@ public sealed class ReconcileForecastLawTests {
             Kit: Fixtures.SeatKitName,
             Look: null,
             Source: IntentSource.Idle,
-            Count: new WorldPlacementInhabitCount(Literal: 1),
+            Count: (count ?? new WorldPlacementInhabitCount(Literal: 1)),
             Distribution: new WorldDistribution(
                 Region: new WorldDistributionRegion.Disc(
                     Radius: 0.5f,
@@ -58,6 +59,38 @@ public sealed class ReconcileForecastLawTests {
                 CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 4),
                 ReconnectGraceSeconds = 0f,
             }),
+        });
+    }
+    // Three literal inhabitants over one whose count reads the Int cell `count` (seed `seed`). They take the four peer
+    // slots from the top down, so "low", the cell-driven one, holds the lowest.
+    private static WorldDefinition CountedDocument(int seed, params string[] removed) {
+        var document = Fixtures.BuildDocument();
+        WorldPlacement[] placements = [
+            Inhabited(id: "observer", x: 0f),
+            Inhabited(id: "temporary", x: 2f),
+            Inhabited(id: "middle", x: 4f),
+            Inhabited(id: "low", x: 6f, count: new WorldPlacementInhabitCount(Row: CountRow)),
+        ];
+
+        return (document with {
+            CreationsRaw = [CreationFixtures.UnitSphere(id: Prototype)],
+            PlacementRowsRaw = [.. placements.Where(predicate: placement => !removed.Contains(value: placement.Id))],
+            PopulationRaw = (document.Population with {
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 4),
+                ReconnectGraceSeconds = 0f,
+            }),
+            StateRaw = new WorldStateSection(World: [
+                new WorldStateRow(
+                    Name: CellName.Parse(candidate: CountRow),
+                    Kind: CellKind.Int,
+                    Min: 0,
+                    Max: 4,
+                    Cells: [new StateCell(
+                        Key: WorldStateRow.SlotKey,
+                        Value: CellValue.Int(value: seed)
+                    )]
+                ),
+            ]),
         });
     }
     private static void Remove(WorldFixture fixture, string id) {
@@ -137,8 +170,96 @@ public sealed class ReconcileForecastLawTests {
         );
     }
 
-    private static bool Forecast(WorldFixture fixture, WorldDefinition definition, bool structural, int body) => fixture.Server.Population.ReconcileKeeps(
+    [Fact]
+    public void ACensusBodyOneInstallAdmitsAndRetiresStaysRetired() {
+        using var fixture = Fixtures.FreshServer(definition: CountedDocument(seed: 1));
+        var population = fixture.Server.Population;
+        var seats = population.LocalSeatCount;
+        var low = seats;
+        var middle = (seats + 1);
+        var census = (seats + 2);
+        var observer = (seats + 3);
+
+        Assert.Equal(
+            expected: "low",
+            actual: population.InhabitantPlacementId(index: low)
+        );
+        Assert.Equal(
+            expected: "middle",
+            actual: population.InhabitantPlacementId(index: middle)
+        );
+        // Free the slot "temporary" held, then seat one census body in it.
+        Remove(fixture: fixture, id: "temporary");
+        Assert.Equal(
+            expected: 1,
+            actual: population.SetSimulatedCount(count: 1)
+        );
+        Assert.True(condition: population.IsActive(index: census) && (population.InhabitantPlacementId(index: census) is null));
+
+        var generations = new int[population.Capacity];
+
+        for (var index = 0; (index < population.Capacity); index++) {
+            generations[index] = population.Generation(index: index);
+        }
+
+        // One install that zeroes the count and removes "middle": the structural re-clamp moves the census body from
+        // its slot down into the one "middle" frees, and the count re-clamp moves it again, into the one "low" frees.
+        // The cell reads the proposed document's seed, as the install reads its arena.
+        var proposed = CountedDocument(seed: 0, removed: ["temporary", "middle"]);
+
+        Assert.True(condition: Forecast(fixture: fixture, definition: proposed, arena: null, structural: true, body: observer));
+        Assert.False(condition: Forecast(fixture: fixture, definition: proposed, arena: null, structural: true, body: low));
+        Assert.False(condition: Forecast(fixture: fixture, definition: proposed, arena: null, structural: true, body: middle));
+        Assert.False(condition: Forecast(fixture: fixture, definition: proposed, arena: null, structural: true, body: census));
+
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.Batch(
+            Principal: Principal.Console,
+            Mutations: [
+                new WorldMutation.UpsertStateCell(
+                    Principal: Principal.Console,
+                    Row: CountRow,
+                    Key: WorldStateRow.SlotKey.Value,
+                    Value: 0L,
+                    Kind: WorldDocumentWriteKind.Set
+                ),
+                new WorldMutation.RemovePlacement(
+                    Id: "middle",
+                    Principal: Principal.Console
+                ),
+            ]
+        ));
+        fixture.Step();
+
+        // One census body, at the lowest slot, and the census count the install began with.
+        Assert.Null(@object: population.InhabitantPlacementId(index: low));
+        Assert.True(condition: population.IsActive(index: low));
+        Assert.False(condition: population.IsActive(index: middle));
+        Assert.False(condition: population.IsActive(index: census));
+        Assert.Equal(
+            expected: 1,
+            actual: population.SimulatedCount
+        );
+        // The install kept what the forecast kept and replaced what it did not.
+        Assert.True(condition: population.IsActive(index: observer));
+        Assert.Equal(
+            expected: generations[observer],
+            actual: population.Generation(index: observer)
+        );
+        Assert.NotEqual(
+            expected: generations[low],
+            actual: population.Generation(index: low)
+        );
+    }
+
+    private static bool Forecast(WorldFixture fixture, WorldDefinition definition, bool structural, int body) => Forecast(
         arena: fixture.Server.Arena,
+        body: body,
+        definition: definition,
+        fixture: fixture,
+        structural: structural
+    );
+    private static bool Forecast(WorldFixture fixture, WorldDefinition definition, StateArena? arena, bool structural, int body) => fixture.Server.Population.ReconcileKeeps(
+        arena: arena,
         bodies: [body],
         definition: definition,
         structural: structural,

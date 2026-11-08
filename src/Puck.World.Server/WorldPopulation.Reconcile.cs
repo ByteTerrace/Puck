@@ -39,8 +39,9 @@ public sealed partial class WorldPopulation {
         void AdmitInhabitant(WorldDefinition definition, int index, WorldPlacement placement, WorldPlacementInhabit inhabit, byte kitIndex, int ordinal, int desired);
         void RetireInhabitant(int index);
         void BindInhabitant(int index, WorldPlacement placement, byte kitIndex);
-        void AdmitCensus(int index);
-        void RetireCensus(int index);
+        // `reports` is whether the change is a peer lifecycle event (SelectCensus' own remarks).
+        void AdmitCensus(int index, bool reports);
+        void RetireCensus(int index, bool reports);
         void TableFull(WorldPlacement placement);
         void CountClamped(WorldPlacement placement, string row, int desired, int bound);
         // The occupancy moved: the live table bumps its revision.
@@ -97,15 +98,20 @@ public sealed partial class WorldPopulation {
             kitIndex: kitIndex,
             placement: placement
         );
-        public void AdmitCensus(int index) {
+        public void AdmitCensus(int index, bool reports) {
             population.ActivateSimulated(index: index);
             population.m_entries[index].Active = true;
-            admitted?.Add(item: population.PeerEventEntry(index: index));
+
+            if (reports) {
+                admitted?.Add(item: population.PeerEventEntry(index: index));
+            }
         }
-        public void RetireCensus(int index) {
+        public void RetireCensus(int index, bool reports) {
             var entry = population.m_entries[index];
 
-            disconnected?.Add(item: population.PeerEventEntry(index: index));
+            if (reports) {
+                disconnected?.Add(item: population.PeerEventEntry(index: index));
+            }
             // A re-activation mints a fresh body at the canonical spawn.
             entry.Body = null;
             entry.Active = false;
@@ -214,12 +220,12 @@ public sealed partial class WorldPopulation {
             forecast.Replaced[index] = true;
         }
         public void BindInhabitant(int index, WorldPlacement placement, byte kitIndex) { }
-        public void AdmitCensus(int index) {
+        public void AdmitCensus(int index, bool reports) {
             forecast.Copy(population: population);
             forecast.Active[index] = true;
             forecast.Replaced[index] = true;
         }
-        public void RetireCensus(int index) {
+        public void RetireCensus(int index, bool reports) {
             forecast.Copy(population: population);
             forecast.Active[index] = false;
             forecast.Replaced[index] = true;
@@ -324,6 +330,7 @@ public sealed partial class WorldPopulation {
     /// <returns>The clamped count actually applied.</returns>
     public int SetSimulatedCount(int count, List<WorldPeerEventEntry>? admitted = null, List<WorldPeerEventEntry>? disconnected = null) => SelectCensus(
         count: count,
+        reports: true,
         slots: new LiveSlots(
             admitted: admitted,
             disconnected: disconnected,
@@ -446,6 +453,7 @@ public sealed partial class WorldPopulation {
         // a freed slot below a census body takes the census ahead of it, which retires the highest census body.
         _ = SelectCensus(
             count: slots.SimulatedCount,
+            reports: false,
             slots: slots
         );
         // A structural install can reorder or replace placements at a fixed ordinal without changing their count
@@ -525,6 +533,7 @@ public sealed partial class WorldPopulation {
         if (changed) {
             _ = SelectCensus(
                 count: slots.SimulatedCount,
+                reports: false,
                 slots: slots
             );
             slots.Settle(definition: definition);
@@ -584,7 +593,13 @@ public sealed partial class WorldPopulation {
     // Inhabited and authority-transferred slots are owned by their own lifecycles. They may occupy any index after a
     // mapped handoff, so census selection counts eligible slots instead of assuming all exclusions live at the top of
     // the table. The networkPlayers cap counts humans only.
-    private int SelectCensus<TSlots>(TSlots slots, int count) where TSlots : struct, ISlots {
+    //
+    // Only a requested census change (SetSimulatedCount) reports peer lifecycle events. An install's re-clamps report
+    // none: the structural and count passes share one install's event lists, so a census body the first re-clamp admits
+    // and the second retires would leave both an admission and a disconnect, and delivery
+    // (WorldGrants.ApplyLifecycleEvents) applies every disconnect before every admission, which would bring the
+    // retired body back and raise the census.
+    private int SelectCensus<TSlots>(TSlots slots, int count, bool reports) where TSlots : struct, ISlots {
         var clamped = Math.Clamp(
             value: count,
             min: 0,
@@ -614,9 +629,15 @@ public sealed partial class WorldPopulation {
             }
 
             if (desired) {
-                slots.AdmitCensus(index: index);
+                slots.AdmitCensus(
+                    index: index,
+                    reports: reports
+                );
             } else {
-                slots.RetireCensus(index: index);
+                slots.RetireCensus(
+                    index: index,
+                    reports: reports
+                );
             }
 
             changed = true;
