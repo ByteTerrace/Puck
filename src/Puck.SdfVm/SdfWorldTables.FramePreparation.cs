@@ -17,7 +17,7 @@ public sealed partial class SdfWorldTables {
         var bytes = checked((((long)count) * DynamicTransformByteLength));
 
         // Neither retirement allocates after the region has grown.
-        m_retired.EnsureCapacity(capacity: checked((m_retired.Count + 2)));
+        m_retired.Reserve(count: 2);
         var previous = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "previous-dynamic-transforms"), sizeBytes: ((ulong)bytes), usage: Puck.Abstractions.Gpu.GpuBufferUsage.Storage);
 
         try {

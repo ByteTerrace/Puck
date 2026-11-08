@@ -4,39 +4,6 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
-    private static void WriteTransferKey(WireWriter writer, WorldTransferKey key) {
-        writer.WriteString(value: key.SourceAuthority);
-        writer.WriteUInt64(value: key.TransferId);
-    }
-    private static WorldTransferKey ReadTransferKey(ref WireReader reader) => new(
-        SourceAuthority: reader.ReadString(
-            field: "transfer key source authority",
-            maxBytes: MaxStringBytes
-        ),
-        TransferId: reader.ReadUInt64()
-    );
-    private static void WriteCommitMember(WireWriter writer, WorldTransferCommitMember member) {
-        WorldIdentityProjectionWire.WriteOptional(
-            projection: member.Profile,
-            writer: writer
-        );
-        WorldWireLeaves.WriteCommitMemberMotion(
-            member: member,
-            writer: writer
-        );
-        WorldWireLeaves.WriteMemberIdentity(
-            companion: member.Companion,
-            memberId: member.MemberId,
-            writer: writer
-        );
-    }
-    private static WorldTransferCommitMember ReadCommitMember(ref WireReader reader) {
-        var profile = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
-        var motion = WorldWireLeaves.ReadCommitMemberMotion(reader: ref reader);
-        var (memberId, companion) = WorldWireLeaves.ReadMemberIdentity(reader: ref reader);
-
-        return (motion with { Companion = companion, MemberId = memberId, Profile = profile });
-    }
     // An autonomous traveller's own World principal is durable authority state, never an actor admitted from a peer, so
     // the checkpoint spells it by a flag the wire's live principal leaf never carries.
     private static void WriteDurablePrincipal(WireWriter writer, Puck.Commands.Principal principal) {
@@ -164,7 +131,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static void WriteLease(WireWriter writer, WorldTransferLeaseCheckpoint lease) {
-        WriteTransferKey(
+        WorldWireLeaves.WriteTransferKey(
             writer: writer,
             key: lease.Key
         );
@@ -184,7 +151,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static WorldTransferLeaseCheckpoint ReadLease(ref WireReader reader) {
-        var key = ReadTransferKey(reader: ref reader);
+        var key = WorldWireLeaves.ReadTransferKey(reader: ref reader);
         var request = ReadReservationRequest(
             reader: ref reader
         );
@@ -212,13 +179,13 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static void WriteCommitted(WireWriter writer, WorldTransferCommittedCheckpoint committed) {
-        WriteTransferKey(
+        WorldWireLeaves.WriteTransferKey(
             writer: writer,
             key: committed.Key
         );
         writer.WriteArray(
             items: committed.Members,
-            writeItem: WriteCommitMember
+            writeItem: WorldWireLeaves.WriteCommitMember
         );
         writer.WriteArray(
             items: committed.Principals,
@@ -234,10 +201,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static WorldTransferCommittedCheckpoint ReadCommitted(ref WireReader reader) {
-        var key = ReadTransferKey(reader: ref reader);
+        var key = WorldWireLeaves.ReadTransferKey(reader: ref reader);
         var members = reader.ReadArray(
             field: "committed members",
-            readItem: (ref WireReader r) => ReadCommitMember(
+            readItem: (ref WireReader r) => WorldWireLeaves.ReadCommitMember(
                 reader: ref r
             ),
             maximum: MaxCollectionCount
@@ -284,7 +251,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     address: row.Incarnation,
                     writer: w
                 );
-                WriteTransferKey(
+                WorldWireLeaves.WriteTransferKey(
                     key: row.Transfer,
                     writer: w
                 );
@@ -297,7 +264,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     address: row.Incarnation,
                     writer: w
                 );
-                WriteTransferKey(
+                WorldWireLeaves.WriteTransferKey(
                     key: row.Transfer,
                     writer: w
                 );
@@ -330,7 +297,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteArray(
             items: section.SpentKeys,
             writeItem: static (w, row) => {
-                WriteTransferKey(
+                WorldWireLeaves.WriteTransferKey(
                     key: row.Key,
                     writer: w
                 );
@@ -375,7 +342,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "escrow latest committed transfer",
             readItem: static (ref WireReader r) => {
                 var incarnation = WorldWireLeaves.ReadEntityAddress(reader: ref r);
-                var transfer = ReadTransferKey(reader: ref r);
+                var transfer = WorldWireLeaves.ReadTransferKey(reader: ref r);
 
                 return (incarnation, transfer);
             },
@@ -385,7 +352,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "escrow mobility leases",
             readItem: static (ref WireReader r) => {
                 var incarnation = WorldWireLeaves.ReadEntityAddress(reader: ref r);
-                var transfer = ReadTransferKey(reader: ref r);
+                var transfer = WorldWireLeaves.ReadTransferKey(reader: ref r);
                 var expectedEpoch = r.ReadUInt64();
 
                 return (incarnation, transfer, expectedEpoch);
@@ -424,7 +391,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var spentKeys = reader.ReadArray(
             field: "escrow spent transfer keys",
             readItem: static (ref WireReader r) => {
-                var key = ReadTransferKey(reader: ref r);
+                var key = WorldWireLeaves.ReadTransferKey(reader: ref r);
                 var committed = r.ReadBoolean();
                 var durable = r.ReadBoolean();
 

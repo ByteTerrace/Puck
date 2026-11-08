@@ -7,8 +7,9 @@ using Puck.SignedDistance.Illumination;
 namespace Puck.SdfVm;
 
 // Each slot owns one readback buffer per demand: a pick's copies the record's first four words, an inspector's its first six. Every record
-// of the render extent is the frame's own, so the answer needs no currency check. Its view's picker polls only
-// signaled submissions; changing demand never replaces an in-flight buffer.
+// of the render extent is the frame's own, so the answer needs no currency check. A copy is read only once the node proves
+// its slot complete (RenderGraphSlotResults), which precedes the next copy into that slot's buffers; changing demand never
+// replaces an in-flight buffer.
 internal sealed class SdfWorldPickReadback : IDisposable {
     // Words 0 to 3: the ray parameter, the identity, the material and the triangle (sdf-visibility.hlsli).
     private const int PickBytes = 16;
@@ -19,6 +20,7 @@ internal sealed class SdfWorldPickReadback : IDisposable {
     private readonly SdfWorldPicker m_picker;
     private readonly RenderGraphPackageRecorderContext m_context;
     private readonly Slot[] m_slots;
+    private readonly RenderGraphSlotResults<Slot> m_copies;
     private readonly byte[] m_bytes = new byte[SurfaceBytes];
 
     private bool m_disposed;
@@ -30,17 +32,19 @@ internal sealed class SdfWorldPickReadback : IDisposable {
         for (var index = 0; (index < m_slots.Length); index++) {
             m_slots[index] = new Slot();
         }
+        // A copy that never reached a submission ends unanswered, so its request records again.
+        m_copies = new RenderGraphSlotResults<Slot>(slots: m_slots.Length,
+            complete: slot => m_picker.Complete(readback: this, result: Answer(slot: slot)),
+            discard: _ => m_picker.Complete(readback: this, result: null));
         picker.Attach(readback: this);
     }
 
     public void Prepare(int slot, uint width, uint height, SdfFrame frame, string visibility, SdfReprojectionView sample, long cut) {
-        Poll();
         var target = m_slots[slot];
 
-        if (target.Record || target.Submit) {
-            // The slot's last copy recorded but never reached a submission: its request records again.
-            target.Record = false;
-            target.Submit = false;
+        if (target.Prepared) {
+            // The slot's last request was prepared but its copy never recorded: it records again.
+            target.Prepared = false;
             m_picker.Complete(readback: this, result: null);
         }
         if (!m_picker.Take(cut: cut, frame: frame, height: height, readback: this, request: out var request, sample: sample, width: width)) {
@@ -55,52 +59,30 @@ internal sealed class SdfWorldPickReadback : IDisposable {
         }
         target.Request = request;
         target.Visibility = visibility;
-        target.Record = true;
+        target.Prepared = true;
     }
     public ulong ReadbackBytes => m_slots.Aggregate(0UL, static (bytes, slot) => checked(((bytes
         + (slot.IdentityBuffer?.SizeBytes ?? 0UL)) + (slot.SurfaceBuffer?.SizeBytes ?? 0UL))));
 
-    public bool Take(int slot, int index, out RenderGraphBufferReadback readback) {
+    // Takes the slot's prepared copy, once, capturing it with the recording.
+    public bool Take(int slot, out RenderGraphBufferReadback readback) {
         var target = m_slots[slot];
 
-        if (!target.Record) {
+        if (!target.Prepared) {
             readback = default;
             return false;
         }
         var request = target.Request;
 
-        target.Submit = true;
-        switch (index) {
-            case 0:
-                target.Record = false;
-                readback = new RenderGraphBufferReadback(Version: target.Visibility!,
-                    SourceOffsetBytes: (((((ulong)request.Y) * request.Width) + request.X) * SdfWorldPackage.VisibilityRecordByteLength),
-                    SizeBytes: ((ulong)target.RecordBytes), Destination: target.Buffer!);
-                return true;
-            default:
-                target.Record = false;
-                readback = default;
-                return false;
-        }
+        target.Prepared = false;
+        m_copies.Record(slot: slot, result: target);
+        readback = new RenderGraphBufferReadback(Version: target.Visibility!,
+            SourceOffsetBytes: (((((ulong)request.Y) * request.Width) + request.X) * SdfWorldPackage.VisibilityRecordByteLength),
+            SizeBytes: ((ulong)target.RecordBytes), Destination: target.Buffer!);
+        return true;
     }
-    public void Submitted(int slot, IGpuSubmissionFence fence) {
-        var target = m_slots[slot];
-
-        if (!target.Submit) {
-            return;
-        }
-        target.Submit = false;
-        target.Fence = fence;
-    }
-    public void Poll() {
-        foreach (var slot in m_slots) {
-            if ((slot.Fence is not { } fence) || !fence.IsSignaled) {
-                continue;
-            }
-            slot.Fence = null;
-            m_picker.Complete(readback: this, result: Answer(slot: slot));
-        }
-    }
+    public void Submitted(int slot) => m_copies.Submitted(slot: slot);
+    public void Completed(int slot) => m_copies.Completed(slot: slot);
     public void Dispose() {
         if (m_disposed) {
             return;
@@ -154,10 +136,9 @@ internal sealed class SdfWorldPickReadback : IDisposable {
         public IGpuReadbackBuffer? Buffer => ((Request.Sample is null) ? IdentityBuffer : SurfaceBuffer);
         public int RecordBytes => ((Request.Sample is null) ? PickBytes : SurfaceBytes);
 
-        public IGpuSubmissionFence? Fence;
         public SdfPickResult Request;
         public string? Visibility;
-        public bool Record;
-        public bool Submit;
+        // Whether Prepare took a request whose copy the slot's recording has not yet taken.
+        public bool Prepared;
     }
 }

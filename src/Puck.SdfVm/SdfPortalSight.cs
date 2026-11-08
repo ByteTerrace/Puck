@@ -17,7 +17,6 @@ internal sealed class SdfPortalSight {
 
     internal bool Occluded(int screen, in Query query) {
         if ((uint)screen >= Capacity) { return false; }
-        foreach (var reader in m_readers) { reader.PollSight(); }
         m_queries[screen] = query;
         return m_hidden[screen] == query;
     }

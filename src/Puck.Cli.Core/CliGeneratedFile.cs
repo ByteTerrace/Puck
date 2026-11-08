@@ -23,9 +23,10 @@ public static class CliGeneratedFile {
     /// <param name="source">What the text is generated from, as the messages name it, such as <c>the model</c>.</param>
     /// <param name="text">The generated text, with LF line endings.</param>
     /// <param name="verb">The verb as it is typed after <c>puck</c>, which prefixes every line.</param>
+    /// <param name="rewriteHint">How to update an embedded section, or null for the verb's ordinary rewrite command.</param>
     /// <returns><see langword="true"/> when the file was written or matched; <see langword="false"/> when a check found
     /// the file missing, different or unstaged.</returns>
-    public static bool WriteOrCheck(bool check, string detail, string relativePath, string repositoryRoot, string source, string text, string verb) =>
+    public static bool WriteOrCheck(bool check, string detail, string relativePath, string repositoryRoot, string source, string text, string verb, string? rewriteHint = null) =>
         WriteOrCheckAll(
             check: check,
             detail: detail,
@@ -33,7 +34,8 @@ public static class CliGeneratedFile {
             files: [new GeneratedFile(RelativePath: relativePath, Text: text)],
             repositoryRoot: repositoryRoot,
             source: source,
-            verb: verb
+            verb: verb,
+            rewriteHint: rewriteHint
         );
     /// <summary>Writes every generated file, or compares each checked-in file against its generated text, then holds the
     /// matching files to the git index with one git query.</summary>
@@ -44,9 +46,10 @@ public static class CliGeneratedFile {
     /// <param name="repositoryRoot">The repository root the paths resolve against.</param>
     /// <param name="source">What the text is generated from, as the messages name it.</param>
     /// <param name="verb">The verb as it is typed after <c>puck</c>, which prefixes every line.</param>
+    /// <param name="rewriteHint">How to update an embedded section, or null for the verb's ordinary rewrite command.</param>
     /// <returns><see langword="true"/> when every file was written or matched and staged; otherwise
     /// <see langword="false"/>.</returns>
-    public static bool WriteOrCheckAll(bool check, string detail, bool eachFile, IReadOnlyList<GeneratedFile> files, string repositoryRoot, string source, string verb) {
+    public static bool WriteOrCheckAll(bool check, string detail, bool eachFile, IReadOnlyList<GeneratedFile> files, string repositoryRoot, string source, string verb, string? rewriteHint = null) {
         var ok = true;
         var matched = new List<string>();
 
@@ -72,7 +75,7 @@ public static class CliGeneratedFile {
             }
 
             if (!File.Exists(path: path)) {
-                Console.Error.WriteLine(value: $"{verb}: {relativePath} is missing; run `puck {verb}` to write it.");
+                Console.Error.WriteLine(value: $"{verb}: {relativePath} is missing; {rewriteHint ?? $"run `puck {verb}` to write it"}.");
                 ok = false;
 
                 continue;
@@ -100,7 +103,8 @@ public static class CliGeneratedFile {
                 expectedText: text,
                 relativePath: relativePath,
                 source: source,
-                verb: verb
+                verb: verb,
+                rewriteHint: rewriteHint
             );
         }
 
@@ -114,7 +118,7 @@ public static class CliGeneratedFile {
         return ok;
     }
 
-    private static void ReportDifference(string relativePath, string source, string verb, string actualText, string expectedText) {
+    private static void ReportDifference(string relativePath, string source, string verb, string actualText, string expectedText, string? rewriteHint) {
         var expected = expectedText.Split(separator: '\n');
         var actual = actualText.Split(separator: '\n');
         var line = 0;
@@ -131,7 +135,7 @@ public static class CliGeneratedFile {
             line++;
         }
 
-        Console.Error.WriteLine(value: $"{verb}: {relativePath} disagrees with {source} at line {(line + 1)}; run `puck {verb}` to rewrite it.");
+        Console.Error.WriteLine(value: $"{verb}: {relativePath} disagrees with {source} at line {(line + 1)}; {rewriteHint ?? $"run `puck {verb}` to rewrite it"}.");
         Console.Error.WriteLine(value: $"  on disk:   {((line < actual.Length)
             ? actual[line]
             : "(end of file)")}");

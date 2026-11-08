@@ -15,6 +15,30 @@ namespace Puck.World.Server;
 /// is trusted local state while a federation peer's bytes are not: the one shared reader applies the untrusted-input
 /// discipline everywhere. Public so a law can read and write exactly the leaf a tape or checkpoint carries.</summary>
 public static class WorldWireLeaves {
+    /// <summary>Writes the source authority and id that identify one crossing.</summary>
+    public static void WriteTransferKey(WireWriter writer, WorldTransferKey key) {
+        writer.WriteString(value: key.SourceAuthority);
+        writer.WriteUInt64(value: key.TransferId);
+    }
+    /// <summary>Reads one crossing key, refusing a blank source authority on both live and durable paths.</summary>
+    public static WorldTransferKey ReadTransferKey(ref WireReader reader) => new(
+        SourceAuthority: reader.ReadRequiredString(field: "transfer key source authority"),
+        TransferId: reader.ReadUInt64()
+    );
+    /// <summary>Writes a complete arriving member, including its travelling identity projection.</summary>
+    public static void WriteCommitMember(WireWriter writer, WorldTransferCommitMember member) {
+        WorldIdentityProjectionWire.WriteOptional(projection: member.Profile, writer: writer);
+        WriteCommitMemberMotion(member: member, writer: writer);
+        WriteMemberIdentity(companion: member.Companion, memberId: member.MemberId, writer: writer);
+    }
+    /// <summary>Reads the complete member shared by federation commits and durable crossing state.</summary>
+    public static WorldTransferCommitMember ReadCommitMember(ref WireReader reader) {
+        var profile = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
+        var motion = ReadCommitMemberMotion(reader: ref reader);
+        var (memberId, companion) = ReadMemberIdentity(reader: ref reader);
+
+        return (motion with { Companion = companion, MemberId = memberId, Profile = profile });
+    }
     /// <summary>Writes the authentication provenance retained by an admission.</summary>
     public static void WriteAdmissionTrust(WireWriter writer, WorldAdmissionTrustIdentity? trust) {
         writer.WriteBoolean(value: (trust is not null));
@@ -97,8 +121,7 @@ public static class WorldWireLeaves {
                     address: ticket.Incarnation,
                     writer: w
                 );
-                w.WriteString(value: ticket.Hop.SourceAuthority);
-                w.WriteUInt64(value: ticket.Hop.TransferId);
+                WriteTransferKey(writer: w, key: ticket.Hop);
                 w.WriteUInt64(value: ticket.Epoch);
             }
         );
@@ -115,10 +138,7 @@ public static class WorldWireLeaves {
         var ticket = reader.ReadOptional(readValue: static (ref WireReader r) => new WorldCustodyTicket(
             Home: r.ReadRequiredString(field: "ticket home"),
             Incarnation: ReadEntityAddress(reader: ref r),
-            Hop: new WorldTransferKey(
-                SourceAuthority: r.ReadRequiredString(field: "ticket hop source"),
-                TransferId: r.ReadUInt64()
-            ),
+            Hop: ReadTransferKey(reader: ref r),
             Epoch: r.ReadUInt64()
         ));
 

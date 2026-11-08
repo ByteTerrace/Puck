@@ -172,15 +172,6 @@ public static class HostAdmission {
     /// <param name="clock">The clock the bound and the sleeps are measured on.</param>
     /// <returns>The admission.</returns>
     public static HostAdmit For(TimeProvider clock) =>
-        (checkout, step, device, heavySuite, kind, bound, progress, stage, cancellationToken) => Task.Run(
-            function: () => Wait(step, device, heavySuite, new HostProbe(checkoutRoot: checkout), clock, progress, cancellationToken, bound, stage, kind),
-            cancellationToken: cancellationToken
-        );
-    /// <summary>Gets the admission the root installs for World starts (<see cref="WorldAdmission"/>): as <see cref="For"/>,
-    /// with the caller choosing whether an admitted start reserves its peak.</summary>
-    /// <param name="clock">The clock the bound and the sleeps are measured on.</param>
-    /// <returns>The admission.</returns>
-    public static WorldAdmit ForWorlds(TimeProvider clock) =>
         (checkout, step, device, heavySuite, kind, bound, reserve, progress, stage, cancellationToken) => Task.Run(
             function: () => Wait(step, device, heavySuite, new HostProbe(checkoutRoot: checkout), clock, progress, cancellationToken, bound, stage, kind, reserve),
             cancellationToken: cancellationToken

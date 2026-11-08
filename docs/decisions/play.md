@@ -31,6 +31,8 @@ competitive FPS or really any multiplayer game). Single player pause menus are
 "true" pauses."
 - The pad's Menu button and the keyboard's Escape open the pause menu for the
   seat that pressed them, as in any game. There is no second menu beneath it.
+  Escape always opens it; Menu opens it on a tap, except while a cartridge is
+  engaged (see the ruling below).
 - A solo session truly pauses: every world the host runs holds while the menu
   is open. A session another person shares over a network (a shared world, an
   MMO, a competitive match) never pauses; the menu opens while the world runs
@@ -50,13 +52,41 @@ its always-active binding plane (`IAlwaysActiveInputBindings`, which answers
 the console key today) answers them for every seat, and
 `BindingProfile.Compile`, which every binding row passes, refuses a row that
 names either, so no page, overlay, chord, wheel or rebinding can take them. An
-engaged machine's own Start is therefore bound to another button. The
+engaged machine's own Start is the plane's tap of Menu, never an authored
+binding (see the ruling below). The
 guarantee stops at a platform overlay that takes the button before Puck sees
 it, at a passthrough source holding the keyboard (its Escape is the source's
 until the reserved Control+Alt+Escape of `SourceFocus` returns the keyboard),
 and at readability: a world's skin styles these entries with the rest of its
 menu. [The hub plan](../plans/hub-and-saves.md#12-the-pause-menu) builds it
 (steps H4 and H5); nothing enforces it yet.
+
+**Menu and an emulated console's Start** (the owner's ruling). Menu is the one
+button the host reserves, and an emulated console's Start would have had to
+move off it. Asked about that side effect, the owner chose: "Hold Menu for
+pause: while a cartridge is engaged, a tap of Menu is the emulated console's
+Start and holding it (about a second) opens the pause menu; elsewhere a tap
+opens the pause menu."
+- Outside an engaged machine a tap of Menu opens the pause menu, as before.
+  Escape on the keyboard is unchanged: it opens the menu at once, engaged or
+  not.
+- While a seat is engaged at a machine, the plane's tap of Menu reaches the
+  machine as its Start and a hold of about a second opens the pause menu. The
+  hold is the always-active plane's decision, made by the existing input
+  pattern matcher (a tap pattern and a hold pattern in one consumption group)
+  rather than a second hold detector, so no engaged page can intercept it.
+- Still no authored binding may name Menu. The machine's Start on a tap is the
+  plane's own answer, not a row a world or the standard authors, so the
+  engagement overlay needs no Start binding and the binding bar carries no
+  moved-Start note.
+
+**Couch pausing, confirmed.** Asked after the pause-menu ruling whether the
+menu still pauses on a local couch or only in true single-player, the owner
+chose: "Couch pauses: keep your earlier ruling: solo always pauses; an
+all-local couch pauses by the standard's default (a world may turn it off);
+anything with a remote player never pauses." The ruling on
+the hub design's open calls below records the same rule; this answer confirms
+it.
 
 The owner's further rulings on the shape:
 - **A character claims, a world clamps.** A player's identity carries its own

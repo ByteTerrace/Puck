@@ -57,38 +57,18 @@ public static class FixedDynamicBodyContacts {
                 position: rightPosition,
                 volume: in right
             );
-            var delta = ClosestDelta(
+            var found = TryRoundPush(
                 p1: leftStart,
-                p2: rightStart,
                 q1: leftEnd,
-                q2: rightEnd
+                p2: rightStart,
+                q2: rightEnd,
+                radius: ((left.Radius + right.Radius) + margin),
+                tieNormal: (((tieBreaker & 1) == 0) ? FixedVector3.UnitX : -FixedVector3.UnitX),
+                push: out var roundPush
             );
-            var distanceSquared = delta.LengthSquared;
-            var radius = ((left.Radius + right.Radius) + margin);
 
-            if (distanceSquared >= (radius * radius)) {
-                correction = default;
-                return false;
-            }
-
-            if (distanceSquared <= FixedQ4816.Zero) {
-                var sign = (((tieBreaker & 1) == 0)
-                    ? FixedQ4816.One
-                    : -FixedQ4816.One
-                );
-
-                correction = new FixedVector3(
-                    X: (radius * sign),
-                    Y: FixedQ4816.Zero,
-                    Z: FixedQ4816.Zero
-                );
-                return true;
-            }
-
-            var distance = FixedQ4816.Sqrt(value: distanceSquared);
-
-            correction = (delta * ((radius - distance) / distance));
-            return true;
+            correction = (found ? (roundPush.Normal * roundPush.Penetration) : default);
+            return found;
         }
 
         if (
@@ -264,6 +244,69 @@ public static class FixedDynamicBodyContacts {
         }
         return ((p1 + (d1 * s)) - (p2 + (d2 * t)));
     }
+    /// <summary>Separates two round cores (a capsule's segment, or a sphere's center given as a degenerate segment),
+    /// each grown by its radius: the one round-pair contact rule static spheres, dynamic sphere/capsule pairs and the
+    /// event feed's overlap sense all answer through.</summary>
+    /// <param name="p1">The first core's start.</param>
+    /// <param name="q1">The first core's end (equal to <paramref name="p1"/> for a sphere).</param>
+    /// <param name="p2">The second core's start.</param>
+    /// <param name="q2">The second core's end (equal to <paramref name="p2"/> for a sphere).</param>
+    /// <param name="radius">The summed radii, in metres, plus any contact skin or margin.</param>
+    /// <param name="tieNormal">The unit direction pushed along when the cores meet exactly, where no witness has a
+    /// direction.</param>
+    /// <param name="push">The push moving the first core out of the second: the closest-point direction and
+    /// <paramref name="radius"/> less the full-width distance.</param>
+    /// <returns><see langword="true"/> when the rounded full-width distance is below <paramref name="radius"/>, so a
+    /// reported push is always positive and a touching pair reports none; an exactly coincident pair reports
+    /// <paramref name="tieNormal"/> at the whole radius.</returns>
+    internal static bool TryRoundPush(FixedVector3 p1, FixedVector3 q1, FixedVector3 p2, FixedVector3 q2, FixedQ4816 radius,
+        FixedVector3 tieNormal, out FixedContactPush push) {
+        var delta = ClosestDelta(p1: p1, q1: q1, p2: p2, q2: q2);
+
+        if (delta == FixedVector3.Zero) {
+            push = new FixedContactPush(Normal: tieNormal, Penetration: radius);
+            return (radius > FixedQ4816.Zero);
+        }
+        // Length roots the exact raw square sum once, so a sub-millimetre gap keeps its direction instead of rounding
+        // to the coincident case.
+        var distance = delta.Length;
+
+        if (distance >= radius) {
+            push = default;
+            return false;
+        }
+        push = new FixedContactPush(Normal: delta.Normalize(), Penetration: (radius - distance));
+        return true;
+    }
+    /// <summary>Returns whether any volume pair of two compound colliders overlaps: exactly the pairs
+    /// <see cref="TryCorrection"/> depenetrates at zero margin, so overlap sense and contact can never disagree.</summary>
+    /// <param name="leftPosition">The left body's world position.</param>
+    /// <param name="leftOrientation">The left body's world orientation.</param>
+    /// <param name="leftVolumes">The left body's local volumes.</param>
+    /// <param name="rightPosition">The right body's world position.</param>
+    /// <param name="rightOrientation">The right body's world orientation.</param>
+    /// <param name="rightVolumes">The right body's local volumes.</param>
+    /// <returns><see langword="true"/> when some pair's narrowphase reports a positive push; a touching pair does not
+    /// overlap.</returns>
+    public static bool Overlaps(
+        FixedVector3 leftPosition,
+        FixedQuaternion leftOrientation,
+        ReadOnlySpan<FixedBodyColliderVolume> leftVolumes,
+        FixedVector3 rightPosition,
+        FixedQuaternion rightOrientation,
+        ReadOnlySpan<FixedBodyColliderVolume> rightVolumes
+    ) {
+        foreach (ref readonly var left in leftVolumes) {
+            foreach (ref readonly var right in rightVolumes) {
+                if (TryVolumeCorrection(correction: out _, left: in left, leftOrientation: leftOrientation,
+                    leftPosition: leftPosition, margin: FixedQ4816.Zero, right: in right, rightOrientation: rightOrientation,
+                    rightPosition: rightPosition, tieBreaker: 0)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
     /// <summary>Finds the deepest overlap correction from <paramref name="rightVolumes"/> to
     /// <paramref name="leftVolumes"/>, every volume grown by half of <paramref name="margin"/>: a pair whose gap is under
     /// the margin reports a correction whose length is the margin less the gap, so the signed overlap depth is the
@@ -291,7 +334,6 @@ public static class FixedDynamicBodyContacts {
         FixedQ4816 margin = default
     ) {
         correction = FixedVector3.Zero;
-        var deepestSquared = UInt128.Zero;
 
         foreach (ref readonly var left in leftVolumes) {
             foreach (ref readonly var right in rightVolumes) {
@@ -310,17 +352,12 @@ public static class FixedDynamicBodyContacts {
                 }
 
                 // Keep Q32 through comparison: rounding to Q16 discards shallow, real overlaps.
-                var squared = ((Square(value: candidate.X.Value) + Square(value: candidate.Y.Value)) + Square(value: candidate.Z.Value));
-
-                if (squared > deepestSquared) {
-                    deepestSquared = squared;
+                if (candidate.CompareLengthTo(other: correction) > 0) {
                     correction = candidate;
                 }
             }
         }
 
-        return (deepestSquared > UInt128.Zero);
+        return (correction != FixedVector3.Zero);
     }
-
-    private static UInt128 Square(long value) => ((UInt128)(((Int128)value) * value));
 }

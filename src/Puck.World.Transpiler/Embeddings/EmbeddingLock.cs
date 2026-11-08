@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using Puck.Assets;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
@@ -297,32 +298,7 @@ public sealed class EmbeddingLock {
     /// <summary>Writes the lock file only when its bytes change.</summary>
     /// <param name="lockPath">Destination lock path.</param>
     /// <returns><see langword="true"/> if the file was written; <see langword="false"/> if contents were unchanged.</returns>
-    public bool Write(string lockPath) {
-        var serialized = Serialize();
-        var newBytes = Encoding.UTF8.GetBytes(s: serialized);
-
-        if (File.Exists(path: lockPath)) {
-            try {
-                var existingBytes = File.ReadAllBytes(path: lockPath);
-
-                if (existingBytes.AsSpan().SequenceEqual(other: newBytes)) {
-                    return false;
-                }
-            } catch {
-                // If read fails, proceed with writing
-            }
-        }
-
-        var dir = Path.GetDirectoryName(path: lockPath);
-
-        if (!string.IsNullOrEmpty(value: dir) && !Directory.Exists(path: dir)) {
-            Directory.CreateDirectory(path: dir);
-        }
-
-        File.WriteAllBytes(bytes: newBytes, path: lockPath);
-
-        return true;
-    }
+    public bool Write(string lockPath) => AtomicFile.WriteAllBytesIfChanged(path: lockPath, bytes: Encoding.UTF8.GetBytes(s: Serialize()));
 
     private static string EscapeJson(string text) {
         return JsonValue.Create(value: text)!.ToJsonString()[1..^1];

@@ -38,19 +38,10 @@ internal sealed class SdfBloomRecorder : IRenderGraphPackageRecorder {
         if (m_disposed) { return; }
         m_disposed = true;
         m_context.Services.Bindings.DestroySampler(samplerHandle: m_sampler);
-        m_owner.Unhold(residency: m_view.Residency);
-        m_view.Residency.Release();
+        m_owner.Leave(view: m_view);
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-        if ((m_owner.ViewOf(instance: m_context.Instance) is { } current) && (current != m_view)) {
-            if (!ReferenceEquals(objA: current.Residency, objB: m_view.Residency)) {
-                current.Residency.Retain();
-                m_owner.Hold(residency: current.Residency);
-                m_owner.Unhold(residency: m_view.Residency);
-                m_view.Residency.Release();
-            }
-            m_view = current;
-        }
+        _ = m_owner.Follow(instance: m_context.Instance, view: ref m_view);
         m_owner.Begin(residency: m_view.Residency);
         var tables = m_view.Residency.Staged(context: recording.Context);
         var frame = m_view.Residency.Frame!;

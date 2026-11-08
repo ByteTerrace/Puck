@@ -12,10 +12,7 @@ namespace Puck.SdfVm;
 // resolve reads (the tables' dummy in any other view) and the image it writes. Its block holds the frame's common
 // values, copied by name from the world layout, the temporal ones every part of a frame writes alike among them.
 internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
-    private static readonly (int Source, int Destination, int Length)[] FrameCopies = [.. SdfWorldPackage.Values.Select(selector: static member => (
-        Source: ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member.Name)),
-        Destination: ((int)SdfWorldInterfaces.GlassParameters.BlockOffsetOf(member: member.Name)),
-        Length: checked((int)(member.Type!.Value.SizeBytes() * (member.Length ?? 1)))))];
+    private static readonly SdfFrameBlock.Copy[] FrameCopies = SdfFrameBlock.CopiesInto(layout: SdfWorldInterfaces.GlassParameters);
     // The pass's inputs by position: the lit image, the visibility records, the glass target and the glass sums, then
     // the environment's buffers the graph orders the pass after, which the World set already binds.
     private const int LitInput = 0;
@@ -53,38 +50,21 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
         }
         m_disposed = true;
         m_shade.Release(releases: m_owner.ShadeReleases);
-        m_owner.Unhold(residency: m_view.Residency);
-        m_view.Residency.Release();
+        m_owner.Leave(view: m_view);
     }
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) =>
         m_owner.SignatureOf(instance: m_context.Instance, part: SdfWorldPackage.Parts.GlassShade, temporal: m_temporal, context: in context);
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-        if ((m_owner.ViewOf(instance: m_context.Instance) is { } current) && (current != m_view)) {
-            if (!ReferenceEquals(objA: current.Residency, objB: m_view.Residency)) {
-                current.Residency.Retain();
-                m_owner.Hold(residency: current.Residency);
-                m_owner.Unhold(residency: m_view.Residency);
-                m_view.Residency.Release();
-            }
-            m_view = current;
-        }
+        _ = m_owner.Follow(instance: m_context.Instance, view: ref m_view);
         var residency = m_view.Residency;
 
         m_owner.Begin(residency: residency);
         var tables = residency.Staged(context: recording.Context);
         var frame = residency.Frame!;
         var index = Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1));
-        Span<byte> frameBlock = stackalloc byte[SdfFrameBlock.SizeBytes];
 
-        frameBlock.Clear();
-        SdfFrameBlock.Write(block: frameBlock, tables: tables.PassValues, frame: frame, view: index, width: recording.RenderWidth, height: recording.RenderHeight);
-        var temporal = m_owner.SkyTemporalOf(instance: m_context.Instance);
-
-        SdfFrameBlock.WriteTemporal(block: frameBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
-        SdfFrameBlock.WritePreviousView(block: frameBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
-        foreach (var copy in FrameCopies) {
-            frameBlock.Slice(length: copy.Length, start: copy.Source).CopyTo(destination: recording.PassBlock.Slice(length: copy.Length, start: copy.Destination));
-        }
+        SdfFrameBlock.WriteInto(passBlock: recording.PassBlock, copies: FrameCopies, tables: tables.PassValues, frame: frame, view: index,
+            width: recording.RenderWidth, height: recording.RenderHeight, temporal: m_owner.SkyTemporalOf(instance: m_context.Instance), temporalEnabled: m_temporal);
         var set = m_sets.PassSet(slot: recording.Slot);
 
         m_work.Write(passSet: set, recording: recording);
@@ -109,7 +89,7 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
     }
     public ulong ReadbackBytes => 0;
     public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) { readback = default; return false; }
-    public void Submitted(int slot, IGpuSubmissionFence fence) => m_shade.Submitted(slot: slot);
+    public void Submitted(int slot) => m_shade.Submitted(slot: slot);
     public void Completed(int slot) => m_shade.Completed(slot: slot);
 
     // Writes, once per slot and tables, each port at the member its version reads or writes it through, and the tables'

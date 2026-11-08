@@ -52,4 +52,7 @@
         <Compile Include="../Shared/World/WindowCameraFixtures.cs" Link="World/WindowCameraFixtures.cs" />
         <Compile Include="../Shared/World/WindowCrossingFixtures.cs" Link="World/WindowCrossingFixtures.cs" />
     </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/FixedFrameSource.cs" Link="FixedFrameSource.cs" />
+    </ItemGroup>
 </Project>

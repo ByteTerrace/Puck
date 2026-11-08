@@ -390,8 +390,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
 
         m_shade.Release(releases: m_owner.ShadeReleases);
-        m_owner.Unhold(residency: m_view.Residency);
-        m_view.Residency.Release();
+        m_owner.Leave(view: m_view);
     }
     // A part skips a frame whose work it would not do, recording neither its work nor its planned barriers: the mesh part
     // a frame that draws no mesh, and a shadow cascade a frame with no draw or no cascade of its own. A frame that draws no
@@ -580,23 +579,26 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         return RenderGraphPackageOutcome.Drew;
     }
     public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) {
-        if (m_pick is not null) {
-            return (m_pick.Take(index: 0, readback: out readback, slot: slot) ||
-                m_diagnosticPick!.Take(index: 0, readback: out readback, slot: slot));
-        }
+        // Each index takes the next prepared copy: the pick's, then the diagnostic pick's.
         readback = default;
-        return false;
+        return ((m_pick is not null) && (m_pick.Take(readback: out readback, slot: slot) ||
+            m_diagnosticPick!.Take(readback: out readback, slot: slot)));
     }
 
     public ulong ReadbackBytes => ((m_pick?.ReadbackBytes ?? 0UL) + (m_diagnosticPick?.ReadbackBytes ?? 0UL));
 
-    public void Submitted(int slot, IGpuSubmissionFence fence) {
+    public void Submitted(int slot) {
         m_shade.Submitted(slot: slot);
-        m_pick?.Submitted(fence: fence, slot: slot);
-        m_diagnosticPick?.Submitted(fence: fence, slot: slot);
-        m_occlusion?.Submitted(slot, fence);
+        m_pick?.Submitted(slot: slot);
+        m_diagnosticPick?.Submitted(slot: slot);
+        m_occlusion?.Submitted(slot: slot);
     }
-    public void Completed(int slot) => m_shade.Completed(slot: slot);
+    public void Completed(int slot) {
+        m_shade.Completed(slot: slot);
+        m_pick?.Completed(slot: slot);
+        m_diagnosticPick?.Completed(slot: slot);
+        m_occlusion?.Completed(slot: slot);
+    }
 
     private int InputIndexOf(string member) {
         for (var index = 0; (index < m_inputs.Length); index++) {
@@ -634,47 +636,16 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         return -1;
     }
-    // Takes the view the instance resolved this frame when it is another than the one the pass records: the package
-    // decided the pass can record it as built (SdfWorldPasses.CanFollow). A counter change holds recording until matching
-    // passes install. The hold and the retain move with the view; the ports and screens rebind for the
-    // other residency's tables on this recording.
+    // Takes the view the instance resolved this frame (SdfWorldPasses.Follow). A counter change holds recording until
+    // matching passes install. The ports and screens rebind for another residency's tables on this recording.
     private void Follow() {
-        if (
-            (m_owner.ViewOf(instance: m_context.Instance) is not { } current) ||
-            (current == m_view)
-        ) {
-            return;
-        }
-
-        var previous = m_view.Residency;
-
-        if (!ReferenceEquals(
-            objA: previous,
-            objB: current.Residency
-        )) {
-            current.Residency.Retain();
-            m_owner.Hold(residency: current.Residency);
-            m_owner.Unhold(residency: previous);
-            previous.Release();
-            DeclareScreens(residency: current.Residency);
-
-            foreach (var screens in m_screens) {
-                Array.Clear(array: screens);
-            }
-        }
-
-        m_view = current;
-    }
-    // Which screen indices a residency binds.
-    private void DeclareScreens(SdfWorldResidency residency) {
-        Array.Clear(array: m_declaredScreens);
-
-        if (residency.ScreenSources is { } sources) {
-            foreach (var screen in sources.Screens) {
-                m_declaredScreens[screen] = true;
-            }
+        if (!m_owner.Follow(instance: m_context.Instance, view: ref m_view)) { return; }
+        DeclareScreens(residency: m_view.Residency);
+        foreach (var screens in m_screens) {
+            Array.Clear(array: screens);
         }
     }
+    private void DeclareScreens(SdfWorldResidency residency) => residency.DeclareScreens(declared: m_declaredScreens);
     // Binds the pass set and dispatches the part's kernel: the pyramid one invocation a texel of its first level, and the
     // surface and views passes one invocation a pixel of the render extent.
     private void RecordCompute(in RenderGraphPackageRecording recording, SdfWorldTables tables) {

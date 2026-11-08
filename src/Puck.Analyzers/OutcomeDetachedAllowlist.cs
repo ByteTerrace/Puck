@@ -30,34 +30,8 @@ public static class OutcomeDetachedAllowlist {
     /// <param name="assembly">The compiling assembly's name.</param>
     /// <param name="path">The source file's path as the compiler was given it, spelled with either separator.</param>
     /// <returns><see langword="true"/> when an entry names the assembly and the file.</returns>
-    public static bool Admits(string assembly, string path) {
-        var normalized = path.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
-
-        foreach (var entry in Entries) {
-            if (
-                string.Equals(
-                    a: entry.Assembly,
-                    b: assembly,
-                    comparisonType: StringComparison.Ordinal
-                ) &&
-                (string.Equals(
-                    a: normalized,
-                    b: entry.Path,
-                    comparisonType: StringComparison.Ordinal
-                ) || normalized.EndsWith(
-                    comparisonType: StringComparison.Ordinal,
-                    value: ("/" + entry.Path)
-                ))
-            ) {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    public static bool Admits(string assembly, string path) => Entries.Any(predicate: entry =>
+        AnalyzerAllowlistPath.Matches(assembly: assembly, path: path, expectedAssembly: entry.Assembly, expectedPath: entry.Path));
 }
 /// <summary>One file allowed to evaluate detached.</summary>
 /// <param name="Assembly">The assembly that compiles the file.</param>

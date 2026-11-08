@@ -196,6 +196,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             handler: Swap
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Local,
             bindability: CommandBindability.Unbindable,
             name: "machine.default",
             description: $"Sets the content a named machine boots from its contentFolders: {MachineDefaultForms.Spelling}, where <name> names a mountable file as machine.swap takes it. Writes the {WorldMachineContentFolder.SettingsFile} of the file's folder naming it, and names none in the machine's other folders that name one; none names none in every folder. A machine whose row sets preferFolderDefault boots the default at the next boot or world.reload, and its authored content when no default is set or the default is absent or unmountable; machine.swap mounts a file now. Changes local files only, so it needs a local console or seat; the settings live beside the content and no document names the default.",
@@ -206,9 +207,6 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
     private CommandResult Default(CommandContext context, WireArgs args) {
         if (args.Count != 2) {
             return MachineDefaultForms.Refuse();
-        }
-        if (context.Principal.Kind is not (PrincipalKind.Console or PrincipalKind.Seat)) {
-            return CommandResult.Error(output: "[machine.default: writing a folder's settings requires a local console or seat]");
         }
         if (!authority.TryResolveServer(
             context: context,

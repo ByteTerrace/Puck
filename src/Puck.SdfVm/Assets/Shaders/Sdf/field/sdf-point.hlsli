@@ -22,6 +22,33 @@ SdfHit sdfIsaErrorHit() {
 
 #include "sdf-quaternion.hlsli"
 
+// The point warps the general walk (mapCore) and the compiled part walk (sdfPartEvaluate) both apply, one arithmetic for
+// both; each caller validates the instruction's axes and propagates its own error first.
+
+// Radial flare warp (KEEP IN SYNC with SdfProgramBuilder.AxialProfile and SdfFieldEvaluator.WarpPoint): data0 = (amount,
+// bulge, top, 1/span), data1 = (the host-baked 1/max(s) size correction over t in [0, 1], the base scale). t folds toward
+// the far end of the span; s(t) is floored at SDF_FLARE_MIN_SCALE so a parameter combination that drives it non-positive
+// still warps finitely. Divides the point's cross-axis components by s(t) and returns the factor the caller's distance
+// scale takes, the size correction; the residual shear from the axis-varying scale is bounded separately by
+// SdfProgram.AnalyzeLipschitz's chain step clamp, not corrected per candidate. axis is below 3.
+float sdfAxialProfile(inout float3 localPosition, uint axis, float4 data0, float4 data1) {
+    float rawT = (data0.z - localPosition[axis]) * data0.w;
+    float t = saturate(rawT);
+    float rawS = data1.y + data0.x * t + data0.y * sin(SDF_PI * t);
+    float scale = max(rawS, SDF_FLARE_MIN_SCALE);
+    float invScale = 1.0 / scale;
+    [unroll] for (uint component = 0u; component < 3u; component++) {
+        if (component != axis) { localPosition[component] *= invScale; }
+    }
+    return data1.x;
+}
+// Polynomial shear (KEEP IN SYNC with SdfProgramBuilder.Shear): only the target axis moves, by an exact (not small-angle)
+// polynomial of the driver axis, coefficients = (linear, quadratic, cubic). Both axes are below 3.
+void sdfShear(inout float3 localPosition, uint target, uint driver, float3 coefficients) {
+    float t = localPosition[driver];
+    localPosition[target] += ((coefficients.z * t + coefficients.y) * t + coefficients.x) * t;
+}
+
 // GLSL-style FLOOR modulo. HLSL's fmod truncates toward zero, so it disagrees with GLSL's mod for negative
 // operands — and the wallpaper parity keys take mod of (possibly negative) cell indices, where a trunc-mod would
 // silently mis-color/mis-rotate every negative-index cell. Keep every wallpaper mod on this helper.

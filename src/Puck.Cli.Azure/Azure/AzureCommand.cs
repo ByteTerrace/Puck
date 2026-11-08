@@ -520,7 +520,7 @@ public static partial class AzureCommand {
                     "--outfile",
                     formatted
                 );
-                if (!File.ReadAllBytes(path: formatted).AsSpan().SequenceEqual(other: File.ReadAllBytes(path: path))) { findings.Add(item: $"{path}: not formatted; run az bicep format --file {path}"); }
+                if (!Puck.Confinement.FileContent.Equals(left: formatted, right: path)) { findings.Add(item: $"{path}: not formatted; run az bicep format --file {path}"); }
             } finally { File.Delete(path: formatted); }
         }
         if (findings.Count != 0) { throw new InvalidDataException(message: ("Bicep sources must be formatted and free of diagnostics:\n" + string.Join(separator: "\n", values: findings))); }

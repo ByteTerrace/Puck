@@ -232,70 +232,12 @@ public static class FixedSurfaceQuery {
     // alone is not enough, because clamping a point already inside the range changes nothing). The normal is exact
     // on a face (delta nonzero on exactly one axis) and Normalize()-correct on an edge/corner (delta nonzero on two
     // or three) — see the type's remarks.
-    // The box's own frame answers the probe: an axis-aligned box's frame is an exact translation, so every clamp,
-    // face normal and interior exit below is exact there (the type's remarks).
+    // Sharp and rounded boxes share their core's nearest feature and exit-face tie order. An axis-aligned box's
+    // frame is an exact translation, so the core's point and face normal stay exact (the type's remarks).
     private static (FixedVector3 Point, FixedVector3 Normal) NearestOnBox(in FixedOrientedBox box, FixedVector3 probe) {
-        var local = box.ToLocal(point: probe);
-        var clamped = box.ClosestLocal(local: local);
-        var delta = (local - clamped);
-        var clampedX = (delta.X != FixedQ4816.Zero);
-        var clampedY = (delta.Y != FixedQ4816.Zero);
-        var clampedZ = (delta.Z != FixedQ4816.Zero);
+        var nearest = FixedRoundedBoxContact.Nearest(halfExtents: box.HalfExtents, point: box.ToLocal(point: probe));
 
-        if (
-            clampedX ||
-            clampedY ||
-            clampedZ
-        ) {
-            var point = box.ToWorld(local: clamped);
-
-            // Face case: the probe is outside on exactly one axis, so the outward normal is that axis's unit
-            // vector — no square root, no rounding.
-            if (
-                clampedX &&
-                !clampedY &&
-                !clampedZ
-            ) {
-                return (Point: point, Normal: (box.AxisX * FixedQ4816.CopySign(
-                    sign: delta.X,
-                    value: FixedQ4816.One
-                )));
-            }
-            if (
-                clampedY &&
-                !clampedX &&
-                !clampedZ
-            ) {
-                return (Point: point, Normal: (box.AxisY * FixedQ4816.CopySign(
-                    sign: delta.Y,
-                    value: FixedQ4816.One
-                )));
-            }
-            if (
-                clampedZ &&
-                !clampedX &&
-                !clampedY
-            ) {
-                return (Point: point, Normal: (box.AxisZ * FixedQ4816.CopySign(
-                    sign: delta.Z,
-                    value: FixedQ4816.One
-                )));
-            }
-
-            // Edge or corner: `delta` already points from the nearest boundary point straight at the probe, which
-            // is the analytically correct outward gradient there too — Normalize() just rescales it to unit length.
-            return (Point: point, Normal: box.ToWorldOffset(local: delta.Normalize()));
-        }
-
-        // Interior (including exactly ON a face, where the gap on that axis is zero): no axis needed clamping, so
-        // project out through the nearest exit face — the shared rule TrySpherePush's interior branch resolves this
-        // collider kind with too.
-        var (normal, surfaceLocal, _) = FixedAxisMath.BoxInteriorExit(
-            halfExtents: box.HalfExtents,
-            local: local
-        );
-
-        return (Point: box.ToWorld(local: surfaceLocal), Normal: box.ToWorldOffset(local: normal));
+        return (Point: box.ToWorld(local: nearest.Point), Normal: box.ToWorldOffset(local: nearest.Normal));
     }
 
     // A collider's nearest surface point and its outward normal; false only for a field whose surface solve reaches no

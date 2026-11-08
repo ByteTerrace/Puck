@@ -21,4 +21,7 @@
         <Compile Include="../Shared/SdfMeshContour.cs" Link="SdfMeshContour.cs" />
         <Compile Include="../Shared/UploadModelGpu.cs" Link="UploadModelGpu.cs" />
     </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/FixedFrameSource.cs" Link="FixedFrameSource.cs" />
+    </ItemGroup>
 </Project>

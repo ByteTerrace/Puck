@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
 using Puck.Abstractions.Machines;
@@ -58,21 +59,15 @@ public static class WorldStaging {
             directory = Path.GetFullPath(path: directory);
             var sourcePath = Path.GetFullPath(path: path);
             var sourceDirectory = Path.GetDirectoryName(path: sourcePath)!;
-            var relativeSource = Path.GetRelativePath(path: sourcePath, relativeTo: directory).Replace(newChar: '/', oldChar: '\\');
 
             if (
                 (Path.GetDirectoryName(path: Path.TrimEndingDirectorySeparator(path: directory)) is null) ||
-                (!Path.IsPathRooted(path: relativeSource) && (relativeSource != "..") && !relativeSource.StartsWith(comparisonType: StringComparison.Ordinal, value: "../"))
+                ConfinedDirectory.Contains(root: directory, path: sourcePath)
             ) {
                 reason = $"'{path}' cannot be staged under {directory}: the staging directory must not be a filesystem root or contain the composition source.";
                 return false;
             }
-            if (Directory.Exists(path: directory)) {
-                Directory.Delete(
-                    path: directory,
-                    recursive: true
-                );
-            }
+            ConfinedDirectory.RemoveTree(path: directory);
 
             foreach (var world in worlds) {
                 if (!TryWrite(
@@ -93,7 +88,7 @@ public static class WorldStaging {
                     entryPath = staged;
                 }
             }
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
             reason = $"'{path}' could not be staged under {directory}: {exception.Message}";
 
             return false;
@@ -237,9 +232,7 @@ public static class WorldStaging {
                 try {
                     var destination = Path.Combine(path1: directory, path2: staged);
 
-                    if (Directory.Exists(path: destination)) {
-                        Directory.Delete(path: destination, recursive: true);
-                    }
+                    ConfinedDirectory.RemoveTree(path: destination);
                     if (Directory.Exists(path: folder)) {
                         var target = Directory.CreateDirectory(path: Path.Combine(
                             path1: directory,
@@ -257,7 +250,7 @@ public static class WorldStaging {
                             );
                         }
                     }
-                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
                     reason = $"content folder '{folder}' could not be staged: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
                     return false;

@@ -17,18 +17,6 @@ public static partial class CanaryManifestLoader {
             options: StringSplitOptions.RemoveEmptyEntries,
             separator: ['/', '\\']
         ).Any(predicate: static segment => (segment == ".."));
-    private static bool ContainsReparsePoint(string path, string containmentRoot) {
-        for (var current = new FileInfo(fileName: path).Directory; ((current is not null) && IsWithin(
-            root: containmentRoot,
-            path: current.FullName
-        )); current = current.Parent) {
-            if ((current.Attributes & FileAttributes.ReparsePoint) != 0) {
-                return true;
-            }
-        }
-
-        return ((File.GetAttributes(path: path) & FileAttributes.ReparsePoint) != 0);
-    }
     private static bool IsSafeToken(string value, bool allowColon, bool allowDot) {
         if (
             (value.Length == 0) ||
@@ -57,21 +45,6 @@ public static partial class CanaryManifestLoader {
         }
 
         return true;
-    }
-    private static bool IsWithin(string root, string path) {
-        var relative = Path.GetRelativePath(
-            relativeTo: Path.GetFullPath(path: root),
-            path: Path.GetFullPath(path: path)
-        );
-
-        return (
-            !Path.IsPathRooted(path: relative) &&
-            (relative != "..") &&
-            !relative.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: $"..{Path.DirectorySeparatorChar}"
-        )
-        );
     }
     // Absent (null) reads the leg's own default transcript — the entry whose world/script equal the leg's, or the
     // sole transcript for a non-federated leg. A leg with no authorities[] cannot name one at all.
@@ -1398,13 +1371,13 @@ public static partial class CanaryManifestLoader {
             discriminating.ScriptPath,
         };
 
-        if (IsWithin(
+        if (PuckPaths.IsWithin(
             root: canaryDirectory,
             path: positive.WorldPath
         )) {
             expected.Add(item: positive.WorldPath);
         }
-        if (IsWithin(
+        if (PuckPaths.IsWithin(
             root: canaryDirectory,
             path: discriminating.WorldPath
         )) {
@@ -1413,7 +1386,7 @@ public static partial class CanaryManifestLoader {
         foreach (var role in positive.Authorities.Concat(second: discriminating.Authorities)) {
             expected.Add(item: role.ScriptPath);
 
-            if (IsWithin(
+            if (PuckPaths.IsWithin(
                 root: canaryDirectory,
                 path: role.WorldPath
             )) {
@@ -1423,7 +1396,7 @@ public static partial class CanaryManifestLoader {
         foreach (var relaunch in new[] { positive.Relaunch, discriminating.Relaunch }) {
             if (relaunch is not null) {
                 expected.Add(item: relaunch.ScriptPath);
-                if ((relaunch.WorldSourcePath is { } sourceWorld) && IsWithin(path: sourceWorld, root: canaryDirectory)) {
+                if ((relaunch.WorldSourcePath is { } sourceWorld) && PuckPaths.IsWithin(path: sourceWorld, root: canaryDirectory)) {
                     expected.Add(item: sourceWorld);
                 }
             }
@@ -1475,7 +1448,7 @@ public static partial class CanaryManifestLoader {
             throw new CanaryManifestRefusal(message: $"{context} path '{rawPath}' is invalid ({exception.Message.ReplaceLineEndings(replacementText: " ")}).");
         }
 
-        if (!IsWithin(
+        if (!PuckPaths.IsWithin(
             path: fullPath,
             root: containmentRoot
         )) {
@@ -1484,10 +1457,10 @@ public static partial class CanaryManifestLoader {
         if (!File.Exists(path: fullPath)) {
             throw new CanaryManifestRefusal(message: $"{context} file '{rawPath}' does not exist.");
         }
-        if (ContainsReparsePoint(
-            containmentRoot: containmentRoot,
-            path: fullPath
-        )) {
+        if (CliTreeFiles.LinkedAncestor(
+            path: fullPath,
+            root: containmentRoot
+        ) is not null) {
             throw new CanaryManifestRefusal(message: $"{context} path '{rawPath}' crosses a link or reparse point; lexical containment would not prove where it reads.");
         }
 

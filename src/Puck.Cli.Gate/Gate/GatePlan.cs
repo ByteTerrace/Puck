@@ -1,3 +1,4 @@
+using Puck.Cli.Host;
 using Puck.Cli.Affected;
 using Puck.Cli.Baselines;
 
@@ -14,12 +15,7 @@ public static class GatePlan {
     // built binaries.
     public static readonly string[] GpuSelection = ["--filter-trait", "Category=Gpu"];
     // The device-law suites, each run with GpuSelection.
-    public static readonly IReadOnlyList<(string Suite, string[] Selection)> DeviceSuites = [
-        ("Puck.World.Tests", GpuSelection),
-        ("Puck.DirectX.Tests", GpuSelection),
-        ("Puck.Vulkan.Tests", GpuSelection),
-        ("Puck.Platform.Windows.Tests", GpuSelection),
-    ];
+    public static readonly IReadOnlyList<(string Suite, string[] Selection)> DeviceSuites = [.. HostProcesses.DeviceTestAssemblies.Select(suite => (suite, GpuSelection))];
     // A file-based app's build refuses MSBuild's -nodeReuse switch (it reads it as the project), so the one file app
     // builds with the SDK's own switch that leaves no build server behind.
     public static readonly string[] FileAppArguments = ["build", "src/Puck.Azure.Resources/bootstrap.cs", "-c", CliOptions.DefaultConfiguration, "--disable-build-servers", "-v", "q", "-nologo"];

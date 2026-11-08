@@ -153,7 +153,7 @@ schema cannot state on its own:
 | [documents-motion.md](documents-motion.md) | A kit's `motion` row: `holds` (the only spelling of a vertical channel), `shaping` (velocity response), behaviour as program operations and their parameters (`planarTarget`), the worked kart example, body facts on the wire, `views.seatRig`. |
 | [documents-composition.md](documents-composition.md) | Boot-authored topology/timing members (`References`, `Gravity`, `Portals`, `Simulation`, `Adjacencies`, `Metadata`); engine facts the quarantined worlds exercised (placement primitives, derived limits, author frame, body scale, contact); the sculpting library; `basis`/`imports` composition and merge rules; the validator; serialization conventions. |
 | [documents-identity.md](documents-identity.md) | Owned-world identity documents: the catalog, seeding, discard/refusal classes, `WorldIdentity`, facts, seating, cross-document durable-state writes. |
-| [documents-binding.md](documents-binding.md) | `WorldBindingComposer`: layer merge rules, context rows, wheel rows, the binding bar. |
+| [input: bindings.md](../../input/references/bindings.md) | `WorldBindingComposer`: layer merge rules, context rows, wheel rows, the binding bar (the `input` skill owns it). |
 
 ## `puck.world.definition.v1`
 
@@ -269,7 +269,7 @@ its whole authority surface.
 - `BindingVocabularyHook.cs` — the static injection seam the composition
   root wires with a `[ModuleInitializer]` (`WorldDataHookInstaller` in
   `Puck.World`) so validators reach the input vocabulary without this
-  project referencing `Puck.Input`. See [documents-binding.md](documents-binding.md).
+  project referencing `Puck.Input`. See [bindings.md](../../input/references/bindings.md).
 
 ## Verifying a change here
 

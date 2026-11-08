@@ -924,11 +924,14 @@ public sealed partial class CommandRegistry {
 
         return result;
     }
-    // The one audience check, ahead of both handler boundaries: an operator verb never runs for anyone but the console,
-    // whichever door the line arrived through.
-    private static CommandResult? AudienceRefusal(CommandDefinition definition, Principal principal) => (((definition.Audience == CommandAudience.Operator) && (principal.Kind != PrincipalKind.Console))
-        ? CommandResult.Error(output: $"[{definition.Name}: refused — an operator verb; {principal.Describe()} is not the operator]")
-        : null
+    // The one audience check, ahead of both handler boundaries: a verb never runs for a principal its audience does not
+    // admit (an operator verb for anyone but the console, a local verb for anyone but the console or a seat), whichever
+    // door the line arrived through.
+    private static CommandResult? AudienceRefusal(CommandDefinition definition, Principal principal) => (definition.Audience.Admits(principal: principal)
+        ? null
+        : CommandResult.Error(output: ((definition.Audience == CommandAudience.Operator)
+            ? $"[{definition.Name}: refused — an operator verb; {principal.Describe()} is not the operator]"
+            : $"[{definition.Name}: refused — {definition.Audience.Describe()}; {principal.Describe()} is neither]"))
     );
     /// <summary>Renders a handler's escaped exception as the error result the wire reports it through.</summary>
     /// <param name="definition">The command whose handler threw.</param>

@@ -266,6 +266,12 @@ refuses when two of its effects write one key (`claim-expire`'s `boneHolder[0]` 
 carries it more than once"). Refine a document over a basis by expanding only the rows that change (the garden's
 `pondFlocks` in `worlds/debug/garden-crowd.puck`), never by expanding the whole template again. In `.puck`, a row
 drops with `placement "arrival" { $drop: true }`.
+A creation's shapes refine the same way, by `id` or `name`: `shape Box "visor" { scale [...] }` in a document that
+names a basis or imports changes only the scale of the imported creation's `visor`, and an unnamed, unkeyed `shapes`
+list over a non-empty basis list refuses (PUCK035, naming `prototypes[id="…"].document.shapes`) rather than replacing
+it. Such a document keeps exactly the members its shape rows write; a row omitting `id`, `position`, `rotation` or
+`scale` is completed once, where the composed creation is read (`CreationDocumentJson.Read`: `id` is the row's
+position in the composed list). A document that composes nothing is whole, and its compiled rows carry every default.
 `$drop`/`$replace` are compose-time vocabulary only; the basis-and-import graph is depth-capped
 (`WorldDocumentBasis.MaxChainDepth`, 8, shared across both edge types on any one resolution path) and cycles
 refuse by name.
@@ -395,7 +401,7 @@ here".
 - **State-backed identifiers** use `DocumentIdentifier`: an ordinary string
   remains literal, while a `state.<row>[.<key>]` string reads its identifier
   from a Text state cell. This includes binding-group identifiers on chord,
-  context, and wheel rows (see [documents-binding.md](documents-binding.md)); creation row/document/shape names; look names and
+  context, and wheel rows (see [bindings.md](../../input/references/bindings.md)); creation row/document/shape names; look names and
   creation sources; and kit/look assignment row entries. Put linked names
   behind one cell when they must rename atomically. Resolution precedes
   validation and binding composition, and a live cell write rehydrates,

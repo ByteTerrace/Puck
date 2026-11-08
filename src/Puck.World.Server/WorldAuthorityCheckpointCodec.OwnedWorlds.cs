@@ -175,7 +175,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         writer.WriteArray(
             items: row.CommitMembers,
-            writeItem: WriteCommitMember
+            writeItem: WorldWireLeaves.WriteCommitMember
         );
         writer.WriteArray(
             items: row.Landed,
@@ -217,7 +217,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var commitMembers = reader.ReadArray(
             field: "in-doubt transfer commit members",
-            readItem: (ref WireReader r) => ReadCommitMember(
+            readItem: (ref WireReader r) => WorldWireLeaves.ReadCommitMember(
                 reader: ref r
             ),
             maximum: MaxCollectionCount

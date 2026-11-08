@@ -8,6 +8,12 @@ namespace Puck.Cli.Source.Tests;
 /// <summary>Laws for the fragment half of <c>puck docs links</c>: a link's <c>#fragment</c> must name a heading anchor
 /// of the markdown file it points at, slugged as GitHub renders headings.</summary>
 public sealed class DocsLinksCommandTests {
+    [Fact]
+    public void ListIndentedFencesHideLinksAndRequireAWhitespaceOnlyCloser() {
+        var (exit, output) = Check(document: "- Example\n\n    ```text\n    [fake](missing.md)\n    ```still-code\n    [also fake](absent.md)\n    ````\n\n[real](target.md#good-heading)\n");
+        Assert.True(condition: (exit == 0), userMessage: output);
+    }
+
     private const string Target = """
         # Target
 
@@ -22,6 +28,8 @@ public sealed class DocsLinksCommandTests {
 
     private static (int ExitCode, string Output) Check(string document) {
         using var directory = new TemporaryDirectory();
+
+        directory.WriteText(name: "src/DocsLinksCommand.cs", text: "class DocsLinksCommand { void Run() {} }");
 
         directory.WriteText(
             name: "docs/target.md",
@@ -62,7 +70,7 @@ public sealed class DocsLinksCommandTests {
         Assert.Contains(
             actualString: output,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "FAIL: docs/document.md:1: anchor 'target.md#missing-heading' does not resolve"
+            expectedSubstring: "FAIL [anchor]: docs/document.md:1: anchor 'target.md#missing-heading' does not resolve"
         );
     }
     [Fact]
@@ -120,7 +128,7 @@ public sealed class DocsLinksCommandTests {
         Assert.Contains(
             actualString: brokenOutput,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "FAIL: docs/document.md:7: anchor '#not-a-heading' does not resolve"
+            expectedSubstring: "FAIL [anchor]: docs/document.md:7: anchor '#not-a-heading' does not resolve"
         );
     }
 }

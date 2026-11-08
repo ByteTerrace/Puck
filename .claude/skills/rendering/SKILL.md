@@ -185,6 +185,26 @@ Measure draw/vertex
 counts, actual transform rows, program/material bytes, region residency and
 bakes; the lead measures frame times and edit-to-running on a quiet machine.
 
+## GPU residency
+
+A table the host writes each frame is a `GpuRegion` (`Puck.Abstractions/Gpu/Residency`). Create it with the
+profile constructor so it chooses ring, in place or staged by `GpuResidency.Select`, and grow it only through
+`Grow`, which chooses again and restages a region past a ring's share of the aperture; never select a policy or
+replace a region in the owner. A fixed policy (the always-staged mesh region, uniform frame blocks) uses the policy
+constructor. Round a constant-buffer block with `IGpuBindings.ConstantBufferBytes`. What `Grow` returns retires
+after the submissions that read the old buffers (`SdfWorldTables.Retire`).
+
+A growing table picks its next size with `GpuCapacity`: `Grown` (a fraction of the current size, for amortized growth)
+or `Headroom` (a fraction over the need, for a table fitted to its need). An object replaced while a queue may still
+read it waits in a `GpuRetirementQueue` keyed by a completion point counted on one queue (an upload's sequence, a native
+fence value). A package recorder never sees a fence: a result its recording captured (a readback, a publication, a
+submission's shading identities) lives in a `RenderGraphSlotResults` and is read only when the node reports the slot
+complete (`IRenderGraphPackageReadback.Completed`), which the node does from `WaitSlot` as it reuses the slot or as
+soon as an owed slot's fence reads signaled (`ShaderPipelineRenderNode.PollReadbacks`), and before it disposes a
+retired graph whose submissions completed. Buffers a recording replaced retire at that slot's next completion
+(`SdfMeshOcclusion.Completed`). A reusable slot fence reads signaled after an abandoned submission and after a loss's
+drain, so polling one is never a proof.
+
 ## Far-cascade caster selection
 
 `SdfMeshOcclusion` and `sdf-mesh-occlusion.comp.hlsl` are the one classification
@@ -1038,7 +1058,7 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   `@held`. A settled capture (`IRenderGraphInstances.SettledCapturePath`) turns the graph host's
   levers off. `SdfPortalSight` supplies completed per-consumer slab tests from the mesh pass's existing
   farthest-depth pyramid. `SdfMeshOcclusion` dispatches one additional workgroup through `sdfOcclusionMaySee`
-  and reads its result only after the frame-slot fence. A changed camera or slab, unknown result, or replaced
+  and reads its result only once its node proves the frame slot complete. A changed camera or slab, unknown result, or replaced
   view/program retains demand. Occlusion is presentation evidence from an earlier completed frame;
   moving occluders carry that delay. Settled captures and non-occlusion cull modes bypass it.
 - **A program's bake plan is made on its build thread.** The composition

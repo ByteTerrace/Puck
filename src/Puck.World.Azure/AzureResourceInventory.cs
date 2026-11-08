@@ -11,9 +11,8 @@ namespace Puck.World.Azure;
 /// <remarks>Pagination must complete before publishing. A failed or oversized read never masquerades as an empty collection.
 /// This source observes metadata, not blob contents, account keys, health, occupancy, or Orleans grain placement.</remarks>
 public sealed class AzureResourceInventory : IWorldExtensionObservationSource {
-    private readonly HttpClient? m_httpClient;
+    private readonly AzureArmPipeline m_arm;
     private readonly int m_maximumItems;
-    private readonly HttpPipeline m_pipeline;
     private readonly AzureResourceInventorySettings m_settings;
     private readonly Uri m_uri;
 
@@ -79,48 +78,23 @@ public sealed class AzureResourceInventory : IWorldExtensionObservationSource {
                 throw new ArgumentException(message: "Inventory fields use slash-separated property paths without JSON-pointer escape sequences.");
             }
         }
-        var endpoint = environment.Endpoint;
-
-        if (
-            (endpoint.Scheme != "https") ||
-            (endpoint.AbsolutePath != "/") ||
-            (endpoint.UserInfo.Length != 0) ||
-            (endpoint.Query.Length != 0) ||
-            (endpoint.Fragment.Length != 0)
-        ) {
-            throw new ArgumentException(message: "Inventory requires an HTTPS ARM origin.");
-        }
+        // Reads may retry; the mutation adapter independently forbids automatic resend.
+        m_arm = new AzureArmPipeline(credential: credential, environment: environment, maximumRetries: 2, scope: scope,
+            transport: transport);
         var path = string.Join(
             separator: '/',
             values: m_settings.ResourceGroup.Split('/').Select(selector: Uri.EscapeDataString)
         );
 
         m_uri = new Uri(
-            baseUri: endpoint,
+            baseUri: m_arm.Origin,
             relativeUri: ((((path + "/resources?api-version=") + Uri.EscapeDataString(stringToEscape: m_settings.ApiVersion)) +
             "&%24filter=") + Uri.EscapeDataString(stringToEscape: (("resourceType eq '" + m_settings.ResourceType) + "'")))
         );
-        if (transport is null) {
-            m_httpClient = new(handler: new SocketsHttpHandler { AllowAutoRedirect = false });
-            transport = new HttpClientTransport(client: m_httpClient);
-        }
-        var options = new ArmClientOptions { Environment = environment, Transport = transport };
-
-        options.Retry.MaxRetries = 2; // Reads may retry; the mutation adapter independently forbids automatic resend.
-        options.Diagnostics.IsLoggingEnabled = false;
-        options.Diagnostics.IsDistributedTracingEnabled = false;
-        m_pipeline = new InventoryResource(
-            client: new ArmClient(
-                credential,
-                defaultSubscriptionId: null,
-                options
-            ),
-            scope: scope
-        ).RequestPipeline;
     }
 
     /// <summary>Disposes the owned transport; the supplied credential and any custom transport remain host-owned.</summary>
-    public void Dispose() => m_httpClient?.Dispose();
+    public void Dispose() => m_arm.Dispose();
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<WorldExtensionObservationItem>> ReadAsync(CancellationToken cancellationToken) {
         var result = new List<WorldExtensionObservationItem>();
@@ -131,40 +105,12 @@ public sealed class AzureResourceInventory : IWorldExtensionObservationSource {
 
         for (var page = 0; (page < m_settings.MaximumPages); page++) {
             if (!pages.Add(item: uri.AbsoluteUri)) { throw new InvalidOperationException(message: "Inventory pagination repeated a page."); }
-            using var message = m_pipeline.CreateMessage();
-
-            message.BufferResponse = false;
-            message.Request.Method = RequestMethod.Get;
-            message.Request.Uri.Reset(value: uri);
-            message.Request.Headers.SetValue(
-                name: "Accept",
-                value: "application/json"
-            );
-            await m_pipeline.SendAsync(
+            using var document = await m_arm.GetJsonAsync(
                 cancellationToken: cancellationToken,
-                message: message
+                maximumBytes: m_settings.MaximumResponseBytes,
+                subject: "Inventory",
+                uri: uri
             ).ConfigureAwait(continueOnCapturedContext: false);
-            if (message.Response.Status != 200) { throw new InvalidOperationException(message: ("Inventory HTTP " + message.Response.Status)); }
-            using var buffer = new MemoryStream();
-            var bytes = new byte[8192];
-            var stream = (message.Response.ContentStream ?? throw new JsonException(message: "Inventory response has no body."));
-            int read;
-
-            while ((read = await stream.ReadAsync(
-                buffer: bytes,
-                cancellationToken: cancellationToken
-            ).ConfigureAwait(continueOnCapturedContext: false)) != 0) {
-                if ((buffer.Length + read) > m_settings.MaximumResponseBytes) { throw new InvalidOperationException(message: "Inventory response exceeds byte budget."); }
-                buffer.Write(
-                    buffer: bytes,
-                    count: read,
-                    offset: 0
-                );
-            }
-            using var document = JsonDocument.Parse(buffer.GetBuffer().AsMemory(
-                0,
-                ((int)buffer.Length)
-            ));
 
             foreach (var resource in document.RootElement.GetProperty(propertyName: "value").EnumerateArray()) {
                 if (++inspected > 4096) { throw new InvalidOperationException(message: "Inventory exceeds inspection budget."); }
@@ -257,13 +203,6 @@ public sealed class AzureResourceInventory : IWorldExtensionObservationSource {
             }
         }
         throw new InvalidOperationException(message: "Inventory pagination exceeds page budget.");
-    }
-
-    private sealed class InventoryResource(ArmClient client, ResourceIdentifier scope) : ArmResource(
-        client,
-        scope
-    ) {
-        public HttpPipeline RequestPipeline => Pipeline;
     }
 }
 

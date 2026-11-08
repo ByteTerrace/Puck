@@ -56,7 +56,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
     // The textures and staging buffers a rebuild replaced, each with the value of the fence signalled behind everything
     // submitted when it was replaced. Command lists hold no reference to what they read, so another consumer's pending
     // submission may still read a replaced texture; it is released once the fence passes that value.
-    private readonly List<(ulong Value, nint Buffer, nint Texture)> m_retired = [];
+    private readonly GpuRetirementQueue<(nint Buffer, nint Texture)> m_retired = new();
 
     // True from the moment a recording is submitted until the queue is known to have finished it: while it holds, the
     // command allocator, the staging buffer and the texture are in use by the GPU.
@@ -363,7 +363,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         var retireValue = m_fenceValue;
 
         try {
-            m_retired.EnsureCapacity(capacity: (m_retired.Count + 1));
+            m_retired.Reserve();
 
             if (0 != m_texture) {
                 DirectXCommandCalls.Signal(
@@ -403,7 +403,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         DirectXImageViews.Release(handle: retiredView);
 
         if (0 != retiredTexture) {
-            m_retired.Add(item: (retireValue, retiredBuffer, retiredTexture));
+            m_retired.Retire(after: retireValue, item: (retiredBuffer, retiredTexture));
         }
 
         ReleaseCompleted();
@@ -487,19 +487,9 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
     // Releases the replaced textures and buffers the fence has passed; a removed device's fence reads complete, so
     // none is kept past a loss.
     private void ReleaseCompleted() {
-        while (m_retired.Count > 0) {
-            var (value, buffer, texture) = m_retired[0];
-
-            if (value > m_calls.CompletedValue(fence: ((ID3D12Fence*)m_fence))) {
-                return;
-            }
-
-            m_retired.RemoveAt(index: 0);
-            RetireNativeResources(
-                buffer: buffer,
-                texture: texture
-            );
-        }
+        if (m_retired.Count == 0) { return; }
+        m_retired.Release(completed: m_calls.CompletedValue(fence: ((ID3D12Fence*)m_fence)),
+            release: retired => RetireNativeResources(buffer: retired.Buffer, texture: retired.Texture));
     }
     // Counts a texture or staging buffer no owner will hold as released and releases it.
     private void Discard(nint resource) {
@@ -535,15 +525,8 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             DirectXImageViews.Release(handle: view);
         } finally {
             try {
-                while (m_retired.Count > 0) {
-                    var (_, retiredBuffer, retiredTexture) = m_retired[0];
-
-                    m_retired.RemoveAt(index: 0);
-                    RetireNativeResources(
-                        buffer: retiredBuffer,
-                        texture: retiredTexture
-                    );
-                }
+                m_retired.Release(completed: ulong.MaxValue,
+                    release: retired => RetireNativeResources(buffer: retired.Buffer, texture: retired.Texture));
             } finally {
                 RetireNativeResources(
                     buffer: buffer,

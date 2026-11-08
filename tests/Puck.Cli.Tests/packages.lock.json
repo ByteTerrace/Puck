@@ -33,59 +33,6 @@
           "xunit.v3.mtp-v2": "[4.0.2]"
         }
       },
-      "Apache.Arrow": {
-        "type": "Transitive",
-        "resolved": "22.1.0",
-        "contentHash": "mTdHWGsNCWpKyQxqyNcSS+q4BtBTSOUfhdG+Lwo6eAOznCLSwrZQ5VKtDG2G8VrUp1ul4DwWHefoBS1umjO/VQ=="
-      },
-      "Azure.AI.OpenAI": {
-        "type": "Transitive",
-        "resolved": "2.9.0-beta.1",
-        "contentHash": "CgIYDuCSOFx+yPuCdK7iz71OW2envfVeIE/YoNYK+mhr6bxgIJV6jfBF+mV9aHDQ6KVQjeSL6OZ7x90XrvsoRg==",
-        "dependencies": {
-          "Azure.Core": "1.51.1",
-          "OpenAI": "2.9.1"
-        }
-      },
-      "Azure.Core": {
-        "type": "Transitive",
-        "resolved": "1.60.0",
-        "contentHash": "qCa5DLAq0w14aTl9/bvMZNA/QxPzYj1a4zakrpeudxWd4D4YliRHRfccD3yFECeHkMkvQjMmyWLggb8bzhDVKA==",
-        "dependencies": {
-          "Microsoft.Bcl.AsyncInterfaces": "10.0.9",
-          "Microsoft.Identity.Client": "4.84.2",
-          "Microsoft.Identity.Client.Extensions.Msal": "4.84.2",
-          "System.ClientModel": "1.14.0",
-          "System.Memory.Data": "10.0.9"
-        }
-      },
-      "Azure.Identity": {
-        "type": "Transitive",
-        "resolved": "1.21.0",
-        "contentHash": "GeFv8sGwRKvDKwI2WFy8r0mhmlxEVZg24Sit2NogTjiSO8RVjllWM65OT6e1sKjOvG8V74y7hAbaELUUPjZQSw==",
-        "dependencies": {
-          "Azure.Core": "1.53.0"
-        }
-      },
-      "Azure.Storage.Blobs": {
-        "type": "Transitive",
-        "resolved": "12.30.1",
-        "contentHash": "ywPqtDHLH5MY0Cp/wfLQgqhHOuJmD+bYVJawjXudtaQr9aJB+9orhk8oE6hHPy5s8H5bzq2q/mDkESf8w1rzBg==",
-        "dependencies": {
-          "Apache.Arrow": "22.1.0",
-          "Azure.Core": "1.60.0",
-          "Azure.Storage.Common": "12.29.0"
-        }
-      },
-      "Azure.Storage.Common": {
-        "type": "Transitive",
-        "resolved": "12.29.0",
-        "contentHash": "0VqPcAinzXFJDAELqC+VPFUL6AaU1mmIpDAHarr7DVw3zcJrlo4k3Xc3TCTVBkDgY6YUOjJ00Fd9ZB9En5H2Jg==",
-        "dependencies": {
-          "Azure.Core": "1.60.0",
-          "System.IO.Hashing": "10.0.9"
-        }
-      },
       "BenchmarkDotNet": {
         "type": "Transitive",
         "resolved": "0.15.8",
@@ -156,8 +103,8 @@
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
-        "resolved": "10.0.9",
-        "contentHash": "Aq7M8lG6BrHeatqKqncVm9m55ec34k6nnfPRLe/PvGg+b/pAsRM2ejofeKmCLjTXMa+5NGXm382f8CG/D5WDow=="
+        "resolved": "6.0.0",
+        "contentHash": "UcSjPsst+DfAdJGVDsu346FX0ci0ah+lw3WRtn18NUwEqRt70HaOQ7lI72vy3+1LxtqI3T5GWwV39rQSrCzAeg=="
       },
       "Microsoft.Bcl.Cryptography": {
         "type": "Transitive",
@@ -277,15 +224,6 @@
         "type": "Transitive",
         "resolved": "10.11.0",
         "contentHash": "h4DX/TdJU4fk1GGaf19n6Kujkj6VXbGeL4UEOsQ8+ZJC5fVApPauokCtvBP684BYbczUYZQNfo1mbmyHG4WVSg=="
-      },
-      "Microsoft.Extensions.AI.OpenAI": {
-        "type": "Transitive",
-        "resolved": "10.11.0",
-        "contentHash": "p8fJdcPOrwaUPRrag5dY9SLohaouutY+bqg1Lw+8OOEFqMXvCHGNWQXv2GcUUNPBCkTR4mcBEHoP9LAV2RtxzA==",
-        "dependencies": {
-          "Microsoft.Extensions.AI.Abstractions": "10.11.0",
-          "OpenAI": "2.14.0"
-        }
       },
       "Microsoft.Extensions.Configuration": {
         "type": "Transitive",
@@ -467,23 +405,6 @@
         "contentHash": "4wcIU0rE04ejEfCwHTftu9O8fgH6CRYCe+tseRapikUBn1Kic3QdO7ku22SwFyLrzdWGYPUZMEgv57ZYuuc5gA==",
         "dependencies": {
           "Microsoft.Extensions.Configuration.Binder": "10.0.14"
-        }
-      },
-      "Microsoft.Identity.Client": {
-        "type": "Transitive",
-        "resolved": "4.84.2",
-        "contentHash": "Va9FjmABSgj/lcUfHH0pBNQkmS7SNyepz2ERV7Yynp6QgEYpFdSqR6Vzy1WWipN8GS5pBHuXoZbqaDWuARCrHQ==",
-        "dependencies": {
-          "Microsoft.IdentityModel.Abstractions": "8.14.0"
-        }
-      },
-      "Microsoft.Identity.Client.Extensions.Msal": {
-        "type": "Transitive",
-        "resolved": "4.84.2",
-        "contentHash": "+D98LaU3dOu/Nzs6kgbBJapMvH7iwYcAeC99XwSkpmEadsPv6rozecOl9P6m4A3RfpOuPt9e6J6TwwUUp3+M4w==",
-        "dependencies": {
-          "Microsoft.Identity.Client": "4.84.2",
-          "System.Security.Cryptography.ProtectedData": "4.5.0"
         }
       },
       "Microsoft.IdentityModel.Abstractions": {
@@ -807,14 +728,6 @@
         "resolved": "13.0.4",
         "contentHash": "pdgNNMai3zv51W5aq268sujXUyx7SNdE2bj1wZcWjAQrKMFZV260lbqYop1d2GM67JI1huLRwxo9ZqnfF/lC6A=="
       },
-      "OpenAI": {
-        "type": "Transitive",
-        "resolved": "2.14.0",
-        "contentHash": "AeyC3GxbrJ7KRoWDyFeNSUOQQWD9AnNvM7LYQijCcXcqjyr53aGRcf5GBLExcSBzIs0RWYHe+NbzPrHTeuU5zA==",
-        "dependencies": {
-          "System.ClientModel": "1.15.0"
-        }
-      },
       "Parlot": {
         "type": "Transitive",
         "resolved": "2.2.1",
@@ -858,14 +771,6 @@
         "type": "Transitive",
         "resolved": "1.0.6",
         "contentHash": "jyvtsZwPZeGN6PW8Gqv05QGWq2qQvZsDL0RQ6ZwSVeVDe7KRL5xI02KOKtBgr3/lXvBInJRAL6A2gVazk6DyRg=="
-      },
-      "System.ClientModel": {
-        "type": "Transitive",
-        "resolved": "1.15.0",
-        "contentHash": "y6zQLInrpX+oGL1gXM04DrUSu1O1esWxt4rD/zrujTnzIFChn/noD1OiVVpTrU8ZvglwqO2Uw038svUR3SiAOg==",
-        "dependencies": {
-          "System.Memory.Data": "10.0.9"
-        }
       },
       "System.CodeDom": {
         "type": "Transitive",
@@ -959,8 +864,8 @@
       },
       "System.Memory.Data": {
         "type": "Transitive",
-        "resolved": "10.0.9",
-        "contentHash": "YweovHiLUoEdbr2Xv8eRqCSkTu1vMms4a6xBHaQiMSFVy32PL+hXv6Vhol2NWOmLHjaVgTyhJ3R52U6JxS6w3Q=="
+        "resolved": "10.0.3",
+        "contentHash": "MaGhRfGunmrj/nHjtsi9XkhlYJ/ERGWrbA+BiSKNtGnAjc9XlG5EhAvak6VRcX5LYzPF6pBO8nJ613dTgzabig=="
       },
       "System.Numerics.Tensors": {
         "type": "Transitive",
@@ -971,11 +876,6 @@
         "type": "Transitive",
         "resolved": "6.0.1",
         "contentHash": "IQ4NXP/B3Ayzvw0rDQzVTYsCKyy0Jp9KI6aYcK7UnGVlR9+Awz++TIPCQtPYfLJfOpm8ajowMR09V7quD3sEHw=="
-      },
-      "System.Security.Cryptography.ProtectedData": {
-        "type": "Transitive",
-        "resolved": "4.5.0",
-        "contentHash": "wLBKzFnDCxP12VL9ANydSYhk59fC4cvOr9ypYQLPnAj48NQIhqnjdD2yhP8yEKyBJEjERWS9DisKL7rX5eU25Q=="
       },
       "Wasmtime": {
         "type": "Transitive",
@@ -1406,7 +1306,8 @@
         "dependencies": {
           "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "Microsoft.Build.Framework": "[18.*, )",
-          "Puck.Cli.Core": "[1.0.0, )"
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Source": "[1.0.0, )"
         }
       },
       "puck.cli.release": {
@@ -1418,7 +1319,6 @@
           "Puck.Cli.Source": "[1.0.0, )",
           "Puck.Cli.Worlds": "[1.0.0, )",
           "Puck.Mcp": "[1.0.0, )",
-          "Puck.Storage.Azure": "[1.0.0, )",
           "Puck.World.Silo": "[1.0.0, )"
         }
       },
@@ -1473,20 +1373,10 @@
           "Puck.Cli.Format": "[1.0.0, )",
           "Puck.Cli.Harness": "[1.0.0, )",
           "Puck.Cli.Shaders": "[1.0.0, )",
-          "Puck.Embeddings.Azure": "[1.0.0, )",
           "Puck.World.Client": "[1.0.0, )",
           "Puck.World.Machines": "[1.0.0, )",
           "Puck.World.Server": "[1.0.0, )",
           "Puck.World.Vocabulary": "[1.0.0, )"
-        }
-      },
-      "puck.embeddings.azure": {
-        "type": "Project",
-        "dependencies": {
-          "Azure.AI.OpenAI": "[2.9.0-beta.1, )",
-          "Azure.Identity": "[1.21.0, )",
-          "ByteTerrace.Puck.Embeddings": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.AI.OpenAI": "[10.*, )"
         }
       },
       "puck.launcher": {
@@ -1546,15 +1436,6 @@
         "dependencies": {
           "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
-        }
-      },
-      "puck.storage.azure": {
-        "type": "Project",
-        "dependencies": {
-          "Azure.Identity": "[1.*, )",
-          "Azure.Storage.Blobs": "[12.*, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Puck.Storage": "[1.0.0, )"
         }
       },
       "puck.world.addons": {

@@ -80,7 +80,7 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
     private const int StickCalibrationMinCenter = 512;
     private const int StickCalibrationMinSpan = 128;
     private const int StickCenter = 2048;
-    private const float StickDeadzone = 0.12f;     // used when the pad's own deadzone is unreadable
+    private const float StickDeadzone = GamepadNormalization.DefaultStickDeadzone;
     private const float StickRange = 1800f;
     private const int SubcommandAttempts = 5;
     private const byte SubcommandDeviceInfo = 0x02;

@@ -181,8 +181,4 @@ public sealed class SdfWorldResidencyReportLawTests {
         Assert.Equal(expected: 0, actual: BlockDebugMode(frame: frame, residency: residency));
     }
 
-    private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
-        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
-            frame;
-    }
 }

@@ -57,7 +57,12 @@ agent works in that mode by default, without asking:
   values it wants. Engine code keeps only mechanisms and correctness (a surface
   drawn black by a lighting defect is a defect, not a style). Authors bringing
   their own shaders is in scope
-  ([open items](docs/plans/open-items.md#author-shaders)).
+  ([open items](docs/plans/open-items.md#author-shaders)). How authors
+  license, credit, sell or restrict their content is theirs too (the owner's
+  ruling: "We can't be in the business of 'policing' how authors perform
+  attribution and whatnot"): the engine carries what an author writes in a
+  creation's identified bytes and enforces no licence vocabulary,
+  compatibility or attribution policy.
 - Puck code over engine code (the owner's ruling). Behaviour is written as
   Puck programs that authors build and own: camera programs, physics and
   motion programs, the state system's rules, board games, emulated machines
@@ -394,6 +399,14 @@ settles a question, decide by that principle and say why.
    world work is mostly wiring its documents to what exists; new code is for a
    gap you can name after that search. A second implementation is a defect,
    and a skill wrong about its own area is corrected in the same change.
+   Search by capability, not only by the name you expect: state what the
+   mechanism does ("tell a tap from a hold", "hold a thing for both sides"),
+   read the area's decision register (`docs/decisions/`) and reference pages
+   for it, then ask the code. The rule binds a plan, a design memo and a brief
+   exactly as it binds code, and a lane that designs or builds a mechanism hands
+   back the systems it considered, with citations. An area with no owning skill,
+   or a skill that does not map a capability its area owns, is a gap fixed when
+   found.
    Act on the code, never on memory (the owner's ruling): before stating how
    something works, naming a cause, briefing a lane or changing code, read the
    current source, document or measurement it rests on, and cite it

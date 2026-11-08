@@ -485,7 +485,7 @@ public sealed partial class ShaderPipelineRenderNode {
     );
     // The frame group block every pass of a graph binds, held by its leading pass.
     private static GpuRegion FrameRegionOf(IGpuDeviceContext device, GpuDeviceServices gpu, uint inFlight, string owner, uint blockBytes) => RingRegionOf(
-        byteCount: UniformBytes(blockBytes: blockBytes),
+        byteCount: IGpuBindings.ConstantBufferBytes(blockBytes: blockBytes),
         device: device,
         gpu: gpu,
         inFlight: inFlight,

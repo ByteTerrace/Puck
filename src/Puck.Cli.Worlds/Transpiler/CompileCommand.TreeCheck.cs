@@ -46,7 +46,7 @@ public static partial class CompileCommand {
 
             if (!File.Exists(path: shipped)) {
                 problems.Add(item: $"missing {relative}: a fresh run writes it and '{CliPaths.ToDisplay(fullPath: catalog)}' does not hold it.");
-            } else if (!File.ReadAllBytes(path: shipped).AsSpan().SequenceEqual(other: File.ReadAllBytes(path: Path.Combine(path1: fresh, path2: relative)))) {
+            } else if (!Puck.Confinement.FileContent.Equals(left: shipped, right: Path.Combine(path1: fresh, path2: relative))) {
                 problems.Add(item: $"differs {relative}: its bytes are not what a fresh run writes.");
             }
         }

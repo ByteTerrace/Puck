@@ -64,7 +64,7 @@ public sealed class WorldFlagCommandModuleLawTests {
             Assert.StartsWith(expectedStartString: "[world.flag: exhibit '..'", actualString: registry.Submit(line: "world.flag ..").Output, comparisonType: StringComparison.Ordinal);
 
             using (var peer = source.CreateSession(principal: Principal.Peer(index: 4, generation: 1))) {
-                Assert.StartsWith(expectedStartString: "[world.flag: flagging requires", actualString: registry.SubmitSession(line: "world.flag close", session: peer).Output, comparisonType: StringComparison.Ordinal);
+                Assert.StartsWith(expectedStartString: "[world.flag: refused — a local verb", actualString: registry.SubmitSession(line: "world.flag close", session: peer).Output, comparisonType: StringComparison.Ordinal);
             }
 
             var flagged = registry.Submit(line: "world.flag near looks off");

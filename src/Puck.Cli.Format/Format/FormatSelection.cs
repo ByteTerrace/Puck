@@ -27,10 +27,8 @@ public static class FormatSelection {
             ) {
                 throw new ArgumentException(message: $"Not a C# or .puck source on disk: {relative}");
             }
-            for (var current = path; (current != root); current = Path.GetDirectoryName(path: current)!) {
-                if ((File.GetAttributes(path: current) & FileAttributes.ReparsePoint) != 0) {
-                    throw new ArgumentException(message: $"Formatting through a symbolic link is unsupported: {relative}");
-                }
+            if (CliTreeFiles.LinkedAncestor(path: path, root: root) is not null) {
+                throw new ArgumentException(message: $"Formatting through a symbolic link is unsupported: {relative}");
             }
         }
         return paths;
@@ -62,13 +60,7 @@ public static class FormatSelection {
             : []);
 
         foreach (var target in sources) {
-            if (File.ReadLines(path: target).Any(predicate: static line => (line.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: "#!"
-            ) || line.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: "#:"
-            )))) {
+            if (File.ReadLines(path: target).Any(predicate: FormatFileProject.IsDirective)) {
                 standalone.Add(item: target);
             } else if (SourceFiles.FindOwningProjectDirectory(start: Path.GetDirectoryName(path: target)!) is null) {
                 orphans.Add(item: target);

@@ -110,7 +110,7 @@ public static partial class LockFiles {
         var result = restore(arg: RecordArguments(update: update));
 
         changed = [.. locks
-            .Where(predicate: path => (File.Exists(path: path) && ((before[path] is not { } previous) || !previous.AsSpan().SequenceEqual(other: File.ReadAllBytes(path: path)))))
+            .Where(predicate: path => (File.Exists(path: path) && ((before[path] is not { } previous) || !Puck.Confinement.FileContent.Equals(expected: previous, path: path))))
             .Select(selector: path => CliPaths.ToDisplay(fullPath: path, relativeTo: repositoryRoot))];
         return result;
     }

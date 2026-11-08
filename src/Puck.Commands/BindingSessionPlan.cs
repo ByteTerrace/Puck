@@ -15,8 +15,8 @@ public sealed record BindingSessionPlan(
     IReadOnlyList<BindingSessionStep> Steps,
     int RequiredPresses = 3,
     IReadOnlyList<string>? ReservedSources = null,
-    float PressThreshold = 0.5f,
-    float ReleaseThreshold = 0.4f
+    float PressThreshold = HeldOrderTracker.DefaultPressThreshold,
+    float ReleaseThreshold = HeldOrderTracker.DefaultReleaseThreshold
 ) {
     // Every source a capture must refuse because binding it would move a PAGE rather than a command: the declared
     // modifiers' own sources, plus each chord/held member that resolves to neither a declared modifier id nor a

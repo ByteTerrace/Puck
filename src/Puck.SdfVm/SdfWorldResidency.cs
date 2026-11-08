@@ -224,6 +224,13 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public SdfFrame? Frame => m_frame;
     /// <summary>Gets the screens the residency binds, or <see langword="null"/> for none.</summary>
     public ISdfScreenSources? ScreenSources => m_screenSources;
+    // Marks the screen indices this residency declares, which alone may bind a source, clearing every other.
+    internal void DeclareScreens(Span<bool> declared) {
+        declared.Clear();
+        if (m_screenSources is { } sources) {
+            foreach (var screen in sources.Screens) { declared[screen] = true; }
+        }
+    }
     /// <summary>Gets the last uploaded program's packed word count, or 0 before the first upload — the live half of the
     /// <c>world.budget</c> cost sheet against <see cref="ProgramWordCapacity"/>.</summary>
     public int LiveProgramWords { get; private set; }
