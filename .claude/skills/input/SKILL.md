@@ -249,5 +249,6 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
 | `puck-world` | Running and verifying a World, engagement and kit `pad` maps, the seat camera's input feel (`seatCameraFeel`), rules and grants. |
 | `puck-dsl` | `.puck` grammar, `let`/`for`, compile and lint verbs, PUCKnnn diagnostics. |
 | `gaming-bricks` | An emulated machine's own pad registers and input timing inside the core. |
+| `platform` | The OS side of a device: window messages, Raw Input, pointer lock, HID and Xbox transports, lamp arrays. |
 | `maths-usage` | Fixed-point types for offsets, calibration and judgement windows. |
 | `verification` | Leases, the private CLI copy, flaky versus failing scenarios. |

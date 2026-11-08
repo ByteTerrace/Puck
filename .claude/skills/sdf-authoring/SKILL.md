@@ -369,3 +369,4 @@ Run every `puck` verb from your lane's private copy of the head's CLI
 | `puck-dsl` | `.puck` grammar (`let`/`template`/`for`, the one-spelling rule), CLI flags, PUCKnnn diagnostics not specific to a creation field |
 | `puck-world` | World sections around a creation (`looks`, `placements`, `render`, `state`), console semantics, booting `--world` |
 | `rendering` | The SDF VM, ISA, kernels, shaders, the bake's internals, GPU cost and captures |
+| `physics` | The contact providers, sweeps and kernels a creation's colliders feed |

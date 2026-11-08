@@ -31,12 +31,6 @@ read. Both timings retain one source read and reuse its outcome at delivery.
 `WorldRuleHost.ProposedPairLive` does not read these sources: its queued
 document rows carry literal identities.
 
-A rule's body target read from a cell that exists in the key table but holds no
-value resolves to body 0, because `WorldServer.ReadArenaCell` answers zero for an
-empty cell (`WorldRuleHost.ResolveBody`, the one resolver since the duplication
-audit). Under the absence rules an empty read is absent, so the target must
-resolve to no body and the effect refuse; fix it in the read, not per caller.
-
 ## Unmeasured
 
 `WorldRuleHost.ProposedPairLive` materializes the arena when common effects

@@ -1176,4 +1176,6 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 | `puck-dsl` | `.puck` grammar and the compile/lint verbs. |
 | `maths-usage` | Fixed-point primitives for the query evaluator. |
 | `dotnet-performance` | Host-side C# hot paths. |
+| `platform` | Native windows, display facts (VRR, colour space, display power), precision waits, camera rings that feed shared textures. |
+| `physics` | Contact against the authored field, which the drawn mesh must agree with. |
 | `verification` | The landing bar, GPU legs and how to read a failed check. |

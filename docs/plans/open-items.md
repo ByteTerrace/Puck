@@ -4366,16 +4366,6 @@ Owner: the lead · ordinary · Next: address skill-readiness issues affecting
 the selected landscape lanes. The broader skill-eval program below and the
 Monitor hook check remain supporting work alongside the landscape priority.
 
-- [medium] Areas with no owning skill (AGENTS.md rule 7: a gap fixed when
-  found), from the input skill lane: audio and speech (`src/Puck.Audio`),
-  physics and contact (`src/Puck.Physics`, mentioned only inside puck-world's
-  document references), the dashboard (`src/Puck.Dashboard`), platform
-  windowing and transports (`src/Puck.Platform.*`), recording and capture
-  (`src/Puck.Recording`), and the state system (`Puck.State` and its `.Rules`,
-  `.Search`, `.Topology`, `.Vectors`, `.Generators` siblings, covered only by
-  `docs/reference/state/` and one puck-world row; the state audit's capability
-  table is the starting point). The duplication audit's map gaps join this list; one
-  lane writes the skills by capability after the audit lands.
 - [high, edit-to-running] A fresh landscape World artifact builds for minutes
   before boot, against the owner's 30-second edit bar; an incremental CLI build
   of a different target is far faster, so the two are observations, not a
