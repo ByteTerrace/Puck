@@ -66,26 +66,14 @@ public static class FixedContactPushMath {
                 unit: out var wall,
                 unitAxis: up
             )) {
-                var intoWall = FixedVector3.Dot(
-                    left: velocity,
-                    right: wall
-                );
-
                 return new Trial(
                     Grounded: false,
                     Normal: normal,
                     PositionDelta: (wall * (penetration / acrossLength)),
-                    VelocityDelta: ((intoWall < FixedQ4816.Zero)
-                    ? -(wall * intoWall)
-                    : FixedVector3.Zero)
+                    VelocityDelta: (velocity.LimitAlong(maximum: FixedQ4816.Zero, unitAxis: -wall) - velocity)
                 );
             }
         }
-
-        var into = FixedVector3.Dot(
-            left: velocity,
-            right: normal
-        );
 
         // Walkable ground holds a body where it stands: it pushes along up, never along its own tilted normal. A normal
         // push and a normal clamp each leave a downslope remainder of the tick's fall (the push's sideways component,
@@ -94,6 +82,11 @@ public static class FixedContactPushMath {
         // velocity's normal component, removed through its up component), so planar motion stays as the body drives
         // it. On level ground the normal is up and both forms are one.
         if (grounded) {
+            var into = FixedVector3.Dot(
+                left: velocity,
+                right: normal
+            );
+
             return new Trial(
                 Grounded: true,
                 Normal: normal,
@@ -104,16 +97,11 @@ public static class FixedContactPushMath {
             );
         }
 
-        var velocityDelta = ((into < FixedQ4816.Zero)
-            ? -(normal * into)
-            : FixedVector3.Zero
-        );
-
         return new Trial(
             Grounded: grounded,
             Normal: normal,
             PositionDelta: (normal * penetration),
-            VelocityDelta: velocityDelta
+            VelocityDelta: (velocity.LimitAlong(maximum: FixedQ4816.Zero, unitAxis: -normal) - velocity)
         );
     }
 }

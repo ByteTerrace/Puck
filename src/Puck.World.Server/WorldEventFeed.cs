@@ -697,138 +697,17 @@ public sealed class WorldEventFeed {
 
         return true;
     }
-    private static bool Overlaps(WorldBody a, WorldBody b) {
-        var aCollider = a.Collider;
-        var bCollider = b.Collider;
-
-        if (
-            (aCollider is not { } aVolume) ||
-            (bCollider is not { } bVolume)
-        ) {
-            return false;
-        }
-
-        var leftVolumes = a.ScaledColliderVolumes();
-        var rightVolumes = b.ScaledColliderVolumes();
-
-        foreach (var left in leftVolumes) {
-            foreach (var right in rightVolumes) {
-                if (Overlaps(
-                    leftPosition: a.FixedPosition,
-                    leftOrientation: a.FixedOrientation,
-                    left: in left,
-                    rightPosition: b.FixedPosition,
-                    rightOrientation: b.FixedOrientation,
-                    right: in right
-                )) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-    // The overlap sense of one volume pair, through the same geometry the contact solver depenetrates with: the
-    // shared segment witness for a sphere/capsule pair, the box's own exact sphere test and the fifteen-axis
-    // separating-axis test for a box against a sphere or a box. A capsule against a box is the one pair with no
-    // exact kernel on either side; it reads world-axis bounds, as the solver does.
-    private static bool Overlaps(FixedVector3 leftPosition, FixedQuaternion leftOrientation, in FixedBodyColliderVolume left,
-        FixedVector3 rightPosition, FixedQuaternion rightOrientation, in FixedBodyColliderVolume right) {
-        if ((left.Kind == FixedBodyColliderKind.Ellipsoid) || (right.Kind == FixedBodyColliderKind.Ellipsoid)) {
-            ReadOnlySpan<FixedBodyColliderVolume> leftVolumes = [left];
-            ReadOnlySpan<FixedBodyColliderVolume> rightVolumes = [right];
-
-            return FixedDynamicBodyContacts.TryCorrection(correction: out _, leftOrientation: leftOrientation, leftPosition: leftPosition,
-                leftVolumes: leftVolumes, rightOrientation: rightOrientation, rightPosition: rightPosition, rightVolumes: rightVolumes, tieBreaker: 0);
-        }
-        if (
-            (left.Kind != FixedBodyColliderKind.Box) &&
-            (right.Kind != FixedBodyColliderKind.Box)
-        ) {
-            var (leftStart, leftEnd) = FixedDynamicBodyContacts.Segment(
-                orientation: leftOrientation,
-                position: leftPosition,
-                volume: in left
-            );
-            var (rightStart, rightEnd) = FixedDynamicBodyContacts.Segment(
-                orientation: rightOrientation,
-                position: rightPosition,
-                volume: in right
-            );
-            var closest = FixedDynamicBodyContacts.ClosestDelta(
-                p1: leftStart,
-                p2: rightStart,
-                q1: leftEnd,
-                q2: rightEnd
-            );
-            var radius = (left.Radius + right.Radius);
-
-            return (FixedVector3.Dot(
-                left: closest,
-                right: closest
-            ) < (radius * radius));
-        }
-
-        if (
-            (left.Kind == FixedBodyColliderKind.Box) &&
-            (right.Kind == FixedBodyColliderKind.Box)
-        ) {
-            return FixedOrientedBox.Overlaps(
-                left: FixedOrientedBox.FromVolume(
-                    orientation: in leftOrientation,
-                    position: leftPosition,
-                    volume: in left
-                ),
-                right: FixedOrientedBox.FromVolume(
-                    orientation: in rightOrientation,
-                    position: rightPosition,
-                    volume: in right
-                )
-            );
-        }
-
-        if (
-            (left.Kind == FixedBodyColliderKind.Sphere) ||
-            (right.Kind == FixedBodyColliderKind.Sphere)
-        ) {
-            var sphereIsLeft = (left.Kind == FixedBodyColliderKind.Sphere);
-            var sphere = (sphereIsLeft ? left : right);
-
-            var (sphereCenter, _) = FixedDynamicBodyContacts.Segment(
-                orientation: (sphereIsLeft ? leftOrientation : rightOrientation),
-                position: (sphereIsLeft ? leftPosition : rightPosition),
-                volume: in sphere
-            );
-            var box = FixedOrientedBox.FromVolume(
-                orientation: (sphereIsLeft ? rightOrientation : leftOrientation),
-                position: (sphereIsLeft ? rightPosition : leftPosition),
-                volume: (sphereIsLeft ? right : left)
-            );
-
-            return box.IntersectsSphere(
-                center: sphereCenter,
-                radius: sphere.Radius
-            );
-        }
-
-        var (leftCenter, leftExtent) = FixedColliderBounds.WorldBounds(
-            orientation: in leftOrientation,
-            position: leftPosition,
-            volume: in left
-        );
-        var (rightCenter, rightExtent) = FixedColliderBounds.WorldBounds(
-            orientation: in rightOrientation,
-            position: rightPosition,
-            volume: in right
-        );
-        var delta = (leftCenter - rightCenter);
-
-        return (
-            (FixedQ4816.Abs(value: delta.X) < (leftExtent.X + rightExtent.X)) &&
-            (FixedQ4816.Abs(value: delta.Y) < (leftExtent.Y + rightExtent.Y)) &&
-            (FixedQ4816.Abs(value: delta.Z) < (leftExtent.Z + rightExtent.Z))
-        );
-    }
+    // The overlap sense of two bodies is the contact narrowphase's own answer at zero margin, so an event never reports
+    // a pair the solver does not depenetrate, nor misses one it does.
+    private static bool Overlaps(WorldBody a, WorldBody b) =>
+        ((a.Collider is not null) && (b.Collider is not null) && FixedDynamicBodyContacts.Overlaps(
+            leftPosition: a.FixedPosition,
+            leftOrientation: a.FixedOrientation,
+            leftVolumes: a.ScaledColliderVolumes(),
+            rightPosition: b.FixedPosition,
+            rightOrientation: b.FixedOrientation,
+            rightVolumes: b.ScaledColliderVolumes()
+        ));
     private void QueueRoute(WorldEventFamily family, int sourceBody, GrantSubject target) {
         // Encoding (see AddonAbi.ObservationVerbs.EventRouteEngaged's own doc): B >= 0 is a screen index; B < 0 is
         // -(bodyIndex + 1). A screen index is always >= 0 and a body index is always >= 0, so the sign alone
