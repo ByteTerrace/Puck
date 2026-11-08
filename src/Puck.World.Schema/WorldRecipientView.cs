@@ -12,7 +12,7 @@ public sealed class WorldRecipientView(Func<WorldDefinition> definition, Func<St
     internal StateArena Arena => arena();
     internal Principal? Recipient => recipient;
     internal WorldDisclosureImages Images => images;
-    internal bool Unrestricted => recipient?.Kind is PrincipalKind.Console or PrincipalKind.World;
+    internal bool Unrestricted => recipient?.IsAuthority == true;
     internal WorldStateDisclosure.Observer Observer => new(Arena, recipient, Unrestricted);
 
     /// <summary>The admission tier; no operation can raise it.</summary>

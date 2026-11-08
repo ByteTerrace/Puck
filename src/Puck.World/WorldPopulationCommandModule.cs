@@ -132,7 +132,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         comparisonType: StringComparison.Ordinal
     );
     private string DescribeBudget(CommandContext context) {
-        if (context.Principal.Kind is not (PrincipalKind.Console or PrincipalKind.World)) {
+        if (!context.Principal.IsAuthority) {
             var definition = server.ReadView(context).Definition;
             var instances = WorldPlacementStamper.StaticStampInstances(definition, definition.Placements);
             return $"[world.budget: placements {instances} static instance(s) ({definition.Placements.Count} row(s)) | state {definition.AuthoredState.Count} row(s) | creations {definition.Creations.Count}]";

@@ -29,7 +29,7 @@ public sealed class WorldStateReadView {
     /// <summary>Gets the document as the reader may read it: every withheld cell removed from its row.</summary>
     public WorldDefinition Definition => m_view.Definition;
     /// <summary>Gets a value indicating whether the reader is the operator, who reads the live document whole.</summary>
-    public bool IsOperator => (Reader.Kind is PrincipalKind.Console or PrincipalKind.World);
+    public bool IsOperator => Reader.IsAuthority;
     /// <summary>Gets the principal the view discloses to.</summary>
     public Principal Reader { get; }
 

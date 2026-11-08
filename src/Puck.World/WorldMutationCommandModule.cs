@@ -364,6 +364,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.save",
             description: $"Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): {WorldSaveForms.Spelling}. The snapshot is the AUTHORED document: the live definition (mutations included), with a moved session lever folded into the section it belongs to when the document authors that section (render levers into render, the master volume into audio, the present target into host, the peer-source default into bodies, magazine selectors into screens) and the host's named machine declarations into machines; a section the document omits stays omitted, and an untouched section is written as authored. No argument writes back to the loaded world file. A .puck target is saved into its source tree: each changed authored node is rewritten in the source that authors it (an import's in the import, a value read from a let in the let), unrelated text is retained, the simulation's state stays as authored, and the recomposed snapshot is proved before writing. A template, compile-time for or module-generated row refuses by name; a generated duplicate requires an authored id. A refused edit can be saved to a JSON target declaring the source as its basis. A target file naming a basis stays a delta: the write is the proved minimal difference over its composed basis chain, and the echo names the preserved basis (or why the save degraded to flat).",
@@ -511,7 +512,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.status",
-            description: "Reports the live world definition and journal state (Immediate; the stdin barrier makes it read the settled state after any pending mutation): source path, the source file's basis (its composition template, or none — peeked from the file, the one truth for derivation), schema, row counts, the simulation rate, correction/producer/audio policy (including the mixer's half-radius curve sample), the declared medium field names (or none), a cheap session-drift hint, dirty = journal length, and journal-depth = host.journalDepth (unbounded when 0, the default). Session drift is separate from dirty: a saved-bytes-only world.save leaves the in-memory definition unchanged, so session drift honestly persists past a save.",
+            description: "Reports the live world definition and journal state (Immediate; the stdin barrier makes it read the settled state after any pending mutation): source path, the source file's basis (its composition template, or none — peeked from the file, the one truth for derivation), schema, row counts, the simulation rate, correction/producer/audio policy (including the mixer's half-radius curve sample), the declared medium field names (or none), for the operator a cheap session-drift hint and dirty = journal length (the authority's edit history, which a recipient's status omits), and journal-depth = host.journalDepth (unbounded when 0, the default). Session drift is separate from dirty: a saved-bytes-only world.save leaves the in-memory definition unchanged, so session drift honestly persists past a save.",
             handler: (context, args) => {
                 if (CommandResult.RequireNoArguments(
                     args: args,
@@ -522,18 +523,22 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                 var definition = server.ReadView(context).Definition;
                 var source = definitionSource.SourcePath;
-                var dirty = server.JournalLength;
-                var drift = WorldSessionCapture.DescribeDrift(
-                    definition: definition,
-                    snapshot: WorldSaveSnapshot.Compose(
-                        audio: audioDirector,
-                        bindingBar: bindingBarVisibility,
-                        editor: editorSeats,
-                        pacing: pacing,
-                        render: renderSettings,
-                        server: server,
-                        tick: (server.NextInputTick - 1UL)
-                    )
+                // The journal and the save snapshot are the authority's edit history: the journal's length moves with
+                // an operator's hidden-only edit, so a recipient's status carries neither.
+                var journal = (context.Principal.IsAuthority
+                    ? $" session-drift {WorldSessionCapture.DescribeDrift(
+                        definition: definition,
+                        snapshot: WorldSaveSnapshot.Compose(
+                            audio: audioDirector,
+                            bindingBar: bindingBarVisibility,
+                            editor: editorSeats,
+                            pacing: pacing,
+                            render: renderSettings,
+                            server: server,
+                            tick: (server.NextInputTick - 1UL)
+                        )
+                    )} dirty {server.JournalLength}"
+                    : string.Empty
                 );
                 var audioCurve = (string.Equals(
                     a: definition.Audio.DefaultCurve,
@@ -583,7 +588,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"[world.status: source {source} basis {basis} documents {documents} schema {definition.Schema} rate {definition.SimulationRateHz}Hz kits {definition.Kits.Count} body-programs {definition.BodyMotionPrograms.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} maxSmoothError {definition.Motion.MaxSmoothError:0.###} medium {medium} audio-curve {definition.Audio.DefaultCurve} half-radius-gain {halfRadiusGain:0.#####} sleeping {server.Population.SleepingCount} session-drift {drift} dirty {dirty} journal-depth {journalDepthText}{machineFaults}]"
+                    handler: $"[world.status: source {source} basis {basis} documents {documents} schema {definition.Schema} rate {definition.SimulationRateHz}Hz kits {definition.Kits.Count} body-programs {definition.BodyMotionPrograms.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} maxSmoothError {definition.Motion.MaxSmoothError:0.###} medium {medium} audio-curve {definition.Audio.DefaultCurve} half-radius-gain {halfRadiusGain:0.#####} sleeping {server.Population.SleepingCount}{journal} journal-depth {journalDepthText}{machineFaults}]"
                 ));
             }
         );
