@@ -40,6 +40,9 @@ public sealed class FixedStepUpLawTests {
                 velocity: ref velocity,
                 volumes: Capsule
             );
+        // A ref struct cannot take the interface's default member, so it names the plain sweep itself.
+        public ContactResolution SweepSupport(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
+            Sweep(previousPosition: in previousPosition, position: ref position, velocity: ref velocity);
     }
 
     // A box riser spanning x 1..2 and the given height; a capsule at x 0.75 is just clear of its lower edge.
