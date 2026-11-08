@@ -542,6 +542,15 @@ when the rendered diagonal floor is present.
 A neighbour's answer moves a local body only through
 `WorldPopulation.AdmitAdjacencyResponse`: its bodies' pushes and its geometry's
 resolution cross back as one displacement and one velocity per projection.
+Refused neighbour sweeps propose their rollback through that door; only the
+local field may refuse the body's move. Support-selected descents are tagged by
+`IFixedContactStep.SweepSupport` through `WorldBody.BodyContactStep` and
+`IEntityContactField.ResolveEntitySupportSweep`. Unless the local landing itself
+grounds, the neighbour's entire landing displacement is admitted from the local
+stationary answer, including the descent and landing depth. A shortened landing
+does not claim neighbour ground and the snap is rejected. Ordinary local support
+keeps its own landing. `IWorldAdjacencyNeighbourContact` hands out `IContactField`;
+the delivered document still compiles it through `WorldSolidField.TryBuild`.
 Every sweep that moves a body names it (`WorldBody.SweepContact`); a probe that
 names no body takes nothing from a neighbour. The door keeps two invariants per
 local body per tick:
@@ -557,6 +566,14 @@ local body per tick:
   outward speed through the face does not grow. A crossing the ownership sweep
   reports therefore comes from the body's own motion; a neighbour can push a
   still body up to its face but not across it.
+
+When incoming velocity retreats from an owned face, that same door admits no
+correction toward the face and no reduction in retreat speed. Repeated phantom
+bodies or sweep refusals therefore cannot cancel the body's own retreat; no
+per-body decay state is needed for that guarantee. A still body can still be
+carried up to the threshold within the existing budget. This does not attest
+the reported geometry or bodies, nor remove their influence while the visitor
+does not retreat.
 
 Body contacts are settled by one responder per authority pair
 (`WorldCrossAuthoritySettlement.LocalResponds`), from this authority's identity

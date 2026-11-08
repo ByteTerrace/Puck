@@ -1018,9 +1018,12 @@ motion. `WorldAdjacencyCorrectionLawTests` drives phantom reports, embedded
 neighbour geometry, sixty-four ticks of herding, generation grinding and an
 honest shallow contact through the real server;
 `WorldBodyWork.AdjacencyCorrectionClamps` is visible in `world.counters`. This
-does not prove reported bodies exist. A neighbour field's sweep refusal, the
-support distance ground snap reads, and untaped delivery timing remain outside
-this guarantee; those packets are in
+does not prove reported bodies exist. Refused neighbour sweeps propose their
+rollback through the same door, and neighbour support landings include their
+whole descent in its budget. Incoming retreat from an owned face cannot be
+cancelled by either response or by repeated phantom bodies. Still bodies can
+still be carried up to the threshold; untaped delivery timing remains outside
+the guarantee. Those residual packets are in
 [open items](../open-items.md#transfers-federation-and-server).
 
 **Critique 1.2, group membership proof on the federation wire: confirmed

@@ -896,11 +896,14 @@ The pair hash reads the two authority identities alone, never a generation
 the neighbour chooses (lane E's "a neighbour can choose generations that
 assign a pair to the local side", [puck-today, premise verdicts](puck-today.md#premise-verdicts)
 **[record]**, Codex R7, [B14](synthesis-attacks.md#b14-pinned-at-the-seam),
-Argon 4). It does not prove a reported body exists, bound how long a visitor
-is held by phantom bodies reported every tick (no decay rule), keep a
-neighbour from carrying a still body toward the plane up to its threshold, or
-stop a neighbour field's refusal pinning a body, and the remote identity stays
-a claim until attested. So A10 is narrowed, not closed, until those land.
+Argon 4). Refused neighbour sweeps propose their rollback through the same door,
+and support landings include the whole neighbour-selected descent in its
+budget. Incoming retreat from an owned face admits no correction toward that
+face and no reduction in retreat speed, so neither repeated phantom bodies nor
+refusals can hold a retreating visitor. It does not prove a reported body exists
+or keep a neighbour from carrying a still body toward the plane up to its
+threshold; no decay rule removes that influence while the body does not retreat.
+The remote identity stays a claim until attested. So A10 is narrowed, not closed.
 Taped neighbour records then close the replay boundary. C1 as the rule for any contested
 place, which is the architecture page's existing rule, and the owner's "do not
 run an authority boundary through a place designed to be contested"
@@ -1266,9 +1269,10 @@ that shows it worked. Steps marked "new" are not in any plan today.
    neighbour-induced crossing of the deadband (nor added outward speed) without
    the body's own motion, and a pair hash over the two authorities alone are
    implemented (`WorldPopulation.AdmitAdjacencyResponse`,
-   `WorldCrossAuthoritySettlement`). Still open: neighbour corrections may
-   still carry a still body toward the plane up to its threshold, a held
-   correction does not decay, a neighbour field's refusal can pin a body; then
+   `WorldCrossAuthoritySettlement`). Refusals and support descents pass that
+   door too, and incoming retreat cannot be cancelled. Still open: neighbour
+   corrections may carry a still body toward the plane up to its threshold,
+   with no decay while it does not retreat; then
    the [neighbour replay packet](../open-items.md#transfers-federation-and-server).
    Closes A10 and the replay boundary; check 8 (C3). Independent of everything
    else.

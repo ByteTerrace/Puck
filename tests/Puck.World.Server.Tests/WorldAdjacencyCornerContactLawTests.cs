@@ -2,6 +2,7 @@ using Puck.Commands;
 using System.Numerics;
 using Puck.World.Authoring;
 using Puck.Maths;
+using Puck.Physics;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
 using Xunit;
@@ -534,7 +535,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         public WorldLook Look(int index) => null!;
         public Quaternion PreviousOrientation(int index) => Quaternion.Identity;
         public Vector3 PreviousPosition(int index) => Vector3.Zero;
-        public bool TryGetSolidField(out WorldSolidField? field, out string reason) {
+        public bool TryGetSolidField(out IContactField? field, out string reason) {
             field = m_field;
             reason = ((m_field is null)
                 ? "the neighbour has delivered no compiled field"
@@ -630,7 +631,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         public WorldLook Look(int index) => null!;
         public Quaternion PreviousOrientation(int index) => Quaternion.Identity;
         public Vector3 PreviousPosition(int index) => Vector3.Zero;
-        public bool TryGetSolidField(out WorldSolidField? field, out string reason) {
+        public bool TryGetSolidField(out IContactField? field, out string reason) {
             field = m_field;
             reason = string.Empty;
             return true;
