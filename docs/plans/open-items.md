@@ -1569,6 +1569,14 @@ requests a set the prewarm did not compile. Nothing reads
 and then clears, the submissions a device loss marked lost, which stay
 reported until it does.
 
+- [medium] One authored program edit compiles two sets: `shaders.compiler.runs.dxc`
+  rose by 4 per edit on both backends where views and glass make 2 (the lead's
+  second GPU window); likely a requested set overtaken while the active and
+  declared sets move on different frames. Unconfirmed.
+- [low] Extracting `bloomSelected` added 48 alloca stores to `place.comp`'s DXIL
+  with identical arithmetic (window-2's disassembly); cost only, needs a GPU
+  timing of `place` to show whether the driver removes them.
+
 The owner's ruling (AGENTS.md, "Authors rule"): authors may bring their own
 shaders, so a look is never limited to what the engine's shading offers.
 [The design memo](author-shaders.md) answers the owner's questions from
