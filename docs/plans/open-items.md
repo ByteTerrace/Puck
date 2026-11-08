@@ -104,9 +104,8 @@ milestone. The owner requested its baseline and implementation plan, which
    `main`]: steps 1-6 behind the harness and step 0b's principals; step 2
    refuses a search output wider than its restricted inputs (the owner's
    ruling).
-9. [Rule faults](rule-faults.md) [high, before `main`]: build the designed
-   outcome type, single interpreter and journal-backed firing in its steps,
-   each reviewed.
+9. [Rule faults](rule-faults.md) [high, before `main`]: queued body-target
+   generations, proposal-owned host scratch, source-read timing and measurements.
 10. [Engine job system](#engine-job-system) [high]: scheduling, the
     garbage-collection cuts, then J1; the replay burst's tick budget and F17 as
     ordinary work.

@@ -519,21 +519,11 @@ verdict covers everything the firing decides: the arena scope, the edge latch,
 a decision's choice and the arms it queued commit through one door after the
 verdict is in, or not at all.
 
-The mechanism that carries this is decided in
-[the rule-faults plan](../plans/rule-faults.md): the fault is a case of the
-value every evaluation returns (`Outcome`, whose number is reachable only
-through the finite case), one interpreter produces every evaluated value and
-resolves every address before an operand reads through it, every store a
-firing decides (the latch, a decision's state, group progress) writes through
-the arena journal so one rewind at any nesting depth undoes all of it, and one
-door reads the firing's verdict. The plan names what enforces each clause
-(structure, one door, or a `puck scan` analyzer) and where the guarantee stops
-(a throw after the arena commit, a detached consumer's own fault arm). A fault
-register beside the value, read by each deciding place within its own scope,
-was the mechanism under review; four review rounds showed it cannot be closed
-(a nested success can clear it, it lives on a replaceable arena, every deciding
-place must poll it, and it cannot order the writes a firing makes), so it is
-replaced rather than patched.
+The mechanism is [one outcome, one interpreter and one journal](#rule-faults),
+with its precise behavior and examples in
+[Reads and expressions](../reference/state/expressions.md#constant-folding-and-faults),
+[Rules and firing](../reference/state/rules.md#make-a-firing-atomic) and
+[the host boundary](../reference/state/hosting.md#the-install-boundary).
 The printer elides a numeric truth test only when its operand reparses as the
 identical test. Explicit compound expression boundaries remain, because fact
 comparisons have special absence and infinity semantics.
@@ -557,6 +547,89 @@ Declarations after a gate or effect are refused: move the declaration before
 the gate to request that pre-effect read. A local may read earlier locals,
 never a later declaration. This keeps the runtime's existing evaluation
 model visible in the source.
+
+### Rule faults
+
+Every authored evaluation returns an `Outcome`; the fault is a case of that
+value, rather than a status register beside it. `Outcome` and `Resolved<T>`
+default to faulted and expose their value only through `TryFinite` or
+`TryNamed`. Absence is a separate value: truth operators convert it to false,
+`isAbsent` and `??` answer it, and other consuming arithmetic returns absence.
+At a gate comparison, both source programs run before combining their answers;
+a fault on either side takes precedence over absence and stops the gate
+before negation or disjunction. A fault is absorbing, rather than an unknown
+that Boolean logic can recover. `RuleEvaluation.Decide` owns that combination.
+
+The old status-register approach required two channels to agree by convention.
+A nested success could overwrite a shared fault variable, the register lived
+on an arena that installation could replace, every deciding caller had to
+remember to poll it, and a read-side flag could not order latch and decision
+writes. The correction removes those mechanisms: `RuleExpressions.Run`
+returns each child outcome as a value, and `RuleEvaluator.Commit` reads the
+proposal's `FiringDecision` once. Faulted and fires are distinct cases, with
+no faulted-and-fires combination.
+
+There is one token interpreter. `RuleExpressions.Evaluate` takes an
+`EvaluationFrame`; `EvaluateDetached` enters the same loop for the closed
+consumer list in `OutcomeDetachedAllowlist`. Computed addresses lower into
+tokens ahead of the operand, and `RuleExpressions.ReadOperand` resolves all
+declared `IRuleOperand.Addresses` before handing the operand `ResolvedKey`
+values. A failed address cannot become a successful read through a second
+evaluator. `RuleExpressions.FoldWord` likewise owns per-token pattern programs,
+including host match read-back. Pricing follows those executed tokens through
+`RuleWorkBudget.ExpressionCost`; computing an address must cost its actual
+work, even when correcting that price makes a document exceed its budget.
+An ergonomic spelling and its unrolled equivalent owe the same work.
+
+Atomicity covers everything a firing decides, not only cells. Latch bits,
+decision bindings and group progress enlist through `IJournalParticipant`
+and `ArenaJournal.RecordParticipant`; `StateArena.Rewind` restores all of
+them at every nesting depth. A separate proposal copy installed at commit
+would not restore a child firing when its parent search or savepoint rewinds,
+and would make the state library know host-private decision types. The generic
+journal participant avoids both problems. A `transaction` handles its body's
+fault as a savepoint refusal and then runs its authored failure arm; a fault
+in that arm still refuses the whole firing.
+
+`RuleEvaluator.FireEffects` keeps a decision's binding, common effects and
+option effects in one scope, using `IFiringPrelude` and `IFiringContinuation`.
+The continuation checks the pair against what the common effects propose to
+install, rather than today's population. `WorldRuleHost.ProposedPairLive`
+composes queued document rows and calls `WorldPopulation.ReconcileKeeps` with
+the open arena. `WorldPopulation.Reconcile` runs over live or forecast slots,
+so structural reconciliation, cell-driven counts and census clamping have
+one implementation. The forecast precedes the option's own consequences and
+assumes counts settled at this commit; actual tick publication can occur later.
+The [host reference](../reference/state/hosting.md#the-install-boundary)
+owns those limits and the W11 examples.
+
+The arena commit is the rollback boundary. Arms declare sources and reuse
+`EffectFiring.Values` at preflight and delivery, so delivery evaluates nothing
+against an arena a document install may have replaced. Input selections
+prepare while refusal can rewind and apply after commit without refusal
+(`WorldServer.ValidateStateTransaction`, `WorldServer.CommitStateTransaction`).
+Transactional installation is non-refusing by contract; delivered effects can
+refuse only as counted failures that undo nothing. A throw past commit remains
+an authority defect, not something a second rollback mechanism can conceal.
+Proposals are serial, under the tick's authority gate, and do not cross
+snapshot publication; parallel execution would need partition-owned journals
+and scratch plus an ordered merge.
+
+Types alone cannot stop a caller ignoring `TryFinite`'s bool or treating every
+verdict except open as closed. `OutcomeAnalyzer` in `Puck.Analyzers` supplies
+the compiler-symbol checks: `OUTCOME001` refuses discarded outcomes,
+`OUTCOME002` refuses unchecked extraction and one-case verdict tests,
+`OUTCOME003` closes detached evaluation to its allowlist, and `OUTCOME004`
+refuses address resolution inside an operand. These are Roslyn build errors,
+not a `puck scan` rule. The [analyzer reference](../reference/state/hosting.md#outcomes-analyzer)
+owns exemptions and limits: a stored bool never read, a literal arena read,
+wrong finite arithmetic or a detached consumer's incorrect fault arm still
+needs review. A default frame is refused at runtime, not made unforgeable.
+
+The behavioral witnesses are indexed in
+[Rule-fault examples](../reference/state/rules.md#rule-fault-examples).
+[The plan](../plans/rule-faults.md) holds the remaining generation, scratch,
+source-timing and measurement work only.
 
 ### The state review
 
