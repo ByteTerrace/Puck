@@ -52,13 +52,17 @@ milestone. The owner requested its baseline and implementation plan, which
    view. Below 60 FPS two frames no longer fit in
    the 30 Hz floor, so every refresh redraws both far layers, the frame stays
    slow, and a view that drops below 60 there tends to stay below it until the
-   far cascade itself costs less. Next: the views pass's live state. It is
-   register-limited on both backends (128 registers with spills on Vulkan,
-   near 97 % register allocation at a quarter of the warps on Direct3D 12), and
-   the irradiance gather (`sdfMeshProbesAt`, whose sixteen addresses and
-   weights stay live through the light walk, the indirect and the reflection)
-   is a third of it on Vulkan by `world.indirect off`; then the remaining caster
-   geometry after receiver and light-space culling
+   far cascade itself costs less. Next: the views pass's registers, which the
+   authored-shading interpreter now sets: 255 on Vulkan (8 of 48 warps on the
+   RTX 4070), 98 % register allocation with 16 % of the warps active on
+   Direct3D 12. Its light phase, inlined in the light walk, raises views from
+   168 registers to 255, and taking the probe gather's state out of the walk
+   moves no count, so the cure is keeping the interpreter out of the pixels that
+   run no program ([author shaders](author-shaders.md) steps 3 and 4, which
+   step 2's reading makes required). The gather's weights still spill to
+   local memory on Direct3D 12, and `world.indirect off` still removes a third
+   of views on Vulkan as the gather's work. Then the
+   remaining caster geometry after receiver and light-space culling
    ([gpu cost](../../.claude/skills/rendering/references/gpu-cost.md#pucks-open-cases)).
    The far cascade now classifies through `SdfMeshOcclusion`'s current receiver
    mask and two-phase entry depth; its exit list remains independent of entry
