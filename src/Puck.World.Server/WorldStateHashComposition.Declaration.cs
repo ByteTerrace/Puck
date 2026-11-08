@@ -67,9 +67,8 @@ public static partial class WorldStateHashComposition {
                 cycle: row.Cycle,
                 hash: ref hash
             );
-            // Folded only when authored, unlike the presence-byte traits above: an unconditional byte would move
-            // every recorded state baseline for a document that declares no verdict anywhere, which is information
-            // no reader gains. A verdict row still changes this hash the moment it exists.
+            // Folded only when authored, unlike the presence-byte traits above: a byte for an absent verdict carries
+            // nothing a reader could tell apart. A verdict row still changes this hash the moment it exists.
             if (row.Verdict is { } verdict) {
                 AppendString(
                     hash: ref hash,
@@ -92,29 +91,51 @@ public static partial class WorldStateHashComposition {
                 );
             }
 
-            hash.Add(value: ((uint)cells.Count));
-
-            for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {
-                var cell = cells[cellIndex];
-
-                AppendString(
-                    hash: ref hash,
-                    value: cell.Key.Value
-                );
-                AppendAdvance(
-                    advance: cell.Advance,
-                    hash: ref hash
-                );
-                AppendDynamics(
-                    dynamics: cell.Dynamics,
-                    hash: ref hash
-                );
-                AppendCycle(
-                    cycle: cell.Cycle,
-                    hash: ref hash
-                );
-            }
+            AppendCellTraits(
+                cells: cells,
+                hash: ref hash
+            );
         }
+    }
+
+    // Which cells a row holds, and in what order, is what the arena stores and folds; a document's cell list is that
+    // membership as of whenever the document was last exported from the arena. Only the traits a cell declares are
+    // declaration, so each cell declaring one folds into an order-free sum and a cell declaring none folds nothing.
+    private static void AppendCellTraits(ref Fnv1aHash hash, IReadOnlyList<StateCell> cells) {
+        var count = 0U;
+        var sum = 0UL;
+
+        for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {
+            var cell = cells[cellIndex];
+
+            if ((cell.Advance is null) && (cell.Cycle is null) && (cell.Dynamics is null)) {
+                continue;
+            }
+
+            var traits = Fnv1aHash.Create();
+
+            AppendString(
+                hash: ref traits,
+                value: cell.Key.Value
+            );
+            AppendAdvance(
+                advance: cell.Advance,
+                hash: ref traits
+            );
+            AppendDynamics(
+                dynamics: cell.Dynamics,
+                hash: ref traits
+            );
+            AppendCycle(
+                cycle: cell.Cycle,
+                hash: ref traits
+            );
+            count++;
+            sum = unchecked(sum + traits.Value);
+        }
+
+        hash.Add(value: count);
+        hash.Add(value: sum);
     }
 
     // A null string folds as a value no length can produce, so an absent member is never the empty one.
