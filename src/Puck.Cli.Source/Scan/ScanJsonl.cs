@@ -21,14 +21,15 @@ internal sealed class ScanSites {
     public int FileCount => m_perFile.Count;
 
     // Records one site.
-    public void Add(string file, int line, int endLine, string kind, string text) {
+    public void Add(string file, int line, int endLine, string kind, string text, string? extra = null) {
         m_jsonl.Append(value: '{')
             .Append(value: "\"file\":").Append(value: ScanJsonl.JsonString(value: file)).Append(value: ',')
             .Append(value: "\"line\":").Append(value: line).Append(value: ',')
             .Append(value: "\"endLine\":").Append(value: endLine).Append(value: ',')
             .Append(value: "\"kind\":").Append(value: ScanJsonl.JsonString(value: kind)).Append(value: ',')
-            .Append(value: "\"text\":").Append(value: ScanJsonl.JsonString(value: text))
-            .Append(value: "}\n");
+            .Append(value: "\"text\":").Append(value: ScanJsonl.JsonString(value: text));
+        if (extra is { Length: > 0 }) { m_jsonl.Append(value: ',').Append(value: extra); }
+        m_jsonl.Append(value: "}\n");
         Count++;
         m_kinds[kind] = (m_kinds.GetValueOrDefault(key: kind) + 1);
         m_perFile[file] = (m_perFile.GetValueOrDefault(key: file) + 1);
@@ -48,10 +49,10 @@ internal sealed class ScanSites {
                 values: m_kinds.Select(selector: static pair => $"{pair.Value} {pair.Key}")
             ));
     // Writes the digest line and the densest files to stderr, and returns the records and the grouped work-list.
-    public (string Jsonl, string Grouped) Finish(string digest, int maxPerChunk) {
-        Console.Error.WriteLine(value: digest);
-        foreach (var line in ScanJsonl.TopFiles(perFile: m_perFile)) {
-            Console.Error.WriteLine(value: line);
+    public (string Jsonl, string Grouped) Finish(int maxPerChunk, string? digest = null) {
+        if (digest is not null) {
+            Console.Error.WriteLine(value: digest);
+            foreach (var line in ScanJsonl.TopFiles(perFile: m_perFile)) { Console.Error.WriteLine(value: line); }
         }
 
         return (m_jsonl.ToString(), ScanJsonl.BuildGroupedChunks(

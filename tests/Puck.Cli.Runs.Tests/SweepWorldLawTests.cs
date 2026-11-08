@@ -58,7 +58,7 @@ public sealed class SweepWorldLawTests : IDisposable {
         WorkingDirectory = m_root,
         World = Path.Combine(path1: m_root, path2: SweepCommand.DefaultWorld),
     };
-    private SweepWorld Boot(string name, SweepBudget budget) {
+    private SweepWorld Boot(string name, SuiteBudget budget) {
         Assert.True(condition: SweepWorld.TryBoot(bootTimeout: TimeSpan.FromMinutes(value: 5), budget: budget, error: out var error, logDirectory: Path.Combine(path1: m_directory, path2: name), request: Request(state: name), session: out var world), userMessage: error);
 
         return world!;
@@ -104,7 +104,7 @@ public sealed class SweepWorldLawTests : IDisposable {
     [Fact]
     public void ASweepWithoutTimeLeftReportsEverythingUnmeasuredAndStopsTheWorld() {
         using var cancel = new CancellationTokenSource();
-        using var budget = new SweepBudget(caller: cancel.Token, total: TimeSpan.FromMinutes(value: 10));
+        using var budget = new SuiteBudget(caller: cancel.Token, total: TimeSpan.FromMinutes(value: 10));
         var plan = Plan(json: ShortPlan);
         int processId;
 
@@ -141,7 +141,7 @@ public sealed class SweepWorldLawTests : IDisposable {
     }
     [Fact]
     public void AWorldThatNeverAttachesIsRefused() {
-        using var budget = new SweepBudget(caller: CancellationToken.None, total: TimeSpan.FromMinutes(value: 10));
+        using var budget = new SuiteBudget(caller: CancellationToken.None, total: TimeSpan.FromMinutes(value: 10));
 
         Assert.False(condition: SweepWorld.TryBoot(bootTimeout: TimeSpan.Zero, budget: budget, error: out var error, logDirectory: Path.Combine(path1: m_directory, path2: "never"), request: Request(state: "never"), session: out var world));
         Assert.Null(@object: world);
@@ -149,7 +149,7 @@ public sealed class SweepWorldLawTests : IDisposable {
     }
     [Fact]
     public void AWorldStartsPausedAndScheduledRefusalsAreObservedAfterArmingSucceeded() {
-        using var budget = new SweepBudget(TimeSpan.FromMinutes(minutes: 2), CancellationToken.None);
+        using var budget = new SuiteBudget(TimeSpan.FromMinutes(minutes: 2), CancellationToken.None);
         using var world = Boot(budget: budget, name: "scheduled-refusal");
 
         AssertTick(expected: 0);
@@ -185,7 +185,7 @@ public sealed class SweepWorldLawTests : IDisposable {
         var folder = Path.Combine(path1: m_directory, path2: "bad-log");
 
         _ = Directory.CreateDirectory(path: Path.Combine(path1: folder, path2: "stderr.log"));
-        using var budget = new SweepBudget(TimeSpan.FromMinutes(minutes: 2), CancellationToken.None);
+        using var budget = new SuiteBudget(TimeSpan.FromMinutes(minutes: 2), CancellationToken.None);
         // stdout is opened first; failure opening stderr must also close stdout.
         Assert.Throws<UnauthorizedAccessException>(testCode: () => SweepWorld.TryBoot(Request(state: "bad-log"), folder,
             TimeSpan.FromMinutes(minutes: 1), budget, out _, out _));

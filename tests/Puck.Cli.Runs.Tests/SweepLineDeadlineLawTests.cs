@@ -32,7 +32,7 @@ public sealed class SweepLineDeadlineLawTests {
         }
 
         using var server = new LocalControlServer(createSession: static () => new Session());
-        using var budget = new SweepBudget(caller: CancellationToken.None, total: TimeSpan.FromMinutes(value: 2));
+        using var budget = new SuiteBudget(caller: CancellationToken.None, total: TimeSpan.FromMinutes(value: 2));
 
         Assert.True(condition: SweepWorld.TryAttach(budget: budget, error: out var error, session: out var world, world: server.AttachmentPath), userMessage: error);
         using var attached = world!;

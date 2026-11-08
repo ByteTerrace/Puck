@@ -171,7 +171,7 @@ public static partial class SweepCommand {
         // The whole sweep, a build and its lease waits excepted, is bounded by one budget, and an interrupt ends it the same way: every
         // wait of a World, a lease or a scenario honours it, and the Worlds, leases and processes below are released by
         // the scopes that own them, in order.
-        using var budget = new SweepBudget(caller: cancellation, total: TimeSpan.FromSeconds(value: timeoutSeconds));
+        using var budget = new SuiteBudget(caller: cancellation, total: TimeSpan.FromSeconds(value: timeoutSeconds));
         var deadline = TimeSpan.FromSeconds(value: timeoutSeconds);
 
         using (build) {
@@ -302,7 +302,7 @@ public static partial class SweepCommand {
     };
     // Each file through this CLI's own puck test, one worker at a time, read from its "test <name>:" and
     // "<passed>/<total> verdict(s) passed" lines and its exit code.
-    private static SweepScenarioResult Scenarios(string? artifact, SweepBudget budget, string? cacheDirectory, string directory, string[] files, string repositoryRoot) {
+    private static SweepScenarioResult Scenarios(string? artifact, SuiteBudget budget, string? cacheDirectory, string directory, string[] files, string repositoryRoot) {
         var worlds = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
         var reasons = new List<string>();
         var status = SweepStatus.Clean;
@@ -342,7 +342,7 @@ public static partial class SweepCommand {
         }
         return new SweepScenarioResult(Command: command, Reasons: reasons, Status: status, Worlds: worlds);
     }
-    private static SweepScenarioResult ScenarioFile(string? artifact, SweepBudget budget, string? cacheDirectory, string directory, string file, string repositoryRoot) {
+    private static SweepScenarioResult ScenarioFile(string? artifact, SuiteBudget budget, string? cacheDirectory, string directory, string file, string repositoryRoot) {
         var command = $"puck test {file} --jobs 1";
 
         if (budget.Reason is { } over) {

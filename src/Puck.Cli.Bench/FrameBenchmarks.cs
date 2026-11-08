@@ -92,7 +92,7 @@ public static partial class FrameBenchmarks {
         var complete = false;
         try {
             for (var sample = 0; sample < samples; sample++) {
-                using var budget = new SweepBudget(TimeSpan.FromSeconds(parse.GetValue(options.Timeout)), token);
+                using var budget = new SuiteBudget(TimeSpan.FromSeconds(parse.GetValue(options.Timeout)), token);
                 var log = Path.Combine(directory, $"sample-{sample:D3}");
                 Directory.CreateDirectory(log);
                 var request = new WorldLaunchRequest("bench frames", build.Path) {
