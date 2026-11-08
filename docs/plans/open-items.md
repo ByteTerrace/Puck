@@ -4232,6 +4232,15 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [medium] A measurement window samples with the display off: the World's
+  display-required power request (`Win32NativeWindow.DisplayPower.cs`) keeps a
+  lit display lit but does not wake one already off, so a window that starts
+  after the machine idled samples the compositor's slow fallback (a Vulkan cold
+  bake's probe lighting ran about 3.5 times slower, with `[present-timing] 4
+  presents in a row did not display within 50 ms` and `nvidia-smi`
+  `display_active Disabled`). `puck measure run` checks that presents display
+  before its first sample, wakes the display through the platform layer if it
+  can, and otherwise refuses the slice with that cause instead of spending it.
 - [medium] A measurement's readiness probe gives up before a cold first frame:
   `world.wait ready 1` with a 10 s exec budget (`SweepWorld`, `src/Puck.Cli.Runs/Sweep/SweepWorld.cs`)
   failed both views-live-state requests, whose World stopped after
