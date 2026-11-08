@@ -70,12 +70,14 @@ until the next writer, shape or case arrives.
   (`WorldPopulation.AppendContinuationHash`,
   `src/Puck.World.Server/WorldPopulation.Checkpoint.cs`; the redesign is in the
   [refactoring campaign](../plans/open-items.md#refactoring-campaign)).
-- A raster part with no draws skips its frame only while its target holds a
-  clear. Keyed instead on "written once", a part whose draw count fell to zero
-  left its last hits in the target, and the glass pass read their draw and
-  triangle against the current draw records. `SdfWorldPassRecorder.TargetsHoldClear`
-  is the one place the skip asks, and `RecordMesh`, the one writer of the
-  targets, sets it.
+- A raster pass that skips must not leave hits a later reader names against the
+  current draw records. Keyed on "written once", a part whose draw count fell
+  to zero kept its last hits, and the glass shading pass read their draw and
+  triangle, losing the Vulkan device. The mesh part and the cascades skip only
+  while `SdfWorldPassRecorder.TargetsHoldClear` says every target instance holds
+  a clear (set by `RecordMesh`, the one writer, on submission); the glass
+  passes skip only together with the shading pass that reads them
+  (`SdfWorldPasses.GlassSeen`).
 - The cascades' exit layer assumes a caster encloses a solid
   (`SdfMeshDraw.EnclosesSolid`); a body clipped at a portal's glass is a thin
   caster that shadows its own wrapped side

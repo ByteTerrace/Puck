@@ -4,9 +4,15 @@ namespace Puck.World.Client;
 
 /// <summary>The placement or body a rendered instance stands for. Presentation-only; a pick never grants authority
 /// to edit or move this identity.</summary>
-/// <param name="Placement">The authored placement id, or null for a body-rooted stamp.</param>
+/// <param name="Placement">The placement id, or null for a body-rooted stamp. A card back a recipient's view deals
+/// for a withheld cell is a look and no target, so it is held as its deal template's id
+/// (<see cref="WorldPlacementDeal.PickedId"/>).</param>
 /// <param name="BodyIndex">The stamped body index, or null for a placement.</param>
 public sealed record WorldPickTarget(string? Placement, int? BodyIndex) {
+    private readonly string? m_placement = WorldPlacementDeal.PickedId(id: Placement);
+
+    /// <summary>Gets the picked placement id: a card back's template, or the row itself.</summary>
+    public string? Placement { get => m_placement; init => m_placement = WorldPlacementDeal.PickedId(id: value); }
     /// <summary>Gets the prototype id captured by this emission, or null when the host has no prototype.</summary>
     public string? Prototype { get; init; }
     /// <summary>Gets a static placement's deterministic lattice occurrence ordinal, or null when the identity names

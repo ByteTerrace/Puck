@@ -14,5 +14,4 @@ namespace Puck.World.Protocol;
 /// <param name="Everything">Whether every row must be treated as moved: the sender could not name the moved rows
 /// (the state arena was rebuilt).</param>
 /// <param name="ArenaValues">Whether changed values arrive in the following snapshot's cell channel.</param>
-/// <param name="PlacementProjection">Whether derived placement appearance or membership changed.</param>
-public readonly record struct WorldStateStamp(ulong Tick, ulong EngineTick, ReadOnlyMemory<int> MovedRows, bool Everything, bool ArenaValues = false, bool PlacementProjection = false);
+public readonly record struct WorldStateStamp(ulong Tick, ulong EngineTick, ReadOnlyMemory<int> MovedRows, bool Everything, bool ArenaValues = false);

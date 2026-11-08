@@ -47,7 +47,7 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
             // The owner moves its generation only once its submission retired, so an unmoved one is still the batch's.
             if (alias.m_generation == m_aliasGeneration) {
                 alias.m_disposalFailure?.Throw();
-                if (alias.m_armed) { alias.WaitNative(); }
+                if (alias.m_armed) { alias.WaitNativeCounted(); }
             }
             m_alias = null;
             m_generation++;
@@ -56,7 +56,7 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
         }
         if (!m_armed) { return; }
 
-        WaitNative();
+        WaitNativeCounted();
         DrainNative();
         m_armed = false;
         m_generation++;
@@ -97,6 +97,16 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
     /// <summary>Releases the native fence.</summary>
     protected abstract void DisposeNative();
 
+    // Every blocking wait goes through here, so the calling thread's blocked time (GpuFenceBlocking) covers them all.
+    private void WaitNativeCounted() {
+        var start = System.Diagnostics.Stopwatch.GetTimestamp();
+
+        try {
+            WaitNative();
+        } finally {
+            GpuFenceBlocking.Add(ticks: (System.Diagnostics.Stopwatch.GetTimestamp() - start));
+        }
+    }
     internal void Defer(GpuSubmissionBatch batch) {
         RequireDrained();
         m_deferred = batch;

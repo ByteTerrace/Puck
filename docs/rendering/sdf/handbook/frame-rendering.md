@@ -1471,12 +1471,18 @@ holds), the cascade's extent or texels change, the camera cuts, turns past half
 a degree or moves half a metre, the view follows another residency, or a
 capture converges. Frames that come at or below 30 a second hold nothing.
 
-A refresh the rate alone calls for is split over two frames where both fit in
-the 30 Hz period (`PresentationRate.Fits`): the first draws the depth and its
-glass extinction, the second draws the exit layer and holds the depth
-(`SdfFarLayers`), so a 60 Hz view draws one layer a frame and each still
-refreshes 30 times a second; a slower view, or any refresh that ends a hold,
-redraws both. For the frame between, the exit layer keeps the camera of the
+A refresh the rate alone calls for is split over two frames whatever the
+frames' pace: the first draws the depth and its glass extinction, the second
+draws the exit layer and holds the depth (`SdfFarLayers`), so a 60 Hz view
+draws one layer a frame and each still refreshes 30 times a second, and a
+slower view draws one layer a frame too, each layer refreshing every two
+frames, so the cascade never costs a slow frame a whole refresh and holds it
+slow. A refresh that ends a hold redraws both. Under occlusion culling a layer
+also records the sample grid its receivers were classified on
+(`SdfWorldPasses.ReceiverSignatureOf`: cull level, detail, extent, scale, cut
+and bindings, never the camera, the geometry or the jitter, which the hold's
+own tolerances and the receiver cells' margin cover); a changed grid refreshes
+both layers. For the frame between, the exit layer keeps the camera of the
 refresh before, and the surface pass reads it through the pass block's fourth
 camera row, without glass extinction for those receivers. The shadow-far pass
 asks `SdfWorldPasses.RecordFar` which layers to draw, which answers both while

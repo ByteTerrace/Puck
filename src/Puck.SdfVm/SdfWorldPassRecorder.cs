@@ -375,10 +375,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private bool IsShadowCascade => (m_part is SdfWorldPackage.Parts.ShadowNear or SdfWorldPackage.Parts.ShadowFar or SdfWorldPackage.Parts.ShadowSecond);
     // The draws the part rasterizes: the glass draws for the glass pass, the opaque ones for the mesh pass and the cascades.
     private uint PartDrawCount(SdfWorldTables tables) => (IsGlass ? tables.GlassDrawCount : tables.OpaqueDrawCount);
-    // Whether a frame holding none of the part's draws may skip: every target instance (and a cascade's every exit layer)
-    // already holds the clear such a frame records. A target that last drew hits keeps them when its part skips, and a
-    // reader of a hit (the glass and surface passes read draw and triangle) would name them against draw records that no
-    // longer hold their meshes.
+    // Whether a mesh or cascade frame holding none of the part's draws may skip: every target instance (and a cascade's
+    // every exit layer) already holds the clear such a frame records. A target that last drew hits keeps them when its part
+    // skips, and the surface pass reads a hit's draw and triangle against draw records that may no longer hold their
+    // meshes. The glass passes skip by their own answer instead (SdfWorldPasses.GlassSeen), which skips the shading pass
+    // that reads their target with them.
     private bool TargetsHoldClear => (Array.TrueForAll(array: m_targetsClear, match: static clear => clear) &&
         (!IsShadowCascade || Array.TrueForAll(array: m_exitsClear, match: static clear => clear)));
     // Whether every layer of the target instance a recording binds has been drawn in this graph.
@@ -420,20 +421,25 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         m_owner.Leave(view: m_view);
     }
     // A part skips a frame whose work it would not do, recording neither its work nor its planned barriers: the mesh part
-    // a frame that draws no opaque mesh, the glass part one with no glass draw, and a shadow cascade a frame with no draw
-    // or no cascade of its own. A raster part with no draws still records until every instance of its target holds the
-    // clear such a frame records (TargetsHoldClear): before the first bake lands, and after a frame that drew, whose hits a
-    // skipped frame would leave for the surface and glass passes to read. No part walks the field: the bake samples it as
-    // the residency's background GPU work (SdfMeshBakeGpuWork).
+    // a frame that draws no opaque mesh, the glass passes one whose view sees no glass draw, and a shadow cascade a frame
+    // with no draw or no cascade of its own. The mesh part and the cascades with no draws still record until every
+    // instance of their target holds the clear such a frame records (TargetsHoldClear): before the first bake lands, and
+    // after a frame that drew, whose hits a skipped frame would leave for the surface pass to read. No part walks the
+    // field: the bake samples it as the residency's background GPU work (SdfMeshBakeGpuWork).
     public bool Skips(in FrameContext context) {
         switch (m_part) {
-            // The clear and the glass shading pass never skip: the shading pass writes the lit image every pass after it
-            // reads.
-            case SdfWorldPackage.Parts.Mesh:
-            case SdfWorldPackage.Parts.Glass: {
+            case SdfWorldPackage.Parts.Mesh: {
                     Follow();
                     m_owner.Begin(residency: m_view.Residency);
                     return ((PartDrawCount(tables: m_view.Residency.Staged(context: in context)) == 0) && TargetsHoldClear);
+                }
+            // The glass clear and the glass raster skip a frame in which no glass draw meets the view's frustum
+            // (SdfWorldPasses.GlassSeen); the shading pass, which reads their sums and target, then draws nothing.
+            case SdfWorldPackage.Parts.GlassClear:
+            case SdfWorldPackage.Parts.Glass: {
+                    Follow();
+                    m_owner.Begin(residency: m_view.Residency);
+                    return !m_owner.GlassSeen(instance: m_context.Instance, view: m_view, context: in context);
                 }
             // The surface pass reads the pyramid only for a pixel the mesh covers, which a frame with no draws has none of.
             case SdfWorldPackage.Parts.Pyramid: {
@@ -502,6 +508,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if (m_part == SdfWorldPackage.Parts.GlassClear) {
             var sums = recording.Outputs[0].Buffer!;
 
+            m_owner.NoteGlassExtent(instance: m_context.Instance, width: recording.RenderWidth, height: recording.RenderHeight);
             recording.Recorder.ClearStorageBuffer(recording.CommandBuffer, sums.BufferHandle, sums.SizeBytes);
 
             return RenderGraphPackageOutcome.Drew;
@@ -514,6 +521,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var width = recording.Width;
         var height = recording.Height;
 
+        if (IsGlass) {
+            m_owner.NoteGlassExtent(instance: m_context.Instance, width: width, height: height);
+        }
         residency.RequestExtent(height: recording.FrameHeight, width: recording.FrameWidth);
         SdfFrameBlock.Write(
             block: recording.PassBlock,

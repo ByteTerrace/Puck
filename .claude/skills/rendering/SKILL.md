@@ -231,11 +231,17 @@ selection, never entry visibility. They execute after entry depth is final.
 Never use an earlier exit/peel image to reject a caster.
 
 A receiver-conditioned cascade retains a coverage identity with each submitted
-layer: geometry, camera, sample grid and jitter, excluding the light. The far rate
-can hold or split while both layers cover those same receiver inputs; a changed
-coverage identity refreshes both. This is conservative equality, not a proof that
-different receiver sets are spatially contained. Readers use each layer's committed
-light camera. The graph keeps the sampling barrier, while the package projects its
+layer (`SdfWorldPasses.ReceiverSignatureOf`): the sample grid its receivers were
+classified on (cull level, detail, extent, scale, cut, bindings), excluding the
+light, the camera, the geometry and the jitter. The far rate can hold or split
+while both layers cover that grid; a changed grid refreshes both. The hold's own
+camera tolerances and the receiver cells' neighbouring-cell margin cover the
+drift the identity leaves out; a receiver a moving caster uncovers lags by the
+same refresh its shadow does. Hashing the geometry signature or the jitter here
+ends the hold on every frame anything moves, so a receiver-conditioned cascade
+then pays a whole refresh each frame (`sdf.rates` shows `rendered` on every
+frame and no `split` or `held`). Readers use each layer's committed light
+camera. The graph keeps the sampling barrier, while the package projects its
 cadence dependency onto the consumed receiver inputs, so unrelated mesh writes do
 not invalidate it. `world.cull camera` removes the receiver input and disables cascade
 depth occlusion, retaining the original far rate and camera occlusion. Count held
@@ -613,7 +619,15 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   functions of the thickness, `opaque - t` and that light alone: the pass reads
   the lit image once (`sdfGlassLitAt`, or the frost's disc). The handbook's
   [glass section](../../../docs/rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)
-  states the limits.
+  states the limits. A frame in which no glass draw's host box meets the view's
+  frustum (`SdfWorldPasses.GlassSeen`, decided once per instance and frame for
+  the three passes) skips the sums clear and the raster and answers
+  `DrewNothing` from the shading pass, whose `glassLit` then stands for the
+  opaque image; the sky, composite and resolve recorders key their cached lit
+  binding on the image they are handed. The sums and the glass target are never
+  read on such a frame, so a new reader of either must not run on one. A timing
+  window keeps a skipped pass's last samples: toggle `world.gpu-timing off` and
+  `on` before reading the trio at a stop.
 - **A flow moves shading, never geometry, and never reads a clock.** A palette
   slot's `flow` (`SdfFlow`, material rows 27 to 30) runs `sdfApplyFlow`
   through `sdfShadeFlow` (`shade/shade-flow.hlsli`) in the light stage after the
@@ -1022,6 +1036,10 @@ backends. `world.debug-view` lists the diagnostic images. For a frame-time bar,
 iteration (avg, p50, p99, max) and the worst iterations split into their
 phases (simulate, begin, produce, present, wait) with their collections and the
 pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
+Produce is split into `produce-work`, the frame thread's own work, and
+`produce-fence`, its time blocked on submission fences (`GpuFenceBlocking`,
+counted in `GpuBatchedSubmissionFence`'s one wait door): a produce that grows
+by its fence share is GPU back-pressure, not CPU work.
 
 - **The far cascade is the frame's largest variable pass; read whether it
   holds.** With box-only selection it draws nearly every caster in a 280 m box out to 200 m toward the
@@ -1034,8 +1052,9 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   shows `.split` on every frame; one that shows `.rendered` on every frame pays
   a whole refresh each frame. The hold tolerates the light turning by
   `SdfUpdateRateTiers.ShadowFarLightTurnRadians` (a day clock's sun turns every
-  frame); a timed refresh where two frames fit in the 30 Hz period draws the
-  depth on one frame and the exit layer on the next (`SdfFarLayers`). The pass
+  frame); a timed refresh always draws the depth on one frame and the exit
+  layer on the next (`SdfFarLayers`), so no frame draws both layers for the
+  rate's sake and a slow frame is never held slow by its own cascade. The pass
   asks `SdfWorldPasses.RecordFar`, which answers both for a layer its graph has
   not drawn, and `SubmittedFar` commits each drawn layer's camera; the surface
   pass reads the exit layer through the pass block's fourth camera. Compare

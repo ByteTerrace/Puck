@@ -491,7 +491,7 @@ public sealed partial class WorldTick {
                         offsets[slot],
                         slot
                     )
-                : BuildChild(
+                : WorldPlacementDeal.Child(
                         id: ((existing >= 0)
                     ? m_dealChildren[existing].Id
                     : WorldPlacementDeal.ChildId(
@@ -560,7 +560,7 @@ public sealed partial class WorldTick {
         return -1;
     }
     private static WorldPlacement ReconcileChild(WorldPlacement child, WorldPlacement template, string prototype, Vector3 offset, int slot) {
-        var seed = BuildChild(
+        var seed = WorldPlacementDeal.Child(
             template: template,
             id: child.Id,
             prototype: prototype,
@@ -591,19 +591,4 @@ public sealed partial class WorldTick {
             : prototype),
         };
     }
-    private static WorldPlacement BuildChild(WorldPlacement template, string id, string prototype, Vector3 offset, int slot) => new(
-        Id: id,
-        PrototypeId: prototype,
-        Position: offset,
-        YawDegrees: 0f,
-        Scale: template.Scale,
-        Emission: template.Emission,
-        Solid: template.Solid,
-        Region: template.Region,
-        Grip: template.Grip,
-        Parent: template.Id,
-        DealSlot: slot,
-        Spatial: template.Spatial,
-        Surface: template.Surface
-    );
 }

@@ -317,6 +317,7 @@ public sealed partial class WorldAddonRuntime {
     // rule arriving from them is a wiring change to make deliberately rather than a value to map by default.
     private static AddonVerdict ToWireVerdict(in WorldMutationAdmission admission) => admission.Rule switch {
         WorldMutationAdmissionRule.NotDisclosed => AddonVerdict.NotDisclosed,
+        WorldMutationAdmissionRule.Placeholder => AddonVerdict.NoSuchSubject,
         WorldMutationAdmissionRule.SectionDenied => WorldAddonWire.FromRule(rule: admission.Verdict.Rule),
         // A hold whose mask does not cover this kind answers as attenuation — "requested more than the mask admits"
         // attenuates to nothing, exactly like an unrequested Ask. A hold with NO mask is a DIFFERENT case now and

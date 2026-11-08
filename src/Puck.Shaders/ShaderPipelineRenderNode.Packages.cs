@@ -200,7 +200,7 @@ public sealed partial class ShaderPipelineRenderNode {
     }
 
     // Why a pass that draws nothing cannot leave its outputs standing for its inputs, or null when it can: output i
-    // stands for input i, so each output must be an owned image a surface carries, bound beside an input image of its format, that
+    // stands for input i (a buffer output that forwards its predecessor's storage stands for nothing and is skipped), so each output must be an owned image a surface carries, bound beside an input image of its format, that
     // no pass of the graph touches except later package passes reading this frame's instance, since a package pass
     // resolves each input through what it stands for (RecordPackage): publishing the input in its place changes nothing
     // any pass reads, and a chain of passes that draw nothing resolves to the first input it stands for. Every read of
@@ -213,6 +213,12 @@ public sealed partial class ShaderPipelineRenderNode {
         var pass = planned.Package!;
 
         for (var index = 0; (index < pass.Outputs.Count); index++) {
+            // A buffer the pass forwards from its predecessor holds the predecessor's contents whether or not the pass
+            // writes it, so it stands for nothing.
+            if (ForwardsBuffer(plan: plan, name: pass.Outputs[index].Name)) {
+                continue;
+            }
+
             var output = plan.Storages[plan.FindResource(name: pass.Outputs[index].Name)!.Storage];
             var why = ((index >= pass.Inputs.Count)
                 ? "has no input at its position"
@@ -251,6 +257,12 @@ public sealed partial class ShaderPipelineRenderNode {
         return null;
     }
 
+    // Whether a version is a buffer whose writer preserves every field its predecessor owns (a forwarding version,
+    // ShaderPipelineResource.PreservesPredecessor): it shares its predecessor's storage, so a pass that writes nothing
+    // leaves it holding the predecessor's contents.
+    private static bool ForwardsBuffer(ShaderPipelinePlan plan, string name) => (
+        plan.FindResource(name: name) is { Declaration: { Kind: ShaderPipelineResourceKind.Buffer, PreservesPredecessor: true } }
+    );
     // Whether an access to a stand-in's output reads whatever the output stands for: a later package pass reading this
     // frame's instance, which it resolves through the stand-in when it records.
     private static bool ResolvesThroughStandIn(ShaderPipelineAccess access, ShaderPipelinePlannedPass reader, ShaderPipelinePlannedPass standIn) => (
@@ -387,6 +399,11 @@ public sealed partial class ShaderPipelineRenderNode {
             var output = m_resourceLookup[pass.Outputs[index].Name];
 
             if (outcome != RenderGraphPackageOutcome.DrewNothing) {
+                output.Alias = default;
+
+                continue;
+            }
+            if (ForwardsBuffer(plan: m_pipeline!.Plan, name: pass.Outputs[index].Name)) {
                 output.Alias = default;
 
                 continue;

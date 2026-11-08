@@ -160,15 +160,14 @@ scheduling a step:
   presentation feed retains shared observation rows rather than a state JSON
   tree per recipient. [Decision 5](#5-a-delta-is-a-difference-of-views-owned-by-the-stream)
   records the carrier, dependency and sequence choices.
-- The deal's slots are authority history. A child takes the lowest free slot
-  (`src/Puck.World.Server/WorldTick.Deals.cs:426`, `FirstFreeSlot`), is built at
-  `Position = offsets[slot]` with the template's `Solid`, `Grip`, `Region`,
-  `Emission` and `Spatial` facets (`:558-571`), and `preserve.transform` keeps
-  that position across reconciliation (`:544-552`); by design a departing cell
-  moves no sibling (`src/Puck.World.Schema/WorldPlacementDeal.cs:22-28`).
-  Disclosure removes a hidden child but keeps the visible one's `DealSlot` and
-  transform (`WorldStateDisclosure.cs:479-482`, `:562-622`), and
-  `world.placements` prints the slot (`WorldTick.Deals.cs:102`).
+- The deal's slots are authority history: a child takes the lowest free slot
+  (`WorldTick.FirstFreeSlot`), is stamped by `WorldPlacementDeal.Child` at that
+  slot's offset, and `preserve.transform` keeps its position across
+  reconciliation; by design a departing cell moves no sibling. Step 4 keeps that
+  on the authority and re-deals in the view: `WorldStateDisclosure.DisclosedPlacements`
+  is the one placement reading every recipient door shares (the replica
+  document, the presentation projection, `world.placements`, fingerprints), and
+  `world.placements` prints the view's slot.
 - An eviction removes position zero (`src/Puck.State/Arena/StateArena.Members.cs:148-163`),
   so a write into a full row with hidden members has a public effect that
   depends on them.
@@ -208,7 +207,9 @@ that erase key faults) are not disclosure and stay in the
 | [high] A seat's rule edit that eats work allowance makes search re-pricing print a minimum counting a hidden score row's cells (`WorldSearchCompilation.TryPrice`) | Closed for rule edits by the same refusal; pricing still reads members (open items) | 3, landed |
 | [high] Replacing a dealt template without its deal keeps its children, so the distributed-parent refusal answers whether the hidden deal has any | Closed: an upsert or removal admits the installed placement's footprint too (`WorldRecipientView.AdmitsPlacement`) | 3, landed |
 | [high] Removing an absent key from a public row answers one text when no row ever minted the name and another when a hidden row did (the arena's key table is shared) | Closed: the compose door answers `StateArena.MissingCellReason`, the arena's own text, when the name does not resolve | 3, landed |
-| [high] Dealt children keep hidden-dependent slots and positions (`WorldStateDisclosure.cs:481,621`, `WorldTick.Deals.cs:426`) | The layout is authority history, shown as is | 4 |
+| [high] Dealt children keep hidden-dependent slots and positions (Argon's `deal` finding) | Closed: a template over a row that can withhold is re-dealt in the recipient's row order, each child keeping only its displacement (`WorldStateDisclosure.DisclosedPlacements`) | 4, landed |
+| [high] A deal install's delivery waited for the next unrelated delivery, a hidden-only edit included: the sweep ran after the tick's last `DeliverPending` (the card game's tick-40 presentation and replica deliveries) | Closed: the tick delivers right after the response and deal sweeps (`WorldTick` step) | 4, landed |
+| [high] A replica or federation peer was handed its document on a value-only tick only when the authority installed placements, so a dealt cell turning readable by a zone move reached it at the next install, hidden or not | Closed: a value-only delivery owes the document when the recipient's frame moved (`WorldDeliveryCursor.FrameMoved`); the authority's install flag is gone from the stamp | 4, landed |
 | [high] `replay.inspect`, `replay.stop` and `replay.verify` answer any principal with the authoritative tail hash, unprojected authority entries and every body pose | Closed: every `replay.*` verb is `CommandAudience.Operator` | console audit, landed |
 | [medium] `world.history` keyframe ticks, window start and a seek's restored keyframe and re-simulated count follow checkpoint byte counts, which fold withheld rows | Closed: the window's shape is a function of ticks alone (`WorldHistory.Interval`, `WorldHistory.WindowTicks`) | console audit, landed |
 | [medium] Removing an absent key from a public row answers one text when the key is interned by any row, withheld ones included, and another when it is not (`WorldDocument.Compose.Cells.cs`, `StateArena.TryRemove`) | Open: the write door's refusal text reads the arena's shared key ledger | the write-boundary lane |
@@ -244,7 +245,7 @@ levers) are judged from their source.
 | `world.instance.start`, `world.instance.stop`, `world.instance.status` | Operator | `status` prints an instance's journal length (`dirty`), which an operator's edit of a withheld row moves, beside host paths; start and stop run documents from host paths | Operator verbs |
 | `world.view` | Anyone | A seat's claim is public; the `<seat>` form's clock line reads wall-time snapshot arrivals (the fixed fixture's control pair differed there) | The clock line answers the operator alone |
 | `world.state`, `world.state.observe`, `world.observe`, `world.row`, `world.match`, `world.symmetry`, `world.symmetry.word`, `world.tabletop`, `world.topologies`, `world.timeline`, `world.projection`, `world.identify`, `world.hud.template`, `world.state.similar`, `world.status`, `world.budget`, `world.text`, `world.metadata`, `world.references`, `world.imports`, `world.admission`, `world.lighting`, `world.looks`, `world.curves`, `world.dynamics`, `world.contributions`, `world.kits`, `world.properties`, `world.addons` | Anyone | Read through the caller's `WorldStateReadView` (step 2); equal across every pair | None |
-| `world.placements`, `world.placement.get`, `world.inhabitants`, `world.attachments`, `world.faces`, `world.portals`, `world.destinations`, `world.adjacencies`, `world.reflow.preview`, `world.reflow.status`, `world.reflow.commit`, `world.reflow.cancel` | Anyone | Read the view's placements; the dealt layout is step 4's | Step 4 |
+| `world.placements`, `world.placement.get`, `world.inhabitants`, `world.attachments`, `world.faces`, `world.portals`, `world.destinations`, `world.adjacencies`, `world.reflow.preview`, `world.reflow.status`, `world.reflow.commit`, `world.reflow.cancel` | Anyone | Read the view's placements, re-dealt for a restricted template; a restricted template carries no spatial footprint, so it never reflows | None (step 4) |
 | `world.state.cell.set`, `world.state.cell.remove`, `world.state.transform`, `world.state.act`, `world.generate`, `world.row.set`, `world.row.add`, `world.row.remove`, `world.row.step`, `world.assign`, `world.kit.default`, `world.population.defaults`, `world.population.spawn`, `world.place`, `world.snap`, `world.nudge`, `world.turn`, `world.grid`, `player.row.set`, `player.state.cell.set`, `player.state.cell.toggle`, `creation.sculpt`, `creation.shape`, `pipeline.load`, `pipeline.commit` | Anyone | Answer the write door's verdict (step 3). The fixture's fuzz found one write-door oracle: removing an absent key from public `pile` answers `state row 'pile' has no cell keyed 'k0'` when no row interns `k0` and `row 'pile' holds no cell 'k0'` when the withheld `vault` does | The write-boundary lane: one refusal text whatever the key ledger holds |
 | `world.grant`, `world.grants`, `world.revoke`, `world.why`, `world.grant.set`, `world.grant.remove`, `world.group.*`, `world.groups`, `world.ownership.*`, `world.instance.seats`, `world.transfer`, `world.peers`, `world.links` | Anyone | Grant and instance tables, no state rows; equal across every pair | None |
 | `body.*`, `player.*` controls and read-backs (`body.where`, `body.state`, `body.targets`), `world.players`, `world.population`, `world.parked`, `world.gravity` | Anyone | Bodies, not rows: body disclosure is the open item below (`WorldOutputHub.Redact`, A16); no state row reaches them | Body disclosure step |
@@ -623,26 +624,34 @@ keeps that offset as its position for as long as `preserve.transform` holds it
   one and many hidden cells give one layout. The view's placements are the ones
   `world.placements`, the wire projection, `world.reflow.preview` and every
   spatial fingerprint read for that recipient.
-- **A restricted template's children act on nothing.** A template whose row
-  can withhold from any principal (its row declares a visibility policy) deals
+- **A restricted template's children act on nothing.** A template whose dealt
+  or variant row can withhold from any principal (a non-public row policy, a
+  cell policy its storage admits, or a containing ordered zone's) deals
   children that carry no `Solid`, `Grip`, `Spatial`, `Region` or `Emission`
   facet, whatever its `hidden` policy; the validator refuses such a facet on
-  such a template by name. A hidden child then has no collider, no clearance,
+  such a template, and on each of its children, by name
+  (`WorldDefinitionValidator.RefuseWithheldPhysicalFacets`, in whole-document
+  validation and in the sweep's `TryValidateDealtChildren`). A hidden child then has no collider, no clearance,
   no region and no light, so no body, reflow, probe or spatial guard can meet
   it, and a visible child's physical absence tells nothing because no child of
   the template is physical. The table, the felt and the public piles stay
   solid as ordinary placements; the cards are posed, which is how the card
   tables already work ([card tables](open-items.md#card-tables-in-the-board-game-room)).
 - **`Placeholder` is a look, not a thing.** Under `hidden: Placeholder` the
-  view deals an anonymous child for each hidden cell at the authority's slot,
-  with the template's own prototype and no variant: positions and count are
-  what the policy discloses. Its id is `<template>/$back:<slot>`, a
-  `GeneratedName`-minted id with no key in it, stable while the hidden cell
-  holds the slot. It is not a target: a pick on it answers the template's id
-  with no key, and a submission naming it is refused by name as a placeholder,
-  because the authority has no such row. Under `Count` placements are as under
-  `Omit`; the count travels in the observation row's `HiddenCount`, where it
-  already does.
+  view deals an anonymous child for each hidden cell at its place in the
+  re-deal (the row's order, which the policy discloses, never the authority's
+  slot, which hidden arrivals shape), with the template's own prototype and no
+  variant: positions and count are what the policy discloses, and a reader the
+  row's own policy excludes is shown no backs, as its observation shows none.
+  Its id is `<template>/$back$<slot>` (`WorldPlacementDeal.PlaceholderId`,
+  minted through `GeneratedName`, with no key in it; a placement id may not
+  carry `:`), stable while the hidden cell holds that place. It is not a
+  target: a pick on it answers the template's id (`WorldPickTarget` holds
+  `WorldPlacementDeal.PickedId`), and a submission naming it is refused by name
+  as a placeholder before policy (`WorldRecipientMutations.NamesPlaceholder`,
+  code `world.mutation.placeholder`), because the authority has no such row.
+  Under `Count` placements are as under `Omit`; the count travels in the
+  observation row's `HiddenCount`, where it already does.
 
 **Why:** renumbering on the authority is rejected for the reason
 `WorldPlacementDeal` records: it would shuffle every later instance when a cell
@@ -1121,8 +1130,8 @@ from that tick the variants' worlds differ by what those blind writes did:
 
 | Door | Recipient | Pair | What differs | Step |
 |---|---|---|---|---|
-| `world.placements` | seat2 | any hidden member dealt before `pub` | `pub`'s `dealSlot` and position | 4 |
-| `world.projection` | seat2 | a hidden member dealt before `pub` | the disclosed layout still carries the authority deal slot and position, changing the composed projection size | 4 |
+| `world.placements` | seat2 | any hidden member dealt before `pub` | `pub`'s `dealSlot` and position (closed by step 4) | 4 |
+| `world.projection` | seat2 | a hidden member dealt before `pub` | the disclosed layout still carries the authority deal slot and position, changing the composed projection size (closed by step 4) | 4 |
 | `echo` | seat2 | any hidden member | `world.state.cell.remove hand secret0` answers `ran` with no text in both, and its echo says `applied` against `has no cell keyed 'secret0'`: a membership oracle a fire-and-forget verb carries only on the echo | 3 |
 | `deliver.state`, `deliver.definition` | every session | any hidden member | the re-deal after seat2's blind removal moves `pub`'s dealt position (`$.placements.rows[2].position[0]`) | 3, 4 |
 | `world.state.transform`, `world.state.act` | seat2 | two hidden members | after seat2 overwrites the hidden `secret1`, a transfer out of `hand` is refused as `state operation is not disclosed` against `not an ordered token zone` | 3 |
@@ -1133,10 +1142,10 @@ from that tick the variants' worlds differ by what those blind writes did:
 | `echo`, `world.state.transform` | seat2 | `late` | a drawn transfer out of `hand` is refused as `state operation is not disclosed` against `not an ordered token zone` (a drawn `Generate 'hand'` likewise as `draw site is not disclosed` against `requires a redrawable draw site`) | 3 |
 | `world.state`, `world.observe`, `world.budget`, `world.placements` | seat2 | `late` | the install's cells, counts and deal | 3, 4 |
 
-Step 2's remaining layout doors are `world.placements`, `world.reflow.preview`,
+Step 2's remaining layout doors were `world.placements`, `world.reflow.preview`,
 `world.projection` (including its byte count), and placements in `deliver.state`
-and `deliver.definition`. They consume the view already; step 4 replaces the
-hidden-dependent deal slots and base/displacement calculation inside it.
+and `deliver.definition`. They consume the view, and step 4 re-deals inside it;
+the probe now compares equal at every door.
 Read differences after a blind write are step 3's public-state consequences,
 including `query.state`, `world.state`, observation replies and later budgets;
 changing the read path cannot undo a public write. `wire.errors` also retains
@@ -1165,7 +1174,7 @@ read adapter and disclosure implementation stay until step 6 replaces their call
 | 1. The view and the cursor, deltas first — landed | `WorldRecipientView`, `WorldDeliveryCursor`, `WorldDisclosureImages` and the carrier's key bitsets; both sinks use `Advance` and seed on definition/Resume; recipient sequences on deliveries, outcomes and provenance; traveller validity by delivered projection identity; the old change-disclosure cache and its forget path removed. `host.frames`, `host.memory`, `world.counters`, `world.gpu-timing` and `world.collision.probe` are Operator; the operator's budget reports image work/storage. [Decision 5](#5-a-delta-is-a-difference-of-views-owned-by-the-stream) records the choices | `DisclosureHarnessLawTests` compares hidden-only installs with intervening reads; `StateChangeDisclosureLawTests` covers independent cursors, in-place vectors, count primers, seat receipts and shared spectator composition; `WorldProjectionBackpressureLawTests` compares both peer tiers' wire bytes using the harness nonce normalization. Session Resume, authenticated traveller lifetime and observation/anchor restore laws cover boundaries step 0b has not yet added to every fixture. The five fixtures still expose the read/write/layout causes below; equality is required while the actual disclosed image remains equal |
 | 2. Reads through the view — landed | Every non-operator read door reads the view at its ceiling: `world.budget`, `world.placements`, `world.reflow.preview` (over the view's placements), `world.topologies`, `world.timeline`, `world.projection` composed for the caller, `world.identify`, `world.hud.template`, `world.state.similar`, `AnswerStateObservations`, `WorldFederationCodec.Observation`, the prototype fetch, `WorldTravelerProjection`; sessions read through the view's ceiling in place of `ReadSessionDefinition`; search audience widening refused at compile time and live execution; the skirmish's fair search uses blue's memory throughout | Harness: every read door the fuzzer reaches compares equal except the layout doors step 4 owns; `ConsoleDisclosureLawTests` green; `puck references` shows no `server.Definition` in `Puck.World` or `Puck.World.Console` outside operator verbs and boot |
 | 3. The write door refuses by policy — landed | `Admits` and `Refusal` on the view; every mutation touching a restricted row refused by policy for every recipient, seats included, batches and guards (`ExpectedCells`, `ExpectedSpatialReads` through `Fingerprint`) included; the typed completion's code and text; the addon's `NotDisclosed` verdict on bind and write; the forwarded submission door; the `sealedInbox` template in `worlds/standard/` the auction imports; the seven old predicates deleted | Every write door compares equal across all 46 fixture variant pairs, including full typed outcomes; actual guest bind/write and forwarded-traveller laws pass; the auction plays through reveal and reproduces; `TransformDisclosureLawTests` uses the one refusal text. Remaining read/layout delivery differences are recorded below |
-| 4. The layout | The view re-deals restricted templates with base and displacement split; `$back` children under `Placeholder` with their pick and submission contract; the validator's refusal of `Solid`, `Grip`, `Spatial`, `Region` and `Emission` on a restricted template; `world.placements`, the projection and reflow from the re-deal | Harness: the card game's and the skirmish's `world.placements`, `world.reflow.preview`, picks and projections compare equal across their pairs, the displaced card included; `puck compile --validate` refuses the card game's template with `solid` by name; `PlacementResponseDisclosureLawTests` and `WorldDeckAndDisclosureLawTests` updated to the renumbered slots |
+| 4. The layout — landed | `WorldStateDisclosure.DisclosedPlacements`, the one placement reading for every recipient door, re-deals a template whose dealt row can withhold: readable cells in the row's order take slots `0..n-1`, each child at its slot's offset plus its displacement from the authority's slot (in fixed point), re-dealt children following their template in slot order; `$back$<slot>` children under `Placeholder`, picked as the template and refused by name on submission; the validator's refusal of `Solid`, `Grip`, `Spatial`, `Region` and `Emission` on a restricted template and its children; the sweep's child stamp shared as `WorldPlacementDeal.Child`; the tick delivers right after its response and deal sweeps, so an install is delivered on its own tick; a value-only delivery owes a replica or federation peer its document when the recipient's frame moved (`WorldDeliveryCursor.FrameMoved`), replacing the authority's placement-install flag | Harness: the probe and the card game compare equal at every door across every pair; `puck compile --validate` refuses the card game's rack with `solid` by name; `WorldDeckAndDisclosureLawTests` holds the re-dealt layout under all three policies, the displaced card and the facet refusal |
 | 5. The compiler | The authority `internal`; `WorldOperatorAuthority` and the two doors; an operator factory on `CommandDefinition` and `OperatorContext`; `TryResolveServer` deleted; every module's constructor rewired (the 47 files); DISC001 with `Puck.Analyzers.Tests` fixtures for a module taking a `WorldServer`, one taking the view, and an operator handler; the public-surface law | The analyzer test is red on a planted `WorldServer` constructor parameter and green on the view; the surface law green; `dotnet build Puck.slnx` zero warnings; the harness still green |
 | 6. Nothing else decides | `WorldStateDisclosure` the class and `WorldStateReadView` deleted; `view.Withheld` where `ReadsWhole` serves and the timeline's lambda gone; the documents updated: [console](../../.claude/skills/puck-world/references/console.md) "Disclosure chokepoint", [traits](../reference/state/traits.md#control-what-observers-learn), [documents-state](../../.claude/skills/puck-world/references/documents-state.md), the Schema and Server READMEs, [worlds](../reference/state/worlds.md) | `puck references WorldStateDisclosure` answers nothing; the harness green over the five fixtures and the fuzzer: done |
 | 7. Red team | The extension that seats AI agents as players over the harness (an `IPuckExtension`, [hosting](../../.claude/skills/puck-world/references/hosting-and-release.md)), each agent driving one principal in both worlds of a pair with inputs it invents, `world.state.similar` among its doors; a difference it finds becomes an authored script in the fixture | A red-team run over the five fixtures adds no new script, or every script it adds is green after its fix |
@@ -1210,9 +1219,6 @@ commit, as machine readings are not a repository baseline.
   search's minimum depend on a hidden row's size. Decide whether pricing reads
   declarations only (an uncapped row priced at its ceiling, or every priced row
   required to declare a capacity), then add the two-variant law.
-- Argon's adversarial review of step 1: [high] `deal` leaks preceding hidden
-  cells through `DealSlot` and position, which step 4 owns. Its remaining
-  delivery findings are closed by the view/cursor work in decision 5.
 - Whether blind writes return: rejected here (decision 3). The auction fixture
   (`worlds/debug/auction.puck`, `worlds/standard/sealed.puck`'s `sealedInbox`)
   needs nothing more: each bid lands in the bidder's own inbox, a rule moves
@@ -1238,12 +1244,17 @@ commit, as machine readings are not a repository baseline.
   `editor` session, the last with Mutate of the state section and Edit of the
   game's restricted rows, so its drawn writes reach the mutation path). Every
   variant's setup steps apply, and every control agrees. The skirmish is green after its output-audience refusal and memory-only fair job.
-  The card game still differs for its Presentation session's definition/snapshot timing
-  at the hidden swap (tick 40); its row queries and write outcomes now agree. Attribute
-  that remaining presentation invalidation while doing step 4 rather than assuming it is
-  a policy-write failure. The probe still differs at dealt positions and the projection
-  and definition bytes carrying them, which step 4 owns. Its baseline late whole-row install
-  also overwrote public changes caused by blind writes; step 3 refuses those writes.
+  The card game's Presentation session received its definition at the hidden swap
+  (tick 40) rather than at the next public change: the deal sweep ran after the
+  tick's last delivery, so the turned-up card's install rode the next delivery any
+  later change triggered, and the swap's hidden install triggered it early. Step 4
+  closed it (the tick delivers after its sweeps), with the frame trigger for
+  value-only reveals and backs that stand for every withheld cell whether or not
+  the sweep has dealt it, so an operator's hidden key rename between sweeps moves
+  nothing a recipient is shown; the probe's dealt positions closed with the
+  re-deal. All six fixtures compare equal at every door. The probe's baseline late
+  whole-row install also overwrote public changes caused by blind writes; step 3
+  refuses those writes.
   The focused step-1 laws hold
   the public image fixed to isolate the delivery invariant. The auction's
   pairs, including the mid-run sealed bid, are green. Social deduction is green over another pair
