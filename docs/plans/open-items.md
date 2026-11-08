@@ -3185,6 +3185,16 @@ Owner: suites lane · dormant until the owner restores test requirements (AGENTS
 suspends them for the refactoring campaign) · Next: triage the failing Windows
 shards by cause.
 
+- [low] Seen by the glass-skip review on the tip, not caused by it: four
+  `SdfPassPlanLawTests` laws expect shadow-near ordered before mesh
+  (`TheTemporalResolveReadsLastFramesHistoryAndWritesThisFrames`,
+  `EachStageDeclaresExactlyItsReadsAndWrites`,
+  `ThePlannedOrderIsTheFragmentsDispatchOrder`,
+  `ReconstructionKeepsTheOutputGridAndPricesScratchAtTheRenderCeiling`), and
+  `SdfWorldPassesLawTests.TheViewsRecorderWritesTheLiveFadeCountAsync` expects
+  `sdf-world-views` where a programless frame binds `sdf-world-views-plain`.
+  Read whether the planned order changed on purpose, then update or delete.
+
 - Failures the field-packing lane met in code it did not touch (unconfirmed
   on its base): `SdfPackedContractLawTests.TheConstructorAdmitsTheReinterpretedIntegerLanes`
   builds a SampledRegion with no binding, which `BindSampledFields` refuses;
