@@ -4665,8 +4665,8 @@ read one. The plans that keep open items:
   the engineering steps that pay inside one author's packages (declared
   controls and presets, field extents in `creation stats`, the recorded
   expansion, named attachment frames, a shared role table, creations in the
-  cost report), and the owner's calls that wait for creations to cross between
-  parties.
+  cost report) as ordinary standard-package work; the library is this open
+  source repository, not a service or index (the owner's answer).
 - [Rendering](rendering.md): the status table names each package's open
   remainder: the frame-rate bars on the RTX 2060 and the Steam Deck, the mesh
   bake and its defects, glass, GPU capture findings and the remaining parts of

@@ -4,8 +4,20 @@ The design memo of the creation-library research round, for the owner. The
 owner asked whether open 3D libraries (Google Poly, Amazon Berkeley Objects)
 could inspire Puck and ruled: "Research, no copying. This is inspirational, and
 Puck is VERY different from what the state of the art might normally describe
-or rely on." Nothing is decided here: the owner chooses whether a library is a
-direction after reading this, and the memo says what each answer costs.
+or rely on."
+
+**The owner's answer.** "An open library is the goal ONLY in the sense that our
+entire repo is open source and we plan to share with everyone." So the library
+is this repository: the standard package (`worlds/standard/`) and the worlds
+beside it, shared as open source, which any author imports, overrides by id or
+replaces. There is no library service, hosted index, library world or
+federated catalogue to build: options 3 and 4 below are not goals, and option
+2 survives only where it makes the standard package better to use (the
+compiler recording which template and arguments produced a creation). Option
+1, the standard package's families with declared controls, presets, measured
+extents and a shared role table, is ordinary standard-package work, scheduled
+with the rest of the queue and proved in the debug world. The rest of this memo
+is the research record behind that answer.
 
 It weighs three records: [what open libraries learned](creation-library/libraries.md)
 (lane lib-1), [authoring shapes as programs](creation-library/programs.md)
@@ -411,7 +423,7 @@ lib-1 was a label beside the bytes; the run shows the bytes can carry it now.
 The cheap half (the recorded expansion, the store or its deletion) pays
 inside option 1; the rest waits for a second party.
 
-**Option 3: a library world.** A world whose projection discloses its index's
+**Option 3 (not a goal): a library world.** A world whose projection discloses its index's
 prototypes; a browser verb or place that lists, searches and previews what a
 visitor may place; an arrival check that prices a fetched creation against the
 receiving world's budget (I, J). *Cost:* a disclosure design step on the
@@ -423,7 +435,7 @@ right rule, and the fetch door exists; what is missing is the index and the
 order of federation work, which [the MMO synthesis](mmo-foundations/synthesis.md)
 sequenced ahead of any content federation.
 
-**Option 4: a federated index any world hosts.** Mirrorable indexes, remix
+**Option 4 (not a goal): a federated index any world hosts.** Mirrorable indexes, remix
 lineage across authorities, and whatever authors build on top (their own
 licences, credits and stores, carried in the identified bytes). *Cost:* option 3
 plus cross-authority lineage and a settlement door for anything sold. *Unlocks:* the open library the owner asked about. *Evidence:* Poly,
