@@ -290,10 +290,10 @@ whose model, revision, or dimensions differ from the lock's ("Embedding space
 | Option | Effect |
 |---|---|
 | `--check` | Verifies that every text is locked and fresh without contacting a provider. Use it in CI. |
-| `--provider fixture` | Uses the offline fixture provider. It's the default for the `puck-fixture` model. |
-| `--provider openai-compatible --endpoint <url>` | Calls an Azure OpenAI endpoint, authenticating with Azure identity. |
-| `--omit-dimensions` | Leaves the dimension count out of embedding requests. |
-| `--batch-size <n>`, `--timeout-seconds <n>` | Tune requests: 1 to 2,048 texts per batch (default 64), and a timeout in seconds (default 60). |
+| `--provider embedding.fixture` | Selects the offline provider from the installed `Puck.World.Embeddings` extension. |
+| `--provider embedding.azure-openai --settings <json-file>` | Selects the provider from the installed `Puck.World.Azure` extension, using its JSON settings. |
+| `--settings <json-file>` | Provider-specific settings object; the authored space supplies model, revision and dimensions. For Azure, this includes `endpoint`, optional `deployment` and `omitDimensions`. |
+| `--batch-size <n>` | Tune requests: 1 to 2,048 texts per batch (default 64). |
 
 `puck embed probe <path> <text>` ranks the locked vectors against a query text by
 similarity and dot product, which helps you choose thresholds. The

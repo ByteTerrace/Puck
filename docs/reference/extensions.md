@@ -46,6 +46,14 @@ The kinds in use today, and who reads them:
 | `PuckHostedService` | any | `registry.Add` | every host: started with the host, stopped and disposed with it |
 | `HostedControl` | always `control` | `AddHostedControl` | a host with an `IControlSessionHost`, when a control configuration is named |
 | `McpServicesProvider` | provider name | `registry.Add` | remote MCP, when its configuration names `services` |
+| `WorldReleaseHost` | host name | `registry.Add` | CLI release operations (`--host`), official content scanning, and the provider's command tree |
+
+The CLI discovers the same installation directories through `CliExtensions`.
+`Puck.Cli.Azure` contributes the `azure` release host and `puck azure` commands;
+the provider-neutral CLI package references neither it nor Azure SDKs. `puck embed`
+selects a `WorldExtensionEmbeddingProviderType` using `--provider`, with an optional
+`--settings` JSON object file. Both selections default to the single installed
+contribution of their kind and refuse missing or ambiguous selections by name.
 
 The *extension configuration* is the host-approved `puck.world.extensions.v1`
 document described in

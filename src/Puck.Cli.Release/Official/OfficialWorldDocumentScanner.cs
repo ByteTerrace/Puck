@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using System.Text;
 
 using Puck.Launcher.Release;
+using Puck.Cli.Automation;
 using Puck.World;
 using Puck.World.Transpiler.Assets;
 using Puck.World.Transpiler.Composition;
@@ -16,7 +17,7 @@ namespace Puck.Cli.Official;
 // published byte for byte), documents[] (every document that workspace authors, named by its document name
 // (WorldDocumentName) and described by its own JSON — never a full WorldDefinition parse, which most fragments refuse
 // standalone by design — each naming the sources[] file that authors it), and composed[] (the root document, the world
-// production hosts (AzureCommand.HostedWorldName), resolved through its whole basis-and-imports graph, parsed,
+// production's selected release host names, resolved through its whole basis-and-imports graph, parsed,
 // migrated, validated, and re-serialized — the one document this tree proves boots). A .puck source authors exactly the names it emits (WorldCompilation.DocumentNames):
 // its stem, or one per world a composition source declares, or none for a module library, so a .world.json file named
 // like a library, or like a composition that declares no world of its stem, is that name's carrier; a .world.json file
@@ -27,7 +28,7 @@ public static class OfficialWorldDocumentScanner {
     private const string BasisMemberName = "basis";
     private const string ImportsMemberName = "imports";
 
-    private static string RootDocumentName => Azure.AzureCommand.HostedWorldName;
+    private static string RootDocumentName => WorldReleaseHost.Select().RootDocumentName;
 
     // One document the workspace authors: its document name, the sources[] file that authors it, and its JSON.
     private readonly record struct AuthoredDocument(string Name, string Source, byte[] Bytes);

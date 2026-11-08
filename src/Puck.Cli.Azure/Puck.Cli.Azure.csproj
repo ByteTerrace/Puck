@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>Puck.Cli.Azure</AssemblyName>
+        <EnableDynamicLoading>true</EnableDynamicLoading>
+        <IsAotCompatible>false</IsAotCompatible>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <PuckKind>Tool</PuckKind>
+        <PuckProvider>Azure</PuckProvider>
+        <RootNamespace>Puck.Cli.Azure</RootNamespace>
+        <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Puck.Cli.Release/Puck.Cli.Release.csproj" />
+        <ProjectReference Include="../Puck.Storage.Azure/Puck.Storage.Azure.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+    </ItemGroup>
+</Project>

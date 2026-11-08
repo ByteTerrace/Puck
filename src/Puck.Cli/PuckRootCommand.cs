@@ -4,7 +4,6 @@ using Puck.Cli.Analysis;
 using Puck.Cli.Affected;
 using Puck.Cli.Architecture;
 using Puck.Cli.Automation;
-using Puck.Cli.Azure;
 using Puck.Cli.Baselines;
 using Puck.Cli.Branding;
 using Puck.Cli.Bench;
@@ -79,7 +78,7 @@ public static class PuckRootCommand {
             AgentsCommand.Create(),
             ArchitectureCommand.Create(),
             ArtifactsCommand.Create(),
-            AzureCommand.Create(clock: clock),
+            .. CliExtensions.Installed.Contributions<WorldReleaseHost>().Select(entry => entry.Value.CreateCommand(clock: clock)),
             BaselinesCommand.Create(),
             BenchRunner.Create(clock: clock, sampleHost: BenchHost()),
             BrandingCommand.Create(),
