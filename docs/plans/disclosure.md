@@ -119,10 +119,13 @@ scheduling a step:
   Complete admission checks it before grants; detached composition and live state members
   recheck it against earlier batch members. `WorldRecipientMutations.CheckGuards` is the one
   guard implementation, over the view's fingerprints. Addon reads use `Discloses`, while binds
-  and writes require whole-row admission. `WorldDefinitionFingerprint.SpatialRows` includes
-  spatial deal templates even without current children, so a spatial guard's admission cannot
-  disclose whether a hidden member has appeared. Reflow and fingerprints share its placement
-  state-dependency collector.
+  and writes require whole-row admission. A spatial guard's admission takes no region: it checks
+  every placement that can enter a census (`WorldDefinitionFingerprint.EntersSpatialCensus`,
+  spatial deal templates included), since which placements a region holds can depend on bound
+  state. A row keyed over a token domain admits only while the domain reads whole, and a
+  transform only while every row it resolves to does (`RuleCompiler.TryCollectTransformRows`).
+  A live audience (`readersFrom`) admits only while every recipient reads it whole. Reflow and
+  fingerprints share the placement state-dependency collector.
 - A write's outcome reaches its submitter typed, not only as an echo:
   `WorldTick.CompletePendingOp` builds a `WorldMutationOutcome` from the real
   verdict with its decision, detail and the live document version
@@ -347,10 +350,13 @@ hidden one answer apart or the bid is silently lost.
 mutation that touches the row is refused by policy, before anything else is
 looked at and with one text whatever the key: `'<row>' is not disclosed to
 <principal>`. That covers `UpsertStateCell` (Set and Add), `RemoveStateCell`,
-`UpsertStateRow`, `TransformState` and `Generate` naming the row, a batch
-holding any of them or an `ExpectedCells` or `ExpectedSpatialReads` guard that
-reads it (the whole batch refuses, as one member's refusal refuses a batch
-today), and an addon's bind or write of a cell in it, which answers one
+`UpsertStateRow`, `TransformState` and `Generate` naming the row, a write
+into a row keyed over it as a token domain, a transform resolving to it by a
+live key, a zone's domain or a pool field, a batch holding any of them or an
+`ExpectedCells` guard that reads it or an `ExpectedSpatialReads` guard while any
+placement a spatial read could observe depends on it, whatever the region (the
+whole batch refuses, as one member's refusal refuses a batch today), and an
+addon's bind or write of a cell in it, which answers one
 verdict, `NotDisclosed`, for a hidden key and an absent one. The refusal is the
 actual outcome, so the typed completion (`Refused`, code
 `world.mutation.undisclosed`, the one text), the replay tape's recorded
@@ -989,7 +995,8 @@ commit, as machine readings are not a repository baseline.
   grant before it can inspect any key. The standard collection and receipt templates
   supply the auction's move into authority storage.
 - What the other fixtures settled. Social deduction: a `readersFrom` row must
-  itself be public (`WorldDefinitionValidator.Disclosure.cs:169-177`), so a
+  itself read whole by every recipient (`WorldDefinitionValidator.ValidateReadersFrom`,
+  and `WorldStateDisclosure.Allows` admits no one through any other), so a
   secret team's channel cannot be one row whose audience lists the team
   without publishing who is on it; the game keeps a den row per mole instead,
   and seeds every chat slot, so no eviction ever runs. The card game: a pile
@@ -1038,6 +1045,13 @@ commit, as machine readings are not a repository baseline.
 - The resource channels named as best effort are measured, not assumed: step
   1's spectator check records the per-tick disclosure work a hidden write
   costs, so the width of the timing channel is a number in `world.budget`.
+- [low] `world.history row` answers anyone, and its window's oldest tick moves when
+  `WorldHistory.EnforceBudget` evicts a segment because the held keyframe bytes
+  pass the budget. A keyframe encodes the whole authority, withheld rows included,
+  so where the window starts is a byte-count channel on hidden state. A seat's
+  seek no longer prints the authoritative hash; the window bound needs either
+  eviction keyed to ticks alone or a row answer that names only ticks a seat's
+  own recording decides. Owner: the history lane, beside step 6's read verbs.
 
 ---
 

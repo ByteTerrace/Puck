@@ -90,8 +90,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             foreach (var row in schedule.Instances) {
                 if (row.Status is RenderGraphInstanceStatus.Unread or RenderGraphInstanceStatus.Unnamed) { continue; }
                 if (!row.IsRoot && row.LatestFrame < 0 && row.Status is RenderGraphInstanceStatus.Waiting) { continue; }
-                if (m_entries.TryGetValue(row.Instance, out var entry) && entry.Residency is { MeshesResident: false } residency) {
-                    return $"residency '{residency.Name}' through '{row.Instance}' still owes mesh landing or its GPU upload completion";
+                if (m_entries.TryGetValue(row.Instance, out var entry) && entry.Residency is { MeshResidencyPending: { } pending } residency) {
+                    return $"residency '{residency.Name}' through '{row.Instance}': {pending}";
                 }
             }
             return null;

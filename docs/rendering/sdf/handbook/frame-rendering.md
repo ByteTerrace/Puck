@@ -1333,8 +1333,10 @@ packs again only once those words outnumber the named meshes' words and 32 MB
 (`SdfMeshRegionArena.RetainedSlackWords`).
 Placed meshes never land in a frame's upload: they stream through the
 residency's background GPU work (`SdfWorldTables.MeshLanding.cs`, a client of
-`SdfGpuWork`), in jobs of at most `SdfGpuWork.UploadChunkBytes` under that
-service's byte, host-time and GPU-share budget, the meshes the views see largest
+`SdfGpuWork`), in jobs of at most `SdfGpuWork.MostUploadJobBytes` under that
+service's byte, host-time and GPU-share budgets, each a rate of wall time
+(`SdfGpuWork.UploadBytesPerSecond`), so a slow or throttled frame lands as many
+bytes a second as a fast one, the meshes the views see largest
 first (`SdfMeshDemand`). A draw whose mesh is still owed waits out of the staged
 records until its last job has completed, so a boot, a relocation or a body whose
 meshes all arrive at once fills in from the cameras outward over several frames
@@ -1396,7 +1398,11 @@ The store is presentation's alone: no simulation state reads it.
 Only new geometry bakes. The bake reports its residency, groups,
 dispatches, samples, groups loaded, triangles, vertices and wall time on stderr
 when it starts and finishes (`[sdf.mesh-bake] start residency=… baking=…
-loading=…`, `done residency=… loaded=…`).
+loading=…`, `done residency=… loaded=…`). The start line names its cause
+(`program`, a new program; `resample`, a moved sampled field's readers; `promote`,
+a reader's waiting successor) and the first groups it began (`begun=[selector/
+slotN or unionN/bake or load, …]`), so a group that bakes again and again names
+itself.
 It counts a batch as work when the background work takes it. A batch remembers
 the bake that took it and holds its slot until its samples are copied off, so no
 view's coming or going strands it. A batch handed back unanswered (a recording

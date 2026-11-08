@@ -1159,7 +1159,16 @@ and not a spiral:
   wall-clock before/after a lane reports is indicative, and the lead keeps a
   list of the quiet-window readings owed. When a wave lands, or at least every
   few hours, the lead stops launching, lets running builds finish, and takes
-  every owed reading in one quiet window before relaunching.
+  every owed reading in one quiet window before relaunching. When to weave a
+  window in is the lead's call alone, never an owner question (the owner's
+  ruling: deciding when to weave those passes in "is literally your job as the
+  orchestrator"). The default is to let the running wave land, launch nothing,
+  and measure with the machine to itself; interleaving slices with running
+  lanes only stalls their builds and tests behind the quiet lease for as long
+  as it saves, and invites lease tangles. Bounded `--window-seconds` slices
+  are for keeping one window from starving others, not for overlapping lanes.
+  A reading a window cannot take (a display found off, a refused build) is the
+  lead's to retry or route, not something to ask for.
 - Fundamentals do not crowd out features (AGENTS.md, "Fundamentals, driven by
   features"): waves of findings feed the next wave without end, so whenever no
   feature lane is running, the next free slot goes to a debug-world feature

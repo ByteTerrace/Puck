@@ -212,7 +212,9 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
             ? $"[world.history: live input resumes at tick {at}; ticks {(at + 1UL)}..{top} are discarded when the next tick lands]"
             : $"[world.history: live input {(wasPaused ? "resumes" : "was already running")} at the head]"));
     }
-    private CommandResult Seek(ulong target, string verb) {
+    // The authoritative hash folds every row, withheld ones included, so a seat is told only whether the re-simulation
+    // matched the recording; the operator is shown the hashes.
+    private CommandResult Seek(ulong target, string verb, Principal principal) {
         if (!m_history.TrySeek(
             documentPath: DocumentPath,
             refusal: out var refusal,
@@ -236,8 +238,9 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
             ? $"restored keyframe {keyframe} ({(report.RebuiltDocument ? "through the load door" : "in place")}), re-simulated {report.TicksResimulated} tick(s)"
             : $"re-simulated {report.TicksResimulated} tick(s) forward");
         var proof = (report.Matches
-            ? $"authoritative 0x{report.LiveHash:X16} matches the recording"
-            : $"DIVERGED at tick {(report.DivergedAt ?? report.To)} — live 0x{report.LiveHash:X16}, recorded 0x{report.RecordedHash:X16}");
+            ? (principal.IsAuthority ? $"authoritative 0x{report.LiveHash:X16} matches the recording" : "the authoritative state matches the recording")
+            : (principal.IsAuthority ? $"DIVERGED at tick {(report.DivergedAt ?? report.To)} — live 0x{report.LiveHash:X16}, recorded 0x{report.RecordedHash:X16}"
+                : $"DIVERGED at tick {(report.DivergedAt ?? report.To)}"));
 
         if (report.MachineCoresOutsideProof) {
             proof += " (machine cores are outside the authoritative hash and were not compared)";
@@ -280,7 +283,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
 
         return new CommandResult(Output: $"[world.history: on | {window} | held {Bytes(bytes: status.BytesHeld)} of {Bytes(bytes: status.BudgetBytes)} (keyframes {Bytes(bytes: status.KeyframeBytes)} shared from {Bytes(bytes: status.KeyframeEncodedBytes)} encoded, input {Bytes(bytes: status.InputBytes)} = {Bytes(bytes: perTick)}/tick, branches {Bytes(bytes: status.BranchBytes)}) | recorded {counters.TicksRecorded} tick(s), {counters.HashFolds} hash fold(s), {counters.KeyframesCaptured} keyframe(s) captured ({Bytes(bytes: meanKeyframe)} mean encoded, {Bytes(bytes: meanStored)} mean added), {counters.KeyframesDeferred} deferred, {counters.SegmentsEvicted} evicted | {counters.Seeks} seek(s), {counters.TicksResimulated} tick(s) re-simulated, {counters.InPlaceRestores} in-place and {counters.RebuildRestores} rebuilt restore(s) | {counters.BranchesKept} kept and {counters.FuturesDiscarded} discarded future(s) | branches: {branches}]");
     }
-    private CommandResult Step(WireArgs args) {
+    private CommandResult Step(WireArgs args, Principal principal) {
         if (
             (args.Count != 2) ||
             !args.TryLong(index: 1, value: out var delta) ||
@@ -290,7 +293,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
         }
 
         if (m_history.CursorTick is not { } cursor) {
-            return Seek(target: 0UL, verb: "step");
+            return Seek(target: 0UL, verb: "step", principal: principal);
         }
 
         if (
@@ -301,6 +304,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
         }
 
         return Seek(
+            principal: principal,
             target: ((delta < 0L)
                 ? (cursor - ((ulong)(-delta)))
                 : (cursor + ((ulong)delta))),
@@ -336,16 +340,16 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
 
         if (args.Is(index: 0, value: "seek")) {
             return (((args.Count == 2) && args.TryUnsignedDigits(index: 1, value: out var target))
-                ? Seek(target: target, verb: "seek")
+                ? Seek(target: target, verb: "seek", principal: context.Principal)
                 : WorldHistoryForms.Refuse(args: in args));
         }
 
         if (args.Is(index: 0, value: "step")) {
-            return Step(args: args);
+            return Step(args: args, principal: context.Principal);
         }
 
         if (args.Is(index: 0, value: "scrub")) {
-            return Scrub(args: args);
+            return Scrub(args: args, principal: context.Principal);
         }
 
         if (args.Is(index: 0, value: "diff")) {

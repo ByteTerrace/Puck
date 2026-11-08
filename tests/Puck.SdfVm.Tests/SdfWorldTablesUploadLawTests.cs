@@ -756,7 +756,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             expected.AddRange(collection: new[] { 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f }.Select(selector: BitConverter.SingleToUInt32Bits));
             // The mesh's shared level table and its coarser level count, none here; Selection writes the rows after.
             expected.AddRange(collection: [levelWord, 0u]);
-            expected.AddRange(collection: new uint[(SdfMeshRecord.DrawWords - SdfMeshRecord.SelectionWord)]);
+            expected.AddRange(collection: new uint[(SdfMeshRecord.DisplacementWord - SdfMeshRecord.SelectionWord)]);
+            // No draw here is displaced by a height field.
+            expected.Add(item: SdfFrameSampled.None);
         }
         // A level table of one row: the mesh's own triangles from its first, three vertices a triangle, error zero.
         void Levels(SdfMesh mesh) => expected.AddRange(collection: [0u, (uint)(3 * mesh.TriangleCount), 0u]);
@@ -1258,8 +1260,10 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // frames, and the staging after the last landing names every draw.
         public void Land(float time, IReadOnlyList<SdfMeshDraw> meshDraws) {
             Render(meshDraws: meshDraws, time: time);
-            for (var frame = 0; (Engine.MeshesLanding || Engine.DrawsAwaitMeshes); frame++) {
-                Assert.True(condition: (frame < 64), userMessage: "The mesh region never landed its meshes.");
+            // The upload budget is a rate of wall time (SdfGpuWork.UploadBytesPerSecond), so the bound is in seconds.
+            var deadline = System.Diagnostics.Stopwatch.StartNew();
+            while (Engine.MeshesLanding || Engine.DrawsAwaitMeshes) {
+                Assert.True(condition: (deadline.Elapsed < TimeSpan.FromSeconds(10)), userMessage: "The mesh region never landed its meshes.");
                 Render(meshDraws: meshDraws, time: time);
             }
         }

@@ -121,7 +121,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     }
     private long m_sceneAdoptions;
 
-    public bool TryTake(SdfWorldTables tables, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? job, out double estimatedSeconds) {
+    // A scene chunk is cut at SdfGpuWork.UploadChunkBytes before any take, the least any allowance is.
+    public bool TryTake(SdfWorldTables tables, int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? job, out double estimatedSeconds) {
         job = null;
         estimatedSeconds = 0;
         lock (m_gate) {

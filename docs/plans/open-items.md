@@ -1780,6 +1780,14 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [low · bake identity] A group's `Outcome` text (`SdfMeshPathBake`'s
+  "no surface, as baked before", "contour refused" and the rest) is a string
+  literal in the bake's code closure that only the done line's `empty=[...]`
+  reads, so rewording one still moves the store identity. Make it an outcome
+  value the report words (`SdfMeshBakeReport`), as the lines themselves are.
+  The `m_restarts`, `m_loads*` and `m_planMilliseconds` counters that only
+  `world.residency`'s bake line reads belong in `SdfMeshBakeReport.Accounts`
+  too.
 - [medium · frame thread waits on release] A residency's final release still
   waits on the frame thread for two builds: `SdfWorldPipelineSource.Release`
   cancels and waits its lease acquisition, and releasing a last
@@ -2650,16 +2658,6 @@ Next: the per-tick authority hash is incremental
 ([design](engine-job-system.md#the-incremental-state-hash)); re-profile Go's
 reproduce worker for what remains.
 
-- [high · determinism] A rule that removes an inhabited placement does not
-  reproduce. `puck test worlds/debug/rule-faults-tests.puck` passes, and with
-  `--reproduce` it diverges in `boot` at recorded tick 5. The same document
-  with the placement and no removal reproduces; with the removal and no other
-  effect it diverges identically. In the authored run the inhabitant's
-  `peer:7:1` rows are revoked on tick 6, with the removal; the replay admits
-  that inhabitant as `peer:7:2` and narrates `world.revoke: peer:7:1 control
-  all` before tick 6's rules run, so the checkpoint restore or the tape carries
-  the inhabitant's peer generation and its revocation differently from the
-  authored run. Not yet traced to the door that records or re-drives it.
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does.
 - [medium] Recording still costs about a third of the plain authored run. The
   per-tick authority hash folds the arena from `RowVersion`-cached row digests
@@ -2893,28 +2891,23 @@ Grounded causes and leads, largest first:
 - One group in the debug world has a mesh that no draw names, not yet
   identified; `world.residency` counts it resident, since it costs the region
   nothing.
-- The mesh region lands through the background GPU work
-  (`SdfWorldTables.MeshLanding.cs`) at what `SdfGpuWork` admits: four slots of
-  `SdfGpuWork.UploadChunkBytes`, about 4 MiB a frame, so the debug world's
-  1.7 GB region fills in over roughly 300 to 360 frames of a boot whose early
-  frames are slow (`world.residency`'s `owed-frames`). The nearest meshes land
-  first. Whether landing should spend more of a slow frame (more slots, larger
-  chunks, a byte budget that accrues by wall time like the GPU share) is a
-  measurement against the frame bar, not a guess.
 - A relocation owes every placed mesh again and re-lands it from the host,
   although its words already sit in the old destination. A GPU-side compaction
   (copy each kept mesh from its old placement into a fresh destination, as a
   grown region carries its words) would move no byte across the bus and keep
   the old draws drawable until the copy completes; relocations are rare, so it
-  waits for a case that shows them.
-- `world.wait residency` never settles in the windowed debug world, and did not
-  before the mesh landing moved to the background GPU work: with the
-  world residency owing nothing, some
-  routed, view or infinity residency `WorldScreenBinder.ViewsBake(resident:
-  true)` checks (`src/Puck.World/WorldScreenBinder.Device.Bakes.cs:55-71`) stays
-  not resident (a residency never staged has no tables, so
-  `MeshesResident` is false). Name it (the wait's reason does not), then decide
-  whether an unstaged residency counts.
+  waits for a case that shows them (`world.residency`'s landing line counts
+  `relocations=` and names the latest one's reason).
+- A world field's height-field reference (`SdfHeightField.Publish`, from
+  `WorldFieldEmitter`) keys a new mesh whenever a column turns wet or dry, so
+  the debug world's water bakes or loads one static group again (`[sdf.mesh-bake]
+  start … cause=resample begun=[-8593/union1/load]`, the field's one instance
+  near the program's end): nine starts in the first 755 ticks at spawn, the gaps
+  growing from 50 to 190 ticks as the water settles, each a store miss on its
+  first run. The geometry does change, since the raised set is the reference's
+  shape. Whether a reference should hold every column that can ever raise and
+  let displacement close the dry ones, trading the re-keys for draw-time
+  degenerate columns, is a design question for the field's owner.
 
 Bake and probe residency lifecycle lows (each read at the cited lines; a
 failing case is argued from source, not run):
@@ -2958,21 +2951,6 @@ failing case is argued from source, not run):
 
 ### Vulkan regressions and GPU robustness
 
-- [medium] Residency never settles at the teal room: `bench frames --backend
-  vulkan` was refused twice there (`world.wait residency` unsettled 20 s and
-  110 s after `[bakes: settled]`), and a live Direct3D 12 World on the base build
-  showed it once at the same pose (seen by the frame-attrib lane). After a real
-  device-loss recovery, re-landing about 1.75 GB of meshes also outlasts the
-  harness's 20 s residency wait (gpu-hang lane). Name what the residency still
-  owes there before raising any wait. Now reproduced on Direct3D 12 at the tip
-  (window-3, `bench frames worlds/debug --plan worlds/debug/sweep.json --stop
-  finding-teal-roof --backend directx`): after `world.rate pause` and
-  `[bakes: settled]`, `ViewHost.MeshesResident` stays false for 20 s
-  (`SdfWorldTables.MeshesResident`: words owed or the upload fence unsignalled).
-  Before the pause, single-group re-bakes (`loading=1`, one "geometry new to its
-  set" miss) repeat between `world.deal 'sheddingRack1..4'` lines (inference,
-  group ids not logged: the dealt card hands). This blocks every sweep-stop
-  measurement: shade-3b and the four shade-4 binning requests were refused here.
 - [low] The Vulkan pipeline-statistics readout reads the logical device to
   build `CapturesStatistics`'s argument before checking that naming is on
   (`VulkanGpuPipelineFactory.cs:94`, guard at `:108`); move the guard first.
@@ -4265,6 +4243,22 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [medium] A `puck measure request` filed under the caller's own quiet lease
+  queues its frozen-tree build behind the build lease that same holder owns,
+  and waits until the outer lease ends (seen in a measurement window: the
+  filing build sat 10 minutes in the build queue behind its own holder). A
+  lease request from a process whose ancestor holds that lease either nests
+  into the held lease or refuses at once naming the holder; it never queues
+  behind itself.
+- [medium] A measurement window samples with the display off: the World's
+  display-required power request (`Win32NativeWindow.DisplayPower.cs`) keeps a
+  lit display lit but does not wake one already off, so a window that starts
+  after the machine idled samples the compositor's slow fallback (a Vulkan cold
+  bake's probe lighting ran about 3.5 times slower, with `[present-timing] 4
+  presents in a row did not display within 50 ms` and `nvidia-smi`
+  `display_active Disabled`). `puck measure run` checks that presents display
+  before its first sample, wakes the display through the platform layer if it
+  can, and otherwise refuses the slice with that cause instead of spending it.
 - [medium] A measurement's readiness probe gives up before a cold first frame:
   `world.wait ready 1` with a 10 s exec budget (`SweepWorld`, `src/Puck.Cli.Runs/Sweep/SweepWorld.cs`)
   failed both views-live-state requests, whose World stopped after

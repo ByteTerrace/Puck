@@ -8,6 +8,37 @@ public static partial class RuleCompiler {
     /// <param name="reads">The list receiving read ordinals.</param>
     public static void CollectCellSetReads(RuleCompileContext context, CellSetRow set, List<int> reads) =>
         _ = CellSetReads(cells: 0, context: context, reads: reads, ruleName: string.Empty, set: set);
+    /// <summary>Adds every state-row ordinal a resolved transform reads or writes: its subjects and, beyond them, the
+    /// rows a live key, a zone's token domain, a declared set or a pool's fields address. These are the rows the
+    /// arena's audience check walks before the kernel runs, from the same access walk.</summary>
+    /// <param name="transform">The authored transform.</param>
+    /// <param name="context">The compile context whose catalog names resolve against.</param>
+    /// <param name="rows">The list receiving row ordinals; reads and writes alike, possibly repeated.</param>
+    /// <param name="reason">Why the transform's shape was refused, or empty on success.</param>
+    /// <returns><see langword="true"/> when the transform's shape resolved; <see langword="false"/> adds nothing.</returns>
+    /// <remarks>Collects before the audience boundary (<see cref="RequireEnclosedAudience"/>) is judged, so a caller
+    /// deciding whether those rows may be inspected at all asks before anything reads their cell policies.</remarks>
+    public static bool TryCollectTransformRows(StateTransform transform, RuleCompileContext context, List<int> rows, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: context);
+        ArgumentNullException.ThrowIfNull(argument: rows);
+        var start = rows.Count;
+        try {
+            var effect = ResolveStateTransformCore(context: context, resolved: out var resolved, ruleName: string.Empty, transform: transform);
+            var reads = new List<CellAccess>();
+            effect.CollectReads(into: reads);
+            effect.CollectWrites(into: reads);
+            foreach (var access in reads) { rows.Add(item: access.RowOrdinal); }
+            if (resolved is not null) {
+                ArenaTransforms.CollectAccesses(binding: ArenaTransformBinding.None, catalog: context.Catalog, reads: rows, transform: resolved, writes: rows);
+            }
+            reason = string.Empty;
+            return true;
+        } catch (RuleException exception) {
+            rows.RemoveRange(index: start, count: (rows.Count - start));
+            reason = exception.Message;
+            return false;
+        }
+    }
     /// <summary>Resolves an authored transform into the form the arena applies: every row, cell key, board cell,
     /// direction, pattern and admitted value addressed by ordinal rather than by name.</summary>
     /// <param name="transform">The authored transform.</param>

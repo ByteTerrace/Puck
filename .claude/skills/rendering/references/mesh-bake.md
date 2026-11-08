@@ -636,8 +636,11 @@ laws exercise that boundary.
   layout that moves placed meshes when one lands (sections by attribute) made
   every landing rewrite the whole region. Placed meshes land through the
   background GPU work, never a frame's upload (`SdfWorldTables.MeshLanding.cs`):
-  jobs of at most `SdfGpuWork.UploadChunkBytes` under its byte, host-time and
-  GPU-share budget, nearest the views first, each staged into the job's own slot
+  jobs of at most `SdfGpuWork.MostUploadJobBytes` under its byte, host-time and
+  GPU-share budgets, each a rate of wall time and never a count a pump: a
+  per-pump budget lands only as fast as frames come, and a window the
+  compositor throttles to about 8 fps would take some 40 s over the debug
+  world's 1.75 GB region. Jobs take the meshes nearest the views first, each staged into the job's own slot
   of the region (`MeshLandingSlot`, past the upload ring's) and copied in the
   job's command buffer. A mesh leaves `m_meshesOwed` only when every job carrying
   its current placement has completed, and the landing filter in
@@ -864,7 +867,12 @@ laws exercise that boundary.
   constructs counts its whole layout, since its synthesized equality and
   printing read every field. `SdfMeshBakeClosureLawTests` pins both ways. It
   stops at `SdfMeshLibrary` and `SdfMeshStore`,
-  which hold meshes, and at `GpuRegion` and `GpuUploadRuns`, and at the runtime. The
+  which hold meshes, and at `GpuRegion` and `GpuUploadRuns`, and at the runtime. It also
+  stops at `SdfMeshBakeReport`, which words, counts and writes every `[sdf.mesh-bake]` line and owns the counters
+  they report (`Accounts`): the bake hands it values (a group's selector, counts, outcomes) and never builds or
+  writes text itself, so an edit to a line's words, or a new counter, leaves the identity as it was. A new line or
+  counter goes in that type. What the bake stores for a line's later use (a group's `Outcome` text) is still
+  its own code. The
   background GPU work (`SdfGpuWork`, `SdfMeshBakeGpuWork`), which carries a batch's rows to the device and its samples
   back rather than choosing them, is outside it: no root reaches it. An edit to `Puck.Maths` code the
   contour calls re-bakes. The standalone `SdfMeshDresser`, `SdfMeshHistory`, `SdfWorldPassRecorder`, `SdfWorldTables`,

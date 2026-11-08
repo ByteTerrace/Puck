@@ -176,10 +176,15 @@ public static class WorldStateDisclosure {
         return new WorldWithheldRow(Count: count, Policy: (row.Visibility?.Hidden ?? HiddenCells.Omit), WholeRow: !rowReadable);
     }
 
+    // A live audience admits only while every recipient reads it whole: a decision read from cells some recipient
+    // cannot see would tell that recipient what they hold (whether its own write is admitted, whether a row
+    // reaches it). The validator refuses such an audience by name; this keeps the decision a function of public
+    // state when a later install restricts the audience anyway, so it then admits no one.
     private static bool Allows(StateArena arena, StateVisibility? policy, string? recipient) {
         if ((policy is null) || policy.Allows(recipient: recipient)) { return true; }
         if ((recipient is null) || (policy.ReadersFrom is null) ||
-            !arena.Catalog.TryResolve(lane: StateLane.Document, name: policy.ReadersFrom, handle: out var readers)) { return false; }
+            !arena.Catalog.TryResolve(lane: StateLane.Document, name: policy.ReadersFrom, handle: out var readers) ||
+            !new Observer(arena: arena, recipient: null).ReadsWhole(rowOrdinal: readers.Ordinal)) { return false; }
         var cursor = 0;
 
         while (arena.TryNextCell(rowOrdinal: readers.Ordinal, cursor: ref cursor, key: out var key)) {

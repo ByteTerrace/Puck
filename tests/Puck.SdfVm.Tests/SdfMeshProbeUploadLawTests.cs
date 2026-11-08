@@ -116,11 +116,11 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Assert.Equal(4, rig.Engine.GpuWork.InFlight);
         Assert.Equal(4, WorkType.GetField("m_sceneInFlight", Members)!.GetValue(client));
         Assert.Equal(0L, WorkType.GetField("m_sceneUploads", Members)!.GetValue(client));
-        Assert.False(client.TryTake(rig.Engine, out _, out _));
+        Assert.False(client.TryTake(rig.Engine, SdfGpuWork.UploadChunkBytes, out _, out _));
         if (cancel) {
             typeof(SdfMeshIrradiance).GetField("m_scene", Members)!.SetValue(volume, null);
             scene.Dispose(); // Release the volume's claim, keeping this law's and the upload's claims.
-            Assert.False(client.TryTake(rig.Engine, out _, out _));
+            Assert.False(client.TryTake(rig.Engine, SdfGpuWork.UploadChunkBytes, out _, out _));
             Assert.Same(upload, WorkType.GetField("m_sceneUpload", Members)!.GetValue(client));
         }
         foreach (var fence in rig.Gpu.SubmittedFences) { fence.Completed = true; }

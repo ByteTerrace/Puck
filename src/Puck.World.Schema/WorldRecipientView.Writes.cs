@@ -7,6 +7,7 @@ namespace Puck.World;
 public sealed partial class WorldRecipientView {
     private sealed class WriteScratch {
         public HashSet<string> Rows { get; } = new(StringComparer.Ordinal);
+        public HashSet<string> Placements { get; } = new(StringComparer.Ordinal);
         public List<int> Sets { get; } = [];
     }
     // Read-only capabilities are minted during delivery. Writing scratch belongs only to capabilities that write;
@@ -23,10 +24,15 @@ public sealed partial class WorldRecipientView {
             static () => true, new WorldDisclosureImages(), string.Empty, () => time ?? ArenaTime.Origin);
 
     /// <summary>Admits a row from declared policy alone. Absent declarations carry no restriction; ordinary
-    /// composition diagnoses them. A declared set admits only if every row its expression reads admits.</summary>
+    /// composition diagnoses them. A declared set admits only if every row its expression reads admits. A row keyed
+    /// over a token domain admits only if the domain reads whole too: the transaction refuses a key outside the
+    /// domain (<see cref="StateArena.TryValidateRelations(out string)"/>), so a write's outcome reads the domain's membership.</summary>
     public bool Admits(string row) {
         if (Unrestricted) { return true; }
-        if (Arena.Catalog.TryResolve(StateLane.Document, row, out var handle)) { return ReadsWhole(handle.Ordinal); }
+        if (Arena.Catalog.TryResolve(StateLane.Document, row, out var handle)) {
+            var domain = Arena.Layout[handle.Ordinal].DomainOrdinal;
+            return ReadsWhole(handle.Ordinal) && ((domain < 0) || ReadsWhole(domain));
+        }
         return AdmitsSet(row);
     }
     // Keep the set-name predicate's capture off successful direct-row admission, including bound guest writes.
@@ -37,6 +43,25 @@ public sealed partial class WorldRecipientView {
         RuleCompiler.CollectCellSetReads(WorldFactsCompiler.Context(Source), set, reads);
         foreach (var ordinal in reads) {
             if (!ReadsWhole(ordinal)) { return false; }
+        }
+        return true;
+    }
+
+    /// <summary>Checks every row a transform touches once resolved, the rows its subjects do not name included (a
+    /// live key's row, a zone's token domain, a pool's fields), since the arena's audience check reads their current
+    /// cells before the kernel runs. A transform that does not resolve adds nothing here: its refusal comes from the
+    /// declarations alone, at composition.</summary>
+    /// <param name="transform">The authored transform.</param>
+    /// <param name="row">The first withheld row, or empty.</param>
+    /// <returns><see langword="true"/> when every resolved row reads whole, or the transform does not resolve.</returns>
+    public bool AdmitsTransform(StateTransform transform, out string row) {
+        row = string.Empty;
+        if (Unrestricted) { return true; }
+        var rows = Writes.GetValue(this, static _ => new()).Sets;
+        rows.Clear();
+        if (!RuleCompiler.TryCollectTransformRows(transform, WorldFactsCompiler.Context(Source), rows, out _)) { return true; }
+        foreach (var ordinal in rows) {
+            if (!ReadsWhole(ordinal)) { row = Arena.Rows[ordinal].Name.Value; return false; }
         }
         return true;
     }
@@ -71,29 +96,55 @@ public sealed partial class WorldRecipientView {
         return true;
     }
 
-    /// <summary>Checks the declared state dependencies of a spatial census, including deal sources and parents.</summary>
-    public bool AdmitsSpatial(in WorldSpatialReadRegion region, out string row) {
+    /// <summary>Checks the declared state dependencies, deal sources and parents included, of every placement any
+    /// bounded spatial read could observe (<see cref="WorldDefinitionFingerprint.EntersSpatialCensus"/>). Which
+    /// placements one region holds can itself depend on state (a bound centre or extent, a parent's bound frame), so
+    /// the answer takes no region: a refusal never tells the recipient where withheld geometry lies.</summary>
+    /// <param name="row">The first withheld row, or empty when every dependency is admitted.</param>
+    /// <returns><see langword="true"/> when every census-eligible placement's dependencies are admitted.</returns>
+    public bool AdmitsSpatial(out string row) {
         row = string.Empty;
         if (Unrestricted) { return true; }
-        foreach (var placement in WorldDefinitionFingerprint.SpatialRows(Source, region)) {
-            if (!AdmitsPlacement(placement, out row)) { return false; }
+        foreach (var placement in Source.Placements) {
+            if (WorldDefinitionFingerprint.EntersSpatialCensus(placement) && !AdmitsPlacement(placement, out row)) { return false; }
         }
         return true;
     }
 
-    /// <summary>Checks a named placement's dependencies without reading its current values.</summary>
+    /// <summary>Checks a named placement's dependencies without reading its current values. An id spelling a dealt
+    /// child (<see cref="WorldPlacementDeal.TrySplitChildId"/>) depends on its template whether or not the child exists
+    /// now, since whether it exists is the deal row's membership.</summary>
     public bool AdmitsPlacement(string id, out string row) {
         row = string.Empty;
-        return WorldDefinitionRows.FindPlacement(Source.Placements, id) is not { } placement || AdmitsPlacement(placement, out row);
+        if (Unrestricted) { return true; }
+        var visited = Writes.GetValue(this, static _ => new()).Placements;
+        visited.Clear();
+        return AdmitsChain(WorldDefinitionRows.FindPlacement(Source.Placements, id), visited, out row) && AdmitsTemplateOf(id, visited, out row);
     }
-    /// <summary>Checks an incoming placement's complete state dependency declaration.</summary>
+    /// <summary>Checks an incoming placement's complete state dependency declaration and its parent chain's, and the
+    /// template its id spells as a dealt child. A batch composes members without validating between them, so the chain
+    /// may close on itself; each placement is checked once and the walk ends there.</summary>
     public bool AdmitsPlacement(WorldPlacement placement, out string row) {
         row = string.Empty;
+        if (Unrestricted) { return true; }
+        var visited = Writes.GetValue(this, static _ => new()).Placements;
+        visited.Clear();
+        return AdmitsChain(placement, visited, out row) && AdmitsTemplateOf(placement.Id, visited, out row);
+    }
+    private bool AdmitsTemplateOf(string id, HashSet<string> visited, out string row) {
+        row = string.Empty;
+        return !WorldPlacementDeal.TrySplitChildId(id, out var template, out _) ||
+            AdmitsChain(WorldDefinitionRows.FindPlacement(Source.Placements, template), visited, out row);
+    }
+    private bool AdmitsChain(WorldPlacement? next, HashSet<string> visited, out string row) {
+        row = string.Empty;
         var reads = Writes.GetValue(this, static _ => new()).Rows;
-        reads.Clear();
-        WorldDefinitionFingerprint.CollectPlacementStateInputs(placement, reads);
-        foreach (var name in reads) { if (!Admits(name)) { row = name; return false; } }
-        if (placement.Parent is { } parent) { return AdmitsPlacement(parent, out row); }
+        while (next is not null && visited.Add(next.Id)) {
+            reads.Clear();
+            WorldDefinitionFingerprint.CollectPlacementStateInputs(next, reads);
+            foreach (var name in reads) { if (!Admits(name)) { row = name; return false; } }
+            next = next.Parent is { } parent ? WorldDefinitionRows.FindPlacement(Source.Placements, parent) : null;
+        }
         return true;
     }
 
