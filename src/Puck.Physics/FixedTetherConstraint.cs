@@ -149,15 +149,7 @@ public struct FixedTetherConstraint {
         var radial = (offset / distance);
 
         position = (anchor + (radial * Length));
-
-        var radialSpeed = FixedVector3.Dot(
-            left: velocity,
-            right: radial
-        );
-
-        if (radialSpeed > FixedQ4816.Zero) {
-            velocity -= (radial * radialSpeed);
-        }
+        velocity = velocity.LimitAlong(maximum: FixedQ4816.Zero, unitAxis: radial);
 
         return new FixedTetherResolution(Taut: true);
     }

@@ -630,6 +630,24 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             left: this,
             right: unitAxis
         )));
+    /// <summary>Removes the part of this vector's component along a unit axis that exceeds a bound, keeping every other
+    /// part: a one-sided <see cref="RejectFrom"/>. Contact responses remove a velocity's approach to a surface with the
+    /// inward axis (the negated surface normal) and a zero bound, which leaves a separating velocity untouched.</summary>
+    /// <param name="unitAxis">The axis to limit along, which must be unit length.</param>
+    /// <param name="maximum">The greatest component allowed along <paramref name="unitAxis"/>.</param>
+    /// <returns>This vector unchanged when its rounded <see cref="Dot"/> with the axis is at most
+    /// <paramref name="maximum"/>; otherwise <c>v − axis·(v·axis − maximum)</c>, the axis scaled by the excess with one
+    /// rounding per component.</returns>
+    public FixedVector3 LimitAlong(FixedVector3 unitAxis, FixedQ4816 maximum) {
+        var along = Dot(
+            left: this,
+            right: unitAxis
+        );
+
+        return ((along > maximum)
+            ? (this - (unitAxis * (along - maximum)))
+            : this);
+    }
     /// <summary>Removes this vector's component along a unit axis and normalizes what remains, producing its length
     /// in the same pass.</summary>
     /// <param name="unitAxis">The axis to reject from, which must be unit length.</param>
