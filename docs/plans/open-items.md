@@ -1925,7 +1925,7 @@ certified-contact packet and step 8 closes. The measured state is in the
   high multiply exists twice, both private: `SdfSampledLattice.FineDivisor`
   and `PrimeExtensions.QuotientCountWord32` (`Reciprocal`, `Divide`). Make one
   public reciprocal divisor in `Puck.Maths` and move both callers onto it. Its
-  neighbour `SdfMeshCollapse.MixedKey` is a private comparer for packed
+  neighbour `SdfMeshCollapse.Collapser.MixedKey` is a private comparer for packed
   `long` place pairs, whose default hash folds the halves together; any other
   dictionary keyed by a packed pair collides the same way, so the comparer
   belongs beside `InvertibleBitMix` where every such dictionary can share it.
@@ -4611,6 +4611,23 @@ CLI maturity remainders (each a [low]):
 Owner: the lead · ordinary · Next: address skill-readiness issues affecting
 the selected landscape lanes. The broader skill-eval program below and the
 Monitor hook check remain supporting work alongside the landscape priority.
+
+- [high] A mechanical duplicate check over a branch. The landing check in
+  [orchestration](../../.claude/skills/orchestration/SKILL.md#write-and-track-assignments)
+  is done by hand: list the branch's new declarations and search each general
+  technique against its shared home. `puck scan --only clones` finds token
+  clones over the whole tree, but most duplicates are the same technique in
+  other code (a reciprocal divisor, a frame resolver, a CPU twin of a GPU
+  kernel). Give the scan a branch scope (new declarations against a base), a
+  flag for `private` or `internal` helpers whose shape is a general technique,
+  and a near-neighbour pass (normalized bodies, shared constants and BCL calls)
+  against the rest of the tree; the lead and every lane run it before landing.
+- [medium] Capability indexes in the area skills. A skill's map answers "where
+  is symbol X"; a duplicate is written when an agent asks "what does X" and no
+  index answers. Give each area skill a capability table (`maths-usage`'s
+  Choose table is the model), starting with the areas where copies were found:
+  rendering (frame and placement resolution, CPU twins of kernels), the world
+  deal and placement code, and collections and comparers.
 
 - [low] Five new area skills (state, physics, media, platform, dashboard) have
   ten capability eval cases that have not run, and seven sibling skills gained

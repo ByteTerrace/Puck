@@ -266,7 +266,22 @@ A brief also names the existing mechanisms its change must reuse (found with
 says no second one may be added. Reviews kept finding duplicates that lanes
 had just written, a second retry loop in a change built to remove one among
 them, so duplicates were created about as fast as they were found; naming the
-mechanism up front is cheaper than the review that catches it.
+mechanism up front is cheaper than the review that catches it. When the brief
+cannot name one, it names the shared home to search first (`Puck.Maths` for a
+numeric technique, a hash or a comparer).
+
+Duplicates kept arriving after every agent was told to watch for them, because
+nothing in the flow checked: lanes search by name and miss the copy under
+another name, a `private` helper looks local, parallel worktrees merge
+cleanly, and the lead trusted **Systems considered** and filed what it found.
+So the lead checks at landing. Before merging a writing lane, list the
+branch's new declarations (`git diff <integration>...<branch> -U0 -- '*.cs'`,
+added type and method lines), and for each general technique among them (a
+divisor, a hash, a comparer, a pool, a retry, a cache, a resolver, a CPU twin
+of a GPU kernel) run one technique search against its shared home. A hit goes
+back to the lane before the merge, or, when the lane has ended, to the next
+wave's first lane; it is never only filed. The bake-collapse lane's private
+reciprocal divisor, a copy of the prime kernels' private one, is the case.
 
 A brief asks for the fix at the cause and never lists a stopgap as an
 acceptable direction (AGENTS.md: the proper fix is always preferred). A lane

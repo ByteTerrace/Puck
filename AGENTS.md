@@ -171,6 +171,14 @@ agent works in that mode by default, without asking:
     Before writing a mechanism, search for it (`puck references`,
     `puck declarations`, `puck search`); when the home is unclear, put it
     where its callers can share it rather than beside the one caller at hand.
+    A name search misses most duplicates, which carry another name: search
+    by technique too (its formula, constant or the BCL call it rests on, such
+    as `Math.BigMul` or `IEqualityComparer<long>`) and look in the shared home
+    first (`Puck.Maths` for numerics and hashing). A `private` helper that
+    implements a general technique (a divisor, a hash or comparer, a pool, a
+    retry, a cache) is a duplicate in waiting: it goes in its shared home when
+    first written. A duplicate found is fixed in that change or dispatched in
+    the next wave; the packet holds it only between waves, never as its home.
   - No recorded ledgers or fingerprints: format-shape fingerprints, the bake
     derivation fingerprint, the file-length and comment-smell ratchets, canary
     and counters ceilings, test durations, `VerifiedCode` brands, the emulator

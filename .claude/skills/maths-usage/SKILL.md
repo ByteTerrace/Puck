@@ -43,6 +43,8 @@ carrier can diverge in rounding, overflow or floor and ceiling convention.
 | Spatial noise, per-cell randomness or a scattered point | `Pcg3dLatticeNoise` (`ValueNoise01`, `ScatterPoint`) | A per-call RNG; a second copy of the block formula |
 | A one-shot weighted pick | `WeightedSampler.SampleOnce` | A cumulative scan; a table built to be thrown away |
 | A 64-bit mix with an inverse | `InvertibleBitMix.Mix64` (SplitMix64's finalizer) | A hand-rolled multiply-xorshift |
+| Hashing packed `long` pairs as dictionary keys | A comparer beside `InvertibleBitMix` (long's own hash folds the halves, so neighbouring pairs collide) | A `private` comparer per caller; one exists today in `SdfMeshCollapse` (open items, refactoring campaign) |
+| Dividing many values by one divisor | One public reciprocal divisor in `Puck.Maths` (ceil(2^64/d), high multiply) | Two private copies exist today: `PrimeExtensions.QuotientCountWord32` and `SdfSampledLattice.FineDivisor` (open items, refactoring campaign) |
 | An angle in degrees entering the sim | `FixedQ4816.FromDegrees` (one rounding against `PiQ189`) | `FromDouble(degrees * (Math.PI / 180))`, a rounded radians-per-degree factor |
 | π, π/2, 2π, or an angle reduced to one turn | `FixedQ4816.Pi`/`HalfPi`/`Tau`, `FixedQ4816.WrapAngle` | `FromDouble(Math.PI)`, `Pi + Pi` (one raw short of `Tau`), a floor-and-correct wrap |
 | A vector shortened to a length, or rejected from an axis | `FixedVector3.ClampLength`/`WithLength` (toward zero, never above), `RejectFrom`/`TryRejectNormalized`; a one-sided limit (a contact removing approach velocity) is `LimitAlong` | `(v / v.Length) * limit`, which can land above the limit |

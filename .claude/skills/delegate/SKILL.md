@@ -21,6 +21,13 @@ orders, verifying a change by building and running it, and fixing a defect at it
 - Read [the recurring hazards](../../../docs/development/hazards.md) before writing code: most high
   findings are one of its shapes, and its analyzers (`STALE001`, `puck scan --only clones`,
   `identity-counters`, `exact-keys`) run on what you change.
+- Before writing any helper, type or method that implements a general technique, search for the
+  technique as well as the name (AGENTS.md, vigilance against duplication): the formula, a constant,
+  the BCL call it rests on, and the shared home first (`Puck.Maths` for numerics, hashing and
+  comparers). The bake-collapse lane searched for "divisor", found none, and wrote a private
+  reciprocal divisor that `PrimeExtensions` already carried privately under another name; a search
+  for `ulong.MaxValue /` or `Math.BigMul` finds both. A general technique you do write goes in its
+  shared home, public, not `private` beside your caller.
 
 ## Build and run
 
@@ -116,6 +123,11 @@ orders, verifying a change by building and running it, and fixing a defect at it
 - Once your finish line holds on the merged head, hand back. Start no review or hardening round of
   your own (a self-review, extra guards, fuzzing beyond the brief): the lead's area fix passes and any
   invariant review run beside your next work, and what else you noticed goes under **Found**.
+- Before your final commit, list what your branch declares new (`git diff <base>...HEAD -U0 --
+  '*.cs'`, the added `class`, `struct`, `record`, `interface` and method lines) and, under **Systems
+  considered**, give each general-looking one the searches you ran (the commands and what they
+  returned, pasted) and why no existing mechanism owns it. A duplicate you find while doing so is
+  fixed before you hand back.
 - Before your final commit, run `puck docs links` from your CLI copy. Fix every failure your change
   introduced (a renamed symbol, a moved file, a closed plan item), in whichever file it shows up,
   including pages you never edited. Only a failure that was already there before your change goes in
