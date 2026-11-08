@@ -58,16 +58,8 @@ flowchart LR
 the arbiter to drain the current frame, then passes the drained devices to
 `GamepadCaptureSource`, which appends timestamped `InputSignal`s to an
 `InputRouter`. `Puck.World` composes this path and focus-gates it through
-`IInputFocus.IsActiveFor`.
-
-Registered arbiter lanes provide alternate views without draining again:
-
-| Lane mode | Resolution |
-|---|---|
-| `Multicast` | One representative state with buttons OR-ed across connected pads. |
-| `PerPlayer` | The device currently assigned to one player seat. |
-| `Owned` | A device explicitly assigned through `SetLaneDevice`; neutral until assigned. |
-| `Suppressed` | Always neutral. Any other lane can also be muted temporarily. |
+`IInputFocus.IsActiveFor`. The arbiter decides only that the drain happens once;
+which seat a pad drives is the router's slot resolver and the host's roster.
 
 ## Device support
 
@@ -523,7 +515,7 @@ averaged into the frame's gyro.
 | Type | Role |
 |---|---|
 | `GamepadManager` | Enumerates, hotplugs, slots, queries, drains, and owns connection lifetimes. |
-| `InputArbiter` | Performs the single destructive drain and resolves registered lanes. |
+| `InputArbiter` | Performs the single destructive drain per host frame and copies it to readers. |
 | `GamepadSnapshotInputCapture` | Connects the arbiter's frame drain to the snapshot input pump. |
 | `GamepadCaptureSource` | Converts drained normalized states into timestamped `InputSignal`s. |
 | `GamepadDevice` | Hosts one HID parser and owns that handle's asynchronous I/O loop. |
