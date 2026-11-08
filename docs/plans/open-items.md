@@ -1610,6 +1610,19 @@ a shading-only creation edit keeps the arena, the rules and the population, and
 document values bind by copying only the paths to their references
 (`WorldStateDocumentValues.BindLive`). What is left:
 
+- [high · determinism] A full install of an edit that changes no simulation
+  input moves the authoritative state hash: before the presentation install
+  landed, a shading-only creation edit's full install moved `world.state.hash
+  authoritative` at ticks 101 and 130 (`9a60097b0d14d0e6`/`484373d4f4793834`
+  to `dedc032ccafce49f`/`42fe3fcc3e13bbb4`), while the presentation install
+  leaves it bit-identical. Other full installs may perturb state the same way.
+  Name the component (`world.state.hash components`) on a full install of a
+  neutral edit and fix the cause: an install must not change state it was not
+  asked to change (rule 4).
+- [medium] `DeliveryReviewLawTests` fails four cases on the tip
+  (`ReplicaMetadataPriming...` three times and
+  `ReplicaRestoreCompletesItsObservationHeaders...`), seen by the edit-install
+  lane with and without its change; the disclosure area owns it.
 - A shading edit still runs the whole validator over its candidate (rule
   compilation for validation, the work-budget analysis, every section), and
   canonicalizes and digests the edited creation twice. A `dotnet-trace`
