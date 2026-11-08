@@ -519,8 +519,9 @@ public static class WorldStateDisclosure {
         public WorldStateRow Project(WorldStateRow row) => !m_authored.Contains(row.Name.Value) ? row :
             m_disclosed.TryGetValue(row.Name.Value, out var field) ? row with { Field = field.Field } :
             // Replica snapshot row ordinals must stay aligned. An undisclosed field keeps only its row name and policy,
-            // with no physical topology, trait, seed or paint that could reconstruct the field.
-            new WorldStateRow(Name: row.Name, Kind: row.Kind, Domain: StateDomain.Keys.Instance, HostOwned: true, Visibility: row.Visibility);
+            // with no physical topology, trait, seed or paint that could reconstruct the field; a host serves only slot
+            // and lattice shapes (StateCatalog refuses any other host-owned row), and with no topology it is a slot.
+            new WorldStateRow(Name: row.Name, Kind: row.Kind, Domain: StateDomain.Slot.Instance, HostOwned: true, Visibility: row.Visibility);
     }
     /// <summary>Removes reservation, physical slot and cursor metadata that can reveal omitted membership, preserving
     /// the declared or inferred domain; the kept cells then load into contiguous slots. A readback applies this even
