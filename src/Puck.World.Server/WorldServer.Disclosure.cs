@@ -10,6 +10,8 @@ public sealed partial class WorldServer {
 
     /// <summary>The operator's disclosure work and shared storage measurement.</summary>
     public string DescribeDisclosureBudget() => m_disclosureImages.Describe();
+    /// <summary>Gets the <c>world.disclosure</c> counters: the shared image table's monotonic composition work.</summary>
+    public Puck.Abstractions.Counting.IWorkCounterSource DisclosureWorkSource => m_disclosureImages.Work;
 
     internal WorldRecipientView DeliveryView(Principal? recipient, WorldDisclosureTier tier, Func<bool>? observes = null) =>
         new(() => Definition, () => Arena, recipient, tier, observes ?? (() => true), m_disclosureImages,

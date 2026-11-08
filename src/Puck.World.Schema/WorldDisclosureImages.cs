@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Puck.Abstractions.Counting;
 using Puck.Assets;
 
 namespace Puck.World;
@@ -21,7 +22,26 @@ internal sealed record WorldRecipientImageContent(StateCell[] Cells, WorldObserv
 /// <summary>World-owned, content-interned row images. Compositions are shared by ceiling, authority bypass and the
 /// policies admitting the reader. Current audience images keep their content alive; replaced content is weakly retained.</summary>
 public sealed class WorldDisclosureImages {
+    /// <summary>The name a counters report heads this table's monotonic work with.</summary>
+    public const string SourceName = "world.disclosure";
+    /// <summary>Gets the kind counting row images composed.</summary>
+    public static WorkKind RowCompositions { get; } = new(name: "world.disclosure.row-compositions", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the canonical bytes of the row images composed.</summary>
+    public static WorkKind RowBytes { get; } = new(name: "world.disclosure.row-bytes", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting cached row images a key proof kept across a write.</summary>
+    public static WorkKind RowSkips { get; } = new(name: "world.disclosure.row-skips", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting rebuilds of the policy dependency index, each of which drops every cached image.</summary>
+    public static WorkKind IndexRebuilds { get; } = new(name: "world.disclosure.index-rebuilds", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting disclosed definitions composed from the whole document.</summary>
+    public static WorkKind DefinitionCompositions { get; } = new(name: "world.disclosure.definition-compositions", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the bytes serialized to identify disclosed definitions.</summary>
+    public static WorkKind DefinitionBytes { get; } = new(name: "world.disclosure.definition-bytes", unit: "bytes", workClass: WorkClass.Pacing);
+    private static readonly WorkKind[] WorkKindOrder = [RowCompositions, RowBytes, RowSkips, IndexRebuilds, DefinitionCompositions, DefinitionBytes];
+
     private sealed record Entry(ulong Version, ulong Dependencies, WorldRecipientImage Image, int[] Keys);
+    private readonly WorkCounterSet m_work = new(name: SourceName, kinds: WorkKindOrder);
+    /// <summary>The table's monotonic work totals, an operator measurement like <see cref="Describe"/>.</summary>
+    public IWorkCounterSource Work => m_work;
     private StateArena? m_arena;
     private long m_policyRevision = -1;
     private StateVisibility[] m_policies = [];
@@ -70,6 +90,7 @@ public sealed class WorldDisclosureImages {
         if (ReferenceEquals(m_arena, arena) && m_policyRevision == arena.DisclosureRevision) { return; }
         if (!ReferenceEquals(m_arena, arena)) { m_rows.Clear(); }
         m_arena = arena; m_policyRevision = arena.DisclosureRevision;
+        m_work.Count(IndexRebuilds);
         var policies = new HashSet<StateVisibility>();
         var rowPolicies = new HashSet<StateVisibility>[arena.Rows.Count];
         for (var row = 0; row < arena.Rows.Count; row++) {
@@ -134,6 +155,7 @@ public sealed class WorldDisclosureImages {
                 m_changes is not null && !m_changes.Overlaps(row, entry.Keys) &&
                 !arena.ChangedKeys.Overlaps(row, entry.Keys)) {
                 Skipped++;
+                m_work.Count(RowSkips);
                 m_rows[key] = entry with { Version = version };
                 return entry.Image;
             }
@@ -153,6 +175,7 @@ public sealed class WorldDisclosureImages {
             m_content[pin] = new WeakReference<WorldRecipientImage>(image);
         }
         Compositions++; ComposedBytes += bytes.Length;
+        m_work.Count(RowCompositions); m_work.Add(RowBytes, bytes.Length);
         m_rows[key] = new Entry(version, dependencies, image,
             cells.Select(cell => arena.Keys.TryResolve(cell.Key, out var interned) ? interned.Ordinal : -1).ToArray());
         return image;
@@ -170,7 +193,9 @@ public sealed class WorldDisclosureImages {
             disclosed = disclosed with { StateRaw = state with { World = disclosed.AuthoredState.Select((row, ordinal) =>
                 row with { Cells = images[ordinal].Cells }).ToArray() } };
         }
-        var identity = ContentPin.Compute(WorldDefinitionSerialization.SerializeCompact(disclosed));
+        var serialized = WorldDefinitionSerialization.SerializeCompact(disclosed);
+        m_work.Count(DefinitionCompositions); m_work.Add(DefinitionBytes, serialized.Length);
+        var identity = ContentPin.Compute(serialized);
         if (had && identity == held.Identity) { disclosed = held.Disclosed; }
         m_definitions[audience] = (source, identities, disclosed, identity);
         return disclosed;
