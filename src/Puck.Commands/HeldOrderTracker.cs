@@ -11,6 +11,12 @@ namespace Puck.Commands;
 /// order-sensitive pad chord never needs its own copy.
 /// </summary>
 public sealed class HeldOrderTracker {
+    /// <summary>The press threshold a held control latches at when its declaration names none: a modifier's, an
+    /// activator member's and a binding session's analog press.</summary>
+    public const float DefaultPressThreshold = 0.5f;
+    /// <summary>The release threshold paired with <see cref="DefaultPressThreshold"/>.</summary>
+    public const float DefaultReleaseThreshold = 0.4f;
+
     private readonly List<int> m_heldOrder = [];
     private readonly bool[] m_latched;
     private readonly float[] m_pressThresholds;
@@ -50,11 +56,10 @@ public sealed class HeldOrderTracker {
         }
 
         for (var index = 0; (index < pressThresholds.Count); index++) {
-            if (
-                !float.IsFinite(f: pressThresholds[index]) ||
-                !float.IsFinite(f: releaseThresholds[index]) ||
-                (releaseThresholds[index] > pressThresholds[index])
-            ) {
+            if (!IsValidThresholdPair(
+                pressThreshold: pressThresholds[index],
+                releaseThreshold: releaseThresholds[index]
+            )) {
                 throw new ArgumentException(
                     message: $"Threshold pair {index} must be finite with release at or below press.",
                     paramName: nameof(releaseThresholds)
@@ -72,6 +77,25 @@ public sealed class HeldOrderTracker {
     /// <summary>Gets the held modifier indices, in press order (index 0 = pressed first).</summary>
     public ReadOnlySpan<int> HeldOrder => CollectionsMarshal.AsSpan(list: m_heldOrder);
 
+    /// <summary>Returns whether a press/release threshold pair forms a hysteresis band: both finite, release at or
+    /// below press. The one rule every declaration of a held control's thresholds is checked by.</summary>
+    /// <param name="pressThreshold">The value at or above which the control latches held.</param>
+    /// <param name="releaseThreshold">The value at or below which a held control releases.</param>
+    /// <returns><see langword="true"/> when the pair is valid.</returns>
+    public static bool IsValidThresholdPair(float pressThreshold, float releaseThreshold) => (
+        float.IsFinite(f: pressThreshold) &&
+        float.IsFinite(f: releaseThreshold) &&
+        (releaseThreshold <= pressThreshold)
+    );
+    /// <summary>Returns the level a signal drives a held control's hysteresis band with: zero for a release or
+    /// cancel edge, whatever value it carries; otherwise its <see cref="CommandValue.AsAxis1D"/> magnitude (an analog
+    /// trigger's level or a digital button's 0/1).</summary>
+    /// <param name="signal">The signal.</param>
+    /// <returns>The level.</returns>
+    public static float LevelOf(in InputSignal signal) => ((signal.Phase is CommandPhase.Completed or CommandPhase.Canceled)
+        ? 0f
+        : signal.Value.AsAxis1D
+    );
     private static float[] Fill(int count, float value) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: count);
 
@@ -120,22 +144,12 @@ public sealed class HeldOrderTracker {
 
         return false;
     }
-    /// <summary>Feeds one modifier's <see cref="InputSignal"/> this frame, folding the phase-to-value rule in one
-    /// place: a release/cancel edge releases (value 0) whatever value it carries; otherwise the signal's
-    /// <see cref="CommandValue.AsAxis1D"/> magnitude — an analog trigger's level or a digital button's 0/1 — drives
-    /// the hysteresis band.</summary>
+    /// <summary>Feeds one modifier's <see cref="InputSignal"/> this frame at its <see cref="LevelOf"/> level.</summary>
     /// <param name="index">The modifier's index (0-based, less than the count passed to the constructor).</param>
     /// <param name="signal">This frame's signal for the modifier.</param>
     /// <returns><see langword="true"/> when the modifier's held/released membership changed.</returns>
-    public bool Set(int index, in InputSignal signal) {
-        var value = ((signal.Phase is CommandPhase.Completed or CommandPhase.Canceled)
-            ? 0f
-            : signal.Value.AsAxis1D
-        );
-
-        return Set(
-            index: index,
-            value: value
-        );
-    }
+    public bool Set(int index, in InputSignal signal) => Set(
+        index: index,
+        value: LevelOf(signal: in signal)
+    );
 }

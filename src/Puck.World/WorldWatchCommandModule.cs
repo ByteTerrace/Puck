@@ -14,6 +14,7 @@ internal sealed class WorldWatchCommandModule(WorldSourceWatch watch, Func<TextC
     }
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Local,
             name: "world.watch",
             bindability: CommandBindability.Unbindable,
             description: $"Watches the current .puck source and every file fact its compile read: {WorldWatchForms.Spelling}. After 150 ms without another change, queues ordinary world.reload under the enabling local console or seat principal. Reload refusals retain the running world, show their diagnostic, and keep watching. A later world.load follows the new source. An already submitted reload may finish after off.",
@@ -21,9 +22,6 @@ internal sealed class WorldWatchCommandModule(WorldSourceWatch watch, Func<TextC
             handler: (context, args) => {
                 if ((args.Count != 1) || !(args.Is(index: 0, value: "on") || args.Is(index: 0, value: "off"))) {
                     return WorldWatchForms.Refuse();
-                }
-                if (context.Principal.Kind is not (PrincipalKind.Console or PrincipalKind.Seat)) {
-                    return CommandResult.Error(output: "[world.watch: requires a local console or seat ingress]");
                 }
                 Dispose();
                 if (args.Is(index: 0, value: "off")) { return new CommandResult(Output: "[world.watch: off]"); }

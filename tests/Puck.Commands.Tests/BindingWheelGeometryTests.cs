@@ -495,11 +495,19 @@ public sealed class BindingWheelGeometryTests {
                 ticksPerSecond: 50_400UL
             )
         );
-        // Truncated toward zero: a window shorter than one tick is no window at all.
+        // Rounded up from the authored decimal, as every authored duration converts: a positive window lasts at least
+        // one tick, and 0.7 s is 35280 ticks, never the 35279 its binary product (0.699999988 s) would truncate to.
         Assert.Equal(
-            expected: 0UL,
+            expected: 1UL,
             actual: BindingWheelGeometry.SelectionGraceTicks(
                 seconds: 0.000_001f,
+                ticksPerSecond: 50_400UL
+            )
+        );
+        Assert.Equal(
+            expected: 35_280UL,
+            actual: BindingWheelGeometry.SelectionGraceTicks(
+                seconds: 0.7f,
                 ticksPerSecond: 50_400UL
             )
         );

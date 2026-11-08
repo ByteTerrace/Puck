@@ -5,6 +5,10 @@ namespace Puck.Input;
 
 /// <summary>Provides pure normalization and decoding operations shared by gamepad drivers.</summary>
 public static class GamepadNormalization {
+    /// <summary>The radial stick deadzone, in normalized units, a driver applies when its controller reports none of its
+    /// own (or the reported one is unreadable).</summary>
+    public const float DefaultStickDeadzone = 0.12f;
+
     /// <summary>Applies a radial deadzone and rescales the remaining unit-disc magnitude to zero through one.</summary>
     /// <param name="stick">The centered stick vector.</param>
     /// <param name="deadzone">The radial deadzone in normalized units, from zero inclusive to one exclusive.</param>
