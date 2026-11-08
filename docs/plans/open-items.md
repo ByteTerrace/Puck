@@ -1618,15 +1618,19 @@ a shading-only creation edit keeps the arena, the rules and the population, and
 document values bind by copying only the paths to their references
 (`WorldStateDocumentValues.BindLive`). What is left:
 
-- [high · determinism] A full install of an edit that changes no simulation
-  input moves the authoritative state hash: before the presentation install
-  landed, a shading-only creation edit's full install moved `world.state.hash
-  authoritative` at ticks 101 and 130 (`9a60097b0d14d0e6`/`484373d4f4793834`
-  to `dedc032ccafce49f`/`42fe3fcc3e13bbb4`), while the presentation install
-  leaves it bit-identical. Other full installs may perturb state the same way.
-  Name the component (`world.state.hash components`) on a full install of a
-  neutral edit and fix the cause: an install must not change state it was not
-  asked to change (rule 4).
+- [medium · determinism] A full install that changes the state section (a row
+  declared, removed or re-declared) installs a replacement arena seeded from
+  the exported rows, and that replacement still drops state the edit was not
+  asked to change: every scoped replay's captured start and tape
+  (`WorldServer.ScopedReplays` rebinds whenever the arena instance changes, so
+  the debug world's chess demo must capture again), and the per-cell trait
+  declarations of authored cells a rule removed before the install
+  (`StateArena.ToRows` carries a cell's traits only while the cell is present,
+  so the replacement catalog no longer declares them). Carrying a scope across
+  needs key ordinals that survive the replacement (`ArenaScopeSnapshot` holds
+  ordinals local to its arena, and `StateArena.TryRestoreKeys` keeps a row
+  key's new address); a full install that leaves the state section alone
+  already keeps the live arena (`WorldServer.KeepsArena`).
 - [medium] `DeliveryReviewLawTests` fails four cases on the tip
   (`ReplicaMetadataPriming...` three times and
   `ReplicaRestoreCompletesItsObservationHeaders...`), seen by the edit-install
@@ -1640,13 +1644,15 @@ document values bind by copying only the paths to their references
 - Every other mutation composes over `MaterializeArena`, which exports every
   document row anew, so its candidate carries a new state section: the client
   mirror (`WorldDocumentStateView.Shape`) builds a fresh arena, the validator's
-  seed view (`WorldStateReader.Seed`, built once per state section) builds one,
-  and a full install prepares a replacement arena even when the catalog is the
-  one the live arena holds (`StateCatalog.HasSameShape` is still unused).
-  Compose a non-state edit over the installed seeds, export only the rows whose
-  arena version moved since the document last agreed with the arena (a version
-  table that publication does not overwrite), and reload a same-catalog arena in
-  place rather than replacing it.
+  seed view (`WorldStateReader.Seed`, built once per state section) builds one:
+  a neutral `world.row.set hud.defaults` edit on the debug world moves
+  `world.boot.arena-builds` by 3 though its install keeps the live arena. A
+  state-section edit still prepares a replacement arena even when the catalog
+  keeps its shape (`StateCatalog.HasSameShape` is still unused). Compose a
+  non-state edit over the installed seeds, export only the rows whose arena
+  version moved since the document last agreed with the arena (a version table
+  that publication does not overwrite), and reload a same-catalog arena in place
+  rather than replacing it.
 - A bound document value read by the in-process client reads the server's arena
   from the presentation thread (`WorldLiveValues`); its memo is swapped whole,
   but the arena read itself is not synchronized with the tick.
