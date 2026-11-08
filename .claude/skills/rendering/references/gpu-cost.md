@@ -82,7 +82,14 @@ includes private arrays the compiler moved into shared memory (the resolve's
 change reads in seconds: reload the edited tree, read the line, then reload an
 older tree (a `git archive` of the base revision's `Sdf` and `Shared` shader
 directories) to compare in the same World. A pipeline the runtime already holds
-under the same key prints nothing again.
+under the same key prints nothing again. Keep such trees outside `src/`: the
+shader generator refuses any `*.interface.hlsli` no engine package owns, so a
+copy under `src/` fails the next World build, and a copy under
+`Puck.SdfVm/Assets/Shaders` would also enter the build's kernel glob. The
+resolve and bloom kernels include `Shared` by a path five directories up, so
+place the copy's `Puck.SdfVm/Assets/Shaders/<tree>` beside a
+`Puck.Shaders/Assets/Shaders/Shared` copy; a compile error keeps the kernels
+installed before the reload.
 
 **PIX counters (Direct3D 12).** `gpu.capture` a PIX capture, then
 `pixtool open-capture <capture> save-event-list <csv> --counters=<name>` under
