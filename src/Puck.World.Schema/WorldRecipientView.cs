@@ -14,7 +14,11 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     internal WorldDisclosureImages Images => images;
     internal ArenaTime Time => time();
     internal bool Unrestricted => recipient?.IsAuthority == true;
-    internal WorldStateDisclosure.Observer Observer => new(Arena, recipient, Unrestricted);
+    internal WorldStateDisclosure.Observer Observer => new(Arena, recipient, Unrestricted, m_recipientName ??= recipient?.Describe());
+    // The recipient's canonical token, formatted once for every policy check this view makes.
+    private string? m_recipientName;
+    // The last audience key Images composed for this view, reused while the policies it reads answer the same.
+    internal string? AudienceKey { get; set; }
 
     /// <summary>The admission tier; no operation can raise it.</summary>
     public WorldDisclosureTier Ceiling => ceiling;

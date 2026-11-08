@@ -59,17 +59,47 @@ milestone. The owner requested its baseline and implementation plan, which
    and 2.0 to 1.1 at the studio on Direct3D 12, and the root view to 10 to 12 ms
    of GPU at every one of those stops, under the bar with headroom; the frame
    p50 sits at the display rate there, and what remains over 16.7 ms at p99 is
-   the CPU side (simulation ticks of 12 to 23 ms and collections), read under a
-   machine at 68% background CPU, so a quiet-window `bench frames` pair is
-   owed before the p99 is called. `views` now leads the root view at every stop
+   the CPU side, read under a loaded machine, so a quiet-window `bench frames`
+   pair is owed before the p99 is called. The frame thread's CPU side now
+   reads apart: `host.frames` splits produce into `produce-work` and
+   `produce-fence` (time blocked on submission fences) and prints the frame
+   thread's allocated bytes per iteration. A headless debug World's tick
+   allocates about 53 KB and collected nothing in a 600-tick window; most of
+   it is `WorldDisclosureImages` re-imaging changed rows for each session
+   sink's `FrameMoved` (about 8.5 row compositions a tick, JSON and SHA-256
+   each), the [disclosure plan](disclosure.md)'s to narrow. A scope restore
+   that changes no capacity asks no reservation admission, whose growth hook
+   compiles every rule (`WorldRuleCompilation.RefuseReservation`); the chess
+   demo's restore tick still costs tens of milliseconds in its mutations and
+   the restore itself, and any tick that grows a reservation still pays the
+   whole compile. Windowed on the RTX 4070 (Direct3D 12, a loaded machine), at
+   spawn, the teal roof, flight B, the studio and the meadow: `produce-fence`
+   averages 0.5 to 2.8 ms (p99 5 to 16 ms) and every sampled wait is
+   `SdfWorldTables.SubmitUpload`'s wait for the previous upload (a ring of two,
+   so frame N waits for frame N-2's GPU work and whatever the queue ran after
+   it); produce on frames without a step exceeds frames with one mostly in
+   `produce-work` (9.2 against 5.5 ms at spawn), the rated work the scheduler
+   moves off step frames, not back-pressure. The frames still over 16.7 ms
+   there are gen1 collections of 15 to 16 ms started off the frame thread
+   (iterations whose frame thread allocated 16 KB), `produce-work` of 20 to 30
+   ms on frames without a step, fence waits of 10 to 16 ms, and windowed frames
+   whose frame thread allocates 4.7 to 5.0 MB in produce. Next on the CPU side:
+   a windowed thread-time trace keyed to the slow no-step frames, what the
+   queue ran after frame N-2 at a fence-wait frame (`world.gpu-timing
+   timeline`), and what allocates the 5 MB produce frames. `views` now leads the root view at every stop
    (3.0 to 5.0 ms, of which the probe gather is 1.1 to 1.3 ms by `world.indirect
    off` and the remaining 2.95 ms is the same indoors and out, the plain
    kernel's base), then the split far cascade (1.1 to 2.2), the resolve (1.2),
-   the near cascade (1.1 to 1.6), the composite (0.6) and the glass trio
-   (about 0.5 ms a frame at stops with no glass in view: the sums clear, a
-   glass raster with no kept draw and a glass-shade that reads the empty
-   sums; a glass-shade that answers `DrewNothing` when no glass draw's box
-   meets the frustum would recover it). With the
+   the near cascade (1.1 to 1.6) and the composite (0.6). The glass trio no
+   longer runs at a stop where no glass draw's box meets the view's frustum
+   (`SdfWorldPasses.GlassSeen`, the glass pass's own `SdfMeshCull.Keeps` test
+   over the staged glass draws): the clear and the raster skip and the shading
+   pass answers `DrewNothing`, leaving its lit image standing for the opaque
+   one, so its timed cost fell from about 0.5 ms to 0.00 on the RTX 4070 at the
+   meadow looking up (clear 0.13, raster 0.26 to 0.50 and shade 0.12 to 0.35 where
+   glass meets the frustum). A frustum that meets a box a wall hides still runs
+   the trio; the glass pass's occlusion culling lies on the GPU, past this
+   host test. With the
    resolve's history surface planar it no longer saturates L2 and costs about
    1 ms at 1280×720. Next: read the views pass's time now that a
    frame with no active program (the debug world's default, the lever on
@@ -386,8 +416,13 @@ landed geometry).
     `ProbeBlock` and `LightBlock` floats) are the probe cache's own storage,
     which readers outside the gate hold whole, so recycling one needs an epoch
     or a slab with per-entry ownership; then `SdfMeshDresser.BuildDrawTopology`
-    draw bindings, the dressed `SdfFrame` copies and the view-snapshot
-    enumerators. The dressed-pick arrays (`SdfDressedPickMap`) are immutable
+    draw bindings and the dressed `SdfFrame` copies. A windowed gc-verbose
+    trace at the studio also names the GPU meter's `LightingRows`, allocated
+    per meter round trip (`SdfMeshIrradiance.Meter.cs`, about 3 KB a frame),
+    and, under 1 KB a frame each, `BindingBarSeatComposer.PlacedSlots`
+    enumerating `CompiledBindingBarLayout.Banks.Values` (an interface
+    dictionary) once a slot, `BindableScalar.AuthoredValues`' iterator and
+    `WorldMachineHost.State`'s strings. The dressed-pick arrays (`SdfDressedPickMap`) are immutable
     because a delayed GPU pick holds the map of its frame; they rebuild only
     when draw identities change, as do the dressed motion identities
     (`SdfMeshPathBake.IndexCopies`), and neither allocated in a steady window.
@@ -1674,11 +1709,6 @@ document values bind by copying only the paths to their references
   state survive a load, while latches and scoped replays clear on one
   (`WorldServer.ContinueArena`). Clearing them too needs a reorder first: a
   checkpoint restore sets group state before `RecompileRules(Load)` runs.
-- [medium · unattributed] A headless debug World allocates about 620 KB a
-  tick by `host.memory` (about 74 MB per 120 ticks, three instances), against
-  `puck bench world`'s 1,832 B server quiet tick: the rest is client,
-  presentation or machine work no one has attributed. A `dotnet-trace`
-  allocation capture of a quiet headless tick names it.
 - A shading edit still runs the whole validator over its candidate (rule
   compilation for validation, the work-budget analysis, every section), and
   canonicalizes and digests the edited creation twice. A `dotnet-trace`
@@ -1827,10 +1857,6 @@ certified-contact packet and step 8 closes. The measured state is in the
   `RetiredShadeBuilds`, drained at device loss and root teardown), moving
   `GpuBuildCache`'s last-lease retire onto the same table so every holder
   benefits. Seen by the shade-3 fix lane from the code; not measured.
-- [medium · frame allocation] `SdfShadeDispatch.Record` iterates an
-  `IReadOnlyList<Job>`, allocating an enumerator every frame; this is why
-  `AViewAllocatesEachScratchBufferOnce` fails on the tip. Iterate the backing
-  array. Seen by the shade-1 GPU-lifetime fix lane; unverified beyond its read.
 - [medium · addons] `WasmModuleDeclarations.WithCheckpointExports`
   (`src/Puck.Assets/WasmModuleDeclarations.Checkpoint.cs:17`) refuses every
   table and every element/data-count section, and the World mount gate
@@ -3159,13 +3185,21 @@ Owner: suites lane · dormant until the owner restores test requirements (AGENTS
 suspends them for the refactoring campaign) · Next: triage the failing Windows
 shards by cause.
 
+- [low] Seen by the glass-skip review on the tip, not caused by it: four
+  `SdfPassPlanLawTests` laws expect shadow-near ordered before mesh
+  (`TheTemporalResolveReadsLastFramesHistoryAndWritesThisFrames`,
+  `EachStageDeclaresExactlyItsReadsAndWrites`,
+  `ThePlannedOrderIsTheFragmentsDispatchOrder`,
+  `ReconstructionKeepsTheOutputGridAndPricesScratchAtTheRenderCeiling`), and
+  `SdfWorldPassesLawTests.TheViewsRecorderWritesTheLiveFadeCountAsync` expects
+  `sdf-world-views` where a programless frame binds `sdf-world-views-plain`.
+  Read whether the planned order changed on purpose, then update or delete.
+
 - Failures the field-packing lane met in code it did not touch (unconfirmed
   on its base): `SdfPackedContractLawTests.TheConstructorAdmitsTheReinterpretedIntegerLanes`
   builds a SampledRegion with no binding, which `BindSampledFields` refuses;
   three `SdfMeshStoreLawTests` capacity laws, passing before the change titled
-  "cache retention lists again"; `SdfWorldPassesLawTests.AViewAllocatesEachScratchBufferOnce`
-  and `CadenceCanBeDisabledAndDoesNotAllocateOnAStillView`, a per-frame
-  closure allocation in `SdfMeshIrradiance`; and
+  "cache retention lists again"; and
   `AViewSizesItsCascadesByItsShadowResolution…` timing out at 5 minutes; and
   `SdfMeshIrradianceLawTests.RemovingTheLastStaticDrawReplacesItsSceneAndProbeMeasurements`
   failing on `volume.Settling` (`SdfMeshIrradianceLawTests.cs:390`), which the

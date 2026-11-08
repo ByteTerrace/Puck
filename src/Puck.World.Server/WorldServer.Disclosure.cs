@@ -68,38 +68,95 @@ public sealed partial class WorldServer {
 }
 
 /// <summary>Adapts the view's row replacements to the existing snapshot carrier. Both sinks use this one path.</summary>
+/// <remarks>The cells <see cref="Advance"/> returns are borrowed for the delivery in hand: this carrier's scratch, which
+/// its next call overwrites, or, when every cell is disclosed and no row is replaced, the incoming carrier itself, as the
+/// authority's own snapshot cells are borrowed (<see cref="WorldSnapshot.FieldCells"/>). A sink hands them on within the
+/// delivery, and whatever applies, encodes or samples them copies what it keeps.</remarks>
 internal sealed class WorldDeliveryRows {
-    private readonly List<FieldCellDelta> m_cells = [];
+    private FieldCellDelta[] m_cells = [];
+    private int m_count;
+    private readonly HashSet<int> m_changed = [];
+    private int[] m_changedRows = [];
 
     internal ReadOnlyMemory<FieldCellDelta> Advance(WorldRecipientView view, WorldDeliveryCursor cursor,
         ReadOnlyMemory<FieldCellDelta> changes, bool rows) {
-        m_cells.Clear();
+        m_count = 0;
+        m_changed.Clear();
         var sequence = cursor.Sequence;
-        var changed = new HashSet<int>();
-        foreach (var delta in changes.Span) {
+        var span = changes.Span;
+        // The view's answers stand for the whole call, so consecutive cells of one row or field share one answer, and
+        // a field or row the recipient reads whole discloses every cell without a per-cell check.
+        var wholeRow = -1;
+        var wholeRowReads = false;
+        string? wholeField = null;
+        var wholeFieldReads = false;
+        // The disclosed cells keep their order; each unbroken run of them is copied at once.
+        var run = 0;
+        for (var index = 0; index < span.Length; index++) {
+            ref readonly var delta = ref span[index];
+            bool discloses;
             if (delta.Row >= 0) {
-                changed.Add(delta.Row);
-                if (view.ReadsWhole(delta.Row)) { m_cells.Add(delta); }
-                continue;
+                m_changed.Add(delta.Row);
+                if (delta.Row != wholeRow) { wholeRow = delta.Row; wholeRowReads = view.ReadsWhole(delta.Row); }
+                discloses = wholeRowReads;
+            } else if (delta.Cell < 0) {
+                discloses = false;
+            } else {
+                if (!string.Equals(delta.FieldName, wholeField, StringComparison.Ordinal)) { wholeField = delta.FieldName; wholeFieldReads = view.ReadsWhole(delta.FieldName); }
+                discloses = (wholeFieldReads || view.Discloses(delta.FieldName, IndexKeyCache.Get(delta.Cell)));
             }
-            if (delta.Cell >= 0 && view.Discloses(delta.FieldName, IndexKeyCache.Get(delta.Cell))) { m_cells.Add(delta); }
+            if (!discloses) {
+                AppendRun(span[run..index]);
+                run = (index + 1);
+            }
         }
+        // Every cell disclosed and nothing to replace: the carrier is handed on as it came.
+        var passThrough = (run == 0);
+        if (!passThrough) { AppendRun(span[run..]); }
         if (rows) {
-            foreach (var replacement in view.Advance(cursor, changed.Order().ToArray())) {
+            var changedCount = m_changed.Count;
+            if (m_changedRows.Length < changedCount) { m_changedRows = new int[System.Numerics.BitOperations.RoundUpToPowerOf2((uint)changedCount)]; }
+            m_changed.CopyTo(m_changedRows);
+            var changedRows = m_changedRows.AsSpan(0, changedCount);
+            changedRows.Sort();
+            foreach (var replacement in view.Advance(cursor, changedRows)) {
                 var image = replacement.Image;
+                if (passThrough) { AppendRun(span); passThrough = false; }
                 // A row becoming wholly readable replaces its prior restricted image once, even when the raw
                 // carrier also included that row's writes.
-                m_cells.RemoveAll(delta => delta.Row == replacement.Row);
-                m_cells.Add(new FieldCellDelta(-1, 0, image.Cells.Count, replacement.Row,
+                RemoveRow(replacement.Row);
+                Append(new FieldCellDelta(-1, 0, image.Cells.Count, replacement.Row,
                     Observation: view.ReadsWhole(replacement.Row) ? null : image.Observation));
                 for (var position = 0; position < image.Cells.Count; position++) {
                     var cell = image.Cells[position];
-                    m_cells.Add(new FieldCellDelta(position, 0, 0, replacement.Row,
+                    Append(new FieldCellDelta(position, 0, 0, replacement.Row,
                         new ArenaCellImage(cell.Key, cell.Value, cell.Behavior, cell.Clock)));
                 }
             }
         }
-        if (rows && m_cells.Count != 0 && cursor.Sequence == sequence) { cursor.DeliveredRows(view); }
-        return m_cells.ToArray();
+        var delivered = (passThrough ? changes : m_cells.AsMemory(0, m_count));
+        if (rows && !delivered.IsEmpty && cursor.Sequence == sequence) { cursor.DeliveredRows(view); }
+        return delivered;
+    }
+    private void Append(in FieldCellDelta delta) {
+        if (m_count == m_cells.Length) { Array.Resize(ref m_cells, Math.Max(16, m_cells.Length * 2)); }
+        m_cells[m_count++] = delta;
+    }
+    private void AppendRun(ReadOnlySpan<FieldCellDelta> cells) {
+        if (cells.IsEmpty) { return; }
+        if ((m_count + cells.Length) > m_cells.Length) {
+            Array.Resize(ref m_cells, (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)Math.Max(16, m_count + cells.Length)));
+        }
+        cells.CopyTo(m_cells.AsSpan(m_count));
+        m_count += cells.Length;
+    }
+    // Drops the row's cells already carried, keeping the rest in order.
+    private void RemoveRow(int row) {
+        var kept = 0;
+        for (var index = 0; index < m_count; index++) {
+            if (m_cells[index].Row != row) { m_cells[kept++] = m_cells[index]; }
+        }
+        Array.Clear(m_cells, kept, m_count - kept);
+        m_count = kept;
     }
 }

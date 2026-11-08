@@ -619,7 +619,15 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   functions of the thickness, `opaque - t` and that light alone: the pass reads
   the lit image once (`sdfGlassLitAt`, or the frost's disc). The handbook's
   [glass section](../../../docs/rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)
-  states the limits.
+  states the limits. A frame in which no glass draw's host box meets the view's
+  frustum (`SdfWorldPasses.GlassSeen`, decided once per instance and frame for
+  the three passes) skips the sums clear and the raster and answers
+  `DrewNothing` from the shading pass, whose `glassLit` then stands for the
+  opaque image; the sky, composite and resolve recorders key their cached lit
+  binding on the image they are handed. The sums and the glass target are never
+  read on such a frame, so a new reader of either must not run on one. A timing
+  window keeps a skipped pass's last samples: toggle `world.gpu-timing off` and
+  `on` before reading the trio at a stop.
 - **A flow moves shading, never geometry, and never reads a clock.** A palette
   slot's `flow` (`SdfFlow`, material rows 27 to 30) runs `sdfApplyFlow`
   through `sdfShadeFlow` (`shade/shade-flow.hlsli`) in the light stage after the
@@ -1028,6 +1036,10 @@ backends. `world.debug-view` lists the diagnostic images. For a frame-time bar,
 iteration (avg, p50, p99, max) and the worst iterations split into their
 phases (simulate, begin, produce, present, wait) with their collections and the
 pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
+Produce is split into `produce-work`, the frame thread's own work, and
+`produce-fence`, its time blocked on submission fences (`GpuFenceBlocking`,
+counted in `GpuBatchedSubmissionFence`'s one wait door): a produce that grows
+by its fence share is GPU back-pressure, not CPU work.
 
 - **The far cascade is the frame's largest variable pass; read whether it
   holds.** With box-only selection it draws nearly every caster in a 280 m box out to 200 m toward the

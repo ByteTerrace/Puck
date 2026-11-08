@@ -782,8 +782,9 @@ public static class WorldStateDisclosure {
 
         private string? m_name;
 
-        public Observer(StateArena arena, Principal? recipient, bool unrestricted = false) {
-            m_arena = arena; m_unrestricted = unrestricted; m_recipient = recipient; m_name = null;
+        // name, when given, is the recipient's canonical token already formatted (a view's, formatted once).
+        public Observer(StateArena arena, Principal? recipient, bool unrestricted = false, string? name = null) {
+            m_arena = arena; m_unrestricted = unrestricted; m_recipient = recipient; m_name = name;
         }
 
         // A restriction the store holds for the recipient's own token, or one a live text row lists it in.

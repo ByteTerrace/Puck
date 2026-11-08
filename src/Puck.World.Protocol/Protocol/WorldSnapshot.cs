@@ -120,7 +120,8 @@ public readonly record struct EntitySnapshot(
 /// <param name="Entries">The active entries this tick (one <see cref="EntitySnapshot"/> per drawn body).</param>
 /// <param name="Authority">The authority identity every entry belongs to.</param>
 /// <param name="FieldCells">Field-lattice writes and typed document-cell values since the previous snapshot.
-/// A primer carries every streamed document cell, and every lattice cell when <paramref name="FieldsFull"/> is set.</param>
+/// A primer carries every streamed document cell, and every lattice cell when <paramref name="FieldsFull"/> is set.
+/// The memory is borrowed scratch the next snapshot overwrites: a consumer copies what it keeps.</param>
 /// <param name="FieldsFull"><see langword="true"/> when <paramref name="FieldCells"/> carries every cell (a primer or a
 /// resync), so a mirror replaces rather than patches.</param>
 /// <param name="EngineTick">The engine-tick coordinate <see cref="Tick"/> completed at — what a presentation-side

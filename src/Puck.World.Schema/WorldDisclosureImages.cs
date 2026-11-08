@@ -185,28 +185,32 @@ public sealed class WorldDisclosureImages {
         foreach (var dependency in m_dependencies[row]) { dependencies = checked(dependencies + arena.RowVersion(dependency)); }
         return dependencies;
     }
-    internal int[] Affected(WorldRecipientView view, ReadOnlySpan<int> rows) {
+    // Adds the authored rows whose image the changed rows can move (each row and the rows whose policies read it) to
+    // affected, unordered.
+    internal void Affected(WorldRecipientView view, ReadOnlySpan<int> rows, HashSet<int> affected) {
         Prepare(view);
-        var affected = new HashSet<int>();
+        var authored = view.Source.AuthoredState.Count;
         foreach (var row in rows) {
-            if ((uint)row >= (uint)view.Source.AuthoredState.Count) { continue; }
+            if ((uint)row >= (uint)authored) { continue; }
             affected.Add(row);
             foreach (var dependent in m_dependents[row]) {
-                if (dependent < view.Source.AuthoredState.Count) { affected.Add(dependent); }
+                if (dependent < authored) { affected.Add(dependent); }
             }
         }
-        return affected.Order().ToArray();
     }
     internal string Audience(WorldRecipientView view) {
         Prepare(view);
         var observer = view.Observer;
-        return string.Create(m_policies.Length + 2, (m_policies, observer, view.Observes, view.Ceiling, view.Unrestricted), static (span, state) => {
-            span[0] = state.Observes ? (char)('1' + (int)state.Ceiling) : '0';
-            // An authority reads storage bookkeeping even on a declaration that can withhold cells. A recipient
-            // admitted by every current policy still does not, so their definition caches cannot share a class.
-            span[1] = state.Unrestricted ? '1' : '0';
-            for (var index = 0; index < state.m_policies.Length; index++) { span[index + 2] = state.observer.Allows(state.m_policies[index]) ? '1' : '0'; }
-        });
+        var length = (m_policies.Length + 2);
+        var key = ((length <= 512) ? stackalloc char[length] : new char[length]);
+        key[0] = view.Observes ? (char)('1' + (int)view.Ceiling) : '0';
+        // An authority reads storage bookkeeping even on a declaration that can withhold cells. A recipient
+        // admitted by every current policy still does not, so their definition caches cannot share a class.
+        key[1] = view.Unrestricted ? '1' : '0';
+        for (var index = 0; index < m_policies.Length; index++) { key[index + 2] = observer.Allows(m_policies[index]) ? '1' : '0'; }
+        // The key is a function of the answers alone, so a view whose answers stand keeps the string it was handed.
+        if ((view.AudienceKey is { } held) && key.SequenceEqual(held)) { return held; }
+        return view.AudienceKey = new string(key);
     }
     internal WorldRecipientImage Image(WorldRecipientView view, int row) => Image(view, row, Audience(view));
     internal WorldRecipientImage Image(WorldRecipientView view, int row, string audience) {

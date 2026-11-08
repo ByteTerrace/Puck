@@ -162,7 +162,15 @@ outside this contract and takes the references as written.
   --profile dotnet-sampled-thread-time` (frame cost) or `--profile gc-verbose`
   (allocation ticks with stacks, GC heap stats), then `dotnet-trace convert
   --format speedscope` and aggregate the frame thread's stacks yourself; read
-  `host.frames` beside it for produce and simulate per iteration. The sampler
+  `host.frames` beside it for produce (split into `produce-work` and
+  `produce-fence`, the device back-pressure), simulate and the frame thread's
+  allocated bytes per iteration. Without a trace, `host.frames`' frame thread
+  allocation per iteration on a headless World is the first reading of
+  steady-state churn; `host.memory`'s `allocated-bytes` counts every thread.
+  A headless `--unpaced` World spends every iteration ticking, so a short
+  thread-time trace holds thousands of tick samples instead of hundreds, but
+  its ticks also wait on the machine queue (`QueuedMachineHost.Submit`), which
+  a paced World does not. The sampler
   suspends threads at safe points, so samples pile onto `Thread.PollGC` under
   `Buffer.BulkMoveWithWriteBarrier` and other poll sites: charge that time to
   the caller's loop, not to the copy. `SpanHelpers.ZeroMemoryNative` under a
