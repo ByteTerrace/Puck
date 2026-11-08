@@ -60,7 +60,7 @@ public sealed class WorldExtensions {
             : (WorldCapabilityRequests.Contains(
                 requests,
                 WorldCapability.Mutate,
-                GrantSubject.Section(section: WorldDocument.SectionOf(mutation: mutation))
+                GrantSubject.Section(section: WorldMutationKindCatalog.SectionOf(mutation: mutation))
             ) ||
                 ((WorldDocument.RowScopedMutateSubjectOf(mutation: mutation) is { } subject) && WorldCapabilityRequests.Contains(
                 capability: WorldCapability.Mutate,

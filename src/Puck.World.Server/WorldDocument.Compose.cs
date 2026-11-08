@@ -285,60 +285,6 @@ public sealed partial class WorldDocument {
         WorldMutation.RemovePlacement m => GrantSubject.Placement(id: m.Id),
         _ => null,
     };
-    // The world-document section a mutation targets — the Mutate-capability subject it is checked against. One section
-    // per mutation kind (coarse, section-keyed — a genre world adds sections + kinds, never changes this mapping).
-    /// <summary>Returns the world-document section a mutation targets — the Mutate-capability subject it is
-    /// checked against.</summary>
-    /// <param name="mutation">The mutation.</param>
-    /// <returns>The targeted section.</returns>
-    internal static WorldSection SectionOf(WorldMutation mutation) => mutation switch {
-        WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or WorldMutation.SetKitAssignment => WorldSection.Kits,
-        WorldMutation.UpsertScreen or WorldMutation.RemoveScreen => WorldSection.Screens,
-        WorldMutation.UpsertMachine or WorldMutation.RemoveMachine => WorldSection.Machines,
-        WorldMutation.UpsertCamera or WorldMutation.RemoveCamera => WorldSection.Cameras,
-        WorldMutation.SetSpawns => WorldSection.Spawns,
-        WorldMutation.SetMotion => WorldSection.Motion,
-        WorldMutation.SetPopulationDefaults or WorldMutation.SetPopulationDistribution or WorldMutation.SetPopulationCensus => WorldSection.Population,
-        WorldMutation.SetRenderDefaults => WorldSection.Render,
-        WorldMutation.UpsertAddon or WorldMutation.RemoveAddon => WorldSection.Addons,
-        WorldMutation.UpsertBindingOverlay or WorldMutation.RemoveBindingOverlay => WorldSection.Bindings,
-        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation => WorldSection.Creations,
-        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement => WorldSection.Placements,
-        WorldMutation.SetAuthoringDefaults => WorldSection.Authoring,
-        WorldMutation.UpsertSpeaker or WorldMutation.RemoveSpeaker => WorldSection.Speakers,
-        WorldMutation.UpsertTune or WorldMutation.RemoveTune => WorldSection.Tunes,
-        WorldMutation.UpsertPatch or WorldMutation.RemovePatch => WorldSection.Patches,
-        WorldMutation.SetAudioDefaults => WorldSection.Audio,
-        WorldMutation.SetCollision => WorldSection.Collision,
-        WorldMutation.SetHostDefaults => WorldSection.Host,
-        WorldMutation.SetViewDefaults or WorldMutation.SetViewSeatRig or WorldMutation.SetViewSeatControl or WorldMutation.SetViewPost or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout
-            or WorldMutation.UpsertViewGraph or WorldMutation.RemoveViewGraph or WorldMutation.CommitViewGraph => WorldSection.Views,
-        WorldMutation.SetPlayerDefaults or WorldMutation.SetPlayerSeatLook => WorldSection.PlayerDefaults,
-        WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment => WorldSection.Looks,
-        WorldMutation.UpsertDynamics or WorldMutation.RemoveDynamics => WorldSection.Dynamics,
-        WorldMutation.UpsertCurve or WorldMutation.RemoveCurve => WorldSection.Curves,
-        WorldMutation.UpsertGrant or WorldMutation.RemoveGrant => WorldSection.Grants,
-        WorldMutation.UpsertHudPanel or WorldMutation.RemoveHudPanel or WorldMutation.UpsertHudElement or WorldMutation.RemoveHudElement or WorldMutation.SetHudDefaults => WorldSection.Hud,
-        // Generate's OBSERVABLE effect is a state write, so it shares the state section's coarse hold; its narrower
-        // authority is the SAME row-scoped Edit/state:<row> hold every other state write takes, never a second
-        // section.
-        WorldMutation.UpsertStateRow or WorldMutation.RemoveStateRow or WorldMutation.UpsertStateCell or WorldMutation.RemoveStateCell or WorldMutation.Generate or WorldMutation.TransformState => WorldSection.State,
-        WorldMutation.SetInputHold => WorldSection.InputHold,
-        WorldMutation.SetInputModes => WorldSection.InputModes,
-        WorldMutation.Batch => WorldSection.State,
-        WorldMutation.UpsertWorldRule or WorldMutation.RemoveWorldRule => WorldSection.Rules,
-        WorldMutation.UpsertGroupKind or WorldMutation.RemoveGroupKind or WorldMutation.FormGroup or WorldMutation.JoinGroup or WorldMutation.LeaveGroup or WorldMutation.KickMember
-            or WorldMutation.OfferOwnership or WorldMutation.SettleOwnership => WorldSection.Groups,
-        WorldMutation.SetProperty => WorldSection.Properties,
-        WorldMutation.UpsertInteraction or WorldMutation.RemoveInteraction => WorldSection.Interactions,
-        // No silent fallback: a new mutation kind added without its own arm would otherwise inherit Kits authority. A
-        // missing arm throws the first time that kind is mapped — surfaced loudly at runtime rather than mis-authorized.
-        _ => throw new ArgumentOutOfRangeException(
-        paramName: nameof(mutation),
-        actualValue: mutation,
-        message: $"no WorldSection arm for mutation kind '{mutation.GetType().Name}' — every kind must map to its authorizing section."
-    ),
-    };
 
     // A submitted row whose document carries `state.` references, resolved against the current definition's state
     // before anything in its compose arm reads a bound value. A submitter's row can share value holders with the

@@ -127,7 +127,10 @@ scheduling a step:
   validator read), and for an incoming declaration every row the declaration names
   (`WorldRecipientView.AdmitsDeclaration`); a transform only while every row it resolves to
   does (`RuleCompiler.TryCollectTransformRows`); a placement only with its parent chain's inputs
-  and the template every id on that chain spells as a dealt child, present or absent. A live
+  and the template every id on that chain spells as a dealt child, present or absent, for the
+  incoming placement and the installed one it replaces or removes; a machine or kit with the rows
+  its bindings or redraws name, incoming and installed. A recipient's mutation of rules or
+  interactions is refused by kind (`WorldSectionFacts.IsProgram`). A live
   audience (`readersFrom`) admits only while every recipient reads it whole. Reflow and
   fingerprints share the placement state-dependency collector. Whole-document validation and
   rule compilation judge declarations alone (`RuleCompiler.RequireEnclosedAudience` reads row
@@ -201,6 +204,9 @@ that erase key faults) are not disclosure and stay in the
 | [high] A new row keyed over a hidden domain is accepted or refused by the domain's membership (`WorldDefinitionValidator.Discrete.cs`) | Closed: `WorldRecipientView.AdmitsDeclaration` admits every row an incoming declaration names | 3, landed |
 | [high] A placement under a dealt child id answers "not disclosed" when the child exists and "not a declared placement" when it does not | Closed: the parent-chain walk admits the template every id spells, present or absent | 3, landed |
 | [high] An unrelated edit recompiles every rule and `RequireEnclosedAudience` refuses by a hidden cell's current policy | Closed: compile-time audience enclosure reads declared row policies; cells are the arena's at the firing | 3, landed |
+| [high] A seat's rule or interaction with a literal read of a hidden key compiles or refuses `StateCellUndeclared` by the hidden row's membership | Closed: a recipient's mutation of a program section is refused by kind (`WorldSectionFacts.IsProgram`) | 3, landed |
+| [high] A seat's rule edit that eats work allowance makes search re-pricing print a minimum counting a hidden score row's cells (`WorldSearchCompilation.TryPrice`) | Closed for rule edits by the same refusal; pricing still reads members (open items) | 3, landed |
+| [high] Replacing a dealt template without its deal keeps its children, so the distributed-parent refusal answers whether the hidden deal has any | Closed: an upsert or removal admits the installed placement's footprint too (`WorldRecipientView.AdmitsPlacement`) | 3, landed |
 | [high] Removing an absent key from a public row answers one text when no row ever minted the name and another when a hidden row did (the arena's key table is shared) | Closed: the compose door answers `StateArena.MissingCellReason`, the arena's own text, when the name does not resolve | 3, landed |
 | [high] Dealt children keep hidden-dependent slots and positions (`WorldStateDisclosure.cs:481,621`, `WorldTick.Deals.cs:426`) | The layout is authority history, shown as is | 4 |
 | [high] `replay.inspect`, `replay.stop` and `replay.verify` answer any principal with the authoritative tail hash, unprojected authority entries and every body pose | Closed: every `replay.*` verb is `CommandAudience.Operator` | console audit, landed |
@@ -496,8 +502,44 @@ at build time. Two checks make it visible rather than silent: `puck disclosure`
 marks a run INVALID when a variant's steps leave the authority's live document
 failing `WorldDefinitionValidator.TryValidateLocally` (the precondition for the
 fourth instance, which no probe write needs to hit), and `RecipientOracleLawTests`
-holds the four sequences beside the earlier ones, each run over both hidden
+holds each sequence this class has produced, each run over both hidden
 variants and compared by code and text.
+
+**A replacement admits what it replaces.** An upsert of an existing row and a
+removal both carry the installed row's footprint beside the incoming one's,
+through one admission path: composition keeps what the installed row's state
+decides (a deal template's dealt children, present or absent) and validation
+judges it against the replacement, so a footprint over the incoming
+declaration alone let that verdict read the hidden deal. A placement write
+admits the installed placement's inputs (its deal and variants rows), its
+parent chain and the template every id on that chain spells
+(`WorldRecipientView.AdmitsPlacement`); a machine write admits the rows every
+memory binding of the incoming and the installed machine reads or writes
+(`AdmitsMachine`), since a binding copies a cell into hardware a screen may
+show; a kit write admits the rows its actions redraw (`AdmitsKit`).
+
+**Authoring the program is the authority's.** Rules and interactions are the
+world's program: they compile against the whole document, read any row through
+expressions and fire as `Principal.World`, which the grant table admits
+structurally. A recipient who may author one can copy a hidden cell into a
+public row outright, and even a refused authoring was answered by the hidden
+state: the rule compiler refuses a literal key the row neither holds nor declares
+(`StateCellUndeclared`), so a seat's rule reading `vault[x]` asked whether the
+hidden row held `x`; and a rule that ate work allowance made the search
+re-pricing print a minimum that counts a hidden score row's cells. A footprint
+cannot be declared for a program short of compiling it, which is the step that
+leaks. So `WorldRecipientMutations.Admits` refuses every recipient mutation of a
+program section (`WorldSectionFacts.IsProgram`) by its kind, before anything
+compiles, with the one refusal text naming the section; the operator and the
+authority keep it. The same predicate refuses an untrusted Mutate grant over a
+program section, and the seeded seat grants leave program sections out. Search
+jobs have no mutation kind: they change only through a whole-document rebuild,
+an operator verb. A section whose content touches state through rows it names
+(machine bindings, a kit's redraws) stays open to recipients and admits those
+rows as its footprint. The rule refusal closes the re-pricing instance found
+through a rule edit; the pricing itself still reads current members (a score
+row's cell count, an uncapped row's size), which a recipient door that moves
+the work sheet another way would expose ([open items](#open-items)).
 
 **The options weighed.** (a) Admission computes the full read closure of every
 later stage: this is the footprint above, and it holds only because the closure
@@ -1149,6 +1191,16 @@ commit, as machine readings are not a repository baseline.
 
 ## Open items
 
+- Work pricing reads members. `RuleCompileContext.RowCapacity` prices a row
+  without an explicit `capacity` by `StateRow.InitialCellCapacity`, which is its
+  current cell count, and `WorldSearchCompilation.TryPrice` counts the score row's current
+  cells as `seats`. Whole-document validation re-prices rules and searches on
+  every install, so a recipient edit that moves the work sheet (an
+  `UpsertStateRow` raising a public row's capacity that a rule folds over is
+  the candidate; unconfirmed) would make the rules' ceiling check or a
+  search's minimum depend on a hidden row's size. Decide whether pricing reads
+  declarations only (an uncapped row priced at its ceiling, or every priced row
+  required to declare a capacity), then add the two-variant law.
 - Control verbs anyone can run, outside the console audit's disclosure
   scope: `pipeline.load`, `player.claim`, `player.cycle` (the fuzzer moved a
   device to player 1) and `world.transfer` take `CommandAudience.Anyone`.
