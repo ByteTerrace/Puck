@@ -230,6 +230,54 @@ public sealed class RecipientOracleLawTests {
         Assert.StartsWith("True:", outcomes[0], StringComparison.Ordinal);
     }
 
+    // A rule compiles against the candidate document, and its compiler refuses a literal key the row neither holds
+    // nor declares, so a recipient's rule would ask whether a hidden row holds a key. Authoring a rule is authoring the
+    // world: the recipient's mutation is refused by its kind before anything compiles.
+    [Fact]
+    public void ARuleReadingAWithheldKeyIsRefusedAlikeWhetherTheRowHoldsIt() {
+        var outcomes = new List<string>();
+        foreach (var held in new[] { false, true }) {
+            var vault = new WorldStateRow(CellName.Parse("vault"), CellKind.Int, Domain: StateDomain.Keys.Instance,
+                Visibility: new StateVisibility(Readers: []), Cells: held ? [new StateCell(CellName.Parse("x"), CellValue.Int(7))] : []);
+            var marker = new WorldStateRow(CellName.Parse("marker"), CellKind.Int, Cells: [new StateCell(StateRow.SlotKey, CellValue.Int(0))]);
+            var document = Fixtures.BuildDocument().WithWorldState([vault, marker]);
+            Assert.True(WorldDefinitionValidator.TryValidateLocally(document, out var reason), reason);
+            using var fixture = Fixtures.FreshServer(document);
+            var rule = new WorldRule(CellName.Parse("probe"), [new ActionEffect.SetState("marker", FromState: "vault", FromKey: "x")]);
+            var outcome = Submit(fixture, new WorldMutation.UpsertWorldRule(Principal.Seat(0), rule));
+            outcomes.Add($"{outcome.Code}:{outcome.Detail}");
+            Assert.Empty(fixture.Server.ExportDefinition().Rules ?? []);
+        }
+        Assert.Equal(outcomes[0], outcomes[1]);
+        Assert.Equal($"{WorldRecipientMutations.NotDisclosedCode}:'rules' is not disclosed to seat1", outcomes[0]);
+    }
+
+    // An upsert replaces the installed placement but composition keeps its dealt children, which validation then
+    // judges against the replacement: a template that keeps its distribution without its deal is an expanded parent,
+    // refused only when a child exists. The installed template's deal row is the upsert's footprint, present children
+    // or none.
+    [Fact]
+    public void ReplacingADealTemplateIsRefusedAlikeWhetherItsWithheldDealHasChildren() {
+        var outcomes = new List<string>();
+        foreach (var dealt in new[] { false, true }) {
+            var vault = new WorldStateRow(CellName.Parse("vault"), CellKind.Int, Domain: StateDomain.Keys.Instance,
+                Capacity: 4, Visibility: new StateVisibility(Readers: []), Cells: dealt ? [new StateCell(CellName.Parse("x"), CellValue.Int(1))] : []);
+            var document = Fixtures.BuildDocument().WithWorldState([vault]) with { CreationsRaw = [CreationFixtures.Sphere(id: "piece", scale: 0.2f)] };
+            var template = new WorldPlacement("tmpl", document.Creations[0].Id, new DocumentVector3(0, 0, 0), 0, 1, Deal: new WorldPlacementDeal("vault"),
+                Distribution: new WorldDistribution(new WorldDistributionRegion.Lattice(new DocumentVector3(2, 0, 0), 4,
+                    new DocumentVector3(0, 0, 1), 1), new WorldSequence(WorldSequence.None, 0, 0)));
+            document = document with { PlacementsRaw = new WorldPlacementsSection([template], Policy: Fixtures.StandardAuthoring) };
+            Assert.True(WorldDefinitionValidator.TryValidateLocally(document, out var reason), reason);
+            using var fixture = Fixtures.FreshServer(document);
+            fixture.Step();
+            Assert.Equal(dealt, fixture.Server.ExportDefinition().Placements.Any(placement => placement.Id == WorldPlacementDeal.ChildId("tmpl", "x")));
+            var outcome = Submit(fixture, new WorldMutation.UpsertPlacement(Principal.Seat(0), template with { Deal = null }));
+            outcomes.Add($"{outcome.Code}:{outcome.Detail}");
+        }
+        Assert.Equal(outcomes[0], outcomes[1]);
+        Assert.Equal($"{WorldRecipientMutations.NotDisclosedCode}:'vault' is not disclosed to seat1", outcomes[0]);
+    }
+
     [Fact]
     public void ABatchWhoseMembersCloseAParentCycleIsAnsweredNotOverflowed() {
         var document = Fixtures.BuildDocument() with { CreationsRaw = [CreationFixtures.Sphere(id: "piece", scale: 0.2f)] };

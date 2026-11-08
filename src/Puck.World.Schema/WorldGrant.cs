@@ -200,6 +200,16 @@ public enum WorldSection : byte {
     /// <summary>The authoritative input-mode selectors, finite combinations and directed continuity policy.</summary>
     InputModes,
 }
+/// <summary>The facts about a <see cref="WorldSection"/> that more than one door decides by.</summary>
+public static class WorldSectionFacts {
+    /// <summary>Returns whether a section's content is the world's own program: rows the world compiles and runs as
+    /// <see cref="Principal.World"/>, whose reads reach any row through expressions and whose effects the grant
+    /// table admits structurally. Authoring one is authorship of the world, so only the operator and the authority
+    /// mutate it; an untrusted grant over it is refused, and so is every recipient's mutation of it, by kind.</summary>
+    /// <param name="section">The section.</param>
+    /// <returns><see langword="true"/> for <see cref="WorldSection.Rules"/> and <see cref="WorldSection.Interactions"/>.</returns>
+    public static bool IsProgram(this WorldSection section) => section is WorldSection.Rules or WorldSection.Interactions;
+}
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>
 public enum GrantSubjectKind : byte {
     /// <summary>The wildcard — the capability over every subject of its natural domain.</summary>

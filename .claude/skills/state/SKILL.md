@@ -157,8 +157,11 @@ and the source-read timing choice; these are not guarantees the current implemen
   touched-row validator read too), every row an incoming declaration names
   (`WorldRecipientView.AdmitsDeclaration`), every row a transform resolves to
   (`RuleCompiler.TryCollectTransformRows`), a placement's parent chain and the
-  template every id on it spells as a dealt child, and, for a spatial guard,
-  every placement that can enter a census. A `readersFrom` audience admits only
+  template every id on it spells as a dealt child, the installed placement,
+  machine or kit an upsert replaces or a removal drops, and, for a spatial guard,
+  every placement that can enter a census. A recipient's mutation of rules or
+  interactions (`WorldSectionFacts.IsProgram`) is refused by kind before it
+  compiles: authoring the program is the authority's. A `readersFrom` audience admits only
   while every recipient reads it whole. Whole-document validation and rule
   compilation read declarations, never current members: `RuleCompiler.RequireEnclosedAudience`
   judges row policies, and cell policies are the arena's at the firing. `cellVisibility`

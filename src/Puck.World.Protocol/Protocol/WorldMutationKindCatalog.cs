@@ -13,9 +13,8 @@ namespace Puck.World.Protocol;
 /// (one bit of the <see cref="MutationKindMask"/> lane). An ordinal past the lane is refused at boot rather than left
 /// to wrap: .NET masks a shift count by the operand's width, so an out-of-lane bit aliases a real kind and would
 /// admit the wrong door silently.</param>
-/// <param name="section">The <see cref="WorldSection"/> this kind targets (must equal what
-/// <c>Server.WorldServer.SectionOf</c> maps the same record type to — that cross-check is Server-side, since this
-/// project cannot reference Server; this attribute only records the declared pairing).</param>
+/// <param name="section">The <see cref="WorldSection"/> this kind targets — the one mapping
+/// <see cref="WorldMutationKindCatalog.SectionOf"/> answers for grant admission and the recipient door.</param>
 [AttributeUsage(validOn: AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class MutationKindAttribute(int ordinal, WorldSection section) : Attribute {
     /// <summary>Gets the kind's declared dispatch ordinal.</summary>
@@ -49,6 +48,7 @@ public static class WorldMutationKindCatalog {
     private static readonly MutationKindMask[] KindsBySection = new MutationKindMask[(Enum.GetValues<WorldSection>().Length)];
 
     private static IReadOnlyList<WorldMutationKindCatalogEntry>? Entries;
+    private static Dictionary<Type, WorldMutationKindCatalogEntry>? EntriesByType;
     private static bool KindsBySectionBuilt;
 
     private static IReadOnlyList<WorldMutationKindCatalogEntry> Discover() {
@@ -164,18 +164,24 @@ public static class WorldMutationKindCatalog {
     /// <returns>The declared ordinal.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mutation"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The mutation's runtime type carries no catalog entry.</exception>
-    public static int OrdinalOf(WorldMutation mutation) {
+    public static int OrdinalOf(WorldMutation mutation) => EntryOf(mutation: mutation).Ordinal;
+    /// <summary>Returns the section one live mutation's own kind targets — the subject its Mutate hold is checked
+    /// against. The declared <see cref="MutationKindAttribute.Section"/> is the one mapping; nothing keeps a second.</summary>
+    /// <param name="mutation">The mutation whose kind to look up.</param>
+    /// <returns>The declared section.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mutation"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The mutation's runtime type carries no catalog entry.</exception>
+    public static WorldSection SectionOf(WorldMutation mutation) => EntryOf(mutation: mutation).Section;
+    private static WorldMutationKindCatalogEntry EntryOf(WorldMutation mutation) {
         ArgumentNullException.ThrowIfNull(argument: mutation);
 
         var type = mutation.GetType();
+        // Built once from the validated catalog; a race builds two equal tables and keeps either.
+        var byType = (EntriesByType ??= All().ToDictionary(keySelector: static entry => entry.Type));
 
-        foreach (var entry in All()) {
-            if (entry.Type == type) {
-                return entry.Ordinal;
-            }
-        }
-
-        throw new InvalidOperationException(message: $"WorldMutationKindCatalog: '{type.Name}' carries no catalog entry — every WorldMutation kind must declare a [MutationKind] ordinal.");
+        return (byType.TryGetValue(key: type, value: out var entry)
+            ? entry
+            : throw new InvalidOperationException(message: $"WorldMutationKindCatalog: '{type.Name}' carries no catalog entry — every WorldMutation kind must declare a [MutationKind] ordinal and section."));
     }
     /// <summary>Parses the comma-separated kind-name form <see cref="DescribeMask"/> writes. The
     /// <see cref="MutationKindVocabularyHook.TryParse"/> implementation the composition root installs.</summary>

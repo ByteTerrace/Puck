@@ -396,7 +396,8 @@ peer.
 Constructor seed: each seat gets `Drive` over its OWN body only, plus the
 domain seed (`Observe/all`, `Control/all`, `Edit/all`,
 `Control/composition`, `Mutate/section:<s>` for every section EXCEPT
-`grants`); Console gets the domain seed including `Mutate/section:grants`
+`grants` and the program sections `rules` and `interactions`, `WorldSectionFacts.IsProgram`);
+Console gets the domain seed including those sections
 plus the table's only `Drive/all`; addons get NOTHING. Peers are not seeded by
 index: each `PeerAdmitted` event mints the admission verdict's own authored
 templates for that exact generation, and disconnect/reactivation revokes

@@ -118,16 +118,19 @@ journal → echo. Precisely:
 1. **Disclosure, then authority.** `WorldRecipientView.Admits` (the mutation adapter in
    `Puck.World.Protocol/Protocol/WorldRecipientMutations.cs`) refuses every mutation or guard whose
    declared write footprint (its rows, their token domains and the rows keyed over them, an
-   incoming declaration's names, a placement's parent chain and dealt templates) holds a row the
-   recipient cannot read whole, before grants, key lookup or composition.
-   This includes seats. `TryAdmitCompleteMutation`, live state members and detached composition
+   incoming declaration's names, a placement's parent chain and dealt templates, the placement,
+   machine or kit it replaces or removes, a machine's memory-binding rows, a kit's generate rows)
+   holds a row the recipient cannot read whole, before grants, key lookup or composition. A
+   mutation of a program section (`WorldSectionFacts.IsProgram`: rules, interactions) is refused
+   by kind: a recipient never authors the world's program. This includes seats, which are
+   seeded Mutate over every section but grants and the program sections. `TryAdmitCompleteMutation`, live state members and detached composition
    share it; a batch rechecks after earlier members change declarations or reader lists.
    Cell and fingerprint guards use the view's `Fingerprint`, through one `CheckGuards`.
    The echo and typed outcome carry the same refusal; its code is
    `world.mutation.undisclosed`. Addon binds and typed writes use the same row policy and
    answer `NotDisclosed`. `cellVisibility: true` reserves cell policies on empty rows;
    row-level visibility alone lets its admitted owner read the row whole. Then the principal must hold `WorldCapability.Mutate` over
-   `GrantSubject.Section(SectionOf(mutation))`. A denial prints a
+   `GrantSubject.Section(WorldMutationKindCatalog.SectionOf(mutation))`. A denial prints a
    `[world.grant denied: …]` stderr line, fires a `WorldEditEcho`
    (`Denied: true`), and drops.
 2. **Compose.** `TryCompose(current, mutation, out candidate)` builds the
@@ -478,12 +481,12 @@ re-packing ordinals is mechanical. Only past the consolidation question do the
 steps below apply.
 
 1. **Data:** the nested sealed record on `WorldMutation` with
-   `[MutationKind(ordinal, section)]` (the next ordinal past the last, keeping the set dense). XML-doc the row
-   semantics (rejection conditions, timing class) in the
-   same style as its neighbors.
-2. **Server:** an arm in each of these `WorldDocument` switches
-   (`WorldDocument.Compose.cs`) — `TryCompose` (compose the candidate) and
-   `SectionOf` (which THROWS on a missing arm rather than mis-authorizing) —
+   `[MutationKind(ordinal, section)]` (the next ordinal past the last, keeping the set dense); the
+   attribute's section is the one mapping `WorldMutationKindCatalog.SectionOf` answers for grants and
+   the recipient door. XML-doc the row semantics (rejection conditions, timing class) in the
+   same style as its neighbors. A kind whose row names state rows adds them to the recipient
+   footprint in `WorldRecipientMutations.Admits`, for the incoming row and the row it replaces.
+2. **Server:** an arm in `TryCompose` (`WorldDocument.Compose.cs`, compose the candidate),
    plus membership in the classification predicates that apply:
    `AffectsPopulation`, `AffectsSolidField`, `AffectsRenderEnvelope`,
    `IsDocumentDefaults`, and a `WorldServer.Describe` arm
