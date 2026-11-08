@@ -245,14 +245,9 @@ public sealed partial class StateArena {
                         reason = $"undo checkpoint group '{group.Name}' carries vector components for a non-vector column";
                         return false;
                     }
-                    var payloadMatches = entry.Column switch {
-                        ArenaColumn.Text => ((entry.Visibility is null) && (entry.Observation is null)),
-                        ArenaColumn.Visibility => ((entry.Text is null) && (entry.Observation is null)),
-                        ArenaColumn.Observation => ((entry.Text is null) && (entry.Visibility is null)),
-                        _ => ((entry.Text is null) && (entry.Visibility is null) && (entry.Observation is null)),
-                    };
+                    var payloads = (((entry.Text is null) ? 0 : 1) + ((entry.Visibility is null) ? 0 : 1) + ((entry.Observation is null) ? 0 : 1));
 
-                    if (!payloadMatches) {
+                    if (payloads > 1) {
                         reason = $"undo checkpoint group '{group.Name}' carries a payload incompatible with its column";
                         return false;
                     }
@@ -260,11 +255,16 @@ public sealed partial class StateArena {
                         reason = $"undo checkpoint group '{group.Name}' carries a member-key payload on the wrong column";
                         return false;
                     }
-                    if ((entry.MemberKey is not null) && (!CellName.TryParse(candidate: entry.MemberKey, name: out var memberName, reason: out _) || !m_keys.TryResolve(key: out _, name: memberName))) {
-                        reason = $"undo checkpoint group '{group.Name}' names an unknown retained member key '{entry.MemberKey}'";
-                        return false;
+                    var memberOrdinal = -1L;
+
+                    if (entry.MemberKey is not null) {
+                        if (!CellName.TryParse(candidate: entry.MemberKey, name: out var memberName, reason: out _) || !m_keys.TryResolve(key: out var memberKey, name: memberName)) {
+                            reason = $"undo checkpoint group '{group.Name}' names an unknown retained member key '{entry.MemberKey}'";
+                            return false;
+                        }
+                        memberOrdinal = memberKey.Ordinal;
                     }
-                    if (!ValidateUndoEntry(entry: entry, reason: out var entryReason, row: row)) {
+                    if (!ValidateUndoEntry(entry: entry, memberOrdinal: memberOrdinal, reason: out var entryReason, row: row)) {
                         reason = $"undo checkpoint group '{group.Name}' {entryReason}";
                         return false;
                     }
@@ -379,23 +379,21 @@ public sealed partial class StateArena {
         }
         return values;
     }
-    private bool ValidateUndoEntry(ArenaUndoEntrySnapshot entry, int row, out string reason) {
-        ref readonly var layout = ref m_layout[row];
-
-        if (UndoPositionCount(catalog: m_catalog, column: entry.Column, layout: layout, row: row) == 0) {
+    // The undo format carries a member key by name with a -1/0 placeholder number; the position itself is admitted
+    // by the arena's one image admission, under the key ordinal that name resolved to.
+    private bool ValidateUndoEntry(ArenaUndoEntrySnapshot entry, long memberOrdinal, int row, out string reason) {
+        if (UndoPositionCount(catalog: m_catalog, column: entry.Column, layout: m_layout[row], row: row) == 0) {
             reason = $"carries column '{entry.Column}' which row '{m_rows[row].Name.Value}' cannot store";
             return false;
         }
-        if (((entry.Column is (ArenaColumn.Vector or ArenaColumn.Text or ArenaColumn.Visibility or ArenaColumn.Observation)) && (entry.Number != 0L)) || ((entry.Column == ArenaColumn.MemberKey) && (entry.Number is not (-1L or 0L)))) {
+        if ((entry.Column == ArenaColumn.MemberKey) && (entry.Number is not (-1L or 0L))) {
             reason = $"carries a noncanonical number for column '{entry.Column}'";
             return false;
         }
-        if (IsLinkColumn(column: entry.Column) && ((entry.Number < 0L) || (entry.Number > layout.CellCapacity))) {
-            reason = "carries a member link outside its row";
-            return false;
-        }
-        if ((entry.Column == ArenaColumn.CellCapacity) && ((entry.Number < 0L) || (entry.Number > m_rows[row].CellCeiling))) {
-            reason = "carries a reservation outside its row ceiling";
+        // The caller admitted at most one payload; the image admission refuses it unless it is this column's kind.
+        var reference = ((object?)entry.Text ?? ((object?)entry.Visibility ?? entry.Observation));
+
+        if (!TryAdmitImagePosition(layout: m_layout, column: entry.Column, row: row, number: ((entry.Column == ArenaColumn.MemberKey) ? memberOrdinal : entry.Number), reference: reference, reason: out reason)) {
             return false;
         }
         if (entry.Column == ArenaColumn.Number) {
@@ -409,20 +407,6 @@ public sealed partial class StateArena {
                 reason = $"carries a number outside row '{declaration.Name.Value}' admission";
                 return false;
             }
-        } else if ((entry.Column is (ArenaColumn.Presence or ArenaColumn.ClockSet or ArenaColumn.LaneRoster)) && (entry.Number is not (0L or 1L))) {
-            reason = "carries a non-bit value in a bit column";
-            return false;
-        } else if ((entry.Column == ArenaColumn.MemberCount) && ((entry.Number < 0L) || (entry.Number > layout.CellCapacity))) {
-            reason = "carries a member count outside its row capacity";
-            return false;
-        } else if ((entry.Column == ArenaColumn.Behavior) && ((entry.Number < byte.MinValue) || (entry.Number > byte.MaxValue) || !Enum.IsDefined(value: ((StateCellBehavior)((byte)entry.Number))))) {
-            reason = "carries an unknown cell behavior";
-            return false;
-        } else if ((entry.Column == ArenaColumn.Text) && ((entry.Text?.Length ?? 0) > StateCapacity.MaxTextValueLength)) {
-            reason = "carries text past the state text ceiling";
-            return false;
-        } else if ((entry.Column == ArenaColumn.Visibility) && !StateVisibilityStorage.TryMeasure(value: entry.Visibility, bytes: out _, reason: out reason)) {
-            return false;
         }
         reason = string.Empty;
         return true;
@@ -935,7 +919,7 @@ public sealed partial class StateArena {
                 };
 
                 hash.Add(value: ((ulong)number));
-                FoldText(hash: ref hash, text: value.MemberKey);
+                hash.Add(value: value.MemberKey);
                 if (value.ComponentLength > 0) {
                     hash.Add(values: System.Runtime.InteropServices.MemoryMarshal.Cast<sbyte, byte>(span: Components(entry: value)));
                 } else if (value.Entry.Reference is StateVisibility visibility) {
@@ -944,7 +928,7 @@ public sealed partial class StateArena {
                     hash.Add(value: ((ulong)observation.Tick));
                     hash.Add(value: (observation.Visible ? 1UL : 0UL));
                 } else {
-                    FoldText(hash: ref hash, text: (value.Entry.Reference as string));
+                    hash.Add(value: (value.Entry.Reference as string));
                 }
             }
         }

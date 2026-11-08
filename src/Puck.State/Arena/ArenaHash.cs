@@ -373,19 +373,6 @@ public sealed partial class StateArena {
             }
         }
     }
-    // Every variable-length part folds its own length first, so no two records can present the same run of
-    // values by dividing it differently.
-    private static void FoldText(ref Fnv1aHash hash, string? text) {
-        if (text is null) {
-            hash.Add(value: 0UL);
-
-            return;
-        }
-
-        hash.Add(value: 1UL);
-        hash.Add(value: ((ulong)text.Length));
-        hash.Add(value: Fnv1aHash.Compute(values: text.AsSpan()));
-    }
     private void FoldCell(ref Fnv1aHash hash, ArenaColumn column, in ArenaRowLayout layout, int slot) {
         switch (column) {
             case ArenaColumn.MemberKey:
@@ -396,10 +383,9 @@ public sealed partial class StateArena {
 
                 break;
             case ArenaColumn.Text:
-                FoldText(
-                    hash: ref hash,
-                    text: m_texts?[slot]
-                );
+                // Fnv1aHash folds a string's length (or null's mark) first, so no two records present one run of
+                // values by dividing it differently.
+                hash.Add(value: m_texts?[slot]);
 
                 break;
             case ArenaColumn.Vector:

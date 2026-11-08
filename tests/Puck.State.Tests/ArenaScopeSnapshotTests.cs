@@ -113,6 +113,23 @@ public sealed class ArenaScopeSnapshotTests {
         }));
         Assert.Equal(before, arena.ComputeHash());
     }
+    // A scope image read from a checkpoint passes the same position admission as a full checkpoint and an undo turn.
+    [InlineData(ArenaColumn.MemberKey, long.MaxValue)]
+    [InlineData(ArenaColumn.Presence, 2L)]
+    [Theory]
+    public void AScopeImageCarryingAValueNoArenaHoldsIsRefusedWithoutChangingAnyRow(ArenaColumn column, long value) {
+        var (_, arena) = ArenaFixture.Build();
+        var image = arena.CaptureScope(rows: new HashSet<int> { ArenaFixture.Score });
+        var before = arena.ComputeHash();
+        var at = Array.FindIndex(array: image.Numbers, match: entry => (entry.Column == column));
+
+        Assert.True(condition: (at >= 0));
+        var numbers = image.Numbers.ToArray();
+        numbers[at] = (numbers[at] with { Value = value });
+        Assert.Throws<InvalidOperationException>(testCode: () => arena.ValidateScope(image: image with { Numbers = numbers }));
+        Assert.Throws<InvalidOperationException>(testCode: () => arena.RestoreScope(image: image with { Numbers = numbers }));
+        Assert.Equal(before, arena.ComputeHash());
+    }
     [InlineData(ArenaFixture.Clock)]
     [InlineData(ArenaFixture.Embed)]
     [InlineData(ArenaFixture.Field)]
