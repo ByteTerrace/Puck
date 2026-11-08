@@ -86,7 +86,8 @@ agent works in that mode by default, without asking:
   never of one provider's settings; a provider type or assumption outside the
   provider's own project is a leak, fixed when found. A provider project
   declares `<PuckProvider>`, and the architecture gate (PUCKARCH009) refuses
-  a provider project or SDK in any other ranked project's closure.
+  a provider project or SDK in any other project's closure except tests. Tools
+  select installed provider contributions, just as runtime hosts do.
 - Puck is independent work (the owner's ruling). For an external protocol,
   format or device, consult several independent sources as second opinions
   (vendor documentation, kernel drivers, community reverse engineering, other

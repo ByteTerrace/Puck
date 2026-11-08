@@ -12,6 +12,7 @@
         <Project Path="src/Puck.Azure/Puck.Azure.csproj" />
         <Project Path="src/Puck.Azure.Functions/Puck.Azure.Functions.csproj" />
         <Project Path="src/Puck.Cli/Puck.Cli.csproj" />
+        <Project Path="src/Puck.Cli.Azure/Puck.Cli.Azure.csproj" />
         <Project Path="src/Puck.Cli.Bench/Puck.Cli.Bench.csproj" />
         <Project Path="src/Puck.Cli.Content/Puck.Cli.Content.csproj" />
         <Project Path="src/Puck.Cli.Core/Puck.Cli.Core.csproj" />

@@ -62,7 +62,7 @@ in the same change.
 Every workflow installs the SDK through the `setup-dotnet` action's `global-json-file`, so the pin
 `global.json` names, a .NET 11 release candidate until general availability, is the only SDK version a
 runner installs. The container builds pin the matching SDK image tag in each Dockerfile and track the
-`11.0` runtime image, whose base is Ubuntu 26.04. The Functions app builds with the `Azure.Functions.Sdk`
+`11.0` runtime image, whose base is Ubuntu 26.04. The Functions app builds with the Azure.Functions.Sdk
 MSBuild SDK, which supports .NET 11 where the `Microsoft.Azure.Functions.Worker.Sdk` package does not,
 and the Flex plan's runtime version names `11.0`. This SDK generates function metadata into the worker assembly
 and enables worker indexing in `worker.config.json`; bundle assembly requires the host configuration, worker
@@ -650,6 +650,18 @@ is independent of publisher signing and Azure releases.
 The [runtime and delivery programme](../plans/runtime-and-delivery.md#release-pairs)
 proposes a unified operator workflow for deployment, progress-preserving
 rollback, and explicit restore. The procedure below describes current behavior.
+
+The provider-neutral CLI discovers deployment extensions through `CliExtensions` and
+`PuckExtensionDiscovery`. `Puck.Cli.Azure` contributes the `azure` release host
+(`WorldReleaseHost`) and the `puck azure` command tree. Install it locally with
+`dotnet publish src/Puck.Cli.Azure -c Release -o extensions/Puck.Cli.Azure`.
+The artifacts workflow publishes this extension separately as `cli-azure-extension`;
+Azure jobs pass `azure: "true"` to `setup-puck`, which installs that run's artifact
+under the workspace's `extensions/`. The CLI package itself holds no Azure provider.
+`puck world release` operations accept `--host azure`; without a name they require
+exactly one installed release host. Official content scanning uses that single
+host's root document name. Offline release preparation, qualification, exercise,
+and inspection of a supplied group file require no release host.
 
 `puck azure` owns cloud orchestration. Run it from the repository root, where it
 reads the repository's artifact files; `puck azure --help` lists its sub-verbs and

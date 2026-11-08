@@ -1,9 +1,9 @@
 using System.CommandLine;
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using System.Text.Json.Nodes;
-using Microsoft.Extensions.AI;
 using Puck.Embeddings;
-using Puck.Embeddings.Azure;
+using Puck.World.Server;
 using Puck.Maths;
 using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler;
@@ -17,25 +17,13 @@ public static class EmbedCommand {
     private const string LockVerb = "embed lock";
     private const string ProbeVerb = "embed probe";
 
-    // The provider options lock and probe share: the provider kind, its endpoint and its request shape.
-    private sealed record ProviderOptions(Option<string?> Provider, Option<string?> Endpoint, Option<bool> OmitDimensions, Option<int> TimeoutSeconds) {
-        public static ProviderOptions Create() {
-            var provider = new Option<string?>(name: "--provider") {
-                Description = "Provider kind: fixture or openai-compatible. Defaults to fixture for puck-fixture models.",
-            };
-
-            provider.AcceptOnlyFromAmong("fixture", "openai-compatible");
-
-            return new ProviderOptions(
-                Endpoint: new Option<string?>(name: "--endpoint") { Description = "The OpenAI-compatible HTTP endpoint URI a remote provider is reached at." },
-                OmitDimensions: new Option<bool>(name: "--omit-dimensions") { Description = "Omit the dimensions field from embedding request payloads." },
-                Provider: provider,
-                TimeoutSeconds: CliOptions.Count(defaultValue: 60, description: "Request timeout in seconds (default 60).", minimum: 1, name: "--timeout-seconds")
-            );
-        }
-        public IEnumerable<Option> All => [Provider, Endpoint, OmitDimensions, TimeoutSeconds];
+    private sealed record ProviderOptions(Option<string?> Provider, Option<string?> Settings) {
+        public static ProviderOptions Create() => new(
+            Provider: new Option<string?>(name: "--provider") { Description = "Installed embedding provider type key, such as embedding.fixture or embedding.azure-openai; defaults to the single installed type." },
+            Settings: new Option<string?>(name: "--settings") { Description = "JSON object file with provider settings. Model, revision and dimensions come from the authored embedding space." }
+        );
+        public IEnumerable<Option> All => [Provider, Settings];
     }
-
     /// <summary>Creates <c>puck embed</c> and its <c>lock</c> and <c>probe</c> verbs.</summary>
     /// <returns>The configured command tree.</returns>
     public static Command Create() {
@@ -67,11 +55,9 @@ public static class EmbedCommand {
             batchSize: parseResult.GetValue(option: batchSizeOption),
             cancellationToken: cancellationToken,
             check: parseResult.GetValue(option: checkOption),
-            endpoint: parseResult.GetValue(option: providers.Endpoint),
-            omitDimensions: parseResult.GetValue(option: providers.OmitDimensions),
+            settingsPath: parseResult.GetValue(option: providers.Settings),
             path: parseResult.GetRequiredValue(argument: pathArgument),
-            provider: parseResult.GetValue(option: providers.Provider),
-            timeoutSeconds: parseResult.GetValue(option: providers.TimeoutSeconds)
+            provider: parseResult.GetValue(option: providers.Provider)
         ).ConfigureAwait(continueOnCapturedContext: false));
 
         return lockCommand;
@@ -100,25 +86,23 @@ public static class EmbedCommand {
 
         probeCommand.SetAction(action: async (parseResult, cancellationToken) => await ExecuteProbeAsync(
             cancellationToken: cancellationToken,
-            endpoint: parseResult.GetValue(option: providers.Endpoint),
-            omitDimensions: parseResult.GetValue(option: providers.OmitDimensions),
+            settingsPath: parseResult.GetValue(option: providers.Settings),
             path: parseResult.GetRequiredValue(argument: pathArgument),
             provider: parseResult.GetValue(option: providers.Provider),
             space: parseResult.GetValue(option: spaceOption),
             text: parseResult.GetRequiredValue(argument: textArgument),
-            timeoutSeconds: parseResult.GetValue(option: providers.TimeoutSeconds),
             top: parseResult.GetValue(option: topOption)
         ).ConfigureAwait(continueOnCapturedContext: false));
 
         return probeCommand;
-    }    private static async Task<int> ExecuteEmbedAsync(
+    }
+
+    private static async Task<int> ExecuteEmbedAsync(
         string path,
         bool check,
         string? provider,
-        string? endpoint,
-        bool omitDimensions,
+        string? settingsPath,
         int batchSize,
-        int timeoutSeconds,
         CancellationToken cancellationToken
     ) {
         var fullPath = Path.GetFullPath(path: path);
@@ -223,15 +207,13 @@ public static class EmbedCommand {
                 if (textsToEmbed.Count > 0) {
                     var identity = space.Identity;
 
-                    IEmbeddingGenerator<string, Embedding<float>> generator;
+                    IWorldEmbeddingSource generator;
 
                     try {
                         generator = ResolveGenerator(
-                            endpoint: endpoint,
+                            settingsPath: settingsPath,
                             identity: identity,
-                            omitDimensions: omitDimensions,
-                            provider: provider,
-                            timeoutSeconds: timeoutSeconds
+                            provider: provider
                         );
                     } catch (Exception ex) when (ex is InvalidOperationException or UriFormatException or ArgumentException) {
                         return CliExit.Refuse(verb: LockVerb, what: $"space '{space.Name}'", why: $"its provider could not start: {ex.Message}");
@@ -241,12 +223,12 @@ public static class EmbedCommand {
                         var batches = EmbeddingBatcher.Batch(batchSize: batchSize, items: textsToEmbed);
 
                         foreach (var batch in batches) {
-                            GeneratedEmbeddings<Embedding<float>> embeddings;
+                            IReadOnlyList<EmbeddingAnswer> embeddings;
 
                             try {
-                                embeddings = await generator.GenerateAsync(
+                                embeddings = await generator.EmbedAsync(
                                     cancellationToken: cancellationToken,
-                                    values: batch
+                                    texts: batch
                                 ).ConfigureAwait(continueOnCapturedContext: false);
                             } catch (Exception ex) when (ex is not OperationCanceledException) {
                                 return CliExit.Refuse(verb: LockVerb, what: $"space '{space.Name}'", why: $"the embedding provider failed: {ex.Message}");
@@ -262,11 +244,11 @@ public static class EmbedCommand {
                                 var srcText = batch[i];
                                 var emb = embeddingList[i];
 
-                                if (!VectorQuantizer.TryQuantizeToBase64Url(base64UrlVector: out var b64, embedding: emb)) {
-                                    return CliExit.Refuse(verb: LockVerb, what: $"text \"{srcText}\"", why: "its embedding could not be quantized.");
+                                if (emb.Vector is not { } vector) {
+                                    return CliExit.Refuse(verb: LockVerb, what: $"text \"{srcText}\"", why: (emb.Refusal ?? "its embedding was refused."));
                                 }
 
-                                lockFile.SetEntry(identity: identity, spaceName: space.Name, text: srcText, vectorBase64Url: b64);
+                                lockFile.SetEntry(identity: identity, spaceName: space.Name, text: srcText, vectorBase64Url: vector.ToBase64Url());
                             }
                         }
                     }
@@ -306,9 +288,7 @@ public static class EmbedCommand {
         string? space,
         int top,
         string? provider,
-        string? endpoint,
-        bool omitDimensions,
-        int timeoutSeconds,
+        string? settingsPath,
         CancellationToken cancellationToken
     ) {
         var fullPath = Path.GetFullPath(path: path);
@@ -347,36 +327,29 @@ public static class EmbedCommand {
         } else {
             var identity = lockSpace.Identity;
 
-            IEmbeddingGenerator<string, Embedding<float>> generator;
+            IWorldEmbeddingSource generator;
 
             try {
                 generator = ResolveGenerator(
-                    endpoint: endpoint,
+                    settingsPath: settingsPath,
                     identity: identity,
-                    omitDimensions: omitDimensions,
-                    provider: provider,
-                    timeoutSeconds: timeoutSeconds
+                    provider: provider
                 );
             } catch (Exception ex) when (ex is InvalidOperationException or UriFormatException or ArgumentException) {
                 return CliExit.Refuse(verb: ProbeVerb, what: $"space '{resolvedSpaceName}'", why: $"its provider could not start: {ex.Message}");
             }
 
             using (generator) {
-                var embs = await generator.GenerateAsync(
+                var embs = await generator.EmbedAsync(
                     cancellationToken: cancellationToken,
-                    values: [text]
+                    texts: [text]
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
                 var embList = embs.ToList();
 
-                if ((embList.Count == 0) || !VectorQuantizer.TryQuantizeToBase64Url(base64UrlVector: out var b64, embedding: embList[0])) {
-                    return CliExit.Refuse(verb: ProbeVerb, what: "the query text", why: "its embedding could not be quantized.");
+                if ((embList.Count != 1) || (embList[0].Vector is not { } vec)) {
+                    return CliExit.Refuse(verb: ProbeVerb, what: "the query text", why: (embList.FirstOrDefault().Refusal ?? "the provider returned no query vector."));
                 }
-
-                if (!StateVector.TryParseBase64Url(dimensions: lockSpace.Identity.Dimensions, error: out var err, text: b64, vector: out var vec)) {
-                    return CliExit.Refuse(verb: ProbeVerb, what: "the query text", why: $"its vector could not be read: {err}");
-                }
-
                 queryVector = vec;
             }
         }
@@ -409,35 +382,38 @@ public static class EmbedCommand {
 
         return 0;
     }
-    private static IEmbeddingGenerator<string, Embedding<float>> ResolveGenerator(
-        EmbeddingIdentity identity,
-        string? provider,
-        string? endpoint,
-        bool omitDimensions,
-        int timeoutSeconds
-    ) {
-        var isFixture = (string.Equals(a: provider, b: "fixture", comparisonType: StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(a: identity.Model, b: FixtureEmbeddingGenerator.SupportedModel, comparisonType: StringComparison.OrdinalIgnoreCase));
+    private static IWorldEmbeddingSource ResolveGenerator(EmbeddingIdentity identity, string? provider, string? settingsPath) {
+        var type = CliExtensions.Installed.Select<WorldExtensionEmbeddingProviderType>(key: provider, purpose: "embedding provider");
+        var settings = (settingsPath is null ? new JsonObject() : JsonNode.Parse(File.ReadAllText(path: settingsPath)) as JsonObject)
+            ?? throw new ArgumentException(message: "Embedding settings must be a JSON object.");
 
-        if (isFixture) {
-            return new FixtureEmbeddingGenerator(identity: identity);
+        settings["model"] = identity.Model;
+        settings["revision"] = identity.Revision;
+        settings["dimensions"] = identity.Dimensions;
+        var configuration = JsonSerializer.SerializeToElement(value: settings);
+        var configured = type.Create(configuration);
+
+        try {
+            var source = configured.BindEmbedding(settings: configuration);
+
+            if (source.Identity != identity) {
+                source.Dispose();
+                throw new InvalidOperationException(message: "The embedding provider returned a different identity from the authored space.");
+            }
+            return new OwnedEmbeddingSource(provider: configured, source: source);
+        } catch {
+            configured.Dispose();
+            throw;
         }
-
-        if (string.IsNullOrEmpty(value: endpoint)) {
-            throw new InvalidOperationException(message: "Endpoint URL (--endpoint) must be specified for remote provider.");
-        }
-
-        var options = new AzureOpenAiEmbeddingOptions {
-            Dimensions = identity.Dimensions,
-            Endpoint = new Uri(uriString: endpoint),
-            Model = identity.Model,
-            OmitDimensions = omitDimensions,
-            Timeout = TimeSpan.FromSeconds(value: timeoutSeconds),
-        };
-
-        return AzureOpenAiEmbeddingGeneratorFactory.Create(options: options);
     }
 
+    private sealed class OwnedEmbeddingSource(IWorldConfiguredEmbeddingProvider provider, IWorldEmbeddingSource source) : IWorldEmbeddingSource {
+        public EmbeddingIdentity Identity => source.Identity;
+        public Task<IReadOnlyList<EmbeddingAnswer>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken) => source.EmbedAsync(texts, cancellationToken);
+        public void Dispose() {
+            try { source.Dispose(); } finally { provider.Dispose(); }
+        }
+    }
     private sealed record DiscoveredSpace(string Name, EmbeddingIdentity Identity);
 
     private static bool TryDiscoverSpacesAndTexts(
