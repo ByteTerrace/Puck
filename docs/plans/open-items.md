@@ -3808,6 +3808,12 @@ ordinary · Next: new content and art on the owner's call.
   instance, so the pond's decisions may not be running there (seen by the
   rule-faults step 7 lane on a headless boot; unchecked). Read why before
   treating it as a defect.
+- [low] A census body an install's re-clamp moves into a new slot gets no
+  `PeerAdmitted` and so no default peer control grant through
+  `ApplyLifecycleEvents`, while a body `world.population` seats does
+  (`SelectCensus`'s `reports` flag in `WorldPopulation.Reconcile.cs`; the
+  parent behaved the same). Decide whether a moved census body should keep
+  its grant.
 - [high] Player-state defects found grounding the hub design. The design memo
   ([hub and saves](hub-and-saves.md)) decides the shape; these are defects
   whatever it decides:

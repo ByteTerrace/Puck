@@ -864,6 +864,20 @@ pool later declares enters through `ReadsWhole` alone.
 
 ## Open items
 
+- Argon's adversarial review of step 1 (findings unverified until a fix lane
+  reopens each quotation; the lead holds the report): [high] non-operator
+  verbs (`world.budget.rules --spent`, `world.inspect`, `world.cost`,
+  `world.collision.status`, `world.contacts`) expose firing counts, timings and
+  revisions that vary with hidden state, which step 2's read doors own;
+  [high] `deal` leaks preceding hidden cells through `DealSlot` and position,
+  which step 4 owns; [medium] `WorldDeliveryRows.Advance` may drop public
+  field-cell deltas at the presentation tier; [medium] the image key-skip check
+  in `WorldDisclosureImages.Image` may skip readable writes and poison the cached
+  image; [medium] `WorldDisclosureImages.Definition` and
+  `WorldProjectionFeed.Compose` may suppress state-clock anchors and strip
+  unrestricted storage metadata; [medium] `WorldDeliveryCursor.Seed` and
+  `WorldSessionSink.DeliverState` may make sequence numbers depend on the hidden
+  count. The medium four are step 1's own and get a fix pass after step 2 lands.
 - The owner's ruling: a `search` job whose outputs reach a wider audience than
   the restricted rows its scoring reads is **refused**, at compile time for
   declared audiences and at run time where an audience changes live (fog that
