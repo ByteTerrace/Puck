@@ -1161,8 +1161,13 @@ final set:
    flow on glass). Its non-lockstep settled stills, sun held by a paused tick and
    exposure pinned, through both tiers: Vulkan differs in one pixel of 1,152,000
    by one 8-bit level, Direct3D 12 in two, none by two or more, and repeats of
-   one tier are byte-identical. The binned path's per-program kernels and a
-   debug-world sweep through both tiers remain for step 4 and step 6.
+   one tier are byte-identical. The debug world's eight declared programs
+   specialize into one set (168 registers in views and glass on Vulkan); its
+   non-lockstep stills are not repeatable within one tier (two captures of one
+   tier differ in about 11 % of pixels, at silhouettes and grass), so a debug
+   world comparison of the tiers waits for lockstep convergence. The binned
+   path's per-program kernels and a debug-world sweep through both tiers remain
+   for step 4 and step 6.
 4. **Binning** (GPU leg). The `views-filter` and `views-shade` split, the
    filter record, the per-program count, prefix sum, scatter and indirect
    jobs. Check: the decision matrix's binned columns against the unsplit, with

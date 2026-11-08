@@ -1550,9 +1550,9 @@ program plain kernels, and publishes through one door
 section 3.4 states; they await their adversarial review. A player's prewarm
 compiles each hosted world's declared set in `world prepare`; a Direct3D 12
 player without `dxcompiler.dll` refuses a prewarmed kernel at the reflection
-check (`SdfShadePipelines.BuildAsync`), and the residency's frame of a
-composition that renders neighbour worlds may hold programs its own document
-does not declare, so its set misses the prewarmed one. Nothing reads
+check (`SdfShadePipelines.BuildAsync`), and a frame holding a program its own
+document does not declare (none in the debug world: 8 declared, 8 active)
+requests a set the prewarm did not compile. Nothing reads
 `SdfWorldResidency.InFlightShadeIdentities` yet: the quarantine step reads,
 and then clears, the submissions a device loss marked lost, which stay
 reported until it does.
