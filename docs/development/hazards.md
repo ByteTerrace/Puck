@@ -52,6 +52,7 @@ preferred outcome.
 | An exactness-preserving skip in an exact evaluator: a cull, certificate or bound that claims a skipped part could not change the answer (`SdfFieldEvaluator`'s segment hierarchy and relief certificates) | Counterexample tests at the arithmetic edges (overflow, seeds, ties); sampled agreement with a reference evaluator misses them | Yes |
 | [A reference read after its replacement](#a-reference-captured-across-a-replacement) | `STALE001`-`003` | No |
 | GPU fences and resource lifetimes: a buffer retired, reused or resized while a queue still reads it | Review | Yes |
+| A GPU read indexed by GPU data (a raster hit's draw and triangle, a record a pass left from an earlier frame) past its buffer: Direct3D 12's bounded views read zero, Vulkan reads freed or unmapped memory and loses the device, intermittently | A Vulkan run that loses the device names the passes in flight (`VK_NV_device_diagnostic_checkpoints`); GPU-assisted validation sees it only on a run where the read happens | Yes |
 | Process environment reads and any-address listeners | `ENV001`, `NET001` | No |
 | Trust boundaries: grants, federation, admission, credentials, a cap on what a sender claims | Review | Yes |
 | Deleting, moving or rewriting files and persisted data outside the intended root or shape | Review | Yes |
@@ -69,6 +70,14 @@ until the next writer, shape or case arrives.
   (`WorldPopulation.AppendContinuationHash`,
   `src/Puck.World.Server/WorldPopulation.Checkpoint.cs`; the redesign is in the
   [refactoring campaign](../plans/open-items.md#refactoring-campaign)).
+- A raster pass that skips must not leave hits a later reader names against the
+  current draw records. Keyed on "written once", a part whose draw count fell
+  to zero kept its last hits, and the glass shading pass read their draw and
+  triangle, losing the Vulkan device. The mesh part and the cascades skip only
+  while `SdfWorldPassRecorder.TargetsHoldClear` says every target instance holds
+  a clear (set by `RecordMesh`, the one writer, on submission); the glass
+  passes skip only together with the shading pass that reads them
+  (`SdfWorldPasses.GlassSeen`).
 - The cascades' exit layer assumes a caster encloses a solid
   (`SdfMeshDraw.EnclosesSolid`); a body clipped at a portal's glass is a thin
   caster that shadows its own wrapped side

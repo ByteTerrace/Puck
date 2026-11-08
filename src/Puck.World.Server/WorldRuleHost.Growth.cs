@@ -22,7 +22,7 @@ public sealed partial class WorldRuleHost {
             BeginGrowthTick(engineTick: Host.CompletedEngineTicks);
             var spent = arena.ReservationWorkCharged - m_growthWorkStart;
             // Earlier growth in an open scope may also need rolling back after this proposal.
-            return m_growthCompilation?.RefuseReservation(layout: proposed, growthWork: 2L * (spent + StateArena.ReservationWork(layout: proposed)));
+            return m_growthCompilation?.RefuseReservation(growthWork: 2L * (spent + StateArena.ReservationWork(layout: proposed)));
         };
     }
 }

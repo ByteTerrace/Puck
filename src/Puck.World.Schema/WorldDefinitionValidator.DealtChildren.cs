@@ -36,7 +36,7 @@ public static partial class WorldDefinitionValidator {
             if ((child.DealSlot is not { } slot) || (slot < 0) || (slot >= slots)) {
                 errors.Add(item: $"{path}.dealSlot must name a slot in parent '{template.Id}' (0..{(slots - 1)}).");
             }
-            RefuseWithheldPhysicalFacets(definition: definition, errors: errors, path: path, placement: child, template: template);
+            RefuseUndisclosingMembers(definition: definition, errors: errors, path: path, placement: child, template: template);
             if (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: child.PrototypeId) is null) {
                 errors.Add(item: $"{path}.prototypeId '{child.PrototypeId}' names no declared creation.");
             }

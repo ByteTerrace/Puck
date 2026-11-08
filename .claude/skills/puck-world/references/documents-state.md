@@ -738,13 +738,20 @@ axes follow that frame's position/yaw; surface probes remain vertical. `world.na
 origin/yaw. A domain retains its workspace only after matching tuning, capacity, and the complete fixed cell/edge
 bake against the replacement query, which it then uses for future checks. Medium retention also requires the same
 field provider and synchronized revision. Unproved domains rebuild; do not infer tile-level SDF invalidation.
-Dealt placement instances carry reserved `dealSlot` identities independently of their transforms. A recipient is
-shown a template whose dealt row can withhold re-dealt in its own row order, with `$back$<slot>` placeholders under
-`hidden: Placeholder` (`WorldStateDisclosure.DisclosedPlacements`), and such a template and its children may carry
-no `solid`, `grip`, `spatial`, `region` or `emission` ([decision 4](../../../../docs/plans/disclosure.md#4-the-physical-layout-follows-the-hidden-policy)). Each carries its
-template's `scale` as it carries the prototype; its region offset is metres in the template's frame, never scaled
-(a placement parent is otherwise unit-scale). `deal.preserve`
-selects instance-owned transforms, prototypes, and facets. Spatial volumes distinguish occupation, shared clearance,
+Dealt placement instances carry reserved `dealSlot` identities independently of their transforms. A dealt child's
+`position` is its displacement from its slot: its local frame is the slot's fixed-point region offset plus that
+displacement, composed in one place (`WorldPlacementFrameCompilation.LocalFrame`, which the frame table, the spatial
+index and surface frames all resolve through); a mover writes a displacement (`StoredPosition` is the inverse
+reflow uses). A recipient is shown a template whose dealt row can withhold re-dealt in its own row order, each child
+moved to its re-dealt slot with its own displacement, with `$back$<slot>` placeholders under
+`hidden: Placeholder` (`WorldStateDisclosure.DisclosedPlacements`); a hidden variant masks the face whichever row
+withholds. A template whose dealt or variant row can withhold, its children and every placement authored under them
+carry only the allowlist `WorldPlacementDeal.UndisclosingMembers` reads (identity, parent, slot, prototype, transform,
+`distribution`, `mirror`, `surface`)
+([decision 4](../../../../docs/plans/disclosure.md#4-the-physical-layout-follows-the-hidden-policy)). Each carries its
+template's `scale` as it carries the prototype; its region offset and displacement are metres in the template's
+frame, never scaled (a placement parent is otherwise unit-scale). `deal.preserve`
+selects instance-owned transforms (displacement, yaw and scale), prototypes, and facets. Spatial volumes distinguish occupation, shared clearance,
 and opaque influence channels; static planning does not ban dynamic facets from ordinary placements. Reflow previews
 travel through attributed queries and return an ordinary batch with spatial, named-input, and payment guards.
 The debug world's granary board guide records the spatial authoring contract

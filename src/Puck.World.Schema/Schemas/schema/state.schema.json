@@ -163,7 +163,7 @@
             }
           },
           "reservedCapacity": {
-            "description": "Gets the admitted runtime room of a growable row. Exports preserve it so a checkpoint resumes with the same memory and work reservation. Authored rows normally omit it.",
+            "description": "Gets the admitted runtime room of a growable row. Exports preserve it so a checkpoint resumes with the same memory reservation. Authored rows normally omit it.",
             "type": "integer",
             "minimum": 0
           },

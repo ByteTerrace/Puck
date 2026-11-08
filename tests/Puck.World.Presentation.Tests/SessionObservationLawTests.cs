@@ -627,7 +627,6 @@ public sealed partial class SessionObservationLawTests {
             Position: new DocumentVector3(value: new System.Numerics.Vector3(x: 10f, y: 0f, z: 10f)),
             PrototypeId: Store,
             Scale: 1f,
-            Solid: new WorldSolid(Margin: 0f),
             YawDegrees: 0f
         );
         var document = Document(tier: WorldDisclosureTier.Presentation);

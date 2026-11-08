@@ -206,7 +206,7 @@ public sealed class RecipientOracleLawTests {
     public void AnUnrelatedPlacementEditLandsAlikeWhateverCellPolicyASortedRowHoldsNow() {
         var outcomes = new List<string>();
         foreach (var hidden in new[] { false, true }) {
-            var cards = new WorldStateRow(CellName.Parse("cards"), CellKind.Int,
+            var cards = new WorldStateRow(CellName.Parse("cards"), CellKind.Int, Capacity: 2,
                 Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(1)), new StateCell(CellName.Parse("b"), CellValue.Int(2))]);
             var table = new WorldStateRow(CellName.Parse("table"), CellKind.Bool, Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true),
                 Cells: [new StateCell(CellName.Parse("a"), CellValue.Bool(true)), new StateCell(CellName.Parse("b"), CellValue.Bool(true))]);
@@ -276,6 +276,48 @@ public sealed class RecipientOracleLawTests {
         }
         Assert.Equal(outcomes[0], outcomes[1]);
         Assert.Equal($"{WorldRecipientMutations.NotDisclosedCode}:'vault' is not disclosed to seat1", outcomes[0]);
+    }
+
+    // Whole-document validation prices the rules and every search job on each install, and both numbers reach a
+    // recipient in refusal text (and the sheet gates every arena growth). Pricing reads declarations only: a row with
+    // no capacity is priced at the ceiling it may grow to, here its token domain's, so how many cells a hidden row
+    // holds moves no price.
+    [Fact]
+    public void TheWorkSheetAndASearchAllowancePriceAlikeWhateverAHiddenRowHolds() {
+        var prices = new List<(RuleWork Sheet, SearchWork Search)>();
+        foreach (var count in new[] { 1, 40 }) {
+            var hidden = new StateVisibility(Readers: []);
+            var ids = new WorldStateRow(CellName.Parse("ids"), CellKind.Int, Capacity: 64,
+                Cells: [.. Enumerable.Range(0, 64).Select(i => new StateCell(CellName.Parse($"k{i}"), CellValue.Int(i)))]);
+            var vault = new WorldStateRow(CellName.Parse("vault"), CellKind.Int, Domain: new StateDomain.KeysOf(CellName.Parse("ids")), Visibility: hidden,
+                Cells: [.. Enumerable.Range(0, count).Select(i => new StateCell(CellName.Parse($"k{i}"), CellValue.Int(i)))]);
+            var document = Fixtures.BuildDocument() with {
+                StateRaw = new WorldStateSection(World: [
+                    ids,
+                    vault,
+                    new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                    new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Capacity: 2,
+                        Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(0)), new StateCell(CellName.Parse("b"), CellValue.Int(3))]),
+                    new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Visibility: hidden, Cells: [new StateCell(StateRow.SlotKey, CellValue.Int(0))]),
+                    new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Visibility: hidden, Cells: [new StateCell(StateRow.SlotKey, CellValue.Int(0))]),
+                    new WorldStateRow(CellName.Parse("best"), CellKind.Int, Visibility: hidden, Cells: [new StateCell(CellName.Parse("token"), CellValue.Int(0)),
+                        new StateCell(CellName.Parse("to"), CellValue.Int(0)), new StateCell(CellName.Parse("score"), CellValue.Int(0))]),
+                ], Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 4, Depth: 1)]),
+                Rules = [
+                    new WorldRule(CellName.Parse("tally"), [new ActionEffect.SetState("vault", Key: "$each", Expression: ExpressionProgram.Parse(text: "vault[$each] + 1"))],
+                        ForEach: "vault"),
+                    new WorldRule(CellName.Parse("accept"), [new ActionEffect.SetState("verdict", Value: 1),
+                        new ActionEffect.SetState("turn", Expression: ExpressionProgram.Parse(text: "1 - turn"))], Mode: ActionTriggerMode.Edge),
+                ],
+                SearchRaw = new WorldSearchSection(Jobs: [new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn",
+                    Verdict: "verdict", Depth: 2, Score: ExpressionProgram.Parse(text: "count(vault, c -> c > 0)"), Best: "best")]),
+            };
+            Assert.True(WorldDefinitionValidator.TryValidateLocally(document, out var reason), reason);
+            var compilation = WorldRuleCompilation.Compile(document);
+            Assert.True(WorldSearchCompilation.TryPlanAll(compilation, out var plans, out _, out _, out reason), reason);
+            prices.Add((compilation.WorkBudget.WorkUnitsPerTick, Assert.Single(plans).Work));
+        }
+        Assert.Equal(prices[0], prices[1]);
     }
 
     [Fact]

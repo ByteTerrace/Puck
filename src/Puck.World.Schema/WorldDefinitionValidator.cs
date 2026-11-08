@@ -1294,6 +1294,10 @@ public static partial class WorldDefinitionValidator {
 
             if (WorldRuleWorkBudget.Refuse(
                 contributors: () => work.Value.Contributors,
+                rowsAtCeiling: name => ((compiledRules.Concat(second: compiledInteractions)
+                    .FirstOrDefault(predicate: rule => string.Equals(a: rule.Name, b: name, comparisonType: StringComparison.Ordinal)) is { } line)
+                    ? WorldRuleWorkBudget.RowsAtCeiling(context: (ruleContext ??= WorldFactsCompiler.Context(definition: definition)), rule: line)
+                    : []),
                 work: work.Value.Budget.WorkUnitsPerTick
             ) is { } refusal) {
                 errors.Add(item: refusal);
@@ -1427,7 +1431,8 @@ public static partial class WorldDefinitionValidator {
         ValidateGravity(
             errors: errors,
             gravity: definition.Gravity,
-            placements: definition.Placements
+            placements: definition.Placements,
+            worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
         );
         var fontNames = ValidateTextCatalog(
             text: definition.Text,

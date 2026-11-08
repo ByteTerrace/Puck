@@ -69,7 +69,7 @@ curves [
 state {
   world {
     // 1 while her body holds the handheld up in front of her: `world.state.cell.set pilotHold 0 1`.
-    table pilotHold {
+    table pilotHold capacity(1) {
       "0" = 0
     }
   }

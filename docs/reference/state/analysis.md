@@ -138,13 +138,43 @@ link to a kit and any body could be the one standing in the region. When the
 region is absent or no solid-only kit footprint resolves, the bound falls back
 to the population capacity (`WorldRuleWorkBudget.RegionCapacityBound`).
 
-A few prices worth knowing:
+### Prices read declarations
+
+Every price reads a row's room through one door,
+`RuleCompileContext.RowCapacity`, and the answer depends on declarations alone:
+
+| Row | Priced room |
+|---|---|
+| Slot | One cell. |
+| Lattice | Its topology's cell count. |
+| Ring | Its declared length. |
+| Keyed or ordered, with a `capacity` | That capacity. |
+| Keyed or ordered, without one | `StateCapacity.MaxCellsPerRow`, the ceiling the arena may grow it to. |
+| Keyed over a token domain | The smaller of its own room and the domain row's. |
+
+A row's cells, and the room the arena has reserved for it, never enter a price.
+The arena still reserves only what an uncapped row holds and grows it on
+demand ([the state arena](arena.md#from-declarations-to-storage)), but the sheet
+is fixed once a document compiles: an install that changes no declaration, a
+recipient's write to any row, and a growth all leave it where it was. That is
+what lets a refusal that quotes the sheet or a search's allowance reach a
+recipient without telling it how many cells a hidden row holds, and what makes
+a world's cost a property of what its author wrote.
+
+So a rule that iterates or folds a row with no capacity, or a search that keys
+on one, is priced as if the row held the engine's ceiling. When that refuses a
+world, the refusal names each row priced there for want of a capacity
+(`WorldRuleWorkBudget.RowsAtCeiling`); author its capacity, or key it over a
+capped domain, which bounds it with nothing more written. The decision and the
+options weighed are in [costing](../../decisions/state-and-language.md#costing).
+
+### Prices worth knowing
 
 - An expression costs the sum of its operations and live operand reads. A fold
   runs its body once per cell its row can hold, so it is priced at the row's
-  capacity whatever cells the row was authored with, and it reads that one row
-  for scheduling. A shared subprogram is priced once per numeric kind and
-  reused at every call site.
+  room whatever cells the row holds, and it reads that one row for scheduling.
+  A shared subprogram is priced once per numeric kind and reused at every call
+  site.
 - A transform is priced by the operands it addresses (`TransformWork`): a
   fixed door, then the scratch its kernel leases, the cells it visits, and the
   journal entries its writes record. Rows it never touches don't change its

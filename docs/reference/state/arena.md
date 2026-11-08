@@ -85,10 +85,13 @@ in layout order compare across machines.
 A keyed row without an explicit capacity reserves its seed count, including zero.
 When a mint needs more room, the arena proposes twice the current room (one from
 zero), up to the row's cell ceiling. Memory, retained-journal storage, and the
-world's repriced work sheet must all admit the proposal before a key or cell
-changes. Vector byte ceilings apply to the reserved room, both at load and on
-growth. The work allowance also charges the copy and a possible rollback.
-`forEach` and reductions use the admitted room. Reservation changes are journaled,
+tick's work allowance must all admit the proposal before a key or cell changes.
+Vector byte ceilings apply to the reserved room, both at load and on growth. The
+work charge is the copy and a possible rollback, against what the ceiling
+leaves after the world's work sheet; the sheet already prices the row at the
+ceiling it may grow to ([prices read declarations](analysis.md#prices-read-declarations)),
+so a growth never reprices it. `forEach` and reductions walk the admitted room.
+Reservation changes are journaled,
 so a refused firing or rewind restores them. Exports carry `reservedCapacity` for
 growable rows so a checkpoint preserves the same reservation and future admission.
 Exports also carry `cellSlots` when members occupy different physical slots than

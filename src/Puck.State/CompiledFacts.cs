@@ -15,8 +15,8 @@ public readonly record struct CellAccess(int RowOrdinal, CellKey Key, bool IsSet
 /// <summary>What a compiled fact prices one read or firing against. The rule compiler's own context implements it;
 /// a fact needs the capacities and nothing else, so a fact base never names the compiler's whole context.</summary>
 public interface IRuleCostContext {
-    /// <summary>Returns a row's admitted cell room for pricing, or the
-    /// section-wide ceiling for a row the context cannot resolve.</summary>
+    /// <summary>Returns the most cells a row can hold, for pricing, read from declarations only (never its cells or
+    /// its reserved room), or the section-wide ceiling for a row the context cannot resolve.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <returns>The capacity.</returns>
     long RowCapacity(int rowOrdinal);

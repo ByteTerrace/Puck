@@ -812,16 +812,16 @@ public sealed class WorldFaceCatalogLawTests {
             PlacementRowsRaw = [.. door.Placements, crate],
         });
         var catalog = WorldFaceCatalog.For(definition: before);
-        var frames = WorldPlacementFrameCompilation.Resolve(section: before.PlacementsRaw);
-        var spatial = WorldSpatialQueryCompilation.Resolve(section: before.PlacementsRaw);
+        var frames = WorldPlacementFrameCompilation.Resolve(section: before.PlacementsRaw, worldSeed: 0UL);
+        var spatial = WorldSpatialQueryCompilation.Resolve(section: before.PlacementsRaw, worldSeed: 0UL);
         var swapped = before.WithPlacementHoldings(holdings: [(1, 1)]);
 
         Assert.Same(expected: before, actual: before.WithPlacementHoldings(holdings: []));
         Assert.Equal(expected: 1, actual: swapped.Placements[1].Holding);
         Assert.Same(expected: before.Placements[0], actual: swapped.Placements[0]);
         Assert.Same(expected: catalog, actual: WorldFaceCatalog.For(definition: swapped));
-        Assert.Same(expected: frames, actual: WorldPlacementFrameCompilation.Resolve(section: swapped.PlacementsRaw));
-        Assert.Same(expected: spatial, actual: WorldSpatialQueryCompilation.Resolve(section: swapped.PlacementsRaw));
+        Assert.Same(expected: frames, actual: WorldPlacementFrameCompilation.Resolve(section: swapped.PlacementsRaw, worldSeed: 0UL));
+        Assert.Same(expected: spatial, actual: WorldSpatialQueryCompilation.Resolve(section: swapped.PlacementsRaw, worldSeed: 0UL));
         Assert.Equal(expected: WorldHoldingChange.Appearance, actual: WorldPlacementResponse.CompareHoldings(after: swapped, before: before));
         Assert.Equal(expected: WorldHoldingChange.None, actual: WorldPlacementResponse.CompareHoldings(after: swapped, before: swapped));
         Assert.Equal(expected: WorldHoldingChange.None, actual: WorldPlacementResponse.CompareHoldings(after: swapped, before: null));

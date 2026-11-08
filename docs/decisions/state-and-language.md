@@ -662,8 +662,8 @@ defect was found; the weaknesses are structural and economic.
   charges its growth deterministically; relationships do not reserve a
   Cartesian universe; removing or evicting a cell never materializes or shifts
   more than it must.
-- **One deterministic work allowance,** priced by what a world actually holds
-  and does, refusing atomically or resuming across ticks, beside memory and
+- **One deterministic work allowance,** priced by what a world declares and
+  does ([costing](#costing)), refusing atomically or resuming across ticks, beside memory and
   journal bounds. The uncertified reference-cycle model is deleted. Measured
   per-world reports establish headroom against 16.7 ms; they do not replace
   deterministic refusal, which untrusted mods require.
@@ -707,6 +707,55 @@ Reports identify contributors and measured storage; quiet-machine measurements
 show runtime headroom separately on the debug world. Reference-throughput
 constants and a calibrated reference-cycle admission model are removed. Host
 timing never changes simulation admission, ordering, or results.
+
+**A price reads declarations, never members.** Every price reads a row's room
+through one door, `RuleCompileContext.RowCapacity`, and the answer is a
+function of declarations alone: a slot is one cell, a lattice its topology's
+cells, a ring its length, and a keyed or ordered row its declared capacity, or,
+with none, the engine's `StateCapacity.MaxCellsPerRow`, bounded for a row keyed
+over a token domain by the domain row's own room. Storage stays lazy: an
+uncapped row reserves its seeds and the arena grows it on demand, charging the
+copy, but a growth never moves a price, so the work sheet is computed once per
+compilation and an arena growth is judged against what that sheet leaves.
+
+The options weighed:
+
+- *Price at the current reservation* (what a row holds or the arena has grown
+  it to). Rejected: whole-document validation re-prices on every install, and a
+  definition carries live members at every export and edit boundary, so a
+  hidden row's size would move the sheet, a search job's allowance and minimum
+  (text a recipient is told) and whether a public row's growth is admitted, and
+  a world's cost would depend on what it has run rather than on what its author
+  wrote.
+- *Require a capacity on every row a price reads.* Rejected by the "ergonomic
+  is optimal" ruling: an author whose row fits at the ceiling, or whose row is
+  keyed over a capped domain, would write a number that changes nothing.
+- *Fix a capacity from the authored seeds at compile time.* Rejected: the seeds
+  a validator sees are the live members, so the capacity would need its own
+  recorded copy, and it changes meaning by spelling (seeding one example cell
+  would cap a growing row at one, while an empty row grows to the ceiling).
+- *Price at the ceiling the row may grow to.* Chosen. Omitting a capacity means
+  "up to the engine ceiling", and costs that, so two spellings of one meaning
+  cost the same; a keyed-over row takes its domain's bound with nothing
+  written. At MMO scale a world's cost is a fixed property of its documents, so
+  a shard can be admitted, budgeted and placed before it runs.
+
+What it costs authors: a rule that iterates or folds an uncapped row, or a
+search that keys on one, is priced at the ceiling; the refusal names each row
+priced there for want of a capacity (`WorldRuleWorkBudget.RowsAtCeiling`) and
+says to author its capacity or key it over a capped domain. The rows that need
+one are the few a price actually walks: in the debug world, per-body rows a
+rule iterates, the card, stone and move tables, and record-like tables a search
+keys on. A record-like table of fixed fields states its field count by hand; a
+spelling that derives it from the fields is
+[open](../plans/open-items.md#language-and-authoring).
+
+Enforcement: `RowCapacity` is the only room a price reads, and no context can be
+pointed at a live layout. What it does not cover: growth work and memory
+admission (`ReservationWork` over the whole layout, the arena byte and
+retained-journal ceilings, and the validator's vector-byte and undo-byte checks)
+still read reservations, the remaining instance of the class
+([disclosure open items](../plans/disclosure.md#open-items)).
 
 ## Games
 

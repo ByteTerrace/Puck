@@ -3,7 +3,9 @@ using System.Text.Json.Serialization;
 
 namespace Puck.World;
 
-/// <summary>One optional seed edit for a bounded placement reflow. Omitted members preserve their authored value.</summary>
+/// <summary>One optional seed edit for a bounded placement reflow. Omitted members preserve their authored value. A
+/// position replaces the row's own <see cref="WorldPlacement.Position"/>, which for a dealt child is its displacement
+/// from its slot.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPlacementReflowEdit(
     string PlacementId,

@@ -161,9 +161,9 @@ scheduling a step:
   tree per recipient. [Decision 5](#5-a-delta-is-a-difference-of-views-owned-by-the-stream)
   records the carrier, dependency and sequence choices.
 - The deal's slots are authority history: a child takes the lowest free slot
-  (`WorldTick.FirstFreeSlot`), is stamped by `WorldPlacementDeal.Child` at that
-  slot's offset, and `preserve.transform` keeps its position across
-  reconciliation; by design a departing cell moves no sibling. Step 4 keeps that
+  (`WorldTick.FirstFreeSlot`), is stamped by `WorldPlacementDeal.Child` on that
+  slot, and stores only its displacement from it, which `preserve.transform`
+  keeps across reconciliation; by design a departing cell moves no sibling. Step 4 keeps that
   on the authority and re-deals in the view: `WorldStateDisclosure.DisclosedPlacements`
   is the one placement reading every recipient door shares (the replica
   document, the presentation projection, `world.placements`, fingerprints), and
@@ -204,10 +204,10 @@ that erase key faults) are not disclosure and stay in the
 | [high] A placement under a dealt child id answers "not disclosed" when the child exists and "not a declared placement" when it does not | Closed: the parent-chain walk admits the template every id spells, present or absent | 3, landed |
 | [high] An unrelated edit recompiles every rule and `RequireEnclosedAudience` refuses by a hidden cell's current policy | Closed: compile-time audience enclosure reads declared row policies; cells are the arena's at the firing | 3, landed |
 | [high] A seat's rule or interaction with a literal read of a hidden key compiles or refuses `StateCellUndeclared` by the hidden row's membership | Closed: a recipient's mutation of a program section is refused by kind (`WorldSectionFacts.IsProgram`) | 3, landed |
-| [high] A seat's rule edit that eats work allowance makes search re-pricing print a minimum counting a hidden score row's cells (`WorldSearchCompilation.TryPrice`) | Closed for rule edits by the same refusal; pricing still reads members (open items) | 3, landed |
+| [high] A seat's rule edit that eats work allowance makes search re-pricing print a minimum counting a hidden score row's cells (`WorldSearchCompilation.TryPrice`) | Closed: rule edits by the same refusal, and pricing reads declarations only (`RuleCompileContext.RowCapacity`; `RecipientOracleLawTests`); growth and memory admission still read reservations (open items) | 3, landed |
 | [high] Replacing a dealt template without its deal keeps its children, so the distributed-parent refusal answers whether the hidden deal has any | Closed: an upsert or removal admits the installed placement's footprint too (`WorldRecipientView.AdmitsPlacement`) | 3, landed |
 | [high] Removing an absent key from a public row answers one text when no row ever minted the name and another when a hidden row did (the arena's key table is shared) | Closed: the compose door answers `StateArena.MissingCellReason`, the arena's own text, when the name does not resolve | 3, landed |
-| [high] Dealt children keep hidden-dependent slots and positions (Argon's `deal` finding) | Closed: a template over a row that can withhold is re-dealt in the recipient's row order, each child keeping only its displacement (`WorldStateDisclosure.DisclosedPlacements`) | 4, landed |
+| [high] Dealt children keep hidden-dependent slots and positions (Argon's `deal` finding) | Closed: a template over a row that can withhold is re-dealt in the recipient's row order, each child at the deal's own offset for its re-dealt slot (`WorldStateDisclosure.DisclosedPlacements`) | 4, landed |
 | [high] A deal install's delivery waited for the next unrelated delivery, a hidden-only edit included: the sweep ran after the tick's last `DeliverPending` (the card game's tick-40 presentation and replica deliveries) | Closed: the tick delivers right after the response and deal sweeps (`WorldTick` step) | 4, landed |
 | [high] A replica or federation peer was handed its document on a value-only tick only when the authority installed placements, so a dealt cell turning readable by a zone move reached it at the next install, hidden or not | Closed: a value-only delivery owes the document when the recipient's frame moved (`WorldDeliveryCursor.FrameMoved`); the authority's install flag is gone from the stamp | 4, landed |
 | [high] `replay.inspect`, `replay.stop` and `replay.verify` answer any principal with the authoritative tail hash, unprojected authority entries and every body pose | Closed: every `replay.*` verb is `CommandAudience.Operator` | console audit, landed |
@@ -479,6 +479,8 @@ keeps that invariant in one of two ways, and every check is one or the other:
   judges row policies alone; the arena judges cell and containing-zone
   policies at the firing (`StateArena.ReadAudienceEncloses`, through
   `TryEncloseAudience` for transforms and `ArenaSearch` before landing). The
+  work sheet and every search price read a row's declared room
+  (`RuleCompileContext.RowCapacity`), never its cells or reservation. The
   property that makes this sufficient is that the installed document
   validates: every write that changes members is checked at its own door (the
   relation check at commit, binding revalidation when a bound row is written),
@@ -541,9 +543,13 @@ jobs have no mutation kind: they change only through a whole-document rebuild,
 an operator verb. A section whose content touches state through rows it names
 (machine bindings, a kit's redraws) stays open to recipients and admits those
 rows as its footprint. The rule refusal closes the re-pricing instance found
-through a rule edit; the pricing itself still reads current members (a score
-row's cell count, an uncapped row's size), which a recipient door that moves
-the work sheet another way would expose ([open items](#open-items)).
+through a rule edit, and pricing itself reads declarations only: every price
+reads a row's room through `RuleCompileContext.RowCapacity`, which answers an
+uncapped row's ceiling (its token domain's, or the engine's), never its cells,
+so no door that moves a hidden row's members moves the work sheet or a search's
+allowance ([the costing decision](../decisions/state-and-language.md#costing)).
+An arena growth's work and memory admission still read reservations
+([open items](#open-items)).
 
 **The options weighed.** (a) Admission computes the full read closure of every
 later stage: this is the footprint above, and it holds only because the closure
@@ -606,37 +612,64 @@ on rows the engine can reason about.
 
 ### 4. The physical layout follows the hidden policy
 
-A dealt child stands at `offsets[slot]`, and the authority's slot is history
-(the lowest slot free when the cell arrived). A reader shown a visible card at
-slot 1 learns a hidden card holds slot 0; a child built after a hidden one
-keeps that offset as its position for as long as `preserve.transform` holds it
-(`WorldTick.Deals.cs:544-552,561`).
+A dealt child stands on its slot, and the authority's slot is history (the
+lowest slot free when the cell arrived). A reader shown a visible card at slot 1
+learns a hidden card holds slot 0, and a card lifted out of its slot stands
+wherever that slot puts it.
 
 **Puck builds:**
 
-- **Re-dealing in the view, transforms included.** For a template whose row
-  the view does not read whole, the kept cells are dealt in the disclosed row's
-  cell order into slots `0..n-1`. A child's base transform is the deal's,
-  `offsets[i]`; its displacement is what the authority's child carries beyond
-  its own base, `Position - offsets[authoritySlot]` (and the yaw and scale
-  `preserve.transform` kept), so the recipient sees `offsets[i] + displacement`.
-  Nothing of the authority's slot survives into the recipient's transform. Zero,
-  one and many hidden cells give one layout. The view's placements are the ones
-  `world.placements`, the wire projection, `world.reflow.preview` and every
-  spatial fingerprint read for that recipient.
-- **A restricted template's children act on nothing.** A template whose dealt
-  or variant row can withhold from any principal (a non-public row policy, a
-  cell policy its storage admits, or a containing ordered zone's) deals
-  children that carry no `Solid`, `Grip`, `Spatial`, `Region` or `Emission`
-  facet, whatever its `hidden` policy; the validator refuses such a facet on
-  such a template, and on each of its children, by name
-  (`WorldDefinitionValidator.RefuseWithheldPhysicalFacets`, in whole-document
-  validation and in the sweep's `TryValidateDealtChildren`). A hidden child then has no collider, no clearance,
-  no region and no light, so no body, reflow, probe or spatial guard can meet
-  it, and a visible child's physical absence tells nothing because no child of
-  the template is physical. The table, the felt and the public piles stay
-  solid as ordinary placements; the cards are posed, which is how the card
-  tables already work ([card tables](open-items.md#card-tables-in-the-board-game-room)).
+- **A child stores its displacement; one resolver composes its slot.** A dealt
+  child's `position` is its displacement from its slot (zero as the deal stamps
+  it, a lift or a turn once a mover writes one), and its local frame is the
+  slot's offset, computed in fixed point from the authored distribution and the
+  world seed, plus that displacement
+  (`WorldPlacementFrameCompilation.LocalFrame`). The frame table, the spatial
+  index and canonical surface frames all resolve a parent chain through that one
+  composition, so the slot's offset never passes through a float and no reader
+  recovers a displacement by subtracting one. A mover writes displacement:
+  reflow's candidates go through the inverse (`StoredPosition`), and a position
+  upsert writes the row's `position` member, which is the displacement.
+- **Re-dealing in the view, transforms included.** For a template whose dealt
+  row the view does not read whole, the kept cells are dealt in the disclosed
+  row's cell order into slots `0..n-1`, and each kept child changes only its
+  slot (`WorldStateDisclosure.DisclosedPlacements`): it keeps its displacement,
+  yaw and scale, which are its own, and its frame is the re-dealt slot's exact
+  offset plus that displacement. Nothing of the authority's slot reaches it, not
+  even the rounding a float would give that slot's offset (a step of
+  `128 + 2^-16` metres rounds at slot 3 and not at slot 0). Zero, one and many
+  hidden cells give one layout, and a lifted card is shown lifted from the slot
+  the reader is dealt. A placement authored under a child the view is not shown
+  is absent with it. The view's placements are the ones `world.placements`, the
+  wire projection, `world.reflow.preview` and every spatial fingerprint read for
+  that recipient.
+- **A hidden face is masked whichever row hides it.** A template whose variant
+  row the view does not read whole is in the reading even when its dealt row is
+  read whole: its children keep their slots (a row the view reads whole shaped
+  them) and each child whose variant cell the view may not read shows the
+  template's own prototype. Both the dealt and the variant row are recorded as
+  rows the placements read, by declaration.
+- **A restricted template's subtree carries only what the re-deal discloses.**
+  A template whose dealt or variant row can withhold from any principal (a
+  non-public row policy, a cell policy its storage admits, or a containing
+  ordered zone's), its dealt children and every placement authored under them
+  carry only the members the re-deal already discloses: the identity, parent
+  and slot, the prototype the disclosed face selects, the transform the deal
+  stamps, and presentation composed over it (`distribution`, `mirror`,
+  `surface`). Every other member, `solid`, `grip`, `spatial`, `region`,
+  `emission`, `inhabit`, `attach`, `faceSources`, `respond`, `board`,
+  `contribution` and any member the placement model gains later, is refused by
+  name (`WorldPlacementDeal.UndisclosingMembers`, an allowlist read from the
+  generated model shape, applied by `WorldDefinitionValidator` in whole-document
+  validation over each placement's parent chain and in the sweep's
+  `TryValidateDealtChildren`). Its children's transforms are their
+  displacements, so `preserve.transform` is admitted on it. A hidden child then
+  has no collider, no clearance, no
+  region, no body and no light, so no body, reflow, probe or spatial guard can
+  meet it, and a visible child's physical absence tells nothing because no
+  placement in the subtree is physical. The table, the felt and the public
+  piles stay solid as ordinary placements; the cards are posed, which is how
+  the card tables already work ([card tables](open-items.md#card-tables-in-the-board-game-room)).
 - **`Placeholder` is a look, not a thing.** Under `hidden: Placeholder` the
   view deals an anonymous child for each hidden cell at its place in the
   re-deal (the row's order, which the policy discloses, never the authority's
@@ -656,13 +689,27 @@ keeps that offset as its position for as long as `preserve.transform` holds it
 **Why:** renumbering on the authority is rejected for the reason
 `WorldPlacementDeal` records: it would shuffle every later instance when a cell
 leaves. Renumbering in the view costs nothing on the authority and is a pure
-function of the disclosed row, once the transform is split into the deal's base
-and the instance's displacement; keeping the authority's position as
-"instance-owned" would keep the leak. Physical facets on hidden children are
-an oracle no view can close (a collider the authority solves against exists for
-every body in the room), so the template may not author them; that is a
-validator refusal rather than a per-recipient collider, because the authority
-has one collider set. An interactive back would need recipient-scoped ids with
+function of the disclosed row because a child stores only what is its own: a
+position that held `offsets[slot]` plus a displacement in one float would keep
+the leak, and so would reconstructing the displacement by subtracting the
+slot's offset from it, since the float's rounding depends on the slot. Storing
+the displacement and composing the slot's fixed-point offset in the one frame
+resolver costs one offset lookup per dealt child per frame compilation (the
+region's offsets are derived once per distribution and seed,
+`WorldPlacementDeal.Offsets`), and it is the same composition every other
+parent-chain reader uses, so the view, the spatial index and the renderer
+cannot disagree about where a card stands. A new fixed-point member for the
+displacement was rejected: it would be a second representation of a
+placement's local position beside `position`, which every authored local
+transform already quantizes once at the frame boundary. A member that acts or shows at the
+authority's slot is an oracle no view can close (a collider the authority
+solves against exists for every body in the room), so nothing under the
+template may author one; that is a validator refusal rather than a
+per-recipient collider, because the authority has one collider set. The
+refusal is an allowlist rather than a list of physical facets because every
+earlier gap was a member the list did not name (an inhabit on a preserved
+child, a solid on a placement authored under a child): a member the placement
+model gains is refused until someone decides it discloses nothing. An interactive back would need recipient-scoped ids with
 generations and a reverse translation into authority targets; a back the
 policy only shows is a look, and a visible card's own id already works, so the
 plan drops the physical form rather than building that translation.
@@ -941,7 +988,8 @@ games and its fuzzer, not when a review runs out of findings.
 | Blind writes (a pure `Set` admitted and answered `accepted`, resolved privately) | Reject | The write's public effects depend on the secret: eviction of position zero or a capacity refusal in a full row, a mixed batch's rollback, the typed completion's decision, the addon's bound write resolving the key first | Nothing; the authored inbox gives the same capability on rows the engine can reason about |
 | Admit `Add`/`Remove` blind and report the true outcome | Reject | The outcome is the oracle (`(evicted 'k')`, "has no cell keyed") | Nothing |
 | Renumber slots on the authority | Reject | Shuffles every later instance when a cell leaves (`WorldPlacementDeal.cs:22-28`) | Nothing |
-| Keep a child's authority position as instance-owned under `preserve.transform` | Reject | The position is `offsets[authoritySlot]` plus a displacement; keeping it keeps the slot | Nothing |
+| Store a child's position as `offsets[slot]` plus a displacement in one float | Reject | Keeping it, or subtracting the slot's offset from it, keeps the slot through the float's rounding | Nothing |
+| Store a child's displacement from its slot and compose the slot's fixed-point offset in the one frame resolver | Adopt | A re-deal changes the slot alone, so a preserved transform or a lifted card discloses nothing of the authority's slot (`WorldPlacementFrameCompilation.LocalFrame`) | Nothing |
 | Interactive, solid card backs with recipient-scoped ids | Reject for now | Needs opaque ids with generations and a reverse translation into authority targets; the policy only shows a back, and a visible card's own id already works | An authored game that needs an opponent to touch a face-down card |
 | Per-recipient colliders for hidden children | Reject | The authority has one collider set; a hidden collider is met by every body in the room | Nothing |
 | A per-recipient arena copy | Reject | Stale against a moving table; the live store is the reason `Compose` reads the arena (`WorldStateDisclosure.cs:58-60`); cost per recipient per tick | Nothing |
@@ -1174,7 +1222,7 @@ read adapter and disclosure implementation stay until step 6 replaces their call
 | 1. The view and the cursor, deltas first — landed | `WorldRecipientView`, `WorldDeliveryCursor`, `WorldDisclosureImages` and the carrier's key bitsets; both sinks use `Advance` and seed on definition/Resume; recipient sequences on deliveries, outcomes and provenance; traveller validity by delivered projection identity; the old change-disclosure cache and its forget path removed. `host.frames`, `host.memory`, `world.counters`, `world.gpu-timing` and `world.collision.probe` are Operator; the operator's budget reports image work/storage. [Decision 5](#5-a-delta-is-a-difference-of-views-owned-by-the-stream) records the choices | `DisclosureHarnessLawTests` compares hidden-only installs with intervening reads; `StateChangeDisclosureLawTests` covers independent cursors, in-place vectors, count primers, seat receipts and shared spectator composition; `WorldProjectionBackpressureLawTests` compares both peer tiers' wire bytes using the harness nonce normalization. Session Resume, authenticated traveller lifetime and observation/anchor restore laws cover boundaries step 0b has not yet added to every fixture. The five fixtures still expose the read/write/layout causes below; equality is required while the actual disclosed image remains equal |
 | 2. Reads through the view — landed | Every non-operator read door reads the view at its ceiling: `world.budget`, `world.placements`, `world.reflow.preview` (over the view's placements), `world.topologies`, `world.timeline`, `world.projection` composed for the caller, `world.identify`, `world.hud.template`, `world.state.similar`, `AnswerStateObservations`, `WorldFederationCodec.Observation`, the prototype fetch, `WorldTravelerProjection`; sessions read through the view's ceiling in place of `ReadSessionDefinition`; search audience widening refused at compile time and live execution; the skirmish's fair search uses blue's memory throughout | Harness: every read door the fuzzer reaches compares equal except the layout doors step 4 owns; `ConsoleDisclosureLawTests` green; `puck references` shows no `server.Definition` in `Puck.World` or `Puck.World.Console` outside operator verbs and boot |
 | 3. The write door refuses by policy — landed | `Admits` and `Refusal` on the view; every mutation touching a restricted row refused by policy for every recipient, seats included, batches and guards (`ExpectedCells`, `ExpectedSpatialReads` through `Fingerprint`) included; the typed completion's code and text; the addon's `NotDisclosed` verdict on bind and write; the forwarded submission door; the `sealedInbox` template in `worlds/standard/` the auction imports; the seven old predicates deleted | Every write door compares equal across all 46 fixture variant pairs, including full typed outcomes; actual guest bind/write and forwarded-traveller laws pass; the auction plays through reveal and reproduces; `TransformDisclosureLawTests` uses the one refusal text. Remaining read/layout delivery differences are recorded below |
-| 4. The layout — landed | `WorldStateDisclosure.DisclosedPlacements`, the one placement reading for every recipient door, re-deals a template whose dealt row can withhold: readable cells in the row's order take slots `0..n-1`, each child at its slot's offset plus its displacement from the authority's slot (in fixed point), re-dealt children following their template in slot order; `$back$<slot>` children under `Placeholder`, picked as the template and refused by name on submission; the validator's refusal of `Solid`, `Grip`, `Spatial`, `Region` and `Emission` on a restricted template and its children; the sweep's child stamp shared as `WorldPlacementDeal.Child`; the tick delivers right after its response and deal sweeps, so an install is delivered on its own tick; a value-only delivery owes a replica or federation peer its document when the recipient's frame moved (`WorldDeliveryCursor.FrameMoved`), replacing the authority's placement-install flag | Harness: the probe and the card game compare equal at every door across every pair; `puck compile --validate` refuses the card game's rack with `solid` by name; `WorldDeckAndDisclosureLawTests` holds the re-dealt layout under all three policies, the displaced card and the facet refusal |
+| 4. The layout — landed | `WorldStateDisclosure.DisclosedPlacements`, the one placement reading for every recipient door, re-deals a template whose dealt row can withhold: readable cells in the row's order take slots `0..n-1`, each child moved to its re-dealt slot with its own displacement (a child stores its displacement from its slot, and every frame is the slot's fixed-point offset plus it, `WorldPlacementFrameCompilation.LocalFrame`), re-dealt children following their template in slot order, and a placement authored under an unshown child absent with it; a template whose variant row alone withholds keeps its slots and masks each unreadable face, both rows recorded as placement reads; `$back$<slot>` children under `Placeholder`, picked as the template and refused by name on submission; the validator's allowlist (`WorldPlacementDeal.UndisclosingMembers`) over a restricted template, its children and every placement under them, which admits `preserve.transform` since a transform is a displacement; the sweep's child stamp shared as `WorldPlacementDeal.Child`; the tick delivers right after its response and deal sweeps, so an install is delivered on its own tick; a value-only delivery owes a replica or federation peer its document when the recipient's frame moved (`WorldDeliveryCursor.FrameMoved`), replacing the authority's placement-install flag | Harness: the probe and the card game compare equal at every door across every pair; `puck compile --validate` refuses the card game's rack with `solid` by name; `WorldDeckAndDisclosureLawTests` holds the re-dealt layout under all three policies, the facet refusals, the hidden variant under a public deal, the slot-independent rounding of a re-dealt position and a lifted card in a hidden hand shown at bit-identical frames whatever hides ahead of it; the card game's variants all lift its shown card; `PlacementDealLawTests` refuses a solid placement authored under a restricted child |
 | 5. The compiler | The authority `internal`; `WorldOperatorAuthority` and the two doors; an operator factory on `CommandDefinition` and `OperatorContext`; `TryResolveServer` deleted; every module's constructor rewired (the 47 files); DISC001 with `Puck.Analyzers.Tests` fixtures for a module taking a `WorldServer`, one taking the view, and an operator handler; the public-surface law | The analyzer test is red on a planted `WorldServer` constructor parameter and green on the view; the surface law green; `dotnet build Puck.slnx` zero warnings; the harness still green |
 | 6. Nothing else decides | `WorldStateDisclosure` the class and `WorldStateReadView` deleted; `view.Withheld` where `ReadsWhole` serves and the timeline's lambda gone; the documents updated: [console](../../.claude/skills/puck-world/references/console.md) "Disclosure chokepoint", [traits](../reference/state/traits.md#control-what-observers-learn), [documents-state](../../.claude/skills/puck-world/references/documents-state.md), the Schema and Server READMEs, [worlds](../reference/state/worlds.md) | `puck references WorldStateDisclosure` answers nothing; the harness green over the five fixtures and the fuzzer: done |
 | 7. Red team | The extension that seats AI agents as players over the harness (an `IPuckExtension`, [hosting](../../.claude/skills/puck-world/references/hosting-and-release.md)), each agent driving one principal in both worlds of a pair with inputs it invents, `world.state.similar` among its doors; a difference it finds becomes an authored script in the fixture | A red-team run over the five fixtures adds no new script, or every script it adds is green after its fix |
@@ -1209,16 +1257,24 @@ commit, as machine readings are not a repository baseline.
   any device; `pipeline.commit` changes the shared view. All take
   `CommandAudience.Anyone`. Decide them as `player.claim`, `player.cycle` and
   `pipeline.load` were decided.
-- Work pricing reads members. `RuleCompileContext.RowCapacity` prices a row
-  without an explicit `capacity` by `StateRow.InitialCellCapacity`, which is its
-  current cell count, and `WorldSearchCompilation.TryPrice` counts the score row's current
-  cells as `seats`. Whole-document validation re-prices rules and searches on
-  every install, so a recipient edit that moves the work sheet (an
-  `UpsertStateRow` raising a public row's capacity that a rule folds over is
-  the candidate; unconfirmed) would make the rules' ceiling check or a
-  search's minimum depend on a hidden row's size. Decide whether pricing reads
-  declarations only (an uncapped row priced at its ceiling, or every priced row
-  required to declare a capacity), then add the two-variant law.
+- Growth and memory admission read reservations. Work prices read declarations
+  only ([the costing decision](../decisions/state-and-language.md#costing)), but
+  an arena growth is still charged `StateArena.ReservationWork` over the whole
+  proposed layout (every row's reserved room, hidden rows included) plus the
+  growth already spent this tick (`WorldRuleHost.Growth`), and judged against
+  the arena byte and retained-journal ceilings, so a recipient's mint into a
+  public uncapped row can be refused or admitted by a hidden row's reservation.
+  The validator's vector-byte and undo-byte checks
+  (`WorldDefinitionValidator.State`, `RuleGroup`) read seed reservations, which
+  are live members at an install. Candidates: admit memory against declared
+  ceilings once at load, and make a growth's copy proportional to the row that
+  grows.
+- Search plan validation reads members. `WorldSearchCompilation` requires a
+  relocate's or promote's `codes` row to hold as many cells as the tokens row,
+  and resolves a tandem's companion by its position among the tokens' current
+  cells, both on every install. A rule that removes a token, or reorders the
+  row, changes what an unrelated recipient edit's validation answers. Declare
+  the relation (codes keyed over the tokens, a companion named by key) instead.
 - Whether blind writes return: rejected here (decision 3). The auction fixture
   (`worlds/debug/auction.puck`, `worlds/standard/sealed.puck`'s `sealedInbox`)
   needs nothing more: each bid lands in the bidder's own inbox, a rule moves
@@ -1261,6 +1317,16 @@ commit, as machine readings are not a repository baseline.
   of moles, a whisper between two other seats, a line in the den and two
   other seats' votes: its hidden changes are rule writes into per-cell and
   per-seat rows that move nothing a crew seat or a session is delivered.
+- The world seed is two things at once. A presentation recipient rebuilds its
+  document without it (`WorldProjection.TryToDefinition` builds no
+  `Generation`), so every noise or scatter placement, and now a noise or
+  scatter deal template's children, lays out at seed 0 there; the replica tier
+  carries it, and it is a rung of every draw's seed ladder
+  (`GeneratorEngine.ComputeSeedState`) beside a fixed boot instance name, so a
+  replica peer may predict hidden draws (unverified). No shipped deal uses a
+  seeded region (every deal in `worlds/debug` is a lattice). Decided: separate
+  a layout seed, disclosed to every tier, from the draw seed, which stays the
+  authority's; check first whether a replica can predict a draw today.
 - Whether `world.identify` hashes the recipient's view or becomes operator-only
   (decided here: the view; the owner may prefer one QR per world).
 - Body disclosure (`WorldOutputHub.Redact`) joins the recipient view: the MMO

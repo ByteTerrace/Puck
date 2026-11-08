@@ -1,5 +1,8 @@
+using System.Collections.Immutable;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text.Json.Serialization;
+using Puck.Abstractions;
 using Puck.World.Authoring;
 using Puck.Maths;
 
@@ -14,7 +17,10 @@ namespace Puck.World;
 /// <see cref="WorldPlacement.Emission"/> facets are what every child is stamped with. The region's offsets are metres
 /// in the template's frame, never scaled by it. A child is an ordinary
 /// placement row named <c>&lt;template&gt;/&lt;cellKey&gt;</c> (<see cref="ChildId"/>) with
-/// <see cref="WorldPlacement.Parent"/> naming the template and the region's dealt offset as its local position,
+/// <see cref="WorldPlacement.Parent"/> naming the template and <see cref="WorldPlacement.DealSlot"/> its slot. Its
+/// <see cref="WorldPlacement.Position"/> is its displacement from that slot, so its local frame is the slot's
+/// fixed-point offset (<see cref="SlotOffset"/>) plus that displacement, composed by
+/// <see cref="WorldPlacementFrameCompilation"/>, and moving a child to another slot moves it with its displacement. It is
 /// written and removed through ordinary <c>UpsertPlacement</c>/<c>RemovePlacement</c> mutations under
 /// <c>Principal.World</c> by the per-tick sweep (<c>Server.WorldTick.SweepPlacementDeals</c>), so a dealt
 /// instance journals, undoes, replays, and rebuilds colliders through the one placement door. Every template a tick
@@ -32,12 +38,14 @@ namespace Puck.World;
 /// removes the children a sweep added stays undone until the row moves again.</para>
 /// <para>A child is a reading of the cells it was dealt from, so a reader is shown it as the deal would deal it from
 /// the rows that reader may read (<see cref="WorldStateDisclosure.Disclose"/>, the wire projection and a seat's console
-/// alike): a template whose row can withhold from the reader is re-dealt in the reader's row order, so the slots, positions and
-/// order it is shown carry nothing of the authority's slot history; a withheld cell is absent, or an anonymous back
-/// under <see cref="HiddenCells.Placeholder"/>; a withheld variant cell shows the template's own prototype. Because
-/// a child's physical presence would tell every body in the room what the reader is not shown, a template whose
-/// dealt or variant row can withhold from any principal, and its children, carry none of
-/// <see cref="PhysicalFacets"/>.</para>
+/// alike): a template whose row can withhold from the reader is re-dealt in the reader's row order, each child moved
+/// to its re-dealt slot with its own displacement, so the slots, positions and order it is shown carry nothing of the
+/// authority's slot history; a withheld cell is absent, or an anonymous back under
+/// <see cref="HiddenCells.Placeholder"/>, and a placement authored under a child the reader is not shown is absent
+/// too; a withheld variant cell shows the template's own prototype, whether or not the dealt row withholds. Because
+/// whatever a placement under such a template carries beyond that reading acts or shows at the authority's slot, a
+/// template whose dealt or variant row can withhold from any principal, its children and every placement authored
+/// under them carry nothing outside <see cref="UndisclosingMembers"/>' disclosing set.</para>
 /// <para>Refused alongside <see cref="WorldPlacement.Inhabit"/>, <see cref="WorldPlacement.Attach"/>,
 /// <see cref="WorldPlacement.Respond"/>, <see cref="WorldPlacement.Mirror"/>, and
 /// <see cref="WorldPlacement.FaceSources"/>; requires a <see cref="WorldPlacement.Distribution"/> whose region
@@ -103,18 +111,18 @@ public sealed record WorldPlacementDeal(
     /// which is a look and no target, and <paramref name="id"/> itself for every other row.</summary>
     /// <param name="id">The picked row's id.</param>
     public static string? PickedId(string? id) => (IsPlaceholderId(id: id, template: out var template) ? template : id);
-    /// <summary>Returns a fresh child as the deal stamps it at <paramref name="offset"/>: the template's prototype or a
-    /// variant, its scale and its copied facets, parented to the template at <paramref name="slot"/>. The sweep deals
-    /// every new child through it and a recipient's view every placeholder, so the two stamp one shape.</summary>
+    /// <summary>Returns a fresh child as the deal stamps it at <paramref name="slot"/>: the template's prototype or a
+    /// variant, its scale and its copied facets, parented to the template, standing exactly on its slot (no
+    /// displacement, no yaw). The sweep deals every new child through it and a recipient's view every placeholder, so
+    /// the two stamp one shape.</summary>
     /// <param name="template">The template placement.</param>
     /// <param name="id">The child's id.</param>
     /// <param name="prototype">The prototype the child shows.</param>
-    /// <param name="offset">The slot's offset, in the template's frame.</param>
     /// <param name="slot">The slot.</param>
-    public static WorldPlacement Child(WorldPlacement template, string id, string prototype, System.Numerics.Vector3 offset, int slot) => new(
+    public static WorldPlacement Child(WorldPlacement template, string id, string prototype, int slot) => new(
         Id: id,
         PrototypeId: prototype,
-        Position: offset,
+        Position: System.Numerics.Vector3.Zero,
         YawDegrees: 0f,
         Scale: template.Scale,
         Emission: template.Emission,
@@ -126,18 +134,81 @@ public sealed record WorldPlacementDeal(
         Spatial: template.Spatial,
         Surface: template.Surface
     );
-    /// <summary>Returns <paramref name="placement"/>'s physical facets by name (<c>solid</c>, <c>grip</c>,
-    /// <c>spatial</c>, <c>region</c>, <c>emission</c>), the ones a child of a template over a row that can withhold
-    /// may not carry: a collider, a hold, a census volume, a region or a voice exists for every body in the room, so a
-    /// hidden child carrying one is an oracle no view can close.</summary>
-    /// <param name="placement">The template or child.</param>
-    public static IEnumerable<string> PhysicalFacets(WorldPlacement placement) {
-        if (placement.Solid is not null) { yield return "solid"; }
-        if (placement.Grip is not null) { yield return "grip"; }
-        if (placement.Spatial is { Count: > 0 }) { yield return "spatial"; }
-        if (placement.Region is not null) { yield return "region"; }
-        if (placement.Emission is not null) { yield return "emission"; }
+    /// <summary>Returns <paramref name="child"/> as this deal holds it at <paramref name="slot"/>: the stamp
+    /// (<see cref="Child"/>) with <paramref name="prototype"/>, except for what <see cref="Preserve"/> names, which
+    /// keeps the child's own (its displacement, yaw and scale; its prototype; its other facets). The sweep reconciles
+    /// every kept child through it, and a recipient's reading of a template that can withhold shows each child through
+    /// it, so a member the template owns is shown as the sweep will hold it, never a value a mover wrote that the next
+    /// re-deal (whose timing hidden cells can decide) resets.</summary>
+    /// <param name="template">The template placement carrying this deal.</param>
+    /// <param name="child">The child as it stands.</param>
+    /// <param name="prototype">The prototype the deal resolves for the child's cell.</param>
+    /// <param name="slot">The slot the child holds.</param>
+    /// <returns>The reconciled child.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="template"/> or <paramref name="child"/> is
+    /// <see langword="null"/>.</exception>
+    public WorldPlacement Reconcile(WorldPlacement template, WorldPlacement child, string prototype, int slot) {
+        ArgumentNullException.ThrowIfNull(argument: template);
+        ArgumentNullException.ThrowIfNull(argument: child);
+
+        var seed = Child(template: template, id: child.Id, prototype: prototype, slot: slot);
+        var transform = (Preserve?.Transform == true);
+
+        return ((Preserve?.Facets == true) ? child : seed) with {
+            Parent = template.Id,
+            DealSlot = slot,
+            Deal = null,
+            Position = (transform ? child.Position : seed.Position),
+            YawDegrees = (transform ? child.YawDegrees : seed.YawDegrees),
+            Scale = (transform ? child.Scale : seed.Scale),
+            PrototypeId = ((Preserve?.Prototype == true) ? child.PrototypeId : prototype),
+        };
     }
+    // The placement members a template that can withhold, its dealt children and every placement authored under them
+    // may carry, by JSON name: what the re-deal already discloses (the identity and parent, the prototype the disclosed
+    // face selects, the child's own displacement, yaw and scale, which the re-deal carries to the re-dealt slot) and
+    // presentation that composes over that transform. Every other member, a member added to WorldPlacement later included, is refused.
+    private static readonly HashSet<string> Disclosing = new(collection: ["id", "prototypeId", "position", "yawDegrees", "scale", "parent", "dealSlot", "distribution", "mirror", "surface"], comparer: StringComparer.Ordinal);
+
+    /// <summary>Returns, by JSON name, every member <paramref name="placement"/> carries beyond what a re-deal discloses,
+    /// the members a placement under a template whose dealt or variant row can withhold may not carry. Only the
+    /// identity, parent and slot, the prototype, the transform, a distribution, a mirror and a surface projection
+    /// compose over the transform a recipient's re-deal shows; anything else (a collider, a hold, a census volume, a
+    /// region, a voice, a body, an attachment, a face source, a response, a board, a contribution, and any member the
+    /// placement model gains later) acts or shows at the authority's own slot, which hidden arrivals shape, so it is an
+    /// oracle no view can close. The members are read from the generated model shape
+    /// (<see cref="WorldModelShape"/>), so a new member is refused until it is added to the disclosing set.</summary>
+    /// <param name="placement">The template, a dealt child, or a placement authored under one.</param>
+    /// <param name="template">Whether <paramref name="placement"/> is the template itself, the one row that carries
+    /// the <c>deal</c> member.</param>
+    /// <returns>The undisclosing members' JSON names, in model order; empty when <paramref name="placement"/> carries
+    /// none.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="placement"/> is <see langword="null"/>.</exception>
+    public static IEnumerable<string> UndisclosingMembers(WorldPlacement placement, bool template) {
+        ArgumentNullException.ThrowIfNull(argument: placement);
+
+        foreach (var member in WorldModelShape.Of(type: typeof(WorldPlacement))!.Members) {
+            if ((member.Get is not { } read) || ((member.Access & WorldModelAccess.Write) == 0) || Disclosing.Contains(item: member.Name) ||
+                (template && string.Equals(a: member.Name, b: "deal", comparisonType: StringComparison.Ordinal))) {
+                continue;
+            }
+            if (Carries(value: read(arg: placement))) { yield return member.Name; }
+        }
+    }
+    // Whether a member's value is set: absent, a zero or false scalar and an empty collection carry nothing; any other
+    // value, a struct this does not know included, carries something.
+    private static bool Carries(object? value) => value switch {
+        null => false,
+        bool flag => flag,
+        int number => (number != 0),
+        long number => (number != 0L),
+        float number => (number != 0f),
+        double number => (number != 0d),
+        string text => (text.Length != 0),
+        Enum flag => (Convert.ToInt64(value: flag, provider: CultureInfo.InvariantCulture) != 0L),
+        System.Collections.IEnumerable items => items.GetEnumerator().MoveNext(),
+        _ => true,
+    };
     /// <summary>Returns whether <paramref name="id"/> spells <see cref="ChildSeparator"/> at all — the shape only a deal sweep
     /// may mint.</summary>
     /// <param name="id">The placement id.</param>
@@ -186,13 +257,43 @@ public sealed record WorldPlacementDeal(
 
         return true;
     }
+    // A distribution's offsets under one seed, derived once per distribution row (a noise region resolves its whole
+    // grid) and shared by every frame, sweep, re-deal and reflow that reads a slot.
+    private sealed record OffsetEntry(ulong WorldSeed, ImmutableArray<FixedVector3> Offsets);
+    private static readonly CodeDerivedTable<WorldDistribution, OffsetEntry> OffsetCache = new();
+
     /// <summary>Returns the placement-local offsets a template's region deals, in deal order — the identical set and order a
     /// static distribution of the same row materializes (<see cref="WorldPlacementStamp.SampledFixedOffsetsFor"/> for
     /// Noise/Scatter; a Lattice's A-major, B-minor grid, matching <c>CreationStampLattice.ForEachFixedInstance</c>).
-    /// Empty when the template carries no distribution or a region that materializes no fixed count.</summary>
+    /// Empty when the template carries no distribution or a region that materializes no fixed count. Derived once per
+    /// distribution row and seed.</summary>
     /// <param name="template">The template placement row.</param>
     /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
-    public static FixedVector3[] Offsets(WorldPlacement template, ulong worldSeed) {
+    public static ImmutableArray<FixedVector3> Offsets(WorldPlacement template, ulong worldSeed) {
+        if (template.Distribution is not { } distribution) {
+            return [];
+        }
+        if (OffsetCache.TryGetValue(key: distribution, value: out var held) && (held.WorldSeed == worldSeed)) {
+            return held.Offsets;
+        }
+
+        var derived = new OffsetEntry(WorldSeed: worldSeed, Offsets: DeriveOffsets(template: template, worldSeed: worldSeed));
+
+        OffsetCache.AddOrUpdate(key: distribution, value: derived);
+        return derived.Offsets;
+    }
+    /// <summary>Returns the offset of <paramref name="slot"/> in <paramref name="template"/>'s region, in the template's
+    /// frame and in fixed point: where a child dealt at that slot stands before its own displacement. A slot the region
+    /// does not hold (a document validation has not yet refused) answers the template's origin.</summary>
+    /// <param name="template">The template placement row.</param>
+    /// <param name="slot">The child's deal slot.</param>
+    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
+    public static FixedVector3 SlotOffset(WorldPlacement template, int? slot, ulong worldSeed) {
+        var offsets = Offsets(template: template, worldSeed: worldSeed);
+
+        return ((slot is { } index) && (((uint)index) < ((uint)offsets.Length))) ? offsets[index] : FixedVector3.Zero;
+    }
+    private static ImmutableArray<FixedVector3> DeriveOffsets(WorldPlacement template, ulong worldSeed) {
         if (template.Distribution?.Region is WorldDistributionRegion.Lattice lattice) {
             var countA = Math.Max(
                 val1: lattice.CountA,
@@ -213,7 +314,7 @@ public sealed record WorldPlacementDeal(
                 }
             }
 
-            return offsets;
+            return ImmutableCollectionsMarshal.AsImmutableArray(array: offsets);
         }
 
         return ((WorldPlacementStamp.SampledFixedOffsetsFor(
@@ -249,61 +350,31 @@ public sealed record WorldPlacementDeal(
         _ => 0,
     };
     /// <summary>Returns the prototype a child dealt for <paramref name="key"/> shows: the variant row's same-keyed cell
-    /// selects from <see cref="WorldPlacementDealVariants.Map"/> by its text, or by its integer value spelled as text;
-    /// no variants, no cell, or no entry deals <paramref name="templatePrototype"/>. The deal sweep and the
-    /// disclosure door both read a child's prototype through this one resolution, so a child re-dealt from a row with
-    /// its withheld cells removed is exactly the child the sweep would deal from that row.</summary>
+    /// selects from <see cref="WorldPlacementDealVariants.Map"/> by its text, or by its raw integer value spelled as
+    /// text; no variants, no variant row, no cell, or no entry deals <paramref name="templatePrototype"/>. The deal
+    /// sweep reads every child's prototype through this one resolution.</summary>
+    /// <param name="arena">The live store holding the variant row.</param>
+    /// <param name="variantOrdinal">The variant row's ordinal in <paramref name="arena"/>, or a negative value when the
+    /// deal names no variant row the store declares.</param>
     /// <param name="key">The dealt cell's key.</param>
-    /// <param name="variantRow">The variant row as the reader holds it, or <see langword="null"/>.</param>
     /// <param name="templatePrototype">The template's own prototype.</param>
-    public string ResolvePrototype(string key, WorldStateRow? variantRow, string templatePrototype) {
-        if (
-            (Variants is not { Map: { } map }) ||
-            (variantRow?.Cells is not { } cells)
-        ) {
+    /// <returns>The prototype id the child shows.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="arena"/> is <see langword="null"/>.</exception>
+    public string ResolvePrototype(StateArena arena, int variantOrdinal, string key, string templatePrototype) {
+        ArgumentNullException.ThrowIfNull(argument: arena);
+
+        if ((variantOrdinal < 0) || (Variants?.Map is not { } map) || !CellName.TryParse(key, out var name, out _) ||
+            !arena.Keys.TryResolve(name, out var cell) || !arena.TryRead(variantOrdinal, cell, out var value)) {
             return templatePrototype;
         }
-
-        for (var index = 0; (index < cells.Count); index++) {
-            var cell = cells[index];
-
-            if (!string.Equals(
-                a: cell.Key.Value,
-                b: key,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                continue;
-            }
-
-            if (cell.Value.HasValue && (cell.Value.Kind == CellKind.Text)) {
-                return (map.TryGetValue(
-                    key: cell.Value.AsText,
-                    value: out var byText
-                )
-                    ? byText
-                    : templatePrototype
-                );
-            }
-
-            foreach (var (spelled, prototype) in map) {
-                if (
-                    long.TryParse(
-                    s: spelled,
-                    style: NumberStyles.Integer,
-                    provider: CultureInfo.InvariantCulture,
-                    result: out var spelledValue
-                ) &&
-                    cell.Value.HasValue &&
-                    (cell.Value.Kind is CellKind.Int or CellKind.Fixed or CellKind.Bool) &&
-                    (spelledValue == cell.Value.Raw)
-                ) {
-                    return prototype;
-                }
-            }
-
-            return templatePrototype;
+        if (value.Kind == CellKind.Text) {
+            return (map.TryGetValue(key: value.AsText, value: out var selected) ? selected : templatePrototype);
         }
-
+        foreach (var (spelling, prototype) in map) {
+            if (long.TryParse(s: spelling, style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, result: out var raw) && (raw == value.Raw)) {
+                return prototype;
+            }
+        }
         return templatePrototype;
     }
     /// <summary>Returns a definition in which every dealt child shows the costliest prototype its deal can deal: the
@@ -401,7 +472,7 @@ public sealed record WorldPlacementDeal(
 public sealed record WorldPlacementDealVariants(string Row, IReadOnlyDictionary<string, string> Map);
 /// <summary>Instance-owned properties which reconciliation seeds at creation and subsequently preserves.
 /// Membership and the allocated deal slot remain owned by the source row.</summary>
-/// <param name="Transform">Preserve an existing child's local position, yaw, and scale.</param>
+/// <param name="Transform">Preserve an existing child's displacement from its slot, yaw, and scale.</param>
 /// <param name="Prototype">Preserve its prototype, including changes made by responses.</param>
 /// <param name="Facets">Preserve its other facets, including responses and face sources.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

@@ -148,6 +148,13 @@ and the source-read timing choice; these are not guarantees the current implemen
   `RuleCapacity.MaxWorkUnitsPerTick` is refused at load. When merged content
   hits a ceiling, raise the engine constant rather than cutting content
   ([the rule](../../../docs/reference/state/analysis.md#when-merged-content-collides-with-a-capacity)).
+- **A price reads declarations, never members.** Every price reads a row's room
+  through `RuleCompileContext.RowCapacity`: an uncapped keyed row is priced at
+  `StateCapacity.MaxCellsPerRow` (or its token domain's room), never at its cells
+  or the arena's reservation, so a growth never reprices the sheet and a hidden
+  row's size never moves a number a recipient is told. `StateRow.InitialCellCapacity`
+  and `ArenaLayout` capacities are storage; a new price that reads them is this
+  class's defect ([prices read declarations](../../../docs/reference/state/analysis.md#prices-read-declarations)).
 - **Disclosure is checked at every read.** Every untrusted read and delivery
   asks the recipient view again; caching a bound address never caches
   permission. Recipient mutations and guards require whole-row admission before
@@ -180,6 +187,7 @@ and the source-read timing choice; these are not guarantees the current implemen
 | A transform reads no names while it runs | `RuleCompiler.TryResolveTransform` resolves to an `ArenaTransform` of ordinals |
 | A rule fits its host | `RuleNeeds`, read off the rule's own declarations by `RuleNeedsBuilder` and admitted against the host's facets; a rule the host cannot serve is refused before evaluation |
 | Worst-case work fits a tick | `RuleWorkBudget` against `RuleCapacity.MaxWorkUnitsPerTick`, at load |
+| A price is a function of declarations | `RuleCompileContext.RowCapacity`, the one room `IRuleCostContext` serves every fact, search price and rewind estimate; `RecipientOracleLawTests` compares two hidden-member variants. Nothing refuses a new price that reads storage instead |
 | A read audience encloses the destination's | `StateArena.ReadAudienceEncloses`, called by search and the disclosure transforms |
 | Same input, same state | row digests in `StateArena.ComputeHash`; `puck test --reproduce` compares two runs and recomputes every tick |
 

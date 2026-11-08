@@ -3275,8 +3275,8 @@ the reference dropped—and `TryToDefinition` refuses a peer that still names a
 cell. Placements cross as `WorldStateDisclosure.DisclosedPlacements` reads them
 for the recipient: a dealt child is a reading of the cells it was dealt from, so a
 template whose dealt row can withhold is re-dealt in the recipient's row order
-(slots `0..n-1`, each child keeping only its displacement from the authority's
-slot), a child whose dealt cell the recipient may not read is absent, or an
+(slots `0..n-1`, each child moved to its re-dealt slot with its own displacement,
+which is all its `position` holds), a child whose dealt cell the recipient may not read is absent, or an
 anonymous `$back$<slot>` under `hidden: Placeholder`, and one whose variant cell
 it may not read shows the template's own prototype. A responsive placement whose `respond` conditions
 read a row withholding a cell from the recipient crosses with its `holding` mask
