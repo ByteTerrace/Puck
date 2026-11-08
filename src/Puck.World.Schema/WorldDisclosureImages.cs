@@ -84,6 +84,9 @@ public sealed class WorldDisclosureImages {
         }
     }
     private readonly WorkCounterSet m_work = new(name: SourceName, kinds: WorkKindOrder);
+    private readonly System.Buffers.ArrayBufferWriter<byte> m_imageBytes = new();
+    private Utf8JsonWriter? m_imageWriter;
+    private readonly List<StateCell> m_cellScratch = [];
     /// <summary>Gets the table's monotonic work totals, an operator measurement like <see cref="Describe"/>.</summary>
     public IWorkCounterSource Work => m_work;
     private StateArena? m_arena;
@@ -232,25 +235,57 @@ public sealed class WorldDisclosureImages {
             }
         }
         var observer = view.Observer;
-        var exported = arena.ToRow(row);
-        var cells = (exported.Cells ?? []).Where(cell => view.Includes(row) && observer.Discloses(row, cell.Key.Value))
-            .Select(cell => cell.Value.Kind == CellKind.Vector ? cell with { Value = CellValue.Vector(cell.Value.AsVector.ToArray()) } : cell).ToArray();
-        var observation = view.Includes(row) ? WorldStateDisclosure.Compose(view.Source, arena, view.Recipient, view.Unrestricted,
-            presented: new HashSet<string> { exported.Name.Value }, onlyRow: row)?.SingleOrDefault() : null;
+        var includes = view.Includes(row);
+        m_cellScratch.Clear();
+        if (includes && (arena.ToRow(row).Cells is { } exported)) {
+            foreach (var cell in exported) {
+                if (!observer.Discloses(row, cell.Key.Value)) { continue; }
+                m_cellScratch.Add((cell.Value.Kind == CellKind.Vector) ? cell with { Value = CellValue.Vector(cell.Value.AsVector.ToArray()) } : cell);
+            }
+        }
+        var cells = m_cellScratch.ToArray();
+        // The row itself is presented, so it crosses as an observation whatever policy it declares.
+        var declaration = arena.Rows[row];
+        var observation = (includes && !declaration.HostOwned && observer.TryRow(declaration, out var ordinal) && (ordinal == row))
+            ? WorldStateDisclosure.ComposeRow(arena, ref observer, declaration, row, presented: true) : null;
         if (observation is not null) { observation = observation with { Cells = Array.AsReadOnly(observation.Cells.ToArray()) }; }
         // The observation and replica cells together cover all observable state, including cell traits the replica carries.
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(new WorldRecipientImageContent(cells, observation), WorldJsonContext.Default.Options);
-        var digest = SHA256.HashData(bytes);
-        var pin = ContentPin.FromDigest(digest);
-        if (!m_content.TryGetValue(pin, out var reference) || !reference.TryGetTarget(out var image)) {
-            image = new WorldRecipientImage(digest, cells, observation, bytes.Length);
-            m_content[pin] = new WeakReference<WorldRecipientImage>(image);
-        }
+        var bytes = Serialize(new WorldRecipientImageContent(cells, observation));
+        Span<byte> digest = stackalloc byte[SHA256.HashSizeInBytes];
+        SHA256.HashData(bytes, digest);
         Compositions++; ComposedBytes += bytes.Length;
         m_work.Count(RowCompositions); m_work.Add(RowBytes, bytes.Length);
-        m_rows[key] = new Entry(version, dependencies, image,
-            cells.Select(cell => arena.Keys.TryResolve(cell.Key, out var interned) ? interned.Ordinal : -1).ToArray());
+        // A write that leaves the row's disclosed content as it was keeps the image it had.
+        var image = ((entry is not null) && digest.SequenceEqual(entry.Image.Digest)) ? entry.Image : Intern(digest, cells, observation, bytes.Length);
+        var keys = ((entry is not null) && ReferenceEquals(image, entry.Image)) ? entry.Keys : new int[cells.Length];
+        if (!ReferenceEquals(keys, entry?.Keys)) {
+            for (var index = 0; index < cells.Length; index++) { keys[index] = arena.Keys.TryResolve(cells[index].Key, out var interned) ? interned.Ordinal : -1; }
+        }
+        m_rows[key] = new Entry(version, dependencies, image, keys);
         return image;
+    }
+    // The shared image of one disclosed content: the live one with this digest, or a new one the table holds weakly.
+    private WorldRecipientImage Intern(ReadOnlySpan<byte> digest, StateCell[] cells, WorldObservedRow? observation, int bytes) {
+        var pin = ContentPin.FromDigest(digest);
+        if (!m_content.TryGetValue(pin, out var reference) || !reference.TryGetTarget(out var image)) {
+            image = new WorldRecipientImage(digest.ToArray(), cells, observation, bytes);
+            m_content[pin] = new WeakReference<WorldRecipientImage>(image);
+        }
+        return image;
+    }
+    // Serializes an image's content into the table's reused buffer, valid until the next call: the bytes are digested and
+    // measured, never kept.
+    private ReadOnlySpan<byte> Serialize(WorldRecipientImageContent content) {
+        m_imageBytes.ResetWrittenCount();
+        if (m_imageWriter is null) {
+            var options = WorldJsonContext.Default.Options;
+            m_imageWriter = new Utf8JsonWriter(m_imageBytes, new JsonWriterOptions { Encoder = options.Encoder, Indented = options.WriteIndented, MaxDepth = options.MaxDepth });
+        } else {
+            m_imageWriter.Reset(m_imageBytes);
+        }
+        JsonSerializer.Serialize(m_imageWriter, content, WorldJsonContext.Default.For<WorldRecipientImageContent>());
+        m_imageWriter.Flush();
+        return m_imageBytes.WrittenSpan;
     }
     // The content identity of the recipient's disclosed definition. Two documents that disclose the same frame, rows and
     // row observations share it; work follows the rows that changed since the audience's last read.
