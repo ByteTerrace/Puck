@@ -233,9 +233,6 @@ public sealed partial class WorldRoutedPresentationLawTests {
         Assert.Equal(actual: counter.Revision, expected: revision);
     }
 
-    private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
-        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) => frame;
-    }
 
     [Fact]
     public void AnInstanceCannotStandOnAViewRenderedByAnotherInstance() {
