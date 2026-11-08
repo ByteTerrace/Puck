@@ -573,6 +573,48 @@ public sealed class RuleLatch : IJournalParticipant {
             }
         }
     }
+    /// <summary>Moves every key-bound entry to the ordinal its key's name holds in another key table, as an install
+    /// that replaces the arena does: a key-bound <see cref="LatchKey.Left"/> is an ordinal of the table that interned
+    /// it, and a replacement can intern the same names in another order. An entry whose name <paramref name="to"/>
+    /// does not hold is dropped, since no binding can name it again. The scheduler's caches belong to the retired
+    /// arena and are forgotten. Only a family whose bindings are iteration keys is remapped; a family bound to
+    /// participant indices (hashed by <see cref="AppendStateHash"/> without key names) keeps its entries as they are.</summary>
+    /// <param name="from">The key table the entries were interned in.</param>
+    /// <param name="to">The key table of the arena about to be live.</param>
+    /// <param name="journal">The journal of the arena the latch judges beside, which must have no scope open.</param>
+    /// <exception cref="InvalidOperationException">A scope is open on <paramref name="journal"/>.</exception>
+    public void RemapKeys(CellKeyTable from, CellKeyTable to, ArenaJournal journal) {
+        ArgumentNullException.ThrowIfNull(argument: from);
+        ArgumentNullException.ThrowIfNull(argument: to);
+        RefuseInsideScope(journal: journal);
+
+        if (ReferenceEquals(objA: from, objB: to)) {
+            return;
+        }
+
+        foreach (var state in m_byRule.Values) {
+            m_remapScratch.Clear();
+            foreach (var (binding, held) in state.Held) {
+                if ((binding.Left < 0) || (binding.Left >= from.Count)) {
+                    m_remapScratch.Add(item: (binding, held));
+                } else if (to.TryResolve(name: from.Names[binding.Left], key: out var key)) {
+                    m_remapScratch.Add(item: (binding with { Left = key.Ordinal }, held));
+                }
+            }
+
+            state.Held.Clear();
+            foreach (var (binding, held) in m_remapScratch) {
+                state.Held[binding] = held;
+            }
+            state.Scheduling.Clear();
+        }
+
+        m_remapScratch.Clear();
+        InvalidateScheduler();
+    }
+
+    private readonly List<(LatchKey Binding, bool Held)> m_remapScratch = [];
+
     /// <summary>Restores one flattened entry.</summary>
     /// <param name="name">The rule's name.</param>
     /// <param name="binding">The binding the entry belongs to.</param>

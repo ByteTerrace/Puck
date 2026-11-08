@@ -103,7 +103,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     // The EDGE latch, keyed by rule name and deliberately OUTSIDE m_rules: a rule's own effect installs a new
     // definition, which recompiles m_rules, so a latch living in the compiled record would clear itself every time it
     // fired — which is exactly the 503-entries-in-500-ticks shape edge mode exists to close. Surviving names keep
-    // their bit across an install; vanished names are dropped.
+    // their bit across an edit's install (ContinueLatches); vanished names are dropped.
     private readonly RuleLatch m_ruleGateHeld = new();
     // The compiled `interactions` section — a SECOND compiled array, evaluated after m_rules (see
     // EvaluateWorldRules), never merged into it: an interaction desugars into a synthesized WorldRule and rides the
@@ -703,6 +703,21 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
             subject: "interaction"
         );
         AdmitGroups(groups: m_groups);
+    }
+    /// <summary>Carries the edge latches across an arena install by its continuity: an edit keeps every entry, moving a
+    /// rule binding to the ordinal its key name holds in <paramref name="arena"/>, and a load empties both latches, since
+    /// the document's state replaced the state they judged.</summary>
+    /// <param name="previous">The arena the entries were judged beside.</param>
+    /// <param name="arena">The arena about to be live, which may be <paramref name="previous"/>.</param>
+    /// <param name="continuity">The installing door's continuity.</param>
+    internal void ContinueLatches(StateArena previous, StateArena arena, WorldArenaContinuity continuity) {
+        if (continuity == WorldArenaContinuity.Load) {
+            m_ruleGateHeld.Clear(journal: arena.Journal);
+            m_interactionGateHeld.Clear(journal: arena.Journal);
+            return;
+        }
+
+        m_ruleGateHeld.RemapKeys(from: previous.Keys, journal: arena.Journal, to: arena.Keys);
     }
     /// <summary>Drops every latched edge and group cursor whose compiled name the current compilation no longer
     /// carries. A surviving name keeps its bit.</summary>

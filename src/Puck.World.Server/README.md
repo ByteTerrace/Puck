@@ -524,9 +524,15 @@ population forecast all read that answer:
   named rows settle.
 
 What survives an arena install is decided in one place,
-`WorldServer.ContinueScopes`, by the installing door's `WorldArenaContinuity`:
+`WorldServer.ContinueArena`, by the installing door's `WorldArenaContinuity`:
 
-- **Edit** (a mutation's install of any kind): each scoped replay keeps its
+- **Edit** (a mutation's install of any kind): the rule latch keeps every
+  binding's edge bit. A forEach or pool binding names its key by the ordinal the
+  live arena interned it at, and a replacement can intern the same names in
+  another order (an edit that declares a new key ahead of a latched one), so
+  each entry moves to its key name's ordinal in the replacement
+  (`RuleLatch.RemapKeys`, called from `WorldRuleHost.ContinueLatches`); the
+  interaction latch binds participant indices and keeps its entries. Each scoped replay keeps its
   starting image and tape while every one of its rows keeps its declaration
   (`WorldDocument.SameComposeDeclaration`). The scope binds its rows by name, its
   image moves to the replacement by row and key name (`StateArena.CarryScope`),
@@ -537,8 +543,11 @@ What survives an arena install is decided in one place,
   records afresh.
 - **Load** (`world.load`, `world.reload`, `world.reset`, a history seek, a
   checkpoint restore): the document's state replaces the arena's whether the
-  arena is replaced or reloaded in place, so every scope drops its image and
-  tape, and a checkpoint then restores its own.
+  arena is replaced or reloaded in place, so the rule and interaction latches
+  start empty, as at boot (an Edge rule whose gate holds over the loaded state
+  fires once, as it would in a fresh boot of that document), and every scope
+  drops its image and tape. A checkpoint then restores its own latches by key
+  name (`WorldPersistence.RestoreLatch`) and its own scopes.
 
 `world.boot.full-installs`, `value-installs` and `presentation-installs` count each
 kind, and `world.boot.arena-builds` counts every arena a world builds from a state

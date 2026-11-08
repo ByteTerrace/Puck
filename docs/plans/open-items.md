@@ -1618,14 +1618,6 @@ a shading-only creation edit keeps the arena, the rules and the population, and
 document values bind by copying only the paths to their references
 (`WorldStateDocumentValues.BindLive`). What is left:
 
-- [medium · determinism] A rule latch (`RuleLatch`, keyed by `LatchKey`
-  intern ordinals) is not remapped when an install adopts a replacement arena
-  whose key ordinals differ. An edit's replacement takes the live key ledger
-  before any row (`WorldServer.TryBuildEditArena`), so every name keeps its
-  ordinal while the catalog's declared keys keep their order; an edit that adds
-  or reorders declared keys, and every load's replacement, can still move a
-  latched binding to another key. Remap latch keys by name at adoption, as
-  `StateArena.CarryScope` does for a scope image.
 - A world whose state section declares pools does not narrow a state edit to
   its named rows (`WorldDocument.NameStateEdit`): its replacement is seeded from
   the whole export, so the per-cell traits of cells a rule removed are lost there

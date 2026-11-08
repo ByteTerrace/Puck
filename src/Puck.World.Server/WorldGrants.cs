@@ -180,7 +180,12 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         m_host = host;
         m_population = population;
         m_routeTransition = routeTransition;
+        SeedLocalPlayDefaults(seatCount: seatCount);
+    }
 
+    // The permissive local-play defaults the constructor and a rebuild's Reset both seed, silently through TryGrant:
+    // each seat's body and domain, the console's domain and Drive over everything, and the authored program's Edit.
+    private void SeedLocalPlayDefaults(int seatCount) {
         for (var slot = 0; (slot < seatCount); slot++) {
             var seat = Principal.Seat(slot: slot);
 
@@ -1629,31 +1634,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             );
         }
 
-        for (var slot = 0; (slot < seatCount); slot++) {
-            var seat = Principal.Seat(slot: slot);
-
-            _ = TryGrant(
-                grant: new WorldGrant(
-                    Grantee: seat,
-                    Capability: WorldCapability.Drive,
-                    Subject: GrantSubject.Body(index: slot),
-                    Exclusive: false
-                ),
-                reason: out _
-            );
-            SeedDomain(principal: seat);
-        }
-
-        SeedDomain(principal: Principal.Console);
-        _ = TryGrant(
-            grant: new WorldGrant(
-                Grantee: Principal.Console,
-                Capability: WorldCapability.Drive,
-                Subject: GrantSubject.All,
-                Exclusive: false
-            ),
-            reason: out _
-        );
+        SeedLocalPlayDefaults(seatCount: seatCount);
     }
 
     /// <summary>Removes a grant (capability+subject) from a principal, and clears any matching exclusive reservation.
