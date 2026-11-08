@@ -46,20 +46,32 @@ milestone. The owner requested its baseline and implementation plan, which
    small helpers ride along. Each audit lane's remaining findings are filed in
    the refactoring packet as its fix lane lands. Duplicates are fixed when found
    (AGENTS.md); this item is the backlog the audit surfaced.
-1. The frame bar [high]: 60 FPS steady state on the lead machine is not met.
-   The worst sweep stops (the teal room, flight B of the second storey, the
-   studio) are GPU-bound on the root view, not settling: a stop measured again
-   after its `-indirect` twin is as slow as on arrival. With box-only cascade
-   selection, the far shadow cascade holds under the day clock's sun and splits each refresh over two frames
-   (`SdfFarLayers`), so those stops run at the display rate at p50 but still
-   miss vsync on some frames: the pool now holds p99 at the display rate, while
-   the teal roof and the studio still reach about 25 and 22 ms at p99. With the
+1. The frame bar [high]: 60 FPS steady state on the lead machine is not met at
+   p99. The far cascade's cadence is settled: a receiver-conditioned cascade's
+   coverage identity names the sample grid alone (`SdfWorldPasses.ReceiverSignatureOf`),
+   so it holds and splits under occlusion culling as it does box-only (it
+   rendered both layers on every frame of the live debug world before, since
+   the identity hashed the geometry signature and the jitter), and every timed
+   refresh splits over two frames whatever the frames' pace, so no frame draws
+   both far layers for the rate's sake and a slow frame is no longer held slow
+   by its own cascade. On the RTX 4070 at 1280×900 that took `shadow-far` from
+   4.4 to 2.2 ms at spawn, 3.4 to 1.8 at the teal roof, 2.0 to 1.4 at flight B
+   and 2.0 to 1.1 at the studio on Direct3D 12, and the root view to 10 to 12 ms
+   of GPU at every one of those stops, under the bar with headroom; the frame
+   p50 sits at the display rate there, and what remains over 16.7 ms at p99 is
+   the CPU side (simulation ticks of 12 to 23 ms and collections), read under a
+   machine at 68% background CPU, so a quiet-window `bench frames` pair is
+   owed before the p99 is called. `views` now leads the root view at every stop
+   (3.0 to 5.0 ms, of which the probe gather is 1.1 to 1.3 ms by `world.indirect
+   off` and the remaining 2.95 ms is the same indoors and out, the plain
+   kernel's base), then the split far cascade (1.1 to 2.2), the resolve (1.2),
+   the near cascade (1.1 to 1.6), the composite (0.6) and the glass trio
+   (about 0.5 ms a frame at stops with no glass in view: the sums clear, a
+   glass raster with no kept draw and a glass-shade that reads the empty
+   sums; a glass-shade that answers `DrewNothing` when no glass draw's box
+   meets the frustum would recover it). With the
    resolve's history surface planar it no longer saturates L2 and costs about
-   1 ms at 1280×720, so `views` (about 2.3 ms) and the far cascade lead the root
-   view. Below 60 FPS two frames no longer fit in
-   the 30 Hz floor, so every refresh redraws both far layers, the frame stays
-   slow, and a view that drops below 60 there tends to stay below it until the
-   far cascade itself costs less. Next: read the views pass's time now that a
+   1 ms at 1280×720. Next: read the views pass's time now that a
    frame with no active program (the debug world's default, the lever on
    layers) records the plain views and glass kernels, which hold no
    interpreter: on the RTX 4070 under Vulkan views falls from 255 registers

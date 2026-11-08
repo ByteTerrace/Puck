@@ -1,12 +1,13 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
 // The far cascade's rate (SdfUpdateRates.ShadowFar): a view holds its far cascade for the frames a 30 Hz refresh spans,
-// splits a refresh the rate alone calls for over two frames when both fit in that period, and every change the fit stands
-// for ends the hold at once and redraws both layers.
+// splits every refresh the rate alone calls for over two frames whatever the frames' pace, and every change the fit
+// stands for ends the hold at once and redraws both layers.
 public sealed partial class SdfWorldPassesLawTests {
     private const int RateFrames = 8;
 
@@ -19,7 +20,11 @@ public sealed partial class SdfWorldPassesLawTests {
 
         rig.SourceFrame = (DrawnFrame() with { RateCounts = counts, RateIntervals = intervals, UpdateRates = rates });
         if (cull is { } mode) { rig.SourceFrame = rig.SourceFrame with { MeshCull = mode }; }
-        // The first frames fit and render the far cascade whatever the lever holds.
+        // The first frames fit and render the far cascade whatever the lever holds. A cull level other than the frame's
+        // changes the view's fragment (SdfWorldPasses.FragmentOf) and the new graph's first recording draws both layers
+        // whatever the hold says, so the count starts once that graph has installed and drawn.
+        for (var frame = 0; (frame < 2); frame++) { rig.Produce(); }
+        TestLiveness.Until(step: () => { rig.Produce(); return !rig.World.IsBuildingCandidate; }, reason: static () => "the cull level's graph is still building");
         for (var frame = 0; (frame < 2); frame++) { rig.Produce(); }
 
         var renderedBefore = counts.Read(kind: SdfUpdateRateCounts.ShadowFarRendered);
@@ -69,14 +74,24 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(RateFrames, rendered + split + held);
     }
 
-    [Fact]
-    public void AChangedReceiverCameraRefreshesBothOcclusionLayers() {
+    // A receiver-conditioned cascade's coverage names the sample grid, not the camera or the geometry: a camera moving
+    // within the hold's tolerance keeps holding and splitting under occlusion culling as it does under box culling, and
+    // one moving past it refreshes both layers.
+    [Theory]
+    [InlineData(0.001f, true)]
+    [InlineData(2f, false)]
+    public void AReceiverConditionedCascadeHoldsWithinTheCameraToleranceAndRefreshesPastIt(float metresAFrame, bool holds) {
         var (rendered, split, held) = FarCascadeCounts(rates: SdfUpdateRates.ShadowFar, frames: RateFrames,
             displayHertz: 120, cull: SdfMeshCullLevel.Occlusion,
-            change: static (frame, index) => WithCamera(frame, new Vector3(0.001f * (index + 1), 0f, -5f), Vector3.Zero));
-        Assert.Equal(RateFrames, rendered);
-        Assert.Equal(0L, split);
-        Assert.Equal(0L, held);
+            change: (frame, index) => WithCamera(frame, new Vector3(metresAFrame * (index + 1), 0f, -5f), new Vector3(metresAFrame * (index + 1), 0f, 0f)));
+
+        if (holds) {
+            Assert.Equal(expected: 0L, actual: rendered);
+            Assert.Equal(expected: RateFrames, actual: (split + held));
+        } else {
+            Assert.Equal(expected: RateFrames, actual: rendered);
+            Assert.Equal(expected: 0L, actual: (split + held));
+        }
     }
 
     // A view that stands still on a 60 Hz display splits each 30 Hz refresh: one frame draws the depth, the next the exit
@@ -91,14 +106,14 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: 0L, actual: held);
         Assert.Equal(expected: (2d / 60d), actual: (intervals.Longest(hertz: 30, lever: SdfUpdateRates.ShadowFar) ?? 0d), tolerance: 1e-9d);
     }
-    // Where two frames do not fit in the 30 Hz period (a 40 Hz display), no refresh splits: each draws both layers, so no
-    // layer refreshes less than 30 times a second.
+    // Where two frames do not fit in the 30 Hz period (a 40 Hz display) every refresh still splits: each frame draws one
+    // layer and none draws both, so the cascade never costs a slow frame a whole refresh.
     [Fact]
-    public void ASlowerDisplayRedrawsBothFarLayersOnEveryRefresh() {
+    public void ASlowerDisplayStillDrawsOneFarLayerAFrame() {
         var (rendered, split, held) = FarCascadeCounts(displayHertz: 40, rates: SdfUpdateRates.ShadowFar, frames: RateFrames, change: static (frame, _) => frame);
 
-        Assert.Equal(expected: RateFrames, actual: rendered);
-        Assert.Equal(expected: 0L, actual: split);
+        Assert.Equal(expected: 0L, actual: rendered);
+        Assert.Equal(expected: RateFrames, actual: split);
         Assert.Equal(expected: 0L, actual: held);
     }
     // With the lever off, or a lever other than the far cascade's on, every frame renders both layers and none holds.
