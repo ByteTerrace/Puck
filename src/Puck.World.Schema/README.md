@@ -1830,10 +1830,22 @@ reference to a text cell holding the matching JSON array. For example,
 `"[0, 0, 0]"`, while an identity rotation reads `"[0, 0, 0, 1]"`. Resolution
 happens after the complete world exists (in particular, an embedded creation
 cannot resolve its containing world's state while parsing itself), and the reference remains
-on the document value so canonical save writes the indirection back. A live
-mutation touching a referenced row rehydrates and resolves a fresh candidate
-before validation; a rejected value therefore cannot leak into the live
-creation through record-sharing.
+on the document value so canonical save writes the indirection back. A document
+value never changes once built: resolving, binding or flattening one builds a
+new value and copies only the path from the document's root to it, so a rejected
+candidate cannot leak into the live creation through record-sharing, and every
+row no reference reaches stays the same object.
+
+**A server's installed document reads state live.** `WorldStateDocumentValues.BindLive`
+gives each server its own projection: every referenced value is replaced by one
+bound to the server's `WorldLiveValues`, which reads whichever arena the server
+holds when the value is read, so an arena the server replaces needs no new
+binding. A value already bound to that store is kept, and a row or section the
+previous bind left fully bound is kept without being entered, so binding a
+candidate composed over the installed projection costs what the composition
+replaced. The state section is never rewritten by a bind. A live mutation
+touching a referenced row resolves that row's values against the candidate's
+own state (`TryRefresh`) before validation.
 
 **Binding-group identifiers may be state-backed too.** A chord row, context
 row, or wheel may name its group literally or with the same
@@ -1850,8 +1862,8 @@ so a definition delivered across an authority transfer reads exactly like a
 file-loaded one and an arriving seat's binding recompose sees resolved
 identifiers. A projection carries no `state` section, so `WorldProjection.Compose`
 flattens its egress—every reference answered from the composing authority's own
-state and dropped (`WorldStateDocumentValues.TryFlatten`, run on a rehydrated copy
-so the live document keeps its authored reference)—and a peer whose projection
+state and dropped (`WorldStateDocumentValues.TryFlatten`, which copies the paths to
+the references and leaves the live document's authored reference as it is)—and a peer whose projection
 still names a cell is refused by name at the decode door. Law suite:
 `tests/Puck.World.Server.Tests/DeliveredDocumentIdentifierLawTests.cs`.
 
@@ -1863,10 +1875,12 @@ API also accepts caller-owned shapes: it binds their getters once, omitting
 non-boxable properties, then invokes delegates on every walk. Reference
 searches do not construct diagnostic paths; resolution and flattening retain their
 named error paths. Every walk reuses one visited set per thread.
-`CollectReferencedRows` names every referenced row in one walk, and
-`TryRehydrate` is the rehydrate-and-resolve half of `TryRefresh`, so a server
-batch walks once and rehydrates only the members whose rows the walk named. The
-traversal cases live in
+`CollectReferencedRows` names every referenced row in one walk, and a server
+batch refreshes (`TryRefresh`) only the members whose rows the walk named. The
+copy is the walker's own rewrite (`WorldDocumentWalker.Rewrite`): a record on a
+path is copied through its own clone as `with` copies it, a value type's box is
+copied, a list or dictionary is rebuilt, and anything else on a path refuses by
+name. The traversal cases live in
 `tests/Puck.World.Schema.Tests/WorldStateDocumentValuesLawTests.cs`.
 
 **Reserved `$` names are ENGINE-MINTED ONLY.** A `$`-prefixed ROW name is refused

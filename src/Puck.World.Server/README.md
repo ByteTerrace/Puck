@@ -454,7 +454,7 @@ through its own arm, and one that rewrites the state section drops the arena so
 the next cell member loads a fresh one over what that member produced. The
 running candidate is re-seated over the arena's export only where something
 other than a cell write needs it—before a non-cell member composes, before a
-document-value rehydration actually reads it back, and once more when the batch
+document-value refresh actually reads it back, and once more when the batch
 finishes—never once per write: `WorldStateSection` owns an immutable copy of
 its own row list, so the export is the one point that copy is paid for, and a
 run of independent cell writes pays it once for the whole call. The
@@ -463,22 +463,46 @@ refresh runs against one referenced-row set per batch
 (`WorldStateDocumentValues.CollectReferencedRows`), collected on the first
 state member and reused until a member that can add or drop a reference (a
 whole-row write, an edit to another section) drops it; a member whose row is
-in the set rehydrates (`WorldStateDocumentValues.TryRehydrate`) exactly where
-a one-by-one compose would. A batch installs the same document its members
+in the set refreshes the values bound to that row (`WorldStateDocumentValues.TryRefresh`)
+exactly where a one-by-one compose would. A batch installs the same document its members
 reach one by one, a member that reads a row an earlier member wrote included
 (`tests/Puck.World.Server.Tests/BatchComposeLawTests.cs`), and one refused member
 refuses the whole batch.
 
 The refresh has a mirror for the other direction: a mutation that itself
 carries a `state.` reference (a creation whose shapes bind a cell, a placement
-whose position names one) rehydrates its candidate after composing
+whose position names one) resolves its candidate's values after composing
 (`WorldDocument.TryCompose`, `WorldStateDocumentValues.HasReference` over the
 mutation), so validation and the derived rebuilds read a resolved holder. The
-`UpsertCreation` arm additionally resolves a private JSON copy of the submitted
-row against the current state before canonicalizing it
-(`TryResolveSubmittedRow`), because the canonicalizer reads bound values ahead
-of that rehydration; a reference naming no declared cell refuses there by
-name. `tests/Puck.World.Server.Tests/WorldRowFieldEditLawTests.cs` owns the laws.
+`UpsertCreation` arm additionally resolves the submitted row against the current
+state before canonicalizing it (`TryResolveSubmittedRow`), because the
+canonicalizer reads bound values ahead of that resolution; a reference naming no
+declared cell refuses there by name. Both copy only the paths to the values they
+resolve (`WorldStateDocumentValues`). `tests/Puck.World.Server.Tests/WorldRowFieldEditLawTests.cs` owns the laws.
+
+### What an install rebuilds
+
+`WorldDocument.InstallKindOf` classifies every prepared mutation once, against the
+document it was composed over, and the prepare step, the install and the
+population forecast all read that answer:
+
+- **Value**: a state-value mutation that keeps the state catalog and rebinds no
+  population look loads the rows it replaced into the live arena and keeps every
+  compiled product. A plain cell or value-only row write never gets here: it is a
+  state transaction on the arena (`WorldDocument.StateCommands.cs`).
+- **Presentation**: a creation upsert whose new row differs from the installed
+  one only in shading (`WorldPrototype.DiffersInShadingAlone`: palette colours and
+  materials, the palette keeping its length and every slot its glass) adopts the
+  candidate as the server's projection and delivers it. The arena, the rules, the
+  solid field and the population stay as they are, and such an edit composes over
+  the installed document, so it exports no state section either.
+- **Full**: everything else recompiles the rules, installs a prepared arena and
+  reconciles fields and screens, rebuilding the population when the mutation
+  reaches it (`RecompilesPopulation`).
+
+`world.boot.full-installs`, `value-installs` and `presentation-installs` count each
+kind, and `world.boot.arena-builds` counts every arena a world builds from a state
+section.
 
 ## Local flock steering
 
