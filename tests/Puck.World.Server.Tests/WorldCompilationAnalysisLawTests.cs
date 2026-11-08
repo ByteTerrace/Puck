@@ -113,7 +113,7 @@ public sealed class WorldCompilationAnalysisLawTests {
         var replacement = current with { Rules = [current.Rules[1], current.Rules[0]] };
 
         Assert.Same(expected: current.StateCatalog, actual: replacement.StateCatalog);
-        server.RecompileRules(definition: replacement);
+        server.RecompileRules(definition: replacement, continuity: WorldArenaContinuity.Load);
         Assert.Empty(collection: server.RuleHazards);
         Assert.NotSame(expected: cost, actual: server.CostReport);
         Assert.Single(collection: hazards);

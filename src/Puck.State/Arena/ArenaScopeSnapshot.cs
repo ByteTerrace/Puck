@@ -66,6 +66,67 @@ public sealed partial class StateArena {
         }
     }
 
+    /// <summary>Carries a scope image captured from another arena into this one, its rows matched by name and its
+    /// member keys by key name, so a replacement arena that declares the same rows restores the same image.</summary>
+    /// <param name="image">The image <paramref name="source"/> captured.</param>
+    /// <param name="source">The arena that captured <paramref name="image"/>.</param>
+    /// <returns>The image addressed to this arena, the same instance when <paramref name="source"/> is this arena, or
+    /// <see langword="null"/> when this arena declares no document row of an image row's name or holds no key of a
+    /// member key's name. The caller decides that the rows' declarations agree; <see cref="RestoreScope"/> still
+    /// checks every position against this arena's layout.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="image"/> or <paramref name="source"/> is
+    /// <see langword="null"/>.</exception>
+    public ArenaScopeSnapshot? CarryScope(ArenaScopeSnapshot image, StateArena source) {
+        ArgumentNullException.ThrowIfNull(argument: image);
+        ArgumentNullException.ThrowIfNull(argument: source);
+
+        if (ReferenceEquals(objA: source, objB: this)) { return image; }
+        var count = image.Rows.Length;
+        var rows = new int[count];
+        var rowOf = new Dictionary<int, int>(capacity: count);
+
+        for (var index = 0; (index < count); index++) {
+            var from = image.Rows[index];
+
+            if ((((uint)from) >= ((uint)source.m_catalog.Descriptors.Count)) ||
+                !m_catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: source.m_catalog.Descriptors[from].Name)) {
+                return null;
+            }
+            rows[index] = handle.Ordinal;
+            rowOf[from] = handle.Ordinal;
+        }
+        var order = Enumerable.Range(start: 0, count: count).OrderBy(keySelector: index => rows[index]).ToArray();
+        var numbers = new ArenaNumberImage[image.Numbers.Length];
+
+        for (var index = 0; (index < numbers.Length); index++) {
+            var entry = image.Numbers[index];
+            var position = entry.Index;
+            var value = entry.Value;
+
+            if ((ArenaColumns.Space(column: entry.Column) == ArenaIndexSpace.Row) && rowOf.TryGetValue(key: position, value: out var row)) {
+                position = row;
+            }
+            if ((entry.Column == ArenaColumn.MemberKey) && (value >= 0L)) {
+                if ((value >= source.m_keys.Count) || !m_keys.TryResolve(name: source.m_keys.Names[(int)value], key: out var key)) {
+                    return null;
+                }
+                value = key.Ordinal;
+            }
+            numbers[index] = new ArenaNumberImage(Column: entry.Column, Index: position, Value: value);
+        }
+
+        return new ArenaScopeSnapshot(
+            Capacities: order.Select(selector: index => image.Capacities[index]).ToArray(),
+            CellStarts: order.Select(selector: index => image.CellStarts[index]).ToArray(),
+            MaskWordStarts: order.Select(selector: index => image.MaskWordStarts[index]).ToArray(),
+            Numbers: numbers,
+            Observations: image.Observations,
+            Rows: order.Select(selector: index => rows[index]).ToArray(),
+            Text: image.Text,
+            Visibility: image.Visibility
+        );
+    }
+
     /// <summary>Checks the complete scope image before any live column is changed.</summary>
     public void ValidateScope(ArenaScopeSnapshot image) => _ = PrepareScope(image: image);
 

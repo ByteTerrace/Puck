@@ -27,7 +27,7 @@ public sealed partial class SearchLawTests {
 
             Assert.True(condition: StateArena.TryCreate(current.StateCatalog, current.StateRaw, WorldSlotLanes.Options(definition: current),
                 in time, out var replacement, out var reason), userMessage: reason);
-            server.RecompileRules(current, arena: replacement);
+            server.RecompileRules(current, WorldArenaContinuity.Load, arena: replacement);
         }
         for (var tick = 0; ((tick < 120) && !sink.Narrations.Any(predicate: narration => (narration.Channel == "state.search"))); tick++) {
             fixture.Step();

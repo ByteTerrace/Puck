@@ -365,9 +365,10 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
             )
         );
 
+        // The installed document holds declarations and seeds; the arena's values ride the export.
         Assert.Equal(
             expected: before,
-            actual: WorldDefinitionSerialization.Serialize(definition: restored.Definition)
+            actual: WorldDefinitionSerialization.Serialize(definition: restored.ExportDefinition())
         );
 
         var advAfter = WorldDefinitionRows.FindStateRow(

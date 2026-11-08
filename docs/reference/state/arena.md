@@ -446,6 +446,10 @@ What the hash covers:
 - Every column of every lane, with each column's own ordinal folded between
   runs. The fold reads each position's logical value, so
   a clock that was never written hashes the same as one written back to zero.
+  A row's digest (`AddRowTo`) folds its content and not its catalog ordinal; a
+  segment frames each row by its position. A row keeps its digest when a
+  re-declared catalog moves it, so a scoped replay's recorded hashes survive
+  that edit.
 - Member keys by name digest in slot order, independent of intern ordinals. Two
   rows with the same fields fold the same regardless of the order their keys
   were allocated in, while the order of a pile's members stays part of its
@@ -552,6 +556,10 @@ reservations through the full snapshot's admitted relayout path. An empty keyed
 row without an explicit capacity can grow from zero to one cell and rewind to
 empty; growth in an unrelated row stays live. Selected keys keep their arena-local
 identities and newly interned names remain available to unrelated live state.
+`CarryScope` moves an image to a replacement arena that declares the same rows,
+matching its rows by name and its member keys by key name, and answers null when
+the replacement lacks a row or a key; the host decides that the rows'
+declarations agree before it carries one.
 
 Validation checks the complete image against the layout it will restore before
 changing any live column: its inventory, and every position's value under the

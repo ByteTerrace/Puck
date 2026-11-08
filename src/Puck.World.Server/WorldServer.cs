@@ -720,7 +720,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         // admitted document settled before its admission, so this export agrees with it and the receipt still names
         // the definition being installed.
         definition = WorldStateSettlement.SettleFrom(definition: definition, seeded: m_arena);
-        definition = RecompileRules(arena: m_arena, compilation: compilation, definition: definition);
+        definition = RecompileRules(arena: m_arena, compilation: compilation, definition: definition, continuity: WorldArenaContinuity.Load);
         // The lattice exists (the population allocated it) and the instance identity is known only from here on, so
         // this is the first point a lattice row's draw fill can be seeded through the site ladder and painted.
         m_tick.PaintLatticeDraws(definition: definition);

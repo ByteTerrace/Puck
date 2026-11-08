@@ -11,7 +11,7 @@ public sealed partial class WorldScopedReplayRuntime {
     private readonly WorldServer m_server;
     private readonly WorldScopedReplay m_source;
     private readonly HashSet<int> m_bodies;
-    private readonly HashSet<int> m_rows;
+    private readonly HashSet<int> m_rows = [];
 
     private readonly List<(int Tick, WorldMutation Mutation)> m_inputs = [];
     private readonly List<ulong> m_hashes = [];
@@ -35,7 +35,7 @@ public sealed partial class WorldScopedReplayRuntime {
     private Fnv1aHash m_commandHash = Fnv1aHash.Create();
     private Fnv1aHash m_intentHash = Fnv1aHash.Create();
 
-    private readonly int[] m_orderedRows;
+    private int[] m_orderedRows = [];
 
     /// <summary>Gets the authored scope identity.</summary>
     public string Name => m_source.Name;
@@ -45,16 +45,76 @@ public sealed partial class WorldScopedReplayRuntime {
         m_server = server;
         m_source = source;
         m_bodies = source.Bodies.ToHashSet();
-        m_rows = source.Rows.Select(selector: name => Row(name: name)).ToHashSet();
-        m_orderedRows = m_rows.Order().ToArray();
+        BindRows(arena: server.Arena);
     }
 
-    private int Row(string name) => (m_server.Arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: name)
+    // Resolves the scope's rows by name against an arena's catalog.
+    private void BindRows(StateArena arena) {
+        m_rows.Clear();
+        foreach (var name in m_source.Rows) { m_rows.Add(item: Row(arena: arena, name: name)); }
+        m_orderedRows = m_rows.Order().ToArray();
+        m_allRules = null;
+    }
+
+    /// <summary>Carries the scope across an arena install: rebinds its rows by name, and keeps its starting image
+    /// (carried by row and key name) and tape when the install is an edit that kept every scope row's declaration.
+    /// Otherwise drops them; after an edit the control row reports the refusal (status -1) and stderr names it.</summary>
+    /// <param name="previous">The arena the install replaces or reloaded.</param>
+    /// <param name="arena">The arena the install adopts, before it is live.</param>
+    /// <param name="continuity">The installing door's rule.</param>
+    internal void Continue(StateArena previous, StateArena arena, WorldArenaContinuity continuity) {
+        if ((continuity == WorldArenaContinuity.Edit) && ReferenceEquals(objA: previous, objB: arena)) { return; }
+        var keeps = (continuity == WorldArenaContinuity.Edit);
+
+        foreach (var name in m_source.Rows) {
+            keeps = (keeps &&
+                previous.Catalog.TryResolve(handle: out var before, lane: StateLane.Document, name: name) &&
+                arena.Catalog.TryResolve(handle: out var after, lane: StateLane.Document, name: name) &&
+                SameDeclaration(before: previous.Rows[before.Ordinal], after: arena.Rows[after.Ordinal]));
+        }
+        BindRows(arena: arena);
+        var start = ((keeps && (m_start is not null)) ? arena.CarryScope(image: m_start, source: previous) : m_start);
+
+        if (keeps && ((m_start is null) || (start is not null))) {
+            if (!ReferenceEquals(objA: start, objB: m_start)) {
+                m_start = start;
+                m_startImageHash = WorldAuthorityCheckpointCodec.HashScopedReplayStart(scope: Checkpoint());
+            }
+            return;
+        }
+        var held = ((m_start is not null) || m_active || (m_hashes.Count != 0));
+
+        ResetDrive();
+        ClearTape();
+        m_start = null;
+        m_startBodies = [];
+        m_startHash = 0;
+        m_startImageHash = 0;
+        m_startRuleLatch = []; m_startInteractionLatch = []; m_startGroups = [];
+        // A load reseeds the control row with the document; an edit leaves it naming a drive that no longer exists.
+        if (held && (continuity == WorldArenaContinuity.Edit)) {
+            Write(arena: arena, key: "status", value: -1);
+            Write(arena: arena, key: "cursor", value: 0);
+            m_server.Output.Narrate("replay.scope", $"[replay.scope: {Name} refused — an edit re-declared a scope row; capture again]");
+        }
+    }
+
+    private static bool SameDeclaration(StateRow before, StateRow after) => (
+        ReferenceEquals(objA: before, objB: after) ||
+        ((before is WorldStateRow left) && (after is WorldStateRow right) && WorldDocument.SameComposeDeclaration(previous: left, row: right))
+    );
+
+    private static int Row(StateArena arena, string name) => (arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: name)
         ? handle.Ordinal : throw new InvalidOperationException(message: $"No scope row '{name}'."));
-    private CellKey Key(string name) => m_server.Arena.Keys.Intern(name: CellName.Parse(candidate: name));
-    private long Read(string key) => (m_server.Arena.TryRead(Row(name: m_source.Control), Key(name: key), out var value) ? value.Raw : 0);
-    private void Write(string key, long value) {
-        if (!m_server.Arena.TryWrite(Row(name: m_source.Control), Key(name: key), value, StateWriteKind.Set, out var reason)) {
+    private static CellKey Key(StateArena arena, string name) => arena.Keys.Intern(name: CellName.Parse(candidate: name));
+    private long Read(string key) {
+        var arena = m_server.Arena;
+
+        return (arena.TryRead(Row(arena: arena, name: m_source.Control), Key(arena: arena, name: key), out var value) ? value.Raw : 0);
+    }
+    private void Write(string key, long value) => Write(arena: m_server.Arena, key: key, value: value);
+    private void Write(StateArena arena, string key, long value) {
+        if (!arena.TryWrite(Row(arena: arena, name: m_source.Control), Key(arena: arena, name: key), value, StateWriteKind.Set, out var reason)) {
             throw new InvalidOperationException(message: reason);
         }
     }
@@ -190,14 +250,15 @@ public sealed partial class WorldScopedReplayRuntime {
     // has no complete expectation to replay, whereas a previously completed tape remains reusable.
     private void ResetDrive() {
         m_active = false;
-        if (m_recording) {
-            m_inputs.Clear(); m_hashes.Clear(); m_commands.Clear(); m_intents.Clear();
-            m_recordHash = Fnv1aHash.Create(); m_inputHash = Fnv1aHash.Create();
-            m_commandHash = Fnv1aHash.Create(); m_intentHash = Fnv1aHash.Create();
-        }
+        if (m_recording) { ClearTape(); }
         m_recording = false;
         m_cursor = 0; m_inputCursor = 0; m_diverged = false;
         StopInput();
+    }
+    private void ClearTape() {
+        m_inputs.Clear(); m_hashes.Clear(); m_commands.Clear(); m_intents.Clear();
+        m_recordHash = Fnv1aHash.Create(); m_inputHash = Fnv1aHash.Create();
+        m_commandHash = Fnv1aHash.Create(); m_intentHash = Fnv1aHash.Create();
     }
 
     private string InputSource => ("$replay:" + Name);
