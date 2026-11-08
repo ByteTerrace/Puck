@@ -14,8 +14,8 @@ namespace Puck.World;
 /// </summary>
 public sealed class WorldUpdateCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
     /// <inheritdoc/>
-    private static string DescribeUpdate(WorldServer server) {
-        var update = server.Definition.Update;
+    private static string DescribeUpdate(WorldServer server, WorldRecipientView view) {
+        var update = view.Definition.Update;
 
         if (update is null) {
             return "[world.update: none]";

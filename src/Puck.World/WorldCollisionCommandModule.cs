@@ -27,13 +27,13 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
     // vocabulary nothing is resolved against — a reading taken to answer "what am I standing on" that quietly
     // describes the wrong surface. The census is still worth printing there (it is what the analytic path WOULD see,
     // and the gap between the two is exactly what a blend contributes), but it is labelled for what it is.
-    private CommandResult Census() {
+    private CommandResult Census(CommandContext context) {
         var census = server.Population.ContactCensus;
-        var field = WorldContactSelection.RequiresField(collision: server.Definition.Collision);
+        var field = WorldContactSelection.RequiresField(collision: server.ReadView(context).Definition.Collision);
         var provider = (field
             ? $"field contact (requirements: {string.Join(
                 separator: ", ",
-                values: server.Definition.Collision.Requirements
+                values: server.ReadView(context).Definition.Collision.Requirements
             )}); analytic census NOT SOLVED AGAINST"
             : "analytic contact; census"
         );
@@ -151,8 +151,8 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
     }
     // The contact-solver status readout (world.collision.status): the tuning, the field size/revision, and the per-kit
     // collider table so the whole grounded-contact configuration is one Immediate read.
-    private CommandResult Status() {
-        var collision = server.Definition.Collision;
+    private CommandResult Status(CommandContext context) {
+        var collision = server.ReadView(context).Definition.Collision;
         var provider = ((server.SolidField is null)
             ? "analytic"
             : "field"
@@ -167,7 +167,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         var instructions = (server.SolidField?.InstructionCount ?? 0);
         var colliders = new List<string>();
 
-        foreach (var kit in server.Definition.Kits) {
+        foreach (var kit in server.ReadView(context).Definition.Kits) {
             if (kit.Collider is { } collider) {
                 colliders.Add(item: $"{kit.Name}({DescribeCollider(collider: collider)})");
             }
@@ -203,9 +203,9 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             name: "world.contacts",
             description: $"Reports the solidity state (Immediate read): {WorldContactsForms.Spelling}: with no argument it prints the analytic collider census and placement contribution; with a body index it prints that 1-based body's grounded flag, planar speed, grounded witness (resolved=1 when grounded, else 0), the medium facts (inMedium/atMediumBand — always false for a kit authoring no medium hold), and an obstruction witness (obstruction=none, or the LATCHED last non-walkable contact's unit surface normal at 3-decimal precision — a vertical wall reads a non-zero obstruction even though resolved=0, and even while the same body simultaneously reads resolved=1 from standing on the floor elsewhere; a walkable push, ground or ramp, never sets it). LATCHED, not a raw per-tick read: it survives a solver tick that happens not to re-register a push while the body stays actively driven and hasn't meaningfully moved, and clears the instant either input goes idle or the body actually gets clear — so a pinned body reads a stable obstruction rather than flickering.",
             forms: WorldContactsForms,
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count == 0) {
-                    return Census();
+                    return Census(context);
                 }
 
                 if (args.Count > 1) {
@@ -254,13 +254,13 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             audience: CommandAudience.Operator,
             description: $"Reads the live field the simulation solves against (Immediate): {WorldCollisionProbeForms.Spelling} prints signed distance, material, unit gradient, and the field's ambient up mode (gradient when GradientDerivedUp is authored, +Y otherwise). Body-frame policy separately decides whether that candidate, solved gravity, or a measured support normal may orient a body. Requires a field-selecting contact requirement.",
             forms: WorldCollisionProbeForms,
-            handler: (_, args) => Probe(args: args)
+            handler: (context, args) => Probe(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.rigid",
             description: "Reports the rigid solver's live census (Immediate): every active rigid-kit body's mass, linear/angular velocity, and resting latch, plus quiescent=1|0 — the same value $physics:quiescent reads. 'no active rigid body' with quiescent=1 when the world authors none.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(
+            handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.rigid"
             ) is { } refusal)
@@ -272,12 +272,12 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             bindability: CommandBindability.Unbindable,
             name: "world.collision.status",
             description: "Reports the selected contact provider, the requirements that forced it, solid instruction count, field revision, contact skin, and the per-kit collider table.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(
+            handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.collision.status"
             ) is { } refusal)
             ? refusal
-            : Status())
+            : Status(context))
         );
     }
 

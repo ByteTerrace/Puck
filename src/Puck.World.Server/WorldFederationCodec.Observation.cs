@@ -101,9 +101,7 @@ public static class WorldProjectionPrototypeFetch {
             }
             try {
                 var store = (content ?? WorldProjectionContent.Shared);
-                var projection = WorldProjection.Compose(definition: server.Definition, tier: WorldDisclosureTier.Presentation,
-                    authority: server.AuthorityIdentity, revision: server.Population.Revision, arena: server.Arena,
-                    time: server.DeliveryTime, recipient: recipient, content: store)!;
+                var projection = server.DeliveryView(recipient, ceiling).Project(content: store)!;
 
                 if (!projection.Creations.Any(predicate: reference => (reference.Content == pin.ToString())) ||
                     !store.TryGet(content: out var body, pin: pin)) { return null; }

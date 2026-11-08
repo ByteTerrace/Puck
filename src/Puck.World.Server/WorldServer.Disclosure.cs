@@ -15,6 +15,18 @@ public sealed partial class WorldServer {
         new(() => Definition, () => Arena, recipient, tier, observes ?? (() => true), m_disclosureImages,
             AuthorityIdentity, () => DeliveryTime);
 
+    /// <summary>Mints the live capability for this ingress-stamped console invocation.</summary>
+    public WorldRecipientView ReadView(CommandContext context) => ReadView(context.Principal);
+
+    internal WorldRecipientView ReadView(Principal? recipient) {
+        if (recipient is { Kind: PrincipalKind.Session } session) {
+            return m_sessionSinks.TryGetValue(session, out var attached)
+                ? attached.Observation.View
+                : DeliveryView(session, WorldDisclosureTier.Frames, () => false);
+        }
+        return DeliveryView(recipient, WorldDisclosureTier.Replica);
+    }
+
     internal void AttachCursor(Principal? recipient, WorldDeliveryCursor cursor) {
         if (recipient is not { } actor) { return; }
         if (!m_deliveryCursors.TryGetValue(actor, out var streams)) { m_deliveryCursors[actor] = streams = []; }

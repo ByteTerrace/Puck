@@ -125,7 +125,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.placement.get",
             description: $"Reads one live placement row as its exact WorldPlacement JSON shape: {WorldPlacementGetForms.Spelling}.",
             forms: WorldPlacementGetForms,
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count != 1) {
                     return WorldPlacementGetForms.Refuse();
                 }
@@ -133,7 +133,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 var id = args[0].ToString();
 
                 if (WorldDefinitionRows.FindPlacement(
-                    placements: server.Definition.Placements,
+                    placements: server.ReadView(context).Definition.Placements,
                     id: id
                 ) is not { } placement) {
                     return CommandResult.Error(output: $"[world.placement.get: no placement row named '{id}']");
@@ -217,7 +217,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             forms: WorldLoadForms,
             handler: (context, args) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
-                    definition: server.Definition,
+                    definition: server.ReadView(context).Definition,
                     verb: "world.load"
                 ) is { } loadArmed) {
                     return CommandResult.Error(output: loadArmed);
@@ -284,7 +284,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             description: "Re-reads the CURRENT document origin from disk and rebuilds from it — the artist external-edit loop: edit the JSON or .puck source externally, world.reload, no restart: world.reload. The journal always clears on success (reload IS a fresh read of what is on disk right now, so there is nothing to discard-guard the way world.load does). A missing/invalid file, or a re-read that no longer validates or compiles, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the bytes read off disk (for .puck, of the document it lowers to, so an edit that lowers identically keeps the pin) — a re-drive re-reads the same path and refuses BY NAME if the document has moved since the recording was made. The accept echo names the re-read origin.",
             handler: (context, _) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
-                    definition: server.Definition,
+                    definition: server.ReadView(context).Definition,
                     verb: "world.reload"
                 ) is { } reloadArmed) {
                     return CommandResult.Error(output: reloadArmed);
@@ -337,7 +337,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             forms: WorldUndoForms,
             handler: (context, args) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
-                    definition: server.Definition,
+                    definition: server.ReadView(context).Definition,
                     verb: "world.undo"
                 ) is { } undoArmed) {
                     return CommandResult.Error(output: undoArmed);
@@ -370,7 +370,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             forms: WorldSaveForms,
             handler: (context, args) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
-                    definition: server.Definition,
+                    definition: server.ReadView(context).Definition,
                     verb: "world.save"
                 ) is { } saveArmed) {
                     return CommandResult.Error(output: saveArmed);
@@ -459,12 +459,12 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.text",
             description: $"Reads the world text catalog: its default font and every named font's relative source, content pin, Unicode ranges, pixel size, distance range, padding, and preferred columns; {WorldTextForms.Spelling}.",
             forms: WorldTextForms,
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count > 1) {
                     return WorldTextForms.Refuse();
                 }
 
-                var text = server.Definition.Text;
+                var text = server.ReadView(context).Definition.Text;
 
                 if (text is null) {
                     return new CommandResult(Output: "[world.text: none]");
@@ -512,7 +512,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             bindability: CommandBindability.Unbindable,
             name: "world.status",
             description: "Reports the live world definition and journal state (Immediate; the stdin barrier makes it read the settled state after any pending mutation): source path, the source file's basis (its composition template, or none — peeked from the file, the one truth for derivation), schema, row counts, the simulation rate, correction/producer/audio policy (including the mixer's half-radius curve sample), the declared medium field names (or none), a cheap session-drift hint, dirty = journal length, and journal-depth = host.journalDepth (unbounded when 0, the default). Session drift is separate from dirty: a saved-bytes-only world.save leaves the in-memory definition unchanged, so session drift honestly persists past a save.",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (CommandResult.RequireNoArguments(
                     args: args,
                     verb: "world.status"
@@ -520,7 +520,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return refusal;
                 }
 
-                var definition = server.Definition;
+                var definition = server.ReadView(context).Definition;
                 var source = definitionSource.SourcePath;
                 var dirty = server.JournalLength;
                 var drift = WorldSessionCapture.DescribeDrift(
@@ -591,7 +591,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             bindability: CommandBindability.Unbindable,
             name: "world.imports",
             description: "Reads the loaded world's whole basis-and-imports composition graph back: every file that contributed to it, in MERGE order (the deepest basis ancestor through every import to the file's own body last — a later entry's same key overrides an earlier one's), each paired with the top-level keys ITS OWN JSON declares and, for a module that authors one, its exports record as written. A flat file (no basis, no imports) reports just itself.",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (CommandResult.RequireNoArguments(
                     args: args,
                     verb: "world.imports"
@@ -626,7 +626,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             bindability: CommandBindability.Unbindable,
             name: "world.references",
             description: "Reads the references section back: each row's name -> document, or 'none' when the section is absent or declares zero rows. Authored data only — a row asserts nothing about the named document's existence or shape; resolving it is a future consumer's job, not this verb's.",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (CommandResult.RequireNoArguments(
                     args: args,
                     verb: "world.references"
@@ -634,7 +634,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return refusal;
                 }
 
-                var rows = server.Definition.References;
+                var rows = server.ReadView(context).Definition.References;
 
                 if (rows is not { Count: > 0 }) {
                     return new CommandResult(Output: "[world.references: none]");
@@ -652,7 +652,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             bindability: CommandBindability.Unbindable,
             name: "world.metadata",
             description: "Reads the metadata section back: title, description, authors, tags, and the custom bag's key/byte counts, or 'none' when the section is absent. Authored data only, boot-authored, nothing here is read by the engine.",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (CommandResult.RequireNoArguments(
                     args: args,
                     verb: "world.metadata"
@@ -660,7 +660,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return refusal;
                 }
 
-                var metadata = server.Definition.Metadata;
+                var metadata = server.ReadView(context).Definition.Metadata;
 
                 if (metadata is null) {
                     return new CommandResult(Output: "[world.metadata: none]");
@@ -699,7 +699,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             bindability: CommandBindability.Unbindable,
             name: "world.admission",
             description: "Reads the admission section back: each row's domain/subject/mode/algorithm and its grant template count, or 'none' when the section is absent or declares zero rows (deny by default — no remote peer can verify and no traveller can arrive). The document half of the admission decision — world.peers echoes the runtime half (which bodies were admitted under which identity).",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (CommandResult.RequireNoArguments(
                     args: args,
                     verb: "world.admission"
@@ -707,7 +707,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return refusal;
                 }
 
-                var rows = server.Definition.Admission;
+                var rows = server.ReadView(context).Definition.Admission;
 
                 if (rows is not { Count: > 0 }) {
                     return new CommandResult(Output: "[world.admission: none — no remote peer can verify and no traveller can arrive]");

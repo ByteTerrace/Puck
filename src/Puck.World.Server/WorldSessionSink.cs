@@ -26,7 +26,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     private EntitySnapshot[] m_redacted = [];
     private readonly WorldDeliveryCursor m_cursor = new();
     private readonly WorldDeliveryRows m_rows = new();
-    private readonly WorldRecipientView m_view = server.DeliveryView(observation.Session, observation.Tier, () => observation.CanObserve);
+    private readonly WorldRecipientView m_view = observation.View;
     private WorldDocumentVersion Version => server.DocumentVersion with { Sequence = m_cursor.Sequence };
 
     /// <summary>Gets the reason the observer ended its own subscription with, or <see langword="null"/> while it still

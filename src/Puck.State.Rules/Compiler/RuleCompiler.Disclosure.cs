@@ -1,7 +1,8 @@
 namespace Puck.State.Rules;
 
 public static partial class RuleCompiler {
-    private static RuleWork DisclosureCost(IEnumerable<int> reads, IEnumerable<int> writes, RuleCompileContext context) {
+    /// <summary>Bounds the arena audience check shared by transforms and searches, including live cell and zone policies.</summary>
+    public static RuleWork DisclosureCost(IEnumerable<int> reads, IEnumerable<int> writes, RuleCompileContext context) {
         var cost = RuleWork.Zero;
         foreach (var target in writes.Distinct()) {
             var comparisons = 1L + ((long)(context.FindRowAt(rowOrdinal: target)?.Visibility?.Readers?.Count ?? 0) * StateCapacity.MaxVisibilityReaders);

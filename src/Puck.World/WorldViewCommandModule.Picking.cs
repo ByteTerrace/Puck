@@ -45,7 +45,7 @@ internal sealed partial class WorldViewCommandModule {
         return string.Create(provider: CultureInfo.InvariantCulture,
             handler: $"[world.view.pick: instance={instance} request={result.Request} pixel={result.X},{result.Y} kind={((uint)result.Kind)} source={result.Source} material={result.Material}{screen} placement={(target?.Placement ?? "none")} body={(target?.BodyIndex?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")} prototype={(target?.Prototype ?? "none")} materialName={(result.MaterialName ?? "none")}]");
     }
-    private CommandResult Pick(WireArgs args, TextCommandSession? session) {
+    private CommandResult Pick(CommandContext context, WireArgs args, TextCommandSession? session) {
         if (args.Count > 3) {
             return WorldViewPickForms.Refuse(args: in args);
         }
@@ -58,6 +58,9 @@ internal sealed partial class WorldViewCommandModule {
         if (instance == "primary") { instance = presented; }
 
         if (args.Count == 3 && args.Is(1, "finding")) {
+            if (context.Principal.Kind is not (PrincipalKind.Console or PrincipalKind.World)) {
+                return CommandResult.Error("[world.view.pick: diagnostic findings require the operator]");
+            }
             if (diagnostics?.Find(args[2].ToString()) is not { } finding || finding.Identity.Instance != instance) {
                 return CommandResult.Error(output: $"[world.view.pick: no finding '{args[2]}' in instance '{instance}']");
             }

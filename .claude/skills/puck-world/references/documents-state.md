@@ -641,6 +641,17 @@ the one shape is `transfer` (`selector`: `last`/`first`, the zone end a token mu
 the judge reads the moved pile through the arena, which lays an ordered zone out by capacity and moves
 membership without rewriting a row.
 
+Search never declassifies: `WorldSearchCompilation.TryPlanAll` shares
+`RuleCompiler.RequireEnclosedAudience` with transforms and refuses
+`SearchWidensAudience` when any dependency's declared row/cell audience fails
+to enclose an output. `ArenaSearch` repeats the check against live cell and
+containing-zone policies before advancing and landing. `ArenaSearchPlan.Dependencies`
+is the single input inventory for admission, stamps and position keys; it includes
+candidate-generation and control rows as well as judge/score reads. Price the
+checks through `RuleCompiler.DisclosureCost`. An explicit rule write may reveal
+into a side's memory; candidate rules proven live-only (`search(ply) == 0`)
+do not join its speculative judge. Run both skirmish `search evidence` scenarios
+when changing this boundary.
 `shapes` names the candidate shapes the walk enumerates, ahead of token and
 target/direction; absent, the one default `relocate` (`displace: true`) this
 section always ran. `drop` (a token off the board enters an empty cell),

@@ -361,7 +361,7 @@ internal sealed partial class PlayerCommandModule {
                     ) is not { } routedPoint) {
                         // A point only the home world declares takes the body home, standing at it.
                         if (WorldDefinitionRows.FindSpawnPoint(
-                            spawnPoints: m_server.Definition.SpawnPoints,
+                            spawnPoints: m_server.ReadView(context).Definition.SpawnPoints,
                             id: spawnId
                         ) is { } homePoint) {
                             if (!m_instances.TryEnqueuePoseHome(
@@ -414,7 +414,7 @@ internal sealed partial class PlayerCommandModule {
             }
 
             if (WorldDefinitionRows.FindSpawnPoint(
-                spawnPoints: m_server.Definition.SpawnPoints,
+                spawnPoints: m_server.ReadView(context).Definition.SpawnPoints,
                 id: spawnId
             ) is not { } point) {
                 return CommandResult.Error(output: $"[body.pose: spawnPoint '{spawnId}' is not declared — see the spawnPoints section]");

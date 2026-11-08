@@ -1205,6 +1205,7 @@
           "ByteTerrace.Puck.Physics": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.State.Rules": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State.Search": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
           "Puck.World.Authoring": "[1.0.0, )"
         }
@@ -1233,7 +1234,6 @@
         "dependencies": {
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.Hosting": "[10.*, )",
           "Microsoft.Orleans.Server": "[10.*, )",
           "Puck.Launcher": "[1.0.0, )",
           "Puck.Storage": "[1.0.0, )",
