@@ -34,7 +34,7 @@ namespace Puck.World.Server;
 /// records; until that transport exists, this conversion is the named nondeterministic boundary rather than an
 /// implied simulation guarantee.</para>
 /// </remarks>
-internal sealed class WorldAdjacencyContactField : IEntityContactField {
+public sealed class WorldAdjacencyContactField : IEntityContactField {
     private readonly IContactField m_inner;
     private readonly IWorldAdjacencySource m_source;
     private readonly WorldPopulation m_population;
@@ -52,7 +52,7 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
         m_population = population;
     }
 
-    private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, bool supportLanding = false) {
+    private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, FixedVector3? responseOrigin = null, WorldBody? carrier = null) {
         var entryVelocity = velocity;
         var intended = position;
         var resolution = m_inner.ResolveSweep(
@@ -73,14 +73,18 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
         if (entityIndex < 0) {
             return resolution;
         }
+        if ((carrier is not null) && !resolution.Unproved) {
+            carrier.ApplyCarryBlock(correction: position - intended,
+                ceiling: m_population.EntryBody(index: entityIndex)!.RigidBoundingRadius);
+        }
         // A descent selected by untrusted support is not the body's own motion. Unless the local landing grounds,
         // retain the local stationary answer as the baseline and admit the neighbour's entire landing below.
         var neighbourQuery = position;
-        if (supportLanding && !resolution.Grounded) {
+        if ((responseOrigin is { } origin) && !resolution.Grounded) {
             neighbourQuery = intended;
-            position = previousPosition;
+            position = origin;
             velocity = entryVelocity;
-            resolution = m_inner.ResolveSweep(previousPosition: in previousPosition, position: ref position,
+            resolution = m_inner.ResolveSweep(previousPosition: in origin, position: ref position,
                 velocity: ref velocity, orientation: in orientation, volumes: volumes, up: in up);
             if (resolution.Refusal != ContactRefusal.None) { return resolution; }
         }
@@ -228,33 +232,47 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             // displacement and one velocity, mapped as vectors so a rotated seam's point round trip cannot round extra
             // displacement in, and moves this body only as far as the population's door admits.
             var proposedPosition = neighbourQuery +
-                WorldAdjacencyPath.MapVectorIntoSource(value: (neighbourPosition - neighbourStart), path: projection.Path);
+                WorldAdjacencyPath.MapDisplacementIntoSource(value: (neighbourPosition - neighbourStart), path: projection.Path);
+            var before = position;
             m_population.AdmitAdjacencyResponse(
                 displacement: proposedPosition - position,
                 entityIndex: entityIndex,
                 overlapDepth: projection.OverlapDepth,
                 position: ref position,
-                proposedVelocity: WorldAdjacencyPath.MapVectorIntoSource(value: neighbourVelocity, path: projection.Path),
+                proposedVelocity: velocity + WorldAdjacencyPath.MapDisplacementIntoSource(
+                    value: neighbourVelocity - WorldAdjacencyPath.MapVectorIntoNeighbour(value: velocity, path: projection.Path), path: projection.Path),
                 velocity: ref velocity
             );
+            if ((carrier is not null) && !resolution.Unproved && !neighbourResolution.Unproved) {
+                m_population.ApplyCarriedAdjacencyResponse(carrier: carrier, overlapDepth: projection.OverlapDepth,
+                    displacement: position - before);
+            }
 
             var neighbourObstruction = ((neighbourResolution.ObstructionNormal != FixedVector3.Zero)
                 ? neighbourResolution.ObstructionNormal
                 : dynamicObstruction
             );
 
-            return new ContactResolution(
+            var accepted = (position == proposedPosition);
+            var grounded = (accepted && neighbourResolution.Grounded);
+            resolution = new ContactResolution(
                 RequiredStepHeight: FixedQ4816.Max(x: resolution.RequiredStepHeight, y: neighbourResolution.RequiredStepHeight),
                 // A neighbour's pairs index another authority's colliders, so its uncertainty stays unnamed here.
                 Uncertainty: (neighbourResolution.Unproved ? resolution.Uncertainty.Union(other: ContactUncertainty.Unknown) : resolution.Uncertainty),
-                Grounded: (resolution.Grounded || (neighbourResolution.Grounded && (!supportLanding || position == proposedPosition))),
-                ObstructionNormal: ((neighbourObstruction == FixedVector3.Zero)
+                Grounded: (resolution.Grounded || grounded),
+                GroundNormal: (resolution.Grounded ? resolution.GroundNormal : grounded
+                    ? WorldAdjacencyPath.MapVectorIntoSource(value: neighbourResolution.GroundNormal, path: projection.Path).Normalize()
+                    : FixedVector3.Zero),
+                ObstructionNormal: ((!accepted || (neighbourObstruction == FixedVector3.Zero))
                 ? resolution.ObstructionNormal
                 : WorldAdjacencyPath.MapVectorIntoSource(
                         value: neighbourObstruction,
                         path: projection.Path
                     ))
             );
+            // Every projection resolves from the answer admitted so far; a phantom in the first band cannot hide
+            // another band's floor. Support queries retain their original descent until one actually grounds.
+            if ((responseOrigin is null) || resolution.Grounded) { neighbourQuery = position; }
         }
 
         return resolution;
@@ -319,10 +337,16 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             volumes: volumes
         );
     /// <inheritdoc/>
-    public ContactResolution ResolveEntitySupportSweep(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
+    public ContactResolution ResolveEntitySupportSweep(int entityIndex, in FixedVector3 previousPosition, in FixedVector3 responseOrigin, ref FixedVector3 position,
         ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         ResolveCore(entityIndex: entityIndex, previousPosition: in previousPosition, position: ref position,
-            velocity: ref velocity, orientation: in orientation, volumes: volumes, up: in up, supportLanding: true);
+            velocity: ref velocity, orientation: in orientation, volumes: volumes, up: in up, responseOrigin: responseOrigin);
+    /// <summary>Resolves a carried body's sweep and admits each neighbour's propagated block against its carrier.</summary>
+    public ContactResolution ResolveCarriedSweep(int entityIndex, WorldBody carrier, in FixedVector3 previousPosition,
+        ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
+        ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
+        ResolveCore(entityIndex: entityIndex, previousPosition: in previousPosition, position: ref position,
+            velocity: ref velocity, orientation: in orientation, volumes: volumes, up: in up, carrier: carrier);
     /// <inheritdoc/>
     public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         ResolveCore(

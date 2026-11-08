@@ -329,6 +329,9 @@ public sealed partial class WorldTick {
         // end (m_lastCompletedEngineTicks = context.ElapsedTicks); setting it again there is a no-op.
         m_lastCompletedEngineTicks = context.ElapsedTicks;
         m_deliveryTick = (context.Tick + 1UL);
+        Host.Population.BeginAdjacencyContacts(tick: m_deliveryTick);
+        // Read the same pinned image that arrivals, contact and rendering use for this tick.
+        ObserveAdjacencyDeliveries();
         // The per-tick mutation-dispatch allowance opens HERE, before either half of the tick that spends it: the
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
         // submission buffered since the last step — enqueued.
@@ -415,11 +418,6 @@ public sealed partial class WorldTick {
         }
 
         var tick = (context.Tick + 1UL);
-
-        Host.Population.Adjacencies?.BeginTick(tick: tick);
-        // Immediately after the projection graph freezes, so "did this seam refresh" is read off the SAME pinned
-        // image contact and rendering will read for this tick, never a delivery that lands mid-step.
-        ObserveAdjacencyDeliveries();
 
         var stepStartEngineTick = (context.ElapsedTicks - context.StepTicks);
 
