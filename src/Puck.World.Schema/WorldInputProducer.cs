@@ -37,7 +37,7 @@ public sealed class WorldInputProducer {
     /// <summary>Creates one bounded producer from the profile admitted by its authority.</summary>
     public WorldInputProducer(WorldInputCatalog catalog, WorldInputMapping mapping, IReadOnlyList<WorldInputSource> sources, int maximumEventsPerStep,
         uint revision = 1, ulong epoch = 1) {
-        if ((sources.Count > WorldInputCatalog.MaximumSources) || (maximumEventsPerStep is < 1 or > ushort.MaxValue) || (revision == 0) || (epoch == 0)) {
+        if ((maximumEventsPerStep is < 1 or > ushort.MaxValue) || (revision == 0) || (epoch == 0)) {
             throw new ArgumentException(message: "input producer exceeds its admitted bounds");
         }
         m_catalog = catalog;
@@ -46,26 +46,12 @@ public sealed class WorldInputProducer {
         Epoch = epoch;
         m_pending = new WorldInputEvent[maximumEventsPerStep];
         m_deferred = new DeferredObservation[maximumEventsPerStep];
-        m_sources = new WorldInputSourceState[sources.Count];
+        m_sources = catalog.CompileSources(sources: sources, handles: out m_handles);
         m_borrowed = new WorldInputContribution[sources.Count];
         m_neutral = new bool[sources.Count];
         m_observed = new bool[sources.Count];
         m_observedRaw = new long[sources.Count];
         m_reconciledNeutral = new bool[sources.Count];
-        m_handles = new(capacity: sources.Count);
-        var identities = new HashSet<(string, ushort)>();
-
-        for (var index = 0; (index < sources.Count); index++) {
-            var source = sources[index];
-
-            if (string.IsNullOrWhiteSpace(value: source.Name) || (source.Name.Length > 256) || (source.Binding is null) || (source.Binding.Length > 4096) ||
-                !identities.Add(item: (source.Name, source.Channel)) || (source.Channel >= catalog.Channels.Length) || !m_handles.TryAdd(key: source.Handle, value: index) ||
-                !Enum.IsDefined(value: source.Kind) || (catalog.Channels[source.Channel].Shape == ChannelShape.Text) ||
-                ((source.Kind == WorldInputContributionKind.Relative) != (catalog.Channels[source.Channel].Shape == ChannelShape.Relative))) {
-                throw new ArgumentException(message: "input producer source profile has an invalid contract");
-            }
-            m_sources[index] = new(Activation: 0, AwaitingNeutral: false, RawValue: 0, Source: source);
-        }
     }
 
     /// <summary>The last authority-published mapping.</summary>

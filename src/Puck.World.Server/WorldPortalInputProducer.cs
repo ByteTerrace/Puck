@@ -26,24 +26,11 @@ public sealed class WorldPortalInputProducer {
         m_session = session;
         m_definition = destination.Server.Configuration;
         m_catalog = destination.Server.Population.InputCatalog;
-        m_profile = Profile(catalog: m_catalog);
+        m_profile = m_catalog.SnapshotSources(prefix: "$portal:");
         m_activations = new ulong[m_catalog.Channels.Length];
         RequestProfile(destination, fresh: destination.Server.Input.TryGet(input: out _, principal: session));
     }
 
-    private static WorldInputSource[] Profile(WorldInputCatalog catalog) {
-        var profile = new List<WorldInputSource>();
-
-        for (var channel = 0; (channel < catalog.Channels.Length); channel++) {
-            var declaration = catalog.Channels[channel];
-
-            if (declaration.Shape == ChannelShape.Text) { continue; }
-            profile.Add(item: new(((ushort)channel), ((ushort)channel),
-                ((declaration.Shape == ChannelShape.Relative) ? WorldInputContributionKind.Relative : WorldInputContributionKind.Level),
-                ("$portal:" + declaration.Name)));
-        }
-        return profile.ToArray();
-    }
     private void RequestProfile(WorldInstance destination, bool fresh) {
         if (fresh && destination.Server.Input.TryGet(input: out var owner, principal: m_session)) {
             m_waitForReset = (owner!.Revision, owner.Epoch);
@@ -69,7 +56,7 @@ public sealed class WorldPortalInputProducer {
             m_definition = definition;
             if (contractChanged) {
                 m_catalog = destination.Server.Population.InputCatalog;
-                m_profile = Profile(catalog: m_catalog);
+                m_profile = m_catalog.SnapshotSources(prefix: "$portal:");
                 m_activations = new ulong[m_catalog.Channels.Length];
                 RequestProfile(destination, fresh: false);
             }

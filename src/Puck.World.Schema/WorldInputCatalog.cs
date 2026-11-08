@@ -41,6 +41,42 @@ public sealed class WorldInputMapping {
 }
 /// <summary>Immutable logical vocabulary, finite tuples and directed keep sets; compilation alone allocates.</summary>
 public sealed class WorldInputCatalog {
+    /// <summary>Validates one producer/authority source profile and creates its neutral state and handle lookup.
+    /// Both ends use this contract before installing any source.</summary>
+    public WorldInputSourceState[] CompileSources(IReadOnlyList<WorldInputSource> sources, out Dictionary<ushort, int> handles) {
+        if (sources.Count > MaximumSources) { throw new ArgumentException(message: $"input sources exceed {MaximumSources}", paramName: nameof(sources)); }
+        var states = new WorldInputSourceState[sources.Count];
+        var identities = new HashSet<(string, ushort)>();
+
+        handles = new Dictionary<ushort, int>(capacity: sources.Count);
+        for (var index = 0; (index < sources.Count); index++) {
+            var source = sources[index];
+
+            if (string.IsNullOrWhiteSpace(value: source.Name) || (source.Name.Length > 256) || (source.Binding is null) || (source.Binding.Length > 4096) ||
+                !identities.Add(item: (source.Name, source.Channel)) || (source.Channel >= Channels.Length) || !handles.TryAdd(key: source.Handle, value: index) ||
+                !Enum.IsDefined(value: source.Kind) || (Channels[source.Channel].Shape == ChannelShape.Text) ||
+                ((source.Kind == WorldInputContributionKind.Relative) != (Channels[source.Channel].Shape == ChannelShape.Relative))) {
+                throw new ArgumentException(message: $"input source {source.Handle} has an invalid channel, kind or duplicate handle", paramName: nameof(sources));
+            }
+            states[index] = new(Activation: 0, AwaitingNeutral: false, RawValue: 0, Source: source);
+        }
+        return states;
+    }
+    /// <summary>Builds a semantic snapshot source for each non-text channel, preserving its logical id and shape.
+    /// Text travels as ordered events rather than a held source. The prefix identifies the producer's sources.</summary>
+    public WorldInputSource[] SnapshotSources(string prefix) {
+        var sources = new List<WorldInputSource>();
+
+        for (var channel = 0; (channel < Channels.Length); channel++) {
+            var declaration = Channels[channel];
+
+            if (declaration.Shape == ChannelShape.Text) { continue; }
+            sources.Add(item: new(((ushort)channel), ((ushort)channel),
+                ((declaration.Shape == ChannelShape.Relative) ? WorldInputContributionKind.Relative : WorldInputContributionKind.Level),
+                (prefix + declaration.Name)));
+        }
+        return sources.ToArray();
+    }
     /// <summary>Compares the authored input contract during reload; ordinary state values and presentation edits do not reset input.</summary>
     public static bool SameContract(WorldDefinition left, WorldDefinition right) =>
         (ReferenceEquals(objA: left, objB: right) || (Same(left: left.Channels, right: right.Channels) && Same(left: left.InputModes, right: right.InputModes) &&

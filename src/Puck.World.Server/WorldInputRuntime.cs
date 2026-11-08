@@ -225,7 +225,7 @@ public sealed partial class WorldInputRuntime {
                 if (!catalog.TryGetLogicalId(declaration.Name, out var channel) || (catalog.Channels[channel].Shape != declaration.Shape)) { continue; }
                 sources.Add(item: source with { Channel = channel });
             }
-            if (owner.Controller is not null) { sources.Clear(); sources.AddRange(collection: SnapshotProfile(catalog: catalog)); }
+            if (owner.Controller is not null) { sources.Clear(); sources.AddRange(collection: catalog.SnapshotSources(prefix: "$snapshot:")); }
             var candidate = PrepareOwner(owner.Principal, owner.Body, sources, checked((owner.Input.Revision + 1)), owner.SeatStates, owner.Controller);
 
             candidate.Input.InheritDefinition(owner.Input, owner.Definition, definition, Interval, ActivationCauses(owner.Principal));
