@@ -638,7 +638,7 @@ games and its fuzzer, not when a review runs out of findings.
 | A separate authority project as the guard | Reject as the sole guard | SDK references flow transitively and Server's public API would still carry the members | Nothing |
 | The assembly-level denied-API gate | Reject as the guard | Sees assembly references, not members | Nothing; it stays for `System.Console` and Azure |
 | Making `world.identify` operator-only | Watch | Hashing the recipient's view gives a per-recipient identity, which is what the recipient was handed; operator-only is simpler | The owner wanting one QR for every seat |
-| A separate body-disclosure view (`WorldOutputHub.Redact`, `WorldSinkDisclosure`) folded into the recipient view | Watch | Body redaction is the same shape (a per-sink policy applied at the hub) and the natural second occupant of the view; out of scope here so the state fix lands alone | The view landed and a body-disclosure finding |
+| A separate body-disclosure view (`WorldOutputHub.Redact`, `WorldSinkDisclosure`) folded into the recipient view | Adopt as its own step | Body redaction is the same shape (a per-sink policy applied at the hub) and the natural second occupant of the view; out of scope here so the state fix lands alone. Both conditions have arrived: the view landed with step 1, and the MMO round's A16 is the body-disclosure finding ([open items](#open-items)) | Nothing |
 | Refusing `search` jobs whose public outputs are judged over restricted sites | Watch | An authored disclosure like a shared-screen binding; a lint is the owner's product call | The owner's ruling on what authors may hide and from whom |
 | Isolating the arena byte ceiling per row or per audience | Watch | A resource channel outside the guarantee; the per-row `capacity` already bounds cells | An authored world where the shared ceiling is reached with hidden rows |
 
@@ -948,8 +948,23 @@ pool later declares enters through `ReadsWhole` alone.
   per-seat rows that move nothing a crew seat or a session is delivered.
 - Whether `world.identify` hashes the recipient's view or becomes operator-only
   (decided here: the view; the owner may prefer one QR per world).
-- Body disclosure (`WorldOutputHub.Redact`) joins the recipient view when its
-  next finding arrives; the view is designed to hold it.
+- Body disclosure (`WorldOutputHub.Redact`) joins the recipient view: the MMO
+  round's I1 (its step 16; [the seams decision](../decisions/worlds-and-federation.md#seams)).
+  Its finding is the attack catalogue's
+  [A16](mmo-foundations/attacks.md#a16-watching-without-a-body): under the
+  default `All` an unembodied spectator receives every body, and under `Radius`
+  an observer anchored to a window or a camera receives none, because `Redact`
+  anchors only to the observer's own body (`WorldObserverDisclosure`'s
+  `Radius` mode: "An observer with no body of its own is delivered nothing").
+  Fold a spatial grid, hysteresis, an unembodied-observer policy with a window
+  or camera anchor, and distance-tiered cadence into the view and its cursor,
+  replacing `Redact`. Check 5 (I1) in
+  [the memo's checks](mmo-foundations/synthesis.md#5-how-the-debug-world-proves-each-favoured-option):
+  at `Radius 15` with 64 autonomous bodies crossing the radius, a spectator
+  anchored to a window grant receives the bodies within 15 m of its window, an
+  unanchored one receives none under `All` as well as `Radius`, a body
+  oscillating 0.1 m at 15.0 m does not flicker, and `world.budget` shows
+  redaction cost scaling with nearby bodies. Needs step 1 (landed) alone.
 - The resource channels named as best effort are measured, not assumed: step
   1's spectator check records the per-tick disclosure work a hidden write
   costs, so the width of the timing channel is a number in `world.budget`.

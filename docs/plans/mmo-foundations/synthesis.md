@@ -11,7 +11,10 @@ second attack pass
 ([attacks on the synthesis](synthesis-attacks.md)) and two adversarial reviews
 read the first revision of this memo; [the review answers](#9-review-answers)
 take every finding one by one, and the sections above them carry the changes
-those findings forced.
+those findings forced. The decisions now live in
+[the decision register](../../decisions/worlds-and-federation.md), and the
+order of work in the plans and work packets it names; this memo stays as their
+evidence.
 
 Labels: **[record]** means the claim is taken from a named record's section;
 **[opened]** means this memo reopened the code or document at this tree and
@@ -104,7 +107,7 @@ the memo:
    the mechanism is unbuilt, and the memo decides what to build, not what to
    patch ([decision 4](#decision-4-value-across-trust-boundaries)). The
    architecture page already says so **[opened]**
-   (`docs/architecture/worlds.md:804-806`): "Remote round trips do not adopt
+   (`docs/architecture/worlds.md:819-821`): "Remote round trips do not adopt
    ... Remote home adoption remains deferred."
 2. **`WorldRecipientView` was a plan when the records were written.** Lane
    C's options I1 and C1 lean on it; lane E and lane C's own citation check
@@ -167,7 +170,7 @@ make opposite calls on who may issue value.
 
 | Option | Evidence | Cost | Fails at |
 |---|---|---|---|
-| 1a. Record the owner's words in AGENTS.md as a ruling, with one weighing rule: a design round asks what each established answer becomes when every zone, character and server is a world, and judges it at MMO scale | The round's own frame ([the round](../mmo-foundations.md#the-frame)) **[record]** | One paragraph | Nothing; it is prose |
+| 1a. Record the owner's words in AGENTS.md as a ruling, with one weighing rule: a design round asks what each established answer becomes when every zone, character and server is a world, and judges it at MMO scale | The round's own frame ([the round](../mmo-foundations.md), which read [the idea in plain terms](../../architecture/worlds.md#the-idea-in-plain-terms) first) **[record]** | One paragraph | Nothing; it is prose |
 | 1b. Record the purpose in a decision page only | Decision pages hold settled design | Same | A ruling in a decision page does not reach every agent's rules file |
 
 **Favoured.** 1a. **Strongest case against:** a rules file that grows a purpose
@@ -180,8 +183,8 @@ holds it: "Puck exists to make it possible, eventually, to build an MMO at the
 scale of World of Warcraft that redefines the genre the way WoW did. The
 emulators and the screen-within-a-screen work were envisioned as seamless parts
 of that MMO." This memo takes those words as the purpose and weighs every
-decision at that scale. Writing the paragraph and the weighing rule into
-`AGENTS.md` (option 1a) is the lead's task after the round closes.
+decision at that scale. The paragraph and the weighing rule are in
+`AGENTS.md` (option 1a, [Puck's purpose](../../../AGENTS.md#pucks-purpose)).
 
 ### Decision 2: player state across author edits
 
@@ -517,7 +520,7 @@ document, `Mutate` and the slot, with a required write mask **[opened]**
             (candidate.Subject == subject)));
 ```
 
-The model's own answer is in prose **[opened]** (`docs/architecture/worlds.md:86-88`):
+The model's own answer is in prose **[opened]** (`docs/architecture/worlds.md:88-90`):
 "Where something must stay unique or tradeable, such as currency or a stake at
 a card table, the world that issued it keeps the record itself and escrow and
 custody move it, so a copy gains nothing."
@@ -685,7 +688,7 @@ is a two-scan filter at the hub with three modes and a flat cadence
 |---|---|---|---|---|
 | S1. Fiction-aligned split: visible portals for travel and scope changes; `WorldAdjacency` for continuous shards; population layers moved only under an unobservability predicate (no combat, no channel in progress, in a transition volume or by a prompt) with an increasing hop cooldown | Blizzard's own layering deferred transfers during combat and before loot, added a longer delay after PvP, and hotfixed an increasing hop cooldown **[record]** | Authoring transition corridors or the predicate; a last-hop stamp kept by the layer authority; layer ordinals and a deferral queue the engine lacks | Cannot hide a layer change in an open field while the player watches a node | Closes layer-hop farming beside A7; A10 goes to C3 |
 | S2. Framed transitions everywhere; no silent layers | FFXIV's numbered instances (summary only) | Gives up re-layering an entered field | A flash mob in an entered field | Removes mid-cast vanishes by construction |
-| S3. Reactive spatial splitting at runtime | None that held; contradicts "Destinations are boot-authored document data" and "do not run an authority boundary through a place designed to be contested" **[opened]** (`docs/architecture/worlds.md:1413-1414`) | Reactive topology | The crowd at a junction (M2-XFE) | None |
+| S3. Reactive spatial splitting at runtime | None that held; contradicts "Destinations are boot-authored document data" and "do not run an authority boundary through a place designed to be contested" **[opened]** (`docs/architecture/worlds.md:1431-1432`) | Reactive topology | The crowd at a junction (M2-XFE) | None |
 | F1. A frameless portal is a creation with an aperture face and no frame rings, placed with a `WorldPlacementFace` portal; a standard `threshold` template | The glass fills the aperture edge to edge with no bezel; the door and the screen are independent facts about one face **[record]** | A template in `worlds/standard/`; no C# | Nothing it claims | None |
 | F2. An adjacency that falls back to a frameless `window` across scopes it cannot project directly | Adjacency requires a global persisted destination **[opened]** (`src/Puck.World.Schema/WorldAdjacencies.cs:149`) | Teaching adjacency to host a window | Mixed lighting and sky | None |
 | I1. Fold spatial grid, hysteresis, an explicit unembodied-observer policy and distance-tiered cadence into the disclosure view and cursor | The disclosure plan watches this seam as the view's natural second occupant **[record]**; Unreal's actor priority gives each actor a fair share under saturation **[record]** | Replaces `Redact`; builds on disclosure step 1, which has landed | Nothing it claims | Closes A16; narrows A12 |
@@ -990,7 +993,7 @@ The remote identity stays a claim until attested. So A10 is narrowed, not closed
 Taped neighbour records then close the replay boundary. C1 as the rule for any contested
 place, which is the architecture page's existing rule, and the owner's "do not
 run an authority boundary through a place designed to be contested"
-**[opened]** (`docs/architecture/worlds.md:1413-1414`); the referee world is a
+**[opened]** (`docs/architecture/worlds.md:1431-1432`); the referee world is a
 vouched role ([decision 3, neutrality](#decision-3-custody-of-owned-things)).
 C2 as the Puck-native prototype for duels between friends, which no float-based
 MMO can run, stated with what it removes: the host's simulation advantage, and
@@ -1664,7 +1667,9 @@ became of them.
   ordering, a held-input horizon, a match-entry reservation that forfeits on
   an attested stall, and "invalid history" until the replay attributes; step
   18 is the witness's own step; check 8 (C2) gains the five fault legs; the
-  LAN duel is a draw on stall by agreement, in [owner call 13](#7-owner-calls).
+  LAN duel is a draw on stall by agreement, as the first revision's owner call 13
+  stated it and [decision 8](#decision-8-where-a-contested-place-runs) now
+  decides.
 - **B14, with Codex R7 and Argon 4** (pinned at the seam; A10 claimed closed).
   **Accepted.** Decision 8 names exactly what the clamp closes and leaves
   (the aggregate bound, no neighbour-induced crossing, protected retreat,

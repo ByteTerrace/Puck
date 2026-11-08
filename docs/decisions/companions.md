@@ -113,7 +113,9 @@ authority entitled to make it.
   since they may be together in a partitioned world.
 - **By default it waits.** The engine's default is to wait in durable custody;
   a recall happens by the player's request or an author's declared recall
-  window. Refilling with a new identity happens only for a traveller its author
+  window. The standard package declares that window as the margin by which a
+  custodian may miss its lease, so waiting forever is never the standard's
+  answer ([lease-missed recall](worlds-and-federation.md#recall-after-a-missed-lease)). Refilling with a new identity happens only for a traveller its author
   declares a disposable role (a summon, a hireling, an escort), and it is
   named to the player as a different individual.
 - **Every transition is a record** made by the deciding authority (departure,
@@ -122,7 +124,9 @@ authority entitled to make it.
 
 The rule is the engine's for any owned traveller (items, mounts, vehicles,
 summons), not the companion's alone. The redesign that builds it carries the
-records, the fence and the laws.
+records, the fence and the laws. A scarce traveller whose title sits at a
+settlement domain takes that domain as its home, with the player's host as a
+custodian ([bodies under custody](worlds-and-federation.md#bodies-move-under-custody-and-the-active-seat-is-the-domains-right)).
 
 ## State that persists is declared
 

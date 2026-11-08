@@ -14,7 +14,7 @@ protocol. These are options for the [open round](../mmo-foundations.md), not rul
 ## Evidence and scope
 
 **[opened]** The [round](../mmo-foundations.md),
-`docs/plans/mmo-foundations.md:117`, calls custody a hypothesis:
+`docs/plans/mmo-foundations.md:74-75`, calls custody a hypothesis:
 "recovery by presumed abort and recall". This page answers round questions 3
 and 4 and [attack questions](attacks.md#4-questions-for-the-research-lanes) 1, 2,
 3 and 6. Its attack set is A1, A2, A3, A7, A8, A9, A13 and A15.
@@ -490,7 +490,7 @@ states: "signed tickets are not modelled" and
 limits the player's transfer model. Its refinement fixture uses retained
 authorities and local seats, excludes some federation concurrency, and
 defers unbuilt moves. The [build plan](../companion-redesign.md#9-build-plan)
-says at `docs/plans/companion-redesign.md:551`: "Steps 1 to 5 are built." This lane did not run the model or turn those
+says at `docs/plans/companion-redesign.md:553`: "Steps 1 to 5 are built." This lane did not run the model or turn those
 documented bounds into new verification results.
 
 **[inference]** The generalisable machinery is qualified identity, a durable
