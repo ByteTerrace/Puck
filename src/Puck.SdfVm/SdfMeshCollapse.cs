@@ -90,6 +90,8 @@ public static class SdfMeshCollapse {
         private const byte Free = 0;
         private const byte Locked = 2;
         private const byte Slides = 1;
+        // The slide targets Kind keeps per place; a place with more recomputes them.
+        private const int SlideTargets = 4;
 
         private readonly int[] m_placeOf;
         private readonly double[] m_x;
@@ -146,6 +148,8 @@ public static class SdfMeshCollapse {
         private readonly Dictionary<(long Edge, uint Material), (double Distance, int Next)> m_reverseEdges = [];
         private readonly int[] m_stamp;
         private readonly byte[] m_kind;
+        private readonly int[] m_slideTargets;
+        private readonly int[] m_slideCounts;
         private readonly double m_lineLimit;
         private readonly double[] m_candidateCosts;
         private readonly int[] m_candidatePlaces;
@@ -166,6 +170,9 @@ public static class SdfMeshCollapse {
         private readonly List<(int Sample, int Other, double Distance)> m_lineChoices = [];
         private readonly List<double> m_strays = [];
         private readonly List<Source> m_sources = [];
+        private int m_source;
+        private bool m_sourcesListed;
+        private bool m_linesListed;
 
         private int m_laidCount;
 
@@ -234,6 +241,8 @@ public static class SdfMeshCollapse {
             m_stamp = new int[m_places];
             m_fanEdges = new (int, int)[m_places];
             m_kind = new byte[m_places];
+            m_slideTargets = new int[(SlideTargets * m_places)];
+            m_slideCounts = new int[m_places];
             m_candidateCosts = new double[m_places];
             m_candidatePlaces = new int[m_places];
             m_quadrics = new double[(10 * m_places)];
@@ -371,18 +380,25 @@ public static class SdfMeshCollapse {
                 m_targets.Sort();
                 PrepareFrom(place: place);
                 foreach (var (_, target) in m_targets) {
-                    if (TryCollapse(cosine: cosine, error: error, from: place, to: target)) {
+                    var outcome = TryCollapse(cosine: cosine, error: error, from: place, to: target);
+
+                    if (outcome == Outcome.Taken) {
                         taken++;
                         break;
                     }
-                    m_rejected[Directed(from: place, to: target)] = Directed(from: m_revisions[place], to: m_revisions[target]);
+                    // Only the link test reads the neighbour's fan; every other refusal reads the place's own fan, its
+                    // samples and lines, and the neighbour's fixed position, so it stands until the place's revision moves.
+                    m_rejected[Directed(from: place, to: target)] = Directed(from: m_revisions[place], to: ((outcome == Outcome.RefusedLinks) ? m_revisions[target] : AnyRevision));
                 }
             }
 
             return taken;
         }
         private bool Refused(int from, int to) =>
-            (m_rejected.TryGetValue(key: Directed(from: from, to: to), value: out var rejected) && (rejected == Directed(from: m_revisions[from], to: m_revisions[to])));
+            (m_rejected.TryGetValue(key: Directed(from: from, to: to), value: out var rejected) && ((rejected == Directed(from: m_revisions[from], to: AnyRevision)) || (rejected == Directed(from: m_revisions[from], to: m_revisions[to]))));
+        // The neighbour revision a refusal that never read the neighbour's fan records; no revision is negative.
+        private const int AnyRevision = -1;
+        private enum Outcome : byte { Taken, Refused, RefusedLinks }
         private static long Directed(int from, int to) => ((((long)from) << 32) | ((uint)to));
         // Long's own hash folds its halves together, so neighbouring pairs of places collide; a Fibonacci multiply spreads them.
         private sealed class MixedKey : IEqualityComparer<long> {
@@ -405,8 +421,15 @@ public static class SdfMeshCollapse {
         private void Targets(int place) {
             m_targetPlaces.Clear();
             if (m_kind[place] == Slides) {
-                _ = Kind(penalize: false, place: place);
-                m_targetPlaces.AddRange(collection: m_features);
+                // Kind ran on this fan when it last changed (Run, Pass), so its slide targets stand.
+                var count = m_slideCounts[place];
+
+                if (count < 0) {
+                    _ = Kind(penalize: false, place: place);
+                    m_targetPlaces.AddRange(collection: m_features);
+                } else {
+                    m_targetPlaces.AddRange(source: (ReadOnlySpan<int>)m_slideTargets.AsSpan(start: (SlideTargets * place), length: count));
+                }
 
                 return;
             }
@@ -544,10 +567,19 @@ public static class SdfMeshCollapse {
                 m_features.Clear();
                 m_features.AddRange(collection: seams);
 
-                return Slides;
+                return Slide(place: place);
             }
 
-            return ((m_features.Count <= 1) ? Free : Slides);
+            return ((m_features.Count <= 1) ? Free : Slide(place: place));
+        }
+        // Keeps a sliding place's targets (m_features) for Targets, which reads them until the place's fan next changes.
+        private byte Slide(int place) {
+            var count = m_features.Count;
+
+            m_slideCounts[place] = ((count <= SlideTargets) ? count : -1);
+            if (count <= SlideTargets) { CollectionsMarshal.AsSpan(list: m_features).CopyTo(destination: m_slideTargets.AsSpan(start: (SlideTargets * place), length: SlideTargets)); }
+
+            return Slides;
         }
         // Whether Kind's bijection closes one ring rather than several disjoint rings. Follow the incoming twins;
         // reversing the old outgoing walk visits the same cycle, without searching the fan at every step.
@@ -564,49 +596,48 @@ public static class SdfMeshCollapse {
         }
         // Tries to collapse one place onto a neighbour, taking it only where the mesh stays a closed ring of untwisted
         // triangles about the neighbour and every sample of the triangles it changes stays within the bounds.
-        private bool TryCollapse(int from, int to, double error, double cosine) {
+        private Outcome TryCollapse(int from, int to, double error, double cosine) {
             var fan = m_from;
             var first = -1;
             var second = -1;
+            var firstAt = -1;
+            var secondAt = -1;
 
-            // The edge lookup already visits every neighbour; stamp the link here rather than walking the fan again.
-            m_stampValue++;
-            foreach (var triangle in fan) {
-                var (_, next, after) = Around(place: from, triangle: triangle);
+            for (var index = 0; (index < fan.Count); index++) {
+                ref readonly var original = ref m_previous[index];
 
-                m_stamp[next] = m_stampValue;
-                m_stamp[after] = m_stampValue;
-                if (next == to) { first = triangle; }
-                if (after == to) { second = triangle; }
+                if (original.Next == to) { (first, firstAt) = (fan[index], index); }
+                if (original.After == to) { (second, secondAt) = (fan[index], index); }
             }
-            if ((first < 0) || (second < 0)) { return false; }
+            if ((first < 0) || (second < 0)) { return Outcome.Refused; }
 
-            var (_, _, firstOpposite) = Around(place: from, triangle: first);
-            var (_, secondOpposite, _) = Around(place: from, triangle: second);
+            var firstOpposite = m_previous[firstAt].After;
+            var secondOpposite = m_previous[secondAt].Next;
 
-            if ((firstOpposite == secondOpposite) || !Links(firstOpposite: firstOpposite, from: from, secondOpposite: secondOpposite, to: to)) { return false; }
+            if (firstOpposite == secondOpposite) { return Outcome.Refused; }
+            if (!Links(firstOpposite: firstOpposite, from: from, secondOpposite: secondOpposite, to: to)) { return Outcome.RefusedLinks; }
 
             // Each side of the collapsed edge keeps its own vertices: a triangle about the place takes, at the neighbour,
             // the vertex the edge's triangle on its side has there.
-            var fromFirst = m_corners[CornerAt(place: from, triangle: first)];
+            var fromFirst = m_corners[m_previous[firstAt].Corner];
             var toFirst = m_corners[CornerAt(place: to, triangle: first)];
-            var fromSecond = m_corners[CornerAt(place: from, triangle: second)];
+            var fromSecond = m_corners[m_previous[secondAt].Corner];
             var toSecond = m_corners[CornerAt(place: to, triangle: second)];
 
-            if ((fromFirst == fromSecond) && (toFirst != toSecond)) { return false; }
+            if ((fromFirst == fromSecond) && (toFirst != toSecond)) { return Outcome.Refused; }
 
             var (tx, ty, tz) = (m_x[to], m_y[to], m_z[to]);
 
             for (var index = 0; (index < fan.Count); index++) {
-                var triangle = fan[index];
-                if ((triangle == first) || (triangle == second)) { continue; }
-
-                var corner = CornerAt(place: from, triangle: triangle);
-                var vertex = m_corners[corner];
-
-                if ((vertex != fromFirst) && (vertex != fromSecond)) { return false; }
+                if ((index == firstAt) || (index == secondAt)) { continue; }
 
                 ref readonly var original = ref m_previous[index];
+                var triangle = original.Surface.Triangle;
+                var corner = original.Corner;
+                var vertex = m_corners[corner];
+
+                if ((vertex != fromFirst) && (vertex != fromSecond)) { return Outcome.Refused; }
+
                 ref readonly var old = ref original.Surface;
                 var (ax, ay, az, bx, by, bz, cx, cy, cz) = (old.Ax, old.Ay, old.Az, old.Bx, old.By, old.Bz, old.Ex, old.Ey, old.Ez);
                 var (ox, oy, oz) = original.Face;
@@ -618,7 +649,7 @@ public static class SdfMeshCollapse {
                 var oldLength = original.Length;
                 var newLength = Math.Sqrt(d: (((nx * nx) + (ny * ny)) + (nz * nz)));
 
-                if (!(newLength > (1e-12 * oldLength)) || ((((ox * nx) + (oy * ny)) + (oz * nz)) < ((FlipCosine * oldLength) * newLength))) { return false; }
+                if (!(newLength > (1e-12 * oldLength)) || ((((ox * nx) + (oy * ny)) + (oz * nz)) < ((FlipCosine * oldLength) * newLength))) { return Outcome.Refused; }
 
                 // The face keeps the side of its vertices' normals it had, or the opaque pass, which culls back faces,
                 // would leave a hole where the shading faces the camera.
@@ -628,24 +659,63 @@ public static class SdfMeshCollapse {
                 for (var other = (3 * triangle); (other < ((3 * triangle) + 3)); other++) {
                     after += m_normals[((other == corner) ? Mapped(fromFirst: fromFirst, toFirst: toFirst, toSecond: toSecond, vertex: vertex) : m_corners[other])];
                 }
-                if (((((ox * before.X) + (oy * before.Y)) + (oz * before.Z)) > 0.0) != ((((nx * after.X) + (ny * after.Y)) + (nz * after.Z)) > 0.0)) { return false; }
+                if (((((ox * before.X) + (oy * before.Y)) + (oz * before.Z)) > 0.0) != ((((nx * after.X) + (ny * after.Y)) + (nz * after.Z)) > 0.0)) { return Outcome.Refused; }
             }
 
-            if (!Measure(cosine: cosine, error: error, fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond)) { return false; }
-            if (!MeasureReverse(error: error, fan: fan)) { return false; }
-            if (!MeasureLines(error: Math.Min(val1: error, val2: m_lineLimit), from: from, to: to)) { return false; }
+            if (!Measure(cosine: cosine, error: error, fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond)) { return Outcome.Refused; }
+            if (!MeasureReverse(error: error, fan: fan)) { return Outcome.Refused; }
+            if (!MeasureLines(error: Math.Min(val1: error, val2: m_lineLimit), from: from, to: to)) { return Outcome.Refused; }
 
             Commit(fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond);
 
-            return true;
+            return Outcome.Taken;
         }
         // Failed neighbours leave the source fan unchanged. Lay its old geometry out once for all their forward and
         // reverse checks; Pass stops trying neighbours immediately after the first commit changes it.
         private void PrepareFrom(int place) {
             var fan = Alive(fan: m_from, place: place);
             m_reverseEdges.Clear();
-            // The source fan's lines and tracked samples are the same for every neighbour tried.
-            Lines(fan: fan, into: m_lineNeighbours, place: place);
+            // The source fan's lines and tracked samples are the same for every neighbour tried, so the first that needs
+            // them lists them.
+            m_linesListed = false;
+            m_sourcesListed = false;
+            m_source = place;
+
+            if (m_measured.Length < fan.Count) {
+                m_measured = new Candidate[(2 * fan.Count)];
+                m_previous = new OriginalTriangle[(2 * fan.Count)];
+                m_laid = new int[(2 * fan.Count)];
+            }
+            // Every neighbour's link test reads one stamp of the place's neighbours.
+            m_stampValue++;
+            for (var index = 0; (index < fan.Count); index++) {
+                var triangle = fan[index];
+                var (corner, next, after) = Around(place: place, triangle: triangle);
+                var (ax, ay, az, bx, by, bz, ex, ey, ez) = Positions(triangle: triangle);
+                var face = Cross(ax: ax, ay: ay, az: az, bx: bx, by: by, bz: bz, cx: ex, cy: ey, cz: ez);
+                var sum = Vector3.Zero;
+
+                m_stamp[next] = m_stampValue;
+                m_stamp[after] = m_stampValue;
+                for (var at = (3 * triangle); (at < ((3 * triangle) + 3)); at++) { sum += m_normals[m_corners[at]]; }
+                m_previous[index] = new OriginalTriangle {
+                    Surface = new Candidate { Ax = ax, Ay = ay, Az = az, Bx = bx, By = by, Bz = bz, Ex = ex, Ey = ey, Ez = ez, Material = m_materials[triangle], Triangle = triangle },
+                    Face = face,
+                    Length = Math.Sqrt(d: (((face.Item1 * face.Item1) + (face.Item2 * face.Item2)) + (face.Item3 * face.Item3))),
+                    NormalSum = sum,
+                    Corner = corner,
+                    Next = next,
+                    After = after,
+                };
+                Bounds(candidate: ref m_previous[index].Surface);
+            }
+        }
+        // Lists the samples tracked to the prepared fan's triangles, the removed vertex's first, for Measure.
+        private void ListSources() {
+            var fan = m_from;
+            var place = m_source;
+
+            m_sourcesListed = true;
             m_sources.Clear();
             for (var phase = 0; (phase < 2); phase++) {
                 for (var index = 0; (index < fan.Count); index++) {
@@ -670,33 +740,15 @@ public static class SdfMeshCollapse {
                     }
                 }
             }
-
-            if (m_measured.Length < fan.Count) {
-                m_measured = new Candidate[(2 * fan.Count)];
-                m_previous = new OriginalTriangle[(2 * fan.Count)];
-                m_laid = new int[(2 * fan.Count)];
-            }
-            for (var index = 0; (index < fan.Count); index++) {
-                var triangle = fan[index];
-                var (ax, ay, az, bx, by, bz, ex, ey, ez) = Positions(triangle: triangle);
-                var face = Cross(ax: ax, ay: ay, az: az, bx: bx, by: by, bz: bz, cx: ex, cy: ey, cz: ez);
-                var sum = Vector3.Zero;
-
-                for (var corner = (3 * triangle); (corner < ((3 * triangle) + 3)); corner++) { sum += m_normals[m_corners[corner]]; }
-                m_previous[index] = new OriginalTriangle {
-                    Surface = new Candidate { Ax = ax, Ay = ay, Az = az, Bx = bx, By = by, Bz = bz, Ex = ex, Ey = ey, Ez = ez, Material = m_materials[triangle], Triangle = triangle },
-                    Face = face,
-                    Length = Math.Sqrt(d: (((face.Item1 * face.Item1) + (face.Item2 * face.Item2)) + (face.Item3 * face.Item3))),
-                    NormalSum = sum,
-                };
-                Bounds(candidate: ref m_previous[index].Surface);
-            }
         }
+        // A source fan triangle as it stands: its geometry, face normal and its length, its corners' normal sum, and the
+        // collapsing place's corner in it with the places after that corner in winding order.
         private struct OriginalTriangle {
             public Candidate Surface;
             public (double X, double Y, double Z) Face;
             public double Length;
             public Vector3 NormalSum;
+            public int Corner, Next, After;
         }
         // Bounds how far each triangle Measure laid out strays from the mesh's own surface: its centroid's and its edge
         // midpoints' distance to the nearest triangle of its material about the collapsing place as it stands, plus that
@@ -806,6 +858,10 @@ public static class SdfMeshCollapse {
         // the bound; false when one has none.
         private bool MeasureLines(int from, int to, double error) {
             m_lineChoices.Clear();
+            if (!m_linesListed) {
+                Lines(fan: m_from, into: m_lineNeighbours, place: from);
+                m_linesListed = true;
+            }
             foreach (var line in m_lineNeighbours) {
                 if (!m_lines.TryGetValue(key: Key(a: from, b: line), value: out var samples)) { continue; }
 
@@ -876,6 +932,7 @@ public static class SdfMeshCollapse {
             var candidates = Lay(fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond);
 
             m_laidCount = candidates;
+            if (!m_sourcesListed) { ListSources(); }
             // The removed vertex is often the first sample that refuses a target, so PrepareFrom lists its samples first,
             // then all remaining samples; each still chooses its exact nearest admissible witness independently of the
             // others.
