@@ -1026,6 +1026,12 @@ counts edit tool calls in the log and treats a long run with none as a stall
 to act on. Re-test with the next bounded coding item before concluding
 anything about the family.
 
+In the MMO round's synthesis review, an Argon review quoted memo text no revision of the memo
+ever held and a constant its cited file does not contain, beside code evidence that held. So an
+Argon review brief asks it to paste each quotation from the `view_file` output that showed it,
+and the lead or the answering author reopens every quotation a finding rests on before
+accepting it, as the synthesis author did there.
+
 Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden
 a small direction into a quota or an always rule. Using two families is not the

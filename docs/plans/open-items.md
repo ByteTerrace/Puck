@@ -918,9 +918,11 @@ travel.
 
 Neighbour contact replay packet (independent of companion custody):
 
-- [high] Tape fixed neighbour inputs at their local admission tick. The dynamic
-  correction budget is enforced by `WorldPopulation.BoundAdjacencyCorrection`,
-  but `WorldAdjacencyFields.Handle.Pin` (`src/Puck.World.Server/WorldAdjacencyFields.cs:669`)
+- [high] Tape fixed neighbour inputs at their local admission tick.
+  `WorldPopulation.AdmitAdjacencyResponse` bounds what a neighbour's bodies and
+  geometry do to a local body each tick and keeps it behind its ownership
+  faces, and contact settles by authority pair through the link's settled
+  identity, but `WorldAdjacencyFields.Handle.Pin`
   copies the latest presentation snapshot and discards `sourceTick`;
   `WorldAdjacencyContactField.ResolveCore`
   (`src/Puck.World.Server/WorldAdjacencyContactField.cs:25`) still quantizes floats
@@ -941,6 +943,29 @@ Neighbour contact replay packet (independent of companion custody):
   clamp counts. This is a transport/admission/tape change, beyond the bounded
   depenetration fix; the bound does not claim replay determinism or prove a
   neighbour's bodies exist.
+- [medium] A neighbour can still hold a local body still: a refusal from its
+  geometry's sweep (`ContactRefusal`) returns the body to its previous position
+  in `WorldAdjacencyContactField.ResolveCore` before the door, so hostile
+  geometry can pin a body in the band. Bound or ignore a refusal the
+  neighbour's field raises against a body this world owns; show it with a law
+  whose neighbour field refuses every sweep.
+- [medium] `WorldAdjacencyContactField.TrySupportDistance` takes the least
+  support distance a neighbour's field reports, and ground snap then moves the
+  body down that far within its authored reach without passing the door, so a
+  reported floor can draw a body toward a floor/ceiling ownership face. Route
+  the snap's displacement through `AdmitAdjacencyResponse` when the support came
+  from a neighbour.
+- [medium] The rest of C3's residual rules
+  ([synthesis, decision 8](mmo-foundations/synthesis.md#decision-8-where-a-contested-place-runs)):
+  a neighbour correction a body's own motion does not ask for still carries a
+  still body toward the plane up to its ownership threshold, and phantom
+  bodies reported every tick hold a visitor indefinitely. Both belong in
+  `WorldPopulation.AdmitAdjacencyResponse`, which would need the body's own
+  motion this tick and a per-body hold count that decays the admitted budget;
+  check 8 (C3) names the witness.
+- [medium] The settlement's remote identity is the link's first claimed
+  `Authority`; a neighbour that picks its identity before linking still picks
+  which side of a pair yields. Attested authority identities close it.
 
 Still open from the companion build:
 
@@ -1434,9 +1459,10 @@ and the Water packet).
 Owner: rendering · ordinary · Next:
 [step 2 of the design memo](author-shaders.md#6-implementation-steps) (the
 interpreter's cost and registers on the bar devices). Steps 0 and 1 have
-landed; step 1's GPU lifetimes (retained identity lists through fence
-retirement in `SdfWorldResidency`, the bounded `SdfShadeDispatch` records) owe
-an adversarial review.
+landed and step 1's GPU lifetimes had their adversarial review and fixes
+(`SdfShadeSlots`). Nothing reads `SdfWorldResidency.InFlightShadeIdentities`
+yet: the quarantine step reads, and then clears, the submissions a device loss
+marked lost, which stay reported until it does.
 
 The owner's ruling (AGENTS.md, "Authors rule"): authors may bring their own
 shaders, so a look is never limited to what the engine's shading offers.
@@ -1575,6 +1601,14 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [low] `FixedFrameSource` is copied in at least three SdfVm tests
+  (`tests/Puck.SdfVm.Tests/SdfWorldPassesLawTests.cs:199`,
+  `SdfWorldPipelineCatalogLawTests.cs:138`, `SdfWorldResidencyBuildRefusalLawTests.cs:351`);
+  move it to `tests/Shared` with the `HeapAllocator` copies below.
+- [medium · frame allocation] `SdfShadeDispatch.Record` iterates an
+  `IReadOnlyList<Job>`, allocating an enumerator every frame; this is why
+  `AViewAllocatesEachScratchBufferOnce` fails on the tip. Iterate the backing
+  array. Seen by the shade-1 GPU-lifetime fix lane; unverified beyond its read.
 - [low] `HeapAllocator` is copied three times in the Vulkan tests
   (`tests/Puck.Vulkan.Tests/VulkanGroupedBindingLawTests.cs:206`,
   `VulkanGroupedPipelineLayoutLawTests.cs:233`, `VulkanIndirectCountLawTests.cs:155`);
@@ -1812,13 +1846,11 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
     `tests/Puck.SdfVm.Tests/SdfWorldResidencyBuildRefusalLawTests.cs:339`).
 - Make `GpuRegion.Grow` the only way to grow a GPU region, and enforce the uniform
   view limit there (one lane):
-  - [low] Growing the program region on `world.reload` waits for the device to go
-    idle (`SdfWorldTables.EnsureProgramCapacity`, `TryWaitIdle`) and rebuilds the
-    region whole. `GpuRegion.Grow` grows any owned region without waiting,
-    but keeps the policy it was created with, while a program can grow past the
-    ring's share of the aperture that `GpuResidency.Select` would stage. Grow it
-    without the idle wait and reselect the policy when the new size crosses the
-    share.
+  - [low] `GpuRegion.Grow` keeps the policy a region was created with, so
+    `SdfWorldTables.EnsureProgramCapacity` grows the program region through it
+    only while `GpuResidency.Select` still picks that policy, and replaces the
+    region from its host copy when a size crosses the ring's share of the
+    aperture. Let `Grow` reselect the policy itself so that branch goes.
   - [medium · owner: rendering] Uniform region growth accepts an unbindable size
     (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs:688`, `Grow`, uniform-size
     check): a 65,536-byte uniform ring can grow to 65,792 bytes, since the check
@@ -3527,18 +3559,8 @@ brief's priorities ([security review](../development/security-review.md)).
     and step 0b's principals (a socket peer, Observe revoked and regranted, a
     federated traveller, a mounted addon). The harness green over the fixtures
     and the fuzzer is the definition of done.
-  - Step 1, deltas and versions first ([decision 5](disclosure.md#5-a-delta-is-a-difference-of-views-owned-by-the-stream)):
-    [high] forgetting the delta cache reopens a timing oracle after
-    re-disclosure (`src/Puck.World.Server/WorldStateChangeDisclosure.cs:85,97`);
-    [medium] the last-sent image aliases live vector memory (`:90`); [high]
-    versions, revisions, delivery counts and stream invalidation signal hidden
-    installs (`src/Puck.World.Server/WorldTravelerProjection.cs:47-50`,
-    `WorldFederationProjectionSink.cs:52-55`); `host.frames`, `host.memory`,
-    `world.counters`, `world.gpu-timing` and `world.collision.probe` become
-    Operator.
   - Step 2, reads through the view ([decision 1](disclosure.md#1-one-capability-the-recipients-view)):
-    [high] replica resume delivers `server.Definition` raw
-    (`src/Puck.World.Server/WorldSessionSink.cs:188`); [high] `world.budget`
+    [high] `world.budget`
     publishes raw placement counts (`src/Puck.World/WorldPopulationCommandModule.cs:226`,
     no audience at `:461`); [high] `world.reflow.preview` runs over the
     authority's placements (`src/Puck.World.Server/WorldServer.Reflow.cs:98-131,358`);

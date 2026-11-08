@@ -532,6 +532,7 @@ public sealed partial class ShaderPipelineRenderNode {
             pass: pass,
             slot: slot
         );
+        pass.Drew = (outcome == RenderGraphPackageOutcome.Drew);
     }
     // The layout each port's image is in when the recorder records: the one its planned access's barrier left it in.
     private static GpuImageLayout[] LayoutsOf(ShaderPipelineAccess[] accesses, ResourceReference[] ports) {

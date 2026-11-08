@@ -892,6 +892,8 @@ public static partial class WorldFederationCodec {
             writer.WriteInt32(value: delta.Row);
             writer.WriteString(value: delta.Region);
             writer.WriteString(value: delta.FieldName);
+            writer.WriteBlock(value: delta.Observation is { } observation
+                ? JsonSerializer.SerializeToUtf8Bytes(new[] { observation }, WorldJsonContext.Default.WorldObservedRowArray) : []);
             if ((delta.Row >= 0) && (delta.Cell >= 0)) {
                 writer.WriteString(value: delta.Image.Key.Value);
                 var value = delta.Image.Value;
@@ -1672,6 +1674,15 @@ public static partial class WorldFederationCodec {
             var row = reader.ReadInt32();
             var region = reader.ReadString(field: "snapshot physical region");
             var fieldName = reader.ReadString(field: "snapshot field identity");
+            var observationBytes = reader.ReadBlock(field: "snapshot row observation", maxBytes: WorldFieldCapacity.MaxSnapshotBytes);
+            WorldObservedRow? observation = null;
+            if (observationBytes.Length != 0) {
+                try {
+                    var observations = JsonSerializer.Deserialize(observationBytes, WorldJsonContext.Untrusted.WorldObservedRowArray);
+                    if (observations is not { Length: 1 } || row < 0 || cell != -1) { reader.Fail(detail: "invalid snapshot row observation", refusal: WireRefusal.PayloadMalformed); }
+                    else { observation = observations[0]; }
+                } catch (JsonException) { reader.Fail(detail: "invalid snapshot row observation", refusal: WireRefusal.PayloadMalformed); }
+            }
             var image = default(ArenaCellImage);
 
             if ((row < -1) || (row >= StateCapacity.MaxRows) || (cell < -1) ||
@@ -1704,7 +1715,7 @@ public static partial class WorldFederationCodec {
                 }
                 image = new ArenaCellImage(Behavior: behavior, Clock: clock, Key: key, Value: value);
             }
-            deltas[index] = new FieldCellDelta(Cell: cell, Field: field, FieldName: fieldName, Image: image, Raw: raw, Region: region, Row: row);
+            deltas[index] = new FieldCellDelta(Cell: cell, Field: field, FieldName: fieldName, Image: image, Raw: raw, Region: region, Row: row, Observation: observation);
         }
 
         var engineTick = reader.ReadUInt64();

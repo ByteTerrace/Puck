@@ -55,10 +55,20 @@ public sealed partial class ShaderPipelineRenderNode {
 
         throw new InvalidOperationException(message: $"Package readback '{readback.Version}' is not bound to the recording pass.");
     }
+    // The one door a readback is armed through: only a pass whose recording drew this frame is armed, so a pass that
+    // skipped, stood or drew nothing never re-arms an earlier recording's result under this submission's fence.
     private void SubmitPackageReadbacks(int slot, IGpuSubmissionFence fence) {
         foreach (var pass in m_passes) {
-            if (pass.Package is IRenderGraphPackageReadback readback) {
+            if (pass.Drew && (pass.Package is IRenderGraphPackageReadback readback)) {
                 readback.Submitted(fence: fence, slot: slot);
+            }
+        }
+    }
+    // Called only after the slot's fence was waited (WaitSlot), never on a device loss's release.
+    private void CompletePackageReadbacks(int slot) {
+        foreach (var pass in m_passes) {
+            if (pass?.Package is IRenderGraphPackageReadback readback) {
+                readback.Completed(slot: slot);
             }
         }
     }

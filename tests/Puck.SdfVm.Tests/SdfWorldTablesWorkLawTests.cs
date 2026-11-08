@@ -317,7 +317,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Assert.True(copied > 0);
     }
     private sealed class Rig : IDisposable {
-        public Rig(GpuWorkLedger? ledger = null, bool holdFences = false, bool distinctBuffers = false, FakeGpuDevice? device = null) {
+        public Rig(GpuWorkLedger? ledger = null, bool holdFences = false, bool distinctBuffers = false, FakeGpuDevice? device = null, SdfShadeProgram? shadeDefault = null) {
             var gpu = device ?? new FakeGpuDevice(holdFences: holdFences, trackObjects: distinctBuffers) { DistinctBuffers = distinctBuffers };
 
             Gpu = gpu;
@@ -357,7 +357,8 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                 device: gpu,
                 options: new SdfWorldTablesOptions(
                     Program: program,
-                    WorkLedger: owned
+                    WorkLedger: owned,
+                    ShadeDefault: shadeDefault
                 ),
                 pipelines: Pipelines,
                 meshRaster: MeshRaster,
@@ -387,7 +388,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                         Y: 0f
                     )
                 )]
-            );
+            ) { ShadeDefault = shadeDefault };
         }
 
         public GpuPassPipelineCache Cache { get; } = new();

@@ -221,7 +221,8 @@ public static class WorldStateDisclosure {
     /// be handed, which a measurement sizing for every possible recipient reads — instead of as <paramref name="recipient"/>.</param>
     /// <param name="presented">The rows a presentation reads, which cross as observations of the cells the recipient
     /// may read whether or not they declare a policy, or <see langword="null"/> for none.</param>
-    public static IReadOnlyList<WorldObservedRow>? Compose(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted = false, IReadOnlySet<string>? presented = null) {
+    /// <param name="onlyRow">An optional single row to compose for the shared image table.</param>
+    public static IReadOnlyList<WorldObservedRow>? Compose(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted = false, IReadOnlySet<string>? presented = null, int? onlyRow = null) {
         var observer = new Observer(
             arena: arena,
             recipient: recipient,
@@ -238,6 +239,8 @@ public static class WorldStateDisclosure {
             )) {
                 continue;
             }
+
+            if ((onlyRow is { } selected) && (rowOrdinal != selected)) { continue; }
 
             // Which rows cross is decided by declaration, never by whether a member is restricted now.
             if (
@@ -737,7 +740,7 @@ public static class WorldStateDisclosure {
 
     // One recipient's view of one live store: format the canonical token only for a restricted policy. Ordered
     // zones are indexed by token domain, so a cell's read check costs the zones over its own domain and nothing else.
-    private struct Observer {
+    internal struct Observer {
         private readonly StateArena m_arena;
         private readonly bool m_unrestricted;
         private readonly Principal? m_recipient;

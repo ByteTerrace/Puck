@@ -41,7 +41,7 @@ public readonly record struct WorldProjectionDelivery(WorldProjectionDeliveryKin
 /// delivery is the whole projection; every later composition travels as the delta of the members that changed, by the
 /// one document delta (<see cref="WorldDocumentBasis.Diff"/>), and a composition that changes nothing sends nothing.
 /// Its state clocks travel as anchors (<see cref="WorldClockAnchorLedger"/>): a composition carries the anchors the
-/// recipient holds while their predictions hold, and <see cref="Step"/> sends a timeline delta at exactly the
+/// recipient holds while their predictions hold, and <see cref="Step(WorldDefinition, ulong, ulong, StateArena?)"/> sends a timeline delta at exactly the
 /// authoritative ticks a prediction misses, so a steady sky sends nothing.
 /// <para>Counts its deliveries and their bytes under <see cref="WorldProjectionWork"/>. Not thread-safe: one
 /// recipient's deliveries run on the thread that steps its world.</para>
@@ -55,6 +55,67 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
 
     private WorldProjectionDocument? m_held;
     private JsonObject? m_tree;
+    private WorldDefinition? m_recipientSource;
+
+    /// <summary>Compares a traveller's current projection with its last delivery, retaining its clock anchors and
+    /// sequence for the comparison. A hidden install cannot change this identity.</summary>
+    public bool Holds(WorldRecipientView view) => m_held is null || WorldProjection.SerializeCompact(m_held).AsSpan()
+        .SequenceEqual(WorldProjection.SerializeCompact(view.Project(m_anchors, m_held.Provenance.Revision)!));
+
+    /// <summary>Composes through the capability and advances only this delivery's cursor. Hidden-only changes
+    /// reuse the shared row images; a read of the same view cannot seed this feed.</summary>
+    public WorldProjectionDelivery Compose(WorldRecipientView view, WorldDeliveryCursor cursor) {
+        if (!view.Observes) { return WorldProjectionDelivery.Nothing; }
+        var source = view.Images.Definition(view);
+        if (ReferenceEquals(source, m_recipientSource) && m_held is not null) { return WorldProjectionDelivery.Nothing; }
+        m_recipientSource = source;
+        var projection = view.Project(m_anchors, m_held?.Provenance.Revision ?? 0)!;
+        var payload = WorldProjection.SerializeCompact(projection);
+        var tree = WorldProjectionDelta.Tree(payload);
+        tree.Remove("observations", out var nextObservations);
+        var observationsChanged = !(projection.Observations ?? []).SequenceEqual(m_held?.Observations ?? []);
+        var delta = m_tree is null ? null : WorldProjectionDelta.Diff(m_tree, tree);
+        if (delta is { Count: 0 } && !observationsChanged) { return WorldProjectionDelivery.Nothing; }
+        cursor.Delivered(view);
+        projection = projection with { Provenance = projection.Provenance with { Revision = checked((int)cursor.Sequence) } };
+        payload = WorldProjection.SerializeCompact(projection);
+        tree = WorldProjectionDelta.Tree(payload);
+        tree.Remove("observations", out nextObservations);
+        delta = m_tree is null ? null : WorldProjectionDelta.Diff(m_tree, tree);
+        m_anchors.Retain(projection.Timeline?.Clocks ?? []);
+        if (delta is null) { return Whole(projection, tree, payload); }
+        // Retain state only as shared typed row images, never as a JSON tree per spectator. The common document
+        // merge keys arrays by name/key, so a new observation array is not a replacement: diff the transient state
+        // trees too, including removal markers for clocks, traits and cells that disappeared.
+        var previousObservations = observationsChanged && m_held?.Observations is { } previous
+            ? JsonSerializer.SerializeToNode(previous.ToArray(), WorldJsonContext.Default.WorldObservedRowArray) : null;
+        if (observationsChanged) {
+            var before = new JsonObject();
+            var after = new JsonObject();
+            if (previousObservations is not null) { before["observations"] = previousObservations.DeepClone(); }
+            if (nextObservations is not null) { after["observations"] = nextObservations.DeepClone(); }
+            var stateDelta = WorldProjectionDelta.Diff(before, after);
+            if (stateDelta is null) { return Whole(projection, tree, payload); }
+            foreach (var (name, value) in stateDelta) { delta[name] = value?.DeepClone(); }
+        }
+        var valuesOnly = WorldProjectionDelta.IsValuesOnly(delta, previousObservations, nextObservations);
+        m_held = projection; m_tree = tree;
+        return Partial(projection, delta, valuesOnly);
+    }
+
+    /// <summary>Delivers anchor corrections at this stream's sequence.</summary>
+    public WorldProjectionDelivery Step(WorldRecipientView view, WorldDeliveryCursor cursor, ulong tick, ulong engineTick) {
+        var delivery = Step(view.Source, tick, engineTick, view.Arena);
+        if (delivery.Kind == WorldProjectionDeliveryKind.None) { return delivery; }
+        cursor.Delivered();
+        m_held = m_held! with { Provenance = m_held.Provenance with { Revision = checked((int)cursor.Sequence) } };
+        var next = WorldProjectionDelta.Tree(WorldProjection.SerializeCompact(m_held));
+        next.Remove("observations");
+        var delta = WorldProjectionDelta.Tree(delivery.Payload);
+        delta["provenance"] = next["provenance"]?.DeepClone();
+        m_tree = next;
+        return delivery with { Projection = m_held, Payload = CanonicalJsonDocument.SerializeCompact(delta), TimelineOnly = false };
+    }
 
     /// <summary>Gets the anchors the recipient holds.</summary>
     public WorldClockAnchorLedger Anchors => m_anchors;
@@ -196,6 +257,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
         m_anchors.Release();
         m_held = null;
         m_tree = null;
+        m_recipientSource = null;
     }
 
     private WorldProjectionDelivery Partial(WorldProjectionDocument projection, JsonObject delta, bool valuesOnly) {

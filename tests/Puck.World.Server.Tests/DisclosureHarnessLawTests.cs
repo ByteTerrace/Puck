@@ -54,6 +54,18 @@ public sealed class DisclosureHarnessLawTests {
     }
 
     [Fact]
+    public void HiddenOnlyInstallsAndReadsBetweenDeliveriesDoNotMoveARecipientsStream() {
+        var left = Run(definition: Document(pub: 3, secret: 7));
+        var right = Run(definition: Document(pub: 3, secret: 7), atTick: (fixture, tick) => {
+            if (tick != 3UL) { return; }
+            fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateRow(Principal.Console,
+                Document(pub: 3, secret: 19).AuthoredState[0]));
+        });
+        Assert.Empty(left.Invalid);
+        Assert.Empty(right.Invalid);
+        Assert.Empty(WorldDisclosureComparison.Compare(left, right));
+    }
+    [Fact]
     public void TwoWorldsWhoseHiddenStateIsEqualCompareEqualForEveryRecipient() {
         var left = Run(definition: Document(pub: 3, secret: 7));
         var right = Run(definition: Document(pub: 3, secret: 7));

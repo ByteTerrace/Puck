@@ -39,6 +39,10 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
     private int[] m_bodyStateOrdinals = [];
 
     private WorldDefinition? m_shaped;
+    private readonly Dictionary<int, WorldObservedRow> m_observations = [];
+
+    /// <summary>The last delivered observable row metadata, including a hidden count or anonymous backs.</summary>
+    public WorldObservedRow? Observation(int ordinal) => m_observations.GetValueOrDefault(ordinal);
 
     /// <inheritdoc/>
     public WorldPresentationManifest Manifest => WorldPresentationManifest.Of(definition: m_definition());
@@ -277,13 +281,18 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
 
             if (delta.Row >= 0) {
                 if (((uint)delta.Row) >= ((uint)m_arena.Rows.Count)) { continue; }
+                var metadataMoved = delta.Cell == -1 && delta.Observation != m_observations.GetValueOrDefault(delta.Row);
+                if (delta.Cell == -1) {
+                    if (delta.Observation is { } observation) { m_observations[delta.Row] = observation; }
+                    else { m_observations.Remove(delta.Row); }
+                }
                 if (delta.Cell >= 0) {
                     m_arena.ImportProjectionCell(rowOrdinal: delta.Row, position: delta.Cell, image: delta.Image);
                 } else {
                     var replaced = 0;
 
                     while (((index + 1 + replaced) < deltas.Length) && (deltas[(index + 1 + replaced)].Row == delta.Row) && (deltas[(index + 1 + replaced)].Cell >= 0)) { replaced++; }
-                    if (!ReplaceRow(header: delta, cells: deltas.Slice(start: (index + 1), length: replaced))) {
+                    if (!ReplaceRow(header: delta, cells: deltas.Slice(start: (index + 1), length: replaced)) && !metadataMoved) {
                         index += replaced;
                         continue;
                     }
@@ -455,6 +464,7 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
             !ReferenceEquals(objA: document.StateCatalog, objB: m_shaped.StateCatalog)
         ) {
             m_arena = new StateArena(catalog: document.StateCatalog, section: document.StateRaw, time: ArenaTime.Origin);
+            m_observations.Clear();
         }
         m_shaped = document;
         ShapeBodyState(document: document);
