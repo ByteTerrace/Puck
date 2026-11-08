@@ -3074,13 +3074,13 @@ failing case is argued from source, not run):
   'session$24$24/sdf.world$glass-shade'`, `finished every pass before
   'session$24$24/sdf.world$glass'`, on the first frame that 5×3 nested session
   view drew a glass draw (glass draws 0 to 1, three draws, a 16 MiB mesh
-  region); Direct3D 12 never lost it. It no longer reproduces: nine windowed
+  region); Direct3D 12 never lost it. It no longer reproduces: ten windowed
   Vulkan cold bakes on the RTX 4070, each from an empty `--cache-dir`, settled
   their bakes with no loss, after the glass skip (the glass clear, raster and
   shading now run only together, on a frame where a glass draw's box meets the
   view's frustum, where the shading pass ran on every frame before) and the
-  full-allocation clear of a target certified clear. Nine clean runs leave a
-  one-in-four loss about a 7 % chance of hiding, so the cause stays unnamed. A
+  full-allocation clear of a target certified clear. Ten clean runs leave a
+  one-in-four loss about a 6 % chance of hiding, so the cause stays unnamed. A
   loss now names its read: under each fault address the report lists the
   objects bound or recently unbound there, or the nearest bound objects on
   either side (`VulkanDeviceAddressBindings`). Next: when a Vulkan loss recurs,
