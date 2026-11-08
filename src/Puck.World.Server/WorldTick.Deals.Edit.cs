@@ -43,7 +43,7 @@ public sealed partial class WorldTick {
                 VariantVersion = variant < 0 ? 0UL : arena.RowVersion(variant),
                 Template = template, Swept = true, WorldSeed = Host.Definition.Generation?.WorldSeed ?? 0UL,
                 Distribution = template.Distribution,
-                Offsets = WorldPlacementDeal.Offsets(template, Host.Definition.Generation?.WorldSeed ?? 0UL).Select(offset => offset.ToVector3()).ToArray(),
+                Slots = WorldPlacementDeal.Offsets(template, Host.Definition.Generation?.WorldSeed ?? 0UL).Length,
             };
         }
     }

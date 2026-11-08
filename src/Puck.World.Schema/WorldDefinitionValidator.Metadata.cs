@@ -102,7 +102,7 @@ public static partial class WorldDefinitionValidator {
     // The gravitational field (SIM-AFFECTING). The constant is non-negative and the softening length positive (a
     // zero softening lets a coincident pair diverge); every attractor names a live placement, exactly once, with a
     // non-negative mass. An inactive section still validates: authoring the constants before the sources is legal.
-    private static void ValidateGravity(WorldGravity gravity, IReadOnlyList<WorldPlacement> placements, List<string> errors) {
+    private static void ValidateGravity(WorldGravity gravity, IReadOnlyList<WorldPlacement> placements, ulong worldSeed, List<string> errors) {
         if (!Enum.IsDefined(value: gravity.Solver)) {
             errors.Add(item: $"gravity.solver '{gravity.Solver}' is not defined.");
         }
@@ -222,7 +222,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"gravity.areas declares {areas.Count} rows, past the {WorldGravityCapacity.MaxAreas}-row cap.");
         }
 
-        var frames = WorldPlacementFrameCompilation.Compile(placements: placements);
+        var frames = WorldPlacementFrameCompilation.Compile(placements: placements, worldSeed: worldSeed);
 
         for (var index = 0; (index < areas.Count); index++) {
             var area = areas[index];

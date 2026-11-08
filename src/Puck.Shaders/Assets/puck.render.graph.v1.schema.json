@@ -154,7 +154,9 @@
                       "Viewports",
                       "DynamicTransforms",
                       "InstanceMaskWords",
-                      "RenderExtent"
+                      "RenderExtent",
+                      "ExtentTiles",
+                      "RenderExtentTiles"
                     ],
                     "title": "ShaderPipelineCountBasis"
                   }

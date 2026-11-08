@@ -26,7 +26,7 @@ public static partial class WorldPlacementStamp {
 
         public CompilationContext(WorldPlacementsSection section, IReadOnlyList<WorldPrototype> creations, ulong seed, int revision) {
             m_seed = seed; m_revision = revision;
-            m_authored = WorldPlacementFrameCompilation.Resolve(section);
+            m_authored = WorldPlacementFrameCompilation.Resolve(section, seed);
             var projected = false;
             foreach (var row in section.Rows ?? []) {
                 if (row is null) { continue; }
@@ -44,8 +44,7 @@ public static partial class WorldPlacementStamp {
             if (row.Parent is not { Length: > 0 } parentId || !m_rows.TryGetValue(parentId, out var parent)) { return Authored(row); }
             var parentFrame = FrameOf(parent);
             if (Owned(row) && parentFrame == Authored(parent)) { return Authored(row); }
-            return WorldPlacementFrameCompilation.Compose(parentFrame, row,
-                inheritParentScale: !WorldPlacementDeal.IsChild(parent, row));
+            return WorldPlacementFrameCompilation.Compose(parentFrame, parent, row, m_seed);
         }
         private CompiledPlacementFrame FrameOf(WorldPlacement row) {
             if (m_frames.TryGetValue(row, out var held)) { return held; }

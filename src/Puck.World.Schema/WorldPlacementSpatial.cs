@@ -553,12 +553,12 @@ public static class WorldSpatialQueryCompilation {
             Extent: shape.Box.WorldExtent
         );
     }
-    private static FixedSpatialShape CompileShape(WorldSpatialShape authored, SpatialFrame frame) {
-        var center = checked((frame.Position + Rotate(
-            vector: checked((FixedVector3.FromVector3(value: authored.Center.Value) * frame.Scale)),
-            yaw: frame.YawRadians
+    private static FixedSpatialShape CompileShape(WorldSpatialShape authored, CompiledPlacementFrame frame) {
+        var center = checked((frame.FixedPosition + Rotate(
+            vector: checked((FixedVector3.FromVector3(value: authored.Center.Value) * frame.FixedScale)),
+            yaw: frame.FixedYawRadians
         )));
-        var yaw = checked((frame.YawRadians + FixedQ4816.FromDegrees(degrees: authored.YawDegrees)));
+        var yaw = checked((frame.FixedYawRadians + FixedQ4816.FromDegrees(degrees: authored.YawDegrees)));
         var rotation = Yaw(radians: yaw);
 
         if (authored.Kind == WorldSpatialShapeKind.Sphere) {
@@ -568,11 +568,11 @@ public static class WorldSpatialQueryCompilation {
                     halfExtents: FixedVector3.Zero
                 ),
                 Kind: FixedSpatialShapeKind.Sphere,
-                Radius: checked((FixedQ4816.FromDouble(value: authored.Radius) * frame.Scale))
+                Radius: checked((FixedQ4816.FromDouble(value: authored.Radius) * frame.FixedScale))
             );
         }
 
-        var extents = checked((FixedVector3.FromVector3(value: authored.HalfExtents.Value) * frame.Scale));
+        var extents = checked((FixedVector3.FromVector3(value: authored.HalfExtents.Value) * frame.FixedScale));
 
         return new FixedSpatialShape(
             Box: FixedOrientedBox.FromRotation(
@@ -589,11 +589,11 @@ public static class WorldSpatialQueryCompilation {
         if (!WithinNarrowphaseRange(value: vector)) { throw new OverflowException(message: "Spatial rotation input exceeds the query range."); }
         return Yaw(radians: yaw).Rotate(vector: vector);
     }
-    private static bool TryCompileGeometry(WorldSpatialShape authored, SpatialFrame frame,
+    private static bool TryCompileGeometry(WorldSpatialShape authored, CompiledPlacementFrame frame,
         out FixedSpatialShape shape, out FixedSpatialAabb bounds, out string reason) {
         shape = default;
         bounds = default;
-        if (frame.Scale <= FixedQ4816.Zero) {
+        if (frame.FixedScale <= FixedQ4816.Zero) {
             reason = "placement frame scale is zero or negative in Q48.16";
             return false;
         }
@@ -634,77 +634,11 @@ public static class WorldSpatialQueryCompilation {
             return false;
         }
     }
+    // Every frame resolves through the one parent-chain resolver, inside the narrowphase envelope.
+    private static readonly Func<FixedQ4816, bool> NarrowphaseRange = WithinNarrowphaseRange;
     private static bool TryResolveFrame(WorldPlacement placement, IReadOnlyDictionary<string, WorldPlacement> byId,
-        Dictionary<string, SpatialFrame> frames, HashSet<string> visiting, out SpatialFrame frame, out string reason) {
-        if (frames.TryGetValue(
-            key: placement.Id,
-            value: out frame
-        )) { reason = string.Empty; return true; }
-        if (!visiting.Add(item: placement.Id)) { frame = default; reason = $"placement '{placement.Id}' participates in a parent cycle"; return false; }
-
-        try {
-            var position = FixedVector3.FromVector3(value: placement.Position);
-            var scale = FixedQ4816.FromDouble(value: placement.Scale);
-            var yaw = FixedQ4816.FromDegrees(degrees: placement.YawDegrees);
-
-            if (placement.Parent is { Length: > 0 } parentId) {
-                byId.TryGetValue(
-                    key: parentId,
-                    value: out var parent
-                );
-                if (
-                    (parent is null) ||
-                    ((parent.Distribution is not null) && (parent.Deal is null)) ||
-                    (parent.Mirror is not null) ||
-                    (parent.Attach is not null) ||
-                    (parent.Inhabit is not null)
-                ) {
-                    frame = default;
-                    reason = $"placement '{placement.Id}' requires a declared static single parent frame '{parentId}'";
-                    return false;
-                }
-                if (!TryResolveFrame(
-                    byId: byId,
-                    frame: out var parentFrame,
-                    frames: frames,
-                    placement: parent,
-                    reason: out reason,
-                    visiting: visiting
-                )) {
-                    frame = default;
-                    return false;
-                }
-                position = checked((parentFrame.Position + Rotate(
-                    vector: checked((position * parentFrame.Scale)),
-                    yaw: parentFrame.YawRadians
-                )));
-                scale = checked((scale * parentFrame.Scale));
-                yaw = checked((yaw + parentFrame.YawRadians));
-            }
-            if (
-                !WithinNarrowphaseRange(value: position) ||
-                !WithinNarrowphaseRange(value: scale)
-            ) {
-                frame = default;
-                reason = $"placement '{placement.Id}' transform exceeds the fixed-point spatial query range";
-                return false;
-            }
-            frame = new SpatialFrame(
-                Position: position,
-                Scale: scale,
-                YawRadians: yaw
-            );
-            frames[placement.Id] = frame;
-            reason = string.Empty;
-            return true;
-        } catch (OverflowException) {
-            frame = default;
-            reason = $"placement '{placement.Id}' transform exceeds fixed-point range";
-            return false;
-        } finally {
-            visiting.Remove(item: placement.Id);
-        }
-    }
+        Dictionary<string, CompiledPlacementFrame> frames, HashSet<string> visiting, ulong worldSeed, out CompiledPlacementFrame frame, out string reason) =>
+        WorldPlacementFrameCompilation.TryResolveFrame(placement, byId, frames, visiting, worldSeed, out frame, out reason, NarrowphaseRange);
     private static bool WithinNarrowphaseRange(FixedQ4816 value) =>
         ((value.Value >= -NarrowphaseRawLimit) && (value.Value <= NarrowphaseRawLimit));
     private static bool WithinNarrowphaseRange(FixedVector3 value) =>
@@ -715,14 +649,19 @@ public static class WorldSpatialQueryCompilation {
     );
 
     /// <summary>Compiles all eligible rows in authored order.</summary>
-    public static WorldSpatialQueryIndex Compile(IReadOnlyList<WorldPlacement>? placements) => Compile(
+    /// <param name="placements">The rows.</param>
+    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>), which a dealt child's slot offset
+    /// reads under a noise or scatter region.</param>
+    /// <returns>The compiled index.</returns>
+    public static WorldSpatialQueryIndex Compile(IReadOnlyList<WorldPlacement>? placements, ulong worldSeed) => Compile(
         bound: null,
-        placements: placements
+        placements: placements,
+        worldSeed: worldSeed
     );
     // A volume whose center or extents read the live state (a document-value reference) is recorded with the values it
     // compiled, so Resolve can tell the cached index has gone stale and recompile that volume alone. A volume the index
     // does not hold (its placement was refused) records no slot, and a change to it compiles the whole document.
-    private static void NoteBound(WorldPlacementSpatialVolume authored, SpatialFrame frame, int slot, List<BoundVolume>? bound) {
+    private static void NoteBound(WorldPlacementSpatialVolume authored, CompiledPlacementFrame frame, int slot, List<BoundVolume>? bound) {
         if (
             (bound is null) ||
             ((authored.Shape.Center.Reference is null) && (authored.Shape.HalfExtents.Reference is null))
@@ -735,7 +674,7 @@ public static class WorldSpatialQueryCompilation {
             authored.Shape.HalfExtents.Value
         ));
     }
-    private static WorldSpatialQueryIndex Compile(IReadOnlyList<WorldPlacement>? placements, List<BoundVolume>? bound) {
+    private static WorldSpatialQueryIndex Compile(IReadOnlyList<WorldPlacement>? placements, List<BoundVolume>? bound, ulong worldSeed) {
         if (placements is not { Count: > 0 }) {
             return new WorldSpatialQueryIndex([]);
         }
@@ -744,7 +683,7 @@ public static class WorldSpatialQueryCompilation {
             p => p.Id,
             StringComparer.Ordinal
         );
-        var frames = new Dictionary<string, SpatialFrame>(comparer: StringComparer.Ordinal);
+        var frames = new Dictionary<string, CompiledPlacementFrame>(comparer: StringComparer.Ordinal);
         var visiting = new HashSet<string>(comparer: StringComparer.Ordinal);
         var volumes = new List<CompiledSpatialVolume>();
         var unsupported = new List<SpatialQueryUnsupported>();
@@ -777,7 +716,8 @@ public static class WorldSpatialQueryCompilation {
                 frames: frames,
                 placement: placement,
                 reason: out var reason,
-                visiting: visiting
+                visiting: visiting,
+                worldSeed: worldSeed
             )) {
                 unsupported.Add(item: new SpatialQueryUnsupported(
                     PlacementId: placement.Id,
@@ -842,16 +782,17 @@ public static class WorldSpatialQueryCompilation {
     /// <summary>Compiles one candidate placement against its already-authored parent frames.</summary>
     /// <param name="candidate">The candidate row, including any detached transform or spatial edit.</param>
     /// <param name="byId">The immutable placement lookup used to resolve the candidate's parent chain.</param>
+    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
     /// <returns>The candidate's world-space volumes. Parent volumes are not included.</returns>
     /// <remarks>This entry point keeps bounded planning from rebuilding the world's index for every option.
     /// The caller is responsible for rejecting dynamic or otherwise unsupported participant frames.</remarks>
     public static IReadOnlyList<CompiledSpatialVolume> CompilePlacement(
-        WorldPlacement candidate, IReadOnlyDictionary<string, WorldPlacement> byId) {
+        WorldPlacement candidate, IReadOnlyDictionary<string, WorldPlacement> byId, ulong worldSeed) {
         if (candidate.Spatial is not { Count: > 0 }) {
             return [];
         }
 
-        var frames = new Dictionary<string, SpatialFrame>(comparer: StringComparer.Ordinal);
+        var frames = new Dictionary<string, CompiledPlacementFrame>(comparer: StringComparer.Ordinal);
         var visiting = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         if (!TryResolveFrame(
@@ -860,7 +801,8 @@ public static class WorldSpatialQueryCompilation {
             frames: frames,
             placement: candidate,
             reason: out _,
-            visiting: visiting
+            visiting: visiting,
+            worldSeed: worldSeed
         )) {
             return [];
         }
@@ -892,15 +834,18 @@ public static class WorldSpatialQueryCompilation {
         return volumes;
     }
     /// <summary>Gets the cached index for one immutable placement-section instance, compiled again when a volume that
-    /// reads a state-bound value (a document-value reference) now reads another.</summary>
-    public static WorldSpatialQueryIndex Resolve(WorldPlacementsSection? section) {
+    /// reads a state-bound value (a document-value reference) now reads another, or under another seed.</summary>
+    /// <param name="section">The section, or <see langword="null"/>.</param>
+    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
+    /// <returns>The compiled index.</returns>
+    public static WorldSpatialQueryIndex Resolve(WorldPlacementsSection? section, ulong worldSeed) {
         if (section is null) {
             return Empty;
         }
-        var entry = Cache.GetValue(
-            section,
-            static value => Compiled(section: value)
-        );
+        if (!Cache.TryGetValue(key: section, value: out var entry) || (entry.WorldSeed != worldSeed)) {
+            entry = Compiled(section: section, worldSeed: worldSeed);
+            Cache.AddOrUpdate(key: section, value: entry);
+        }
 
         if (entry.Bound.Length == 0) { return entry.Index; }
         var moved = new List<int>();
@@ -917,7 +862,7 @@ public static class WorldSpatialQueryCompilation {
         entry = (Recompiled(
             entry: entry,
             moved: moved
-        ) ?? Compiled(section: section));
+        ) ?? Compiled(section: section, worldSeed: worldSeed));
         Cache.AddOrUpdate(
             key: section,
             value: entry
@@ -952,27 +897,30 @@ public static class WorldSpatialQueryCompilation {
         }
         return new CompiledIndex(
             entry.Index.WithGeometry(replacements: replacements),
-            bound
+            bound,
+            entry.WorldSeed
         );
     }
-    private static CompiledIndex Compiled(WorldPlacementsSection section) {
+    private static CompiledIndex Compiled(WorldPlacementsSection section, ulong worldSeed) {
         var bound = new List<BoundVolume>();
         var index = Compile(
             bound: bound,
-            placements: section.Rows
+            placements: section.Rows,
+            worldSeed: worldSeed
         );
 
         return new CompiledIndex(
             index,
-            [.. bound]
+            [.. bound],
+            worldSeed
         );
     }
     /// <summary>Counts the volumes the placements declare that read a state-bound value, the ones a write can move.</summary>
     /// <param name="placements">The document's placements.</param>
     /// <returns>The bound volume count.</returns>
     public static long BoundVolumeCount(IEnumerable<WorldPlacement> placements) => placements.Sum(selector: static placement => (placement.Spatial?.Count(predicate: static volume => ((volume.Shape.Center.Reference is not null) || (volume.Shape.HalfExtents.Reference is not null))) ?? 0));
-    private sealed record BoundVolume(WorldPlacementSpatialVolume Authored, SpatialFrame Frame, int Slot, System.Numerics.Vector3 Center, System.Numerics.Vector3 HalfExtents);
-    private sealed record CompiledIndex(WorldSpatialQueryIndex Index, BoundVolume[] Bound);
+    private sealed record BoundVolume(WorldPlacementSpatialVolume Authored, CompiledPlacementFrame Frame, int Slot, System.Numerics.Vector3 Center, System.Numerics.Vector3 HalfExtents);
+    private sealed record CompiledIndex(WorldSpatialQueryIndex Index, BoundVolume[] Bound, ulong WorldSeed);
     // Hands a section's compiled index to a section whose rows differ from it only in their holding masks
     // (WorldDefinition.WithPlacementHoldings): the authored volumes it compiles read no shown creation.
     internal static void CarryAcrossHolding(WorldPlacementsSection source, WorldPlacementsSection target) {
@@ -980,6 +928,4 @@ public static class WorldSpatialQueryCompilation {
             Cache.AddOrUpdate(key: target, value: index);
         }
     }
-
-    private readonly record struct SpatialFrame(FixedVector3 Position, FixedQ4816 YawRadians, FixedQ4816 Scale);
 }

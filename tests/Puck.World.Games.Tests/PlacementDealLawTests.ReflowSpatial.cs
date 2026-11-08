@@ -311,9 +311,10 @@ public sealed partial class PlacementDealLawTests {
         ),
             Spatial = ReflowSpatial(),
         };
+        // A dealt child's position is its displacement from its slot: a stands on b's slot (x 2), and b on its own.
         var providerB = b with {
             Position = new DocumentVector3(
-            x: 2,
+            x: 0,
             y: 0,
             z: 0
         ),
@@ -409,7 +410,7 @@ public sealed partial class PlacementDealLawTests {
             Vector3.One,
             0f
         );
-        var verticalIndex = WorldSpatialQueryCompilation.Compile(placements: [ground, above]);
+        var verticalIndex = WorldSpatialQueryCompilation.Compile(placements: [ground, above], worldSeed: 0UL);
 
         Assert.False(condition: WorldSpatialQueryIndex.Conflicts(
             left: verticalIndex.Volumes[0],
@@ -432,7 +433,7 @@ public sealed partial class PlacementDealLawTests {
             Vector3.One,
             45f
         );
-        var rotatedIndex = WorldSpatialQueryCompilation.Compile(placements: [square, diagonal]);
+        var rotatedIndex = WorldSpatialQueryCompilation.Compile(placements: [square, diagonal], worldSeed: 0UL);
 
         Assert.True(condition: rotatedIndex.Volumes[0].Bounds.Intersects(other: rotatedIndex.Volumes[1].Bounds));
         Assert.False(condition: WorldSpatialQueryIndex.Conflicts(

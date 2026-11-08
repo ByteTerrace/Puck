@@ -3,8 +3,9 @@
 // The table deals the same seeded game in every world by tick 30 (seat 1 holds 2, 11, 20, 4 and 5, the two of hearts is
 // turned up); the variants then change what only seat 1 and the world know (which cards seat 1 holds, the order and
 // slots they hold them in, what the deck holds), keeping every count the policies disclose. Seat 1 plays the six of
-// hearts and shows the five of spades (4) in every world, seat 2 draws, and seat 2 and a replica and a presentation
-// session read the same way in each.
+// hearts and shows the five of spades (4) in every world, seat 2 draws, the operator lifts the shown card out of its
+// slot in seat 1's hidden hand (a displacement, which a re-deal carries to the slot seat 2 is shown), and seat 2 and a
+// replica and a presentation session read the same way in each.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"

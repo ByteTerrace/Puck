@@ -202,19 +202,15 @@ public static partial class WorldDefinitionValidator {
     }
     // A deal template whose dealt or variant row can withhold is re-dealt for every reader it withholds from, so the
     // template, its children and every placement authored under them carry only what that re-deal discloses
-    // (WorldPlacementDeal.UndisclosingMembers names the rest), and the template owns its children's transforms: a
-    // preserved one would keep a position the authority's slot shaped, which no re-deal can separate from the deal's
-    // own offset. A child is checked as well as the template, since an edit between sweeps can give it a member.
+    // (WorldPlacementDeal.UndisclosingMembers names the rest). A child's transform is its displacement from its slot,
+    // which the re-deal carries to the re-dealt slot unchanged, so a preserved transform discloses nothing of the
+    // authority's slot. A child is checked as well as the template, since an edit between sweeps can give it a member.
     private static void RefuseUndisclosingMembers(WorldDefinition definition, WorldPlacement template, WorldPlacement placement, string path, List<string> errors) {
         if (WithholdingRow(definition: definition, template: template) is not { } withholding) { return; }
-        var isTemplate = ReferenceEquals(objA: placement, objB: template);
-        var members = WorldPlacementDeal.UndisclosingMembers(placement: placement, template: isTemplate).ToArray();
+        var members = WorldPlacementDeal.UndisclosingMembers(placement: placement, template: ReferenceEquals(objA: placement, objB: template)).ToArray();
 
         if (members.Length > 0) {
             errors.Add(item: $"{path} carries {string.Join(separator: ", ", value: members)}, but it stands under deal template '{template.Id}', which deals from '{withholding}', a row that can withhold cells: a reader the row withholds from is shown each card re-dealt, so whatever acts or shows at the authority's own slot would tell what the reader is not shown; remove {string.Join(separator: " and ", value: members)}.");
-        }
-        if (isTemplate && (template.Deal!.Preserve?.Transform == true)) {
-            errors.Add(item: $"{path}.deal.preserve.transform is refused: deal template '{template.Id}' deals from '{withholding}', a row that can withhold cells, so each child stands where the deal stamps its re-dealt slot, never at a position the authority's slot shaped.");
         }
     }
     // Mirrors StateCatalog's ordered-zone containment: a zone keyed over the row's own key domain (or over the row).

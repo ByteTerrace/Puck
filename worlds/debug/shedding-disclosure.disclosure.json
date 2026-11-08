@@ -9,7 +9,12 @@
   "variants": [
     {
       "name": "dealt",
-      "steps": []
+      "steps": [
+        {
+          "at": 61,
+          "run": "world.row.set placements sheddingRack1/4 position [0, 0.02, 0.01]"
+        }
+      ]
     },
     {
       "name": "swapped",
@@ -29,6 +34,10 @@
         {
           "at": 40,
           "run": "world.row.set state sheddingDeck cells[key=18].key \"2\""
+        },
+        {
+          "at": 61,
+          "run": "world.row.set placements sheddingRack1/4 position [0, 0.02, 0.01]"
         }
       ]
     },
@@ -74,6 +83,10 @@
         {
           "at": 40,
           "run": "world.row.set state sheddingHand1 cells [{\"key\":\"2\",\"value\":true},{\"key\":\"11\",\"value\":true},{\"key\":\"20\",\"value\":true},{\"key\":\"4\",\"value\":true},{\"key\":\"5\",\"value\":true}]"
+        },
+        {
+          "at": 61,
+          "run": "world.row.set placements sheddingRack1/4 position [0, 0.02, 0.01]"
         }
       ]
     },
@@ -95,6 +108,10 @@
         {
           "at": 70,
           "run": "world.row.set state sheddingDeck cells[key=15].key \"19\""
+        },
+        {
+          "at": 61,
+          "run": "world.row.set placements sheddingRack1/4 position [0, 0.02, 0.01]"
         }
       ]
     }
