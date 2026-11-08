@@ -816,6 +816,20 @@ replays [
   }
 ]
 
+// A scope that holds no starting state (status -2: an edit re-declared one of its rows) gives up the loop it was in and
+// lets the fresh-start rule below capture again. A diverged replay (status -1) still holds its start and loops on.
+rule "chess-demo-lost-start" {
+  when chessTape.status == -2
+  mode: Level
+  chessDemo.ready = 0
+  chessDemo.playing = 0
+  chessDemo.holdDue = 0
+  chessDemoInk.recorded = "#000000"
+  chessDemoInk.match = "#000000"
+  chessDemoInk.mismatch = "#000000"
+  chessDemoInk.result = "#000000"
+}
+
 rule "chess-demo-fresh-start" {
   when chessDemo.ready == 0 and gameStarted == 1 and settleHold == chessSettleTicks
   mode: Level

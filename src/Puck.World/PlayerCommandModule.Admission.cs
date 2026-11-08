@@ -9,7 +9,15 @@ internal sealed partial class PlayerCommandModule {
     private static readonly CommandForms PlayerJoinForms = CommandForms.Of(verb: "player.join", "[n]", "<profile> [n]");
     private static readonly CommandForms PlayerLeaveForms = CommandForms.Of(verb: "player.leave", LeaveForm);
     private static readonly CommandForms PlayerIdentityForms = CommandForms.Of(verb: "player.identity", IdentityForm);
+    // A device gesture moves the pressing device. A bound press carries the seat's own device; typed text names the
+    // host's keyboard, which only the console may move, so a seat's typed line is refused rather than moving it.
+    private static bool MovesAnotherSeatsDevice(CommandContext context) =>
+        ((context.Origin == CommandOrigin.Text) && (context.Principal.Kind != PrincipalKind.Console));
+    private static CommandResult RefuseOthersDevice(string verb) =>
+        CommandResult.Error(output: $"[{verb}: a seat moves its own device by pressing it; typed text names the host's keyboard, which only the console moves]");
     private CommandResult ClaimHandler(CommandContext context) {
+        if (MovesAnotherSeatsDevice(context: context)) { return RefuseOthersDevice(verb: ClaimCommand); }
+
         // The target slot rides the binding's Axis1D value as a 1-based player number (the clean scalar constant a
         // CommandBinding carries — CommandValue.Axis(float)); a typed invocation with no value is a no-op. This
         // decodes an authored integer constant, not a continuous stick axis, so it keeps float->MathF.Round rather
@@ -114,6 +122,7 @@ internal sealed partial class PlayerCommandModule {
         );
     }
     private CommandResult CycleHandler(CommandContext context) {
+        if (MovesAnotherSeatsDevice(context: context)) { return RefuseOthersDevice(verb: CycleCommand); }
         // context.Principal is the ingress-stamped identity for THIS lane (the pressing device's own
         // current/source seat, if any) — consumed here, never reconstructed. CycleDevice/AssignDevice decide
         // internally whether it or self-provisioning governs the target, since only they know whether the device
@@ -164,7 +173,7 @@ internal sealed partial class PlayerCommandModule {
             handler: ConfirmHandler
         );
         yield return CommandDefinition.Verb(
-            audience: CommandAudience.Anyone,
+            audience: CommandAudience.Local,
             bindability: CommandBindability.Bindable,
             name: CycleCommand,
             description: "Rotates the pressing device to the next player slot, wrapping 1→2→3→4→1. Onto an empty slot it creates a pending player; onto an occupied one it joins that team. Over stdin it cycles the keyboard.",
@@ -172,7 +181,7 @@ internal sealed partial class PlayerCommandModule {
             handler: CycleHandler
         );
         yield return CommandDefinition.Verb(
-            audience: CommandAudience.Anyone,
+            audience: CommandAudience.Local,
             bindability: CommandBindability.Bindable,
             name: ClaimCommand,
             description: "Moves the keyboard onto the player slot carried as the binding's value (F1..F4). Onto an empty slot it creates a pending player; onto an occupied one it joins that team; onto its own slot a no-op.",
