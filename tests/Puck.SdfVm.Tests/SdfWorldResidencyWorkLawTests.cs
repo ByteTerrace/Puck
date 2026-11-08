@@ -82,10 +82,6 @@ public sealed class SdfWorldResidencyWorkLawTests {
         Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: Frame));
     }
 
-    private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
-        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
-            frame;
-    }
     private sealed class Rig : IDisposable {
         private readonly FrameContext m_context;
 

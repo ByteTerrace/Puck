@@ -130,12 +130,6 @@ public sealed class SdfViewsReadinessLawTests {
         )]
     );
 
-    // Films the one frame the law gives it.
-    private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
-        public SdfFrame Frame { get; } = frame;
-
-        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) => Frame;
-    }
     private sealed class GateOpener(ManualResetEventSlim gate) : IDisposable {
         public void Dispose() => gate.Set();
     }

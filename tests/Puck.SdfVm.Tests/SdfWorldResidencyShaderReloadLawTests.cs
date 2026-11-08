@@ -309,8 +309,4 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
         );
     }
 
-    private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
-        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
-            frame;
-    }
 }

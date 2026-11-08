@@ -1,7 +1,6 @@
-using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Memory;
 using Puck.Abstractions.Windowing;
+using Puck.Testing;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Factories;
 using Puck.Vulkan.Interfaces;
@@ -243,19 +242,5 @@ public sealed class VulkanValidationLivenessTests {
     // A device context over a device created without a surface; nothing the leak creates reads the surface.
     private sealed record LeakContext(VulkanInstance Instance, VulkanLogicalDevice LogicalDevice, VkPhysicalDevice PhysicalDevice) : IVulkanDeviceContext {
         public VulkanSurface Surface => throw new InvalidOperationException(message: "The leak's device has no surface.");
-    }
-    private sealed unsafe class HeapAllocator : IAllocator {
-        public void* Allocate(nuint size, nuint alignment = 0) => NativeMemory.Alloc(byteCount: Math.Max(
-            val1: size,
-            val2: 1
-        ));
-        public void Free(void* ptr) => NativeMemory.Free(ptr: ptr);
-        public void* Reallocate(void* ptr, nuint newSize, nuint alignment = 0) => NativeMemory.Realloc(
-            byteCount: Math.Max(
-                val1: newSize,
-                val2: 1
-            ),
-            ptr: ptr
-        );
     }
 }

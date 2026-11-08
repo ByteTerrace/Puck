@@ -75,10 +75,6 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         public bool IsReady => view.IsReady;
         public string? NotReadyReason => view.NotReadyReason;
     }
-    private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
-        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
-            frame;
-    }
     private sealed class NoBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
     }

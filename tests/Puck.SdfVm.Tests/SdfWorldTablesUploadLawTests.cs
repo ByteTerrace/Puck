@@ -1132,10 +1132,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         return transforms;
     }
 
-    private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
-        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
-            frame;
-    }
     // A producer's moved set: every Move owes its slot on the next rendered frame, as an emitter would.
     private sealed class Rig : IDisposable {
         private readonly SdfMovedTransforms m_moved = new();

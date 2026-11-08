@@ -135,8 +135,4 @@ public sealed class SdfWorldPipelineCatalogLawTests {
         return value;
     }
 
-    private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
-        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
-            frame;
-    }
 }
