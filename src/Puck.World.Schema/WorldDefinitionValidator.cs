@@ -1431,7 +1431,8 @@ public static partial class WorldDefinitionValidator {
         ValidateGravity(
             errors: errors,
             gravity: definition.Gravity,
-            placements: definition.Placements
+            placements: definition.Placements,
+            worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
         );
         var fontNames = ValidateTextCatalog(
             text: definition.Text,

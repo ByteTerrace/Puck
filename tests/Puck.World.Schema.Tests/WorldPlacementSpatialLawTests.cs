@@ -86,7 +86,7 @@ public sealed class WorldPlacementSpatialLawTests {
         var reach = "[1, 1, 1]";
         var placements = ReachDocument(reach: () => reach);
         var section = new WorldPlacementsSection(Rows: placements);
-        var before = WorldSpatialQueryCompilation.Resolve(section: section);
+        var before = WorldSpatialQueryCompilation.Resolve(section: section, worldSeed: 0UL);
 
         Assert.Equal(
             0,
@@ -96,8 +96,8 @@ public sealed class WorldPlacementSpatialLawTests {
             )
         );
         reach = "[6, 1, 1]";
-        var after = WorldSpatialQueryCompilation.Resolve(section: section);
-        var fresh = WorldSpatialQueryCompilation.Compile(placements: placements);
+        var after = WorldSpatialQueryCompilation.Resolve(section: section, worldSeed: 0UL);
+        var fresh = WorldSpatialQueryCompilation.Compile(placements: placements, worldSeed: 0UL);
 
         Assert.NotSame(
             before,
@@ -134,7 +134,7 @@ public sealed class WorldPlacementSpatialLawTests {
         );
         Assert.Same(
             after,
-            WorldSpatialQueryCompilation.Resolve(section: section)
+            WorldSpatialQueryCompilation.Resolve(section: section, worldSeed: 0UL)
         );
     }
     [Fact]
@@ -193,7 +193,7 @@ public sealed class WorldPlacementSpatialLawTests {
             z: .3535534f
         )),
         };
-        var index = WorldSpatialQueryCompilation.Compile(placements: [first, second]);
+        var index = WorldSpatialQueryCompilation.Compile(placements: [first, second], worldSeed: 0UL);
         var left = index.Volumes[0];
         var right = index.Volumes[1];
 
@@ -226,7 +226,7 @@ public sealed class WorldPlacementSpatialLawTests {
             z: 0f
         ),
         };
-        var index = WorldSpatialQueryCompilation.Compile(placements: [first, second]);
+        var index = WorldSpatialQueryCompilation.Compile(placements: [first, second], worldSeed: 0UL);
         var edge = FixedQ4816.FromRawBits(value: 32769L);
         var result = index.Query(new FixedSpatialAabb(
             Center: new FixedVector3(
@@ -272,7 +272,7 @@ public sealed class WorldPlacementSpatialLawTests {
                 .25f
             )
         ));
-        var query = WorldSpatialQueryCompilation.Compile(placements: placements).Query(new FixedSpatialAabb(
+        var query = WorldSpatialQueryCompilation.Compile(placements: placements, worldSeed: 0UL).Query(new FixedSpatialAabb(
             Center: FixedVector3.Zero,
             Extent: FixedVector3.FromVector3(value: new Vector3(
                 x: 1f,
@@ -310,7 +310,7 @@ public sealed class WorldPlacementSpatialLawTests {
             )
         );
 
-        var index = WorldSpatialQueryCompilation.Compile(placements: [control, oversized]);
+        var index = WorldSpatialQueryCompilation.Compile(placements: [control, oversized], worldSeed: 0UL);
 
         Assert.Contains(
             collection: index.Volumes,
@@ -383,7 +383,7 @@ public sealed class WorldPlacementSpatialLawTests {
             ),
             "water"
         );
-        var index = WorldSpatialQueryCompilation.Compile(placements: [target, source, second]);
+        var index = WorldSpatialQueryCompilation.Compile(placements: [target, source, second], worldSeed: 0UL);
 
         Assert.True(condition: index.HasOccupationTarget(placementId: "target"));
         Assert.False(condition: index.HasOccupationTarget(placementId: "source"));
@@ -422,7 +422,7 @@ public sealed class WorldPlacementSpatialLawTests {
                 1f
             )
         );
-        var index = WorldSpatialQueryCompilation.Compile(placements: [clearance, secondClearance]);
+        var index = WorldSpatialQueryCompilation.Compile(placements: [clearance, secondClearance], worldSeed: 0UL);
 
         Assert.False(condition: index.HasBlockingOverlap(candidate: index.Volumes[1]));
 
@@ -435,7 +435,7 @@ public sealed class WorldPlacementSpatialLawTests {
                 1f
             )
         );
-        var occupiedIndex = WorldSpatialQueryCompilation.Compile(placements: [clearance, occupation]);
+        var occupiedIndex = WorldSpatialQueryCompilation.Compile(placements: [clearance, occupation], worldSeed: 0UL);
 
         Assert.True(condition: occupiedIndex.HasBlockingOverlap(candidate: occupiedIndex.Volumes[1]));
     }
@@ -468,7 +468,7 @@ public sealed class WorldPlacementSpatialLawTests {
             z: 0f
         ),
         };
-        var index = WorldSpatialQueryCompilation.Compile(placements: [parent, child]);
+        var index = WorldSpatialQueryCompilation.Compile(placements: [parent, child], worldSeed: 0UL);
         var volume = index.Volumes[0];
 
         Assert.Equal(
@@ -514,7 +514,7 @@ public sealed class WorldPlacementSpatialLawTests {
             ),
             userMessage: reason
         );
-        var index = WorldSpatialQueryCompilation.Compile(placements: [placement]);
+        var index = WorldSpatialQueryCompilation.Compile(placements: [placement], worldSeed: 0UL);
 
         Assert.Empty(collection: index.Volumes);
         Assert.Contains(
@@ -550,7 +550,7 @@ public sealed class WorldPlacementSpatialLawTests {
             expectedSubstring: "scale"
         );
 
-        var index = WorldSpatialQueryCompilation.Compile(placements: [placement]);
+        var index = WorldSpatialQueryCompilation.Compile(placements: [placement], worldSeed: 0UL);
 
         Assert.Empty(collection: index.Volumes);
         Assert.Contains(
@@ -563,7 +563,8 @@ public sealed class WorldPlacementSpatialLawTests {
         );
         Assert.Empty(collection: WorldSpatialQueryCompilation.CompilePlacement(
             placement,
-            new Dictionary<string, WorldPlacement>(comparer: StringComparer.Ordinal) { [placement.Id] = placement }
+            new Dictionary<string, WorldPlacement>(comparer: StringComparer.Ordinal) { [placement.Id] = placement },
+            0UL
         ));
     }
     [Fact]
@@ -591,7 +592,7 @@ public sealed class WorldPlacementSpatialLawTests {
             z: 0f
         ),
         };
-        var volume = WorldSpatialQueryCompilation.Compile(placements: [parent, child]).Volumes[0];
+        var volume = WorldSpatialQueryCompilation.Compile(placements: [parent, child], worldSeed: 0UL).Volumes[0];
 
         Assert.Equal(
             0f,
@@ -633,7 +634,7 @@ public sealed class WorldPlacementSpatialLawTests {
             z: 0
         ),
         };
-        var index = WorldSpatialQueryCompilation.Compile(placements: [first, touching, separated]);
+        var index = WorldSpatialQueryCompilation.Compile(placements: [first, touching, separated], worldSeed: 0UL);
 
         Assert.True(condition: WorldSpatialQueryIndex.TryOverlap(
             left: index.Volumes[0],
@@ -667,7 +668,7 @@ public sealed class WorldPlacementSpatialLawTests {
             )
         );
 
-        var index = WorldSpatialQueryCompilation.Compile(placements: [box, sphere]);
+        var index = WorldSpatialQueryCompilation.Compile(placements: [box, sphere], worldSeed: 0UL);
 
         Assert.Equal(
             2,
@@ -708,7 +709,7 @@ public sealed class WorldPlacementSpatialLawTests {
             z: 0f
         ),
         };
-        var index = WorldSpatialQueryCompilation.Compile(placements: [court, bridge]);
+        var index = WorldSpatialQueryCompilation.Compile(placements: [court, bridge], worldSeed: 0UL);
         var result = index.Query(new FixedSpatialAabb(
             Center: FixedVector3.Zero,
             Extent: FixedVector3.FromVector3(value: new Vector3(

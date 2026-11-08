@@ -520,9 +520,9 @@ public static class WorldStateDisclosure {
     // every view door share. A responsive row loses the holding bit of each entry over a cell the recipient may not
     // read. A template whose dealt row can withhold from the recipient is re-dealt from the row as the recipient reads
     // it: its readable cells, in the row's order, take slots 0..n-1, and under Placeholder each withheld cell of a row
-    // the recipient may read takes its place in that order as an anonymous back. A kept child stands at its re-dealt
-    // slot's offset, computed from the region in fixed point, so nothing of the authority's slot history, which hidden
-    // arrivals shape, survives into a slot, a position or the order of the rows, and zero, one or many hidden cells give
+    // the recipient may read takes its place in that order as an anonymous back. A kept child moves to its re-dealt slot
+    // with its own displacement, so nothing of the authority's slot history, which hidden arrivals shape, survives
+    // into a slot, a position or the order of the rows, and zero, one or many hidden cells give
     // one layout; a placement authored under a child the recipient is not shown is absent too. A template whose variant
     // row alone withholds keeps its children's slots and masks each face the recipient may not read. Every row whose
     // disclosure shaped the result is added to reads, by declaration, so a cached composition knows which rows' images
@@ -655,11 +655,11 @@ public static class WorldStateDisclosure {
     // Every cell the recipient is shown takes the next slot whether or not the sweep has dealt its child yet, and a
     // back stands for a withheld cell whatever child the authority holds for it: an install between sweeps (an
     // operator's key rename, a cell not yet dealt) then moves nothing the recipient is shown that the row it reads did
-    // not move. A kept child stands exactly where the deal stamps a child at its re-dealt slot: the region's fixed-point
-    // offset for that slot, at no yaw and the template's scale, since a template that can withhold owns its children's
-    // transforms; nothing is read back from the authority's position, whose float rounding the authority's slot shaped.
+    // not move. A kept child changes only its slot: its position is its displacement from its slot, and its frame
+    // (WorldPlacementFrameCompilation.LocalFrame) is the re-dealt slot's fixed-point offset plus that displacement, so
+    // nothing of the authority's slot, its offset or that offset's rounding reaches the recipient.
     private static void Redeal(WorldPlacement template, int rowOrdinal, Dictionary<string, WorldPlacement>? children, StateArena arena, ref Observer observer, Func<string, string?, bool> withheld, ulong worldSeed, List<WorldPlacement> result) {
-        var offsets = WorldPlacementDeal.Offsets(template: template, worldSeed: worldSeed);
+        var slots = WorldPlacementDeal.Offsets(template: template, worldSeed: worldSeed).Length;
         var row = arena.Rows[rowOrdinal];
         // Under Placeholder a reader the row admits is shown a back for each withheld cell, in order, as the row's
         // observation shows it; a reader the row's own policy excludes is shown nothing of it.
@@ -669,7 +669,7 @@ public static class WorldStateDisclosure {
         var slot = 0;
         var cursor = 0;
 
-        while ((slot < offsets.Length) && arena.TryNextCell(cursor: ref cursor, key: out var cell, rowOrdinal: rowOrdinal)) {
+        while ((slot < slots) && arena.TryNextCell(cursor: ref cursor, key: out var cell, rowOrdinal: rowOrdinal)) {
             if (!arena.TryRead(key: cell, rowOrdinal: rowOrdinal, value: out _)) { continue; }
             if (rowReadable && observer.CanRead(key: cell, row: row, rowOrdinal: rowOrdinal)) {
                 var key = arena.Keys[key: cell].Value;
@@ -677,16 +677,12 @@ public static class WorldStateDisclosure {
                 if ((children is not null) && children.TryGetValue(key: key, value: out var child)) {
                     result.Add(item: child with {
                         DealSlot = slot,
-                        Position = offsets[slot].ToVector3(),
-                        YawDegrees = 0f,
-                        Scale = template.Scale,
                         PrototypeId = (((variants is not null) && withheld(arg1: variants.Row, arg2: key)) ? template.PrototypeId : child.PrototypeId),
                     });
                 }
             } else if (placeholder) {
                 result.Add(item: WorldPlacementDeal.Child(
                     id: WorldPlacementDeal.PlaceholderId(template: template.Id, slot: slot),
-                    offset: offsets[slot].ToVector3(),
                     prototype: template.PrototypeId,
                     slot: slot,
                     template: template

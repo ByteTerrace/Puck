@@ -40,10 +40,7 @@ public sealed partial class PlacementDealLawTests {
         transport.SubmitWorldMutation(new WorldMutation.UpsertPlacement(
             Principal.Console,
             b with {
-                Position = Child(
-                fixture.Server,
-                "a"
-            ).Position,
+                Position = Over(server: fixture.Server, child: b, key: "a"),
             }
         ));
         fixture.Step();
@@ -219,14 +216,8 @@ public sealed partial class PlacementDealLawTests {
             expected: (before - 5)
         );
         Assert.NotEqual(
-            Child(
-                fixture.Server,
-                "a"
-            ).Position,
-            Child(
-                fixture.Server,
-                "b"
-            ).Position
+            Local(server: fixture.Server, key: "a"),
+            Local(server: fixture.Server, key: "b")
         );
     }
     [Fact]
@@ -298,13 +289,7 @@ public sealed partial class PlacementDealLawTests {
         fixture.Step();
         Assert.Equal(
             succeeds,
-            (Child(
-                fixture.Server,
-                "a"
-            ).Position != Child(
-                fixture.Server,
-                "b"
-            ).Position)
+            (Local(server: fixture.Server, key: "a") != Local(server: fixture.Server, key: "b"))
         );
         Assert.Equal(
             (balance - (succeeds
@@ -357,13 +342,7 @@ public sealed partial class PlacementDealLawTests {
         fixture.Step();
         Assert.Equal(
             !blocks,
-            (Child(
-                fixture.Server,
-                "a"
-            ).Position != Child(
-                fixture.Server,
-                "b"
-            ).Position)
+            (Local(server: fixture.Server, key: "a") != Local(server: fixture.Server, key: "b"))
         );
     }
     [Fact]
@@ -394,14 +373,8 @@ public sealed partial class PlacementDealLawTests {
         fixture.Server.EnqueueMutation(result.Proposal.Mutation);
         fixture.Step();
         Assert.NotEqual(
-            Child(
-                fixture.Server,
-                "a"
-            ).Position,
-            Child(
-                fixture.Server,
-                "b"
-            ).Position
+            Local(server: fixture.Server, key: "a"),
+            Local(server: fixture.Server, key: "b")
         );
     }
     [Fact]
@@ -481,14 +454,8 @@ public sealed partial class PlacementDealLawTests {
         );
         fixture.Step();
         Assert.NotEqual(
-            Child(
-                fixture.Server,
-                "a"
-            ).Position,
-            Child(
-                fixture.Server,
-                "b"
-            ).Position
+            Local(server: fixture.Server, key: "a"),
+            Local(server: fixture.Server, key: "b")
         );
         Assert.Equal(
             95,
@@ -503,14 +470,8 @@ public sealed partial class PlacementDealLawTests {
         );
         fixture.Step();
         Assert.Equal(
-            Child(
-                fixture.Server,
-                "a"
-            ).Position,
-            Child(
-                fixture.Server,
-                "b"
-            ).Position
+            Local(server: fixture.Server, key: "a"),
+            Local(server: fixture.Server, key: "b")
         );
         Assert.Equal(
             100,
@@ -650,14 +611,8 @@ public sealed partial class PlacementDealLawTests {
         fixture.Server.EnqueueMutation(proposal!.Mutation);
         fixture.Step();
         Assert.Equal(
-            Child(
-                fixture.Server,
-                "a"
-            ).Position,
-            Child(
-                fixture.Server,
-                "b"
-            ).Position
+            Local(server: fixture.Server, key: "a"),
+            Local(server: fixture.Server, key: "b")
         );
         Assert.Equal(
             100,
@@ -714,6 +669,17 @@ public sealed partial class PlacementDealLawTests {
             )]),
         };
     }
+    // The displacement that stands child exactly where the child dealt for key stands in the template's frame.
+    private static System.Numerics.Vector3 Over(WorldServer server, WorldPlacement child, string key) {
+        var definition = server.ExportDefinition();
+
+        return WorldPlacementFrameCompilation.StoredPosition(
+            parent: WorldDefinitionRows.FindPlacement(id: TemplateId, placements: definition.Placements),
+            row: child,
+            localPosition: LocalFixed(server: server, key: key),
+            worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
+        ).ToVector3();
+    }
     private static void OverlapChildren(WorldFixture fixture, bool pinned = false) {
         var a = Child(
             fixture.Server,
@@ -727,7 +693,7 @@ public sealed partial class PlacementDealLawTests {
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
             Principal.Console,
             b with {
-                Position = a.Position,
+                Position = Over(server: fixture.Server, child: b, key: "a"),
                 Spatial = ReflowSpatial(pinned: pinned),
             }
         ));
@@ -772,14 +738,8 @@ public sealed partial class PlacementDealLawTests {
         fixture.Server.EnqueueMutation(proposal.Mutation);
         fixture.Step();
         Assert.NotEqual(
-            Child(
-                fixture.Server,
-                "a"
-            ).Position,
-            Child(
-                fixture.Server,
-                "b"
-            ).Position
+            Local(server: fixture.Server, key: "a"),
+            Local(server: fixture.Server, key: "b")
         );
         Assert.Equal(
             95,
@@ -811,14 +771,8 @@ public sealed partial class PlacementDealLawTests {
         fixture.Server.EnqueueMutation(proposal!.Mutation);
         fixture.Step();
         Assert.Equal(
-            Child(
-                fixture.Server,
-                "a"
-            ).Position,
-            Child(
-                fixture.Server,
-                "b"
-            ).Position
+            Local(server: fixture.Server, key: "a"),
+            Local(server: fixture.Server, key: "b")
         );
         Assert.Equal(
             100,

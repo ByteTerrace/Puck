@@ -2,6 +2,7 @@ using Puck.Testing;
 using Puck.Commands;
 using System.Numerics;
 using Puck.Assets.Documents;
+using Puck.Maths;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -103,6 +104,18 @@ public sealed partial class PlacementDealLawTests {
                 template: TemplateId
             ))
         );
+    // A dealt child's position in its template's frame: its slot's offset plus its stored displacement.
+    private static FixedVector3 LocalFixed(WorldServer server, string key) {
+        var definition = server.ExportDefinition();
+
+        return WorldPlacementFrameCompilation.LocalFrame(
+            parent: WorldDefinitionRows.FindPlacement(id: TemplateId, placements: definition.Placements),
+            row: Child(server: server, key: key),
+            worldSeed: (definition.Generation?.WorldSeed ?? 0UL),
+            inheritScale: out _
+        ).FixedPosition;
+    }
+    private static Vector3 Local(WorldServer server, string key) => LocalFixed(server: server, key: key).ToVector3();
     private static Vector3 Offset(int slot) => new(
         x: (2f * slot),
         y: 0f,
@@ -121,7 +134,7 @@ public sealed partial class PlacementDealLawTests {
         values: Children(server: server).OrderBy(
             keySelector: child => child.Id,
             comparer: StringComparer.Ordinal
-        ).Select(selector: child => $"{child.Id}@{child.Position.Value}:{child.PrototypeId}")
+        ).Select(selector: child => $"{child.Id}@{child.DealSlot}+{child.Position.Value}:{child.PrototypeId}")
     );
 
     [Fact]
@@ -242,6 +255,10 @@ public sealed partial class PlacementDealLawTests {
 
             Assert.Equal(
                 expected: Offset(slot: slot),
+                actual: Local(server: fixture.Server, key: key)
+            );
+            Assert.Equal(
+                expected: Vector3.Zero,
                 actual: child.Position.Value
             );
             Assert.Equal(
@@ -316,10 +333,7 @@ public sealed partial class PlacementDealLawTests {
         );
         Assert.Equal(
             expected: Offset(slot: 3),
-            actual: Child(
-                server: fixture.Server,
-                key: "d"
-            ).Position.Value
+            actual: Local(server: fixture.Server, key: "d")
         );
         Assert.StartsWith(
             expectedStartString: before,
@@ -353,17 +367,11 @@ public sealed partial class PlacementDealLawTests {
         );
         Assert.Equal(
             expected: Offset(slot: 0),
-            actual: Child(
-                server: fixture.Server,
-                key: "a"
-            ).Position.Value
+            actual: Local(server: fixture.Server, key: "a")
         );
         Assert.Equal(
             expected: Offset(slot: 2),
-            actual: Child(
-                server: fixture.Server,
-                key: "c"
-            ).Position.Value
+            actual: Local(server: fixture.Server, key: "c")
         );
 
         fixture.Server.EnqueueMutation(mutation: Upsert(key: "e"));
@@ -375,17 +383,11 @@ public sealed partial class PlacementDealLawTests {
         );
         Assert.Equal(
             expected: Offset(slot: 1),
-            actual: Child(
-                server: fixture.Server,
-                key: "e"
-            ).Position.Value
+            actual: Local(server: fixture.Server, key: "e")
         );
         Assert.Equal(
             expected: Offset(slot: 2),
-            actual: Child(
-                server: fixture.Server,
-                key: "c"
-            ).Position.Value
+            actual: Local(server: fixture.Server, key: "c")
         );
     }
     /// <summary>A variant row selects the prototype: a text cell whose text maps, and an integer cell whose value
@@ -496,7 +498,7 @@ public sealed partial class PlacementDealLawTests {
             );
             Assert.Equal(
                 expected: Offset(slot: 2),
-                actual: redealt.Position.Value
+                actual: Local(server: fixture.Server, key: "c")
             );
         }
     }
@@ -770,7 +772,6 @@ public sealed partial class PlacementDealLawTests {
                     template,
                     WorldPlacementDeal.Child(
                         id: WorldPlacementDeal.ChildId(key: "a", template: TemplateId),
-                        offset: Offset(slot: 0),
                         prototype: StoreCreation,
                         slot: 0,
                         template: template
