@@ -64,6 +64,17 @@ rearms timing so the previous view cannot supply its samples. Filing uses the sa
 stop/pass selection as execution and refuses unsupported pointers before freezing.
 See the [measurement reference](../../../docs/reference/cli.md#puck-measurequeued-measurement-windows).
 
+Choose a metric that tracks the change. `bench frames`' boot window is fixed in
+ticks, so a change that makes a tick cheaper finishes it in fewer frames, and
+its one-off boot hitches then weigh more in `boot.frames.avg` and `p99`: a
+per-tick cost change is decided on the tick and simulate percentiles of the
+same `host.frames` rows (or a headless `bench world` idle tick), never on boot
+frame averages. A request freezes builds the harness can still boot: a frozen
+build older than the harness's readiness probe can satisfy is refused before
+any sample, so file a pair that both pass a plain `bench frames` first. Under
+Git Bash, export `MSYS_NO_PATHCONV=1` before `--metric /...`, or MSYS rewrites
+the pointer into a Windows path and the request is refused.
+
 A queued World build can outlive a cancelled start. Do not change a checkout's
 sources until its build has finished. The artifact resolver checks the source
 key after build admission and after compilation, and discards a build if either

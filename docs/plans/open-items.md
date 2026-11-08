@@ -2947,7 +2947,15 @@ failing case is argued from source, not run):
   showed it once at the same pose (seen by the frame-attrib lane). After a real
   device-loss recovery, re-landing about 1.75 GB of meshes also outlasts the
   harness's 20 s residency wait (gpu-hang lane). Name what the residency still
-  owes there before raising any wait.
+  owes there before raising any wait. Now reproduced on Direct3D 12 at the tip
+  (window-3, `bench frames worlds/debug --plan worlds/debug/sweep.json --stop
+  finding-teal-roof --backend directx`): after `world.rate pause` and
+  `[bakes: settled]`, `ViewHost.MeshesResident` stays false for 20 s
+  (`SdfWorldTables.MeshesResident`: words owed or the upload fence unsignalled).
+  Before the pause, single-group re-bakes (`loading=1`, one "geometry new to its
+  set" miss) repeat between `world.deal 'sheddingRack1..4'` lines (inference,
+  group ids not logged: the dealt card hands). This blocks every sweep-stop
+  measurement: shade-3b and the four shade-4 binning requests were refused here.
 - [low] The Vulkan pipeline-statistics readout reads the logical device to
   build `CapturesStatistics`'s argument before checking that naming is on
   (`VulkanGpuPipelineFactory.cs:94`, guard at `:108`); move the guard first.
@@ -4252,7 +4260,11 @@ failing case marked "argued" is read from source, not run.
   failed both views-live-state requests, whose World stopped after
   `[world.warm] prepared ...` with no bake start (inference: a cold driver compile
   of the new views shader on the first frame blocks the pump). Time warm to first
-  bake on a frozen build, then size the probe from it.
+  bake on a frozen build, then size the probe from it. The quiet window saw the
+  same refusal on every frozen build that still compiled shade programs at boot
+  (four builds across two requests): each logs `[world.warm]` and never reaches
+  `[world.render] envelope` within 10 s, while the tip does (inference, not
+  bisected).
 - [medium] `puck lease quiet` holds what it has while it waits for the rest:
   a frame-measuring lane's quiet acquisition held the build and heavy leases
   while queued behind another lane's GPU leg, so a third lane's heavy test
