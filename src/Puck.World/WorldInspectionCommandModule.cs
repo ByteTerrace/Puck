@@ -34,9 +34,9 @@ internal sealed partial class WorldInspectionCommandModule(WorldEditorSeats seat
     }
 
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithWireArgs(name: "world.cost", description: $"Reads live placement cost: {WorldCostForms.Spelling}. Prints exclusive words and separate shared program overhead. world.cost sky reads the sky, composite and environment passes and their layer rows from each node's latest completed submission.", forms: WorldCostForms,
+        yield return CommandDefinition.WithWireArgs(name: "world.cost", audience: CommandAudience.Operator, description: $"Reads live placement cost: {WorldCostForms.Spelling}. Prints exclusive words and separate shared program overhead. world.cost sky reads the sky, composite and environment passes and their layer rows from each node's latest completed submission.", forms: WorldCostForms,
             handler: Cost, routing: CommandRouting.Immediate, bindability: CommandBindability.Bindable);
-        yield return CommandDefinition.WithWireArgs(name: "world.inspect", description: $"Shows the acting seat's pointer, camera, counts and reload diagnostics: {WorldInspectForms.Spelling}; bare prints the same text as its panel.", forms: WorldInspectForms,
+        yield return CommandDefinition.WithWireArgs(name: "world.inspect", audience: CommandAudience.Operator, description: $"Shows the acting seat's pointer, camera, counts and reload diagnostics: {WorldInspectForms.Spelling}; bare prints the same text as its panel.", forms: WorldInspectForms,
             handler: Inspect, routing: CommandRouting.Immediate, bindability: CommandBindability.Bindable);
         yield return CommandDefinition.WithWireArgs(name: "world.explain", description: "Requests the acting seat or pane's pointer pixel once through its shared GPU picker and, after its fence, reports the pixel's material. A missing pixel names its refusal; no simulation state changes.",
             handler: Explain, routing: CommandRouting.Immediate, bindability: CommandBindability.Unbindable);

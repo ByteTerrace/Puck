@@ -81,6 +81,15 @@ public sealed record ArenaSearchPlan(
     int EnabledOrdinal = -1,
     int RevisionOrdinal = -1
 ) {
+    /// <summary>Every row that can affect a candidate, its judgement, its score or its published metadata.</summary>
+    public int[] Dependencies(IReadOnlyList<int> judgeRows) => new[] {
+        TokensOrdinal, TurnOrdinal, VerdictOrdinal, ScoresOrdinal, Chance?.RowOrdinal ?? -1,
+        HeldOrdinal, RevisionOrdinal, EnabledOrdinal
+    }.Concat(ZoneOrdinals).Concat(CodeOrdinals).Concat(judgeRows).Where(row => row >= 0).Distinct().Order().ToArray();
+
+    /// <summary>The rows that receive the search's derived results.</summary>
+    public int[] Outputs() => new[] { BestOrdinal, LegalOrdinal, ReachOrdinal, CountsOrdinal }.Where(row => row >= 0).Distinct().ToArray();
+
     private static bool TryRow(StateCatalog catalog, string job, string? name, out int ordinal, out string reason) {
         ordinal = -1;
         reason = string.Empty;

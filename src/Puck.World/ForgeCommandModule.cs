@@ -156,7 +156,7 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
                         }
                         if (
                             (name == "play") &&
-                            (server.Definition.Screens.FirstOrDefault(predicate: screen => (screen.Index == index))?.Source is WorldScreenSource.Machine named)
+                            (server.ReadView(context).Definition.Screens.FirstOrDefault(predicate: screen => (screen.Index == index))?.Source is WorldScreenSource.Machine named)
                         ) {
                             if (server.Machines.InstanceState(name: named.Instance) is not { } state) {
                                 return CommandResult.Error(output: $"[forge.play: named machine '{named.Instance}' is unavailable; source saved to {path}]");

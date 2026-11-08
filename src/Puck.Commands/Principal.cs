@@ -61,6 +61,9 @@ public readonly record struct Principal(PrincipalKind Kind, int Index, string? N
 
     /// <summary>Gets whether this principal was stamped by a door at all.</summary>
     public bool IsStamped => (Kind != PrincipalKind.Unspecified);
+    /// <summary>Gets whether this principal is the authority (<see cref="Console"/> or <see cref="World"/>), which
+    /// reads the live document whole; every other principal is a recipient of a disclosed view.</summary>
+    public bool IsAuthority => (Kind is PrincipalKind.Console or PrincipalKind.World);
 
     /// <summary>Returns the named extension principal used by WASM descriptors and host-composed providers.</summary>
     /// <param name="name">The extension's identity name.</param>

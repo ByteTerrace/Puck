@@ -37,7 +37,7 @@ public sealed partial class WorldRenderLeverCommandModule {
                 lever = new(WorldSection.Render, WorldSessionLevers.BloomQuality,
                     (automatic ? -1d : (double)Enum.Parse<BloomQuality>(args[1], true)), View: view);
             } else if ((args.Count == 1) && (args.Is(index: 0, value: "on") || args.Is(index: 0, value: "off") || args.Is(index: 0, value: "auto") || args.Is(index: 0, value: "toggle"))) {
-                var enabled = (settings.ResolveBloom(server.Definition.Render).Scatter > 0f);
+                var enabled = (settings.ResolveBloom(server.ReadView(context).Definition.Render).Scatter > 0f);
 
                 lever = new(WorldSection.Render, WorldSessionLevers.Bloom,
                     (args.Is(index: 0, value: "auto") ? -1d : ((args.Is(index: 0, value: "on") || (args.Is(index: 0, value: "toggle") && !enabled)) ? 1d : 0d)));

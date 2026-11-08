@@ -17,11 +17,16 @@ internal sealed class WorldDebugViewCommandModule(WorldDiagnostics diagnostics, 
 
     public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(name: "world.debug-view", bindability: CommandBindability.Bindable,
-                description: $"{WorldDebugViewForms.Spelling} — colliders and contacts preserve the scene; default is exterior marks and pins. report [colliders|contacts|all] [--json] evaluates on demand, even off or headless; incomplete inputs are unknown. goto <finding-id> moves only the operator camera. world.view.pick <view-or-instance> finding <id> reads a retained causal record even while off; primary resolves to the first seat's rendered instance. Run report first to populate findings. Findings name snapshot, tick, revision, provenance, expected relation, measurements, budget, coverage and lifetime. Amber is off by default.", forms: WorldDebugViewForms,
+                description: $"{WorldDebugViewForms.Spelling} — colliders and contacts preserve the scene; default is exterior marks and pins. A mode selects what the shared screen draws, so any seat or binding may select one; report and goto read the authority's diagnostics and are operator forms, and a seat's colliders or contacts selection answers the mode alone, without the report's summary. report [colliders|contacts|all] [--json] evaluates on demand, even off or headless; incomplete inputs are unknown. goto <finding-id> moves only the operator camera. world.view.pick <view-or-instance> finding <id> reads a retained causal record even while off; primary resolves to the first seat's rendered instance. Run report first to populate findings. Findings name snapshot, tick, revision, provenance, expected relation, measurements, budget, coverage and lifetime. Amber is off by default.", forms: WorldDebugViewForms,
                 handler: (context, args) => Execute(context, args), routing: CommandRouting.Immediate);
     }
 
     private CommandResult Execute(CommandContext context, WireArgs args) {
+        // The diagnostics count and locate authority colliders and contacts, which a recipient's view cannot
+        // reconstruct; a mode only selects the shared screen's presentation, the operator's own.
+        if (args.Count > 0 && (args.Is(0, "report") || args.Is(0, "goto")) && !context.Principal.IsAuthority) {
+            return CommandResult.Error($"[world.debug-view: {args[0]} is an operator form; {context.Principal.Describe()} selects a mode only]");
+        }
         if (args.Count > 0 && args.Is(0, "report")) {
             var view = diagnostics.Mode is "colliders" or "contacts" ? diagnostics.Mode : "all";
             var json = false;
@@ -74,7 +79,7 @@ internal sealed class WorldDebugViewCommandModule(WorldDiagnostics diagnostics, 
         diagnostics.Amber = amber;
         if (renderProbe?.Residency is { } residency) { residency.DebugMode = mode; }
         if (settings is not null) { settings.RateTints = DebugViewModes.ShowsRates(mode); }
-        if (diagnostics.Mode is "colliders" or "contacts") {
+        if (diagnostics.Mode is "colliders" or "contacts" && context.Principal.IsAuthority) {
             var report = diagnostics.Report(diagnostics.Mode);
             return new CommandResult(Output: $"[world.debug-view: {report.Summary()}]");
         }

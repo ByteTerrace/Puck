@@ -160,7 +160,7 @@ public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority) : I
         );
         yield return authority.CreateServerQueryCommand(
             description: "Reports the LOOK census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): one line per look row — name, resolved source, active entity count. A world with no looks section prints the single implicit 'catalog (index-derived)' row over the whole population.",
-            describe: server => DescribeLooks(population: server.Population),
+            describe: (server, view) => DescribeLooks(population: server.Population),
             name: "world.looks"
         );
     }

@@ -5,7 +5,7 @@ import "gametable"
 // room's north-east table on level 2. The debug world imports this file whole; skirmish-tests.puck boots it on its own
 // as the disclosure harness's fixture for hidden positions, line of sight and a search over what a side may see. Seat 1
 // is red, seat 2 blue; `skirmish.move <seat> <unit> <cell>` orders a unit (1 to 3) one step, and `skirmish.computer
-// sharp|fair` lets one of blue's computer players work out its move into `skirmishSharpBest` or `skirmishFairBest`.
+// sharp|fair` runs the authority-only sharp diagnostic or blue's memory-only fair search.
 
 export action skirmishOrder1, skirmishOrder2, skirmishSharpOn, skirmishFairOn, skirmishTurn
 export read skirmish, skirmishTurn, skirmishVerdict, skirmishUnits, skirmishPos, skirmishLast, skirmishWall, skirmishSight

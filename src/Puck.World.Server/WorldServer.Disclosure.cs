@@ -15,6 +15,18 @@ public sealed partial class WorldServer {
         new(() => Definition, () => Arena, recipient, tier, observes ?? (() => true), m_disclosureImages,
             AuthorityIdentity, () => DeliveryTime);
 
+    /// <summary>Mints the live capability for this ingress-stamped console invocation.</summary>
+    public WorldRecipientView ReadView(CommandContext context) => ReadView(context.Principal);
+
+    internal WorldRecipientView ReadView(Principal? recipient) {
+        if (recipient is { Kind: PrincipalKind.Session } session) {
+            return m_sessionSinks.TryGetValue(session, out var attached)
+                ? attached.Observation.View
+                : DeliveryView(session, WorldDisclosureTier.Frames, () => false);
+        }
+        return DeliveryView(recipient, WorldDisclosureTier.Replica);
+    }
+
     internal void AttachCursor(Principal? recipient, WorldDeliveryCursor cursor) {
         if (recipient is not { } actor) { return; }
         if (!m_deliveryCursors.TryGetValue(actor, out var streams)) { m_deliveryCursors[actor] = streams = []; }
@@ -26,7 +38,7 @@ public sealed partial class WorldServer {
         if (streams.Count == 0) { m_deliveryCursors.Remove(actor); }
     }
     internal WorldDocumentVersion RecipientVersion(Principal recipient) {
-        if (recipient.Kind is PrincipalKind.Console or PrincipalKind.World) { return DocumentVersion; }
+        if (recipient.IsAuthority) { return DocumentVersion; }
         // A submission with no unambiguous observation stream has received no version. Never substitute an
         // authority install count, or another stream's potentially higher-fidelity delivery count.
         var sequence = m_deliveryCursors.TryGetValue(recipient, out var streams) && streams.Count == 1 ? streams[0].Sequence : 0;

@@ -138,7 +138,7 @@ internal sealed partial class PlayerCommandModule {
         if (target.Kind == GrantSubjectKind.Screen) {
             var screenIndex = target.Value;
 
-            if (FindScreen(screenIndex: screenIndex) is not { } screen) {
+            if (FindScreen(context, screenIndex: screenIndex) is not { } screen) {
                 return CommandResult.Error(output: $"[body.engage: no screen {screenIndex} — see world.screens]");
             }
 
@@ -233,8 +233,8 @@ internal sealed partial class PlayerCommandModule {
         );
     }
     // The declared screen with the given engine index, or null when no screen declares it.
-    private WorldScreen? FindScreen(int screenIndex) {
-        foreach (var screen in m_server.Definition.Screens) {
+    private WorldScreen? FindScreen(CommandContext context, int screenIndex) {
+        foreach (var screen in m_server.ReadView(context).Definition.Screens) {
             if (screen.Index == screenIndex) {
                 return screen;
             }

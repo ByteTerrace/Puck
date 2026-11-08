@@ -131,7 +131,12 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         ),
         comparisonType: StringComparison.Ordinal
     );
-    private string DescribeBudget(bool operatorView) {
+    private string DescribeBudget(CommandContext context) {
+        if (!context.Principal.IsAuthority) {
+            var definition = server.ReadView(context).Definition;
+            var instances = WorldPlacementStamper.StaticStampInstances(definition, definition.Placements);
+            return $"[world.budget: placements {instances} static instance(s) ({definition.Placements.Count} row(s)) | state {definition.AuthoredState.Count} row(s) | creations {definition.Creations.Count}]";
+        }
         var (visibilityBytes, meshAttachmentBytes, glassBytes) = WorldViewBytes();
         var render = ((renderProbe?.Residency is { } node)
             ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), {node.LiveProgramMaterials} material(s), {node.LiveDynamicTransforms} dynamic slot(s), {(renderProbe.ProgramBuildsSource?.Invoke() ?? 0)} program build(s), globalStepScale {node.LiveProgramStepScale.ToString(
@@ -268,7 +273,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             gravity,
             placements,
             $"state {(server.Definition.State?.Count ?? 0)} row(s)",
-            operatorView ? server.DescribeDisclosureBudget() : "disclosure work: operator only",
+            server.DescribeDisclosureBudget(),
             rules,
             curves,
             navigation,
@@ -299,8 +304,8 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         format: "0.#####",
         provider: CultureInfo.InvariantCulture
     );
-    private string DescribeGravity() {
-        var authored = server.Definition.Gravity;
+    private string DescribeGravity(CommandContext context) {
+        var authored = server.ReadView(context).Definition.Gravity;
         var compiled = population.CompiledGravity;
         var statistics = population.GravityStatistics;
         var areaStatistics = population.GravityAreaStatistics;
@@ -427,7 +432,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
     // The world.population readout: the active simulated count, the between-tapes behavior, and the total avatar load on
     // the renderer. LOOPBACK-ONLY: the population reads here are in-process; a socket transport replaces them with a
     // link query the server composes.
-    private string DescribePopulation() {
+    private string DescribePopulation(CommandContext context) {
         var local = roster.Count;
         var simulated = population.SimulatedCount;
         var behavior = (population.DefaultPeerSource.IsIdle
@@ -436,7 +441,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 ? $"producer:{producer}"
                 : "live"
         ));
-        var looks = server.Definition.Looks;
+        var looks = server.ReadView(context).Definition.Looks;
         var workload = WorldRigCatalog.ActiveWorkload(
             isActive: index => (population.IsActive(index: index) && (WorldDefinitionRows.ResolveLook(looks, population.LookIndex(index: index)).Source is WorldLookSource.Catalog)),
             capacity: population.Capacity,
@@ -452,11 +457,11 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         var counts = population.ActiveKitCounts();
         var kits = string.Join(
             separator: " ",
-            values: server.Definition.Kits.Select(selector: (kit, row) => $"{kit.Name}={counts[row]}")
+            values: server.ReadView(context).Definition.Kits.Select(selector: (kit, row) => $"{kit.Name}={counts[row]}")
         );
-        var defaults = server.Definition.Population;
-        var kitAssignment = DescribeAssignment(assignment: server.Definition.Assignment);
-        var lookAssignment = DescribeAssignment(assignment: server.Definition.LookAssignment);
+        var defaults = server.ReadView(context).Definition.Population;
+        var kitAssignment = DescribeAssignment(assignment: server.ReadView(context).Definition.Assignment);
+        var lookAssignment = DescribeAssignment(assignment: server.ReadView(context).Definition.LookAssignment);
 
         return $"[world.population: {simulated} network-human stand-ins active (0..{population.PeerCapacity}), behavior {behavior} | distribution {DescribeDistribution(distribution: defaults.Distribution)} | peerVariation {DescribeVariation(variation: defaults.PeerVariation)} seatVariation {DescribeVariation(variation: defaults.SeatVariation)} peerColors {DescribeSequence(sequence: defaults.PeerColors)} | assignments kit={kitAssignment} look={lookAssignment} | {local} local + {simulated} = {(local + simulated)}/{population.Capacity} inhabitants | archetypes {kits} | {WorldRigCatalog.RigCount} catalog looks, {WorldRigCatalog.MinInstructionCount}..{WorldRigCatalog.MaxInstructionCount} instructions/avatar; catalog workload {workload.Leaves} leaves in {workload.Instances} leaf cull instances, {workload.Instructions} authored VM instructions (creation stamps accounted separately)]";
     }
@@ -472,7 +477,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             bindability: CommandBindability.Unbindable,
             name: "world.decisions",
             description: "Echoes authored choice policies and active bindings: selected option, last score, commitment, reconsideration cadence, and local random draw count.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(
+            handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.decisions"
             ) is { } refusal)
@@ -484,7 +489,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             bindability: CommandBindability.Unbindable,
             name: "world.flock",
             description: "Echoes each kit's authored local flock steering: space, perception range/cone/cadence, candidate and neighbor budgets, sight requirement, steering weights, and last-step work. Available headless; does not change behavior.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(
+            handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.flock"
             ) is { } refusal)
@@ -496,7 +501,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             bindability: CommandBindability.Unbindable,
             name: "world.navigation",
             description: "Echoes every authored deterministic navigation domain: surface, free-volume, or medium-constrained; compiled dimensions and clear cells; volume connectivity; medium binding; and hard route search/path limits.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(
+            handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.navigation"
             ) is { } refusal)
@@ -513,19 +518,19 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 verb: "world.budget"
             ) is { } refusal)
             ? refusal
-            : new CommandResult(Output: DescribeBudget(context.Principal.Kind == PrincipalKind.Console))),
+            : new CommandResult(Output: DescribeBudget(context))),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.gravity",
             description: "Reads the authored and compiled gravity field back (Immediate): solver, uniform acceleration, shared G/softening, explicit mass sources, point/planet surface-gravity presets with their derived masses, and the last deterministic solve's work counters.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(
+            handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.gravity"
             ) is { } refusal)
             ? refusal
-            : new CommandResult(Output: DescribeGravity())),
+            : new CommandResult(Output: DescribeGravity(context))),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
@@ -555,7 +560,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             forms: WorldPopulationForms,
             handler: (context, args) => {
                 if (args.Count == 0) {
-                    return new CommandResult(Output: DescribePopulation());
+                    return new CommandResult(Output: DescribePopulation(context));
                 }
 
                 int? count = null;
@@ -657,7 +662,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                     );
                 }
 
-                return new CommandResult(Output: (notice + DescribePopulation()));
+                return new CommandResult(Output: (notice + DescribePopulation(context)));
             },
             routing: CommandRouting.Simulation
         );
@@ -672,7 +677,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             bindability: CommandBindability.Unbindable,
             name: "world.input-holds",
             description: "Reports every active participant's authored, measured, and applied input hold plus the participant setting the equalized maximum.",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (CommandResult.RequireNoArguments(args: in args, verb: "world.input-holds") is { } refusal) {
                     return refusal;
                 }

@@ -123,62 +123,26 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
             return;
         }
 
-        switch (value.Kind) {
-            case CellKind.Int:
-                text = value.AsInt.ToString(provider: CultureInfo.InvariantCulture);
-                fraction = Fraction(
-                    fixedPoint: false,
-                    max: sample.Max,
-                    min: sample.Min,
-                    mirror: mirror,
-                    slot: slot
-                );
-
-                break;
-            case CellKind.Fixed:
-                text = FixedQ4816.FromRawBits(value: value.AsFixed).ToString();
-                fraction = Fraction(
-                    fixedPoint: true,
-                    max: sample.Max,
-                    min: sample.Min,
-                    mirror: mirror,
-                    slot: slot
-                );
-
-                break;
-            case CellKind.Bool:
-                text = (value.AsBool
-                    ? "true"
-                    : "false"
-                );
-
-                break;
-            case CellKind.Text:
-                text = (value.AsText ?? string.Empty);
-
-                break;
-            case CellKind.Vector:
-                // A vector has no scalar reading and no envelope, so the gauge draws empty and the label names the
-                // shape rather than a component: a panel bound to one is an authoring mistake an operator reads off
-                // the panel, not a throw on the render path.
-                text = $"vector[{value.AsVector.Length.ToString(provider: CultureInfo.InvariantCulture)}]";
-
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(paramName: nameof(slot));
+        text = FormatValue(value);
+        if (value.Kind is CellKind.Int or CellKind.Fixed && mirror.TryValue(slot, out var presented)) {
+            fraction = Fraction(presented, sample.Min, sample.Max, value.Kind == CellKind.Fixed);
         }
     }
+    internal static string FormatValue(CellValue value) => !value.HasValue ? string.Empty : value.Kind switch {
+        CellKind.Int => value.AsInt.ToString(CultureInfo.InvariantCulture),
+        CellKind.Fixed => FixedQ4816.FromRawBits(value.AsFixed).ToString(),
+        CellKind.Bool => value.AsBool ? "true" : "false",
+        CellKind.Text => value.AsText ?? string.Empty,
+        CellKind.Vector => $"vector[{value.AsVector.Length.ToString(CultureInfo.InvariantCulture)}]",
+        _ => throw new ArgumentOutOfRangeException(nameof(value))
+    };
     // A row declaring no range draws empty. The envelope is raw, so a Fixed row's bounds convert to the presented
     // value's units first.
-    private static float Fraction(WorldStateMirror mirror, int slot, long? min, long? max, bool fixedPoint) {
+    internal static float Fraction(double presented, long? min, long? max, bool fixedPoint) {
         if (
             (min is not { } lo) ||
             (max is not { } hi) ||
-            (hi <= lo) ||
-            !mirror.TryValue(
-            slot: slot,
-            value: out var presented
-        )
+            (hi <= lo)
         ) {
             return 0f;
         }

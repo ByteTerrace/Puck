@@ -152,7 +152,7 @@ public static class WorldConsoleAuthorityExtensions {
         this IWorldConsoleAuthority authority,
         string name,
         string description,
-        Func<WorldServer, string> describe
+        Func<WorldServer, WorldRecipientView, string> describe
     ) =>
         CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
@@ -168,7 +168,7 @@ public static class WorldConsoleAuthorityExtensions {
                     return error;
                 }
 
-                return new CommandResult(Output: describe(server));
+                return new CommandResult(Output: describe(server, server.ReadView(context)));
             },
             name: name
         );
@@ -177,7 +177,7 @@ public static class WorldConsoleAuthorityExtensions {
         this IWorldConsoleAuthority authority,
         CommandForms forms,
         string description,
-        Func<string?, WorldServer, string> describe
+        Func<string?, WorldServer, WorldRecipientView, string> describe
     ) =>
         CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
@@ -201,7 +201,7 @@ public static class WorldConsoleAuthorityExtensions {
                     ((args.Count == 1)
                         ? args[0].ToString()
                         : null),
-                    server
+                    server, server.ReadView(context)
                 ));
             },
             name: forms.Verb
