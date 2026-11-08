@@ -99,14 +99,22 @@ the memo:
    architecture page already says so **[opened]**
    (`docs/architecture/worlds.md:804-806`): "Remote round trips do not adopt
    ... Remote home adoption remains deferred."
-2. **`WorldRecipientView` is a plan, not code.** Lane C's options I1 and C1
-   lean on it; lane E and lane C's own citation check found it absent from
-   `src/` ([seams, citation check](seams.md#7-citation-check)). Reopened: a
-   search for `WorldRecipientView|WorldDeliveryCursor` over `src/` finds no
-   file **[opened]**. The order of work therefore puts the disclosure plan's
-   step 1 before interest management and before any claim that a silo keeps a
-   visitor's hidden state from a host ([decision 5](#decision-5-seams),
-   [the order](#6-the-order-of-work)).
+2. **`WorldRecipientView` was a plan when the records were written.** Lane
+   C's options I1 and C1 lean on it; lane E and lane C's own citation check
+   found it absent from `src/` ([seams, citation check](seams.md#7-citation-check)).
+   Disclosure step 1 has since landed: `WorldRecipientView` and
+   `WorldDeliveryCursor` exist and the session sink delivers through them
+   **[opened]** (`src/Puck.World.Server/WorldSessionSink.cs:27-29`):
+
+   ```csharp
+       private readonly WorldDeliveryCursor m_cursor = new();
+       private readonly WorldDeliveryRows m_rows = new();
+       private readonly WorldRecipientView m_view = server.DeliveryView(observation.Session, observation.Tier, () => observation.CanObserve);
+   ```
+
+   Body disclosure still runs through `Redact` at the hub until I1. The order
+   of work keeps step 1 as the floor the table and interest-management steps
+   stand on ([decision 5](#decision-5-seams), [the order](#6-the-order-of-work)).
 3. **A13 is refuted for today's hosts.** Lane B asked for a confirmation; lane
    E traced it: a continuation's generation id is narration only, recovery
    binds by authority identity, and no host both restores rows and spawns
@@ -624,7 +632,7 @@ is a two-scan filter at the hub with three modes and a flat cadence
 | S3. Reactive spatial splitting at runtime | None that held; contradicts "Destinations are boot-authored document data" and "do not run an authority boundary through a place designed to be contested" **[opened]** (`docs/architecture/worlds.md:1413-1414`) | Reactive topology | The crowd at a junction (M2-XFE) | None |
 | F1. A frameless portal is a creation with an aperture face and no frame rings, placed with a `WorldPlacementFace` portal; a standard `threshold` template | The glass fills the aperture edge to edge with no bezel; the door and the screen are independent facts about one face **[record]** | A template in `worlds/standard/`; no C# | Nothing it claims | None |
 | F2. An adjacency that falls back to a frameless `window` across scopes it cannot project directly | Adjacency requires a global persisted destination **[opened]** (`src/Puck.World.Schema/WorldAdjacencies.cs:149`) | Teaching adjacency to host a window | Mixed lighting and sky | None |
-| I1. Fold spatial grid, hysteresis, an explicit unembodied-observer policy and distance-tiered cadence into the disclosure view and cursor | The disclosure plan watches this seam as the view's natural second occupant **[record]**; Unreal's actor priority gives each actor a fair share under saturation **[record]** | Replaces `Redact`; waits on disclosure step 1 | Nothing it claims | Closes A16; narrows A12 |
+| I1. Fold spatial grid, hysteresis, an explicit unembodied-observer policy and distance-tiered cadence into the disclosure view and cursor | The disclosure plan watches this seam as the view's natural second occupant **[record]**; Unreal's actor priority gives each actor a fair share under saturation **[record]** | Replaces `Redact`; builds on disclosure step 1, which has landed | Nothing it claims | Closes A16; narrows A12 |
 | I2. Keep `Redact`, add a grid and an `Unembodied` mode | Smaller diff | Stateless across ticks | The fog-of-war skirmish; hysteresis; priority | A16 only |
 
 **Favoured.** S1 with F1 now, I1 after disclosure step 1, F2 only if an author
@@ -877,7 +885,7 @@ Tick-addressed neighbour records remain the
 
 | Option | Honest between two player hosts | Feel | Hidden state safe | Scale | Attacks |
 |---|---|---|---|---|---|
-| C1. Co-location onto an authority neither combatant controls (a silo or a vouched referee world), bound before the first swing | Yes | Client-server round trip | Yes, once disclosure step 1 lands | A single authority's budget | A3, A4, A5, A6, A8, A10 |
+| C1. Co-location onto an authority neither combatant controls (a silo or a vouched referee world), bound before the first swing | Yes | Client-server round trip | Yes, on disclosure step 1's view | A single authority's budget | A3, A4, A5, A6, A8, A10 |
 | C2. Mutual deterministic simulation: both peers step the encounter over signed per-tick inputs with rollback, compare state hashes, and a lazy referee replays the tape on a mismatch | Yes, with a witness for stalls and disputes | Best for 1 to 8 peers | Only by commit-reveal; both peers hold the arena | Stalls on the slowest of N | A3, A5, A6 |
 | C3. Clamped, tick-addressed seam contact plus signed cross-seam proposals the target's authority applies under its own rules | Only between authorities that honour rules on their own bodies | One round trip per cross-seam effect | Yes | The border band | A10 and the replay boundary; nothing against a host that makes its body immortal |
 
@@ -1253,10 +1261,12 @@ federation reorder under the favoured options. Each step names what it needs,
 what it unblocks and the check in [section 5](#5-how-the-debug-world-proves-each-favoured-option)
 that shows it worked. Steps marked "new" are not in any plan today.
 
-1. **Disclosure step 1** (in flight; step 0 stands): `WorldRecipientView` and
-   `WorldDeliveryCursor`. Unblocks I1, per-seat table sessions and any claim
-   that a silo keeps hidden state from a visitor
-   ([disclosure, build order](../disclosure.md#the-build-order)).
+1. **Disclosure step 1** (landed): `WorldRecipientView` and
+   `WorldDeliveryCursor`, with step 0's noninterference harness as the check.
+   The floor for I1, per-seat table sessions and any claim that a silo keeps
+   hidden state from a visitor
+   ([disclosure, build order](../disclosure.md#the-build-order)). Body
+   disclosure still runs through `Redact` at the hub until step 16.
 2. **C3's residual rules and taped neighbour records** (a defect fix; the
    per-body reach budget is implemented, the rest is in flight): one aggregate
    bound across the dynamic and terrain contributions, no neighbour-induced
