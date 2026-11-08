@@ -22,8 +22,9 @@ public sealed class WorldBodyWork : IWorkCounterSource {
 
     /// <summary>Gets the kind counting simulated body advances: one per non-seat body a tick's integration pass steps.</summary>
     public static WorkKind Advances { get; } = new(name: "physics.bodies.advances", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the number of neighbour-body correction requests shortened or rejected by the local tick
-    /// budget. Delivery timing is not yet taped, so this count is pacing-dependent.</summary>
+    /// <summary>Gets the number of neighbour responses (body pushes and geometry resolution) the local tick budget or
+    /// an ownership face shortened, rejected or slowed. Delivery timing is not yet taped, so this count is
+    /// pacing-dependent.</summary>
     public static WorkKind AdjacencyCorrectionClamps { get; } = new(name: "physics.bodies.adjacency-correction-clamps", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting parked rigid bodies a contact-field change woke.</summary>
     public static WorkKind FieldWakes { get; } = new(name: "physics.bodies.field-wakes", unit: "count", workClass: WorkClass.Deterministic);

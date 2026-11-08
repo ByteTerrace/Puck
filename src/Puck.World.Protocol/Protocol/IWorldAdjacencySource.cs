@@ -62,7 +62,9 @@ public sealed record WorldAdjacencyProjection(string Name, IWorldAdjacencyNeighb
 /// <c>IWorldAdjacencyNeighbourContact</c> for the compiled solid field this project cannot name.
 /// </summary>
 public interface IWorldAdjacencyNeighbour {
-    /// <summary>The identity stamped on this delivered authority image.</summary>
+    /// <summary>Gets the authority identity this link settled on: the identity stamped on the first delivered image
+    /// it froze, kept for the link's lifetime so a neighbour cannot claim another identity per image. Cross-authority
+    /// settlement (<c>WorldCrossAuthoritySettlement</c>) reads it.</summary>
     string Authority { get; }
     /// <summary>Gets the neighbour's live delivered definition.</summary>
     WorldDefinition Definition { get; }

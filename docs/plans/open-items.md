@@ -914,9 +914,11 @@ travel.
 
 Neighbour contact replay packet (independent of companion custody):
 
-- [high] Tape fixed neighbour inputs at their local admission tick. The dynamic
-  correction budget is enforced by `WorldPopulation.BoundAdjacencyCorrection`,
-  but `WorldAdjacencyFields.Handle.Pin` (`src/Puck.World.Server/WorldAdjacencyFields.cs:669`)
+- [high] Tape fixed neighbour inputs at their local admission tick.
+  `WorldPopulation.AdmitAdjacencyResponse` bounds what a neighbour's bodies and
+  geometry do to a local body each tick and keeps it behind its ownership
+  faces, and contact settles by authority pair through the link's settled
+  identity, but `WorldAdjacencyFields.Handle.Pin`
   copies the latest presentation snapshot and discards `sourceTick`;
   `WorldAdjacencyContactField.ResolveCore`
   (`src/Puck.World.Server/WorldAdjacencyContactField.cs:25`) still quantizes floats
@@ -937,6 +939,29 @@ Neighbour contact replay packet (independent of companion custody):
   clamp counts. This is a transport/admission/tape change, beyond the bounded
   depenetration fix; the bound does not claim replay determinism or prove a
   neighbour's bodies exist.
+- [medium] A neighbour can still hold a local body still: a refusal from its
+  geometry's sweep (`ContactRefusal`) returns the body to its previous position
+  in `WorldAdjacencyContactField.ResolveCore` before the door, so hostile
+  geometry can pin a body in the band. Bound or ignore a refusal the
+  neighbour's field raises against a body this world owns; show it with a law
+  whose neighbour field refuses every sweep.
+- [medium] `WorldAdjacencyContactField.TrySupportDistance` takes the least
+  support distance a neighbour's field reports, and ground snap then moves the
+  body down that far within its authored reach without passing the door, so a
+  reported floor can draw a body toward a floor/ceiling ownership face. Route
+  the snap's displacement through `AdmitAdjacencyResponse` when the support came
+  from a neighbour.
+- [medium] The rest of C3's residual rules
+  ([synthesis, decision 8](mmo-foundations/synthesis.md#decision-8-where-a-contested-place-runs)):
+  a neighbour correction a body's own motion does not ask for still carries a
+  still body toward the plane up to its ownership threshold, and phantom
+  bodies reported every tick hold a visitor indefinitely. Both belong in
+  `WorldPopulation.AdmitAdjacencyResponse`, which would need the body's own
+  motion this tick and a per-body hold count that decays the admitted budget;
+  check 8 (C3) names the witness.
+- [medium] The settlement's remote identity is the link's first claimed
+  `Authority`; a neighbour that picks its identity before linking still picks
+  which side of a pair yields. Attested authority identities close it.
 
 Still open from the companion build:
 

@@ -211,7 +211,9 @@ public sealed partial class WorldBody {
             var sweptPosition = desiredPosition;
             var sweptVelocity = (desiredPosition - previousPosition);
 
-            var resolution = field.ResolveSweep(
+            var resolution = SweepContact(
+                entityIndex: m_entityIndex,
+                field: field,
                 orientation: in m_orientation,
                 position: ref sweptPosition,
                 previousPosition: in previousPosition,

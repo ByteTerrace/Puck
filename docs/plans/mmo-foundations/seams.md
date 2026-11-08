@@ -358,12 +358,13 @@ In Puck's current codebase, "running without a frame" is already supported at tw
 
 #### Option C3 (Brief's (c)): Transactional cross-authority proposal protocol and clamped/taped seam contact
 
-Implementation status: `WorldPopulation.BoundAdjacencyCorrection` now bounds
-the sum of neighbour-body correction lengths by the local body's collider
-reach per tick, and each request by the overlap depth minus spent budget.
-The design below is the round's proposal: preventing a correction from crossing
-the ownership deadband is not part of this cap, and tick-addressed input tapes
-remain in the [neighbour replay packet](../open-items.md#transfers-federation-and-server).
+Implementation status: `WorldPopulation.AdmitAdjacencyResponse` bounds what a
+neighbour's bodies and geometry together move a local body per tick by its
+collider reach and the overlap depth, and keeps the body and its outward speed
+behind every ownership face it is still owned behind, so a correction never
+crosses the ownership deadband. Contact settles by authority pair. The design
+below is the round's proposal; tick-addressed input tapes remain in the
+[neighbour replay packet](../open-items.md#transfers-federation-and-server).
 
 - **Mechanism:**
   1. **Fix `WorldAdjacencyContactField` (Attack A10 and the Track 3 replay hole):**
@@ -371,7 +372,7 @@ remain in the [neighbour replay packet](../open-items.md#transfers-federation-an
      - Replace raw float-snapshot contact with **tick-addressed, taped fixed-point neighbour records** and clamp any cross-seam contact correction to:
        1. A per-tick maximum displacement ceiling derived from the local world's accepted speed/impulse envelope (so a lying neighbour reporting a phantom solid collider moving at $1000\text{ m/s}$ cannot launch or shove a local body across the border); and
        2. Never allowing a neighbour-induced contact correction alone to push a local body across the ownership deadband unless the local body's own velocity/intent moved toward the border.
-  2. **Cross-seam interaction proposals:** Instead of `WorldCrossAuthoritySettlement.LocalResponds` letting a hash-selected authority unilateral-adjudicate half of all pairs (`src/Puck.World.Server/WorldCrossAuthoritySettlement.cs:51-80` **[opened]**), an authority whose body initiates an action across an adjacency seam emits a **tick-stamped, signed interaction proposal** `(attackerAddress, targetAddress, interactionId, origin, direction, tick)` across the federation link. The target's own authority validates that:
+  2. **Cross-seam interaction proposals:** Instead of `WorldCrossAuthoritySettlement.LocalResponds` letting a hash-selected authority adjudicate every contact between two authorities unilaterally **[opened]**, an authority whose body initiates an action across an adjacency seam emits a **tick-stamped, signed interaction proposal** `(attackerAddress, targetAddress, interactionId, origin, direction, tick)` across the federation link. The target's own authority validates that:
      - The attacker's reported pose was within its kit speed envelope from its previous tick;
      - The interaction reach is within the compiled `WorldOverlapTerms.InteractionReach` (`src/Puck.World.Schema/WorldAdjacencies.cs:653-656` **[opened]**); and
      - Applies the effect to its own body under its own rules (preserving Invariant 1: only a body's authority writes to that body).
@@ -446,7 +447,7 @@ Each leading option can be proved in `worlds/debug` with a small, concrete scena
 - `src/Puck.World.Schema/WorldPortals.cs:1-221`
 - `src/Puck.World.Server/WorldAdjacencyContactField.cs:1-353`
 - `src/Puck.World.Server/WorldAdjacencyFields.cs:450-600`
-- `src/Puck.World.Server/WorldCrossAuthoritySettlement.cs:1-81`
+- `src/Puck.World.Server/WorldCrossAuthoritySettlement.cs:1-54`
 - `src/Puck.World.Server/WorldInstanceHost.cs:1-1820`
 - `src/Puck.World.Server/WorldInstanceHost.Transfers.cs:1-400`
 - `src/Puck.World.Server/WorldOutputHub.cs:1-450`

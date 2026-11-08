@@ -22,9 +22,12 @@ namespace Puck.World.Server;
 /// boundary plane — where this world's terrain has ended and its field can only be answering with its own rim. A
 /// body standing inside its own world therefore pays nothing extra and behaves identically to one in a world with
 /// no adjacency at all.</para>
-/// <para><b>Untrusted bodies.</b> Every neighbour-body correction enters through
-/// <see cref="WorldPopulation.BoundAdjacencyCorrection"/> before it moves the local body. All sweeps in a tick
-/// share that body's locally owned reach budget; neighbour terrain resolution remains a separate contribution.</para>
+/// <para><b>Untrusted neighbours.</b> A neighbour's bodies and solid geometry move a local body only through
+/// <see cref="WorldPopulation.AdmitAdjacencyResponse"/>, which bounds their combined displacement per body per tick by
+/// that body's locally owned reach and keeps it, and the body's outward speed, behind every ownership face the body is
+/// still owned behind: a crossing comes from the body's own motion. A query naming no local body takes nothing from a
+/// neighbour. Body contacts are settled by one responder per authority pair
+/// (<see cref="WorldCrossAuthoritySettlement"/>).</para>
 /// <para><b>Replay boundary.</b> Neighbour poses presently arrive as presentation-float snapshot fields and are
 /// converted to fixed point below at delivery timing. Ground and dynamic-contact correction are therefore not yet
 /// replay-deterministic across network schedules. Track 3 replaces this input with tick-addressed taped neighbour
@@ -65,10 +68,25 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
         if (resolution.Refusal != ContactRefusal.None) {
             return resolution;
         }
+        // A query naming no local body (a probe) takes nothing from a neighbour: every answer that moves a body passes
+        // the population's door for that body.
+        if (entityIndex < 0) {
+            return resolution;
+        }
+
+        var localAddress = m_source.LocalEntityAddress(index: entityIndex);
+        var localIsSolid = (m_source.LocalBodyContact(index: entityIndex) == WorldBodyContactMode.Solid);
+        // The frozen record can predate a handoff committed after it was frozen, within the same tick, so the
+        // arrival asks for itself: the entity still shown at the slot it departed from is this body.
+        var departedFrom = default(Protocol.WorldEntityAddress);
+        var hasDeparted = (localIsSolid && m_source.TryLocalDepartedFrom(
+            departedFrom: out departedFrom,
+            index: entityIndex
+        ));
 
         foreach (var projection in m_source.Visuals()) {
             if (!TryMapIntoNeighbour(
-                mapped: out var neighbourPosition,
+                mapped: out var neighbourStart,
                 position: position,
                 projection: projection
             )) {
@@ -76,6 +94,7 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             }
 
             var neighbour = projection.Neighbour;
+            var neighbourPosition = neighbourStart;
             var neighbourPreviousPosition = WorldAdjacencyPath.MapPointIntoNeighbour(
                 value: previousPosition,
                 path: projection.Path
@@ -90,31 +109,18 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             );
 
             var dynamicObstruction = FixedVector3.Zero;
-            var localDynamicCorrection = FixedVector3.Zero;
-            var localAddress = ((entityIndex >= 0)
-                ? m_source.LocalEntityAddress(index: entityIndex)
-                : default
-            );
-            var localIsSolid = ((entityIndex >= 0) && (m_source.LocalBodyContact(index: entityIndex) == WorldBodyContactMode.Solid));
-            // The frozen record can predate a handoff committed after it was frozen, within the same tick, so the
-            // arrival asks for itself: the entity still shown at the slot it departed from is this body.
-            var departedFrom = default(Protocol.WorldEntityAddress);
-            var hasDeparted = (localIsSolid && m_source.TryLocalDepartedFrom(
-                departedFrom: out departedFrom,
-                index: entityIndex
+            // One responder per authority pair settles every body contact between them, whichever bodies meet.
+            var responds = (localIsSolid && WorldCrossAuthoritySettlement.LocalResponds(
+                interaction: "physical-contact",
+                localAuthority: localAddress.Authority,
+                remoteAuthority: neighbour.Authority
             ));
 
-            for (var entity = 0; (localIsSolid && (entity < neighbour.EntityCapacity)); entity++) {
+            for (var entity = 0; (responds && (entity < neighbour.EntityCapacity)); entity++) {
                 if (
                     !neighbour.IsEntityActive(index: entity) ||
                     (neighbour.Collider(index: entity) is not { } neighbourCollider) ||
-                    (neighbour.BodyContact(index: entity) != WorldBodyContactMode.Solid) ||
-                    (entityIndex < 0) ||
-                    !WorldCrossAuthoritySettlement.LocalResponds(
-                    local: in localAddress,
-                    remote: neighbour.EntityAddress(index: entity),
-                    interaction: "physical-contact"
-                )
+                    (neighbour.BodyContact(index: entity) != WorldBodyContactMode.Solid)
                 ) {
                     continue;
                 }
@@ -138,16 +144,7 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
                     continue;
                 }
 
-                correction = m_population.BoundAdjacencyCorrection(
-                    entityIndex: entityIndex,
-                    overlapDepth: projection.OverlapDepth,
-                    correction: WorldAdjacencyPath.MapVectorIntoSource(value: correction, path: projection.Path)
-                );
-                if (correction == FixedVector3.Zero) { continue; }
-                localDynamicCorrection += correction;
-                neighbourPosition = WorldAdjacencyPath.MapPointIntoNeighbour(
-                    value: position + localDynamicCorrection, path: projection.Path);
-                correction = WorldAdjacencyPath.MapVectorIntoNeighbour(value: correction, path: projection.Path);
+                neighbourPosition += correction;
                 var normal = correction.Normalize();
                 var inward = FixedVector3.Dot(
                     left: neighbourVelocity,
@@ -160,7 +157,6 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
                 dynamicObstruction = normal;
             }
 
-            var neighbourDynamicPosition = neighbourPosition;
             var neighbourResolution = default(ContactResolution);
             // Outward of this world's own boundary plane its terrain has ended by construction, so ground its field
             // still answers there is the rim of that terrain rather than the floor the seam continues — the
@@ -216,16 +212,16 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
                 // sit inside two bands' extents at once) rather than committing an inert round trip.
                 continue;
             }
-            // Map the projected neighbour's depenetrated answer through every forward stage into this authority.
-            // Commit admitted body pushes in the local frame. A point round trip through a rotated seam can round;
-            // it must not add displacement outside the budget. Geometry resolution remains a separate contribution.
-            position += localDynamicCorrection + WorldAdjacencyPath.MapVectorIntoSource(
-                value: neighbourPosition - neighbourDynamicPosition,
-                path: projection.Path
-            );
-            velocity = WorldAdjacencyPath.MapVectorIntoSource(
-                value: neighbourVelocity,
-                path: projection.Path
+            // The neighbour's whole answer, its bodies' pushes and its geometry's resolution, crosses back as one
+            // displacement and one velocity, mapped as vectors so a rotated seam's point round trip cannot round extra
+            // displacement in, and moves this body only as far as the population's door admits.
+            m_population.AdmitAdjacencyResponse(
+                displacement: WorldAdjacencyPath.MapVectorIntoSource(value: (neighbourPosition - neighbourStart), path: projection.Path),
+                entityIndex: entityIndex,
+                overlapDepth: projection.OverlapDepth,
+                position: ref position,
+                proposedVelocity: WorldAdjacencyPath.MapVectorIntoSource(value: neighbourVelocity, path: projection.Path),
+                velocity: ref velocity
             );
 
             var neighbourObstruction = ((neighbourResolution.ObstructionNormal != FixedVector3.Zero)
@@ -288,18 +284,6 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
         return ResolveCore(
             entityIndex: -1,
-            orientation: in orientation,
-            position: ref position,
-            previousPosition: position,
-            up: in up,
-            velocity: ref velocity,
-            volumes: volumes
-        );
-    }
-    /// <inheritdoc/>
-    public ContactResolution ResolveEntity(int entityIndex, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
-        return ResolveCore(
-            entityIndex: entityIndex,
             orientation: in orientation,
             position: ref position,
             previousPosition: position,

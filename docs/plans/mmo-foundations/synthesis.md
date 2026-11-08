@@ -839,15 +839,15 @@ round would otherwise leave it unowned.
 authorities, what each can lie about, and what invariant 1 (only a body's
 authority writes it) implies. It matters because the owner names direct
 player-to-player interaction as raw PvP, and the one cross-authority decision
-in the code is a pair hash for physical contact **[opened]**
-(`src/Puck.World.Server/WorldAdjacencyContactField.cs:106-110`):
+in the code is an authority-pair hash for physical contact **[opened]**
+(`WorldAdjacencyContactField.ResolveCore`):
 
 ```csharp
-                    !WorldCrossAuthoritySettlement.LocalResponds(
-                    local: in localAddress,
-                    remote: neighbour.EntityAddress(index: entity),
-                    interaction: "physical-contact"
-                )
+            var responds = (localIsSolid && WorldCrossAuthoritySettlement.LocalResponds(
+                interaction: "physical-contact",
+                localAuthority: localAddress.Authority,
+                remoteAuthority: neighbour.Authority
+            ));
 ```
 
 over poses the neighbour delivered as presentation floats, which the code names
@@ -859,23 +859,18 @@ as outside replay determinism **[opened]** (`src/Puck.World.Server/WorldAdjacenc
 /// replay-deterministic across network schedules.
 ```
 
-Lane E found the missing per-tick cap, and the seam-clamp fix now bounds every
-neighbour-body correction through `WorldPopulation.BoundAdjacencyCorrection`
-to the local body's own collider reach per tick; the neighbour's terrain sweep
-is a separate contribution outside that budget **[opened]**
-(`src/Puck.World.Server/WorldAdjacencyContactField.cs:25-27`):
+Lane E found the missing per-tick cap. The seam clamp now admits a
+neighbour's body pushes and terrain sweep through one per-body budget and keeps
+them behind the body's ownership faces **[opened]**
+(`src/Puck.World.Server/WorldAdjacencyContactField.cs:25-30`):
 
 ```csharp
-/// <para><b>Untrusted bodies.</b> Every neighbour-body correction enters through
-/// <see cref="WorldPopulation.BoundAdjacencyCorrection"/> before it moves the local body. All sweeps in a tick
-/// share that body's locally owned reach budget; neighbour terrain resolution remains a separate contribution.</para>
-```
-
-and (`src/Puck.World.Server/WorldPopulation.AdjacencyContacts.cs:19-21`):
-
-```csharp
-    // The sole admission door for neighbour-body depenetration. The sum of admitted correction lengths per body
-    // per tick cannot exceed its locally owned collider reach, nor the consulted overlap depth. Remote collider
+/// <para><b>Untrusted neighbours.</b> A neighbour's bodies and solid geometry move a local body only through
+/// <see cref="WorldPopulation.AdmitAdjacencyResponse"/>, which bounds their combined displacement per body per tick by
+/// that body's locally owned reach and keeps it, and the body's outward speed, behind every ownership face the body is
+/// still owned behind: a crossing comes from the body's own motion. A query naming no local body takes nothing from a
+/// neighbour. Body contacts are settled by one responder per authority pair
+/// (<see cref="WorldCrossAuthoritySettlement"/>).</para>
 ```
 
 Tick-addressed neighbour records remain the
@@ -892,22 +887,21 @@ Tick-addressed neighbour records remain the
 **Favoured.** C3 as a defect fix, with what it closes and leaves stated
 exactly. The clamp closes the launch and the forced handoff by one correction:
 a neighbour's reported collider sizes, poses, body counts and speeds cannot
-enlarge the local body's reach budget. It does not prove a reported body
-exists, bound how long a visitor is held by phantom bodies reported every tick,
-stop repeated bounded corrections from herding a standing body across the
-ownership deadband over several ticks, bound the neighbour terrain sweep, or
-stop a neighbour choosing entity generations so the pair hash assigns every
-pair to the local side (lane E: "a neighbour can choose generations that assign
-a pair to the local side", [puck-today, premise verdicts](puck-today.md#premise-verdicts))
-**[record]**. So A10 is narrowed, not closed, until the follow-up lane lands
-the remaining rules: one aggregate bound across the dynamic and terrain
-contributions; no neighbour-induced correction advancing a body toward the
-boundary plane or across the deadband without the body's own intent toward it;
-a neighbour-induced correction with no local intent decaying to zero over a
-bounded number of ticks; and a pair hash over the two authorities and the local
-address, never the neighbour's chosen generation (Codex R7;
-[B14](synthesis-attacks.md#b14-pinned-at-the-seam); Argon 4). Taped neighbour
-records then close the replay boundary. C1 as the rule for any contested
+enlarge the local body's reach budget. The same door
+(`WorldPopulation.AdmitAdjacencyResponse`) bounds the neighbour terrain sweep
+in that one budget, and keeps every neighbour correction, and the body's
+outward speed, behind each ownership face the body is still owned behind, so
+repeated bounded corrections cannot herd a standing body across the deadband.
+The pair hash reads the two authority identities alone, never a generation
+the neighbour chooses (lane E's "a neighbour can choose generations that
+assign a pair to the local side", [puck-today, premise verdicts](puck-today.md#premise-verdicts)
+**[record]**, Codex R7, [B14](synthesis-attacks.md#b14-pinned-at-the-seam),
+Argon 4). It does not prove a reported body exists, bound how long a visitor
+is held by phantom bodies reported every tick (no decay rule), keep a
+neighbour from carrying a still body toward the plane up to its threshold, or
+stop a neighbour field's refusal pinning a body, and the remote identity stays
+a claim until attested. So A10 is narrowed, not closed, until those land.
+Taped neighbour records then close the replay boundary. C1 as the rule for any contested
 place, which is the architecture page's existing rule, and the owner's "do not
 run an authority boundary through a place designed to be contested"
 **[opened]** (`docs/architecture/worlds.md:1413-1414`); the referee world is a
@@ -1267,12 +1261,15 @@ that shows it worked. Steps marked "new" are not in any plan today.
    hidden state from a visitor
    ([disclosure, build order](../disclosure.md#the-build-order)). Body
    disclosure still runs through `Redact` at the hub until step 16.
-2. **C3's residual rules and taped neighbour records** (a defect fix; the
-   per-body reach budget is implemented, the rest is in flight): one aggregate
-   bound across the dynamic and terrain contributions, no neighbour-induced
-   advance toward the plane or across the deadband without local intent, decay
-   of a held correction, a pair hash over authorities and the local address;
-   then the [neighbour replay packet](../open-items.md#transfers-federation-and-server).
+2. **C3's residual rules and taped neighbour records** (a defect fix). The
+   aggregate bound across the dynamic and terrain contributions, no
+   neighbour-induced crossing of the deadband (nor added outward speed) without
+   the body's own motion, and a pair hash over the two authorities alone are
+   implemented (`WorldPopulation.AdmitAdjacencyResponse`,
+   `WorldCrossAuthoritySettlement`). Still open: neighbour corrections may
+   still carry a still body toward the plane up to its threshold, a held
+   correction does not decay, a neighbour field's refusal can pin a body; then
+   the [neighbour replay packet](../open-items.md#transfers-federation-and-server).
    Closes A10 and the replay boundary; check 8 (C3). Independent of everything
    else.
 3. **H1 and H2** unchanged: the standard's identity template and one account

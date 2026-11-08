@@ -4,19 +4,11 @@ using Puck.Physics;
 namespace Puck.World.Server;
 
 /// <summary>A contact field that needs the durable identity of the body being resolved. WorldBody supplies the
-/// entity index only to this refinement; ordinary terrain fields remain unaware of population addressing.</summary>
+/// entity index only to this refinement (<see cref="WorldBody.SweepContact"/>); ordinary terrain fields remain unaware
+/// of population addressing.</summary>
 internal interface IEntityContactField : IContactField {
-    ContactResolution ResolveEntity(int entityIndex, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up);
     ContactResolution ResolveEntitySweep(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
-        ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
-        ResolveEntity(
-            entityIndex: entityIndex,
-            orientation: in orientation,
-            position: ref position,
-            up: in up,
-            velocity: ref velocity,
-            volumes: volumes
-        );
+        ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up);
 }
 
 /// <summary>The analytic collider vocabulary's live document census, measured from the definition by

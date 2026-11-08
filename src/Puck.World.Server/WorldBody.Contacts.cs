@@ -382,26 +382,19 @@ public sealed partial class WorldBody {
             m_memo.Query(descent: out descent, field: m_field, orientation: in m_orientation, position: in start, reach: reach,
                 up: in m_axis, volumes: m_volumes, volumesRevision: m_volumesRevision);
         public ContactResolution Sweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
-            ((m_field is IEntityContactField entityField)
-                ? entityField.ResolveEntitySweep(
-                    entityIndex: m_entityIndex,
-                    orientation: in m_orientation,
-                    position: ref position,
-                    previousPosition: in previousPosition,
-                    up: in m_axis,
-                    velocity: ref velocity,
-                    volumes: m_volumes
-                )
-                : m_field.ResolveSweep(
-                    orientation: in m_orientation,
-                    position: ref position,
-                    previousPosition: in previousPosition,
-                    up: in m_axis,
-                    velocity: ref velocity,
-                    volumes: m_volumes
-                )
-            );
+            SweepContact(entityIndex: m_entityIndex, field: m_field, orientation: in m_orientation, position: ref position,
+                previousPosition: in previousPosition, up: in m_axis, velocity: ref velocity, volumes: m_volumes);
     }
+    // The one dispatch every sweep that moves a body goes through: an entity-aware field learns which local body it
+    // moves, so what a neighbour answers is admitted against that body (WorldPopulation.AdmitAdjacencyResponse). A probe
+    // that moves no body calls the field directly and names none.
+    internal static ContactResolution SweepContact(IContactField field, int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
+        ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
+        ((field is IEntityContactField entityField)
+            ? entityField.ResolveEntitySweep(entityIndex: entityIndex, orientation: in orientation, position: ref position,
+                previousPosition: in previousPosition, up: in up, velocity: ref velocity, volumes: volumes)
+            : field.ResolveSweep(orientation: in orientation, position: ref position, previousPosition: in previousPosition,
+                up: in up, velocity: ref velocity, volumes: volumes));
 
     // A walking body's velocity in world space: its planar velocity, tangent to the body's own up, plus its vertical
     // velocity along that up, the frame it integrates in (IntegratePlanarAndVerticalVelocity). Every write that moves
