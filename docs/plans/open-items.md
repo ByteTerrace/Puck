@@ -1648,6 +1648,18 @@ document values bind by copying only the paths to their references
   (`ReplicaMetadataPriming...` three times and
   `ReplicaRestoreCompletesItsObservationHeaders...`), seen by the edit-install
   lane with and without its change; the disclosure area owns it.
+- [medium · determinism · unconfirmed] Latches over pools may fire again
+  after an edit: a rule's `forEach` over a pool binds `LatchKey.LeftGeneration`
+  to the pool handle's generation (`RuleEvaluator`), and interaction pairs bind
+  pool slot indices and generations (`WorldRuleHost.PoolCarriers`); an edit in a
+  pool-declaring world seeds its replacement from the whole export, and if that
+  restarts generations or slot order, `RuleLatch.RemapKeys` (key names only)
+  leaves those entries pointing at different carriers. Reproduce with a latched
+  Edge rule over a pool across a state-section edit.
+- [low] Rule-group progress (`RuleGroupState`, by group name) and decision
+  state survive a load, while latches and scoped replays clear on one
+  (`WorldServer.ContinueArena`). Clearing them too needs a reorder first: a
+  checkpoint restore sets group state before `RecompileRules(Load)` runs.
 - [medium · unattributed] A headless debug World allocates about 620 KB a
   tick by `host.memory` (about 74 MB per 120 ticks, three instances), against
   `puck bench world`'s 1,832 B server quiet tick: the rest is client,
