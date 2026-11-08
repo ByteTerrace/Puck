@@ -32,6 +32,8 @@ public sealed class StateChangeDisclosureLawTests(ITestOutputHelper output) {
         Assert.True(arena.Keys.TryResolve(CellName.Parse("pub0"), out var pub));
         Assert.NotNull(first.DeliverDefinition(view));
         Assert.NotNull(second.DeliverDefinition(view));
+        Assert.Single(view.Advance(first, []));
+        Assert.Single(view.Advance(second, []));
         var before = view.Image(row.Ordinal);
         Assert.True(arena.TryWriteVector(row.Ordinal, secret, [0, 127, 0, 0, 0, 0, 0, 0], out var reason), reason);
         _ = view.Definition;
@@ -46,6 +48,7 @@ public sealed class StateChangeDisclosureLawTests(ITestOutputHelper output) {
         Assert.Empty(view.Advance(first, [row.Ordinal]));
         first.Release();
         Assert.NotNull(first.DeliverDefinition(view));
+        Assert.Single(view.Advance(first, []));
         Assert.Empty(view.Advance(first, [row.Ordinal]));
     }
 
@@ -101,7 +104,10 @@ public sealed class StateChangeDisclosureLawTests(ITestOutputHelper output) {
         Assert.True(arena.Catalog.TryResolve(StateLane.Document, "hand", out var row));
         Assert.True(arena.Keys.TryResolve(CellName.Parse("secret"), out var secret));
         Assert.True(arena.Keys.TryResolve(CellName.Parse("pub0"), out var pub));
-        for (var index = 0; index < spectators; index++) { cursors[index].DeliverDefinition(views[index]); }
+        for (var index = 0; index < spectators; index++) {
+            cursors[index].DeliverDefinition(views[index]);
+            Assert.Single(views[index].Advance(cursors[index], []));
+        }
         arena.CopyChangedRows(new bool[arena.Rows.Count], clear: true);
         images.BeginTick(arena.ChangedKeys);
         Assert.True(arena.TryWriteVector(row.Ordinal, secret, [0, 127, 0, 0, 0, 0, 0, 0], out var reason), reason);

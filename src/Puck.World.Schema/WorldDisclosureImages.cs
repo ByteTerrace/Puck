@@ -18,10 +18,10 @@ public sealed class WorldRecipientImage {
 }
 internal sealed record WorldRecipientImageContent(StateCell[] Cells, WorldObservedRow? Observation);
 
-/// <summary>World-owned, content-interned row images. Compositions are shared by the set of policies admitting the
-/// reader. Current audience images keep their content alive; replaced content is weakly retained.</summary>
+/// <summary>World-owned, content-interned row images. Compositions are shared by ceiling, authority bypass and the
+/// policies admitting the reader. Current audience images keep their content alive; replaced content is weakly retained.</summary>
 public sealed class WorldDisclosureImages {
-    private sealed record Entry(ulong Version, ulong Dependencies, long Tick, WorldRecipientImage Image, int[] Keys);
+    private sealed record Entry(ulong Version, ulong Dependencies, WorldRecipientImage Image, int[] Keys);
     private StateArena? m_arena;
     private long m_policyRevision = -1;
     private StateVisibility[] m_policies = [];
@@ -30,8 +30,9 @@ public sealed class WorldDisclosureImages {
     private readonly Dictionary<(int Row, string Audience), Entry> m_rows = [];
     private readonly Dictionary<ContentPin, WeakReference<WorldRecipientImage>> m_content = [];
     private readonly Dictionary<string, (WorldDefinition Source, ContentPin[] Rows, WorldDefinition Disclosed, ContentPin Identity)> m_definitions = [];
-    private ArenaChangedKeys m_changes = new();
-    private long m_tick;
+    private ArenaChangedKeys? m_changes;
+    private StateArena? m_windowArena;
+    private ulong[] m_windowVersions = [];
     private WorldDefinition? m_presentedSource;
     private IReadOnlySet<string> m_presented = new HashSet<string>();
     internal IReadOnlySet<string> Presented(WorldDefinition source) {
@@ -50,7 +51,13 @@ public sealed class WorldDisclosureImages {
     public long Skipped { get; private set; }
     /// <summary>Starts the world's next disclosure window. The carrier accumulates its committed writes.</summary>
     public void BeginTick(ArenaChangedKeys changes) {
-        m_changes = changes; m_tick++; Compositions = 0; ComposedBytes = 0; Skipped = 0;
+        m_changes = changes; m_windowArena = m_arena; Compositions = 0; ComposedBytes = 0; Skipped = 0;
+        // Capture each row once, independently of audience count. Only an image at least this current is covered
+        // by the new window's key proof; a throttled stream may have missed a write whose keys were just cleared.
+        if (m_windowArena is { } arena) {
+            if (m_windowVersions.Length != arena.Rows.Count) { m_windowVersions = new ulong[arena.Rows.Count]; }
+            for (var row = 0; row < m_windowVersions.Length; row++) { m_windowVersions[row] = arena.RowVersion(row); }
+        }
         foreach (var pin in m_content.Where(pair => !pair.Value.TryGetTarget(out _)).Select(pair => pair.Key).ToArray()) { m_content.Remove(pin); }
     }
     /// <summary>Reports live shared image storage and current tick work, for the operator's budget.</summary>
@@ -104,9 +111,12 @@ public sealed class WorldDisclosureImages {
     internal string Audience(WorldRecipientView view) {
         Prepare(view);
         var observer = view.Observer;
-        return string.Create(m_policies.Length + 1, (m_policies, observer, view.Observes, view.Ceiling), static (span, state) => {
+        return string.Create(m_policies.Length + 2, (m_policies, observer, view.Observes, view.Ceiling, view.Unrestricted), static (span, state) => {
             span[0] = state.Observes ? (char)('1' + (int)state.Ceiling) : '0';
-            for (var index = 0; index < state.m_policies.Length; index++) { span[index + 1] = state.observer.Allows(state.m_policies[index]) ? '1' : '0'; }
+            // An authority reads storage bookkeeping even on a declaration that can withhold cells. A recipient
+            // admitted by every current policy still does not, so their definition caches cannot share a class.
+            span[1] = state.Unrestricted ? '1' : '0';
+            for (var index = 0; index < state.m_policies.Length; index++) { span[index + 2] = state.observer.Allows(state.m_policies[index]) ? '1' : '0'; }
         });
     }
     internal WorldRecipientImage Image(WorldRecipientView view, int row) => Image(view, row, Audience(view));
@@ -119,11 +129,12 @@ public sealed class WorldDisclosureImages {
         foreach (var dependency in m_dependencies[row]) { dependencies = checked(dependencies + arena.RowVersion(dependency)); }
         var key = (row, audience);
         if (m_rows.TryGetValue(key, out var entry) && entry.Dependencies == dependencies) {
-            if (entry.Version == version) { m_rows[key] = entry with { Tick = m_tick }; return entry.Image; }
-            if (entry.Tick >= m_tick - 1 && !m_changes.Overlaps(row, entry.Keys) &&
+            if (entry.Version == version) { return entry.Image; }
+            if (ReferenceEquals(arena, m_windowArena) && entry.Version >= m_windowVersions[row] &&
+                m_changes is not null && !m_changes.Overlaps(row, entry.Keys) &&
                 !arena.ChangedKeys.Overlaps(row, entry.Keys)) {
                 Skipped++;
-                m_rows[key] = entry with { Version = version, Tick = m_tick };
+                m_rows[key] = entry with { Version = version };
                 return entry.Image;
             }
         }
@@ -142,7 +153,7 @@ public sealed class WorldDisclosureImages {
             m_content[pin] = new WeakReference<WorldRecipientImage>(image);
         }
         Compositions++; ComposedBytes += bytes.Length;
-        m_rows[key] = new Entry(version, dependencies, m_tick, image,
+        m_rows[key] = new Entry(version, dependencies, image,
             cells.Select(cell => arena.Keys.TryResolve(cell.Key, out var interned) ? interned.Ordinal : -1).ToArray());
         return image;
     }
@@ -157,7 +168,7 @@ public sealed class WorldDisclosureImages {
         var disclosed = WorldStateDisclosure.Disclose(source, view.Arena, view.Recipient, view.Unrestricted).Definition;
         if (disclosed.StateRaw is { } state) {
             disclosed = disclosed with { StateRaw = state with { World = disclosed.AuthoredState.Select((row, ordinal) =>
-                WorldStateDisclosure.WithoutStorageMetadata(row) with { Cells = images[ordinal].Cells }).ToArray() } };
+                row with { Cells = images[ordinal].Cells }).ToArray() } };
         }
         var identity = ContentPin.Compute(WorldDefinitionSerialization.SerializeCompact(disclosed));
         if (had && identity == held.Identity) { disclosed = held.Disclosed; }

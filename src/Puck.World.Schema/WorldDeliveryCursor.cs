@@ -47,9 +47,9 @@ public sealed class WorldDeliveryCursor {
         for (var row = 0; row < view.Source.AuthoredState.Count; row++) {
             if (!view.ReadsWhole(row)) {
                 var image = view.Image(row);
-                // Replica state rows carry readable cells. A nonzero hidden count or backs is carried by the primer
-                // snapshot's observation header instead; do not pretend the definition delivered that metadata.
-                if (view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica && image.Observation is { HiddenCount: > 0 }) { m_metadataPrimers.Add(row); }
+                // The definition carries no observation header, including when its hidden count is zero. Whether
+                // the following primer is owed depends on the row's policy, never on its current hidden members.
+                if (view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica && image.Observation is not null) { m_metadataPrimers.Add(row); }
                 m_rows[view.Arena.Rows[row].Name.Value] = image.Identity;
             }
         }

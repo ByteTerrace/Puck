@@ -22,6 +22,8 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
     private WorldDefinition? m_hydrated;
     private bool m_withheld;
+    private bool m_replicaDefined;
+    private bool m_deliveringSnapshot;
 
     private EntitySnapshot[] m_redacted = [];
     private readonly WorldDeliveryCursor m_cursor = new();
@@ -190,6 +192,19 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         server.DetachCursor(observation.Session, m_cursor);
     }
     private WorldDefinition? DiscloseToReplica(WorldDefinition definition) => m_cursor.DeliverDefinition(m_view);
+    // Replacing a replica document replaces its state arena and observation metadata together. Complete that
+    // delivery with the existing non-consuming primer now, rather than leaving policy-dependent work for a later
+    // quiet tick. The primer has the actual entity table too; an empty synthetic snapshot would erase bodies.
+    private void PrimeReplica() {
+        // AttachSink supplies the first primer itself. Subsequent definition/state replacements have no such
+        // caller, so they must complete the same pair here.
+        if (!m_replicaDefined) { m_replicaDefined = true; return; }
+        // Resume already has its caller's snapshot in hand. Rebuilding a primer here would overwrite that
+        // borrowed carrier while the hub is still fanning it out to other sinks.
+        if (m_deliveringSnapshot) { return; }
+        FollowObserverDetach();
+        if (DetachReason is null) { DeliverSnapshot(server.Document.BuildPrimerSnapshot()); }
+    }
     /// <summary>Discloses a definition as this session's tier shows it, for a read door — see
     /// <see cref="Disclose(WorldDefinition, WorldDisclosureTier, StateArena, Principal?, bool)"/>. Whether the session observes right now is the
     /// delivery's question, not this one's.</summary>
@@ -260,7 +275,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             server.AttachCursor(observation.Session, m_cursor);
 
             if (Tier == WorldDisclosureTier.Replica) {
-                if (DiscloseToReplica(definition) is { } delivered) { inner.DeliverDefinition(delivered, Version); }
+                if (DiscloseToReplica(definition) is { } delivered) { inner.DeliverDefinition(delivered, Version); PrimeReplica(); }
             } else {
                 Project(
                     definition: definition,
@@ -298,6 +313,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         var engineTick = snapshot.EngineTick;
 
         try {
+            m_deliveringSnapshot = true;
             Resume();
 
             if (DetachReason is not null) {
@@ -330,6 +346,8 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             EndAfterFault(exception: exception);
 
             throw;
+        } finally {
+            m_deliveringSnapshot = false;
         }
     }
     // Below Replica the observer's feed decides what the values owe it: nothing, a delta of the members they moved, or
@@ -357,7 +375,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
             if (m_withheld) {
                 m_withheld = false;
-                if (DiscloseToReplica(definition) is { } resumed) { inner.DeliverDefinition(resumed, Version); }
+                if (DiscloseToReplica(definition) is { } resumed) { inner.DeliverDefinition(resumed, Version); PrimeReplica(); }
                 FollowObserverDetach();
 
                 return;
@@ -369,6 +387,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             // exported and loaded whole.
             if (DiscloseToReplica(definition) is { } delivered) {
                 inner.DeliverState(delivered, Version, stamp with { Everything = true, MovedRows = default, ArenaValues = false });
+                PrimeReplica();
             }
             FollowObserverDetach();
         } catch (Exception exception) {
