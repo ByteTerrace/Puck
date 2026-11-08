@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The Azure Blob storage provider: a Puck.Storage target and backend, and the storage-account partitioning the
+         Azure deployment routes users with. Hosts reach it through an installed extension's storage provider, never a
+         reference. -->
+    <PropertyGroup>
+        <IsAotCompatible>false</IsAotCompatible>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Leaf contracts and data</PuckLayer>
+        <PuckProvider>Azure</PuckProvider>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Storage/Puck.Storage.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Azure.Identity" Version="[1.*, )" />
+        <PackageReference Include="Azure.Storage.Blobs" Version="[12.*, )" />
+    </ItemGroup>
+</Project>

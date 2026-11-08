@@ -767,6 +767,14 @@ minting the operator's view leaks through several verbs at once). A new read-bac
 of state values reads through the view; one in `Puck.World` builds it with
 `WorldStateReadView.Of(server, context.Principal)`.
 
+Delivery history lives separately: both sinks take a live `WorldRecipientView`
+and their own `WorldDeliveryCursor`. A read may compose the same shared
+`WorldDisclosureImages`, but it never seeds a cursor. Resume delivers through
+the cursor too. Receipt versions use the recipient's delivery sequence, never
+the authority's install count; a seat is a recipient here even though the grant
+system trusts seats for unmetered local operations. The remaining read-door and
+compiler migration is tracked in [disclosure](../../../../docs/plans/disclosure.md).
+
 **Local presentation is not filtered.** The local HUD, view bindings and
 `world.hud`'s echo of them resolve against the live document for the one shared
 screen: the author chooses what that screen shows, and a binding to a restricted

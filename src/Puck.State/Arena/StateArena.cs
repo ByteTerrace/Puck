@@ -788,18 +788,35 @@ public sealed partial class StateArena {
         );
 
         if (row >= 0) {
-            MarkRowVersion(rowOrdinal: row);
+            MarkRowVersion(rowOrdinal: row, changesRecorded: true);
+            // A value/clock write retains its key. Membership, order and policy writes may remove an old readable
+            // key, so their carrier names the whole row rather than trying to classify the key after deletion.
+            var keyed = column is ArenaColumn.Number or ArenaColumn.Text or ArenaColumn.Vector or
+                ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or
+                ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet or
+                ArenaColumn.Behavior or ArenaColumn.Observation;
+            ChangedKeys.Mark(row, keyed ? KeyAtSlot(m_layout[row], index).Ordinal : -1);
+            if (!keyed) { DisclosureRevision++; }
         }
     }
-    private void MarkRowVersion(int rowOrdinal) {
+    private void MarkRowVersion(int rowOrdinal, bool changesRecorded = false) {
         m_deliveryRows[rowOrdinal] = true;
+        if (!changesRecorded) { MarkDisclosureRow(rowOrdinal); }
         if (m_rowChangeStamp[rowOrdinal] != m_changeEpoch) {
             m_rowChangeStamp[rowOrdinal] = m_changeEpoch;
-            BumpRowVersion(rowOrdinal: rowOrdinal);
+            BumpRowVersion(rowOrdinal: rowOrdinal, changesRecorded: true);
         }
     }
+    private void MarkDisclosureRow(int row) { ChangedKeys.Mark(row); DisclosureRevision++; }
 
     private bool[] m_deliveryRows = [];
+
+    /// <summary>The committed key changes carried with <see cref="CopyChangedRows"/>. Cleared by that method when
+    /// it consumes a publication; a caller needing the keys copies them before consuming the rows.</summary>
+    public ArenaChangedKeys ChangedKeys { get; } = new();
+
+    /// <summary>Structural or audience changes within this arena; a disclosure dependency index rebuilds on these.</summary>
+    public long DisclosureRevision { get; private set; }
 
     /// <summary>Copies rows reached by committed journal positions, and optionally clears the delivery marks.</summary>
     public void CopyChangedRows(Span<bool> rows, bool clear = false) {
@@ -807,6 +824,7 @@ public sealed partial class StateArena {
             rows[i] |= m_deliveryRows[i];
             if (clear) { m_deliveryRows[i] = false; }
         }
+        if (clear) { ChangedKeys.Clear(); }
     }
 
     // Reverse-walks the closing scope so the last entry seen for a position is the first write to it, whose

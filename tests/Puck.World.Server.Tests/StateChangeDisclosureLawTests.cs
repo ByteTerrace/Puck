@@ -4,40 +4,113 @@ using Xunit;
 
 namespace Puck.World.Server.Tests;
 
-// A replica-tier recipient's row replacements come from WorldStateChangeDisclosure. Seeing one requires a replica
-// session, which a headless console run cannot open, so the law drives the filter directly.
-public sealed class StateChangeDisclosureLawTests {
-    [Fact]
-    public void ARestrictedRowIsReplacedOnlyWhenWhatTheRecipientReadsMoves() {
-        var definition = Fixtures.BuildDocument() with {
-            StateRaw = new WorldStateSection(World: [new WorldStateRow(
-                Name: CellName.Parse(candidate: "hand"), Kind: CellKind.Int,
+public sealed class StateChangeDisclosureLawTests(ITestOutputHelper output) {
+    private static WorldDefinition Document(int vectors = 1) => Fixtures.BuildDocument() with {
+        StateRaw = new WorldStateSection(
+            Spaces: [new StateSpace(dimensions: 8, model: "test-model", name: CellName.Parse("lore"), revision: "1")],
+            World: [new WorldStateRow(Name: CellName.Parse("hand"), Kind: CellKind.Vector, Space: "lore",
                 Visibility: new StateVisibility(Hidden: HiddenCells.Omit),
-                Cells: [
-                    new StateCell(Key: CellName.Parse(candidate: "pub"), Value: CellValue.Int(value: 3)),
-                    new StateCell(Key: CellName.Parse(candidate: "secret"), Value: CellValue.Int(value: 7),
-                        Visibility: new StateVisibility(Readers: ["seat1"])),
-                ])])
-        };
-        using var host = HostRow.Build(name: "boot", definition: definition);
-        var server = host.Server;
-        var arena = server.Arena;
+                Cells: Enumerable.Range(0, vectors).Select(index => new StateCell(CellName.Parse("pub" + index),
+                    CellValue.Vector(new sbyte[] { 127, 0, 0, 0, 0, 0, 0, 0 })))
+                    .Append(new StateCell(CellName.Parse("secret"), CellValue.Vector(new sbyte[] { 127, 0, 0, 0, 0, 0, 0, 0 }),
+                        Visibility: new StateVisibility(Readers: ["seat1"]))).ToArray())])
+    };
+    private static WorldRecipientView View(WorldServer server, WorldDisclosureImages images, Principal? recipient = null) =>
+        new(() => server.Definition, () => server.Arena, recipient ?? Principal.Seat(1), WorldDisclosureTier.Replica,
+            () => true, images, server.AuthorityIdentity, () => server.DeliveryTime);
 
-        Assert.True(arena.Catalog.TryResolve(handle: out var hand, lane: StateLane.Document, name: "hand"));
-        Assert.True(arena.Keys.TryResolve(key: out var pub, name: CellName.Parse(candidate: "pub")));
-        Assert.True(arena.Keys.TryResolve(key: out var secret, name: CellName.Parse(candidate: "secret")));
-        FieldCellDelta[] changed = [new FieldCellDelta(Cell: -1, Field: 0, Raw: 0, Row: hand.Ordinal)];
-        var disclosure = new WorldStateChangeDisclosure();
-        var seat2 = Principal.Seat(slot: 1);
-        int Replaced() => disclosure.Filter(server: server, recipient: seat2, changes: changed, rows: true).Span.ToArray()
-            .Count(predicate: delta => (delta.Row == hand.Ordinal) && (delta.Cell == -1));
+    [Fact]
+    public void DefinitionSeedsDeltasAndAReadBetweenDeliveriesCannotConsumeAnInPlaceVectorWrite() {
+        using var fixture = Fixtures.FreshServer(Document());
+        var images = new WorldDisclosureImages();
+        var view = View(fixture.Server, images);
+        var first = new WorldDeliveryCursor();
+        var second = new WorldDeliveryCursor();
+        var arena = fixture.Server.Arena;
+        Assert.True(arena.Catalog.TryResolve(StateLane.Document, "hand", out var row));
+        Assert.True(arena.Keys.TryResolve(CellName.Parse("secret"), out var secret));
+        Assert.True(arena.Keys.TryResolve(CellName.Parse("pub0"), out var pub));
+        Assert.NotNull(first.DeliverDefinition(view));
+        Assert.NotNull(second.DeliverDefinition(view));
+        var before = view.Image(row.Ordinal);
+        Assert.True(arena.TryWriteVector(row.Ordinal, secret, [0, 127, 0, 0, 0, 0, 0, 0], out var reason), reason);
+        _ = view.Definition;
+        Assert.Empty(view.Advance(first, [row.Ordinal]));
+        Assert.Empty(view.Advance(second, [row.Ordinal]));
+        Assert.True(arena.TryWriteVector(row.Ordinal, pub, [0, 127, 0, 0, 0, 0, 0, 0], out reason), reason);
+        _ = view.Observations();
+        var delivered = Assert.Single(view.Advance(first, [row.Ordinal]));
+        Assert.Single(view.Advance(second, [row.Ordinal]));
+        Assert.Equal((sbyte)127, before.Cells[0].Value.AsVector.Span[0]);
+        Assert.Equal((sbyte)0, delivered.Image.Cells[0].Value.AsVector.Span[0]);
+        Assert.Empty(view.Advance(first, [row.Ordinal]));
+        first.Release();
+        Assert.NotNull(first.DeliverDefinition(view));
+        Assert.Empty(view.Advance(first, [row.Ordinal]));
+    }
 
-        Assert.Equal(expected: 1, actual: Replaced());
-        Assert.True(arena.TryWrite(rowOrdinal: hand.Ordinal, key: secret, value: CellValue.Int(value: 8), reason: out var reason), reason);
-        Assert.Equal(expected: 0, actual: Replaced());
-        Assert.True(arena.TryWrite(rowOrdinal: hand.Ordinal, key: pub, value: CellValue.Int(value: 4), reason: out reason), reason);
-        Assert.Equal(expected: 1, actual: Replaced());
-        disclosure.Forget();
-        Assert.Equal(expected: 1, actual: Replaced());
+    [Fact]
+    public void ASeatReceiptWithoutAnObservationStreamNeverCarriesTheAuthoritySequence() {
+        using var fixture = Fixtures.FreshServer(Document());
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateRow(Principal.Console, Document().AuthoredState[0]));
+        fixture.Step();
+        var seat = Principal.Seat(1);
+        var results = new List<WorldSubmissionResult>();
+        fixture.Server.Submit(new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId,
+            SessionGeneration: 0, Sequence: 1, CorrelationId: 1, Principal: seat, OperationId: Guid.NewGuid(),
+            Payload: new WorldSubmissionPayload.Mutation(new WorldMutation.RemoveStateCell(seat, "hand", "absent"))), results.Add);
+        fixture.Step();
+        var outcome = Assert.IsType<WorldSubmissionResult.Mutation>(Assert.Single(results)).Outcome;
+        Assert.True(fixture.Server.DocumentVersion.Sequence > 0);
+        Assert.Equal(0, outcome.Version.Sequence);
+    }
+
+    [Fact]
+    public void AReplicaPrimesCountMetadataThenKeepsItLiveWithoutResendingHiddenValues() {
+        var document = Document();
+        document = document.WithWorldState([document.AuthoredState[0] with { Visibility = new StateVisibility(Hidden: HiddenCells.Count) }]);
+        using var fixture = Fixtures.FreshServer(document);
+        var images = new WorldDisclosureImages();
+        var view = View(fixture.Server, images);
+        var cursor = new WorldDeliveryCursor();
+        Assert.NotNull(cursor.DeliverDefinition(view));
+        Assert.Equal(1, Assert.Single(view.Advance(cursor, [])).Image.Observation!.HiddenCount);
+        Assert.Empty(view.Advance(cursor, []));
+        var arena = fixture.Server.Arena;
+        Assert.True(arena.Catalog.TryResolve(StateLane.Document, "hand", out var row));
+        Assert.True(arena.Keys.TryResolve(CellName.Parse("secret"), out var secret));
+        Assert.True(arena.TryWriteVector(row.Ordinal, secret, [0, 127, 0, 0, 0, 0, 0, 0], out var reason), reason);
+        Assert.Empty(view.Advance(cursor, [row.Ordinal]));
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateRow(Principal.Console, document.AuthoredState[0] with {
+            Cells = [document.AuthoredState[0].Cells![0]]
+        }));
+        fixture.Step();
+        var replacement = Assert.Single(view.Advance(cursor, [row.Ordinal]));
+        Assert.Equal(0, replacement.Image.Observation!.HiddenCount);
+    }
+
+    [Fact]
+    public void SpectatorsShareOneCompositionPerAudienceAndChangedRow() {
+        var spectators = 32;
+        var vectors = 64;
+        using var fixture = Fixtures.FreshServer(Document(vectors));
+        var images = new WorldDisclosureImages();
+        var views = Enumerable.Range(0, spectators).Select(index => View(fixture.Server, images, Principal.Session(index, 1))).ToArray();
+        var cursors = views.Select(_ => new WorldDeliveryCursor()).ToArray();
+        var arena = fixture.Server.Arena;
+        Assert.True(arena.Catalog.TryResolve(StateLane.Document, "hand", out var row));
+        Assert.True(arena.Keys.TryResolve(CellName.Parse("secret"), out var secret));
+        Assert.True(arena.Keys.TryResolve(CellName.Parse("pub0"), out var pub));
+        for (var index = 0; index < spectators; index++) { cursors[index].DeliverDefinition(views[index]); }
+        arena.CopyChangedRows(new bool[arena.Rows.Count], clear: true);
+        images.BeginTick(arena.ChangedKeys);
+        Assert.True(arena.TryWriteVector(row.Ordinal, secret, [0, 127, 0, 0, 0, 0, 0, 0], out var reason), reason);
+        for (var index = 0; index < spectators; index++) { Assert.Empty(views[index].Advance(cursors[index], [row.Ordinal])); }
+        Assert.Equal(0, images.Compositions);
+        output.WriteLine($"{spectators} spectators x {vectors} vectors, hidden-only: {images.Describe()}");
+        Assert.True(arena.TryWriteVector(row.Ordinal, pub, [0, 127, 0, 0, 0, 0, 0, 0], out reason), reason);
+        for (var index = 0; index < spectators; index++) { Assert.Single(views[index].Advance(cursors[index], [row.Ordinal])); }
+        Assert.Equal(1, images.Compositions);
+        output.WriteLine($"{spectators} spectators x {vectors} vectors, visible write: {images.Describe()}");
     }
 }

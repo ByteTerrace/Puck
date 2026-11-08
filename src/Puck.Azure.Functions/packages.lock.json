@@ -659,10 +659,17 @@
       "puck.storage": {
         "type": "Project",
         "dependencies": {
-          "Azure.Identity": "[1.*, )",
-          "Azure.Storage.Blobs": "[12.*, )",
           "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
+      },
+      "puck.storage.azure": {
+        "type": "Project",
+        "dependencies": {
+          "Azure.Identity": "[1.*, )",
+          "Azure.Storage.Blobs": "[12.*, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "Puck.Storage": "[1.0.0, )"
         }
       }
     }

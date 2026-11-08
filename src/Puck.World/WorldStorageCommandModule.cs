@@ -8,30 +8,31 @@ namespace Puck.World;
 /// <summary>
 /// The storage console surface — <c>storage.status</c>, <c>storage.push</c>, <c>storage.pull</c>,
 /// <c>storage.credential</c>. Status is one honest Immediate echo of the player-catalog persistence state: the wiring
-/// disposition (local-only, or the wired container, route, AND discovery-endpoint decision), the identity resolver's
-/// decision, the endpoint, the discovery endpoint, the catalog's revision / last-synced cursor / dirty flag /
-/// tracked-token count / last-write outcome (ok / precondition-failed / failed) / cloud-discovery availability, and
-/// the last credential-probe verdict. Push and pull move whole owned-world documents against the per-user container
-/// with refuse-and-surface semantics — a stale token, an unsynced cloud copy, a colliding cloud blob name, a
-/// document-gate refusal, and a transport error each land as a named per-world line, never silently. A
-/// whole-catalog <c>storage.pull</c> also DISCOVERS cloud-only worlds by listing the cloud namespace — an edge-shaped
-/// endpoint with no discovery endpoint authored refuses that list BY NAME (the platform edge cannot serve one at
-/// all) rather than reporting an empty catalog (see <see cref="WorldOwnedWorldSync"/>'s class summary for the
-/// round-trip caveat). Credential probes the ambient Azure credential and records the verdict for status to echo. A
-/// SEPARATE module to keep each class under its analyzer ceilings.
+/// disposition (local-only, or the wired container and the store's own description), the identity resolver's
+/// decision, the catalog's revision / last-synced cursor / dirty flag / tracked-token count / last-write outcome
+/// (ok / precondition-failed / failed) / cloud-discovery availability, and the last access-probe verdict. Push and
+/// pull move whole owned-world documents against the per-user container with refuse-and-surface semantics — a stale
+/// token, an unsynced cloud copy, a colliding cloud blob name, a document-gate refusal, and a transport error each land
+/// as a named per-world line, never silently. A whole-catalog <c>storage.pull</c> also DISCOVERS cloud-only worlds by
+/// listing the cloud namespace — a store that cannot list refuses that list BY NAME rather than reporting an empty
+/// catalog (see <see cref="WorldOwnedWorldSync"/>'s class summary for the round-trip caveat). Credential asks the
+/// configured store whether this machine could reach it and records the verdict for status to echo. A SEPARATE module
+/// to keep each class under its analyzer ceilings.
 /// </summary>
 /// <remarks>All four are Immediate — none of them are simulation traffic — and all four run INLINE on the host's
 /// frame loop, which is where the console pump drains. Status is a pure read and costs nothing; the other three are
 /// control-plane IO, and while one is in flight the loop does not advance: a windowed session visibly stalls for as
-/// long as the operation takes, bounded at 15s per blob for push/pull and 10s for the credential probe. That is the
+/// long as the operation takes, bounded at 15s per blob for push/pull and 10s for the access probe. That is the
 /// accepted shape for an operator verb nobody issues mid-play, not an oversight. The stdin barrier still lets a
 /// preceding <c>identity.motion</c>/<c>identity.bindings.save</c> settle before any of them read the bumped revision.</remarks>
-internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlayerStorageIdentityResolver identity, WorldStorageSettings settings, WorldStorageSyncHandle sync) : ICommandModule {
+internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlayerStorageIdentityResolver identity, WorldStorageSettings settings, WorldStorageSyncHandle sync,
+    IObjectBlobStore store) : ICommandModule {
     private static readonly TimeSpan CredentialProbeTimeout = TimeSpan.FromSeconds(seconds: 10);
 
     private readonly WorldOwnedWorlds m_profiles = profiles;
     private readonly IPlayerStorageIdentityResolver m_identity = identity;
     private readonly WorldStorageSettings m_settings = settings;
+    private readonly IObjectBlobStore m_store = store;
     private readonly WorldStorageSyncHandle m_sync = sync;
     private string m_credential = "not probed";
     private static readonly CommandForms StoragePushForms = CommandForms.Of(verb: "storage.push", "[<world-id>]");
@@ -45,8 +46,6 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
             ? reason
             : $"declined — {reason}"
         );
-        var endpoint = RedactedEndpoint(value: m_settings.Endpoint);
-        var discoveryEndpoint = RedactedEndpoint(value: m_settings.DiscoveryEndpoint);
         var catalog = ((m_sync.Engine is { } engine)
             ? $"catalog revision {m_profiles.Revision} lastSynced {engine.LastSyncedRevision} dirty {(engine.Dirty
                 ? "on"
@@ -54,47 +53,27 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
             : $"catalog revision {m_profiles.Revision} (local authoritative, discovery off)"
         );
 
-        return $"[storage.status: {m_sync.Disposition} | identity {identity} | endpoint {endpoint} | discoveryEndpoint {discoveryEndpoint} | credential {m_credential} | {catalog} | file {m_profiles.FilePath}]";
+        return $"[storage.status: {m_sync.Disposition} | identity {identity} | store {(m_settings.Target?.Description ?? "none")} | credential {m_credential} | {catalog} | file {m_profiles.FilePath}]";
     }
-    // The probe answers "would the cloud let this machine in", which is only ON this session's path when the endpoint
-    // is a service URI — a connection string authenticates with the account key it carries instead. Both readings are
-    // reported so the verdict is never mistaken for a verdict about the wrong thing.
     private CommandResult Probe() {
-        var status = AzureBlobCredentialProbe.ProbeAsync(timeout: CredentialProbeTimeout).AsTask().GetAwaiter().GetResult();
-        var route = ((m_settings.Endpoint is not { Length: > 0 } endpoint)
-            ? "no endpoint — nothing authenticates"
-            : (Uri.TryCreate(
-                result: out _,
-                uriKind: UriKind.Absolute,
-                uriString: endpoint
-            )
-                ? "this session's endpoint is a service URI — it authenticates with exactly this credential"
-                : "this session's endpoint is a connection string — it authenticates with the account key instead"
-        ));
+        if (m_settings.Target is not { } target) {
+            return CommandResult.Error(output: "[storage.credential: no store configured — nothing authenticates]");
+        }
+
+        var status = m_store.ProbeAccessAsync(
+            target: target,
+            timeout: CredentialProbeTimeout
+        ).AsTask().GetAwaiter().GetResult();
 
         m_credential = (status.Available
-            ? $"available (expires {status.ExpiresOn:u})"
+            ? $"available{((status.ExpiresOn is { } expires) ? $" (expires {expires:u})" : "")}"
             : $"unavailable — {status.Detail}"
         );
 
         return (status.Available
-            ? new CommandResult(Output: $"[storage.credential: {status.Detail}, expires {status.ExpiresOn:u} | {route}]")
-            : CommandResult.Error(output: $"[storage.credential: no storage token — {status.Detail} | {route}]")
+            ? new CommandResult(Output: $"[storage.credential: {status.Detail}{((status.ExpiresOn is { } expiresOn) ? $", expires {expiresOn:u}" : "")} | {target.Description}]")
+            : CommandResult.Error(output: $"[storage.credential: no access — {status.Detail} | {target.Description}]")
         );
-    }
-    // A connection string carries the account key; only a URI endpoint is safe to echo. Shared by endpoint and
-    // discoveryEndpoint — both are the same authored-value shape (a URI or a dev/emulator connection string).
-    private static string RedactedEndpoint(string? value) {
-        return ((value is not { Length: > 0 } present)
-            ? "none"
-            : (Uri.TryCreate(
-                result: out _,
-                uriKind: UriKind.Absolute,
-                uriString: present
-            )
-                ? present
-                : "a connection string (redacted — it carries the account key)"
-        ));
     }
     private CommandResult Run(string? id, string verb, Func<WorldOwnedWorldSync, string?, IReadOnlyList<WorldSyncOutcome>> operation) {
         if (m_sync.Engine is not { } engine) {
@@ -135,7 +114,7 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "storage.status",
-            description: "Reports the honest player-catalog storage state (Immediate): the wiring disposition (including the discovery-endpoint decision), the identity resolver's decision, the endpoint, the discovery endpoint, the per-catalog revision / last-synced cursor / dirty flag / tracked-token count / last-write outcome (ok / precondition-failed / failed), and the last storage.credential verdict.",
+            description: "Reports the honest player-catalog storage state (Immediate): the wiring disposition, the identity resolver's decision, the configured store's description, the per-catalog revision / last-synced cursor / dirty flag / tracked-token count / last-write outcome (ok / precondition-failed / failed), and the last storage.credential verdict.",
             handler: (_, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "storage.status"
@@ -176,7 +155,7 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "storage.credential",
-            description: "Probes whether the ambient Azure credential can issue a storage token from this machine — the credential the cloud tier authenticates a service-URI endpoint with (a player signs in ambiently, a hosted server runs as a managed identity; no app registration is involved). A presence check, never a prompt: it records its verdict for storage.status to echo (Immediate, up to 10s).",
+            description: "Probes whether this machine could authenticate to the configured store right now, through its provider (a store that needs no credential answers available). A presence check, never a prompt: it records its verdict for storage.status to echo (Immediate, up to 10s).",
             handler: (_, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "storage.credential"

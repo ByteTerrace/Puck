@@ -18,7 +18,11 @@ public static class ObjectBlobAddressPath {
     /// <summary>Normalizes a list operation's key prefix: empty means "every key under the object"; a non-empty value
     /// is validated exactly like a key (relative, no dot segments) and rendered back with a trailing slash so it can
     /// only match whole path segments — a prefix "worlds" must not also match a sibling key "worlds2/x.json".</summary>
-    internal static string GetNormalizedPrefix(string keyPrefix) {
+    /// <param name="keyPrefix">The list prefix, relative and without dot segments; empty for every key.</param>
+    /// <returns>The empty string, or the validated segments joined by <c>/</c> with a trailing <c>/</c>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="keyPrefix"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="keyPrefix"/> is not a portable relative path.</exception>
+    public static string GetNormalizedPrefix(string keyPrefix) {
         ArgumentNullException.ThrowIfNull(argument: keyPrefix);
 
         if (keyPrefix.Length == 0) {
@@ -35,7 +39,12 @@ public static class ObjectBlobAddressPath {
             segments
         )}/";
     }
-    internal static string GetRoot(Guid objectId) {
+    /// <summary>Returns the root segment every backend files an object's blobs under: the object id's canonical
+    /// string.</summary>
+    /// <param name="objectId">The object (container) id.</param>
+    /// <returns>The object id in its <c>D</c> format.</returns>
+    /// <exception cref="ArgumentException"><paramref name="objectId"/> is <see cref="Guid.Empty"/>.</exception>
+    public static string GetRoot(Guid objectId) {
         if (objectId == Guid.Empty) {
             throw new ArgumentException(
                 message: "The object id must not be empty.",

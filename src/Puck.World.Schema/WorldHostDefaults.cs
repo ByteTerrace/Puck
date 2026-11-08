@@ -6,36 +6,21 @@ using Puck.Abstractions.Gpu;
 namespace Puck.World;
 
 /// <summary>
-/// The world's storage host-section defaults — the per-user cloud endpoint, an explicit user-id override, and the
-/// direct-to-account discovery endpoint — authored as data so durable configuration lives in the world file (never a
-/// <c>PUCK_*</c> env var; World has no such surface). An endpoint plus a resolved identity wires the owned-world sync
-/// engine (<c>storage.push</c> / <c>storage.pull</c>); anything less leaves the catalog local-only. A
-/// <c>--storage-uri</c> / <c>--user-id</c> / <c>--storage-discovery-uri</c> CLI reflection overrides each at boot.
+/// The world's storage host-section defaults: an explicit user-id override, authored as data so durable configuration
+/// lives in the world file (never a <c>PUCK_*</c> env var; World has no such surface). The store itself is deployment
+/// configuration, never document content: the host's <c>--storage-config-file</c> selects an installed storage
+/// provider and its settings, since a document travels and a store's settings can carry an account secret. A store
+/// plus a resolved identity wires the owned-world sync engine (<c>storage.push</c> / <c>storage.pull</c>); anything
+/// less leaves the catalog local-only. A <c>--user-id</c> CLI reflection overrides the user-id at boot.
 /// <c>storage.status</c> echoes the resolved values.
 /// </summary>
-/// <param name="Endpoint">The per-user blob endpoint (a URI, e.g. <c>https://blob.byteterrace.com</c>), or
-/// <see langword="null"/> for none. Validated as an absolute URI when present. Feeds
-/// <c>WorldStorageSyncHandle</c>'s target construction; a URI here is edge-shaped (platform-managed containers), a
-/// connection-string override (CLI-only — see the validator) is raw-shaped.</param>
 /// <param name="UserId">An explicit user-id override (a UUID string for a dev box or agent), or
 /// <see langword="null"/> to decline identity (local-only). Fed to the identity resolver's explicit-override source.</param>
-/// <param name="DiscoveryEndpoint">The direct-to-account connection container listing uses when <see cref="Endpoint"/>
-/// resolves to an edge-shaped target — the platform edge cannot serve List at all (see
-/// the storage extension documentation), so an edge-shaped target with this
-/// <see langword="null"/> refuses discovery by name instead of a request the edge cannot answer. Validated as an
-/// absolute URI when present; a connection-string override (CLI-only — see the validator) is for the dev/emulator
-/// shape. Ignored when <see cref="Endpoint"/> is raw-shaped (a raw target lists directly, like it reads and
-/// writes).</param>
-// Every member is optional and null-meaningful — see None below, which is all three absent. The explicit defaults are
-// what tell the loader so, now that a parameter without one is required of the document.
-public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserId = null, string? DiscoveryEndpoint = null) {
-    /// <summary>Gets the built-in default: no endpoint, no user-id, no discovery endpoint (cloud unwired, identity
-    /// declined — local-only).</summary>
-    public static WorldStorageDefaults None { get; } = new WorldStorageDefaults(
-        DiscoveryEndpoint: null,
-        Endpoint: null,
-        UserId: null
-    );
+// The member is optional and null-meaningful — see None below. The explicit default is what tells the loader so, since
+// a parameter without one is required of the document.
+public sealed record WorldStorageDefaults(string? UserId = null) {
+    /// <summary>Gets the built-in default: no user-id (identity declined — local-only).</summary>
+    public static WorldStorageDefaults None { get; } = new WorldStorageDefaults(UserId: null);
 }
 /// <summary>
 /// World-varying editor/authoring policy values, authored as data rather than compile-time constants. The whole

@@ -36,7 +36,7 @@ The kinds in use today, and who reads them:
 | Kind | Key | Registered with | Read by |
 |---|---|---|---|
 | `IMachineEngine`, `IMachineContentProvider` | engine id | `AddMachineEngine` | every host's `WorldMachineCatalog.From` |
-| `WorldSiloStorageProvider` | store `type` | `AddStorage` | the silo document's `store` |
+| `WorldStorageProvider` | store `type` | `AddStorage` | the silo document's `store`; World's `--storage-config-file` |
 | `WorldSiloRetirementProvider` | observer `type` | `AddRetirement` | the silo document's `lifecycle.observer` |
 | `WorldAuthenticationProvider` | `type` | `AddAuthentication` | silo row admission; World's `--authentication-config-file` |
 | `WorldExtensionProviderType`, `WorldExtensionEmbeddingProviderType` | provider `type` | `AddOperation`, `AddEmbedding` | the extension configuration's `providers` |
@@ -157,7 +157,7 @@ before the set that owns their extensions.
 
 `world.extensions.catalog` prints each composed extension and its contributions
 by kind and key, for example
-`Puck.World.Server: WorldSiloStorageProvider directory`. It is how a running
+`Puck.World.Server: WorldStorageProvider directory`. It is how a running
 World or silo shows what it composed.
 
 ## Writing an extension

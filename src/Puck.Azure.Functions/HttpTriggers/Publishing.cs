@@ -6,7 +6,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 using System.Net;
 using Puck.Azure.Functions.Services;
 using Puck.Azure.Functions.Utilities;
-using Puck.Storage;
+using Puck.Storage.Azure;
 
 namespace Puck.Azure.Functions.HttpTriggers;
 

@@ -318,6 +318,29 @@ state {
       kind: "Int"
       cells [{ key: "4", value: 1 }]
     }
+    // W11's cell-driven cases. Body 3 is `rule-faults-unrelated`; the cell-driven counts are admitted after every
+    // literal one, so `rule-faults-counted` (its count `countedSize`) is body 2 and `rule-faults-counted-alone` (its
+    // count `aloneSize`) is body 1.
+    row {
+      name: "countedScore"
+      kind: "Int"
+      cells [{ key: "2", value: 1 }]
+    }
+    row {
+      name: "aloneScore"
+      kind: "Int"
+      cells [{ key: "1", value: 1 }]
+    }
+    row {
+      name: "countedSize"
+      kind: "Int"
+      value: 1
+    }
+    row {
+      name: "aloneSize"
+      kind: "Int"
+      value: 1
+    }
     table decided {
       noChoicePicked = 0
       noChoiceLanded = 0
@@ -331,6 +354,10 @@ state {
       untakenLanded = 0
       removedCommon = 0
       removedOption = 0
+      countedCommon = 0
+      countedOption = 0
+      aloneCommon = 0
+      aloneOption = 0
     }
 
     // W12: a one-token search whose judge faults while `searchFault` holds (before tick 30). `searchBest.score`
@@ -373,79 +400,32 @@ state {
   }
 }
 
+// An idle stand-in placement inhabited by `count` bodies, a literal or a count cell.
+template standIns(name, at, count) {
+  placement name {
+    prototype: "standIn"
+    position: at
+    inhabit {
+      count: count
+      distribution {
+        fill { name: "additive", offset: 0, step: 0.001 }
+        region: disc(radius: 0.01)
+      }
+      kit: "walker"
+      look: "standIn"
+      source: "Idle"
+    }
+  }
+}
+
 placements {
-  placement "rule-faults-inhabited" {
-    prototype: "standIn"
-    position [0, 0.05, 0]
-    inhabit {
-      count: 1
-      distribution {
-        fill {
-          name: "additive"
-          offset: 0
-          step: 0.001
-        }
-        region: disc(radius: 0.01)
-      }
-      kit: "walker"
-      look: "standIn"
-      source: "Idle"
-    }
-  }
-  placement "rule-faults-observer" {
-    prototype: "standIn"
-    position [4, 0.05, 0]
-    inhabit {
-      count: 1
-      distribution {
-        fill {
-          name: "additive"
-          offset: 0
-          step: 0.001
-        }
-        region: disc(radius: 0.01)
-      }
-      kit: "walker"
-      look: "standIn"
-      source: "Idle"
-    }
-  }
-  placement "rule-faults-kept" {
-    prototype: "standIn"
-    position [5, 0.05, 0]
-    inhabit {
-      count: 1
-      distribution {
-        fill {
-          name: "additive"
-          offset: 0
-          step: 0.001
-        }
-        region: disc(radius: 0.01)
-      }
-      kit: "walker"
-      look: "standIn"
-      source: "Idle"
-    }
-  }
-  placement "rule-faults-removed" {
-    prototype: "standIn"
-    position [4, 0.05, 1]
-    inhabit {
-      count: 1
-      distribution {
-        fill {
-          name: "additive"
-          offset: 0
-          step: 0.001
-        }
-        region: disc(radius: 0.01)
-      }
-      kit: "walker"
-      look: "standIn"
-      source: "Idle"
-    }
-  }
+  standIns("rule-faults-inhabited", [0, 0.05, 0], 1)
+  standIns("rule-faults-observer", [4, 0.05, 0], 1)
+  standIns("rule-faults-kept", [5, 0.05, 0], 1)
+  standIns("rule-faults-removed", [4, 0.05, 1], 1)
+  standIns("rule-faults-unrelated", [3, 0.05, 0], 1)
+  standIns("rule-faults-counted", [5, 0.05, 1], { row: "countedSize" })
+  standIns("rule-faults-counted-alone", [5, 0.05, -1], { row: "aloneSize" })
 }
 
 search {
@@ -893,6 +873,61 @@ rule "liveness-removal" {
   }
 }
 
+// W11, a common effect that zeroes the chosen neighbour's count cell with no document row: the counts settle from the
+// firing's writes, which retire the neighbour, so the option is not proposed and the common effects stand.
+rule "liveness-count-alone" {
+  when $tick == 2
+  mode: Level
+  forEach: observer
+  decided.aloneCommon += 1
+  aloneSize = 0
+  decision {
+    periodSeconds: 1s
+    mode: HighestScore
+    scoreKind: Int
+    option "meet" {
+      score: aloneScore[$right]
+      decided.aloneOption += 1
+      neighbors {
+        candidateBudget: 8
+        halfAngleDegrees: 180
+        maxCandidates: 4
+        range: 10
+        requiresLineOfSight: false
+        retainCurrent: true
+      }
+    }
+  }
+}
+
+// W11, a common effect that zeroes the chosen neighbour's count cell and removes another placement: the install
+// rebuilds the population and its cell-driven reconcile retires the neighbour, so the option is not proposed.
+rule "liveness-count-install" {
+  when $tick == 2
+  mode: Level
+  forEach: observer
+  decided.countedCommon += 1
+  countedSize = 0
+  removePlacement(id: `rule-faults-unrelated`)
+  decision {
+    periodSeconds: 1s
+    mode: HighestScore
+    scoreKind: Int
+    option "meet" {
+      score: countedScore[$right]
+      decided.countedOption += 1
+      neighbors {
+        candidateBudget: 8
+        halfAngleDegrees: 180
+        maxCandidates: 4
+        range: 10
+        requiresLineOfSight: false
+        retainCurrent: true
+      }
+    }
+  }
+}
+
 // W12: the judge accepts every relocation, then faults while the window holds. A candidate whose judge faults is a
 // faulted candidate and not a scored one, so the step restarts and no answer lands until the window closes.
 rule "search-accept" {
@@ -1065,6 +1100,12 @@ test "W11 a decision firing that faults decides nothing, and an option reads the
     decided.untakenLanded == 1
     decided.removedCommon == 1
     decided.removedOption == 0
+    decided.aloneCommon == 1
+    decided.aloneOption == 0
+    aloneSize == 0
+    decided.countedCommon == 1
+    decided.countedOption == 0
+    countedSize == 0
   }
 }
 

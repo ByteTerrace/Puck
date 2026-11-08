@@ -12,10 +12,11 @@ public interface IWorldHostRetirementObserver : IDisposable {
     /// <returns>The observation lifetime; completing successfully never implies a failed retirement succeeded.</returns>
     Task RunAsync(Func<DateTimeOffset, CancellationToken, Task> retire, CancellationToken cancellationToken);
 }
-/// <summary>A persistence provider an installed extension contributes, selected by its key.</summary>
-/// <param name="Type">The contribution key a silo document selects.</param>
-/// <param name="Create">Validates provider-owned settings and returns the silo's storage target without network I/O.</param>
-public sealed record WorldSiloStorageProvider(string Type, Func<JsonElement, ObjectStorageTarget> Create);
+/// <summary>A storage provider an installed extension contributes, selected by its key: the one way a host reaches a
+/// store, so no host names a provider's target type.</summary>
+/// <param name="Type">The contribution key a silo document's <c>store</c> or a World's storage configuration selects.</param>
+/// <param name="Create">Validates provider-owned settings and returns the storage target without network I/O.</param>
+public sealed record WorldStorageProvider(string Type, Func<JsonElement, ObjectStorageTarget> Create);
 /// <summary>A retirement observer provider an installed extension contributes, selected by its key.</summary>
 /// <param name="Type">The contribution key a silo document selects.</param>
 /// <param name="Create">Validates provider-owned settings and creates an owned observer without starting observation.

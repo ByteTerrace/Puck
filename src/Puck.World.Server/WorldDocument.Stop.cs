@@ -44,7 +44,7 @@ public sealed partial class WorldDocument {
                             binding: binding,
                             code: WorldServer.StoppedCode,
                             detail: reason,
-                            version: Host.DocumentVersion
+                            version: Host.RecipientVersion(binding.Actor)
                         ))
                         : new WorldSubmissionResult.Refusal(Code: WorldServer.StoppedCode, Detail: reason)));
 

@@ -11,7 +11,7 @@ namespace Puck.World.Silo.Tests;
 
 /// <summary>Durable group-state and managed silo admission laws.</summary>
 public sealed class WorldReleaseGroupTests {
-    private static readonly ObjectStorageTarget Target = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: "UseDevelopmentStorage=true");
+    private static readonly ObjectStorageTarget Target = new DirectoryObjectStorageTarget(rootPath: "fake-store");
 
     private static Task PumpAsync(WorldSiloHost host, Task operation) => WorldSiloHost.PumpActivationMailboxesAsync(
         cancellationToken: TestContext.Current.CancellationToken,

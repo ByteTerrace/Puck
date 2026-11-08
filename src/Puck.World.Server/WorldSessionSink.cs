@@ -21,13 +21,13 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     );
 
     private WorldDefinition? m_hydrated;
-    // The state section the replica observer was last handed, so a delivery that moves only placements carries it again
-    // as the same instance and the observer keeps the state it already loaded and the values the snapshots wrote into it.
-    private WorldStateSection? m_replicaState;
     private bool m_withheld;
 
     private EntitySnapshot[] m_redacted = [];
-    private readonly WorldStateChangeDisclosure m_stateDisclosure = new();
+    private readonly WorldDeliveryCursor m_cursor = new();
+    private readonly WorldDeliveryRows m_rows = new();
+    private readonly WorldRecipientView m_view = server.DeliveryView(observation.Session, observation.Tier, () => observation.CanObserve);
+    private WorldDocumentVersion Version => server.DocumentVersion with { Sequence = m_cursor.Sequence };
 
     /// <summary>Gets the reason the observer ended its own subscription with, or <see langword="null"/> while it still
     /// takes deliveries; the session ends with it.</summary>
@@ -162,16 +162,10 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         var time = server.DeliveryTime;
 
         Present(
-            delivery: m_feed.Compose(
-                arena: server.Arena,
-                authority: server.AuthorityIdentity,
-                definition: definition,
-                revision: server.Population.Revision,
-                time: in time
-            ),
+            delivery: m_feed.Compose(m_view, m_cursor),
             engineTick: time.EngineTick,
             tick: time.Tick,
-            version: version
+            version: Version
         );
     }
     // Ends a withheld span: the observer takes the current disclosed definition before anything newer.
@@ -182,18 +176,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         m_withheld = false;
 
-        if (Tier == WorldDisclosureTier.Replica) {
-            m_replicaState = server.Definition.StateRaw;
-            inner.DeliverDefinition(
-                definition: server.Definition,
-                version: server.DocumentVersion
-            );
-        } else {
-            Project(
-                definition: server.Definition,
-                version: server.DocumentVersion
-            );
-        }
+        DeliverDefinition(server.Definition, server.DocumentVersion);
 
         FollowObserverDetach();
     }
@@ -203,23 +186,10 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     public void Release() {
         m_feed.Release();
         m_hydrated = null;
-        m_replicaState = null;
+        m_cursor.Release();
+        server.DetachCursor(observation.Session, m_cursor);
     }
-    // The placements this session may read, read from the arena without exporting its rows.
-    private IReadOnlyList<WorldPlacement>? PlacementsFor(WorldDefinition definition) {
-        var placements = WorldStateDisclosure.PlacementProjection(arena: server.Arena, definition: definition, recipient: observation.Session);
-
-        return (ReferenceEquals(objA: placements, objB: definition.Placements) ? definition.PlacementRowsRaw : [.. placements]);
-    }
-    // A replica observer's whole disclosed definition, remembering the state section it carries.
-    private WorldDefinition DiscloseToReplica(WorldDefinition definition) {
-        var disclosed = Disclose(definition: definition)!;
-
-        m_replicaState = disclosed.StateRaw;
-        m_stateDisclosure.Forget();
-
-        return disclosed;
-    }
+    private WorldDefinition? DiscloseToReplica(WorldDefinition definition) => m_cursor.DeliverDefinition(m_view);
     /// <summary>Discloses a definition as this session's tier shows it, for a read door — see
     /// <see cref="Disclose(WorldDefinition, WorldDisclosureTier, StateArena, Principal?, bool)"/>. Whether the session observes right now is the
     /// delivery's question, not this one's.</summary>
@@ -287,12 +257,10 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         try {
             m_withheld = false;
+            server.AttachCursor(observation.Session, m_cursor);
 
             if (Tier == WorldDisclosureTier.Replica) {
-                inner.DeliverDefinition(
-                    definition: DiscloseToReplica(definition: definition),
-                    version: version
-                );
+                if (DiscloseToReplica(definition) is { } delivered) { inner.DeliverDefinition(delivered, Version); }
             } else {
                 Project(
                     definition: definition,
@@ -339,15 +307,10 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             // A state clock's anchor reaches the observer ahead of the tick whose phase it holds.
             if (Tier == WorldDisclosureTier.Presentation) {
                 Present(
-                    delivery: m_feed.Step(
-                    arena: server!.Arena,
-                    definition: server.Definition,
-                        engineTick: engineTick,
-                        tick: tick
-                    ),
+                    delivery: m_feed.Step(m_view, m_cursor, tick, engineTick),
                     engineTick: engineTick,
                     tick: tick,
-                    version: server.DocumentVersion
+                    version: Version
                 );
                 FollowObserverDetach();
 
@@ -357,9 +320,10 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             }
 
             redacted = redacted with {
-                FieldCells = m_stateDisclosure.Filter(server, observation.Session, redacted.FieldCells, (Tier == WorldDisclosureTier.Replica)),
+                FieldCells = m_rows.Advance(m_view, m_cursor, redacted.FieldCells, (Tier == WorldDisclosureTier.Replica)),
                 Inputs = WorldInputPublication.ForOwner(redacted.Inputs, observation.Session, ref m_inputDisclosure),
             };
+            redacted = redacted with { Revision = checked((int)m_cursor.Sequence) };
             inner.DeliverSnapshot(snapshot: in redacted);
             FollowObserverDetach();
         } catch (Exception exception) {
@@ -377,19 +341,14 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         }
 
         try {
+            server.AttachCursor(observation.Session, m_cursor);
             if (Tier != WorldDisclosureTier.Replica) {
                 m_withheld = false;
                 Present(
-                    delivery: m_feed.Compose(
-                        arena: server.Arena,
-                        authority: server.AuthorityIdentity,
-                        definition: definition,
-                        revision: server.Population.Revision,
-                        time: server.DeliveryTime
-                    ),
+                    delivery: m_feed.Compose(m_view, m_cursor),
                     engineTick: stamp.EngineTick,
                     tick: stamp.Tick,
-                    version: version
+                    version: Version
                 );
                 FollowObserverDetach();
 
@@ -398,10 +357,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
             if (m_withheld) {
                 m_withheld = false;
-                inner.DeliverDefinition(
-                    definition: DiscloseToReplica(definition: definition),
-                    version: version
-                );
+                if (DiscloseToReplica(definition) is { } resumed) { inner.DeliverDefinition(resumed, Version); }
                 FollowObserverDetach();
 
                 return;
@@ -411,15 +367,9 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             // Placements moved and no value did that the snapshots' cell channel does not carry: the observer's state
             // stands, so it is handed the same section again with the placements as it may read them, never a state
             // exported and loaded whole.
-            var delivered = ((stamp.ArenaValues && (m_replicaState is { } held))
-                ? definition with { PlacementRowsRaw = PlacementsFor(definition: definition), StateRaw = held }
-                : DiscloseToReplica(definition: definition));
-
-            inner.DeliverState(
-                definition: delivered,
-                stamp: in stamp,
-                version: version
-            );
+            if (DiscloseToReplica(definition) is { } delivered) {
+                inner.DeliverState(delivered, Version, stamp with { Everything = true, MovedRows = default, ArenaValues = false });
+            }
             FollowObserverDetach();
         } catch (Exception exception) {
             EndAfterFault(exception: exception);

@@ -167,7 +167,7 @@ In this worktree, Puck divides outbound filtering across three mechanisms:
      every document version, revision and sequence the recipient is shown, the size
      and number of deliveries it receives per tick, and the lifetime of its streams.
      ```
-   - `docs/plans/disclosure.md:464-467` **[opened]** avoids $O(N \times M)$ state composition by caching row images per audience class:
+   - [Disclosure, decision 5](../disclosure.md#5-a-delta-is-a-difference-of-views-owned-by-the-stream) avoids $O(N \times M)$ state composition by caching row images per audience class:
      ```text
      Composition of one row's image for a
      tick is cached by (row, audience class), where the audience class is the set

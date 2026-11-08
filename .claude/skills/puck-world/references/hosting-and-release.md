@@ -148,7 +148,7 @@ The contribution kinds, each registered by an extension method on
 | Kind | Key | Registered with | Read by |
 |---|---|---|---|
 | `IMachineEngine`, `IMachineContentProvider` | engine id | `AddMachineEngine` | every host's `WorldMachineCatalog.From` |
-| `WorldSiloStorageProvider` | store `type` | `AddStorage` | the silo document's `store` |
+| `WorldStorageProvider` | store `type` | `AddStorage` | the silo document's `store`; World's `--storage-config-file` |
 | `WorldSiloRetirementProvider` | observer `type` | `AddRetirement` | the silo's `lifecycle.observer` |
 | `WorldAuthenticationProvider` | `type` | `AddAuthentication` | silo row admission; World's `--authentication-config-file` |
 | `WorldExtensionProviderType`, `WorldExtensionEmbeddingProviderType` | provider `type` | `AddOperation`, `AddEmbedding` | the extension configuration's `providers` |
@@ -159,10 +159,12 @@ The contribution kinds, each registered by an extension method on
 | `HostedControl` | always `control` | `AddHostedControl` | a host with an `IControlSessionHost`; one per host |
 | `McpServicesProvider` | provider name | `registry.Add` | remote MCP, when its configuration names `services` |
 
-A new provider (a GCP or S3 blob store for the silo, say) is one optional
-extension project: an `IPuckExtension` with a public parameterless constructor,
+A new provider (a GCP or S3 blob store for the silo and the World, say) is one optional
+extension project; a store's `ObjectStorageTarget` subtype and the `IObjectBlobStoreBackend` it names live in the
+provider's own project (`Puck.Storage.Azure` holds Azure Blob's), so no host or `Puck.Storage` registers a backend.
+The extension is an `IPuckExtension` with a public parameterless constructor,
 named after its assembly and declared with `[assembly: PuckExtension(typeof(...))]`,
-whose `Register` calls the kind's method (`registry.AddStorage(provider: new WorldSiloStorageProvider(...))`
+whose `Register` calls the kind's method (`registry.AddStorage(provider: new WorldStorageProvider(...))`
 under the `type` a silo document's `store` names, as `Puck.World.Azure`'s
 `AzureWorldExtension` does for `azure.blob`). The project sets
 `<EnableDynamicLoading>true</EnableDynamicLoading>` and publishes into
@@ -172,7 +174,7 @@ per-kind extension interface. Registration does no I/O. A remote-MCP service is
 an `McpServicesProvider` contribution, selected only when the MCP configuration
 names `services` and refused with none or two installed. Check the composed
 result with `world.extensions.catalog` in a running host
-(`Puck.World.Server: WorldSiloStorageProvider directory` is a built-in line), and
+(`Puck.World.Server: WorldStorageProvider directory` is a built-in line), and
 verify with `ExtensionModelLawTests`.
 
 `Puck.World` built-ins: both Gaming Brick forges, the Gaming Deck forge and `WorldServerExtension` (`directory`
@@ -182,7 +184,7 @@ connection authentication, retirement observers and health endpoints from contri
 `type` with opaque settings. `WorldSiloHost` consumes a supplied `ObjectStorageTarget`; its lifecycle service
 consumes `IWorldHostRetirementObserver`. Metadata polling, event types and credential handling stay in
 `Puck.World.Azure`, an Optional extensions project no shipped host references.
-The compiled-output architecture gate denies Azure SDK API use in Schema, Protocol, Server, and Client. Neither simulation nor replay executes physical host retirement. The silo README
+A provider project declares `<PuckProvider>`, and the architecture gate (PUCKARCH009) refuses a provider project or provider SDK assembly in any provider-neutral ranked project's closure. Neither simulation nor replay executes physical host retirement. The silo README
 owns provider-neutral configuration; the Azure README owns Azure provider keys. Verify with
 `ExtensionModelLawTests` (`tests/Puck.World.Silo.Tests`).
 

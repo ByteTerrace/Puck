@@ -429,6 +429,21 @@ public sealed partial class FederationTransferLawTests {
         Assert.Equal(expected: Aimed(body: 4), actual: HydratedAim(body: 4, definition: rebuilt!));
         Assert.Null(@object: HydratedAim(body: 5, definition: rebuilt!));
 
+        // Re-author another traveller's vector. The definition reference changes, but this stream's projection
+        // and admission do not; wait through the installed tick so a queued primer cannot hide an invalidation.
+        var hidden = fixture.Server.Definition.AuthoredState.Single(row => row.Name.Value == "aim5");
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateRow(Principal.Console, hidden with {
+            Cells = [hidden.Cells![0] with { Value = CellValue.Vector(Aimed(body: 4).Memory) }]
+        }));
+        fixture.Step();
+        while (true) {
+            var frame = await RequireFrameAsync(ct: ct, stream: lane);
+            Assert.NotEqual((byte)WorldFederationResponse.ProjectionInvalidated, frame.Kind);
+            if (frame.Kind == (byte)WorldFederationResponse.Snapshot &&
+                WorldFederationCodec.TryDecodeSnapshot(frame.Body.Span, out var snapshot, out _) &&
+                snapshot.Tick >= fixture.Server.CompletedTick) { break; }
+        }
+
         var loadedAt = ArenaTime.At(engineTick: 0UL, tick: 0UL);
 
         // The rebuilt rows load into a store like any document's.

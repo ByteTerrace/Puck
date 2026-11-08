@@ -14,7 +14,7 @@ using Puck.Azure;
 using Puck.Azure.Functions;
 using Puck.Azure.Functions.HttpDelegatingHandlers;
 using Puck.Azure.Functions.Services;
-using Puck.Storage;
+using Puck.Storage.Azure;
 
 var builder = FunctionsApplication.CreateBuilder(args: args);
 var configuration = builder.Configuration;

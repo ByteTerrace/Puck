@@ -4,12 +4,15 @@
         <PuckKind>Production</PuckKind>
         <!-- Installed beside a host and discovered, never referenced by one: the top row keeps every ranked host off it. -->
         <PuckLayer>Optional extensions</PuckLayer>
+        <PuckProvider>Azure</PuckProvider>
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="Azure.Identity" Version="[1.*, )" />
         <PackageReference Include="Azure.ResourceManager" Version="[1.*,2.0)" />
         <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="[8.*,9.0)" />
         <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="[8.*,9.0)" />
+        <ProjectReference Include="../Puck.Embeddings.Azure/Puck.Embeddings.Azure.csproj" />
+        <ProjectReference Include="../Puck.Storage.Azure/Puck.Storage.Azure.csproj" />
         <ProjectReference Include="../Puck.World.Server/Puck.World.Server.csproj" />
     </ItemGroup>
 </Project>
