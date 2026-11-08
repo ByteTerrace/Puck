@@ -4179,6 +4179,14 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [high] A `puck measure run` drain holds the machine's quiet priority with no
+  time bound: one window drained queued requests for over three hours, and every
+  other lane's leased build or test queued behind it (a lead law run gave up
+  after 55 minutes; two audit lanes' focused suites were cancelled while
+  queued). The orchestration skill already says a window states when it closes;
+  nothing enforces it. Give `measure run` a window deadline (a `--until` or a
+  per-window budget, default short) after which it starts no further request and
+  releases quiet priority, and report the requests it left pending.
 - [medium] `puck lease quiet` holds what it has while it waits for the rest:
   a frame-measuring lane's quiet acquisition held the build and heavy leases
   while queued behind another lane's GPU leg, so a third lane's heavy test
