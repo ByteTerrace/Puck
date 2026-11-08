@@ -4232,6 +4232,13 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [medium] A `puck measure request` filed under the caller's own quiet lease
+  queues its frozen-tree build behind the build lease that same holder owns,
+  and waits until the outer lease ends (seen in a measurement window: the
+  filing build sat 10 minutes in the build queue behind its own holder). A
+  lease request from a process whose ancestor holds that lease either nests
+  into the held lease or refuses at once naming the holder; it never queues
+  behind itself.
 - [medium] A measurement window samples with the display off: the World's
   display-required power request (`Win32NativeWindow.DisplayPower.cs`) keeps a
   lit display lit but does not wake one already off, so a window that starts
