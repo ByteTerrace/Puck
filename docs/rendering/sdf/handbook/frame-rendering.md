@@ -1398,7 +1398,11 @@ The store is presentation's alone: no simulation state reads it.
 Only new geometry bakes. The bake reports its residency, groups,
 dispatches, samples, groups loaded, triangles, vertices and wall time on stderr
 when it starts and finishes (`[sdf.mesh-bake] start residency=… baking=…
-loading=…`, `done residency=… loaded=…`).
+loading=…`, `done residency=… loaded=…`). The start line names its cause
+(`program`, a new program; `resample`, a moved sampled field's readers; `promote`,
+a reader's waiting successor) and the first groups it began (`begun=[selector/
+slotN or unionN/bake or load, …]`), so a group that bakes again and again names
+itself.
 It counts a batch as work when the background work takes it. A batch remembers
 the bake that took it and holds its slot until its samples are copied off, so no
 view's coming or going strands it. A batch handed back unanswered (a recording

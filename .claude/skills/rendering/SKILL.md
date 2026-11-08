@@ -79,6 +79,12 @@ contributors owe their geometry, including before the first submission. The host
 residency is checked directly. Unread views and waiting views with no produced image
 do not contribute. Readiness reads the schedule on the host pump, without looking
 its names up in a potentially replaced node set.
+A refusal names what the residency owes (`SdfWorldTables.MeshResidencyPending`):
+the staged list's owed bytes and meshes, how many restore from the store or are
+in landing, whether background work may bind, and the arena's relocations, or the
+required upload against those submitted and completed and its fence. Landing runs
+at `SdfGpuWork.UploadBytesPerSecond` of wall time, so a boot owes the debug
+world's 1.75 GB region for some seconds whatever the frame rate.
 Waiting on every allocated residency
 deadlocks on hidden routed scenes whose GPU work correctly never starts.
 

@@ -520,7 +520,8 @@ public sealed partial class SdfWorldTables {
     /// <summary>Describes the mesh region's landing: the bytes it holds and the latest list uses, the mesh bytes written
     /// into it, the bytes it still owes, the frames and seconds it spent owing them, the mesh region bytes the frame
     /// uploads staged (the latest, the most one staged and at which upload, and their sum), the uploads submitted and the
-    /// one at which a staging last stopped owing, and the background landing jobs, their bytes and their chunk. Safe to read
+    /// one at which a staging last stopped owing, the arena's relocations and the latest one's reason, the meshes grown
+    /// draw reserves moved, and the background landing jobs, their bytes and the most one job may carry. Safe to read
     /// from any thread, the counts being a frame's.</summary>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeLanding() {

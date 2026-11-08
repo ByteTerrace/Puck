@@ -2876,28 +2876,23 @@ Grounded causes and leads, largest first:
 - One group in the debug world has a mesh that no draw names, not yet
   identified; `world.residency` counts it resident, since it costs the region
   nothing.
-- The mesh region lands through the background GPU work
-  (`SdfWorldTables.MeshLanding.cs`) at what `SdfGpuWork` admits: four slots of
-  `SdfGpuWork.UploadChunkBytes`, about 4 MiB a frame, so the debug world's
-  1.7 GB region fills in over roughly 300 to 360 frames of a boot whose early
-  frames are slow (`world.residency`'s `owed-frames`). The nearest meshes land
-  first. Whether landing should spend more of a slow frame (more slots, larger
-  chunks, a byte budget that accrues by wall time like the GPU share) is a
-  measurement against the frame bar, not a guess.
 - A relocation owes every placed mesh again and re-lands it from the host,
   although its words already sit in the old destination. A GPU-side compaction
   (copy each kept mesh from its old placement into a fresh destination, as a
   grown region carries its words) would move no byte across the bus and keep
   the old draws drawable until the copy completes; relocations are rare, so it
-  waits for a case that shows them.
-- `world.wait residency` never settles in the windowed debug world, and did not
-  before the mesh landing moved to the background GPU work: with the
-  world residency owing nothing, some
-  routed, view or infinity residency `WorldScreenBinder.ViewsBake(resident:
-  true)` checks (`src/Puck.World/WorldScreenBinder.Device.Bakes.cs:55-71`) stays
-  not resident (a residency never staged has no tables, so
-  `MeshesResident` is false). Name it (the wait's reason does not), then decide
-  whether an unstaged residency counts.
+  waits for a case that shows them (`world.residency`'s landing line counts
+  `relocations=` and names the latest one's reason).
+- A world field's height-field reference (`SdfHeightField.Publish`, from
+  `WorldFieldEmitter`) keys a new mesh whenever a column turns wet or dry, so
+  the debug world's water bakes or loads one static group again (`[sdf.mesh-bake]
+  start … cause=resample begun=[-8593/union1/load]`, the field's one instance
+  near the program's end): nine starts in the first 755 ticks at spawn, the gaps
+  growing from 50 to 190 ticks as the water settles, each a store miss on its
+  first run. The geometry does change, since the raised set is the reference's
+  shape. Whether a reference should hold every column that can ever raise and
+  let displacement close the dry ones, trading the re-keys for draw-time
+  degenerate columns, is a design question for the field's owner.
 
 Bake and probe residency lifecycle lows (each read at the cited lines; a
 failing case is argued from source, not run):
@@ -2941,21 +2936,6 @@ failing case is argued from source, not run):
 
 ### Vulkan regressions and GPU robustness
 
-- [medium] Residency never settles at the teal room: `bench frames --backend
-  vulkan` was refused twice there (`world.wait residency` unsettled 20 s and
-  110 s after `[bakes: settled]`), and a live Direct3D 12 World on the base build
-  showed it once at the same pose (seen by the frame-attrib lane). After a real
-  device-loss recovery, re-landing about 1.75 GB of meshes also outlasts the
-  harness's 20 s residency wait (gpu-hang lane). Name what the residency still
-  owes there before raising any wait. Now reproduced on Direct3D 12 at the tip
-  (window-3, `bench frames worlds/debug --plan worlds/debug/sweep.json --stop
-  finding-teal-roof --backend directx`): after `world.rate pause` and
-  `[bakes: settled]`, `ViewHost.MeshesResident` stays false for 20 s
-  (`SdfWorldTables.MeshesResident`: words owed or the upload fence unsignalled).
-  Before the pause, single-group re-bakes (`loading=1`, one "geometry new to its
-  set" miss) repeat between `world.deal 'sheddingRack1..4'` lines (inference,
-  group ids not logged: the dealt card hands). This blocks every sweep-stop
-  measurement: shade-3b and the four shade-4 binning requests were refused here.
 - [low] The Vulkan pipeline-statistics readout reads the logical device to
   build `CapturesStatistics`'s argument before checking that naming is on
   (`VulkanGpuPipelineFactory.cs:94`, guard at `:108`); move the guard first.
