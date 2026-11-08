@@ -4,6 +4,37 @@ namespace Puck.World.Protocol;
 public static class WorldRecipientMutations {
     /// <summary>The actual typed mutation refusal for a row withheld by policy.</summary>
     public const string NotDisclosedCode = "world.mutation.undisclosed";
+    /// <summary>The typed mutation refusal for a submission naming a card back (<see cref="WorldPlacementDeal.PlaceholderId"/>).</summary>
+    public const string PlaceholderCode = "world.mutation.placeholder";
+
+    /// <summary>Finds a card back a mutation names as a placement, its parent, or a guarded input: an id only a
+    /// recipient's view holds, which no authority row stands for. A function of the mutation alone, so it is decided
+    /// before policy and answers every principal alike.</summary>
+    /// <param name="mutation">The submitted mutation.</param>
+    /// <param name="id">The first placeholder id named, or empty.</param>
+    /// <returns><see langword="true"/> when the mutation names a placeholder.</returns>
+    public static bool NamesPlaceholder(WorldMutation mutation, out string id) {
+        id = string.Empty;
+        bool Is(string? candidate, out string found) {
+            found = candidate ?? string.Empty;
+            return WorldPlacementDeal.IsPlaceholderId(id: candidate, template: out _);
+        }
+        switch (mutation) {
+            case WorldMutation.UpsertPlacement upsert:
+                return Is(upsert.Placement.Id, out id) || Is(upsert.Placement.Parent, out id);
+            case WorldMutation.RemovePlacement remove:
+                return Is(remove.Id, out id);
+            case WorldMutation.Batch batch:
+                foreach (var input in batch.ExpectedInputs?.PlacementIds ?? []) { if (Is(input, out id)) { return true; } }
+                foreach (var member in batch.Mutations) { if (NamesPlaceholder(member, out id)) { return true; } }
+                return false;
+            default:
+                return false;
+        }
+    }
+    /// <summary>The refusal for a submission naming a card back, worded from the id alone.</summary>
+    /// <param name="id">The placeholder id.</param>
+    public static string PlaceholderRefusal(string id) => $"'{id}' is a placeholder, the back a reader is shown for a withheld cell; no placement stands for it";
     /// <summary>Refuses every write or guard touching a row the recipient cannot read whole, before grants,
     /// membership, capacity, fingerprints or composition can disclose anything about that row.</summary>
     public static bool Admits(this WorldRecipientView view, WorldMutation mutation, out string row) {

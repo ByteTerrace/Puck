@@ -174,6 +174,30 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"state row '{name}': visibility.readersFrom must name a distinct keyed text row every recipient reads whole (no row, cell or containing-zone visibility).");
         }
     }
+    // Whether a row's declarations let it withhold a member from some principal: a non-public policy of its own, a
+    // cell policy its storage admits, or a containing ordered zone's. The declaration-only answer, for every recipient
+    // at once, of the question WorldStateDisclosure.Observer.ReadsWhole answers for one.
+    private static bool CanWithhold(WorldDefinition definition, WorldStateRow row) => (
+        ((row.Visibility is { } policy) && !policy.IsPublic) ||
+        ArenaLayout.DeclaresCellVisibility(row: row) ||
+        RestrictedByZone(definition: definition, row: row)
+    );
+    // A deal template's physical facets are refused when its dealt or variant row can withhold: the template stamps
+    // them on every child, and a hidden child's collider, hold, census volume, region or voice is met by every body in
+    // the room whatever any reader is shown. The template and each of its children are checked, since a child that
+    // preserves its facets can be edited to carry one.
+    private static void RefuseWithheldPhysicalFacets(WorldDefinition definition, WorldPlacement template, WorldPlacement placement, string path, List<string> errors) {
+        if (template.Deal is not { } deal) { return; }
+        var withholding = new[] { deal.Row, deal.Variants?.Row }
+            .FirstOrDefault(name => (name is not null) && (WorldDefinitionRows.FindStateRow(definition.State, name) is { } row) && CanWithhold(definition, row));
+
+        if (withholding is null) { return; }
+        var facets = WorldPlacementDeal.PhysicalFacets(placement: placement).ToArray();
+
+        if (facets.Length > 0) {
+            errors.Add(item: $"{path} carries {string.Join(separator: ", ", value: facets)}, but deal template '{template.Id}' deals from '{withholding}', which can withhold cells: its children act on nothing, so a hidden card has no collider, hold, census volume, region or voice for a body to meet; remove {string.Join(separator: " and ", value: facets)}.");
+        }
+    }
     // Mirrors StateCatalog's ordered-zone containment: a zone keyed over the row's own key domain (or over the row).
     private static bool RestrictedByZone(WorldDefinition definition, WorldStateRow row) {
         var domain = (row.EffectiveDomain is StateDomain.KeysOf keys) ? keys.Row : row.Name;

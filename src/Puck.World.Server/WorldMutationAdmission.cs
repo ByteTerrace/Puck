@@ -41,6 +41,9 @@ public enum WorldMutationAdmissionRule : byte {
     MalformedBatch,
     /// <summary>Denied by the recipient's declared disclosure policy, before grants or state are inspected.</summary>
     NotDisclosed,
+    /// <summary>Denied — the mutation names a card back a recipient's view deals for a withheld cell, which no
+    /// authority row stands for.</summary>
+    Placeholder,
 }
 /// <summary>The decided outcome of <see cref="WorldServer.TryAdmitMutation"/> — which rule fired and the row-level
 /// evidence behind it, produced inside the decision so a caller's narration can never disagree with the door (the
@@ -75,7 +78,7 @@ public readonly record struct WorldMutationAdmission(
     /// print the same sentence for the same decision.</summary>
     /// <returns>The refusal fragment, or <c>"admitted"</c>.</returns>
     public string Describe() => Rule switch {
-        WorldMutationAdmissionRule.NotDisclosed => DisclosureRefusal!,
+        WorldMutationAdmissionRule.NotDisclosed or WorldMutationAdmissionRule.Placeholder => DisclosureRefusal!,
         WorldMutationAdmissionRule.MalformedBatch => "cannot submit a batch with malformed guards, no members, or a different actor in a member",
         WorldMutationAdmissionRule.ObservationDenied => $"cannot observe {Subject.Describe()} ({Verdict.DescribeDenial()})",
         WorldMutationAdmissionRule.Admitted => "admitted",

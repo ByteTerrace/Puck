@@ -1574,6 +1574,7 @@ public static partial class WorldDefinitionValidator {
                 } else if (!occupiedSlots.Add(item: (parentRow!.Id, slot))) {
                     errors.Add(item: $"{path}.dealSlot {slot} is already occupied under parent '{parentRow.Id}'.");
                 }
+                RefuseWithheldPhysicalFacets(definition: definition, errors: errors, path: path, placement: placement, template: parentRow!);
             } else if (placement.DealSlot is not null) {
                 errors.Add(item: $"{path}.dealSlot is reserved for a child of a deal template.");
             }
@@ -2041,6 +2042,8 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"{dealPath} is refused alongside inhabit/attach/respond/mirror/faceSources — a dealt template is a layout, and its children are plain static stamps of its prototype, solid, grip, region, and emission.");
         }
+
+        RefuseWithheldPhysicalFacets(definition: definition, errors: errors, path: path, placement: placement, template: placement);
 
         RequireStaticCreation(
             creations: definition.Creations,
