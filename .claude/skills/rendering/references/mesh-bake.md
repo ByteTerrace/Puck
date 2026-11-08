@@ -636,8 +636,11 @@ laws exercise that boundary.
   layout that moves placed meshes when one lands (sections by attribute) made
   every landing rewrite the whole region. Placed meshes land through the
   background GPU work, never a frame's upload (`SdfWorldTables.MeshLanding.cs`):
-  jobs of at most `SdfGpuWork.UploadChunkBytes` under its byte, host-time and
-  GPU-share budget, nearest the views first, each staged into the job's own slot
+  jobs of at most `SdfGpuWork.MostUploadJobBytes` under its byte, host-time and
+  GPU-share budgets, each a rate of wall time and never a count a pump: a
+  per-pump budget lands only as fast as frames come, and a window the
+  compositor throttles to about 8 fps would take some 40 s over the debug
+  world's 1.75 GB region. Jobs take the meshes nearest the views first, each staged into the job's own slot
   of the region (`MeshLandingSlot`, past the upload ring's) and copied in the
   job's command buffer. A mesh leaves `m_meshesOwed` only when every job carrying
   its current placement has completed, and the landing filter in

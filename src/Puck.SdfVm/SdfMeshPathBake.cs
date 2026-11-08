@@ -1053,7 +1053,7 @@ public sealed partial class SdfMeshPathBake {
         WatchSettles();
         BeginOrphans(indices: null, started: ref started);
         Prioritize();
-        BeginAccounts(fresh: true, instances: program.Instances.Count, restarted: restarted, started: started);
+        BeginAccounts(cause: "program", fresh: true, instances: program.Instances.Count, restarted: restarted, started: started);
         // The draws name their groups, so they are rebuilt only when a group was replaced, renumbered or dropped; a
         // program change that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
         // A replacement taken wholly from cache lands no later bake callback to invalidate these draws.
@@ -1122,7 +1122,7 @@ public sealed partial class SdfMeshPathBake {
             replaced |= Succeed(identity: identity, index: indices[at], leaders: leaders, old: old, plan: plan, started: ref started);
         }
         BeginOrphans(indices: m_sampledReaders, started: ref started);
-        BeginAccounts(fresh: false, instances: frame.Program.Instances.Count, restarted: restarted, started: started);
+        BeginAccounts(cause: "resample", fresh: false, instances: frame.Program.Instances.Count, restarted: restarted, started: started);
         if (replaced) { m_productRevision++; }
     }
     // Starts each successor whose group has landed in that group's place (Resample): the landed mesh draws until the
@@ -1143,7 +1143,7 @@ public sealed partial class SdfMeshPathBake {
         }
         if (leaders is null) { return; }
         BeginOrphans(indices: m_sampledReaders, started: ref started);
-        BeginAccounts(fresh: false, instances: frame.Program.Instances.Count, restarted: restarted, started: started);
+        BeginAccounts(cause: "promote", fresh: false, instances: frame.Program.Instances.Count, restarted: restarted, started: started);
         if (replaced) { m_productRevision++; }
     }
     // Puts a reader's newer plan in the place of the reader, which has landed (Place), dropping any successor the reader
@@ -1181,6 +1181,17 @@ public sealed partial class SdfMeshPathBake {
         public int Baking;
         public int Loading;
         public int Shared;
+        // The first groups begun, each its selector and how it began, which the start line names.
+        public List<string>? Named;
+
+        public const int NamedMost = 8;
+
+        public void Begun(Group group, bool loading) {
+            if (loading) { Loading++; } else { Baking++; }
+            if ((Named ??= []).Count < NamedMost) {
+                Named.Add(item: string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"{group.Selector}/{(group.Dynamic ? $"slot{group.Slot}" : $"union{group.Instances}")}/{(loading ? "load" : "bake")}"));
+            }
+        }
     }
 
     // Puts a newly planned group at an index in place of the group `old` the bake held at its selector: `old` itself where
@@ -1263,11 +1274,7 @@ public sealed partial class SdfMeshPathBake {
             return true;
         }
         leaders.Add(key: group.Sealed, value: group);
-        if (Begin(group: group)) {
-            started.Loading++;
-        } else {
-            started.Baking++;
-        }
+        started.Begun(group: group, loading: Begin(group: group));
         return true;
     }
     // Begins each group, of the listed indices or every one, still waiting on a leader the bake has retired: it bakes its
@@ -1280,13 +1287,13 @@ public sealed partial class SdfMeshPathBake {
 
             if (group.Done || (group.Leader is not { Retired: true })) { continue; }
             group.Leader = null;
-            if (Begin(group: group)) { started.Loading++; } else { started.Baking++; }
+            started.Begun(group: group, loading: Begin(group: group));
         }
     }
     // Opens the accounts and the start line of the work a restart, resample or promotion began, if any: a new program's, or
     // any once the bake before it reported, whose counts and clock start again; otherwise work added to the bake still
     // running, whose done line then covers it. A bake that began nothing and has every group done reports here or never.
-    private void BeginAccounts(bool fresh, int instances, long restarted, PlaceCounts started) {
+    private void BeginAccounts(string cause, bool fresh, int instances, long restarted, PlaceCounts started) {
         var begun = ((started.Baking + started.Loading) + started.Shared);
 
         if ((begun > 0) && (fresh || m_reported || !m_clock.IsRunning)) {
@@ -1307,7 +1314,7 @@ public sealed partial class SdfMeshPathBake {
             m_loadsDone = 0;
             m_loadFirst = ((started.Loading > 0) ? restarted : 0);
             m_loadLast = 0;
-            Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} residency-id={ResidencyId} groups={m_groups.Count} baking={started.Baking} loading={started.Loading} shared={started.Shared} dynamic={m_groups.Count(predicate: static group => group.Dynamic)} instances={instances}");
+            Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} residency-id={ResidencyId} groups={m_groups.Count} baking={started.Baking} loading={started.Loading} shared={started.Shared} dynamic={m_groups.Count(predicate: static group => group.Dynamic)} instances={instances} cause={cause} begun=[{string.Join(separator: ',', values: started.Named ?? [])}{(((started.Baking + started.Loading) > PlaceCounts.NamedMost) ? ",…" : "")}]");
             // The store's account reads its directory, so it runs off the frame's thread.
             if (Library.Disk is { } disk) {
                 var parts = Identity;

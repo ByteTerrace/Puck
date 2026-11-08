@@ -16,15 +16,19 @@ public interface ISdfGpuWorkClient : IDisposable {
     void Stop() { }
     /// <summary>Takes the client's next job, or none: a job taken is recorded, submitted and answered, or abandoned.</summary>
     /// <param name="tables">The tables whose World set the job binds, holding the latest submitted upload.</param>
+    /// <param name="uploadBytes">The most host payload bytes the job may stage (<see cref="UploadBytes"/>), from
+    /// <see cref="SdfGpuWork.UploadChunkBytes"/> to <see cref="SdfGpuWork.MostUploadJobBytes"/>: what the service's upload
+    /// budget holds now.</param>
     /// <param name="job">The job, handed back to <see cref="Record"/> and then to <see cref="Complete"/> or
     /// <see cref="Abandon"/>.</param>
     /// <param name="estimatedSeconds">The GPU time the job is estimated to take, in seconds, which the service charges
     /// its budget until the job's timestamps measure it.</param>
     /// <returns><see langword="true"/> when the client hands over a job.</returns>
-    bool TryTake(SdfWorldTables tables, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds);
-    /// <summary>The host payload bytes staged by a taken job; zero for jobs without uploads.</summary>
+    bool TryTake(SdfWorldTables tables, int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds);
+    /// <summary>The host payload bytes staged by a taken job, at most the <c>uploadBytes</c> its take allowed; zero for
+    /// jobs without uploads.</summary>
     /// <param name="job">The taken job.</param>
-    /// <returns>Bytes charged to the service's per-pump upload budget.</returns>
+    /// <returns>Bytes charged to the service's upload budget.</returns>
     int UploadBytes(object job) => 0;
     /// <summary>Records a taken job's commands into its slot's open command buffer, and the copy of what it answers with
     /// through <see cref="SdfGpuWorkRecording.CopyToReadback"/>.</summary>
@@ -175,8 +179,10 @@ public readonly ref struct SdfGpuWorkRecording {
 /// not recorded into for as long (<see cref="ISdfGpuWorkClient.ReleaseIdle"/>): buffers sized for a cold bake's largest
 /// batch go once the bake settles rather than living as long as the tables.</para>
 /// <para>Budget: the service takes at most <see cref="GpuShare"/> of the GPU's time, by each job's measured GPU time
-/// (its timestamps, or its client's estimate on a queue without them), and keeps at most <see cref="SlotCount"/> jobs in
-/// flight.</para>
+/// (its timestamps, or its client's estimate on a queue without them), stages at most <see cref="UploadBytesPerSecond"/>
+/// of host payload, records for at most <see cref="HostShare"/> of the wall time between pumps, and keeps at most
+/// <see cref="SlotCount"/> jobs in flight. Every budget is a rate of wall time, never a count a pump, so work such as
+/// landing a mesh region takes as many seconds whatever the frame rate.</para>
 /// </summary>
 public sealed class SdfGpuWork : IDisposable {
     /// <summary>The jobs in flight at most.</summary>
@@ -185,26 +191,41 @@ public sealed class SdfGpuWork : IDisposable {
     public const double GpuShare = 0.25;
     /// <summary>The seconds a free slot keeps buffers no job in that span needed (<see cref="ISdfGpuWorkClient.ReleaseIdle"/>).</summary>
     public const double IdleSeconds = 2.0;
-    /// <summary>The largest host payload one background upload job stages: one MiB.</summary>
+    /// <summary>The fewest host payload bytes an upload job is allowed to stage, which the budget may overdraw once: one
+    /// MiB.</summary>
     public const int UploadChunkBytes = 1 << 20;
-    /// <summary>The most host payload bytes one pump stages.</summary>
-    public const int UploadBudgetBytes = SlotCount * UploadChunkBytes;
+    /// <summary>The most host payload bytes one upload job stages: eight MiB, within a staged region slot's staging floor
+    /// (<see cref="GpuRegion.StagingFloorBytes"/>).</summary>
+    public const int MostUploadJobBytes = 8 << 20;
+    /// <summary>The host payload, in bytes a second, background uploads stage at most: a chunk in every slot each frame
+    /// at the 60 Hz frame bar. It accrues by wall time between pumps, so a residency whose frames come slower (a heavy
+    /// frame, or a presentation the compositor throttles) stages more a pump and lands its words in the same
+    /// seconds.</summary>
+    public const double UploadBytesPerSecond = (SlotCount * UploadChunkBytes) * 60.0;
+    /// <summary>The share of wall time, between pumps, one pump spends recording jobs at most: two milliseconds of a
+    /// 60 Hz frame. A pump spends at least <see cref="HostBudget"/> and at most <see cref="MostHostBudget"/>.</summary>
+    public const double HostShare = 0.12;
     /// <summary>The rate, in bytes a second, an upload job's GPU time is estimated at until its timestamps measure it:
     /// the copy kernel's read of host staging memory across the bus.</summary>
-    public const double UploadBytesPerSecond = 1e10;
+    public const double UploadCopyBytesPerSecond = 1e10;
     /// <summary>The measured GPU time, in seconds, past which a completed job is written as a <c>[sdf.gpu-work] slow</c>
     /// line: a twentieth of a second, a fortieth of the two seconds after which Windows resets a device whose submission
     /// has not finished (TDR).</summary>
     public const double SlowJobSeconds = 0.05;
 
     /// <summary>Returns the GPU time, in seconds, an upload job of <paramref name="bytes"/> host payload bytes is
-    /// estimated to take (<see cref="UploadBytesPerSecond"/>).</summary>
+    /// estimated to take (<see cref="UploadCopyBytesPerSecond"/>).</summary>
     /// <param name="bytes">The job's host payload bytes.</param>
     /// <returns>The estimate, in seconds.</returns>
-    public static double UploadSecondsOf(long bytes) => (bytes / UploadBytesPerSecond);
-    private static readonly TimeSpan HostBudget = TimeSpan.FromMilliseconds(2);
+    public static double UploadSecondsOf(long bytes) => (bytes / UploadCopyBytesPerSecond);
+    /// <summary>The recording time one pump spends at least, whatever the wall time since the last.</summary>
+    public static readonly TimeSpan HostBudget = TimeSpan.FromMilliseconds(2);
+    /// <summary>The recording time one pump spends at most, however long since the last.</summary>
+    public static readonly TimeSpan MostHostBudget = TimeSpan.FromMilliseconds(16);
     // The GPU time, in seconds, an idle service may bank: an idle spell admits no more than this at once.
     private const double MostCreditSeconds = 0.02;
+    // The host payload bytes an idle service may bank: a full slot ring of the largest jobs.
+    private const double MostUploadCreditBytes = (SlotCount * (double)MostUploadJobBytes);
 
     private readonly IGpuDeviceContext m_device;
     private readonly GpuDeviceServices m_gpu;
@@ -218,6 +239,7 @@ public sealed class SdfGpuWork : IDisposable {
     private bool m_submissionFailed;
 
     private double m_credit = MostCreditSeconds;
+    private double m_uploadCredit = MostUploadCreditBytes;
     private long m_creditAt;
 
     // Since the first job: jobs submitted and answered, the GPU seconds they measured, the wall time some job was in
@@ -433,38 +455,42 @@ public sealed class SdfGpuWork : IDisposable {
         m_gpuSeconds += seconds;
         return seconds;
     }
-    // Banks the GPU time the share allows since the last pump, up to MostCreditSeconds.
-    private void Accrue() {
+    // Banks the GPU time and the upload bytes their rates allow since the last pump, each up to its most, and returns the
+    // seconds since the last pump (zero at the first).
+    private double Accrue() {
         var now = Stopwatch.GetTimestamp();
+        var seconds = ((m_creditAt != 0) ? ((now - m_creditAt) / ((double)Stopwatch.Frequency)) : 0.0);
 
-        if (m_creditAt != 0) {
-            m_credit = Math.Min(val1: MostCreditSeconds, val2: (m_credit + (((now - m_creditAt) / ((double)Stopwatch.Frequency)) * GpuShare)));
-        }
+        m_credit = Math.Min(val1: MostCreditSeconds, val2: (m_credit + (seconds * GpuShare)));
+        m_uploadCredit = Math.Min(val1: MostUploadCreditBytes, val2: (m_uploadCredit + (seconds * UploadBytesPerSecond)));
         m_creditAt = now;
+        return seconds;
     }
-    // Takes each free slot's next job, the clients in turn, while the budget holds credit; a job may overdraw it once.
+    // Takes each free slot's next job, the clients in turn, while the budgets hold credit; a job may overdraw each once.
+    // The recording time and the upload bytes are rates of the wall time between pumps, so the work a second does not
+    // fall with the frame rate.
     private void Refill(SdfWorldTables tables) {
-        Accrue();
+        var seconds = Accrue();
+        var hostBudget = TimeSpan.FromSeconds(Math.Clamp(value: (seconds * HostShare), min: HostBudget.TotalSeconds, max: MostHostBudget.TotalSeconds));
         var began = Stopwatch.GetTimestamp();
-        var uploaded = 0;
         for (var index = 0; (index < SlotCount); index++) {
-            if (uploaded >= UploadBudgetBytes || Stopwatch.GetElapsedTime(began) >= HostBudget) { m_budgetHolds++; return; }
             var slot = m_slots[index];
 
             if (!slot.IsFree) { continue; }
-            if (m_credit <= 0.0) { m_budgetHolds++; return; }
-            if (!TryTake(tables: tables, client: out var client, estimate: out var estimate, job: out var job)) { return; }
-            uploaded += client.UploadBytes(job);
+            if ((m_credit <= 0.0) || (m_uploadCredit <= 0.0) || (Stopwatch.GetElapsedTime(began) >= hostBudget)) { m_budgetHolds++; return; }
+
+            var allowance = (int)Math.Clamp(value: m_uploadCredit, min: UploadChunkBytes, max: MostUploadJobBytes);
+
+            if (!TryTake(tables: tables, uploadBytes: allowance, client: out var client, estimate: out var estimate, job: out var job)) { return; }
+            m_uploadCredit -= client.UploadBytes(job);
             Submit(client: client, estimate: estimate, index: index, job: job, slot: slot);
-            // A full four-slot pump can exhaust the byte budget on its last iteration too.
-            if (uploaded >= UploadBudgetBytes || Stopwatch.GetElapsedTime(began) >= HostBudget) { m_budgetHolds++; return; }
         }
     }
-    private bool TryTake(SdfWorldTables tables, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out ISdfGpuWorkClient? client, out double estimate, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job) {
+    private bool TryTake(SdfWorldTables tables, int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out ISdfGpuWorkClient? client, out double estimate, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job) {
         for (var turn = 0; (turn < m_clients.Count); turn++) {
             var candidate = m_clients[((m_nextClient + turn) % m_clients.Count)];
 
-            if (candidate.TryTake(estimatedSeconds: out estimate, job: out job, tables: tables)) {
+            if (candidate.TryTake(estimatedSeconds: out estimate, job: out job, tables: tables, uploadBytes: uploadBytes)) {
                 m_nextClient = ((m_nextClient + turn + 1) % m_clients.Count);
                 client = candidate;
                 return true;

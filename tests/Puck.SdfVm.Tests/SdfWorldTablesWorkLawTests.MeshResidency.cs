@@ -89,11 +89,13 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         rig.Engine.Pack(frame: frame);
         var grown = rig.Engine.MeshRegionBytes;
         Assert.False(condition: rig.Engine.MeshesResident);
-        // The big mesh lands in several chunks, each its own job.
+        // The big mesh lands in several jobs, at the upload budget's rate of wall time (SdfGpuWork.UploadBytesPerSecond),
+        // so the loop is bounded in seconds rather than pumps.
         rig.Engine.SubmitUpload();
         var oldFence = Assert.IsType<FakeGpuDevice.Fence>(@object: rig.Gpu.LastSubmittedFence);
-        for (var pump = 0; rig.Engine.MeshesLanding; pump++) {
-            Assert.True(condition: (pump < 128));
+        var deadline = System.Diagnostics.Stopwatch.StartNew();
+        while (rig.Engine.MeshesLanding) {
+            Assert.True(condition: (deadline.Elapsed < TimeSpan.FromSeconds(10)));
             rig.Engine.GpuWork.Pump(tables: rig.Engine);
             // Waiting the latest job completes every earlier submission on the queue.
             rig.Gpu.LastSubmittedFence!.Wait();
@@ -115,10 +117,14 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         carried.Completed = true;
         // The carry has completed, but the relocated meshes have not landed.
         Assert.False(condition: rig.Engine.MeshesResident);
-        rig.Engine.GpuWork.Pump(tables: rig.Engine);
-        rig.Gpu.LastSubmittedFence!.Wait();
-        rig.Engine.GpuWork.Pump(tables: rig.Engine);
-        rig.Engine.Pack(frame: relocated);
-        Assert.True(condition: rig.Engine.MeshesResident);
+        // The big mesh's landing overdrew the upload budget, which accrues again over wall time.
+        deadline.Restart();
+        while (!rig.Engine.MeshesResident) {
+            Assert.True(condition: (deadline.Elapsed < TimeSpan.FromSeconds(10)));
+            rig.Engine.GpuWork.Pump(tables: rig.Engine);
+            rig.Gpu.LastSubmittedFence!.Wait();
+            rig.Engine.GpuWork.Pump(tables: rig.Engine);
+            rig.Engine.Pack(frame: relocated);
+        }
     }
 }

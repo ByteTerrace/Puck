@@ -424,7 +424,11 @@ A `StateVisibility` has three parts:
 - **`ReadersFrom`**: a keyed `Text` row whose cell values are further reader
   tokens. A rule widens the audience by writing a token (a showdown reveals a
   hand) and narrows it by clearing one. Declaring either list keeps the row
-  private.
+  private. Every reader reads the audience row whole: it declares no
+  visibility, no cell policy (`cellVisibility` or a seeded cell policy) and sits
+  in no ordered zone that declares one, since who it admits would otherwise
+  depend on cells some reader can't see. The validator refuses another audience,
+  and one that a later install restricts admits no one.
 - **`Hidden`**: what an allowed reader of the row learns about cells it can't
   read. `Omit` hides the cells and their count, `Count` reports how many were hidden, and
   `Placeholder` shows each hidden cell in pile order as an anonymous entry, like a
@@ -447,7 +451,13 @@ way with zero, one or many cells hidden. Such a row omits its storage
 reservation and physical slot order, refuses every recipient write or guard and a HUD template
 placeholder from that reader, keeps its place in the reader's observations, and
 is re-sent to a replica only when the cells the reader can read change. A cell
-the reader can't read and a cell that doesn't exist answer alike.
+the reader can't read and a cell that doesn't exist answer alike. A recipient's
+write is refused the same way when its outcome would read such a row: a row
+keyed over a token domain is admitted only while the domain reads whole (a key
+outside the domain refuses the write), a transform only while every row it
+resolves to reads whole (a live key's row, a zone's token domain, a pool's
+fields), and a spatial guard only while every placement any spatial read could
+observe has dependencies that read whole, whatever region it names.
 `puck disclosure worlds/debug/disclosure-probe.puck` compares a second seat's and two sessions' answers with zero, one
 and two hidden cells.
 [State in Puck.World](worlds.md) describes the disclosure tiers.

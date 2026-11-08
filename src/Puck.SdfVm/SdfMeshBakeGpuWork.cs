@@ -97,7 +97,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
     /// <inheritdoc/>
     /// <remarks>Takes the bake's next batch for the tables' uploaded program, estimated at
     /// <see cref="SdfMeshPathBake.NanosecondsPerTap"/> a field evaluation.</remarks>
-    public bool TryTake(SdfWorldTables tables, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
+    public bool TryTake(SdfWorldTables tables, int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
         if (!m_bake.TryTake(batch: out var batch, field: tables.BackgroundProgram)) {
             job = null;
             estimatedSeconds = 0.0;
