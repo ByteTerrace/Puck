@@ -2639,16 +2639,6 @@ Next: the per-tick authority hash is incremental
 ([design](engine-job-system.md#the-incremental-state-hash)); re-profile Go's
 reproduce worker for what remains.
 
-- [high · determinism] A rule that removes an inhabited placement does not
-  reproduce. `puck test worlds/debug/rule-faults-tests.puck` passes, and with
-  `--reproduce` it diverges in `boot` at recorded tick 5. The same document
-  with the placement and no removal reproduces; with the removal and no other
-  effect it diverges identically. In the authored run the inhabitant's
-  `peer:7:1` rows are revoked on tick 6, with the removal; the replay admits
-  that inhabitant as `peer:7:2` and narrates `world.revoke: peer:7:1 control
-  all` before tick 6's rules run, so the checkpoint restore or the tape carries
-  the inhabitant's peer generation and its revocation differently from the
-  authored run. Not yet traced to the door that records or re-drives it.
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does.
 - [medium] Recording still costs about a third of the plain authored run. The
   per-tick authority hash folds the arena from `RowVersion`-cached row digests
