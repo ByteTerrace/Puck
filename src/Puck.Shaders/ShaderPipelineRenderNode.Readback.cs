@@ -56,17 +56,42 @@ public sealed partial class ShaderPipelineRenderNode {
         throw new InvalidOperationException(message: $"Package readback '{readback.Version}' is not bound to the recording pass.");
     }
     // The one door a readback is armed through: only a pass whose recording drew this frame is armed, so a pass that
-    // skipped, stood or drew nothing never re-arms an earlier recording's result under this submission's fence.
-    private void SubmitPackageReadbacks(int slot, IGpuSubmissionFence fence) {
+    // skipped, stood or drew nothing never arms an earlier recording's result under this submission. The slot then owes
+    // its readback passes a completion, which PollReadbacks proves early once its fence reads signaled.
+    private void SubmitPackageReadbacks(int slot) {
         foreach (var pass in m_passes) {
             if (pass.Drew && (pass.Package is IRenderGraphPackageReadback readback)) {
-                readback.Submitted(fence: fence, slot: slot);
+                readback.Submitted(slot: slot);
+                m_slots[slot].ReadbacksOwed = true;
             }
+        }
+    }
+    // Waits, through WaitSlot, every slot whose readback passes are owed a completion and whose fence already reads
+    // signaled, so a result lands while the node stands instead of at the slot's reuse. The wait does not block and is
+    // the proof WaitSlot gives at reuse: a lost device throws from it and nothing is completed.
+    private void RetireSignaledReadbacks() {
+        for (var slot = 0; (slot < m_slots.Length); slot++) {
+            if (m_slots[slot] is { ReadbacksOwed: true, Fence: { IsSignaled: true } }) {
+                WaitSlot(slot: slot);
+            }
+        }
+    }
+    private bool ReadbacksOwed {
+        get {
+            foreach (var slot in m_slots) {
+                if (slot.ReadbacksOwed) { return true; }
+            }
+            return false;
         }
     }
     // Called only after the slot's fence was waited (WaitSlot), never on a device loss's release.
     private void CompletePackageReadbacks(int slot) {
-        foreach (var pass in m_passes) {
+        m_slots[slot].ReadbacksOwed = false;
+        CompleteReadbacks(passes: m_passes, slot: slot);
+    }
+    // Tells every readback pass of a graph that the slot's previous submission completed.
+    private static void CompleteReadbacks(RuntimePass[] passes, int slot) {
+        foreach (var pass in passes) {
             if (pass?.Package is IRenderGraphPackageReadback readback) {
                 readback.Completed(slot: slot);
             }

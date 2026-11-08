@@ -1,3 +1,5 @@
+using Puck.Abstractions.Gpu;
+
 namespace Puck.SdfVm;
 
 /// <summary>
@@ -188,12 +190,10 @@ public sealed class SdfMeshRegionArena : IDisposable {
 
         return true;
     }
-    // The reserve a list of drawCount draws grows it to: double, at least the list and MinimumDrawCapacity, at most
-    // SdfMeshRegion.MaxDraws.
-    private int GrownCapacity(int drawCount) => Math.Min(
-        val1: SdfMeshRegion.MaxDraws,
-        val2: Math.Max(val1: drawCount, val2: Math.Max(val1: MinimumDrawCapacity, val2: (2 * m_drawCapacity)))
-    );
+    // The reserve a list of drawCount draws takes: the current one while it holds the list, otherwise doubled, at least the
+    // list and MinimumDrawCapacity, at most SdfMeshRegion.MaxDraws.
+    private int GrownCapacity(int drawCount) => (int)GpuCapacity.Grown(current: m_drawCapacity, required: drawCount,
+        ceiling: SdfMeshRegion.MaxDraws, divisor: 1, minimum: MinimumDrawCapacity);
     // Grows the reserve for a list of drawCount draws: every mesh whose words begin inside the grown reserve leaves its
     // placement, a named one to be placed again at the arena's end (Moved), and the arena ends no earlier than the reserve.
     private void GrowReserve(int drawCount) {

@@ -9,13 +9,7 @@ public sealed partial class SdfWorldResidency {
     /// stays here: neither a lost nor an abandoned submission is ever read as completed.</summary>
     public IReadOnlyList<string> InFlightShadeIdentities => m_shadeSubmissions.SelectMany(static s => s.Identities).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
 
-    internal SdfShadeSubmission? SubmittedShade(IReadOnlyList<string> identities) {
-        if (identities.Count == 0) { return null; }
-        var submission = new SdfShadeSubmission(residency: this, identities: identities);
-
-        m_shadeSubmissions.Add(item: submission);
-        return submission;
-    }
+    internal void SubmittedShade(SdfShadeSubmission submission) => m_shadeSubmissions.Add(item: submission);
     internal void RetireShade(SdfShadeSubmission submission) => _ = m_shadeSubmissions.Remove(item: submission);
     // A loss proves nothing completed: every submission still held stays reported.
     private void LoseShade() {

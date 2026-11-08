@@ -42,8 +42,8 @@ milestone. The owner requested its baseline and implementation plan, which
 0. [Duplication audit](#refactoring-campaign) [high, the owner's priority]: the
    seven-lane audit's drifted copies and boundary duplicates are fixed first
    (tooling's architecture, identity, release, lease, path, lock and deletion
-   copies; physics and world contact responses and the remote-response gate;
-   rendering's readback state machines), then its live copies as a batch, and
+   copies; physics and world contact responses and the remote-response gate),
+   then its live copies as a batch, and
    small helpers ride along. Each audit lane's remaining findings are filed in
    the refactoring packet as its fix lane lands. Duplicates are fixed when found
    (AGENTS.md); this item is the backlog the audit surfaced.
@@ -2117,33 +2117,23 @@ Rendering duplicates the dup-render audit found (paths under `src/`):
   unslotted light) or the probe share alone, never their product. One light-geometry
   function (direction, reach, visibility, probe share) in `sdf-light.hlsli`, read
   by both, removes the second evaluation and the drift.
-- [medium] Three per-slot readback state machines (recorded, submitted with a
-  fence, poll `IsSignaled`, read): `SdfWorldPickReadback`, the occlusion sight
-  slots (`SdfMeshOcclusion.SightSlot`, `Submitted`, `PollSight`), and
-  `SdfShadeSlots`. The first two poll the reusable slot fence, which
-  `SdfShadeSubmissions` documents as reading signaled after an abandoned
-  submission and a device loss's drain, so they can read a readback that never
-  ran. One slot-readback type in `Puck.Shaders` beside
-  `IRenderGraphPackageReadback`, completed by the node's `Completed(slot)` proof
-  rather than a fence poll, serves all three.
-- [low] Retiring a GPU object after its last reader is written five ways, each
-  with its own key: `SdfWorldTables` (upload sequence, `Retire`),
-  `SdfMeshOcclusion.m_retired` (per slot), `LeaseRetireList` (per slot, leases),
-  `ShaderPipelineRenderNode.Retirement` (`RetiredGraph`, fence and submission)
-  and `DirectXSurfaceUpload` (fence value). A fence-value retirement queue in
-  `Puck.Abstractions/Gpu` could hold them; decide the key with the next
-  lifetime change.
-- [low] The next capacity of a growing table is chosen in six places with five
-  factors: `SdfWorldTables.GrowCapacity` (half again), the frame-sampled table's
-  inline half again (`SdfWorldTables.FrameSampled.cs`), `MeshRegionGrownBytes`
-  (an eighth to a granule), `SdfMeshRegionArena.GrownCapacity`,
-  `SdfMeshOcclusion.EnsureBuffers` (power of two) and the probe scene's eighth
-  (`SdfMeshProbeGpuWork.Scene.cs`). One growth helper with the factor as a
-  parameter.
-- [low] Rec. 709 luminance weights are written as literals beside the
-  generated `SDF_LUMINANCE` (`SdfPhotometry`): `Shared/bloom-filter.hlsli`
-  (`bloomSelected`) and `Puck.Overlays/Assets/Shaders/overlay-unified.frag.hlsl`.
-  `Puck.Shaders.Generator` could emit one shared constant both layers include.
+- [low] The render node's own retirement still polls fences beside the slot
+  proof its packages use: `RetiredGraph` disposes on `Fence.IsSignaled`
+  (`ShaderPipelineRenderNode.RetireCompleted`), and the node's completions and
+  timing fold on `IsSignaled` (`FoldCompletions`, `PollTimings`). The
+  sequence-keyed queue (`GpuRetirementQueue`: `SdfWorldTables`,
+  `DirectXSurfaceUpload`) and the per-slot proof (`WaitSlot` to
+  `IRenderGraphPackageReadback.Completed`, `LeaseRetireList`) are the two
+  shapes left; key `RetiredGraph` on the node's submission count through the
+  queue, completed by `WaitSlot`, with the next lifetime change.
+- [medium · unconfirmed] A submission its batch never queued reads complete:
+  `GpuSubmissionBatch.Split`'s failure path aliases every deferred fence to an
+  owner that `AbandonIfDeferred` retires, so both `IsSignaled` and `Wait`
+  report completion (`GpuBatchedSubmissionFence`). The node's `WaitSlot` then
+  proves a slot complete whose copies never ran, and a readback reads stale
+  bytes. Whether `Split` can fail without a device loss (which releases the
+  node without a proof) was not traced; if it can, the fence needs an
+  abandoned state that `Wait` reports.
 
 Duplicates the survey left to the lanes that own their areas:
 
@@ -2274,8 +2264,6 @@ the fixed poses and the approaches already rejected.
     volume instead, keeping the snapshot's timing.
   - `RecordCommit` records one buffer copy per probe because the source
     interleaves records; one scatter dispatch replaces them.
-  - The bloom kernels (`sdf-bloom-down`, `sdf-bloom-apply`) and the overlay
-    keep literal luminance weights instead of the generated `SDF_LUMINANCE`.
   - Full relight, selection, metering and hit-cache paths need CPU/GPU parity
     coverage. The trace law covers miss-only directional visibility and the
     gather law covers receiver lookup; `world.probe` supplies the broader
@@ -2871,12 +2859,6 @@ failing case is argued from source, not run):
   printed no `done` after more than five minutes (seen by the mesh-twice lane;
   not compared against a base Vulkan run). Compare base and tip on Vulkan before
   calling it a regression.
-- [low · unchecked] `SdfWorldPickReadback.Dispose` returns its readback's
-  arena range (`DirectXGpuReadbackBuffer.Dispose` now reports the release), but
-  whether every retirement path of the pick readback runs after its fence
-  depends on graph teardown order and was not traced by the deck-memory review.
-  Trace each retirement path; if one can dispose before the fence, retire it
-  through the fence-ordered path the other readbacks use.
 - [medium, before V1] Draw identity is tracked twice and the occlusion visible
   bit uses neither: R2's per-mesh identity counter (`SdfMesh.cs:331-335`,
   `:612`, read at `sdf-mesh-selection.hlsli:79`) beside the residency's

@@ -11,8 +11,9 @@ public sealed partial class SdfWorldTables {
     public IGpuBuffer ScreenEmission => m_screenEmission.Buffer;
     /// <summary>Gets the actual submitted screen reduction, independent of sky projection's cadence.</summary>
     public SdfEnvironmentSubmission? SubmittedScreenEmission => m_screenEmission.Submitted;
-    /// <summary>Gets the latest screen reduction whose actual submission fence has completed.</summary>
-    public GpuImagePublication CompletedScreenEmission { get { m_screenEmission.Poll(); return m_screenEmission.Completed; } }
+    /// <summary>Gets the latest screen reduction whose submission its render node proved complete while it was still the
+    /// latest submitted.</summary>
+    public GpuImagePublication CompletedScreenEmission => m_screenEmission.Completed;
 
     internal bool ScreenEmissionOwes => (m_screenEmission.Owes || m_screenEmission.Forced);
     internal bool ScreenEmissionHasImages => m_screenBound.Any(predicate: static bound => bound);
@@ -20,7 +21,8 @@ public sealed partial class SdfWorldTables {
 
     internal ulong? ScreenEmissionSignature(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) =>
         m_screenEmission.Observe(reads: reads, residency: residency, view: view);
-    internal long SubmitScreenEmission(IGpuSubmissionFence fence) => m_screenEmission.Publish(fence: fence);
+    internal long SubmitScreenEmission() => m_screenEmission.Publish();
+    internal void CompleteScreenEmission(long sequence) => m_screenEmission.Complete(sequence: sequence);
     internal void WithdrawScreenEmission(long sequence) => m_screenEmission.Withdraw(sequence: sequence);
 
     private sealed class ScreenEmissionPass : IDisposable {
@@ -50,7 +52,6 @@ public sealed partial class SdfWorldTables {
         public SdfEnvironmentSubmission? Submitted { get; private set; }
 
         public ulong? Observe(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {
-            Poll();
             Array.Clear(array: m_sources);
             Array.Clear(array: Screens);
             Array.Clear(array: m_tainted);
@@ -83,7 +84,7 @@ public sealed partial class SdfWorldTables {
             Owes = ((Submitted is null) || changed || Forced);
             return unchecked((ulong)(Renders + (Owes ? 1 : 0)));
         }
-        public long Publish(IGpuSubmissionFence fence) {
+        public long Publish() {
             for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
                 m_renderedSources[screen] = m_sources[screen];
                 m_renderedTainted[screen] = m_tainted[screen];
@@ -93,13 +94,12 @@ public sealed partial class SdfWorldTables {
             }
             Owes = false;
             Forced = false;
-            Submitted = new(Owner: this, Sequence: ++Renders, Fence: fence, Tainted: m_renderedTainted.Any(predicate: static tainted => tainted));
+            Submitted = new(Owner: this, Sequence: ++Renders, Tainted: m_renderedTainted.Any(predicate: static tainted => tainted));
             return Renders;
         }
-        public void Poll() {
-            if ((Submitted is { } submitted) && (submitted.Publication != Completed) && submitted.Fence.IsSignaled) {
-                Completed = submitted.Publication;
-            }
+        // Latches a proven submission only while it is still the latest: a newer one owns the buffer.
+        public void Complete(long sequence) {
+            if (Submitted is { } submitted && (submitted.Sequence == sequence)) { Completed = submitted.Publication; }
         }
         public void Withdraw(long sequence) {
             if ((Submitted is { } submitted) && (submitted.Sequence == sequence) && (submitted.Publication != Completed)) { Forget(); }

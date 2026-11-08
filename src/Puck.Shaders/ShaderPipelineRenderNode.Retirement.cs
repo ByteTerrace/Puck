@@ -375,7 +375,7 @@ public sealed partial class ShaderPipelineRenderNode {
         if (inFlight || holdsBorrowedPublication) {
             m_retired.Add(item: retired);
         } else {
-            retired.Dispose(node: this);
+            retired.Dispose(node: this, completed: true);
         }
         foreach (var held in m_retired) { held.ReleasePublication(node: this); }
     }
@@ -442,7 +442,7 @@ public sealed partial class ShaderPipelineRenderNode {
             var retired = m_retired[index];
 
             if (retired.ReadersCompleted || (retired.Fence is { IsSignaled: true })) {
-                retired.Dispose(node: this);
+                retired.Dispose(node: this, completed: true);
                 m_retired.RemoveAt(index: index);
             }
         }
@@ -476,7 +476,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // Releases everything queued or held without waiting: the caller has drained the device, or lost it.
     private void ReleaseRetired() {
         foreach (var retired in m_retired) {
-            retired.Dispose(node: this);
+            retired.Dispose(node: this, completed: false);
         }
         foreach (var held in m_held) {
             held.Resource.Dispose();
@@ -555,7 +555,12 @@ public sealed partial class ShaderPipelineRenderNode {
             AfterSubmission = (node.m_submissions + (allTransferred ? 0 : RetirementLag));
             Fence = (allTransferred ? node.m_lastSubmissionFence : null);
         }
-        public void Dispose(ShaderPipelineRenderNode node) {
+        // A retirement the node proved complete tells the graph's readback passes every slot completed before they are
+        // released; a drained or lost release proves nothing to them.
+        public void Dispose(ShaderPipelineRenderNode node, bool completed) {
+            if (completed) {
+                for (var slot = 0; (slot < node.m_inFlight); slot++) { CompleteReadbacks(passes: passes, slot: slot); }
+            }
             node.DisposeGraph(
                 passes: passes,
                 resources: resources

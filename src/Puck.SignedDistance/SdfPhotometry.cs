@@ -46,11 +46,11 @@ public static class SdfPhotometry {
     public const float MaximumEv100 = 20f;
 
     /// <summary>The red primary's share of a linear Rec. 709 colour's luminance (ITU-R BT.709).</summary>
-    public const float LuminanceRed = 0.2126f;
-    /// <summary>The green primary's share of a linear Rec. 709 colour's luminance (ITU-R BT.709).</summary>
-    public const float LuminanceGreen = 0.7152f;
+    public const float LuminanceRed = (float)Puck.Abstractions.Sources.ImageSourceConversion.Bt709Kr;
+    /// <summary>The green primary's share of a linear Rec. 709 colour's luminance (ITU-R BT.709): what red and blue leave.</summary>
+    public const float LuminanceGreen = (float)(1.0 - Puck.Abstractions.Sources.ImageSourceConversion.Bt709Kr - Puck.Abstractions.Sources.ImageSourceConversion.Bt709Kb);
     /// <summary>The blue primary's share of a linear Rec. 709 colour's luminance (ITU-R BT.709).</summary>
-    public const float LuminanceBlue = 0.0722f;
+    public const float LuminanceBlue = (float)Puck.Abstractions.Sources.ImageSourceConversion.Bt709Kb;
 
     /// <summary>Returns the luminance of a linear Rec. 709 colour, its Y.</summary>
     /// <param name="color">The linear RGB colour.</param>
