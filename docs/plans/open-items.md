@@ -1917,16 +1917,10 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   version. The stake is about 7 % of a long recording (go-tests), the share of
   resting bodies; a version that also covers moving bodies' unchanged
   fields would not help, since a moving body's pose changes every tick.
-- [medium] Navigation enumerates its neighbour stencil four times:
-  `NavigationRuntime.Domain.Predecessors` (`src/Puck.Physics/Navigation/NavigationRuntime.Shared.cs`)
-  and three loops in `NavigationRuntime.cs` repeat axis counting, connectivity
-  and coordinate bounds. One `Domain` enumerator yielding offset, node and cost
-  serves them; reverse traversal keeps its own `predecessor -> settled` check.
-- [low] `CertifiedLowDiscrepancy.FromQuadraticIrrational` and
-  `QuadraticInflation.FromQuadraticIrrational` (`src/Puck.Maths/Research/`) each
-  grow continued-fraction scratch by catching `ContinuedFraction.Expand`'s
-  short-terms refusal and doubling. Give `ContinuedFraction` the storage-owning
-  expansion.
+- [medium] `WorldOverviewCamera.Resolve` (`src/Puck.World.Client/WorldOverviewCamera.cs`), the view of a world with
+  no local seat or camera, bakes in its eye offset (`[0, 14, 18]`), target lift and PI/3 field of view. Those are an
+  authored look: move them into the standard package's camera program and let the engine fall back to a neutral
+  framing only.
 - [low] `AzureScheduledEvents.ReadAsync` parses the instance-metadata body with
   no byte budget, unlike every ARM read, which passes `AzureArmPipeline.ReadJsonAsync`.
   Decide whether the link-local metadata endpoint needs the same bound.
@@ -3494,6 +3488,13 @@ still changes a fraction of a percent of pixels, not exactly zero.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [high] A template parameter can replace a string literal: in a template at
+  document level with a parameter named `top`, a body row `shape Box "top"` had
+  its name string replaced by the parameter's value (seen by the medium dedup
+  lane building `twoPedestalTable` in `worlds/debug/gametable.puck`, which renamed
+  the parameter to `topScale`; `gameTablePrototype` with the same names did not
+  show it). A quoted string must never be substituted. Reproduce in a scratch
+  document, then fix in the transpiler's lowering. Owner: language.
 - [medium] The authoring-time creation store `WorldPrototype`'s remarks name
   ("the CAS is an authoring-time import/export cache") has no implementation:
   no code puts or gets a creation document outside a projection
@@ -4288,12 +4289,11 @@ Launch and process lifecycles:
   `world.wait` forms (`src/Puck.World.Console/WorldWaitCommandModule.cs:253`),
   so admission over-reserves. Have the World print its own readiness line once
   ready, and set the flag after the write.
-- [low] The sweep's budget pause exists twice and canary has neither:
-  `SweepBudget.Pause` (`src/Puck.Cli.Runs/Sweep/SweepBudget.cs:41-52`) and
-  `WorldOffscreenLeg.Pause` (`src/Puck.Cli.Harness/WorldOffscreenLeg.cs:229-235`)
-  stop a clock while a leg queues for a lease, while canary's budget
-  (`CanaryCommand.cs`, `CanaryLegRun.BudgetExpired`) still counts queueing, so a
-  later leg can read `BudgetExpired`. Keep one pausable clock; delete
+- [low] Canary's concurrent leg budget (`CanaryCommand.CanaryBudget`,
+  `CanaryLegRun.BudgetExpired`) still counts external lease queueing, so a later
+  leg can read `BudgetExpired`. Sweep and offscreen legs now share
+  `SuiteBudget.Pause`; canary needs accounting that excludes external queueing
+  without stopping its budget while another leg runs. Delete
   `SweepCommand.SamePath` (`src/Puck.Cli.Runs/Sweep/SweepCommand.cs:294`), which
   nothing calls.
 - [low · plausible, Linux only] `FileLock.TryAcquireForDeletion`
@@ -4356,16 +4356,16 @@ Owner: the lead · ordinary · Next: address skill-readiness issues affecting
 the selected landscape lanes. The broader skill-eval program below and the
 Monitor hook check remain supporting work alongside the landscape priority.
 
-- [medium] Areas with no owning skill (AGENTS.md rule 7: a gap fixed when
-  found), from the input skill lane: audio and speech (`src/Puck.Audio`),
-  physics and contact (`src/Puck.Physics`, mentioned only inside puck-world's
-  document references), the dashboard (`src/Puck.Dashboard`), platform
-  windowing and transports (`src/Puck.Platform.*`), recording and capture
-  (`src/Puck.Recording`), and the state system (`Puck.State` and its `.Rules`,
-  `.Search`, `.Topology`, `.Vectors`, `.Generators` siblings, covered only by
-  `docs/reference/state/` and one puck-world row; the state audit's capability
-  table is the starting point). The duplication audit's map gaps join this list; one
-  lane writes the skills by capability after the audit lands.
+- [low] Five new area skills (state, physics, media, platform, dashboard) have
+  ten capability eval cases that have not run, and seven sibling skills gained
+  routing rows (re-run `puck-world`'s regression cases): `puck evals run <skill>
+  --model claude-opus-5-5 --runs 5`, then `puck evals graders`. Pages still cite
+  canaries that moved to `experimental/tests/Puck.World.Canaries`
+  (`docs/reference/audio.md`, `src/Puck.World/Audio/README.md`,
+  `docs/reference/physics.md`, `docs/reference/state/testing.md`).
+- [medium] `CaptureSink` (`src/Puck.Recording/Capture/CaptureSink.cs`) is
+  constructed nowhere in `src`: an unreached capture capability to wire, not
+  delete (AGENTS.md, "Unreached is not unwanted").
 - [high, edit-to-running] A fresh landscape World artifact builds for minutes
   before boot, against the owner's 30-second edit bar; an incremental CLI build
   of a different target is far faster, so the two are observations, not a
@@ -4489,8 +4489,6 @@ Monitor hook check remain supporting work alongside the landscape priority.
   Low:
   - Mentioning a counter counts as persisting it.
   - `exact-keys` reports a tolerant `Matches` as exact.
-  - `CommentSmellScan.cs:326` is a second line-site writer beside
-    `ScanSites`.
 
   The `ArenaSearch.cs:557` suppression is justified.
 

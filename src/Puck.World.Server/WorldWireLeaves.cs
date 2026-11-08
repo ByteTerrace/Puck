@@ -15,6 +15,12 @@ namespace Puck.World.Server;
 /// is trusted local state while a federation peer's bytes are not: the one shared reader applies the untrusted-input
 /// discipline everywhere. Public so a law can read and write exactly the leaf a tape or checkpoint carries.</summary>
 public static class WorldWireLeaves {
+    /// <summary>Writes a live intent-source union, refusing an undeclared source before writing any bytes.</summary>
+    public static void WriteIntentSource(WireWriter writer, IntentSource source) {
+        if (!WorldWireCodec.TryWriteIntentSource(source: source, writer: writer)) {
+            throw new InvalidOperationException(message: $"intent source '{source}' is not defined");
+        }
+    }
     /// <summary>Writes the source authority and id that identify one crossing.</summary>
     public static void WriteTransferKey(WireWriter writer, WorldTransferKey key) {
         writer.WriteString(value: key.SourceAuthority);

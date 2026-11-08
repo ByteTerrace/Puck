@@ -29,7 +29,7 @@ internal sealed class OracleProbes {
     // Timer0 (÷1) enabled, an immediate 1-word DMA runs, then a plain memory access follows: hardware forces the
     // instruction fetch after a DMA non-sequential. The timer read afterward captures the combined cost. Target: 88.
     private byte[] BuildDmaForceNseqProbe() {
-        var a = new Asm();
+        var a = new ArmProbeAssembler();
 
         a.LdrConst(
             rd: 0,
@@ -101,7 +101,7 @@ internal sealed class OracleProbes {
     // own open-bus latch. With per-channel latches that value is 0 (ch0 never drove its latch); with a single shared
     // latch it would be channel 1's 0xAABBCCDD. Result[0] = ch0 dest, Result[1] = ch1 dest.
     private byte[] BuildDmaLatchProbe() {
-        var a = new Asm();
+        var a = new ArmProbeAssembler();
 
         a.LdrConst(
             rd: 0,
@@ -186,7 +186,7 @@ internal sealed class OracleProbes {
     // Timer0 (÷1) enabled, then an immediate 4-word DMA is triggered; the timer is read right after. The measured
     // value reflects the DMA start delay + burst cycles. Documented corpus target: 20.
     private byte[] BuildDmaStartDelayProbe() {
-        var a = new Asm();
+        var a = new ArmProbeAssembler();
 
         a.LdrConst(
             rd: 0,
@@ -250,7 +250,7 @@ internal sealed class OracleProbes {
     // Enable timer0 (÷1), HALT (write HALTCNT=0), and immediately raise a pending timer IRQ so the CPU wakes; the
     // timer is read after wake, capturing the halt-exit latency. Documented direct halt-exit: 12. Needs the retail BIOS.
     private byte[] BuildHaltExitProbe() {
-        var a = new Asm();
+        var a = new ArmProbeAssembler();
 
         a.LdrConst(
             rd: 0,
@@ -345,7 +345,7 @@ internal sealed class OracleProbes {
     // MEASUREMENT (our harness shape, not the corpus's) against the documented region-dependent latency 92/112/120;
     // it needs the retail BIOS IRQ vector to dispatch at all.
     private byte[] BuildIrqLatencyProbe() {
-        var a = new Asm();
+        var a = new ArmProbeAssembler();
 
         a.LdrConst(
             rd: 0,
@@ -442,7 +442,7 @@ internal sealed class OracleProbes {
     // Timer0 near overflow (reload 0xFFF0), let it run, then write a new reload while live and read the counter: probes
     // whether the live counter or the freshly written reload wins at the boundary. Documented boundary: 0xDEAE/0xFFF9.
     private byte[] BuildTimerReloadRaceProbe() {
-        var a = new Asm();
+        var a = new ArmProbeAssembler();
 
         a.LdrConst(
             rd: 0,
@@ -499,7 +499,7 @@ internal sealed class OracleProbes {
     // Enable timer0 (÷1), read it a few cycles later (result 0), then STOP it and read again (result 1, frozen).
     // Documented: reads ~3 while running, then a frozen value (corpus target 8).
     private byte[] BuildTimerStartStopProbe() {
-        var a = new Asm();
+        var a = new ArmProbeAssembler();
 
         a.LdrConst(
             rd: 0,
@@ -898,59 +898,4 @@ internal sealed class OracleProbes {
         );
     }
 
-    // -------------------------------------------------------------------------------------------------------------
-    // A minimal ARM assembler (little-endian words, a dedup literal pool after the code, label + backward-branch
-    // resolution). Extended from the MicroRoms assembler with LDR-from-register and an infinite-spin terminator.
-    // -------------------------------------------------------------------------------------------------------------
-    private sealed class Asm {
-        private const uint RomBase = 0x08000000u;
-        private const int RomSizeBytes = 0x8000;
-
-        private readonly List<uint> m_code = new();
-        private readonly List<(int instr, int rd, uint value, string? label)> m_loads = new();
-        private readonly Dictionary<string, int> m_labels = new();
-
-        public void Bx(int rn) => m_code.Add(item: 0xE12FFF10u | ((uint)rn));
-        public byte[] Finish() {
-            var poolBase = m_code.Count;
-            var pool = AsmLiteralPool.Resolve(
-                code: m_code,
-                labels: m_labels,
-                loads: m_loads,
-                poolBase: poolBase,
-                romBase: RomBase
-            );
-
-            var words = new List<uint>(collection: m_code);
-
-            words.AddRange(collection: pool);
-
-            var bytes = new byte[RomSizeBytes];
-
-            for (var i = 0; (i < words.Count); ++i) {
-                BitConverter.TryWriteBytes(
-                    destination: bytes.AsSpan(start: (i * 4)),
-                    value: words[i]
-                );
-            }
-
-            return bytes;
-        }
-        public void Label(string name) => m_labels[name] = m_code.Count;
-        public void Ldr(int rd, int rn, uint imm12) =>
-            m_code.Add(item: 0xE5900000u | (((uint)rn) << 16) | (((uint)rd) << 12) | (imm12 & 0xFFFu));
-        public void LdrConst(int rd, uint value) {
-            m_loads.Add(item: (m_code.Count, rd, value, null));
-            m_code.Add(item: 0);
-        }
-        public void LdrLabel(int rd, string label) {
-            m_loads.Add(item: (m_code.Count, rd, 0, label));
-            m_code.Add(item: 0);
-        }
-        public void Mov(int rd, uint imm8) => m_code.Add(item: 0xE3A00000u | (((uint)rd) << 12) | (imm8 & 0xFFu));
-        public void Nop() => m_code.Add(item: 0xE1A00000u); // mov r0,r0
-        public void Spin() => m_code.Add(item: 0xEAFFFFFEu); // b . (branch to self)
-        public void Str(int rd, int rn, uint imm12) =>
-            m_code.Add(item: 0xE5800000u | (((uint)rn) << 16) | (((uint)rd) << 12) | (imm12 & 0xFFFu));
-    }
 }

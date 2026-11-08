@@ -746,57 +746,7 @@ prototypes {
           color: "#FFF8E9"
           roughness: 0.22
           specular: 0.04
-          // Where each eye's upper lid and lash meet its white, in the eye's frame.
-          paints [
-            {
-              parent: "eye-left"
-              type: "Sweep"
-              curve {
-                a: map([-0.047, 0, 0.027], v => v * pilotHeadScale)
-                b: map([0, 0.066, 0.052], v => v * pilotHeadScale)
-                c: map([0.047, 0.004, 0.027], v => v * pilotHeadScale)
-                radiusStart: 0.0045 * pilotHeadScale
-                radiusEnd: 0.0045 * pilotHeadScale
-              }
-              color: "#171210"
-            }
-            {
-              parent: "eye-left"
-              type: "Sweep"
-              curve {
-                a: map([0.04, 0.017, 0.03], v => v * pilotHeadScale)
-                b: map([0.05, 0.023, 0.023], v => v * pilotHeadScale)
-                c: map([0.059, 0.023, 0.016], v => v * pilotHeadScale)
-                radiusStart: 0.0035 * pilotHeadScale
-                radiusEnd: 0.0035 * pilotHeadScale
-              }
-              color: "#171210"
-            }
-            {
-              parent: "eye-right"
-              type: "Sweep"
-              curve {
-                a: map([0.047, 0, 0.027], v => v * pilotHeadScale)
-                b: map([0, 0.066, 0.052], v => v * pilotHeadScale)
-                c: map([-0.047, 0.004, 0.027], v => v * pilotHeadScale)
-                radiusStart: 0.0045 * pilotHeadScale
-                radiusEnd: 0.0045 * pilotHeadScale
-              }
-              color: "#171210"
-            }
-            {
-              parent: "eye-right"
-              type: "Sweep"
-              curve {
-                a: map([-0.04, 0.017, 0.03], v => v * pilotHeadScale)
-                b: map([-0.05, 0.023, 0.023], v => v * pilotHeadScale)
-                c: map([-0.059, 0.023, 0.016], v => v * pilotHeadScale)
-                radiusStart: 0.0035 * pilotHeadScale
-                radiusEnd: 0.0035 * pilotHeadScale
-              }
-              color: "#171210"
-            }
-          ]
+          paints: mothLidPaints(pilotHeadScale)
         }
         {
           color: "#754137"

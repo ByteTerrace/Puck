@@ -350,14 +350,6 @@ public static partial class WorldFederationCodec {
 
         return true;
     }
-    private static void WriteIntentSource(WireWriter writer, IntentSource source) {
-        if (!WorldWireCodec.TryWriteIntentSource(
-            source: source,
-            writer: writer
-        )) {
-            throw new InvalidOperationException(message: $"intent source '{source}' is not defined");
-        }
-    }
 
     /// <summary>Encodes the challenge proof sent before every federation operation. Carries no claimed source
     /// namespace — the door derives that from the verified proof itself (<see cref="WorldAttestedAuthenticator"/>),
@@ -692,7 +684,7 @@ public static partial class WorldFederationCodec {
                 mobility: mobility,
                 writer: writer
             );
-            WriteIntentSource(
+            WorldWireLeaves.WriteIntentSource(
                 writer: writer,
                 source: member.Source
             );

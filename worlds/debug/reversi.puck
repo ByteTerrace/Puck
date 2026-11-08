@@ -2,6 +2,7 @@ import "../standard/seat"
 import "../standard/inputs"
 import "../standard/kits"
 import "shapes"
+import "gametable"
 // Physical Reversi (Othello) on an 8x8 board, played to the World Othello Federation's official rules
 // (https://www.worldothello.org/about/about-othello/othello-rules/official-rules/english): 64 rigid two-faced discs,
 // black on one face and white on the other, on a table in the gallery hall's board game room (hall.puck), whose every
@@ -201,24 +202,7 @@ prototypes {
         { color: "#4A3526", roughness: 0.8, specular: 0.05 }
       ]
       schema: "puck.creation.v1"
-      shape Box "top" {
-        material: 0
-        position [0, 1.25, 0]
-        scale [1.75, 0.05, 0.85]
-      }
-      for x in [-1.1, 1.1] {
-        // The two pedestals stand on the floor 0.5 m under the creation's origin.
-        shape Cylinder $"leg-{x}" {
-          material: 0
-          position [x, 0.855, 0]
-          scale [0.08, 0.355, 0.08]
-        }
-        shape Cylinder $"foot-{x}" {
-          material: 0
-          position [x, 0.52, 0]
-          scale [0.35, 0.02, 0.35]
-        }
-      }
+      twoPedestalTable(0)
       // The board: a dark base the lines show through, inside a dark rim flush with the tiles' faces.
       shape Box "base" {
         material: 1

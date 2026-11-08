@@ -107,14 +107,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             throw new InvalidOperationException(message: $"{nameof(GrantSubject)} {subject.Kind}:{subject.Value} has no wire value");
         }
     }
-    private static void WriteIntentSource(WireWriter writer, IntentSource source) {
-        if (!WorldWireCodec.TryWriteIntentSource(
-            source: source,
-            writer: writer
-        )) {
-            throw new InvalidOperationException(message: $"{nameof(IntentSource)} '{source}' has no live wire value");
-        }
-    }
     private static void WritePeerEventEntry(WireWriter writer, WorldPeerEventEntry peer) {
         if (!WorldWireLeaves.TryWritePeerEventEntry(
             peer: peer,

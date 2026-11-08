@@ -160,58 +160,18 @@ public sealed partial class NavigationRuntime {
         private readonly record struct SharedEdge(int Node, int Cost);
 
         private int Predecessors(int node, Span<SharedEdge> edges) {
-            Coordinates(
-                node: node,
-                x: out var x,
-                y: out var y,
-                z: out var z
-            );
             var count = 0;
 
-            for (var dy = ((Tuning.Kind == NavigationKind.Surface)
-                ? 0
-                : -1
-            ); (dy <= ((Tuning.Kind == NavigationKind.Surface)
-                ? 0
-                : 1)); dy++) {
-                for (var dz = -1; (dz <= 1); dz++) {
-                    for (var dx = -1; (dx <= 1); dx++) {
-                        var axes = ((((dx == 0)
-                            ? 0
-                            : 1) + ((dy == 0)
-                            ? 0
-                            : 1)) + ((dz == 0)
-                            ? 0
-                            : 1));
-                        var nx = (x + dx); var ny = (y + dy); var nz = (z + dz);
-
-                        if (
-                            (axes == 0) ||
-                            !AdmitsAxes(axes: axes) ||
-                            (((uint)nx) >= ((uint)Tuning.Width)) ||
-                            (((uint)ny) >= ((uint)Tuning.Layers)) ||
-                            (((uint)nz) >= ((uint)Tuning.Depth))
-                        ) { continue; }
-                        var next = Index(
-                            x: nx,
-                            y: ny,
-                            z: nz
-                        );
-                        // Reverse search: prove predecessor -> settled node, not an assumed directed reverse edge.
-                        if (IsTraversableEdge(
-                            current: next,
-                            next: node
-                        )) {
-                            edges[count++] = new SharedEdge(
-                                Cost: ((axes == 1)
-                                ? StraightCost
-                                : ((axes == 2)
-                                    ? DiagonalCost
-                                    : SpaceDiagonalCost)),
-                                Node: next
-                            );
-                        }
-                    }
+            foreach (var step in Neighbors(node: node)) {
+                // Reverse search: prove predecessor -> settled node, not an assumed directed reverse edge.
+                if (IsTraversableEdge(
+                    current: step.Node,
+                    next: node
+                )) {
+                    edges[count++] = new SharedEdge(
+                        Cost: step.Cost,
+                        Node: step.Node
+                    );
                 }
             }
             return count;
@@ -331,13 +291,11 @@ public sealed partial class NavigationRuntime {
                         z: out var nz
                     );
                     var dx = (nx - x); var dy = (ny - y); var dz = (nz - z);
-                    var axes = ((((dx == 0)
-                        ? 0
-                        : 1) + ((dy == 0)
-                        ? 0
-                        : 1)) + ((dz == 0)
-                        ? 0
-                        : 1));
+                    var axes = StepAxes(
+                        dx: dx,
+                        dy: dy,
+                        dz: dz
+                    );
 
                     if (
                         (Math.Abs(value: dx) > 1) ||
@@ -348,11 +306,7 @@ public sealed partial class NavigationRuntime {
                         dy: dy,
                         dz: dz
                     )) == 0) ||
-                        ((node.Cost - next.Cost) != ((axes == 1)
-                        ? StraightCost
-                        : ((axes == 2)
-                            ? DiagonalCost
-                            : SpaceDiagonalCost)))
+                        ((node.Cost - next.Cost) != StepCost(axes: axes))
                     ) {
                         throw new InvalidOperationException(message: "shared navigation checkpoint successor is not a costed static edge.");
                     }

@@ -1,5 +1,3 @@
-using Microsoft.CodeAnalysis.CSharp;
-
 using Puck.Cli.Source;
 
 namespace Puck.Cli.Scan.Analyzers;
@@ -16,31 +14,9 @@ internal sealed class CommentAnalyzer : ISourceAnalyzer {
         var multi = 0;
 
         foreach (var parsed in corpus.Files) {
-            foreach (var trivia in parsed.Root.DescendantTrivia()) {
-                var kind = trivia.Kind();
-                var isSingle = (kind == SyntaxKind.SingleLineCommentTrivia);
-
-                if (
-                    !isSingle &&
-                    (kind != SyntaxKind.MultiLineCommentTrivia)
-                ) {
-                    continue;
-                }
-
-                var (startLine, endLine) = ScanJsonl.LineRange(location: trivia.GetLocation());
-
-                sites.Add(
-                    endLine: endLine,
-                    file: parsed.Relative,
-                    kind: (isSingle ? "single" : "multi"),
-                    line: startLine,
-                    text: trivia.ToString().Trim()
-                );
-                if (isSingle) {
-                    single++;
-                } else {
-                    multi++;
-                }
+            foreach (var (startLine, endLine, isSingle, text) in InlineComments.CollectComments(parsed: parsed)) {
+                sites.Add(endLine: endLine, file: parsed.Relative, kind: (isSingle ? "single" : "multi"), line: startLine, text: text);
+                if (isSingle) { single++; } else { multi++; }
             }
         }
 

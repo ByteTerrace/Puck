@@ -323,7 +323,7 @@ public sealed record WorldAudioCue(
 /// <see cref="CurveLinear"/>.</param>
 /// <param name="DefaultBedFadeSeconds">The presence slew bound a bed coalesces to when it declares none.</param>
 /// <param name="Listener">The listener policy: <see cref="ListenerFocus"/> (the active view
-/// camera's pose listens), <c>seat:&lt;n&gt;</c> (that seat's view camera), or a declared camera name — so a stage
+/// camera's pose listens), <c>seat&lt;n&gt;</c> (that seat's view camera), or a declared camera name — so a stage
 /// or museum world can pin its listener without touching the runtime.</param>
 /// <param name="Cues">The cue table (default empty): world events tied to sound as data —
 /// see <see cref="WorldAudioCue"/>.</param>
@@ -341,8 +341,6 @@ public sealed record WorldAudioDefaults(
     public const string CurveSmoothstep = "smoothstep";
     /// <summary>The focus listener policy token — the active view camera's pose listens.</summary>
     public const string ListenerFocus = "focus";
-    /// <summary>The seat listener policy prefix (<c>seat:1</c>..<c>seat:4</c>).</summary>
-    public const string ListenerSeatPrefix = "seat:";
 
     private readonly IReadOnlyList<WorldAudioCue> m_cues = (Cues ?? []);
 

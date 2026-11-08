@@ -27,6 +27,32 @@ public static class PrincipalTokens {
         token: principal.Describe(),
         out var parsed
     ) && (parsed == principal));
+    /// <summary>The prefix of a seat token, <c>seat1</c>..<c>seat4</c>: the one spelling every surface that names a
+    /// local seat in a single token uses (principals, <c>world.hud</c>'s seat filter, <c>audio.listener</c>).</summary>
+    public const string SeatPrefix = "seat";
+
+    /// <summary>Parses a seat token (<c>seat1</c>..<c>seat4</c>), ignoring case.</summary>
+    /// <param name="token">The token to parse.</param>
+    /// <param name="number">The 1-based seat number, on success; meaningless otherwise.</param>
+    /// <returns><see langword="true"/> when the token names a local seat of this world's limits.</returns>
+    public static bool TryParseSeat(ReadOnlySpan<char> token, out int number) {
+        number = 0;
+
+        return (
+            token.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: SeatPrefix
+        ) &&
+            int.TryParse(
+            s: token[SeatPrefix.Length..],
+            style: NumberStyles.Integer,
+            provider: CultureInfo.InvariantCulture,
+            result: out number
+        ) &&
+            (number >= 1) &&
+            (number <= WorldBodiesLimits.LocalSeatCount)
+        );
+    }
     /// <summary>Parses a principal token (<see cref="Grammar"/>), ignoring case.</summary>
     /// <param name="token">The token to parse.</param>
     /// <param name="principal">The parsed principal, on success; <see cref="Principal.Console"/> otherwise.</param>
@@ -64,20 +90,10 @@ public static class PrincipalTokens {
             return true;
         }
 
-        if (
-            token.StartsWith(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: "seat"
-        ) &&
-            int.TryParse(
-            s: token[4..],
-            style: NumberStyles.Integer,
-            provider: CultureInfo.InvariantCulture,
-            result: out var seat
-        ) &&
-            (seat >= 1) &&
-            (seat <= WorldBodiesLimits.LocalSeatCount)
-        ) {
+        if (TryParseSeat(
+            number: out var seat,
+            token: token
+        )) {
             // Seat(slot) is right here: a "seatN" token names the seat identity itself, regardless of who currently
             // claims the slot.
             principal = Principal.Seat(slot: (seat - 1));

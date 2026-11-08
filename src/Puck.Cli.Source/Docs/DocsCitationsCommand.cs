@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -19,7 +18,7 @@ namespace Puck.Cli.Docs;
 // drift from what the code does.
 //
 // The console-verb vocabulary itself is BOOTED, not read from a file: with no --enumeration override, this
-// verb builds and runs the real Puck.World twice — headless and windowed — piping `help` over stdin each
+// verb builds and runs the real Puck.World twice — headless and windowed — reading `world.affordances` each
 // time and unioning the two vocabularies. Some command modules register only under one boot shape (a
 // presentation-only verb never registers headless), so either boot alone under-reports the surface.
 //
@@ -89,14 +88,6 @@ public static class DocsCitationsCommand {
     public static readonly Regex SourceLiteral = new(
         options: RegexOptions.Compiled,
         pattern: $@"""({DottedName})"""
-    );
-
-    // A `help` listing line, built by CommandRegistry.BuildHelpText as `{name} - {description}` — the name is
-    // group 1. The listing is one console record, so every line after its first carries the record's
-    // continuation indent (ConsoleRecord).
-    private static readonly Regex HelpLine = new(
-        options: RegexOptions.Compiled,
-        pattern: @"^\s*([a-z][A-Za-z0-9._-]*) - "
     );
 
     private static void AddProperties(JsonElement element, string prefix, HashSet<string> names) {
@@ -212,7 +203,7 @@ public static class DocsCitationsCommand {
                 );
             }
 
-            enumerationSource = "the live `help` enumeration (booted headless + windowed)";
+            enumerationSource = "the live `world.affordances` enumeration (booted headless + windowed)";
         }
 
         var sourceFiles = FileWalk.Enumerate(
@@ -396,139 +387,19 @@ public static class DocsCitationsCommand {
 
         return names;
     }
-    // One boot leg: `--headless true` or `--headless false`, piping `help` then the runner-owned `wire.errors`
-    // terminal observation over stdin, and folding every reported verb name into the shared set.
-    private static bool TryBootLeg(string artifact, string world, bool headless, string runDirectory, HashSet<string> enumerated, out string error) {
-        error = string.Empty;
-
-        var shape = (headless
-            ? "headless"
-            : "windowed"
-        );
-        var stateDirectory = Path.Combine(
-            path1: runDirectory,
-            path2: $"state-{shape}"
-        );
-        var input = $"help --full{Environment.NewLine}wire.errors{Environment.NewLine}";
-
-        Console.Error.WriteLine(value: $"docs citations: booting Puck.World {shape} to read its `help` vocabulary.");
-
-        CliProcessResult process;
-
-        try {
-            using var launch = WorldLaunch.Admit(request: new WorldLaunchRequest(Artifact: artifact, Step: "docs citations") {
-                ExitAfterSeconds = 20,
-                Shape = (headless ? WorldShape.Headless : WorldShape.Windowed),
-                StateDirectory = stateDirectory,
-                WorkingDirectory = runDirectory,
-                World = world,
-            });
-
-            process = launch.Run(input: input, timeout: TimeSpan.FromSeconds(value: 60));
-        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception or TimeoutException)) {
-            error = $"could not start the {shape} Puck.World boot: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
-            return false;
-        }
-
-        File.WriteAllText(
-            path: Path.Combine(
-                path1: runDirectory,
-                path2: $"{shape}-stdout.log"
-            ),
-            contents: process.Stdout,
-            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-        );
-        File.WriteAllText(
-            path: Path.Combine(
-                path1: runDirectory,
-                path2: $"{shape}-stderr.log"
-            ),
-            contents: process.Stderr,
-            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-        );
-
-        if (
-            process.TimedOut ||
-            (process.ExitCode != 0)
-        ) {
-            error = $"the {shape} Puck.World boot {(process.TimedOut
-                ? "timed out"
-                : $"exited {process.ExitCode}")}; transcripts are at {CliPaths.ToDisplay(fullPath: runDirectory)}.";
-
-            return false;
-        }
-
-        var found = 0;
-
-        foreach (var line in process.Stdout.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n')) {
-            var match = HelpLine.Match(input: line);
-
-            if (match.Success) {
-                _ = enumerated.Add(item: match.Groups[1].Value);
-                found++;
-            }
-        }
-
-        if (found == 0) {
-            error = $"the {shape} Puck.World boot exited 0 but its stdout carried no `name - description` help line; transcripts are at {CliPaths.ToDisplay(fullPath: runDirectory)}.";
-
-            return false;
-        }
-
-        return true;
-    }
-    // Resolves the Release Puck.World build (see WorldArtifactBuild) and boots it headless then windowed, piping `help` over stdin to each
-    // and unioning the reported verb names. Reuses CliProcess — the same build-then-run shape Canary and
-    // Parity already boot the real executable through — rather than a second process launcher.
+    // Read the same structured live vocabulary as puck verbs, including the world's authored commands.
     private static bool TryEnumerateLive(string root, out HashSet<string> enumerated, out string error) {
-        enumerated = new HashSet<string>(comparer: StringComparer.Ordinal);
-        error = string.Empty;
-
         using var run = RunDirectory.Create(prefix: ScratchPrefix);
-        var runDirectory = run.Path;
-
-        if (!WorldLaunch.TryResolve(
-            build: out var world,
-            error: out error,
-            logDirectory: runDirectory,
-            named: null,
-            repositoryRoot: root,
-            spirv: WorldLaunch.NeedsSpirv(backend: null, shape: WorldShape.Windowed),
-            verb: Verb
-        )) {
-            return false;
-        }
-
-        using (world) {
-            foreach (var headless in ((bool[])[true, false])) {
-                if (!TryBootLeg(
-                    artifact: world.Path,
-                    world: Path.Combine(paths: [root, "worlds", "debug"]),
-                    enumerated: enumerated,
-                    error: out error,
-                    headless: headless,
-                    runDirectory: runDirectory
-                )) {
-                    return false;
-                }
-            }
-        }
-
-        if (enumerated.Count == 0) {
-            error = $"both boots exited 0 but produced no `name - description` help line on stdout; transcripts are at {CliPaths.ToDisplay(fullPath: runDirectory)}.";
-
-            return false;
-        }
-
-        run.Conclude(passed: true);
-
-        return true;
+        var passed = WorldConsoleVerbs.TryEnumerate(repositoryRoot: root, runDirectory: run.Path,
+            verb: Verb, verbs: out var verbs, error: out error, includeAuthored: true);
+        enumerated = new HashSet<string>(collection: verbs.Keys, comparer: StringComparer.Ordinal);
+        run.Conclude(passed: passed);
+        return passed;
     }
 
     public static Command Create() {
         var enumerationOption = new Option<string?>(name: "--enumeration") {
-            Description = "The console verb list, one name per line, as the runtime `help` enumerates them; absent, Puck.World is built and booted to enumerate them live.",
+            Description = "The console verb list, one name per line, as the runtime `world.affordances` enumerates them; absent, Puck.World is built and booted to enumerate them live.",
         };
         var command = new Command(
             description: "Check the console-verb tokens skills and XML docs cite against vocabularies swept from the code.",
@@ -543,7 +414,7 @@ public static class DocsCitationsCommand {
             world-document field path the generated section schemas declare (`storage.userId`).
 
             Without --enumeration, Puck.World is built (Release) and booted headless and windowed
-            in a scratch run directory, piping `help` over stdin to each and unioning the two
+            in a scratch run directory, reading `world.affordances` over stdin from each and unioning the two
             vocabularies; nothing lands in the working directory.
 
             If a literally-registered verb is missing from the enumeration, nothing is reported

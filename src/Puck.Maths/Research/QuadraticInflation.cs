@@ -86,32 +86,22 @@ public readonly record struct QuadraticInflation {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="q"/> is not positive, <paramref name="d"/> is below two or a perfect square, or <paramref name="r"/> is zero.</exception>
     /// <exception cref="OverflowException">A partial-quotient product exceeds <see cref="long"/> — the period is too long for the width.</exception>
     public static QuadraticInflation FromQuadraticIrrational(long p, long q, long d, long r) {
-        Span<long> terms = stackalloc long[128];
-        int periodStart;
-        int periodLength;
+        Span<long> scratch = stackalloc long[128];
 
-        while (true) {
-            try {
-                _ = ContinuedFraction.Expand(
-                    d: d,
-                    p: p,
-                    periodLength: out periodLength,
-                    periodStart: out periodStart,
-                    q: q,
-                    r: r,
-                    terms: terms
-                );
-
-                break;
-            } catch (ArgumentException exception) when (((exception.ParamName == nameof(terms)) && (terms.Length < int.MaxValue))) {
-                var nextLength = ((terms.Length <= (int.MaxValue / 2))
-                    ? (terms.Length * 2)
-                    : int.MaxValue
-                );
-
-                terms = new long[nextLength];
-            }
-        }
+        _ = ContinuedFraction.ExpandGrowing(
+            d: d,
+            heap: out var heap,
+            p: p,
+            periodLength: out var periodLength,
+            periodStart: out var periodStart,
+            q: q,
+            r: r,
+            scratch: scratch
+        );
+        ReadOnlySpan<long> terms = ((heap is null)
+            ? scratch
+            : heap
+        );
 
         // The pre-period is only how the trajectory enters the geodesic; the closed geodesic — and so the inflation — is the
         // product of the period block alone. Compose the partial quotients as convergent matrices [[aᵢ, 1], [1, 0]].

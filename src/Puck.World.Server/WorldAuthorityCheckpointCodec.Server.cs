@@ -787,7 +787,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         WriteLongArray(writer: writer, values: state.RelativeRemainders);
         writer.WriteString(value: state.BodyMotionProgramName);
-        WriteIntentSource(
+        WorldWireLeaves.WriteIntentSource(
             writer: writer,
             source: state.Source
         );
