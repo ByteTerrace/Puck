@@ -926,6 +926,19 @@ pool later declares enters through `ReadsWhole` alone.
 
 ## Open items
 
+- Argon's adversarial review of step 2 (unverified until a fix lane reopens
+  each quotation; the lead holds the report): [high] `SymmetryOperand.CollectReads`
+  may omit `SymmetryOtherCell`, bypassing `SearchWidensAudience` and
+  `TransformWidensAudience`; [high] non-operator verbs (`world.properties`,
+  `world.interactions`, `world.fields`, `world.rule.hazards`, `world.patterns`,
+  `world.tables`, `world.topology`) may still read the authority's arena or
+  definition; [high] the replica tier's `Disclose` and
+  `WorldDisclosureImages.Definition` may omit `FieldProjection`, leaking
+  restricted field regions; [medium] `world.status`, `world.gravity`,
+  `world.flock` and `world.navigation` may read counters that vary with hidden
+  state; [medium] `WorldProjection.TryObservedRow` may drop `Domain` and
+  `Capacity`; [low] `RuleRefusal.SearchWidensAudience` may lack its catalog
+  attribute. A fix pass follows the step 1 fix pass, which shares files.
 - Argon's adversarial review of step 1: [high] `deal` leaks preceding hidden
   cells through `DealSlot` and position, which step 4 owns. Its remaining
   delivery findings are closed by the view/cursor work in decision 5.

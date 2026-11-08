@@ -72,9 +72,9 @@ opens the pause menu."
   not.
 - While a seat is engaged at a machine, the plane's tap of Menu reaches the
   machine as its Start and a hold of about a second opens the pause menu. The
-  hold is the always-active plane's decision, made from the held state
-  `BindingChordTracker` already keeps rather than a second hold detector, so
-  no engaged page can intercept it.
+  hold is the always-active plane's decision, made by the existing input
+  pattern matcher (a tap pattern and a hold pattern in one consumption group)
+  rather than a second hold detector, so no engaged page can intercept it.
 - Still no authored binding may name Menu. The machine's Start on a tap is the
   plane's own answer, not a row a world or the standard authors, so the
   engagement overlay needs no Start binding and the binding bar carries no
