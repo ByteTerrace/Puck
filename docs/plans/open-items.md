@@ -4257,6 +4257,10 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [medium] `puck_world_start` discards a build and asks for a restart when
+  any file under the checkout changes mid-build, documentation included (a
+  lane lost two builds to its own doc edits). Key the source state on what the
+  World's build reads, not the whole tree.
 - [medium] A `puck measure request` filed under the caller's own quiet lease
   queues its frozen-tree build behind the build lease that same holder owns,
   and waits until the outer lease ends (seen in a measurement window: the

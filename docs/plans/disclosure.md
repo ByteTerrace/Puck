@@ -1152,6 +1152,12 @@ commit, as machine readings are not a repository baseline.
 
 ## Open items
 
+- More seat-reachable control verbs: `player.confirm` acts on the host
+  keyboard from a seat's typed line (`PlayerCommandModule.Admission.cs`,
+  `ConfirmHandler`); `player.assign` (`PlayerAssignmentCommand.cs`) can name
+  any device; `pipeline.commit` changes the shared view. All take
+  `CommandAudience.Anyone`. Decide them as `player.claim`, `player.cycle` and
+  `pipeline.load` were decided.
 - Argon's adversarial review of step 1: [high] `deal` leaks preceding hidden
   cells through `DealSlot` and position, which step 4 owns. Its remaining
   delivery findings are closed by the view/cursor work in decision 5.
