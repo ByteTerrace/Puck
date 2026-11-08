@@ -50,6 +50,20 @@ public enum WorldAdmissionRefusal : byte {
 /// claims, issuer re-attestation).</para>
 /// </summary>
 public static class WorldAdmissionDoor {
+    // Document validation and live verification must interpret a keyed admission row identically. Keep only the
+    // row-to-attestation mapping here; the validator still reports shape errors and browser crypto deferrals itself.
+    internal static TrustListEntry TrustEntry(WorldAdmissionEntry entry, byte[] spki) => new(
+        PinnedId: new KeyId {
+            Algorithm = (entry.Algorithm ?? string.Empty),
+            Domain = (entry.Domain ?? string.Empty),
+            KeyHash = KeyId.ComputeKeyHash(subjectPublicKeyInfo: spki),
+            Subject = ((entry.Mode == WorldAdmissionTrustMode.Vouches) ? null : entry.Subject),
+        },
+        PublicKeySubjectPublicKeyInfo: spki,
+        Mode: ((entry.Mode == WorldAdmissionTrustMode.Vouches) ? AttestationTrustMode.Vouches : AttestationTrustMode.SignsDirectly),
+        Reach: NoReach,
+        MaximumAge: null
+    );
     private static TrustList BuildTrustList(IReadOnlyList<WorldAdmissionEntry> entries, TimeSpan? defaultMaximumAge) {
         var list = new List<TrustListEntry>(capacity: entries.Count);
 
@@ -68,24 +82,7 @@ public static class WorldAdmissionDoor {
             // whose Domain does not actually equal ComputeKeyHash(spki) (the root-self-certification rule), so an
             // authored typo refuses the WHOLE trust list rather than silently trusting a different root than the
             // document names.
-            var pinnedId = new KeyId {
-                Algorithm = (entry.Algorithm ?? string.Empty),
-                Domain = entry.Domain,
-                KeyHash = KeyId.ComputeKeyHash(subjectPublicKeyInfo: spki),
-                Subject = ((entry.Mode == WorldAdmissionTrustMode.Vouches)
-                ? null
-                : entry.Subject),
-            };
-
-            list.Add(item: new TrustListEntry(
-                PinnedId: pinnedId,
-                PublicKeySubjectPublicKeyInfo: spki,
-                Mode: ((entry.Mode == WorldAdmissionTrustMode.Vouches)
-                ? AttestationTrustMode.Vouches
-                : AttestationTrustMode.SignsDirectly),
-                Reach: NoReach,
-                MaximumAge: null
-            ));
+            list.Add(item: TrustEntry(entry: entry, spki: spki));
         }
 
         return new TrustList(

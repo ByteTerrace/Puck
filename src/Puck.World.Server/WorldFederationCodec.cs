@@ -182,13 +182,6 @@ public static partial class WorldFederationCodec {
     public const int ProjectionDeltaHeaderBytes = (DocumentHeaderBytes + 16);
 
     private static bool Finish(ref WireReader reader, out WireFailure failure) => reader.TryFinish(failure: out failure);
-    private static WorldTransferCommitMember ReadCommitMember(ref WireReader reader) {
-        var profile = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
-        var motion = WorldWireLeaves.ReadCommitMemberMotion(reader: ref reader);
-        var (memberId, companion) = WorldWireLeaves.ReadMemberIdentity(reader: ref reader);
-
-        return (motion with { Companion = companion, MemberId = memberId, Profile = profile });
-    }
     private static EntitySnapshot ReadEntity(ref WireReader reader, int ordinal) {
         var index = reader.ReadInt32();
         var position = reader.ReadFiniteVector(field: $"snapshot entity {ordinal} position");
@@ -357,21 +350,6 @@ public static partial class WorldFederationCodec {
 
         return true;
     }
-    private static void WriteCommitMember(WireWriter writer, WorldTransferCommitMember member) {
-        WorldIdentityProjectionWire.WriteOptional(
-            projection: member.Profile,
-            writer: writer
-        );
-        WorldWireLeaves.WriteCommitMemberMotion(
-            member: member,
-            writer: writer
-        );
-        WorldWireLeaves.WriteMemberIdentity(
-            companion: member.Companion,
-            memberId: member.MemberId,
-            writer: writer
-        );
-    }
     private static void WriteIntentSource(WireWriter writer, IntentSource source) {
         if (!WorldWireCodec.TryWriteIntentSource(
             source: source,
@@ -405,12 +383,11 @@ public static partial class WorldFederationCodec {
 
         var writer = new WireWriter(capacity: 4096);
 
-        writer.WriteString(value: sourceAuthority);
-        writer.WriteUInt64(value: transferId);
+        WorldWireLeaves.WriteTransferKey(writer: writer, key: new(SourceAuthority: sourceAuthority, TransferId: transferId));
         writer.WriteInt32(value: members.Count);
 
         foreach (var member in members) {
-            WriteCommitMember(
+            WorldWireLeaves.WriteCommitMember(
                 member: member,
                 writer: writer
             );
@@ -941,8 +918,7 @@ public static partial class WorldFederationCodec {
     public static byte[] EncodeTransferKey(string sourceAuthority, ulong transferId) {
         var writer = new WireWriter();
 
-        writer.WriteString(value: sourceAuthority);
-        writer.WriteUInt64(value: transferId);
+        WorldWireLeaves.WriteTransferKey(writer: writer, key: new(SourceAuthority: sourceAuthority, TransferId: transferId));
 
         return writer.ToArray();
     }
@@ -1077,8 +1053,10 @@ public static partial class WorldFederationCodec {
     public static bool TryDecodeCommit(ReadOnlySpan<byte> body, out string sourceAuthority, out ulong transferId, out WorldTransferCommitMember[] members, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
-        sourceAuthority = reader.ReadRequiredString(field: "commit source authority");
-        transferId = reader.ReadUInt64();
+        var key = WorldWireLeaves.ReadTransferKey(reader: ref reader);
+
+        sourceAuthority = key.SourceAuthority;
+        transferId = key.TransferId;
         members = [];
 
         var count = reader.ReadCount(
@@ -1097,7 +1075,7 @@ public static partial class WorldFederationCodec {
         members = new WorldTransferCommitMember[count];
 
         for (var index = 0; (index < count); index++) {
-            members[index] = ReadCommitMember(reader: ref reader);
+            members[index] = WorldWireLeaves.ReadCommitMember(reader: ref reader);
         }
 
         return Finish(
@@ -1779,8 +1757,10 @@ public static partial class WorldFederationCodec {
     public static bool TryDecodeTransferKey(ReadOnlySpan<byte> body, out string sourceAuthority, out ulong transferId, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
-        sourceAuthority = reader.ReadRequiredString(field: "transfer key source authority");
-        transferId = reader.ReadUInt64();
+        var key = WorldWireLeaves.ReadTransferKey(reader: ref reader);
+
+        sourceAuthority = key.SourceAuthority;
+        transferId = key.TransferId;
 
         return Finish(
             failure: out failure,

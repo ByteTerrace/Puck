@@ -143,4 +143,16 @@ float3 bloomTent(Texture2D<float4> image, SamplerState filter, BloomAxis x, Bloo
     }
     return color;
 }
+
+// The part of a colour a bloom cutoff selects to scatter: a smooth ramp by Rec. 709 luminance from none at half the
+// cutoff to all of it at one and a half, and the whole colour when no cutoff is set. The down pass selects with it and
+// the composites that take the selected light away again (sdf-bloom-apply, place) read the same ramp, so what one
+// scatters is what the other removes.
+float3 bloomSelected(float3 color, float cutoff) {
+    float3 selected = color;
+    if (cutoff > 0.0) {
+        selected *= smoothstep(cutoff * 0.5, cutoff * 1.5, dot(color, float3(0.2126, 0.7152, 0.0722)));
+    }
+    return selected;
+}
 #endif

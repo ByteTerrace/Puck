@@ -181,6 +181,15 @@ Measure draw/vertex
 counts, actual transform rows, program/material bytes, region residency and
 bakes; the lead measures frame times and edit-to-running on a quiet machine.
 
+## GPU residency
+
+A table the host writes each frame is a `GpuRegion` (`Puck.Abstractions/Gpu/Residency`). Create it with the
+profile constructor so it chooses ring, in place or staged by `GpuResidency.Select`, and grow it only through
+`Grow`, which chooses again and restages a region past a ring's share of the aperture; never select a policy or
+replace a region in the owner. A fixed policy (the always-staged mesh region, uniform frame blocks) uses the policy
+constructor. Round a constant-buffer block with `IGpuBindings.ConstantBufferBytes`. What `Grow` returns retires
+after the submissions that read the old buffers (`SdfWorldTables.Retire`).
+
 ## Far-cascade caster selection
 
 `SdfMeshOcclusion` and `sdf-mesh-occlusion.comp.hlsl` are the one classification

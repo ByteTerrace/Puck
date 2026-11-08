@@ -1714,6 +1714,16 @@ when the door builds its attestation trust list—it can never verify a claim—
 and a document authoring arrivals alone still admits no connecting peer.
 ## Federation transport (`WorldFederationCodec.cs`)
 
+`WorldWireLeaves` owns transfer keys and complete commit members shared by
+federation, checkpoints and durable crossing records. The key reader refuses
+a blank authority on every path. Replay carriers that pin rates separately
+use its motion-only member leaf instead.
+
+Portal forwarding and synthetic snapshot controllers build their semantic
+source profiles through `WorldInputCatalog.SnapshotSources`. The producer and
+authority install those sources through `WorldInputCatalog.CompileSources`,
+which owns profile validation and neutral source initialization.
+
 Outbound `WorldRemoteAuthority` construction requires the intended namespace.
 Destination documents author `host.authorityNamespace` independently of the
 `host.authority` endpoint; the peer must prove that namespace on every connection.
