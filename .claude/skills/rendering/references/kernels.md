@@ -365,7 +365,15 @@ exactness off its lowering without a GPU.
   with `name: default` reads `(unnamed)` there. The fence that reports a removal
   is only the first call after it, never evidence of which work hung. A lost
   Vulkan device reports `VK_EXT_device_fault` and its last pass checkpoints
-  (`VK_NV_device_diagnostic_checkpoints`) in the loss's message.
+  (`VK_NV_device_diagnostic_checkpoints`) in the loss's message. Under each
+  faulting address it names the objects bound there now, or unbound there
+  recently, by their `GpuObjectName`, or the nearest bound objects on either
+  side (`VulkanDeviceAddressBindings`, fed by
+  `VK_EXT_device_address_binding_report` whenever the device supports it): a
+  read just past a buffer's end shows as the nearest object below, and a read
+  of a released buffer as an unbound range. The boot log's
+  `[device-fault] VK_EXT_device_address_binding_report reporting` lines name each
+  object type the record receives reports for.
 - **Validation layers.** Under `--debug-layers`, any `[vulkan-debug]
   validation`, `SYNC-HAZARD-*` or `[d3d12-debug]` line is a bug to fix in the
   engine, never a message to filter. `--debug-layers full` adds Direct3D 12

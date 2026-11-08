@@ -34,6 +34,8 @@ public sealed unsafe class VulkanDeviceAddressBindings : IDisposable {
     private readonly Dictionary<(ulong Handle, ulong Base), Binding> m_bound = [];
     private readonly Binding[] m_unbound = new Binding[HistoryCapacity];
     private readonly Dictionary<ulong, string> m_names = [];
+    // The object types reported so far; the first report of each is announced once on standard error.
+    private readonly HashSet<uint> m_typesSeen = [];
     private readonly VulkanInstanceCommands m_instance;
     private GCHandle m_self;
     private nint m_messenger;
@@ -173,8 +175,8 @@ public sealed unsafe class VulkanDeviceAddressBindings : IDisposable {
             var sequence = ++m_sequence;
             var key = (handle, binding.BaseAddress);
 
-            if (sequence == 1L) {
-                Console.Error.WriteLine(value: $"[device-fault] {ExtensionName} reporting: first range [0x{binding.BaseAddress:x16}, +{binding.Size}) of {TypeName(objectType: objectType)} 0x{handle:x}");
+            if (m_typesSeen.Add(item: objectType)) {
+                Console.Error.WriteLine(value: $"[device-fault] {ExtensionName} reporting: first range of a {TypeName(objectType: objectType)}, [0x{binding.BaseAddress:x16}, +{binding.Size}) of 0x{handle:x}");
             }
 
             if (binding.BindingType == 0u) {

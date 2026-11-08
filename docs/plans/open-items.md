@@ -3057,20 +3057,24 @@ failing case is argued from source, not run):
   `sdf-mesh-shadow.vert.hlsl:8-9`, `IGpuRecorder.cs:111-122`; and, unconfirmed,
   a discarded recording that grew history leaves it uninitialized.
 
-- [high] A Vulkan cold bake of the debug world can still lose the device once:
-  a page fault (`read invalid`, a 1 MiB-aligned address) with the queue's
-  checkpoints at `started 'session$24$24/sdf.world$glass-shade'`, `finished
-  every pass before 'session$24$24/sdf.world$glass'`, on the first frame that
-  5×3 nested session view drew a glass draw (glass draws 0 to 1, three draws,
-  a 16 MiB mesh region). One of four runs after the stale-target fix; Direct3D
-  12 never loses it, consistent with another read past a buffer that its
-  bounded views answer with zero (the hazard in
-  [hazards](../development/hazards.md#silent-invariants)). Every loss so far
-  was in a tiny nested session view's glass passes. Next: a run with the
-  glass raster's and glass shading's reads bounded by their buffers' lengths
-  under GPU-assisted validation until a run hits it, or the views' extents and
-  each bound buffer's size logged per recording (a scratch diagnostic did this)
-  beside the checkpoints.
+- [medium] A Vulkan cold bake of the debug world lost the device in one of
+  four runs on an earlier tree: a page fault (`read invalid`, a 1 MiB-aligned
+  address) with the queue's checkpoints at `started
+  'session$24$24/sdf.world$glass-shade'`, `finished every pass before
+  'session$24$24/sdf.world$glass'`, on the first frame that 5×3 nested session
+  view drew a glass draw (glass draws 0 to 1, three draws, a 16 MiB mesh
+  region); Direct3D 12 never lost it. It no longer reproduces: nine windowed
+  Vulkan cold bakes on the RTX 4070, each from an empty `--cache-dir`, settled
+  their bakes with no loss, after the glass skip (the glass clear, raster and
+  shading now run only together, on a frame where a glass draw's box meets the
+  view's frustum, where the shading pass ran on every frame before) and the
+  full-allocation clear of a target certified clear. Nine clean runs leave a
+  one-in-four loss about a 7 % chance of hiding, so the cause stays unnamed. A
+  loss now names its read: under each fault address the report lists the
+  objects bound or recently unbound there, or the nearest bound objects on
+  either side (`VulkanDeviceAddressBindings`). Next: when a Vulkan loss recurs,
+  fix the object its report names; close this after a further batch of cold
+  bakes stays clean.
 - [medium] The bake's output differs by backend. On one tree, from empty
   stores, both backends bake the `world` residency to identical sample and
   triangle counts on repeat, but Vulkan's differ from Direct3D 12's by a small
