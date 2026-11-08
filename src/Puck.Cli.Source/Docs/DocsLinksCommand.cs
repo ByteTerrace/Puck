@@ -400,31 +400,30 @@ public static class DocsLinksCommand {
                     failures.Add(item: (category, $"{document}:{lineNumber}: {message}"));
                 }
 
-                // A fenced block is an example or a transcript, not a citation: its spans are not names.
-                if (!code) {
-                    foreach (Match span in Backticked.Matches(input: line)) {
-                        var content = span.Groups[1].Value;
+                // A fenced block is an example or a transcript; neither its spans nor its links are citations.
+                if (code) { continue; }
+                foreach (Match span in Backticked.Matches(input: line)) {
+                    var content = span.Groups[1].Value;
 
-                        if (DocsSymbols.CitedName(span: content) is { } name) {
-                            checkedCount++;
+                    if (DocsSymbols.CitedName(span: content) is { } name) {
+                        checkedCount++;
 
-                            switch (symbols.Resolve(name: name)) {
-                                case DocsSymbolVerdict.Missing:
-                                    failures.Add(item: ("symbol", $"{document}:{lineNumber}: symbol '{name}' names no declaration under src/ or tests/"));
+                        switch (symbols.Resolve(name: name)) {
+                            case DocsSymbolVerdict.Missing:
+                                failures.Add(item: ("symbol", $"{document}:{lineNumber}: symbol '{name}' names no declaration under src/ or tests/"));
 
-                                    break;
-                                case DocsSymbolVerdict.Unknown:
-                                    advisories.Add(item: $"{document}:{lineNumber}: symbol '{name}' is neither Puck's nor the runtime's, so its currency is not checked");
+                                break;
+                            case DocsSymbolVerdict.Unknown:
+                                advisories.Add(item: $"{document}:{lineNumber}: symbol '{name}' is neither Puck's nor the runtime's, so its currency is not checked");
 
-                                    break;
-                                default:
-                                    break;
-                            }
+                                break;
+                            default:
+                                break;
                         }
+                    }
 
-                        if (corpus && (rot.Branch(span: content) is { } branchMessage)) {
-                            failures.Add(item: ("branch", $"{document}:{lineNumber}: {branchMessage}"));
-                        }
+                    if (corpus && (rot.Branch(span: content) is { } branchMessage)) {
+                        failures.Add(item: ("branch", $"{document}:{lineNumber}: {branchMessage}"));
                     }
                 }
 

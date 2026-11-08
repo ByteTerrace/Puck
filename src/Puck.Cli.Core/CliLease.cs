@@ -575,9 +575,16 @@ public sealed class CliLease : IDisposable {
             throw;
         }
     }
-    /// <summary>Publishes guard metadata whole. A reader that denies replacement causes a refusal, never an in-place
-    /// truncation visible to other readers.</summary>
-    private static void WriteMetadata(string path, string contents) => AtomicFile.WriteAllText(contents: contents, path: path);
+    /// <summary>Publishes diagnostic metadata while holding the exclusive guard. A reader that denies deletion of an
+    /// old metadata file must not keep the released guard: overwrite that file in place when replacement is refused.
+    /// Such a reader can observe incomplete metadata, which is not authority; the guard alone excludes holders.</summary>
+    private static void WriteMetadata(string path, string contents) {
+        try {
+            AtomicFile.WriteAllText(contents: contents, path: path);
+        } catch (IOException) when (File.Exists(path: path)) {
+            File.WriteAllText(contents: contents, path: path);
+        }
+    }
     /// <summary>Decides from a queued ticket's metadata whether its process is gone; null when the metadata is unrecognized.</summary>
     private static bool? ProcessGone(string[] lines, DateTimeOffset now) {
         if (Identity(lines: lines) is not { } identity) { return null; }

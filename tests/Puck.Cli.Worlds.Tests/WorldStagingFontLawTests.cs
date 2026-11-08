@@ -241,6 +241,8 @@ public sealed class WorldStagingFontLawTests {
                 paths.Add(item: path);
             }
             Assert.Equal(expected: 2, actual: paths.Distinct(comparer: StringComparer.Ordinal).Count());
+            // Restaging owns the old output, including files an author or previous run marked read-only.
+            File.SetAttributes(fileAttributes: FileAttributes.ReadOnly, path: staged);
             Assert.True(condition: WorldStaging.TryStageComposition(catalog: CliWorldVocabulary.EnsureInstalled(),
                 path: Path.Combine(path1: source, path2: "world.puck"),
                 worlds: [new WorldCompiledWorld(Entry: true, Json: CanonicalJsonDocument.Serialize(node: new JsonObject { ["schema"] = WorldDefinition.SchemaVersion }), Name: "empty")],

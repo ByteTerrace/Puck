@@ -29,7 +29,9 @@ public sealed class LanesCommandLawTests {
 
     private sealed class Layout : IDisposable {
         public GitScratchCheckout Checkout { get; } = new();
+
         public string Leases => Path.Combine(path1: Path.GetDirectoryName(path: Checkout.Root)!, path2: "leases");
+
         public Dictionary<string, string> Paths { get; } = [];
 
         public Layout() {
@@ -53,7 +55,7 @@ public sealed class LanesCommandLawTests {
             _ = Directory.CreateDirectory(path: Path.Combine(path1: Leases, path2: "gpu"));
             Guard = FileLock.TryAcquire(path: Path.Combine(path1: Leases, path2: "gpu.guard"));
             File.WriteAllLines(path: Path.Combine(path1: Leases, path2: "gpu", path3: "holder"), contents: Metadata(holder: "boot-runner", pid: Environment.ProcessId, ticks: ticks));
-            File.WriteAllText(path: Path.Combine(path1: Leases, path2: "gpu", path3: "checkout"), contents: (Paths["lane-a"] + "\n"));
+            File.WriteAllText(path: Path.Combine(path1: Leases, path2: "gpu", path3: "checkout"), contents: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Environment.ProcessId}\n{ticks}\n{Paths["lane-a"]}\n"));
             _ = Directory.CreateDirectory(path: Path.Combine(path1: Leases, path2: "gpu.queue"));
             File.WriteAllLines(path: Path.Combine(path1: Leases, path2: "gpu.queue", path3: "000000000003"), contents: Metadata(holder: "lane-e dead", pid: 2147483, ticks: 1));
             File.WriteAllLines(path: Path.Combine(path1: Leases, path2: "gpu.queue", path3: "000000000007"), contents: Metadata(holder: "capture-runner", pid: Environment.ProcessId, ticks: ticks));
@@ -62,7 +64,8 @@ public sealed class LanesCommandLawTests {
             _ = Directory.CreateDirectory(path: Path.Combine(path1: Checkout.Root, path2: ".claude", path3: "scratch"));
         }
 
-        public void ExitLog(string lane, string line) => File.WriteAllText(path: Path.Combine(path1: Checkout.Root, path2: ".claude", path3: "scratch", path4: (lane + ".log")), contents: ("working\n" + line + "\n"));
+        public void ExitLog(string lane, string line) => File.WriteAllText(path: Path.Combine(path1: Checkout.Root, path2: ".claude", path3: "scratch", path4: (lane + ".log")), contents: (("working\n" + line) + "\n"));
+
         public FileStream? Guard { get; set; }
 
         public Task<IReadOnlyList<LanesCommand.LaneRow>> SnapshotAsync(TimeSpan later) => LanesCommand.SnapshotAsync(baseRef: "main", leaseRoot: Leases, now: (DateTimeOffset.UtcNow + later), repository: Checkout.Root, stall: TimeSpan.FromMinutes(minutes: 30));
@@ -84,7 +87,6 @@ public sealed class LanesCommandLawTests {
         Assert.Empty(collection: rows["lane-a"].Leases);
         Assert.False(condition: CliLease.Inspect(name: "gpu", now: DateTimeOffset.UtcNow, root: layout.Leases).HolderAlive);
     }
-
     [Fact]
     public async Task EachWorktreeReportsItsGitStateLeaseLogAndStall() {
         using var layout = new Layout();
@@ -118,7 +120,6 @@ public sealed class LanesCommandLawTests {
         // The same layout read now has written within the interval, so nothing stalls.
         Assert.DoesNotContain(collection: await layout.SnapshotAsync(later: TimeSpan.Zero), filter: static row => row.Stall);
     }
-
     [Fact]
     public async Task TheReportChangesNothingAndTheJsonFormListsEveryLane() {
         using var layout = new Layout();
@@ -128,7 +129,7 @@ public sealed class LanesCommandLawTests {
         var result = await ConsoleCapture.RunSplitAsync(run: () => LanesCommand.ExecuteAsync(baseRef: "main", clock: TimeProvider.System, json: true, leaseRoot: layout.Leases, repository: layout.Paths["lane-a"], stall: TimeSpan.FromMinutes(minutes: 30)));
 
         Assert.True(condition: (result.ExitCode == 0), userMessage: result.Error);
-        var lanes = result.Output.Split(separator: '\n', options: StringSplitOptions.RemoveEmptyEntries).Select(selector: static line => JsonDocument.Parse(json: line).RootElement).ToArray();
+        var lanes = result.Output.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\n').Select(selector: static line => JsonDocument.Parse(json: line).RootElement).ToArray();
 
         Assert.Equal(expected: 6, actual: lanes.Length);
         Assert.Contains(collection: lanes, filter: static lane => (lane.GetProperty(propertyName: "name").GetString() == "lane-b"));
@@ -138,11 +139,10 @@ public sealed class LanesCommandLawTests {
         Assert.True(condition: File.Exists(path: Path.Combine(path1: layout.Leases, path2: "gpu.queue", path3: "000000000003")), userMessage: "a dead ticket is left for its next waiter to drop");
         var text = await ConsoleCapture.RunSplitAsync(run: () => LanesCommand.ExecuteAsync(baseRef: "main", clock: new OffsetClock(offset: TimeSpan.FromHours(hours: 2)), json: false, leaseRoot: layout.Leases, repository: layout.Checkout.Root, stall: TimeSpan.FromMinutes(minutes: 30)));
 
-        Assert.Equal(expected: 6, actual: text.Output.Split(separator: '\n', options: StringSplitOptions.RemoveEmptyEntries).Length);
+        Assert.Equal(expected: 6, actual: text.Output.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\n').Length);
         // Only the two active lanes with no lease and no log are stalled: the holder, the waiter, the finished lane and the main checkout are not.
-        Assert.Equal(expected: ["lane-d", "lane-e"], actual: text.Output.Split(separator: '\n').Where(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "STALL")).Select(selector: static line => line.Split(separator: ' ', options: StringSplitOptions.RemoveEmptyEntries)[1]));
+        Assert.Equal(expected: ["lane-d", "lane-e"], actual: text.Output.Split(separator: '\n').Where(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "STALL")).Select(selector: static line => line.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ')[1]));
     }
-
     [Fact]
     public async Task AFindingsOnlyLaneIsJudgedByItsLogAndReportAndADeliveryOutranksTheExit() {
         using var layout = new Layout();
@@ -173,19 +173,18 @@ public sealed class LanesCommandLawTests {
         Assert.EndsWith(expectedEndString: "lane-e-findings.md", actualString: rows["lane-e"].Report);
         Assert.Equal(expected: "done", actual: rows["lane-c"].State);
         Assert.Equal(expected: ("findings-only", "exited", null), actual: (rows["lane-d"].Mode, rows["lane-d"].State, rows["lane-d"].Report));
-        var messages = LanesCommand.Changes(previous: before, current: after, now: DateTimeOffset.UtcNow.Add(later));
+        var messages = LanesCommand.Changes(previous: before, current: after, now: DateTimeOffset.UtcNow.Add(timeSpan: later));
 
-        Assert.Contains(collection: messages, filter: static message => (message.StartsWith(comparisonType: StringComparison.Ordinal, value: "lane-e: finished (reported, agy exit 0") && message.Contains(value: "report ", comparisonType: StringComparison.Ordinal)));
+        Assert.Contains(collection: messages, filter: static message => (message.StartsWith(comparisonType: StringComparison.Ordinal, value: "lane-e: finished (reported, agy exit 0") && message.Contains(comparisonType: StringComparison.Ordinal, value: "report ")));
         Assert.Contains(collection: messages, filter: static message => (message == "lane-d: finished (exited, codex exit 1; the process exited without a report)"));
     }
-
     [Fact]
     public async Task WatchingPrintsOnlyWhatChanged() {
         using var layout = new Layout();
         var before = await layout.SnapshotAsync(later: TimeSpan.FromHours(hours: 2));
         var now = DateTimeOffset.UtcNow.AddHours(hours: 2);
 
-        Assert.Empty(collection: LanesCommand.Changes(previous: before, current: before, now: now));
+        Assert.Empty(collection: LanesCommand.Changes(current: before, now: now, previous: before));
         layout.ExitLog(lane: "lane-e", line: "agy exit 0");
         File.Delete(path: Path.Combine(path1: layout.Leases, path2: "gpu", path3: "holder"));
         var messages = LanesCommand.Changes(previous: before, current: await layout.SnapshotAsync(later: TimeSpan.FromHours(hours: 2)), now: now);

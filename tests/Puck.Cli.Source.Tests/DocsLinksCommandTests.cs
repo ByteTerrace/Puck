@@ -29,6 +29,8 @@ public sealed class DocsLinksCommandTests {
     private static (int ExitCode, string Output) Check(string document) {
         using var directory = new TemporaryDirectory();
 
+        directory.WriteText(name: "src/DocsLinksCommand.cs", text: "class DocsLinksCommand { void Run() {} }");
+
         directory.WriteText(
             name: "docs/target.md",
             text: Target
@@ -68,7 +70,7 @@ public sealed class DocsLinksCommandTests {
         Assert.Contains(
             actualString: output,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "FAIL: docs/document.md:1: anchor 'target.md#missing-heading' does not resolve"
+            expectedSubstring: "FAIL [anchor]: docs/document.md:1: anchor 'target.md#missing-heading' does not resolve"
         );
     }
     [Fact]
@@ -126,7 +128,7 @@ public sealed class DocsLinksCommandTests {
         Assert.Contains(
             actualString: brokenOutput,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "FAIL: docs/document.md:7: anchor '#not-a-heading' does not resolve"
+            expectedSubstring: "FAIL [anchor]: docs/document.md:7: anchor '#not-a-heading' does not resolve"
         );
     }
 }

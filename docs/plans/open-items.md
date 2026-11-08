@@ -41,7 +41,7 @@ milestone. The owner requested its baseline and implementation plan, which
 
 0. [Duplication audit](#refactoring-campaign) [high, the owner's priority]: the
    seven-lane audit's drifted copies and boundary duplicates are fixed first
-   (tooling's architecture, identity, release, lease, path, lock and deletion
+   (tooling's architecture, identity, release and lease
    copies; physics and world contact responses and the remote-response gate;
    rendering's readback state machines), then its live copies as a batch, and
    small helpers ride along. Each audit lane's remaining findings are filed in
