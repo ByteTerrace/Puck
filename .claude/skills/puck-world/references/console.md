@@ -744,16 +744,21 @@ name only itself; naming another is refused by name.
 
 **Disclosure chokepoint.** A seat's own console session reaches every verb, so a
 read-back of state values never reads `WorldServer.Definition` for it directly.
-`IWorldConsoleAuthority.ReadView` (reached through `TryResolveReadView`) mints a
-`WorldStateReadView`: the live document as `WorldStateDisclosure.Disclose` shows it
-to the acting principal, and the whole document for the console — its placements
-included, each dealt child re-dealt from the rows the principal may read, and each
-responsive placement whose `respond` conditions read a row withholding a cell from
-the principal handed its `holding` mask without the entries that read a withheld
-cell, so it shows the first entry left, or its authored prototype. `world.state`,
+`WorldServer.ReadView(CommandContext)` mints the caller's live `WorldRecipientView`
+at its admission ceiling. Sessions reuse `WorldSessionObservation.View`, including
+live Observe admission; a missing or ended session sees the undisclosed document.
+`WorldStateReadView` is the console adapter over this capability until the final
+cleanup in the disclosure plan. It never reads authority state separately.
+What a view cannot reconstruct is the operator's (`Principal.IsAuthority`): the
+authority diagnostics, `world.debug-view report` and `goto` (a mode stays
+bindable, since it only selects the shared screen's presentation),
+`world.save`, and `world.status`'s `session-drift` and `dirty`, which a
+recipient's status omits.
+Placements come from the view; restricted dealt slots are still step 4's work.
+`world.state`,
 `world.row`, `world.tabletop`, `world.hud.template` and `world.placements` read through it; `world.match`
 refuses a row the view withholds anything from. Whether a row withholds is decided by its declaration
-(`WorldStateDisclosure.ReadsWholeRow`: its policy, a cell policy its storage admits, a containing zone), never by
+(`WorldRecipientView.ReadsWhole`: its policy, a cell policy its storage admits, a containing zone), never by
 which cells are hidden now, so every door (`view.Withheld`, observations, whole-row edits, HUD template
 placeholders, presentation bindings, replica row replacements) answers zero, one and many hidden cells alike.
 `puck disclosure worlds/debug/disclosure-probe.puck` runs a second seat and two sessions through those doors in worlds that differ only in hidden cells and names every door that answers differently. A direct read of a withheld cell is

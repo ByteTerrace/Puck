@@ -17,6 +17,7 @@
         <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
         <ProjectReference Include="../Puck.Physics/Puck.Physics.csproj" />
         <ProjectReference Include="../Puck.State.Rules/Puck.State.Rules.csproj" />
+        <ProjectReference Include="../Puck.State.Search/Puck.State.Search.csproj" />
         <ProjectReference Include="../Puck.State/Puck.State.csproj" />
         <ProjectReference Include="../Puck.Text/Puck.Text.csproj" />
         <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />

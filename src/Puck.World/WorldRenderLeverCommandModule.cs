@@ -322,7 +322,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             description: $"Auditions the sky rows printed by world.lighting: {WorldSkyLayerForms.Spelling}. Session-only; mute takes precedence over solo.",
             forms: WorldSkyLayerForms,
             handler: (context, args) => {
-                CommandResult Echo() => new(Output: $"[world.sky-layer: solo={((settings.SkyLayers.Solo < 0) ? "off" : settings.SkyLayers.Solo.ToString(provider: CultureInfo.InvariantCulture))} | {string.Join(separator: " | ", values: Enumerable.Range(0, (server.Definition.Render.Sky?.Layers?.Count ?? 0)).Select(selector: index => $"sky[{index}] muted={settings.SkyLayers.Muted(index: index)} included={settings.SkyLayers.Includes(index: index)}"))}]");
+                CommandResult Echo() => new(Output: $"[world.sky-layer: solo={((settings.SkyLayers.Solo < 0) ? "off" : settings.SkyLayers.Solo.ToString(provider: CultureInfo.InvariantCulture))} | {string.Join(separator: " | ", values: Enumerable.Range(0, (server.ReadView(context).Definition.Render.Sky?.Layers?.Count ?? 0)).Select(selector: index => $"sky[{index}] muted={settings.SkyLayers.Muted(index: index)} included={settings.SkyLayers.Includes(index: index)}"))}]");
                 if (args.Count == 0) { return Echo(); }
                 var solo = args.Is(index: 0, value: "solo");
                 var index = -1;
@@ -330,7 +330,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                 var mute = ((args.Count == 3) ? ParseOnOff(token: args[2]) : null);
 
                 if ((!solo && !args.Is(index: 0, value: "mute")) || (args.Count != (solo ? 2 : 3)) || (!solo && (mute is null)) ||
-                    (!off && (!int.TryParse(args[1], CultureInfo.InvariantCulture, out index) || (index < 0) || (index >= (server.Definition.Render.Sky?.Layers?.Count ?? 0))))) {
+                    (!off && (!int.TryParse(args[1], CultureInfo.InvariantCulture, out index) || (index < 0) || (index >= (server.ReadView(context).Definition.Render.Sky?.Layers?.Count ?? 0))))) {
                     return WorldSkyLayerForms.Refuse();
                 }
                 return SubmitLever(link, context.Principal, (solo ? WorldSessionLevers.SkySolo : WorldSessionLevers.SkyMute), index, Echo, ((mute == true) ? 1d : 0d));
@@ -594,7 +594,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             description: $"Reads or pins the camera exposure: {WorldExposureForms.Spelling}. No argument echoes the world's render.exposure (mode, ev100, bounds, compensation, adaptation, local adaptation), the session's pin and, for each view of the world's latest frame, the EV100 it renders at, its multiplier per nit and the luminance its meter read about the camera (none while the irradiance volume has no probe there, or the exposure is manual). 'pin <ev100>' holds every view the session presents, nested worlds included, manual at that EV100 with no local adaptation, as render.exposure.hold does; 'pin' alone holds the first view's current EV100; 'pin off' releases it. Presentation only: the pin never reaches the document or simulation state.",
             forms: WorldExposureForms,
             handler: (context, args) => {
-                var exposure = WorldRenderExposure.Resolve(exposure: server.Definition.Render.Exposure);
+                var exposure = WorldRenderExposure.Resolve(exposure: server.ReadView(context).Definition.Render.Exposure);
                 var authored = string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, $"mode={exposure.Mode.ToString().ToLowerInvariant()} ev100={exposure.Ev100:0.##} minimum={exposure.Minimum:0.##} maximum={exposure.Maximum:0.##} compensation={exposure.Compensation:0.##} adaptation={exposure.Adaptation:0.##}s local={exposure.Local:0.##}");
                 string Pin() => ((settings.ExposurePin is { } pinned) ? pinned.ToString(format: "0.##", provider: CultureInfo.InvariantCulture) : "off");
                 // The lever lands through the server, after this answer: echo what was asked.
@@ -634,7 +634,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             name: "world.residency",
             description: $"Reads every residency held by the presentation's world package, including routed and session views: {WorldResidencyForms.Spelling} (metres, default 8). Each report names its diagnostic residency-id, independent of its display name. Echoes the latest bake's groups and when they landed (finished) and became resident (their words in the mesh region), counted from the bake's start, both for every group and for the groups whose planned box lies within the radius of the primary seat's camera (the occupied area), with when half and nine tenths of those landed and which landed last; its store loads and their span; the time its plan and restart took; the resident meshes' region bytes by level of detail; the store's reads, bytes and read and decode thread-seconds; the mesh region's held, used, written and owed bytes and the frames and seconds it owed words; the latest program's instances, words, builds and its emission and build milliseconds; and the irradiance volume's probe cache bytes. 'pending' marks a time not reached yet. Presentation only; reads change nothing.",
             forms: WorldResidencyForms,
-            handler: (_, args) => {
+            handler: (context, args) => {
                 var radius = 8f;
 
                 if (args.Count == 1) {
@@ -659,7 +659,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             name: "world.probe",
             description: $"Reads the settled irradiance probes about a point: {WorldProbeForms.Spelling}. A changing trace or pending publication is marked unsettled with the published GPU and live CPU windows. Otherwise echoes spacing, window, answering corners and total weight for a receiver facing the normal (up by default), then each corner's cell, relocated position, offset, back-face share, validity, sweeps, measured cubes' mean sky and luminance, and weight terms: trilinear share, positive normal cosine, octahedral depth visibility and final weight. reference-clear is the exact static-mesh segment check for diagnosing sampling; it never changes the gather.",
             forms: WorldProbeForms,
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (((args.Count != 3) && (args.Count != 6)) || !args.TryFloats(count: args.Count, start: 0, values: out var values) || values.Any(predicate: static value => !float.IsFinite(f: value))) {
                     return WorldProbeForms.Refuse();
                 }
@@ -683,7 +683,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             forms: WorldRenderScaleForms,
             description: $"Controls view resolution: {WorldRenderScaleForms.Spelling}. No argument echoes ceiling, saved quality floor, grid and signal. A pin is session-only and must lie between the floor and ceiling; auto releases it and resumes the policy from its grid. Sweeps inside the same ceiling allocate nothing. Defaults are off; the floor is Quarter unless a view's quality or tier authors another.",
             handler: (context, args) => {
-                settings.ReadQuality(definition: server.Definition);
+                settings.ReadQuality(definition: server.ReadView(context).Definition);
                 if (!WorldRenderScaleCommand.TryParse(args: in args, command: out var command, refusal: out var refusal)) {
                     return ((refusal is null) ? WorldRenderScaleForms.Refuse(args: in args, got: args.Tail(start: 0).ToString()) : CommandResult.Error(output: $"[{refusal}]"));
                 }
@@ -829,7 +829,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                     return WorldQualityForms.Refuse(args: in args, got: args[0].ToString());
                 }
 
-                if (server.Definition.Render.Preset(tier: tier) is not { } preset) {
+                if (server.ReadView(context).Definition.Render.Preset(tier: tier) is not { } preset) {
                     return CommandResult.Error(output: $"[world.quality: this world authors no {QualityTiers.Name(tier: tier)} preset]");
                 }
 

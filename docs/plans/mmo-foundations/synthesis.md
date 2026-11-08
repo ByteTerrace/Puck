@@ -114,13 +114,8 @@ the memo:
    found it absent from `src/` ([seams, citation check](seams.md#7-citation-check)).
    Disclosure step 1 has since landed: `WorldRecipientView` and
    `WorldDeliveryCursor` exist and the session sink delivers through them
-   **[opened]** (`src/Puck.World.Server/WorldSessionSink.cs:27-29`):
-
-   ```csharp
-       private readonly WorldDeliveryCursor m_cursor = new();
-       private readonly WorldDeliveryRows m_rows = new();
-       private readonly WorldRecipientView m_view = server.DeliveryView(observation.Session, observation.Tier, () => observation.CanObserve);
-   ```
+   (`WorldSessionSink`, `WorldSessionObservation.View`). Step 2 also routes
+   reads through that live view without advancing the delivery cursor.
 
    Body disclosure still runs through `Redact` at the hub until I1. The order
    of work keeps step 1 as the floor the table and interest-management steps
@@ -947,17 +942,8 @@ as outside replay determinism **[opened]** (`src/Puck.World.Server/WorldAdjacenc
 
 Lane E found the missing per-tick cap. The seam clamp now admits a
 neighbour's body pushes and terrain sweep through one per-body budget and keeps
-them behind the body's ownership faces **[opened]**
-(`src/Puck.World.Server/WorldAdjacencyContactField.cs:25-30`):
-
-```csharp
-/// <para><b>Untrusted neighbours.</b> A neighbour's bodies and solid geometry move a local body only through
-/// <see cref="WorldPopulation.AdmitAdjacencyResponse"/>, which bounds their combined displacement per body per tick by
-/// that body's locally owned reach and keeps it, and the body's outward speed, behind every ownership face the body is
-/// still owned behind: a crossing comes from the body's own motion. A query naming no local body takes nothing from a
-/// neighbour. Body contacts are settled by one responder per authority pair
-/// (<see cref="WorldCrossAuthoritySettlement"/>).</para>
-```
+them behind the body's ownership faces (`WorldPopulation.AdmitAdjacencyResponse`).
+`WorldCrossAuthoritySettlement` selects one responder per authority pair.
 
 Tick-addressed neighbour records remain the
 [replay packet](../open-items.md#transfers-federation-and-server).

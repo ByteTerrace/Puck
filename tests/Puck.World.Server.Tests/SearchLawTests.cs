@@ -7,7 +7,7 @@ namespace Puck.World.Server.Tests;
 
 /// <summary>A search job explores document-defined positions without exposing hypothetical state to the installed
 /// section, survives checkpoint transport, and returns deterministic answers.</summary>
-public sealed class SearchLawTests {
+public sealed partial class SearchLawTests {
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
@@ -199,9 +199,9 @@ public sealed class SearchLawTests {
 
         Assert.True(condition: (alone.Allowance < RuleCapacity.MaxWorkUnitsPerTick));
         Assert.True(condition: (alone.Allowance >= alone.Minimum));
-        // Both jobs fold their token, turn and verdict rows before one advances: 2 + 1 + 1 cells each.
+        // Both jobs fold four cells, and bound two audience checks over those cells and their three rows.
         Assert.Equal(
-            (alone.Allowance - 4L),
+            (alone.Allowance - (4L + (2L * (4L + 3L)))),
             shared[0].Work.Allowance
         );
         Assert.Equal(

@@ -173,11 +173,11 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
             name: Verb,
             description: $"Cuts the World's field on an axis-aligned plane and writes the SDF distance diagnostic to a PNG: {WorldSliceForms.Spelling}. The explicit form names the plane (x|y|z = offset) and the square on it by its centre (u, v) and half side, where (u, v) is (Z, Y) on an x cut, (X, Z) on a y cut and (X, Y) on a z cut; the placement form cuts through a placement's position (plus offset along the axis) over a square reaching {WorldSliceRequest.PlacementMargin} times its creation's reach. bands sets the iso-distance spacing in metres (default a tenth of the half side), res the samples a side ({SdfFieldSlice.MinResolution}..{SdfFieldSlice.MaxResolution}, default {WorldSliceRequest.DefaultResolution}). The mesh bake's sampler (the one field walk) reads the program at every sample with its tetrahedral gradient, one frame's bake share at a time, before any pending bake group. The image is two panels: on the left the distance, warm outside, cool inside, a thin line every band and a white surface line, so bands that bunch or spread show a field that is not the distance; on the right |grad d|, white within {(SdfFieldSlice.GradientTolerance * 100f)}% of one (exact), blue below (a bound underestimates), red above (an overestimate), the surface black; grey answers no shape. Where the answered field stops rising away from the surface (at least {(SdfFieldSlice.ClipShare * 100f)}% of the outside samples rise slower than {SdfFieldSlice.ClipGradient}), the samples from that ceiling up are clipped: dull magenta on both panels and left out of the statistics. Echoes the armed slice on stdout; the written file and the statistics (the field's range, the inside share, clipped= and its ceiling, world= the share the unowned segments answered, then |grad d| min, mean, max and the share off one, overall and near-surface within three pixels of the surface) land on stderr as [world.slice] ... -> <path>; world.wait bakes <seconds> holds a script until it lands. One slice at a time. Refused with no renderer.",
             forms: WorldSliceForms,
-            handler: (_, args) => {
+            handler: (context, args) => {
                 var tokens = new string[args.Count];
 
                 for (var index = 0; (index < tokens.Length); index++) { tokens[index] = args[index].ToString(); }
-                if (!TryParse(args: tokens, definition: server.Definition, refusal: out var refusal, request: out var request)) {
+                if (!TryParse(args: tokens, definition: server.ReadView(context).Definition, refusal: out var refusal, request: out var request)) {
                     return refusal;
                 }
                 return Arm(request: request);
@@ -201,7 +201,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
                         : context.Slot
                     );
 
-                    if (NearestSpawnedPlacement(body: seat) is not { } nearest) {
+                    if (NearestSpawnedPlacement(context, body: seat) is not { } nearest) {
                         return CommandResult.Error(output: $"[{SaveVerb}: 'near' names the placement of the spawn point nearest seat {(seat + 1)}'s body, and none stands there]");
                     }
 
@@ -223,7 +223,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
                     path3: $"{placement}-{axis}.png"
                 );
                 for (var index = 2; (index < args.Count); index++) { tokens[(index + 1)] = args[index].ToString(); }
-                if (!TryParse(args: tokens, definition: server.Definition, refusal: out var refusal, request: out var request)) {
+                if (!TryParse(args: tokens, definition: server.ReadView(context).Definition, refusal: out var refusal, request: out var request)) {
                     return refusal;
                 }
                 return Arm(request: request);
@@ -233,12 +233,12 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
 
     // The placement sharing its id with the spawn point nearest the body (a world that names a spawn point after the
     // placement it stands before), or null when the body is inactive or no such spawn point names a placement.
-    private string? NearestSpawnedPlacement(int body) {
+    private string? NearestSpawnedPlacement(CommandContext context, int body) {
         if (server.Body(index: body) is not { } subject) {
             return null;
         }
 
-        var definition = server.Definition;
+        var definition = server.ReadView(context).Definition;
         var position = subject.FixedPosition.ToVector3();
         string? nearest = null;
         var best = float.PositiveInfinity;

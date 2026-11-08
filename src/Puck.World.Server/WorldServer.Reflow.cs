@@ -112,8 +112,9 @@ public sealed partial class WorldServer {
                 ) {
                     return (Definition: ((WorldDefinition?)null), Tick: 0UL, Reason: WorldSessionObservation.QueryRefusal);
                 }
+                var disclosed = ReadView(principal).Definition;
                 var template = ReflowTemplate(
-                    definition: m_document.Definition,
+                    definition: disclosed,
                     request: request
                 );
 
@@ -128,7 +129,7 @@ public sealed partial class WorldServer {
                 )) {
                     return (Definition: ((WorldDefinition?)null), Tick: 0UL, Reason: admission.Describe());
                 }
-                return (Definition: ((WorldDefinition?)m_document.Definition), Tick: m_tick.CompletedTick, Reason: string.Empty);
+                return (Definition: ((WorldDefinition?)disclosed), Tick: m_tick.CompletedTick, Reason: string.Empty);
             });
 
             definition = captured.Definition;

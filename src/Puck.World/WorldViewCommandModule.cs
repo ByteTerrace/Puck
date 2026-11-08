@@ -394,7 +394,7 @@ internal sealed partial class WorldViewCommandModule(IServerLink link, WorldView
             name: "world.view.pick",
             description: $"Requests or reads a presentation-only GPU pixel pick: {WorldViewPickForms.Spelling} — the view is the rendered instance world.view.panes names (view or pane<i> source), and defaults to the presented world view, the first seat's (what primary names), so world.view.pick <x> <y> asks what is under a pixel of the view on screen; normalized coordinates in [0,1) request one visibility pixel and hold the call until a rendered frame answers it (a paused World still renders) or the call's answer deadline passes; omitting them echoes pending or the last completed geometry kind, source ordinal, material, host placement or body, and the winning shape's transform slot. world.view.pick <view-or-instance> finding <id> resolves primary to the first seat's rendered instance (world before presentation) and returns a retained diagnostic finding even while its view is off; run world.debug-view report first to populate findings. The record carries its snapshot, provenance, predicate, measurements and budget. The asynchronous readback belongs to the captured frame's identity table and never sends simulation input.",
             forms: WorldViewPickForms,
-            handler: (context, args) => Pick(args: args, session: context.TextSession),
+            handler: (context, args) => Pick(context, args: args, session: context.TextSession),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(

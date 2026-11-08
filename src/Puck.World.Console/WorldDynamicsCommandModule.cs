@@ -103,7 +103,7 @@ public sealed class WorldDynamicsCommandModule(IWorldConsoleAuthority authority)
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return authority.CreateServerQueryCommand(
             description: "Reports the dynamics census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): one segment per row — the authored f/zeta/r triple, the derived decay/osc/k3 constants (the SAME fixed-point derivation the simulation reads), and how many document members reference it.",
-            describe: server => DescribeDynamics(definition: server.Definition),
+            describe: (server, view) => DescribeDynamics(definition: view.Definition),
             name: "world.dynamics"
         );
     }
