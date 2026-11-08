@@ -197,6 +197,37 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the opaque draws the latest frame's mesh pass and shadow cascades rasterize.</summary>
     public uint OpaqueDrawCount => (m_meshDrawCount - m_glassDrawCount);
 
+    // The staged draws that are glass, by index, as of the mesh revision they were collected at.
+    private readonly List<int> m_glassIndices = [];
+    private long m_glassIndicesRevision = -1;
+
+    /// <summary>Returns whether the glass pass would draw any glass draw of the staged list under a cull: the test the
+    /// pass's own selection applies to each draw's host box (<see cref="SdfMeshCull.Keeps"/>), so a draw no host box
+    /// bounds counts as drawn.</summary>
+    /// <param name="cull">The glass pass's cull.</param>
+    /// <returns><see langword="false"/> when the pass keeps no glass draw, so it rasterizes nothing.</returns>
+    public bool GlassMaySee(in SdfMeshCull cull) {
+        if (m_glassDrawCount == 0) {
+            return false;
+        }
+        if (m_glassIndicesRevision != m_meshRevision) {
+            m_glassIndices.Clear();
+            for (var index = 0; (index < m_stagedCount); index++) {
+                if (m_stagedDraws[index].Glass) { m_glassIndices.Add(index); }
+            }
+            m_glassIndicesRevision = m_meshRevision;
+        }
+        foreach (var index in m_glassIndices) {
+            SdfMeshBox? box = (SdfMeshBox.TryOf(draw: in m_stagedDraws[index], box: out var bounded) ? bounded : null);
+
+            if (cull.Keeps(box: in box)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // Packs new draws or a new revision, growing the region when the list needs more
     // bytes; the upload sends the slot what it owes.
     private void StageMeshRegion(SdfFrame frame) {

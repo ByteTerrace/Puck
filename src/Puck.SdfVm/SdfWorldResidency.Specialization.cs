@@ -93,17 +93,7 @@ public sealed partial class SdfWorldResidency {
                     CancelShadeBuild();
                     m_shadeRequest = request;
                     m_shadeFailure = null;
-                    var target = ((BytecodeExtension() == ".dxil") ? ShaderTarget.Dxil : ShaderTarget.Spirv);
-                    var catalog = m_pipelines.Catalog;
-
-                    m_shadeBuild.Start(build: token => SdfShadePipelines.BuildAsync(
-                        cache: catalog.Pipelines,
-                        cancellationToken: token,
-                        compiler: catalog.ShadeCompiler,
-                        device: device,
-                        request: request,
-                        target: target
-                    ));
+                    StartShadeBuild(device: device, request: request);
                 }
             }
         }
@@ -136,6 +126,21 @@ public sealed partial class SdfWorldResidency {
         m_shadesInBins = (levers.Bins && (m_shadeActive.Length != 0));
     }
 
+    // Kept apart from PrepareShade, which runs every frame: the build's closure captures a parameter, so a method
+    // holding it allocates the closure on entry whether or not it starts a build.
+    private void StartShadeBuild(IGpuDeviceContext device, SdfShadeKernels request) {
+        var target = ((BytecodeExtension() == ".dxil") ? ShaderTarget.Dxil : ShaderTarget.Spirv);
+        var catalog = m_pipelines.Catalog;
+
+        m_shadeBuild.Start(build: token => SdfShadePipelines.BuildAsync(
+            cache: catalog.Pipelines,
+            cancellationToken: token,
+            compiler: catalog.ShadeCompiler,
+            device: device,
+            request: request,
+            target: target
+        ));
+    }
     // An overtaken or released compile is canceled without waiting and retired to the catalog, which disposes a result
     // it completed anyway on the pool as it finishes and outlives this residency; a device loss drains the catalog's
     // retired builds before the device is recreated (ReleaseShadePipelines), the host's teardown before it is destroyed.

@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.Launcher;
 
@@ -40,6 +42,8 @@ public sealed class HostFrameTimeline {
     private readonly long[] m_late = new long[Capacity];
     private readonly int[] m_collections = new int[(Capacity * 3)];
     private readonly long[] m_allocated = new long[Capacity];
+    private readonly long[] m_threadAllocated = new long[Capacity];
+    private readonly long[] m_produceBlocked = new long[Capacity];
     private readonly long[] m_open = new long[PhaseCount];
     private readonly long[] m_tickCosts = new long[Capacity];
 
@@ -56,6 +60,9 @@ public sealed class HostFrameTimeline {
     private int m_gen1;
     private int m_gen2;
     private long m_allocatedStart;
+    private long m_threadAllocatedStart;
+    private long m_blockedAtMark;
+    private long m_openProduceBlocked;
     private int m_openSteps;
     private long m_openLate;
 
@@ -79,6 +86,7 @@ public sealed class HostFrameTimeline {
         var gen1 = GC.CollectionCount(generation: 1);
         var gen2 = GC.CollectionCount(generation: 2);
         var allocated = GC.GetTotalAllocatedBytes(precise: false);
+        var threadAllocated = GC.GetAllocatedBytesForCurrentThread();
 
         if (m_iterationStart != 0L) {
             var slot = ((int)(m_count % Capacity));
@@ -86,6 +94,8 @@ public sealed class HostFrameTimeline {
             m_intervals[slot] = (now - m_iterationStart);
             m_pauses[slot] = (pause - m_pauseStart);
             m_allocated[slot] = (allocated - m_allocatedStart);
+            m_threadAllocated[slot] = (threadAllocated - m_threadAllocatedStart);
+            m_produceBlocked[slot] = m_openProduceBlocked;
             m_steps[slot] = m_openSteps;
             m_late[slot] = m_openLate;
             m_collections[(slot * 3)] = (gen0 - m_gen0);
@@ -104,6 +114,7 @@ public sealed class HostFrameTimeline {
         Array.Clear(array: m_open);
         m_openSteps = 0;
         m_openLate = 0L;
+        m_openProduceBlocked = 0L;
         m_iterationStart = now;
         m_phaseStart = now;
         m_pauseStart = pause;
@@ -111,14 +122,23 @@ public sealed class HostFrameTimeline {
         m_gen1 = gen1;
         m_gen2 = gen2;
         m_allocatedStart = allocated;
+        m_threadAllocatedStart = threadAllocated;
+        m_blockedAtMark = GpuFenceBlocking.Blocked;
     }
-    /// <summary>Charges the time since the previous mark to <paramref name="phase"/>.</summary>
+    /// <summary>Charges the time since the previous mark to <paramref name="phase"/>, and, for
+    /// <see cref="HostFramePhase.Produce"/>, the part of it the thread spent blocked on submission fences
+    /// (<see cref="GpuFenceBlocking"/>). Marks run on the thread whose iteration this is.</summary>
     /// <param name="phase">The phase that just ran.</param>
     public void Mark(HostFramePhase phase) {
         var now = Time.GetTimestamp();
+        var blocked = GpuFenceBlocking.Blocked;
 
         m_open[((int)phase)] += (now - m_phaseStart);
+        if (phase == HostFramePhase.Produce) {
+            m_openProduceBlocked += ((long)((blocked - m_blockedAtMark) * ((double)m_frequency / Stopwatch.Frequency)));
+        }
         m_phaseStart = now;
+        m_blockedAtMark = blocked;
     }
     /// <summary>Records the fixed steps the iteration ran.</summary>
     /// <param name="steps">The step count.</param>
@@ -270,12 +290,19 @@ public sealed class HostFrameTimeline {
         );
 
         // The frame thread's own work per iteration: produce and simulate, the two phases a frame's cost lives in.
+        // Produce's fence waits (the device still finishing earlier frames' work, produce-fence) are read apart from the
+        // work it did (produce-work); the two sum to produce for each iteration.
         AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce", second: null);
+        AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce-work", second: null, lessBlocked: true);
+        AppendSeries(builder: builder, indices: indices, label: "produce-fence", values: m_produceBlocked);
         AppendPhases(builder: builder, first: HostFramePhase.Simulate, indices: indices, label: "simulate", second: null);
         AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce+simulate", second: HostFramePhase.Simulate);
         // Produce split by whether the iteration ran a step, where presentation work a frame carries beside a tick shows.
         AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce with a step", second: null, stepped: true);
         AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce without one", second: null, stepped: false);
+        AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce-work with a step", second: null, stepped: true, lessBlocked: true);
+        AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce-work without one", second: null, stepped: false, lessBlocked: true);
+        AppendThreadAllocation(builder: builder, indices: indices);
 
         var order = Enumerable.Range(
             count: count,
@@ -294,7 +321,7 @@ public sealed class HostFrameTimeline {
             builder.Append(value: '\n');
             builder.Append(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"  #{indices[i]} {intervals[i]:0.00} ms{((i == busiestAt) ? " (busiest)" : "")}: input={Milliseconds(ticks: m_phases[phases]):0.00} commands={Milliseconds(ticks: m_phases[(phases + 1)]):0.00} simulate={Milliseconds(ticks: m_phases[(phases + 2)]):0.00} ({m_steps[slot]} steps) begin={Milliseconds(ticks: m_phases[(phases + 3)]):0.00} produce={Milliseconds(ticks: m_phases[(phases + 4)]):0.00} present={Milliseconds(ticks: m_phases[(phases + 5)]):0.00} wait={Milliseconds(ticks: m_phases[(phases + 6)]):0.00} (late {Milliseconds(ticks: m_late[slot]):0.00}) gc={m_collections[(slot * 3)]}/{m_collections[((slot * 3) + 1)]}/{m_collections[((slot * 3) + 2)]} pause={TimeSpan.FromTicks(value: m_pauses[slot]).TotalMilliseconds:0.00} allocated={m_allocated[slot]}"
+                handler: $"  #{indices[i]} {intervals[i]:0.00} ms{((i == busiestAt) ? " (busiest)" : "")}: input={Milliseconds(ticks: m_phases[phases]):0.00} commands={Milliseconds(ticks: m_phases[(phases + 1)]):0.00} simulate={Milliseconds(ticks: m_phases[(phases + 2)]):0.00} ({m_steps[slot]} steps) begin={Milliseconds(ticks: m_phases[(phases + 3)]):0.00} produce={Milliseconds(ticks: m_phases[(phases + 4)]):0.00} (fence {Milliseconds(ticks: m_produceBlocked[slot]):0.00}) present={Milliseconds(ticks: m_phases[(phases + 5)]):0.00} wait={Milliseconds(ticks: m_phases[(phases + 6)]):0.00} (late {Milliseconds(ticks: m_late[slot]):0.00}) gc={m_collections[(slot * 3)]}/{m_collections[((slot * 3) + 1)]}/{m_collections[((slot * 3) + 2)]} pause={TimeSpan.FromTicks(value: m_pauses[slot]).TotalMilliseconds:0.00} allocated={m_allocated[slot]} thread-allocated={m_threadAllocated[slot]}"
             );
         }
 
@@ -318,10 +345,9 @@ public sealed class HostFrameTimeline {
     }
 
     // Appends one phase's (or two phases' summed) distribution over the iterations, or over those that ran a step or
-    // none when stepped says which; nothing when no iteration qualifies.
-    private void AppendPhases(StringBuilder builder, long[] indices, string label, HostFramePhase first, HostFramePhase? second, bool? stepped = null) {
+    // none when stepped says which, less produce's fence waits when lessBlocked; nothing when no iteration qualifies.
+    private void AppendPhases(StringBuilder builder, long[] indices, string label, HostFramePhase first, HostFramePhase? second, bool? stepped = null, bool lessBlocked = false) {
         var values = new List<double>(capacity: indices.Length);
-        var total = 0.0;
 
         for (var i = 0; (i < indices.Length); i++) {
             var slot = ((int)(indices[i] % Capacity));
@@ -336,11 +362,25 @@ public sealed class HostFrameTimeline {
             if (second is { } other) {
                 ticks += m_phases[(phases + ((int)other))];
             }
+            if (lessBlocked) {
+                ticks -= m_produceBlocked[slot];
+            }
 
             values.Add(item: Milliseconds(ticks: ticks));
-            total += values[^1];
         }
 
+        AppendDistribution(builder: builder, label: label, values: values);
+    }
+    // Appends a per-iteration series' distribution, in milliseconds.
+    private void AppendSeries(StringBuilder builder, long[] indices, string label, long[] values) {
+        var read = new List<double>(capacity: indices.Length);
+
+        foreach (var index in indices) {
+            read.Add(item: Milliseconds(ticks: values[((int)(index % Capacity))]));
+        }
+        AppendDistribution(builder: builder, label: label, values: read);
+    }
+    private static void AppendDistribution(StringBuilder builder, string label, List<double> values) {
         if (values.Count == 0) {
             return;
         }
@@ -350,7 +390,23 @@ public sealed class HostFrameTimeline {
         Array.Sort(array: sorted);
         builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $"\n  {label}: avg={(total / sorted.Length):0.00} p50={Percentile(fraction: 0.5, sorted: sorted):0.00} p99={Percentile(fraction: 0.99, sorted: sorted):0.00} max={sorted[^1]:0.00} ms"
+            handler: $"\n  {label}: avg={sorted.Average():0.00} p50={Percentile(fraction: 0.5, sorted: sorted):0.00} p99={Percentile(fraction: 0.99, sorted: sorted):0.00} max={sorted[^1]:0.00} ms"
+        );
+    }
+    // Appends the frame thread's allocated bytes per iteration: its distribution and total.
+    private void AppendThreadAllocation(StringBuilder builder, long[] indices) {
+        var sorted = new long[indices.Length];
+
+        for (var i = 0; (i < indices.Length); i++) {
+            sorted[i] = m_threadAllocated[((int)(indices[i] % Capacity))];
+        }
+        Array.Sort(array: sorted);
+        var total = 0L;
+
+        foreach (var bytes in sorted) { total += bytes; }
+        builder.Append(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"\n  frame thread allocated: avg={(total / sorted.Length)} p50={sorted[Math.Min(sorted.Length - 1, sorted.Length / 2)]} p99={sorted[Math.Min(sorted.Length - 1, (int)(0.99 * sorted.Length))]} max={sorted[^1]} total={total} bytes"
         );
     }
     private double Milliseconds(long ticks) => ((ticks * 1000.0) / m_frequency);

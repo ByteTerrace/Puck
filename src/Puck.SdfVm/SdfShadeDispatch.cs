@@ -23,27 +23,32 @@ public sealed class SdfShadeDispatch {
     // The most groups one dispatch names on an axis, on both backends.
     private const ulong MaxGroups = 65535UL;
 
-    private readonly IReadOnlyList<Job> m_jobs;
-    private readonly IReadOnlyList<Bin> m_bins;
+    // The backing arrays, which the recording doors iterate without an enumerator; callers read the read-only views.
+    private readonly Job[] m_jobs;
+    private readonly Bin[] m_bins;
+    private readonly IReadOnlyList<Job> m_jobsView;
+    private readonly IReadOnlyList<Bin> m_binsView;
     private readonly IReadOnlyList<string> m_identities;
     // The extent's tiles, a binned job's argument record's stride between bins.
     private readonly uint m_tiles;
     private (SdfProgram? Scene, SdfShadeProgram? Default, bool Enabled, uint Width, uint Height, uint Lights, bool Glass, bool Binned)? m_key;
 
     private SdfShadeDispatch(Job[] jobs, Bin[] bins, string[] identities, uint tiles) {
-        m_jobs = Array.AsReadOnly(jobs);
-        m_bins = Array.AsReadOnly(bins);
+        m_jobs = jobs;
+        m_bins = bins;
+        m_jobsView = Array.AsReadOnly(jobs);
+        m_binsView = Array.AsReadOnly(bins);
         m_identities = Array.AsReadOnly(identities);
         m_tiles = tiles;
     }
 
     /// <summary>The unsplit plan's bounded jobs, in raster order; empty for a binned plan.</summary>
-    public IReadOnlyList<Job> Jobs => m_jobs;
+    public IReadOnlyList<Job> Jobs => m_jobsView;
     /// <summary>The binned plan's bins in bin order (<c>SdfWorldPackage.ShadeBins</c> at most); empty for an unsplit
     /// plan.</summary>
-    public IReadOnlyList<Bin> Bins => m_bins;
+    public IReadOnlyList<Bin> Bins => m_binsView;
     /// <summary>Whether the plan shades in bins.</summary>
-    public bool Binned => (m_bins.Count != 0);
+    public bool Binned => (m_bins.Length != 0);
     /// <summary>The canonical identities any job may execute, retained through submission retirement.</summary>
     public IReadOnlyList<string> Identities => m_identities;
 

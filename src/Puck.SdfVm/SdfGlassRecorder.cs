@@ -60,6 +60,17 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
 
         m_owner.Begin(residency: residency);
         var tables = residency.Staged(context: recording.Context);
+
+        m_owner.NoteGlassExtent(instance: m_context.Instance, width: recording.RenderWidth, height: recording.RenderHeight);
+        // A frame with no glass in view skipped the clear and the raster, leaving the sums and the glass target as an
+        // earlier frame's glass left them, so this pass must not read them: it leaves its lit image standing for the opaque
+        // one. Its fragment makes that stand-in possible, and the runtime refuses it for a graph that cannot.
+        if (!m_owner.GlassSeen(instance: m_context.Instance, view: m_view, context: recording.Context)) {
+            return (recording.MayStandIn
+                ? RenderGraphPackageOutcome.DrewNothing
+                : throw new InvalidOperationException(message: $"The glass shading pass of '{m_context.Instance}' has no glass in view and its graph cannot leave the lit image standing, so it would read sums the skipped glass passes did not clear."));
+        }
+
         var frame = residency.Frame!;
         var index = Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1));
 

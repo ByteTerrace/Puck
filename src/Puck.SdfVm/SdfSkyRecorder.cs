@@ -43,6 +43,8 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
 
     // Per frame slot, the tables the slot's pass set was written against.
     private readonly SdfWorldTables?[] m_portTables;
+    // Per frame slot, the lit image view the slot's pass set binds.
+    private readonly nint[] m_portLit;
     // Per slot, the infinity-view image each array element of the slot's set binds now, and the tables whose filler a
     // zero there stands for; a filler that already sits in an element is not written again, while a leased image always
     // is, since its handle may name a new image once the old one is released.
@@ -70,6 +72,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         m_temporal = fragment.Resources.Any(predicate: static resource => resource.History);
         m_fragmentPass = fragment.Passes.Single(predicate: pass => string.Equals(a: pass.Name, b: context.Part, comparisonType: StringComparison.Ordinal));
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
+        m_portLit = new nint[context.InFlightFrames];
         m_skyViewTables = new SdfWorldTables?[context.InFlightFrames];
         m_skyViewImages = new nint[context.InFlightFrames][];
         for (var slot = 0; (slot < m_skyViewImages.Length); slot++) { m_skyViewImages[slot] = new nint[SdfWorldPackage.SkyViewCount]; }
@@ -161,14 +164,29 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
     }
 
-    // Writes, once per slot and tables, a filler at every member, then each port at the member its version reads or
-    // writes it through. A slot's ports stay the same storages for the recorder's life.
+    // The lit image this recording reads: the glass shading pass's output, or the opaque image it stands for while no
+    // glass is in view.
+    private nint LitOf(in RenderGraphPackageRecording recording) {
+        for (var port = 0; (port < m_fragmentPass.Inputs.Count); port++) {
+            var name = m_fragmentPass.Inputs[port].Name;
+
+            if ((name is not (SdfSkyEnvironmentGraph.Input or SdfSkyEnvironmentGraph.MapInput or SdfSkyEnvironmentGraph.ScreensInput)) && (ReadMemberOf(version: name) == SdfWorldPackage.LitImage)) {
+                return recording.Inputs[port].Image.ImageViewHandle;
+            }
+        }
+
+        return 0;
+    }
+    // Writes, once per slot, tables and lit image, a filler at every member, then each port at the member its version
+    // reads or writes it through. A slot's ports stay the same storages for the recorder's life, except the lit input.
     private void BindPorts(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
         var slot = recording.Slot;
+        var lit = LitOf(recording: in recording);
 
-        if (ReferenceEquals(objA: m_portTables[slot], objB: tables)) {
+        if (ReferenceEquals(objA: m_portTables[slot], objB: tables) && (m_portLit[slot] == lit)) {
             return;
         }
+        m_portLit[slot] = lit;
 
         var bindings = m_context.Services.Bindings;
         var layout = SdfWorldInterfaces.SkyParameters.Layout;
