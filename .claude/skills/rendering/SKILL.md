@@ -19,9 +19,13 @@ query evaluator (`SdfFieldEvaluator`) and `maths-usage`.
 
 Read [authored shading](references/authored-shading.md) for `SdfShadeProgram`,
 the op table, CPU admission, slice ownership, helper-closed cost, shadow demand
-and generated interpreter/emitter semantics, shared GPU phase invocation, and
-bounded dispatch planner. CPU admission proves neither driver spill behavior nor
-the measured dispatch margin; those remain in the author-shader plan.
+and generated interpreter/emitter semantics, shared GPU phase invocation, the
+bounded dispatch planner, and the three views and glass kernels (plain,
+interpreter, specialized set) with their one publication door. CPU admission
+proves neither driver spill behavior nor the measured dispatch margin; those
+remain in the author-shader plan. A views or glass register reading names its
+kernel: `[pipeline-statistics]` lines (Vulkan) print `sdf-world-views`,
+`sdf-world-views-plain` and `sdf-world-views.shade-<set>` apart.
 
 ## Camera bloom
 

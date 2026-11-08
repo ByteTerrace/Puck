@@ -25,7 +25,7 @@ checked, which does not establish the surrounding claims.
 6. **Do the steps measure before committing?**
    - **No (Finding 10).** Step 1 deletes `applyWeathering` before Step 2 measures Tier 1; Step 2 measures Tier 1 on `weathered` alone while the other 4 fixed-function layers (`paint`, `inset`, `flow`, `cel`) remain compiled in `sdf-light-stage.hlsli`, biasing both the register count and runtime delta; and Step 5 adds `SdfShadeDispatch` (`MaxWork`) *after* Step 4 may have declined binning.
 7. **What did the memo miss that would cost a rewrite later?**
-   - **Glass pass flow & contact reveal** ([`sdf-glass.comp.hlsl:260-388`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass.comp.hlsl#L260-L388)), **static-copy object-space flow velocity transform** ([`shade-flow.hlsli:95-101`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/shade-flow.hlsli#L95-L101)), and **analytic gradient noise `sdfLatticeNoiseGradient3`** ([`sdf-noise.hlsli:160-188`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-noise.hlsli#L160-L188)) (Finding 2).
+   - **Glass pass flow & contact reveal** ([`sdf-glass-stage.hlsli:260-388`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass-stage.hlsli#L260-L388)), **static-copy object-space flow velocity transform** ([`shade-flow.hlsli:95-101`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/shade-flow.hlsli#L95-L101)), and **analytic gradient noise `sdfLatticeNoiseGradient3`** ([`sdf-noise.hlsli:160-188`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-noise.hlsli#L160-L188)) (Finding 2).
    - **Cel shading (`SdfToon`) is per-light + post-light**, not a pre-light surface layer, plus `row 25.w` holds glass `ShadowDensity` and `passGroup` holds live `world.toon` (Finding 3).
    - **`wrap` and `normal` outputs in `views` break `sdfSurfaceStage`'s shadow-cascade unqueried gate (`SDF_SHADOW_UNQUERIED = 255`)**, leaking 100 klx sunlight indoors (Finding 4).
    - **GI probe relight (`SdfMeshIrradiance.Shade` / `sdfProbeShade`)** reads only scalar base material fields (`Albedo`, `Metal`, `Bleed`, `Wrap`, `Emissive`), so procedural materials whose base color or emission lives in `shade` bounce black or wrong in indirect lighting (Finding 9).
@@ -66,7 +66,7 @@ checked, which does not establish the surrounding claims.
     // light stage and the glass pass. One implementation, so an opaque surface and a glass surface wearing one flow move
     // alike.
     ```
-  - [`src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass.comp.hlsl:260-274`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass.comp.hlsl#L260-L274), [`298`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass.comp.hlsl#L298), [`320`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass.comp.hlsl#L320), [`385-388`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass.comp.hlsl#L385-L388):
+  - [`src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass-stage.hlsli:260-274`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass-stage.hlsli#L260-L274), [`298`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass-stage.hlsli#L298), [`320`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass-stage.hlsli#L320), [`385-388`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass-stage.hlsli#L385-L388):
   - [`src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-noise.hlsli:160-188`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-noise.hlsli#L160-L188):
   - [`src/Puck.SdfVm/Assets/Shaders/Sdf/shade/shade-flow.hlsli:95-101`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/shade-flow.hlsli#L95-L101):
 - **Failing case:**
@@ -156,7 +156,7 @@ checked, which does not establish the surrounding claims.
 - **Severity:** High
 - **Memo section:** `§3.4` ([`docs/plans/author-shaders.md:507-527`](../../../docs/plans/author-shaders.md)), `§3.6` ([`docs/plans/author-shaders.md:569-586`](../../../docs/plans/author-shaders.md)), `§3.8` ([`docs/plans/author-shaders.md:627-632`](../../../docs/plans/author-shaders.md))
 - **Code citations:**
-  - [`src/Puck.SdfVm/SdfKernelSet.cs:23-37`](../../../src/Puck.SdfVm/SdfKernelSet.cs#L23-L37):
+  - [`src/Puck.SdfVm/SdfKernelSet.cs:24-39`](../../../src/Puck.SdfVm/SdfKernelSet.cs#L24-L39):
     ```csharp
     public SdfKernelSet(IReadOnlyList<ReadOnlyMemory<byte>> bytecode) {
         ArgumentNullException.ThrowIfNull(argument: bytecode);
@@ -169,6 +169,7 @@ checked, which does not establish the surrounding claims.
         }
 
         m_bytecode = [.. bytecode];
+        m_contentKey = Puck.Abstractions.Gpu.GpuPipelineCacheStore.ContentKeyOf(parts: m_bytecode);
     }
 
     /// <summary>Gets every kernel, in pipeline order.</summary>

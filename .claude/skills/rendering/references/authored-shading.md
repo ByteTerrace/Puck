@@ -8,7 +8,12 @@ vocabulary's `WorldShadeLowering` uses the ordinary parser, lexical scopes,
 template/function expansion and compile-time loops; it does not run a second DSL.
 
 The stamp and allowed phase reads are `SdfShadeOps.Inputs`; output members and
-types are `SdfShadeProgram.OutputType`. There is no author buffer address or
+types are `SdfShadeProgram.OutputType`. A light's direction, reach, probe share
+and visibility are evaluated once (`sdfLightInputs`) and read by both the default
+response and the light phase's stamp: `light.visibility` is the share the default
+response lets through (the cascade slot's, or the probes' where no cascade
+measured it, for a directional; the probes' share for a traced point light; one
+otherwise), and `light.occlusion` is the surface's ambient occlusion. There is no author buffer address or
 neighbour read. Runtime parameters occupy a separate typed block. Structural
 constants enter code; runtime data does not. Canonical words, parameter layout
 and the live semantics fingerprint determine identity. Author names are reporting

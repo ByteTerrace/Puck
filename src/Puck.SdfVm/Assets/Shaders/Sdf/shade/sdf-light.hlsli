@@ -259,15 +259,18 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
 //   E = L * A * cos / (d^2 + A / pi) on a surface facing it, exact on the axis of a disc of that area.
 // A specular lobe's scale is the light's illuminance, pi times its weight, since sdfMaterialSpecular answers the BRDF
 // times the cosine. A wrap of 0 reduces each wrapped term to max(n.l, 0).
-// The stage and authored stamp share this calculation. The authored stamp requests every term; ordinary shading
-// requests only the terms its light kind uses, preserving the no-program path's work.
+// The one evaluation of a light's direction, reach, probe share and visibility, which the default response and an
+// authored light phase's stamp both read. `visibility` is the share of the light the default response lets through:
+// the cascade slot's (the probes' where no cascade measured it) for a directional, the probes' share for a traced point
+// light, and one for every other kind. The authored stamp requests every term; ordinary shading requests only the
+// terms its light kind uses, preserving the no-program path's work.
 struct SdfLightInputs { float3 direction; float reach; float probeShare; float visibility; };
 SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, bool authored) {
     SdfLightInputs inputs;
     inputs.direction = light.position;
     inputs.reach = 1.0;
     inputs.probeShare = 1.0;
-    inputs.visibility = surface.ambientOcclusion;
+    inputs.visibility = 1.0;
     if (light.kind == SDF_LIGHT_POINT) {
         inputs.reach = sdfPointReach(light.record, light.position, surface.position, inputs.direction);
     } else if (light.kind == SdfLightScreen || (authored && light.kind != SDF_LIGHT_DIRECTIONAL)) {
@@ -281,9 +284,11 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
          (light.kind == SDF_LIGHT_POINT && light.weight * inputs.reach > 0.0))) {
         inputs.probeShare = sdfMeshLightVisibility(surface.probes, (uint)light.index);
     }
-    if (authored || light.kind == SDF_LIGHT_DIRECTIONAL) {
+    if (light.kind == SDF_LIGHT_DIRECTIONAL) {
         inputs.visibility = !surface.cascaded && surface.probed && light.record.Shadows != 0u && light.index >= 0
             ? inputs.probeShare : sdfLightVisibility(light.index, surface.shadowVisibility, surface.ambientOcclusion, surface.shadowMeasured);
+    } else if (light.kind == SDF_LIGHT_POINT) {
+        inputs.visibility = inputs.probeShare;
     }
     return inputs;
 }
@@ -310,7 +315,7 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
         }
     } else if (light.kind == SDF_LIGHT_POINT) {
         float3 pointDirection = inputs.direction;
-        float reach = (light.weight * inputs.reach) * inputs.probeShare;
+        float reach = (light.weight * inputs.reach) * inputs.visibility;
         if (reach > 0.0) {
             float pointLambert = sdfWrapDiffuse(dot(normal, pointDirection), surface.material.wrap);
 

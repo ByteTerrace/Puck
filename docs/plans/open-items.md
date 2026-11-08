@@ -52,16 +52,19 @@ milestone. The owner requested its baseline and implementation plan, which
    view. Below 60 FPS two frames no longer fit in
    the 30 Hz floor, so every refresh redraws both far layers, the frame stays
    slow, and a view that drops below 60 there tends to stay below it until the
-   far cascade itself costs less. Next: the views pass's registers, which the
-   authored-shading interpreter now sets: 255 on Vulkan (8 of 48 warps on the
-   RTX 4070), 98 % register allocation with 16 % of the warps active on
-   Direct3D 12. Its light phase, inlined in the light walk, raises views from
-   168 registers to 255, and taking the probe gather's state out of the walk
-   moves no count, so the cure is keeping the interpreter out of the pixels that
-   run no program ([author shaders](author-shaders.md) steps 3 and 4, which
-   step 2's reading makes required). The gather's weights still spill to
-   local memory on Direct3D 12, and `world.indirect off` still removes a third
-   of views on Vulkan as the gather's work. Then the
+   far cascade itself costs less. Next: read the views pass's time now that a
+   frame with no active program (the debug world's default, the lever on
+   layers) records the plain views and glass kernels, which hold no
+   interpreter: on the RTX 4070 under Vulkan views falls from 255 registers
+   (8 of 48 warps) to 128 (16), and PIX on Direct3D 12 reads achieved compute
+   warps on views at 24 % against the interpreter kernel's 15 %
+   ([author shaders](author-shaders.md) step 3; the timing is a queued
+   measurement, not a claim). The plain kernel still spills 176 bytes a
+   thread to local memory on Vulkan, and a frame with programs runs a
+   specialized set at 168 registers, so binning (step 4) is what takes the
+   arms' registers out of the pixels that run no program. The gather's
+   weights still spill to local memory on Direct3D 12, and `world.indirect
+   off` still removes a third of views on Vulkan as the gather's work. Then the
    remaining caster geometry after receiver and light-space culling
    ([gpu cost](../../.claude/skills/rendering/references/gpu-cost.md#pucks-open-cases)).
    The far cascade now classifies through `SdfMeshOcclusion`'s current receiver
@@ -1538,12 +1541,21 @@ and the Water packet).
 ### Author shaders
 
 Owner: rendering · ordinary · Next:
-[step 2 of the design memo](author-shaders.md#6-implementation-steps) (the
-interpreter's cost and registers on the bar devices). Steps 0 and 1 have
-landed and step 1's GPU lifetimes had their adversarial review and fixes
-(`SdfShadeSlots`). Nothing reads `SdfWorldResidency.InFlightShadeIdentities`
-yet: the quarantine step reads, and then clears, the submissions a device loss
-marked lost, which stay reported until it does.
+[step 4 of the design memo](author-shaders.md#6-implementation-steps)
+(binning), with step 2's readings on the RTX 2060 and the Deck still to take.
+Steps 0, 1 and 3 have landed: step 3 specializes each program set into views
+and glass kernels with no interpreter in them, gives a frame with no active
+program plain kernels, and publishes through one door
+(`SdfWorldResidency.PrepareShade`) whose GPU-lifetime invariants the memo's
+section 3.4 states; they await their adversarial review. A player's prewarm
+compiles each hosted world's declared set in `world prepare`; a Direct3D 12
+player without `dxcompiler.dll` refuses a prewarmed kernel at the reflection
+check (`SdfShadePipelines.BuildAsync`), and the residency's frame of a
+composition that renders neighbour worlds may hold programs its own document
+does not declare, so its set misses the prewarmed one. Nothing reads
+`SdfWorldResidency.InFlightShadeIdentities` yet: the quarantine step reads,
+and then clears, the submissions a device loss marked lost, which stay
+reported until it does.
 
 The owner's ruling (AGENTS.md, "Authors rule"): authors may bring their own
 shaders, so a look is never limited to what the engine's shading offers.
