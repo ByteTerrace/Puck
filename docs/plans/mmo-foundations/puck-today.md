@@ -787,19 +787,9 @@ Compared with this tree **[opened]**:
   `CompanionTrustLawTests`, `CompanionRoleLawTests` and
   `worlds/debug/companion-body.puck` do not exist in this tree.
 
-The repository already records this verdict **[opened]**
-(`docs/plans/open-items.md:1003-1010`):
-
-```text
-- [low] Branch `lane/companion-v1` on `origin` (companions v1) is superseded
-  for custody and trust by the protocol build, but holds step 9 and 10 prior art
-  no other branch has: `WorldServer.Roles.cs` (`TryRoleVerdict`, visiting
-  drivers mounted per pin under `accept`), the `WorldRole` driver, accept, fuel
-  and budget fields, `CompanionTrustLawTests`' driver laws, and the debug world's
-  faerie split (`companion-body.puck`, role rows in `night` and `garden`). Step 9
-  ports them onto the custody bindings (`WorldCompanionCustody.TryBinding`); keep
-  the branch until then.
-```
+The [companion build packet](../open-items.md#transfers-federation-and-server)
+records the branch's remaining prior art and keeps it until step 9 ports that
+work onto the custody bindings.
 
 ## 7. Disclosure
 
@@ -1018,9 +1008,12 @@ motion. `WorldAdjacencyCorrectionLawTests` drives phantom reports, embedded
 neighbour geometry, sixty-four ticks of herding, generation grinding and an
 honest shallow contact through the real server;
 `WorldBodyWork.AdjacencyCorrectionClamps` is visible in `world.counters`. This
-does not prove reported bodies exist. A neighbour field's sweep refusal, the
-support distance ground snap reads, and untaped delivery timing remain outside
-this guarantee; those packets are in
+does not prove reported bodies exist. Refused neighbour sweeps propose their
+rollback through the same door, and neighbour support landings include their
+whole descent in its budget. Incoming retreat from an owned face cannot be
+cancelled by either response or by repeated phantom bodies. Still bodies can
+still be carried up to the threshold; untaped delivery timing remains outside
+the guarantee. Those residual packets are in
 [open items](../open-items.md#transfers-federation-and-server).
 
 **Critique 1.2, group membership proof on the federation wire: confirmed

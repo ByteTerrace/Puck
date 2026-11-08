@@ -52,8 +52,9 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
         m_population = population;
     }
 
-    private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
+    private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, bool supportLanding = false) {
         var entryVelocity = velocity;
+        var intended = position;
         var resolution = m_inner.ResolveSweep(
             orientation: in orientation,
             position: ref position,
@@ -63,8 +64,7 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             volumes: volumes
         );
 
-        // A refusal on either side of the seam is the whole step's: no neighbour is consulted past it, and the body keeps
-        // its start and the velocity it came with.
+        // Only the local field may refuse the body's own move.
         if (resolution.Refusal != ContactRefusal.None) {
             return resolution;
         }
@@ -72,6 +72,17 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
         // the population's door for that body.
         if (entityIndex < 0) {
             return resolution;
+        }
+        // A descent selected by untrusted support is not the body's own motion. Unless the local landing grounds,
+        // retain the local stationary answer as the baseline and admit the neighbour's entire landing below.
+        var neighbourQuery = position;
+        if (supportLanding && !resolution.Grounded) {
+            neighbourQuery = intended;
+            position = previousPosition;
+            velocity = entryVelocity;
+            resolution = m_inner.ResolveSweep(previousPosition: in previousPosition, position: ref position,
+                velocity: ref velocity, orientation: in orientation, volumes: volumes, up: in up);
+            if (resolution.Refusal != ContactRefusal.None) { return resolution; }
         }
 
         var localAddress = m_source.LocalEntityAddress(index: entityIndex);
@@ -87,7 +98,7 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
         foreach (var projection in m_source.Visuals()) {
             if (!TryMapIntoNeighbour(
                 mapped: out var neighbourStart,
-                position: position,
+                position: neighbourQuery,
                 projection: projection
             )) {
                 continue;
@@ -197,16 +208,17 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             }
 
             if (neighbourResolution.Refusal != ContactRefusal.None) {
-                position = previousPosition;
-                velocity = entryVelocity;
-
-                return neighbourResolution;
+                // A refusal is an untrusted proposed rollback, not a local refusal. Its displacement and velocity
+                // pass the same door as every other response, and it cannot mark the local step immovable.
+                neighbourResolution = neighbourResolution with { Refusal = ContactRefusal.None };
             }
 
             if (
                 (dynamicObstruction == FixedVector3.Zero) &&
                 !neighbourResolution.Grounded &&
-                (neighbourResolution.ObstructionNormal == FixedVector3.Zero)
+                (neighbourResolution.ObstructionNormal == FixedVector3.Zero) &&
+                (neighbourPosition == neighbourStart) &&
+                (neighbourVelocity == WorldAdjacencyPath.MapVectorIntoNeighbour(value: velocity, path: projection.Path))
             ) {
                 // Nothing on the neighbour's side either — try the next band (a body straddling a corner post could
                 // sit inside two bands' extents at once) rather than committing an inert round trip.
@@ -215,8 +227,10 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             // The neighbour's whole answer, its bodies' pushes and its geometry's resolution, crosses back as one
             // displacement and one velocity, mapped as vectors so a rotated seam's point round trip cannot round extra
             // displacement in, and moves this body only as far as the population's door admits.
+            var proposedPosition = neighbourQuery +
+                WorldAdjacencyPath.MapVectorIntoSource(value: (neighbourPosition - neighbourStart), path: projection.Path);
             m_population.AdmitAdjacencyResponse(
-                displacement: WorldAdjacencyPath.MapVectorIntoSource(value: (neighbourPosition - neighbourStart), path: projection.Path),
+                displacement: proposedPosition - position,
                 entityIndex: entityIndex,
                 overlapDepth: projection.OverlapDepth,
                 position: ref position,
@@ -233,7 +247,7 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
                 RequiredStepHeight: FixedQ4816.Max(x: resolution.RequiredStepHeight, y: neighbourResolution.RequiredStepHeight),
                 // A neighbour's pairs index another authority's colliders, so its uncertainty stays unnamed here.
                 Uncertainty: (neighbourResolution.Unproved ? resolution.Uncertainty.Union(other: ContactUncertainty.Unknown) : resolution.Uncertainty),
-                Grounded: (resolution.Grounded || neighbourResolution.Grounded),
+                Grounded: (resolution.Grounded || (neighbourResolution.Grounded && (!supportLanding || position == proposedPosition))),
                 ObstructionNormal: ((neighbourObstruction == FixedVector3.Zero)
                 ? resolution.ObstructionNormal
                 : WorldAdjacencyPath.MapVectorIntoSource(
@@ -304,6 +318,11 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             velocity: ref velocity,
             volumes: volumes
         );
+    /// <inheritdoc/>
+    public ContactResolution ResolveEntitySupportSweep(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
+        ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
+        ResolveCore(entityIndex: entityIndex, previousPosition: in previousPosition, position: ref position,
+            velocity: ref velocity, orientation: in orientation, volumes: volumes, up: in up, supportLanding: true);
     /// <inheritdoc/>
     public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         ResolveCore(
