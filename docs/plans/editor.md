@@ -394,7 +394,9 @@ between the pointer ray and the axis, or the ray's intersection with the plane),
 snaps it through E1, and moves a presentation ghost of the placement while the
 button is held: the stamper draws the placement at the dragged pose and no
 mutation is sent. Releasing commits one mutation, so one undo reverts the whole
-drag; Escape or a right click cancels and sends nothing. A gamepad drags along
+drag; a right click cancels and sends nothing, as does opening the pause menu
+(Escape is the menu's, [play decisions](../decisions/play.md#the-game)), which
+releases every held input. A gamepad drags along
 the camera-relative plane with the sticks, with the same commit rule, as the
 sculptor's pad model did. Before adding the ghost, check whether
 `world.reflow.preview` already draws proposed positions (AGENTS.md rule 7).
