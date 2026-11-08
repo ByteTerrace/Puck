@@ -507,7 +507,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
         if ((IndirectTierOverride is { } tier) && (frame.IndirectTier != tier)) { frame = frame with { IndirectTier = tier }; }
 
         ApplyPendingShaderReload();
-        PrepareShade(frame, device);
         ReconcileGlyphAtlas(tables: tables);
         tables.DebugMode = m_debugMode;
         tables.DebugLabel = Name;
@@ -578,6 +577,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
             tables.StageLandedMeshes(frame: frame);
         }
 
+        // The shading selection follows the frame the passes record (the one the tables hold), never a pending one.
+        PrepareShade(frame: m_frame!, device: device);
         FollowRunningCode();
         MeshPathBake.ObserveResidency(tables: tables);
         MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.IrradiancePending);

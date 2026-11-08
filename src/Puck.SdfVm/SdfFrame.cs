@@ -275,6 +275,11 @@ public sealed record SdfFrame(
     /// <summary>All programs the frame's shading jobs may invoke.</summary>
     public IEnumerable<SdfShadeProgram> ShadingPrograms => ShadeDefault is { } fallback
         ? Program.Appearance.ShadingPrograms.Append(fallback) : Program.Appearance.ShadingPrograms;
+    /// <summary>Gets every program the documents behind the frame declare, which the residency specializes together with
+    /// the frame's active programs (<see cref="ShadingPrograms"/>), so its specialized kernels do not change while the
+    /// scene's composition does. The emitter passes one list for one set of documents, compared by reference; empty
+    /// declares none.</summary>
+    public IReadOnlyList<SdfShadeProgram> ShadeDeclared { get; init; } = [];
 
     /// <summary>Engine-bench lever: skips the per-screen area-light loop (the diegetic screens stop spilling colored light
     /// into the room). Default <see langword="false"/> = screen lights on. Directly measures the lit screens' cost for the

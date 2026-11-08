@@ -131,9 +131,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             uint paintFirst;
             uint paintCount;
             float3 paintedAlbedo = sdfMaterialPaints(material, paintFirst, paintCount);
-            uint4 shadeBinding = sdfShadeBinding(material);
+            SdfShadeBinding shadeBinding = sdfShadeBinding(material);
             float paintCoverage;
-            bool deferPaint = (sdfShadeRead(shadeBinding.xy, 0u).w & SDF_SHADE_READ_PAINT) != 0u;
+            bool deferPaint = (sdfShadeReadsOf(shadeBinding) & SDF_SHADE_READ_PAINT) != 0u;
             sdfApplyPaints(surfacePoint, layerPoint, p.pixelFootprint * s.t, paintFirst, paintCount, deferPaint, paintedAlbedo, paintCoverage);
 
             SdfMaterialData shadeMaterial = sdfMaterialLoad(material);
@@ -143,7 +143,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
                 s.curvature, p.pixelFootprint * s.t, s.lanes, 0.0, 0.0, frameRotation, s.frameSlot, s.meshDraw);
             sdfShadeSet_paint_coverage(shadeStamp, paintCoverage);
             float revealed;
-            if (shadeBinding.y != 0u) {
+            if (sdfShadeBound(shadeBinding)) {
                 sdfShadeSurfacePhase(shadeBinding, shadeStamp, shadeMaterial, normal, revealed);
             } else {
             applyInset(layerPoint, layerNormal, layerRay, shadeMaterial);
@@ -154,7 +154,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             sdfApplyEmissiveLane(s.lanes, shadeMaterial);
             sdfShadeSurfaceInputs(shadeStamp, shadeMaterial, normal, revealed);
             float4 shadowMeasured = float4(1.0, 1.0, 1.0, 1.0);
-            if (shadeBinding.y != 0u && !worldSoftShadowsDisabled()) {
+            if (sdfShadeBound(shadeBinding) && !worldSoftShadowsDisabled()) {
                 uint shadowWord = sdfVisibilityRecordBuffer[worldVisibilityRecord(p.pixel, p.viewIndex) + SdfVisibilityShadowWord];
                 shadowMeasured = sdfShadowQueried(shadowWord);
             }
@@ -182,7 +182,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             shadeSurface.rayDirection = p.rayDirection;
             shadeSurface.material = shadeMaterial;
             shadeSurface.toon = sdfToonStyle(shadeMaterial);
-            if (shadeBinding.y != 0u) shadeSurface.toon = (SdfToonStyle)0;
+            if (sdfShadeBound(shadeBinding)) shadeSurface.toon = (SdfToonStyle)0;
             shadeSurface.ambientOcclusion = ambientOcclusion;
             shadeSurface.shadowVisibility = shadowVisibility;
             shadeSurface.shadowMeasured = shadowMeasured;
@@ -193,7 +193,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             float3 radiance = indirectSky ? 0.0 : worldSkyIrradiance(normal) * ambientOcclusion;
             float3 ambientTerm = radiance;
             SdfToonStyle style = sdfToonStyle(shadeMaterial);
-            bool toon = shadeBinding.y == 0u && sdfToonEnabled(style);
+            bool toon = !sdfShadeBound(shadeBinding) && sdfToonEnabled(style);
             if (toon) { radiance *= style.shadow.rgb; }
             float3 rim = float3(0.0, 0.0, 0.0);
             float3 specular = float3(0.0, 0.0, 0.0);
@@ -290,7 +290,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
                 float ink = sdfToonOutline(style, p, s, surfacePoint);
                 color *= lerp(1.0, style.ink, ink);
                 color += selfEmission;
-            } else if (shadeBinding.y != 0u && sdfToonEnabled(style)) {
+            } else if (sdfShadeBound(shadeBinding) && sdfToonEnabled(style)) {
                 color *= lerp(1.0, style.ink, sdfToonOutline(style, p, s, surfacePoint));
             } else if (curvatureShading) {
                 float lit = saturate(((incoming * localGain) * passGroup.exposure) / SDF_REFERENCE_WHITE);

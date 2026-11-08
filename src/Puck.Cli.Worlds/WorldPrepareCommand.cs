@@ -41,7 +41,7 @@ public static class WorldPrepareCommand {
         var visited = new HashSet<string>(comparer: StringComparer.Ordinal);
         var names = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
         var needs = new PlayerDerivedProducts.Needs();
-        var shadeSets = new List<SdfShadeProgram[]>();
+        var shadeSets = new List<IReadOnlyList<SdfShadeProgram>>();
 
         pending.Enqueue(item: Path.Combine(
             path1: root,
@@ -131,11 +131,7 @@ public static class WorldPrepareCommand {
                 throw new InvalidDataException(message: $"Cannot validate {relative}: {reason}");
             }
             needs.Note(definition: definition!, documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: path));
-            var shades = definition!.Creations.SelectMany(p => p.Document.Palette ?? [])
-                .Concat(definition.FieldRegions.SelectMany(r => r.Fields).Where(f => f.Material is not null).Select(f => f.Material!))
-                .Select(m => m.Shade).Append(definition.Render.Shade).Where(s => s is not null)
-                .Select(s => SdfShadeProgram.Compile(s!)).DistinctBy(s => s.Identity).ToArray();
-            shadeSets.Add(shades);
+            shadeSets.Add(item: WorldRenderSettings.DeclaredShades(definition: definition!));
             File.WriteAllBytes(
                 Path.Combine(
                     path1: output,
@@ -145,25 +141,33 @@ public static class WorldPrepareCommand {
             );
         }
         PlayerDerivedProducts.Prepare(output: output, agbBios: needs.AgbBios, guests: [.. needs.Guests]);
-        PrepareShading(shadeSets, output);
+        PrepareShading(output: output, sets: shadeSets);
         Console.WriteLine(value: $"Prepared {visited.Count} hosted world definitions, with {primaryName} as the primary world.");
         return 0;
     }
 
-    private static void PrepareShading(IReadOnlyList<SdfShadeProgram[]> sets, string output) {
-        var compiler = new ShaderCompiler(ShaderCompiler.DefaultCacheDirectory);
-        foreach (var target in new[] { ShaderTarget.Dxil, ShaderTarget.Spirv }) {
-            var kernels = SdfKernelSet.Load(target == ShaderTarget.Dxil ? ".dxil" : ".spv");
-            var requests = sets.Select(s => new SdfShadeKernels(s, kernels))
-                .Concat(sets.SelectMany(s => s).Select(s => new SdfShadeKernels([s], kernels, fallback: false)))
-                .Append(new SdfShadeKernels([], kernels, fallback: false)).DistinctBy(r => r.Identity);
-            foreach (var request in requests) {
-                _ = request.CompileAsync(compiler, target, SdfKernelSet.DeployedTree).GetAwaiter().GetResult();
-                foreach (var (_, plan) in request.Plan(compiler, target, SdfKernelSet.DeployedTree)) {
-                    compiler.ExportPrepared(plan, Path.Combine(output, "derived"));
+    // Each hosted world's declared program set specializes the views and glass kernels exactly as its residency requests
+    // them (SdfWorldResidency's PrepareShade), for both targets, from the deployed tree a player compiles against, so a
+    // player's first boot finds them in its shipping cache and interprets only a program its documents did not declare.
+    private static void PrepareShading(IReadOnlyList<IReadOnlyList<SdfShadeProgram>> sets, string output) {
+        var compiler = new ShaderCompiler(cacheDirectory: ShaderCompiler.DefaultCacheDirectory);
+        var store = Path.Combine(path1: output, path2: Puck.Assets.DerivedBytes.ShippingDirectoryName);
+        var distinct = sets.Where(predicate: static set => (set.Count != 0))
+            .DistinctBy(keySelector: static set => string.Join(separator: '\n', values: set.Select(selector: static p => p.Identity)), comparer: StringComparer.Ordinal).ToArray();
+        var kernels = 0;
+
+        foreach (var programs in distinct) {
+            foreach (var target in (ReadOnlySpan<ShaderTarget>)[ShaderTarget.Dxil, ShaderTarget.Spirv]) {
+                var plans = SdfShadeKernels.Plan(compiler: compiler, programs: programs, target: target, tree: SdfKernelSet.DeployedTree);
+
+                _ = SdfShadeKernels.CompileAsync(compiler: compiler, plans: plans).GetAwaiter().GetResult();
+                foreach (var (_, plan) in plans) {
+                    compiler.ExportPrepared(directory: store, plan: plan);
+                    kernels++;
                 }
             }
         }
+        Console.WriteLine(value: $"Prepared {kernels} specialized shading kernel(s) for {distinct.Length} program set(s) in {store.Replace(oldChar: '\\', newChar: '/')}.");
     }
 
     public static Command Create() {

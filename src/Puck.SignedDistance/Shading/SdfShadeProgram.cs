@@ -24,6 +24,13 @@ public sealed partial class SdfShadeProgram {
     public const uint DefaultComposeWork = 256;
     /// <summary>A provisional CPU admission bound. Step 5 measures the dispatch throughput and sets its margin.</summary>
     public const ulong MaxWork = (1UL << 32);
+    /// <summary>The first header vector holding the program's identity: <see cref="IdentityVectors"/> vectors of its
+    /// SHA-256, which a specialized kernel compares to select the program's straight-line arm.</summary>
+    public const int IdentityVector = 4;
+    /// <summary>The header vectors the identity occupies, eight words.</summary>
+    public const int IdentityVectors = 2;
+    /// <summary>The header's vectors: the three phase ranges, the constant and parameter ranges, then the identity.</summary>
+    public const int HeaderVectors = (IdentityVector + IdentityVectors);
 
     // Register selectors use a mask. Work admission prices the actual phases at the maximum light walk.
     private const int RegisterBoundProof = 1 / ((MaxRegisters > 0 && (MaxRegisters & (MaxRegisters - 1)) == 0) ? 1 : 0);
@@ -51,10 +58,10 @@ public sealed partial class SdfShadeProgram {
         }
         m_identityBytes = hash.GetHashAndReset();
         Identity = Convert.ToHexStringLower(inArray: m_identityBytes);
-        // The two identity vectors are zero while hashing, then carry the complete identity for GPU dispatch.
+        // The identity vectors are zero while hashing, then carry the complete identity for GPU dispatch.
         // Only this admission door can write them; they never include runtime parameter values.
-        for (var i = 0; i < 8; i++) {
-            m_words[16 + i] = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(m_identityBytes.AsSpan(i * 4, 4));
+        for (var i = 0; i < (IdentityVectors * 4); i++) {
+            m_words[(IdentityVector * 4) + i] = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(m_identityBytes.AsSpan(i * 4, 4));
         }
     }
 

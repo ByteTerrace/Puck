@@ -104,7 +104,7 @@ float sdfGlassContact(SdfMaterialData material, float behind) {
 // replace it, and the volume's indirect light as a surface receives it. `incoming` is that light's luminance before the
 // indirect gains, what the local adaptation meters (sdfLocalAdaptationGain).
 float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal, float3 rayDirection, bool probed, SdfMeshProbes probes,
-    uint4 shadeBinding, SdfShadeStamp shadeStamp, out float3 highlights, out float incoming,
+    SdfShadeBinding shadeBinding, SdfShadeStamp shadeStamp, out float3 highlights, out float incoming,
     out float3 radiance, out float3 indirect, out float3 rim, out float attenuation) {
     SdfShadeSurface surface;
 
@@ -134,7 +134,7 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
 
         radiance += response.diffuse;
         highlights += response.specular;
-        if (shadeBinding.y != 0u) { rim += response.rim; attenuation *= response.attenuation; }
+        if (sdfShadeBound(shadeBinding)) { rim += response.rim; attenuation *= response.attenuation; }
     }
 
     indirect = (probed ? sdfMeshIndirectSeen(probes, normal) : float3(0.0, 0.0, 0.0));
@@ -268,12 +268,12 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             float3 normal = sdfMeshSurfaceNormal(draw, triangleIndex, surfacePoint, rayDirection, face, curvature, frameSlot);
             int materialId = sdfMeshMaterial(draw, triangleIndex);
             SdfMaterialData material = sdfMaterialLoad(materialId);
-            uint4 shadeBinding = sdfShadeBinding(materialId);
+            SdfShadeBinding shadeBinding = sdfShadeBinding(materialId);
             float ior = max(material.ior, 1.0);
             float ratio = (ior - 1.0) / (ior + 1.0);
             float f0 = ratio * ratio;
             float3 baseAlbedo = material.albedo;
-            if (shadeBinding.y != 0u) { material.specular = f0; material.metal = 0.0; material.coat = 0.0; }
+            if (sdfShadeBound(shadeBinding)) { material.specular = f0; material.metal = 0.0; material.coat = 0.0; }
             float roughness = material.roughness;
 
             // The flow moves the surface's shading: its tilt bends the normal the glass reflects and refracts by, and its
@@ -290,13 +290,13 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             float3 painted = sdfMaterialPaints(materialId, paintFirst, paintCount);
             float paintCoverage;
             sdfApplyPaints(surfacePoint, layerPoint, footprint * t, paintFirst, paintCount,
-                (sdfShadeRead(shadeBinding.xy, 0u).w & SDF_SHADE_READ_PAINT) != 0u, painted, paintCoverage);
+                (sdfShadeReadsOf(shadeBinding) & SDF_SHADE_READ_PAINT) != 0u, painted, paintCoverage);
             material.albedo = painted;
             SdfShadeStamp shadeStamp = sdfShadeStamp(material, surfacePoint, layerPoint, normal, rayDirection,
                 curvature, footprint * t, sdfFrameLanes(frameSlot), sdfGlassContact(material, opaque - t), share, layerRotation, frameSlot, draw);
             sdfShadeSet_surface_geometricNormal(shadeStamp, face);
             sdfShadeSet_paint_coverage(shadeStamp, paintCoverage);
-            if (shadeBinding.y != 0u) {
+            if (sdfShadeBound(shadeBinding)) {
                 sdfShadeSurfacePhase(shadeBinding, shadeStamp, material, normal, revealed);
                 roughness = material.roughness;
             } else {
@@ -322,7 +322,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
             // The GGX lobe reads the glass's own reflectance and nothing of a metal or a coat; the flow's revealed surface
             // covers the glass rather than roughening it.
-            if (shadeBinding.y == 0u) {
+            if (!sdfShadeBound(shadeBinding)) {
                 material.specular = f0;
                 material.metal = 0.0;
                 material.coat = 0.0;
@@ -356,7 +356,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             float3 shown = (((((environment * fresnel) + highlights + rim) * localGain) + (((1.0 - fresnel) * medium) * received)) * air * attenuation);
             float3 passed = ((1.0 - fresnel) * transmittance);
             float3 revealedAlbedo = max((material.albedo - baseAlbedo * (1.0 - revealed)) / max(revealed, 1.0e-6), 0.0);
-            float3 cover = (((shadeBinding.y != 0u ? revealedAlbedo : material.flowColor.rgb) * received) * air * attenuation);
+            float3 cover = (((sdfShadeBound(shadeBinding) ? revealedAlbedo : material.flowColor.rgb) * received) * air * attenuation);
             shown = sdfShadeComposePhase(shadeBinding, shadeStamp, radiance, rim, highlights, attenuation,
                 indirect, environment, environment * fresnel, localGain, shown / max(air, 1.0e-12)) * air;
             float luminous = ((1.0 - fresnel) * dot(transmittance, SDF_LUMINANCE));
