@@ -73,19 +73,6 @@ public sealed partial class WorldInputRuntime {
         }
         return accepted;
     }
-    private static WorldInputSource[] SnapshotProfile(WorldInputCatalog catalog) {
-        var sources = new List<WorldInputSource>();
-
-        for (var channel = 0; (channel < catalog.Channels.Length); channel++) {
-            var declaration = catalog.Channels[channel];
-
-            if (declaration.Shape == ChannelShape.Text) { continue; }
-            sources.Add(item: new(((ushort)channel), ((ushort)channel),
-                ((declaration.Shape == ChannelShape.Relative) ? WorldInputContributionKind.Relative : WorldInputContributionKind.Level),
-                ("$snapshot:" + declaration.Name)));
-        }
-        return sources.ToArray();
-    }
 
     /// <summary>Publishes a complete synthetic observation through a generation-bearing input session. The caller
     /// still submits under the actual actor for grants and contribution consent; the session owns only its history.
@@ -117,7 +104,7 @@ public sealed partial class WorldInputRuntime {
         }
         if (owner is null) {
             if (m_ordered.Count == ushort.MaxValue) { reason = "input.capacity: too many input owners"; return false; }
-            var sources = SnapshotProfile(catalog: Catalog);
+            var sources = Catalog.SnapshotSources(prefix: "$snapshot:");
             var session = m_host.GrantTable.AdmitInputControllerSession();
 
             try { owner = PrepareOwner(session, body, sources, 1, controller: new(actor, source)); } catch (ArgumentException error) { m_host.GrantTable.MarkObserverEnded(session: session); reason = error.Message; return false; }

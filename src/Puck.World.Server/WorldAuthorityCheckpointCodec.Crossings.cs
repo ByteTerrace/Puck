@@ -30,7 +30,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         writer.WriteArray(
             items: arrival.Members,
-            writeItem: WriteCommitMember
+            writeItem: WorldWireLeaves.WriteCommitMember
         );
         writer.WriteArray(
             items: arrival.Readopted,
@@ -54,7 +54,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var members = reader.ReadArray(
             field: "arrival members",
-            readItem: static (ref WireReader r) => ReadCommitMember(reader: ref r),
+            readItem: static (ref WireReader r) => WorldWireLeaves.ReadCommitMember(reader: ref r),
             maximum: WorldBodiesLimits.CapacityCeiling
         );
         var readopted = reader.ReadArray(
@@ -316,7 +316,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 break;
             case WorldCrossingRecord.Lease lease:
                 writer.WriteByte(value: CrossingLeaseTag);
-                WriteTransferKey(
+                WorldWireLeaves.WriteTransferKey(
                     key: lease.Key,
                     writer: writer
                 );
@@ -324,7 +324,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 break;
             case WorldCrossingRecord.Tombstone tombstone:
                 writer.WriteByte(value: CrossingTombstoneTag);
-                WriteTransferKey(
+                WorldWireLeaves.WriteTransferKey(
                     key: tombstone.Key,
                     writer: writer
                 );
@@ -353,7 +353,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 break;
             case WorldCrossingRecord.Hop hop:
                 writer.WriteByte(value: CrossingHopTag);
-                WriteTransferKey(
+                WorldWireLeaves.WriteTransferKey(
                     key: hop.Key,
                     writer: writer
                 );
@@ -366,7 +366,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 break;
             case WorldCrossingRecord.HopDone done:
                 writer.WriteByte(value: CrossingHopDoneTag);
-                WriteTransferKey(
+                WorldWireLeaves.WriteTransferKey(
                     key: done.Key,
                     writer: writer
                 );
@@ -378,7 +378,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 break;
             case WorldCrossingRecord.HopAcked acked:
                 writer.WriteByte(value: CrossingHopAckedTag);
-                WriteTransferKey(
+                WorldWireLeaves.WriteTransferKey(
                     key: acked.Key,
                     writer: writer
                 );
@@ -479,7 +479,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
             }
             case CrossingLeaseTag: {
-                var key = ReadTransferKey(reader: ref reader);
+                var key = WorldWireLeaves.ReadTransferKey(reader: ref reader);
 
                 return new WorldCrossingRecord.Lease(
                     Floor: reader.ReadUInt64(),
@@ -487,7 +487,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
             }
             case CrossingTombstoneTag: {
-                var key = ReadTransferKey(reader: ref reader);
+                var key = WorldWireLeaves.ReadTransferKey(reader: ref reader);
 
                 return new WorldCrossingRecord.Tombstone(
                     Burned: reader.ReadArray(
@@ -527,7 +527,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
             }
             case CrossingHopTag: {
-                var key = ReadTransferKey(reader: ref reader);
+                var key = WorldWireLeaves.ReadTransferKey(reader: ref reader);
                 var from = reader.ReadString(
                     field: "hop source authority",
                     maxBytes: MaxStringBytes
@@ -550,7 +550,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
             }
             case CrossingHopDoneTag: {
-                var key = ReadTransferKey(reader: ref reader);
+                var key = WorldWireLeaves.ReadTransferKey(reader: ref reader);
                 var incarnation = WorldWireLeaves.ReadEntityAddress(reader: ref reader);
 
                 return new WorldCrossingRecord.HopDone(
@@ -560,7 +560,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
             }
             case CrossingHopAckedTag: {
-                var key = ReadTransferKey(reader: ref reader);
+                var key = WorldWireLeaves.ReadTransferKey(reader: ref reader);
 
                 return new WorldCrossingRecord.HopAcked(
                     Incarnation: WorldWireLeaves.ReadEntityAddress(reader: ref reader),
