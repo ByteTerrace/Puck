@@ -47,14 +47,6 @@ public readonly record struct FixedContactPush(FixedVector3 Normal, FixedQ4816 P
 /// <param name="Field">A field collider's surface, read in the frame of <paramref name="Center"/> and
 /// <paramref name="Rotation"/>; its local half-extent about that centre is in <paramref name="Extent"/>.</param>
 public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, FixedVector3 Center, FixedVector3 Extent, FixedQuaternion Rotation = default, FixedQ4816 Radius = default, FixedQ4816 Chamfer = default, FixedQ4816 Exponent = default, FixedColliderField? Field = null) {
-    // The point of a segment nearest to a point: the point less the one segment witness every segment query shares.
-    private static FixedVector3 ClosestOnSegment(FixedVector3 point, FixedVector3 start, FixedVector3 end) =>
-        (point - FixedDynamicBodyContacts.ClosestDelta(
-            p1: point,
-            p2: start,
-            q1: point,
-            q2: end
-        ));
     private bool TryBoxPush(
         FixedVector3 position,
         in FixedQuaternion orientation,
@@ -102,25 +94,15 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         FixedQ4816 skin,
         out FixedContactPush push
     ) {
-        FixedVector3 closest;
-        FixedQ4816 bodyRadius;
-
         switch (volume.Kind) {
-            case FixedBodyColliderKind.Sphere:
-                closest = (position + orientation.Rotate(vector: volume.Center));
-                bodyRadius = volume.Radius;
-                break;
-            case FixedBodyColliderKind.Capsule: {
-                    var lower = (position + orientation.Rotate(vector: volume.Center));
-                    var upper = (position + orientation.Rotate(vector: volume.Endpoint));
+            case FixedBodyColliderKind.Sphere or FixedBodyColliderKind.Capsule: {
+                    var (start, end) = FixedDynamicBodyContacts.Segment(orientation: orientation, position: position,
+                        volume: in volume);
 
-                    closest = ClosestOnSegment(
-                        point: Center,
-                        start: lower,
-                        end: upper
-                    );
-                    bodyRadius = volume.Radius;
-                    break;
+                    // A body core through the sphere's center exits along +X, across an upright capsule's axis, as an
+                    // even dynamic tie does.
+                    return FixedDynamicBodyContacts.TryRoundPush(p1: start, q1: end, p2: Center, q2: Center,
+                        radius: ((volume.Radius + Extent.X) + skin), tieNormal: FixedVector3.UnitX, push: out push);
                 }
             case FixedBodyColliderKind.Box: {
                     var overlaps = FixedSphereBoxContact.TryPush(
@@ -138,24 +120,6 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
             default:
                 throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}.");
         }
-
-        var delta = (closest - Center);
-        var distance = delta.Length;
-        var minimum = ((bodyRadius + Extent.X) + skin);
-
-        if (
-            (distance >= minimum) ||
-            (distance <= FixedQ4816.Zero)
-        ) {
-            push = default;
-            return false;
-        }
-
-        push = new FixedContactPush(
-            Normal: (delta / distance),
-            Penetration: (minimum - distance)
-        );
-        return true;
     }
 
     /// <summary>Creates a static world-axis-aligned box.</summary>

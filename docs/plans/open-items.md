@@ -41,9 +41,8 @@ milestone. The owner requested its baseline and implementation plan, which
 
 0. [Duplication audit](#refactoring-campaign) [high, the owner's priority]: the
    seven-lane audit's drifted copies and boundary duplicates are fixed first
-   (tooling's architecture, identity, release and lease
-   copies; physics and world contact responses and the remote-response gate;
-   rendering's readback state machines), then its live copies as a batch, and
+   (tooling's architecture, identity, release and lease copies; rendering's
+   readback state machines), then its live copies as a batch, and
    small helpers ride along. Each audit lane's remaining findings are filed in
    the refactoring packet as its fix lane lands. Duplicates are fixed when found
    (AGENTS.md); this item is the backlog the audit surfaced.
@@ -1876,6 +1875,19 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   version. The stake is about 7 % of a long recording (go-tests), the share of
   resting bodies; a version that also covers moving bodies' unchanged
   fields would not help, since a moving body's pose changes every tick.
+- [medium] Navigation enumerates its neighbour stencil four times:
+  `NavigationRuntime.Domain.Predecessors` (`src/Puck.Physics/Navigation/NavigationRuntime.Shared.cs`)
+  and three loops in `NavigationRuntime.cs` repeat axis counting, connectivity
+  and coordinate bounds. One `Domain` enumerator yielding offset, node and cost
+  serves them; reverse traversal keeps its own `predecessor -> settled` check.
+- [low] `CertifiedLowDiscrepancy.FromQuadraticIrrational` and
+  `QuadraticInflation.FromQuadraticIrrational` (`src/Puck.Maths/Research/`) each
+  grow continued-fraction scratch by catching `ContinuedFraction.Expand`'s
+  short-terms refusal and doubling. Give `ContinuedFraction` the storage-owning
+  expansion.
+- [low] `AzureScheduledEvents.ReadAsync` parses the instance-metadata body with
+  no byte budget, unlike every ARM read, which passes `AzureArmPipeline.ReadJsonAsync`.
+  Decide whether the link-local metadata endpoint needs the same bound.
 - [low] `IAllocator`'s documentation names a `NativeMemory`-backed implementation
   that `src` does not have (the test allocators are now one, `tests/Shared/HeapAllocator.cs`).
 - Duplicates the clone scan's type and expression passes found (the
@@ -4167,6 +4179,14 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [high] A `puck measure run` drain holds the machine's quiet priority with no
+  time bound: one window drained queued requests for over three hours, and every
+  other lane's leased build or test queued behind it (a lead law run gave up
+  after 55 minutes; two audit lanes' focused suites were cancelled while
+  queued). The orchestration skill already says a window states when it closes;
+  nothing enforces it. Give `measure run` a window deadline (a `--until` or a
+  per-window budget, default short) after which it starts no further request and
+  releases quiet priority, and report the requests it left pending.
 - [medium] `puck lease quiet` holds what it has while it waits for the rest:
   a frame-measuring lane's quiet acquisition held the build and heavy leases
   while queued behind another lane's GPU leg, so a third lane's heavy test

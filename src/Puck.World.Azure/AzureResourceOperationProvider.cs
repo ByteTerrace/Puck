@@ -13,11 +13,9 @@ namespace Puck.World.Azure;
 /// does not follow redirects, and reconciles only a saved operation-status URL. It never infers that a lost
 /// mutation succeeded from the current resource's existence or provisioning state. Credentials are host-owned.</remarks>
 public sealed partial class AzureResourceOperationProvider : IWorldExternalOperationProvider, IDisposable {
+    private readonly AzureArmPipeline m_arm;
     private readonly AzureResourceBinding m_binding;
-    private readonly HttpPipeline m_pipeline;
-    private readonly Uri m_endpoint;
     private readonly Uri m_requestUri;
-    private readonly HttpClient? m_httpClient;
     private readonly int m_maximumRequestBytes;
     private readonly int m_maximumResponseBytes;
 
@@ -43,46 +41,15 @@ public sealed partial class AzureResourceOperationProvider : IWorldExternalOpera
         m_maximumRequestBytes = maximumRequestBytes;
         m_maximumResponseBytes = maximumResponseBytes;
         var cloud = (environment ?? ArmEnvironment.AzurePublicCloud);
+        var relative = (binding.ValidateAndGetPath() + binding.GetQuery());
 
-        m_endpoint = (cloud.Endpoint ?? throw new ArgumentException(
-            message: "An ARM cloud endpoint is required.",
-            paramName: nameof(environment)
-        ));
-        if (
-            (m_endpoint.Scheme != Uri.UriSchemeHttps) ||
-            (m_endpoint.UserInfo.Length != 0) ||
-            (m_endpoint.AbsolutePath != "/") ||
-            (m_endpoint.Query.Length != 0) ||
-            (m_endpoint.Fragment.Length != 0)
-        ) {
-            throw new ArgumentException(
-                message: "The ARM endpoint must be an HTTPS origin.",
-                paramName: nameof(environment)
-            );
-        }
+        // A mutation is never resent automatically.
+        m_arm = new AzureArmPipeline(credential: credential, environment: cloud, maximumRetries: 0,
+            scope: new ResourceIdentifier(resourceId: binding.ResourceId), transport: transport);
         m_requestUri = new Uri(
-            baseUri: m_endpoint,
-            relativeUri: (binding.ValidateAndGetPath() + binding.GetQuery())
+            baseUri: m_arm.Origin,
+            relativeUri: relative
         );
-        if (transport is null) {
-            m_httpClient = new HttpClient(handler: new SocketsHttpHandler { AllowAutoRedirect = false });
-            transport = new HttpClientTransport(client: m_httpClient);
-        }
-        var options = new ArmClientOptions { Environment = cloud, Transport = transport };
-
-        options.Retry.MaxRetries = 0;
-        options.Diagnostics.IsLoggingEnabled = false;
-        options.Diagnostics.IsDistributedTracingEnabled = false;
-        var client = new ArmClient(
-            credential,
-            defaultSubscriptionId: null,
-            options
-        );
-
-        m_pipeline = new BoundResource(
-            client: client,
-            id: new ResourceIdentifier(resourceId: binding.ResourceId)
-        ).RequestPipeline;
         // Length-prefixed fields prevent identities with embedded separators from colliding.
         using var bytes = new MemoryStream();
 
@@ -119,7 +86,7 @@ public sealed partial class AzureResourceOperationProvider : IWorldExternalOpera
     /// <inheritdoc/>
     public async ValueTask<WorldExternalOperationResult> ExecuteAsync(WorldExternalOperation operation, CancellationToken cancellationToken) {
         CheckOperation(operation: operation);
-        using var message = CreateMessage(
+        using var message = m_arm.CreateJsonRequest(
             m_requestUri,
             new RequestMethod(method: m_binding.Method.ToString().ToUpperInvariant())
         );
@@ -141,7 +108,7 @@ public sealed partial class AzureResourceOperationProvider : IWorldExternalOpera
             );
             message.Request.Content = RequestContent.Create(bytes: Encoding.UTF8.GetBytes(s: operation.Payload));
         }
-        await m_pipeline.SendAsync(
+        await m_arm.Pipeline.SendAsync(
             cancellationToken: cancellationToken,
             message: message
         ).ConfigureAwait(continueOnCapturedContext: false);
@@ -169,12 +136,12 @@ public sealed partial class AzureResourceOperationProvider : IWorldExternalOpera
         ) {
             return previous with { Status = WorldExternalOperationStatus.Unknown };
         }
-        using var message = CreateMessage(
+        using var message = m_arm.CreateJsonRequest(
             uri,
             RequestMethod.Get
         );
 
-        await m_pipeline.SendAsync(
+        await m_arm.Pipeline.SendAsync(
             cancellationToken: cancellationToken,
             message: message
         ).ConfigureAwait(continueOnCapturedContext: false);
@@ -185,18 +152,6 @@ public sealed partial class AzureResourceOperationProvider : IWorldExternalOpera
         ).ConfigureAwait(continueOnCapturedContext: false);
     }
 
-    private HttpMessage CreateMessage(Uri uri, RequestMethod method) {
-        var message = m_pipeline.CreateMessage();
-
-        message.BufferResponse = false;
-        message.Request.Method = method;
-        message.Request.Uri.Reset(value: uri);
-        message.Request.Headers.SetValue(
-            name: "Accept",
-            value: "application/json"
-        );
-        return message;
-    }
     private void CheckOperation(WorldExternalOperation operation) {
         ArgumentNullException.ThrowIfNull(operation);
         ArgumentException.ThrowIfNullOrWhiteSpace(operation.Id);
@@ -233,7 +188,7 @@ public sealed partial class AzureResourceOperationProvider : IWorldExternalOpera
         ) &&
             (candidate.Scheme == Uri.UriSchemeHttps) &&
             candidate.Authority.Equals(
-            m_endpoint.Authority,
+            m_arm.Origin.Authority,
             StringComparison.OrdinalIgnoreCase
         ) &&
             (candidate.UserInfo.Length == 0) &&
@@ -242,19 +197,10 @@ public sealed partial class AzureResourceOperationProvider : IWorldExternalOpera
             uri = candidate;
             return true;
         }
-        uri = m_endpoint;
+        uri = m_arm.Origin;
         return false;
     }
 
     /// <summary>Disposes the owned default HTTP client. The host retires its recorded runtime separately.</summary>
-    public void Dispose() => m_httpClient?.Dispose();
-
-    // ArmResource exposes the authenticated pipeline to resource implementations. The typed GenericResource
-    // CRUD methods cannot express arbitrary POST actions or preserve every provider-specific JSON field.
-    private sealed class BoundResource(ArmClient client, ResourceIdentifier id) : ArmResource(
-        client,
-        id
-    ) {
-        public HttpPipeline RequestPipeline => Pipeline;
-    }
+    public void Dispose() => m_arm.Dispose();
 }

@@ -158,10 +158,19 @@ axes and half-extents, with the projection radius, world-axis extent
 (`FixedColliderBounds.WorldBounds` reads it), box-local frame, closest point,
 containment, sphere test, and the complete fifteen-axis separating-axis test
 as a verdict (`Overlaps`) and with depth (`TrySeparation`). A body volume
-builds one with `FromVolume`, a placement's compiled spatial volume carries
-one, and the event feed's overlap sense reads the same tests.
+builds one with `FromVolume`, and a placement's compiled spatial volume carries
+one.
 `FixedDynamicBodyContacts` supplies a conservative compound broadphase radius and
-the deepest pair correction without knowing body identity or mutating state. A
+the deepest pair correction without knowing body identity or mutating state.
+Its `Overlaps` is the event feed's overlap sense: a pair overlaps exactly when
+the correction's narrowphase reports a positive push at zero margin, so a
+collision event and a contact never disagree and a touching pair is neither.
+Sphere and capsule pairs, dynamic or against a static sphere, answer through
+one round-core rule (`TryRoundPush`): the segment witness, the full-width
+distance against the summed radii, and an explicit tie axis when the cores
+meet exactly. A body's velocity loses its approach to a contact through
+`FixedVector3.LimitAlong` with the inward axis and a zero bound, in the
+ordinary, field and seam responses alike. A
 box-vs-box pair depenetrates by `FixedOrientedBox.TrySeparation`: both boxes'
 face axes and their nine edge cross products, each at unit length, so an
 edge-edge contact reads its true minimum.

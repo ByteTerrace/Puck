@@ -94,7 +94,7 @@ the memo:
        !arrival.Request.PeerAdmission &&
    ```
 
-   and (`src/Puck.World.Server/WorldFederationCodec.cs:1363`):
+   and (`src/Puck.World.Server/WorldFederationCodec.cs:1343`):
 
    ```csharp
            PeerAdmission: true,
