@@ -125,7 +125,7 @@ public static class SdfMeshCollapse {
         private readonly List<double> m_lineZ = [];
         private readonly List<double> m_lineDistance = [];
         private readonly List<int> m_lineNext = [];
-        private readonly Dictionary<long, (int First, int Last)> m_lines = [];
+        private readonly Dictionary<long, (int First, int Last)> m_lines = new(comparer: MixedKey.Instance);
 
         // Each triangle's bound on how far it strays from the mesh's own surface (zero for the mesh's own triangles).
         private readonly double[] m_stray;
@@ -177,6 +177,13 @@ public static class SdfMeshCollapse {
 
         private int m_laidCount;
 
+        // Lines' scratch: each fan triangle's corner and the places after it, and per place the first triangle whose
+        // second place after the corner it is, with how many are; Lines clears every place it reads.
+        private int[] m_ringCorner = new int[16];
+        private int[] m_ringNext = new int[16];
+        private int[] m_ringAfter = new int[16];
+        private readonly int[] m_afterFirst;
+        private readonly int[] m_afterCount;
         private int[] m_fanCorner = new int[16];
         private int[] m_fanNext = new int[16];
         private int[] m_fanAfter = new int[16];
@@ -237,6 +244,8 @@ public static class SdfMeshCollapse {
             m_revisions = new int[m_places];
             m_stamp = new int[m_places];
             m_fanEdges = new (int, int)[m_places];
+            m_afterFirst = new int[m_places];
+            m_afterCount = new int[m_places];
             m_kind = new byte[m_places];
             m_slideTargets = new int[(SlideTargets * m_places)];
             m_slideCounts = new int[m_places];
@@ -247,6 +256,10 @@ public static class SdfMeshCollapse {
             m_stray = new double[m_triangles];
             Array.Fill(array: m_tracked, value: -1);
 
+            // A vertex's first material is a sample at once; only a vertex whose triangles carry a second material asks the
+            // set, so the samples keep their first-corner order.
+            var firstMaterial = new uint[vertices];
+            var hasMaterial = new bool[vertices];
             var sampleOf = new HashSet<(int Vertex, uint Material)>();
             var sampleTriangles = new List<int>();
             var sampleVertices = new List<int>();
@@ -254,10 +267,21 @@ public static class SdfMeshCollapse {
             for (var triangle = 0; (triangle < m_triangles); triangle++) {
                 if (!m_alive[triangle]) { continue; }
 
+                var material = m_materials[triangle];
+
                 for (var corner = 0; (corner < 3); corner++) {
-                    if (sampleOf.Add(item: (m_corners[((3 * triangle) + corner)], m_materials[triangle]))) {
+                    var vertex = m_corners[((3 * triangle) + corner)];
+                    var fresh = !hasMaterial[vertex];
+
+                    if (fresh) {
+                        hasMaterial[vertex] = true;
+                        firstMaterial[vertex] = material;
+                    } else if (firstMaterial[vertex] != material) {
+                        fresh = sampleOf.Add(item: (vertex, material));
+                    }
+                    if (fresh) {
                         sampleTriangles.Add(item: triangle);
-                        sampleVertices.Add(item: m_corners[((3 * triangle) + corner)]);
+                        sampleVertices.Add(item: vertex);
                     }
                 }
             }
@@ -826,17 +850,43 @@ public static class SdfMeshCollapse {
         // vertices at either end or carry different materials. The place's triangles close one ring of edges two
         // triangles share wherever it can move, so each edge has its twin.
         private void Lines(int place, List<int> fan, List<int> into) {
+            var count = fan.Count;
+
             into.Clear();
-            foreach (var triangle in fan) {
-                var (corner, next, _) = Around(place: place, triangle: triangle);
+            if (m_ringCorner.Length < count) {
+                m_ringCorner = new int[(2 * count)];
+                m_ringNext = new int[(2 * count)];
+                m_ringAfter = new int[(2 * count)];
+            }
+            // Index each triangle by the place after its corner, so every edge finds its twins at once; every place the
+            // index reads is cleared first.
+            for (var at = 0; (at < count); at++) {
+                (m_ringCorner[at], m_ringNext[at], m_ringAfter[at]) = Around(place: place, triangle: fan[at]);
+                m_afterCount[m_ringNext[at]] = 0;
+                m_afterCount[m_ringAfter[at]] = 0;
+            }
+            for (var at = 0; (at < count); at++) {
+                if (m_afterCount[m_ringAfter[at]]++ == 0) { m_afterFirst[m_ringAfter[at]] = at; }
+            }
+            for (var at = 0; (at < count); at++) {
+                var next = m_ringNext[at];
+                var twins = m_afterCount[next];
 
-                foreach (var twin in fan) {
-                    var (twinCorner, _, after) = Around(place: place, triangle: twin);
-
-                    if ((after == next) && ((m_corners[corner] != m_corners[twinCorner]) || (m_corners[NextCorner(corner: corner)] != m_corners[PreviousCorner(corner: twinCorner)]) || (m_materials[triangle] != m_materials[twin]))) {
-                        into.Add(item: next);
-                    }
+                if (twins == 1) {
+                    Line(at: at, into: into, twin: m_afterFirst[next], fan: fan);
+                    continue;
                 }
+                // A non-manifold edge: every twin in fan order.
+                for (var twin = 0; (twins > 1) && (twin < count); twin++) {
+                    if (m_ringAfter[twin] == next) { Line(at: at, into: into, twin: twin, fan: fan); }
+                }
+            }
+        }
+        private void Line(int at, int twin, List<int> fan, List<int> into) {
+            var (corner, twinCorner) = (m_ringCorner[at], m_ringCorner[twin]);
+
+            if ((m_corners[corner] != m_corners[twinCorner]) || (m_corners[NextCorner(corner: corner)] != m_corners[PreviousCorner(corner: twinCorner)]) || (m_materials[fan[at]] != m_materials[fan[twin]])) {
+                into.Add(item: m_ringNext[at]);
             }
         }
         private static long Key(int a, int b) => (((long)Math.Min(val1: a, val2: b)) << 32) | ((uint)Math.Max(val1: a, val2: b));
