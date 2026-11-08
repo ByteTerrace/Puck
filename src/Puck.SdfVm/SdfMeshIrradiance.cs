@@ -1317,7 +1317,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             m_localVersion++;
         }
 
-        var captured = Lighting.Capture(frame: frame, captureLights: captureLights, localVersion: m_localVersion, previous: m_lighting, version: (m_lightingVersion + 1));
+        var captured = Lighting.Capture(frame: frame, captureLights: captureLights, localVersion: m_localVersion, previous: m_lighting, version: (m_lightingVersion + 1), scratch: m_captureScratch);
         if ((frame.IndirectSources & SdfIndirectSources.Sky) != 0) { Counters.Count(EnvironmentProjections); }
         // Exposure reads the current capture's bound even when its irradiance stays in the same grid cell.
         m_skyPeak = captured.SkyPeak;
@@ -2909,6 +2909,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // The lighting the probes are relit under: its version and when it was captured, the directional lights, the static
     // point and spot lights, the program's materials, the gains and sources, and the sky's irradiance projected on the CPU
     // (SdfSkyEnvironment), which the bounced light reads.
+    // Lighting.Capture's workspace: the frame thread's lists, sky map and sky layer table, which every capture refills.
+    private sealed class CaptureScratch {
+        public List<SdfLight> Lights { get; } = [];
+        public List<int> Indices { get; } = [];
+        public List<TracedLight> Points { get; } = [];
+        public Vector3[] Map { get; } = new Vector3[SdfSkyEnvironment.Texels];
+        public SdfSkyLayer[] Layers { get; } = new SdfSkyLayer[SdfSky.MaxLayers];
+        public SdfSkyDetails Details { get; } = new();
+    }
+    private readonly CaptureScratch m_captureScratch = new();
     private sealed class Lighting {
         public required int Version { get; init; }
         // The version of the part of the lighting the point and spot lights and emission make; it advances only when
@@ -2956,10 +2966,14 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // The sky's cosine-weighted mean radiance about a normal: its irradiance over pi, the views pass's unit.
         public Vector3 SkyIrradiance(Vector3 normal) => (SdfSkyEnvironment.Irradiance(coefficients: SkyCoefficients, normal: normal) / MathF.PI);
         // Captures a frame's lighting; the materials are the previous capture's while the program is the same one.
-        public static Lighting Capture(SdfFrame frame, SdfLights captureLights, Lighting? previous, int version, int localVersion) {
-            var lights = new List<SdfLight>();
-            var indices = new List<int>();
-            var points = new List<TracedLight>();
+        // The workspace is the caller's, refilled by every capture; a capture keeps only copies of what it holds.
+        public static Lighting Capture(SdfFrame frame, SdfLights captureLights, Lighting? previous, int version, int localVersion, CaptureScratch scratch) {
+            var lights = scratch.Lights;
+            var indices = scratch.Indices;
+            var points = scratch.Points;
+            lights.Clear();
+            indices.Clear();
+            points.Clear();
             var records = captureLights.Records;
 
             for (var index = 0; (index < frame.Lights.Count); index++) {
@@ -2978,10 +2992,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             var skyPeak = 0f;
 
             if ((sources & SdfIndirectSources.Sky) != 0) {
-                var map = new Vector3[SdfSkyEnvironment.Texels];
-                var layers = new SdfSkyLayer[SdfSky.MaxLayers];
+                var map = scratch.Map;
+                var layers = scratch.Layers;
 
-                frame.Sky.Pack(captureLights, frame.FarDistance, new SdfSkyDetails(), out var block, layers);
+                frame.Sky.Pack(captureLights, frame.FarDistance, scratch.Details, out var block, layers);
                 SdfSkyEnvironment.Render(block: in block, layers: layers, map: map);
                 SdfSkyEnvironment.Project(coefficients: coefficients, map: map);
                 foreach (var texel in map) {

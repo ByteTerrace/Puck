@@ -21,6 +21,9 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
     private long m_copyLayoutRevision = -1;
     private int m_drawnMeshes = -1;
     private readonly List<DrawBinding> m_drawBindings = [];
+    // A topology rebuild's previous bindings by what each draws, so a binding the new topology names again keeps its
+    // object and its pose caches, which compare against the frame as on a frame that keeps the topology.
+    private readonly Dictionary<DrawBinding.Key, DrawBinding> m_reusableBindings = new(comparer: DrawBinding.KeyComparer.Instance);
     // Each finished group the topology was built from, with its mesh, in the bake's group order: a frame whose finished
     // groups and meshes match it in order keeps the topology, read without hashing a group a frame.
     private readonly List<(SdfMeshBakeGroup Group, SdfMesh Mesh)> m_dressedGroups = [];
@@ -297,6 +300,7 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
         SdfMeshHistory.ProcessWork.Count(SdfMeshHistory.DressTopologyBuilds);
         m_draws.Clear();
         m_chunkOwners.Clear();
+        foreach (var binding in m_drawBindings) { m_reusableBindings.TryAdd(binding.Identity, binding); }
         m_drawBindings.Clear();
         m_dressedGroups.Clear();
         m_hostDrawCount = frame.MeshDraws.Count;
@@ -307,29 +311,42 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
             if (access.CopiesOf(group) is { } copies) {
                 foreach (var copy in copies) {
                     for (var piece = 0; piece < Math.Max(1, mesh.Chunks.Count); piece++) {
-                        Bind(new DrawBinding(((mesh.Chunks.Count == 0) ? mesh : mesh.Chunks[piece]), group, copy));
+                        Bind(((mesh.Chunks.Count == 0) ? mesh : mesh.Chunks[piece]), group, copy, chunked: false);
                     }
                 }
                 continue;
             }
             for (var piece = 0; piece < Math.Max(1, mesh.Chunks.Count); piece++) {
                 var part = ((mesh.Chunks.Count == 0) ? mesh : mesh.Chunks[piece]);
-                Bind(new DrawBinding(part, group, -1, chunked: mesh.Chunks.Count > 0));
+                Bind(part, group, -1, chunked: (mesh.Chunks.Count > 0));
                 if (mesh.Chunks.Count > 0) { m_chunkOwners[part] = group; }
             }
         }
         for (var index = 0; index < frame.MeshInstances.Count; index++) {
-            if (frame.MeshInstances[index].Mesh is { } mesh) { Bind(new DrawBinding(mesh, null, index)); }
+            if (frame.MeshInstances[index].Mesh is { } mesh) { Bind(mesh, null, index, chunked: false); }
         }
         IndexBindings(frame);
         for (var index = 0; index < m_drawBindings.Count; index++) {
             visited++;
             m_draws.Add(m_drawBindings[index].Pose(frame, ref matrices));
         }
-        void Bind(DrawBinding binding) => m_drawBindings.Add(binding);
+        // A binding the previous topology held for the same draw and no binding of this one took is not reused again.
+        m_reusableBindings.Clear();
     }
+    // Lists the binding of one draw: the previous topology's for it, or a new one.
+    private void Bind(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked) =>
+        m_drawBindings.Add(m_reusableBindings.Remove(new DrawBinding.Key(mesh, group, copyIndex, chunked), out var kept)
+            ? kept : new DrawBinding(mesh, group, copyIndex, chunked));
 
     private sealed class DrawBinding(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked = false) {
+        // What a binding draws: its mesh or chunk and group by reference, its copy and whether its group is chunked.
+        public readonly record struct Key(SdfMesh Mesh, SdfMeshBakeGroup? Group, int CopyIndex, bool Chunked);
+        public sealed class KeyComparer : IEqualityComparer<Key> {
+            public static KeyComparer Instance { get; } = new();
+            public bool Equals(Key x, Key y) => ReferenceEquals(x.Mesh, y.Mesh) && ReferenceEquals(x.Group, y.Group) && (x.CopyIndex == y.CopyIndex) && (x.Chunked == y.Chunked);
+            public int GetHashCode(Key key) => HashCode.Combine(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(key.Mesh), (key.Group is null) ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(key.Group), key.CopyIndex, key.Chunked);
+        }
+        public Key Identity => new(mesh, group, copyIndex, chunked);
         private object? m_motionSource;
         private object? m_motionIdentity;
         private SdfMeshInstance? m_copy;
