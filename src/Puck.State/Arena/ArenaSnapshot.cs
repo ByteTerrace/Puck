@@ -91,7 +91,7 @@ public sealed partial class StateArena {
             layout = layout.WithCellCapacity(rowOrdinal: row, capacity: capacity);
         }
         // A snapshot whose every reservation equals the live one grows nothing, so it is not a proposal: admission
-        // (whose growth hook prices the document's rules against the proposed layout) runs only for a changed one.
+        // (memory, retained journal and the host's growth-work charge) runs only for a changed one.
         if (ReferenceEquals(objA: layout, objB: m_layout)) { return layout; }
         if (!AdmitReservation(next: layout, additionalBytes: 0L, reason: out var reason)) { throw new InvalidOperationException(message: reason); }
         return layout;

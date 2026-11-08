@@ -1075,7 +1075,7 @@ state {
 
     // The move token: the point the last stone was played on, and the point a request moves it to. It is the search
     // job's one token.
-    table goMove bounds(-1..goPoints - 1) {
+    table goMove capacity(1) bounds(-1..goPoints - 1) {
       play = -1
     }
 
@@ -1150,6 +1150,7 @@ state {
     row {
       name: "goOrdinal"
       kind: "Int"
+      capacity: goStones
       cells: map(range(0, goStones), i => { key: $"goStone{i}", value: i })
     }
     row {
@@ -1160,6 +1161,7 @@ state {
     row {
       name: "goReturn"
       kind: Int
+      capacity: goStones
       cells: map(range(0, goStones), i => { key: $"goStone{i}", value: 0 })
     }
     row {

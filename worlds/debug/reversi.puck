@@ -936,7 +936,7 @@ state {
 
     // The move token: the cell the last disc was played on, and the cell a request moves it to. It is the search job's
     // one token.
-    table reversiMove bounds(-1..63) {
+    table reversiMove capacity(1) bounds(-1..63) {
       play = -1
     }
 

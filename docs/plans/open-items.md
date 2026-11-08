@@ -3637,6 +3637,16 @@ hang, then the pre-`main` language findings.
   The walls sit in the language plan's S11 audit, this section and the
   sdf-authoring skill's evals. Start the one page under `docs/plans/` those
   three link to, and move the walls recorded here into it. Owner: lead.
+- [medium] A record-like table of fixed fields states its room by counting
+  them. Work pricing reads declarations only, so a table a rule folds or a
+  search keys on is priced at the engine's cell ceiling until it declares a
+  capacity (`RuleCompileContext.RowCapacity`), and `table play capacity(25)`
+  (`worlds/debug/chess.puck`) restates its 25 fields by hand, a count that drifts
+  when a field is added. A spelling that lowers to `capacity` = the authored
+  entries at compile time (a `table … fixed` modifier, say) gives the identical
+  compiled document without the count; the decompiler would choose it where the
+  capacity equals the entries. Wall recorded under "Ergonomic is optimal"
+  (AGENTS.md). Owner: language.
 - [medium] A rule `local` costs more than the expression it names: with
   computed keys lowered into the program (rule-faults step 2),
   `local k = a + 1` then `cards[k]` prices the gate at 6 plus the local's 3 tokens

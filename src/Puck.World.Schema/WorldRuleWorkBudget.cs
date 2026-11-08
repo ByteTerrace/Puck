@@ -330,22 +330,57 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     /// <param name="work">The tick's worst-case work.</param>
     /// <param name="contributors">Lists the sheet's lines, costliest first; called only to word a refusal, which
     /// names the first three.</param>
+    /// <param name="rowsAtCeiling">Names, for one line, the rows it reads, writes or iterates that are priced at the
+    /// engine's cell ceiling for want of a capacity (<see cref="RowsAtCeiling(Puck.State.Rules.RuleCompileContext, CompiledRule)"/>), or <see langword="null"/> to name
+    /// none; called only to word a refusal.</param>
     /// <returns>The refusal, in the author's vocabulary, or <see langword="null"/>.</returns>
-    public static string? Refuse(RuleWork work, Func<IReadOnlyList<RuleWorkContributor>> contributors) {
+    public static string? Refuse(RuleWork work, Func<IReadOnlyList<RuleWorkContributor>> contributors, Func<string, IEnumerable<string>>? rowsAtCeiling = null) {
         ArgumentNullException.ThrowIfNull(argument: contributors);
 
         if (work.Fits(ceiling: RuleCapacity.MaxWorkUnitsPerTick)) {
             return null;
         }
 
+        var lines = contributors().Take(count: 3).ToArray();
         var costliest = string.Join(
             separator: ", ",
-            values: contributors().Take(count: 3).Select(selector: static line => $"'{line.Name}' x{line.Multiplier} = {line.WorkUnits}")
+            values: lines.Select(selector: static line => $"'{line.Name}' x{line.Multiplier} = {line.WorkUnits}")
         );
+        var uncapped = ((rowsAtCeiling is null) ? [] : lines.SelectMany(selector: line => rowsAtCeiling(arg: line.Name)).Distinct(comparer: StringComparer.Ordinal).ToArray());
+        var fix = ((uncapped.Length == 0)
+            ? "a forEach line's multiplier is its row's capacity, so author the capacity the row needs"
+            : $"{string.Join(separator: ", ", values: uncapped.Select(selector: static name => $"'{name}'"))} declare no capacity and are priced at the {StateCapacity.MaxCellsPerRow}-cell ceiling they may grow to: author each one's capacity, or key it over a capped token domain");
 
         return $"rules/interactions/flock affinities derive {(work.IsKnown
             ? $"{work} worst-case work units per tick, exceeding"
-            : $"no bound on their work per tick ({work}), which cannot be admitted under")} the maximum of {RuleCapacity.MaxWorkUnitsPerTick}; costliest: {costliest} (a forEach line's multiplier is its row's capacity, so author the capacity the row needs; world.budget.rules lists every line).";
+            : $"no bound on their work per tick ({work}), which cannot be admitted under")} the maximum of {RuleCapacity.MaxWorkUnitsPerTick}; costliest: {costliest} ({fix}; world.budget.rules lists every line).";
+    }
+    /// <summary>Returns the keyed rows a compiled rule iterates, reads or writes whose price is the engine's cell
+    /// ceiling only because they declare no capacity and no capped token domain: the rows whose capacity an author
+    /// would write to bring the rule's price down.</summary>
+    /// <param name="context">The context the rule was priced in.</param>
+    /// <param name="rule">The compiled rule or interaction.</param>
+    /// <returns>The row names, in catalog order.</returns>
+    public static IReadOnlyList<string> RowsAtCeiling(Puck.State.Rules.RuleCompileContext context, CompiledRule rule) {
+        ArgumentNullException.ThrowIfNull(argument: rule);
+
+        return RowsAtCeiling(context: context, ordinals: Puck.State.Rules.RuleDataflow.Reads(rule: rule).Concat(second: Puck.State.Rules.RuleDataflow.Writes(rule: rule))
+            .Select(selector: static access => access.RowOrdinal).Append(element: rule.ForEachOrdinal));
+    }
+    /// <summary>Returns the rows among <paramref name="ordinals"/> priced at the engine's cell ceiling only because
+    /// they are keyed and declare no capacity and no capped token domain.</summary>
+    /// <param name="context">The context the rows were priced in.</param>
+    /// <param name="ordinals">The catalog ordinals to judge; a negative ordinal is skipped.</param>
+    /// <returns>The row names, in catalog order, each once.</returns>
+    public static IReadOnlyList<string> RowsAtCeiling(Puck.State.Rules.RuleCompileContext context, IEnumerable<int> ordinals) {
+        ArgumentNullException.ThrowIfNull(argument: context);
+        ArgumentNullException.ThrowIfNull(argument: ordinals);
+
+        return [.. new SortedSet<int>(collection: ordinals.Where(predicate: static ordinal => (ordinal >= 0)))
+            .Select(selector: ordinal => (Ordinal: ordinal, Row: context.FindRowAt(rowOrdinal: ordinal)))
+            .Where(predicate: entry => (entry.Row is { Capacity: null, Shape: (RowShape.Keyed or RowShape.Ordered), Generated: false }) &&
+                (context.RowCapacity(rowOrdinal: entry.Ordinal) >= StateCapacity.MaxCellsPerRow))
+            .Select(selector: static entry => entry.Row!.Name.Value)];
     }
     /// <summary>Describes why one contributor's multiplier is what it is — the forEach row's capacity, the
     /// interaction's carrier/pair-count formula, or the region-capacity bound's own terms — for

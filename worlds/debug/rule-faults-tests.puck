@@ -325,6 +325,7 @@ state {
     row {
       name: "observer"
       kind: "Int"
+      capacity: 1
       cells [{ key: "6", value: 1 }]
     }
     row {

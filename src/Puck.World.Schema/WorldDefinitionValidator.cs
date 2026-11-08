@@ -1294,6 +1294,10 @@ public static partial class WorldDefinitionValidator {
 
             if (WorldRuleWorkBudget.Refuse(
                 contributors: () => work.Value.Contributors,
+                rowsAtCeiling: name => ((compiledRules.Concat(second: compiledInteractions)
+                    .FirstOrDefault(predicate: rule => string.Equals(a: rule.Name, b: name, comparisonType: StringComparison.Ordinal)) is { } line)
+                    ? WorldRuleWorkBudget.RowsAtCeiling(context: (ruleContext ??= WorldFactsCompiler.Context(definition: definition)), rule: line)
+                    : []),
                 work: work.Value.Budget.WorkUnitsPerTick
             ) is { } refusal) {
                 errors.Add(item: refusal);

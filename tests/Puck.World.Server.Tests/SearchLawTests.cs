@@ -75,7 +75,7 @@ public sealed partial class SearchLawTests {
         var state = new WorldStateSection(
             World: [
                 new WorldStateRow(CellName.Parse(candidate: "board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse(candidate: "pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: tokenA)), new StateCell(CellName.Parse(candidate: "b"), CellValue.Int(value: tokenB))]),
+                new WorldStateRow(CellName.Parse(candidate: "pieceCell"), CellKind.Int, Capacity: 2, Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: tokenA)), new StateCell(CellName.Parse(candidate: "b"), CellValue.Int(value: tokenB))]),
                 new WorldStateRow(CellName.Parse(candidate: "turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
                 new WorldStateRow(CellName.Parse(candidate: "verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0L))]),
                 new WorldStateRow(CellName.Parse(candidate: "best"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "token"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "to"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "score"), CellValue.Int(value: 0L))]),
