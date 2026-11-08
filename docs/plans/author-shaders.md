@@ -680,16 +680,33 @@ identity, kernel and bin; an `octaves` edit changes all three.
 
 ### 3.4 The two tiers, generated from one table
 
-**Step 3 implementation invariants.** Publication happens in the residency's
-once-per-frame preparation, before any recorder reads its shading selection.
-A recording retains the selected pipeline through `SdfShadeSlots`; its lease
-is released only by that slot's completion proof, abandonment before submission,
-or device teardown. Replacing the residency's selection cannot free a pipeline
-already captured by a recorder. Background results carry the exact requested
-program set and interpreter content identity; only the current request may
-publish. Compilation, reflection and driver pipeline creation stay off the
-frame thread. Publication changes neither scene revisions nor render history.
-These are implementation obligations, not yet GPU evidence.
+**Step 3's GPU-lifetime invariants, and what enforces each.**
+
+1. *A specialized kernel replaces the interpreter only at a frame boundary, and
+   only for a frame whose active programs its set holds.* The one publication
+   door is `SdfWorldResidency.PrepareShade`, which runs once a produced frame
+   after the frame is packed and before any pass records, with the frame the
+   passes record. A frame whose active set leaves the published set, or whose
+   kernels a reload replaced, retires it there before any recording; an arrival
+   publishes only while its identity (the sorted program identities, the op
+   fingerprint and the interpreter's `SdfKernelSet.ContentKey`) is still the
+   request and it covers the active set (`SdfShadeKernels.Covers`). Every views
+   and glass recording takes its kernel from `SdfShadeSlots.RecordPipeline`
+   alone, which reads that selection, so the passes of one frame record one
+   selection.
+2. *A kernel is freed only after the last submission that recorded it.*
+   `RecordPipeline` pins the set before a native handle reaches the recorder; the
+   pin moves to the slot's submission and drops only on that submission's
+   completion proof (the node's wait of the slot, or a released recorder's next
+   package frame), on abandonment before submission, or on a device loss. A
+   retired set is disposed by `PrepareShade` only at zero pins; device teardown
+   and the residency's final release (after `TryWaitIdle`) dispose every set.
+3. *Nothing on the frame thread waits for a compile or a driver.* Compilation
+   (on the shared `ShaderCompileTurns`), reflection and pipeline creation run in
+   `SdfShadePipelines.BuildAsync` on the thread pool; `PrepareShade` only polls
+   it, and an overtaken build is detached and disposed on a later frame.
+4. *Publication changes no scene revision and no render history.* Only
+   `world.shaders.tier`, a diagnostic, invalidates the shading passes.
 
 **Tier 1, the interpreter.** The views kernel gains one rolled `[loop]` over
 the program's ops with a `switch` over the op table, one per phase, running in
@@ -764,24 +781,29 @@ parameters are data and only structural edits make a new identity, a world's
 specializations number its distinct programs times two targets, and an author
 sweeping a colour or a seed compiles nothing.
 
-**Specialization by program set, with the interpreter as its default arm.**
-The first tier-2 variant the matrix measures keeps the unsplit views kernel
-and specializes it per **program set**: one kernel per distinct set of program
-identities a world's documents declare, whose identity is the hash of the
-sorted program identities and whose kernel selects each pixel's program by a
-`switch` over the set's identities, each arm the emitted straight-line program,
-and whose `default` arm is the interpreter. Pixels of one surface share a
-program, so a wave takes one arm coherently, registers are allocated to the
-union of the arms' live ranges (one arm live at a time), the 8×8 tile and its
-filter stay as they are, and an edited program whose identity the compiled set
-does not hold falls to the interpreter arm at once while the set recompiles.
-Its edit behaviour is stated rather than assumed: any program edit changes the
-set identity, so the set kernel recompiles whole (one views-sized compile, two
-to seven seconds measured above) while the interpreter arm shows the edit; the
-debug world is one set, so one compile. The per-program kernels of the binned
-path (section 3.5) are the second variant, taken only where the matrix shows
-the set kernel's registers or time past the bar. The bound and the quarantine
-hold on both (section 3.7).
+**Specialization by program set, with no interpreter in the kernel.** Step 3
+specializes the unsplit views and glass kernels per **program set**: one pair
+of kernels per distinct set, whose identity hashes the sorted program
+identities, the op fingerprint and the interpreter's content key, and which
+selects each pixel's program once (`SdfShadeBinding.arm`, by the identity the
+program's header carries) and runs its emitted straight-line arm. Pixels of one
+surface share a program, so a wave takes one arm coherently, registers are
+allocated to the union of the arms' live ranges, and the 8×8 tile and its filter
+stay as they are. The set is the frame's active programs together with every
+program the documents declare (`SdfFrame.ShadeDeclared`), so composition changes
+do not recompile it and `world prepare` compiles the same set. The draft's
+interpreter `default` arm is not taken: registers are allocated for the whole
+kernel, so an interpreter arm would keep the interpreter's 255 registers in
+every specialized kernel (the light phase alone sets that count, section 5).
+Instead a set records only a frame whose active programs it holds, and any
+other frame (an edit, a program the documents did not declare) records with
+the fixed interpreter kernel at once while the new set compiles: any program
+edit changes the set identity, so the set recompiles whole (one views-sized and
+one glass-sized compile) while the interpreter shows the edit. A frame with no
+active program records with the plain kernels, compiled with no program state
+at all. The per-program kernels of the binned path (section 3.5) are the second
+variant, taken only where the matrix shows the set kernel's registers or time
+past the bar. The bound and the quarantine hold on both (section 3.7).
 
 ### 3.5 Binning: authored code out of the views pass's register budget
 
@@ -819,12 +841,12 @@ loops in it, every pixel pays the loops' register allocation, programs or not
    cascade reads depend on, and keep a wave on one program; a pixel-granular
    list is a variant step 4 measures only if mixed tiles turn out to dominate.
 
-**A world with no program pays nothing for bins.** When the loaded documents
-declare no program, the planner (section 3.7) emits today's one dispatch over
-the extent with the kernel whose interpreter loops run zero ops, allocates no
-filter record and no pixel list, and records no classification; the split
-exists only while a program exists, and the no-program frame is one of the
-decision matrix's rows (section 6).
+**A world with no program pays nothing for bins.** When a frame has no active
+program, the planner (section 3.7) emits today's one dispatch over the extent
+with the plain views and glass kernels (step 3: compiled with no interpreter
+and no program state), allocates no filter record and no pixel list, and records
+no classification; the split exists only while a program exists, and the
+no-program frame is one of the decision matrix's rows (section 6).
 
 The pipeline count is one interpreter plus the specialized programs in view,
 tens rather than thousands, every one enumerable from the document before the
@@ -1120,19 +1142,27 @@ final set:
    occupancy limiters from PIX, Nsight or RenderDoc beside the timings.
    Decides the scope of tier 2 and the stamp's live-state budget; a device
    past its bar makes steps 3 and 4 required and ordered before step 6.
-3. **Tier 2 and the equivalence corpus** (GPU for the stills). The emitter's
-   HLSL splice, the background compile through `ShaderCompiler` on the shared
-   turnstile, the specialization loader over authored identities, the
-   stall-free publication of section 3.4, `world prepare` emitting every
-   program's kernel for both targets. Check: the threshold-sensitive corpus of
-   section 3.3 rendered through both tiers agrees within the still tolerance on
-   both targets, pixel by pixel; `world.shaders.status` reports each program's
-   state; the compile is counted in the shader compiler's work and a second
-   boot of the same world compiles nothing; edit-to-running of a program edit
-   is measured under 30 s with the interpreter showing it; a burst of twenty
-   arrivals and an edit that overtakes an older compile (the stale arrival
-   discarded) show no frame change and no spike in a presented burst
-   (`puck_capture_frame` `mode: presented`).
+3. **Tier 2 and the equivalence corpus** (GPU for the stills). Landed: the
+   emitter's splice (`SdfShadeHlsl.Specialize` as the kernels'
+   `isa/sdf-shade.hlsli`), the background compile through the World's
+   `ShaderCompiler` on `ShaderCompileTurns`, the loader over program sets
+   (`SdfShadeKernels`, `SdfShadePipelines`), the publication door of section
+   3.4 (`SdfWorldResidency.PrepareShade`), the plain kernels for frames with no
+   active program, and `world prepare` compiling each hosted world's declared set
+   for both targets into the player's shipping cache (a target the machine's
+   toolchain cannot compile is skipped and named, since the runtime derives a
+   miss again). The choices this step made: no interpreter arm in a specialized
+   kernel (section 3.4); the set is the active programs with the declared ones;
+   `world.shaders.tier interpreted|automatic` forces the interpreter for the
+   comparison. The corpus is `worlds/debug/shade-tier-checks.puck` (a step on a
+   folded edge, the lattice at its corners, a smoothstep one footprint wide, a
+   hash of a quantized coordinate, a reveal at its threshold with a division by
+   zero, a stepped light phase and a compose phase, and the standard water's
+   flow on glass). Its non-lockstep settled stills, sun held by a paused tick and
+   exposure pinned, through both tiers: Vulkan differs in one pixel of 1,152,000
+   by one 8-bit level, Direct3D 12 in two, none by two or more, and repeats of
+   one tier are byte-identical. The binned path's per-program kernels and a
+   debug-world sweep through both tiers remain for step 4 and step 6.
 4. **Binning** (GPU leg). The `views-filter` and `views-shade` split, the
    filter record, the per-program count, prefix sum, scatter and indirect
    jobs. Check: the decision matrix's binned columns against the unsplit, with

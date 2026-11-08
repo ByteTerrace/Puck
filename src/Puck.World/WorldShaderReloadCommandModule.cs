@@ -24,10 +24,10 @@ internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProb
             description: "Selects which tier shades authored programs, for comparing them: [automatic|interpreted]. automatic records with the published specialized kernels wherever they hold every active program; interpreted records with the interpreter. Changing it re-renders the shading passes; specialization continues in either mode, and world.shaders.status reports each program's state.",
             handler: (_, args) => {
                 if (renderProbe.Residency is not { } node) { return new CommandResult(Output: "[world.shaders.tier: renderer not ready]"); }
-                if (args.Count > 1 || (args.Count == 1 && args[0] is not ("automatic" or "interpreted"))) {
+                if ((args.Count > 1) || ((args.Count == 1) && !args.Is(index: 0, value: "automatic") && !args.Is(index: 0, value: "interpreted"))) {
                     return CommandResult.Error(output: "[world.shaders.tier: automatic|interpreted]");
                 }
-                if (args.Count == 1) { node.InterpretShade = args[0] == "interpreted"; }
+                if (args.Count == 1) { node.InterpretShade = args.Is(index: 0, value: "interpreted"); }
                 return new CommandResult(Output: $"[world.shaders.tier: {(node.InterpretShade ? "interpreted" : "automatic")}]");
             });
         yield return CommandDefinition.WithWireArgs(

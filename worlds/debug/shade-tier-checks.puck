@@ -1,0 +1,105 @@
+// Tier equivalence witnesses: programs whose outputs sit exactly on a threshold, which the interpreter and a
+// specialized kernel must shade alike (world.shaders.tier interpreted|automatic). One panel a program, opaque and glass.
+schema: "puck.world.definition.v1"
+basis: "shade-checks"
+documentId: "shade-tier-checks"
+import "../standard/water"
+
+function tierFrac(x) = x - floor(x)
+
+// A step whose edge the lowering folds exactly (0.25 + 0.25 is 0.5 in binary32) over a value crossing it each cell.
+shade template tierFoldedStep() {
+  surface {
+    albedo = mix([0.08, 0.08, 0.08], [0.92, 0.92, 0.92], step(0.25 + 0.25, tierFrac(surface.position.x * 4)))
+  }
+}
+// The lattice read at its cell corners, where it is exactly zero, and stepped there.
+shade template tierLatticeCorner(seed) {
+  surface {
+    let corner = lattice(floor(surface.position * 4), seed)
+    albedo = mix([0.9, 0.2, 0.1], [0.1, 0.3, 0.9], step(0, corner))
+    roughness = 0.5 + 0.5 * corner
+  }
+}
+// A smoothstep edge exactly one footprint wide.
+shade template tierFootprintEdge() {
+  surface {
+    albedo = mix([0.1, 0.6, 0.1], [0.95, 0.95, 0.6], smoothstep(0, surface.footprint, tierFrac(surface.position.y * 8) - 0.5))
+  }
+}
+// A hash of a coordinate quantized at integers, seeding a lattice read stepped at zero.
+shade template tierQuantizedHash() {
+  surface {
+    let cell = hash(quantize(surface.position * 2))
+    albedo = mix([0.2, 0.2, 0.2], [0.9, 0.7, 0.2], step(0, lattice([0.25, 0.5, 0.75], cell.x)))
+  }
+}
+// A reveal at exactly its threshold, and a division by zero the stage sanitizes, through all three phases.
+shade template tierReveal(seed) {
+  surface {
+    let cover = lattice(surface.position * 3, seed)
+    reveal = cover >= 0 ? 1 : 0
+    wrap = cover / 0
+  }
+  light {
+    diffuse = light.color * (light.weight * step(0.5, light.cosine) * light.visibility)
+  }
+  compose {
+    color = (surface.albedo * (compose.radiance + compose.indirect) + compose.specular) * compose.adaptation * (1 - 0.5 * surface.reveal)
+  }
+}
+
+prototypes {
+  prototype "tier-folded-step" {
+    document {
+      schema: "puck.creation.v1"
+      palette [{ color: "#808080", roughness: 0.8, specular: 0.02, shade: tierFoldedStep() }]
+      shape Box "panel" { scale [0.8, 0.8, 0.04] }
+    }
+  }
+  prototype "tier-lattice-corner" {
+    document {
+      schema: "puck.creation.v1"
+      palette [{ color: "#808080", roughness: 0.8, specular: 0.02, shade: tierLatticeCorner(seed: 7) }]
+      shape Box "panel" { scale [0.8, 0.8, 0.04] }
+    }
+  }
+  prototype "tier-footprint-edge" {
+    document {
+      schema: "puck.creation.v1"
+      palette [{ color: "#808080", roughness: 0.8, specular: 0.02, shade: tierFootprintEdge() }]
+      shape Box "panel" { scale [0.8, 0.8, 0.04] }
+    }
+  }
+  prototype "tier-quantized-hash" {
+    document {
+      schema: "puck.creation.v1"
+      palette [{ color: "#808080", roughness: 0.8, specular: 0.02, shade: tierQuantizedHash() }]
+      shape Box "panel" { scale [0.8, 0.8, 0.04] }
+    }
+  }
+  prototype "tier-reveal" {
+    document {
+      schema: "puck.creation.v1"
+      palette [{ color: "#B09070", roughness: 0.6, specular: 0.04, shade: tierReveal(seed: 11) }]
+      shape Box "panel" { scale [0.8, 0.8, 0.04] }
+    }
+  }
+  prototype "tier-water" {
+    document {
+      schema: "puck.creation.v1"
+      palette [
+        flowed(waterMaterial, stillFlowLayer with { frame: Object, coverage: 0.3, tilt: 0.1 }, world: 0, glass: 1)
+      ]
+      shape Box "water" { scale [0.8, 0.1, 0.8] }
+    }
+  }
+}
+placements {
+  placement "tier-folded-step" { prototype: "tier-folded-step" position [-4, 1, -3] solid }
+  placement "tier-lattice-corner" { prototype: "tier-lattice-corner" position [-2, 1, -3] solid }
+  placement "tier-footprint-edge" { prototype: "tier-footprint-edge" position [2, 1, -3] solid }
+  placement "tier-quantized-hash" { prototype: "tier-quantized-hash" position [4, 1, -3] solid }
+  placement "tier-reveal" { prototype: "tier-reveal" position [-2, 2.8, -3] solid }
+  placement "tier-water" { prototype: "tier-water" position [2, 0.15, -1] }
+}

@@ -149,6 +149,8 @@ public static class WorldPrepareCommand {
     // Each hosted world's declared program set specializes the views and glass kernels exactly as its residency requests
     // them (SdfWorldResidency's PrepareShade), for both targets, from the deployed tree a player compiles against, so a
     // player's first boot finds them in its shipping cache and interprets only a program its documents did not declare.
+    // The kernels are a cache whose miss the runtime derives again, so a target this machine's toolchain cannot compile
+    // (no dxc, a dxc without SPIR-V, an install without the kernel sources) is skipped and named, never fatal.
     private static void PrepareShading(IReadOnlyList<IReadOnlyList<SdfShadeProgram>> sets, string output) {
         var compiler = new ShaderCompiler(cacheDirectory: ShaderCompiler.DefaultCacheDirectory);
         var store = Path.Combine(path1: output, path2: Puck.Assets.DerivedBytes.ShippingDirectoryName);
@@ -156,15 +158,19 @@ public static class WorldPrepareCommand {
             .DistinctBy(keySelector: static set => string.Join(separator: '\n', values: set.Select(selector: static p => p.Identity)), comparer: StringComparer.Ordinal).ToArray();
         var kernels = 0;
 
-        foreach (var programs in distinct) {
-            foreach (var target in (ReadOnlySpan<ShaderTarget>)[ShaderTarget.Dxil, ShaderTarget.Spirv]) {
-                var plans = SdfShadeKernels.Plan(compiler: compiler, programs: programs, target: target, tree: SdfKernelSet.DeployedTree);
+        foreach (var target in (ReadOnlySpan<ShaderTarget>)[ShaderTarget.Dxil, ShaderTarget.Spirv]) {
+            try {
+                foreach (var programs in distinct) {
+                    var plans = SdfShadeKernels.Plan(compiler: compiler, programs: programs, target: target, tree: SdfKernelSet.DeployedTree);
 
-                _ = SdfShadeKernels.CompileAsync(compiler: compiler, plans: plans).GetAwaiter().GetResult();
-                foreach (var (_, plan) in plans) {
-                    compiler.ExportPrepared(directory: store, plan: plan);
-                    kernels++;
+                    _ = SdfShadeKernels.CompileAsync(compiler: compiler, plans: plans).GetAwaiter().GetResult();
+                    foreach (var (_, plan) in plans) {
+                        compiler.ExportPrepared(directory: store, plan: plan);
+                        kernels++;
+                    }
                 }
+            } catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException or ShaderToolMissingException or ShaderClosureRefusedException) {
+                Console.Error.WriteLine(value: $"world prepare: specialized shading kernels for {target} skipped, the runtime compiles them on a miss: {exception.Message}");
             }
         }
         Console.WriteLine(value: $"Prepared {kernels} specialized shading kernel(s) for {distinct.Length} program set(s) in {store.Replace(oldChar: '\\', newChar: '/')}.");
