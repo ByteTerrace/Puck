@@ -1030,6 +1030,11 @@ commit, as machine readings are not a repository baseline.
 
 ## Open items
 
+- Control verbs anyone can run, outside the console audit's disclosure
+  scope: `pipeline.load`, `player.claim`, `player.cycle` (the fuzzer moved a
+  device to player 1) and `world.transfer` take `CommandAudience.Anyone`.
+  Decide each one's audience by what a seat should be able to change, the way
+  the audit decided reads.
 - Argon's adversarial review of step 1: [high] `deal` leaks preceding hidden
   cells through `DealSlot` and position, which step 4 owns. Its remaining
   delivery findings are closed by the view/cursor work in decision 5.
