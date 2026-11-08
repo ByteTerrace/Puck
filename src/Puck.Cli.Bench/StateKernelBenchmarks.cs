@@ -251,13 +251,13 @@ public class StateExpressionKernels {
     public long Evaluate() {
         var frame = new Puck.State.Rules.EvaluationFrame(reader: m_reader!);
 
-        _ = RuleExpressions.Evaluate(
+        return (RuleExpressions.Evaluate(
             frame: ref frame,
             kind: CellKind.Int,
             program: m_program
-        ).TryFinite(raw: out var value);
-
-        return value;
+        ).TryFinite(raw: out var value)
+            ? value
+            : 0L);
     }
 }
 // The bulk shapes a rule pass drives over a row's cells, at the same capacity breakpoints: a contiguous scan, a

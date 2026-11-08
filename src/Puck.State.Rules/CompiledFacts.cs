@@ -158,9 +158,9 @@ public interface IRuleKey : ICompiledFact {
             return WriteKey.Faulted();
         }
 
-        _ = resolved.TryNamed(value: out var key);
-
-        return WriteKey.Resolved(key: key);
+        return WriteKey.Resolved(key: (resolved.TryNamed(value: out var key)
+            ? key
+            : default));
     }
     /// <summary>Resolves the key as an integer index — a live zone's table index, a static table's key.</summary>
     /// <param name="reader">The evaluation in flight.</param>

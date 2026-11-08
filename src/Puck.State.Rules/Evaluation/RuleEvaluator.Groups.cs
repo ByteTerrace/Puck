@@ -46,21 +46,25 @@ public sealed partial class RuleEvaluator {
 
             // A trigger that faulted decided nothing: the group neither runs nor re-arms this tick, and keeps its
             // progress for the tick its trigger decides again.
-            if (armed == Verdict.Faulted) {
-                continue;
-            }
-            // A trigger that reads false re-arms the group: a breached fixpoint group runs again only after its
-            // trigger has gone false and holds once more.
-            if (armed != Verdict.Open) {
-                if ((group.Undo is not null) && (m_host is IArenaUndoHost inactiveUndo) && inactiveUndo.UndoTurnPending(group: group.Name)) {
-                    inactiveUndo.CancelUndoTurn(group: group.Name);
-                }
-                state.Set(
-                    name: group.Name,
-                    progress: default
-                );
+            switch (armed) {
+                case Verdict.Faulted:
+                    continue;
+                // A trigger that reads false re-arms the group: a breached fixpoint group runs again only after its
+                // trigger has gone false and holds once more.
+                case Verdict.Closed:
+                    if ((group.Undo is not null) && (m_host is IArenaUndoHost inactiveUndo) && inactiveUndo.UndoTurnPending(group: group.Name)) {
+                        inactiveUndo.CancelUndoTurn(group: group.Name);
+                    }
+                    state.Set(
+                        name: group.Name,
+                        progress: default
+                    );
 
-                continue;
+                    continue;
+                case Verdict.Open:
+                    break;
+                default:
+                    throw new System.Diagnostics.UnreachableException();
             }
 
             BeginUndoIfNeeded(group: group);

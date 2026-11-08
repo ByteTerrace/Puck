@@ -151,8 +151,9 @@ public static partial class RuleExpressions {
                         }
 
                         // An absent body is false.
-                        _ = truthOutcome.TryFinite(raw: out var truthValue);
-                        stack[top] = truthValue;
+                        stack[top] = (truthOutcome.TryFinite(raw: out var truthValue)
+                            ? truthValue
+                            : 0L);
                         absent[top++] = false;
                     }
                     stack[(top - 1)] = ((absent[(top - 1)] || (stack[(top - 1)] == 0L)) ? 1L : 0L);
@@ -169,8 +170,8 @@ public static partial class RuleExpressions {
                             return rightOutcome;
                         }
 
-                        _ = rightOutcome.TryFinite(raw: out var rightTruth);
-                        truth = (rightTruth != 0L);
+                        // An absent right side is false.
+                        truth = (rightOutcome.TryFinite(raw: out var rightTruth) && (rightTruth != 0L));
                     }
                     stack[(top - 1)] = (truth ? 1L : 0L);
                     absent[(top - 1)] = false;

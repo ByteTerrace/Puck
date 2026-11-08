@@ -12,13 +12,13 @@ public static class RuleEvaluation {
     /// <param name="fact">The fact.</param>
     /// <returns>The spelling.</returns>
     public static string DescribeFact(in Fact fact) {
-        fact.Outcome.TryFinite(raw: out var raw);
-
         return DescribeFact(
             isAbsent: (fact.Outcome.Case is FaultCase.Absent or FaultCase.Faulted),
             isForever: (fact.Outcome.Case == FaultCase.Forever),
             kind: fact.Kind,
-            value: raw
+            value: (fact.Outcome.TryFinite(raw: out var raw)
+                ? raw
+                : 0L)
         );
     }
     /// <summary>Formats a raw value for a trace.</summary>
@@ -167,8 +167,13 @@ public static class RuleEvaluation {
                 (right.Outcome.Case is FaultCase.Absent or FaultCase.Faulted)
             );
 
-            left.Outcome.TryFinite(raw: out var leftRaw);
-            right.Outcome.TryFinite(raw: out var rightRaw);
+            // A case with no number (forever, or the absence the comparison already refused) compares as zero beside its flag.
+            var leftRaw = (left.Outcome.TryFinite(raw: out var leftFinite)
+                ? leftFinite
+                : 0L);
+            var rightRaw = (right.Outcome.TryFinite(raw: out var rightFinite)
+                ? rightFinite
+                : 0L);
 
             var holds = (
                 !absent &&

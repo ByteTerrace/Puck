@@ -670,19 +670,25 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             rule: rule,
             trace: trace?.Zones
         );
-        var verdict = ((rows == Verdict.Open)
-            ? Decide(
+        var verdict = (rows switch {
+            Verdict.Open => Decide(
                 gate: rule.Gate,
                 ruleName: rule.Name,
                 trace: trace?.Conjuncts
-            )
-            : rows);
+            ),
+            _ => rows,
+        });
         var faulted = (verdict == Verdict.Faulted);
 
         return new Judgement(
             Decided: !faulted,
             Faulted: faulted,
-            Open: (verdict == Verdict.Open),
+            Open: (verdict switch {
+                Verdict.Open => true,
+                Verdict.Closed => false,
+                Verdict.Faulted => false,
+                _ => throw new System.Diagnostics.UnreachableException(),
+            }),
             WakeTick: ((!faulted && (schedule?.Deadline is { } deadline)) ? WakeTick(deadline: deadline, gate: rule.Gate, tick: tick) : ulong.MaxValue)
         );
     }
@@ -696,8 +702,11 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         var x = RuleEvaluation.ReadSource(frame: ref frame, kind: token.ValueKind, source: (deadline.TickOnLeft ? token.RightSource : token.LeftSource));
         var now = RuleEvaluation.ReadSource(frame: ref frame, kind: token.ValueKind, source: (deadline.TickOnLeft ? token.LeftSource : token.RightSource));
 
-        now.Outcome.TryFinite(raw: out var nowRaw);
-        if ((x.Outcome.Case == FaultCase.Faulted) || (nowRaw != unchecked((((long)tick) * deadline.Scale)))) {
+        if (
+            (x.Outcome.Case == FaultCase.Faulted) ||
+            !now.Outcome.TryFinite(raw: out var nowRaw) ||
+            (nowRaw != unchecked((((long)tick) * deadline.Scale)))
+        ) {
             return 0UL;
         }
 
