@@ -697,8 +697,9 @@ public static class SdfMeshCollapse {
             }
 
             if (!Measure(cosine: cosine, error: error, fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond)) { return Outcome.RefusedMeasure; }
-            if (!MeasureReverse(error: error, fan: fan)) { return Outcome.RefusedMeasure; }
+            // The line check is the cheaper of the two, and neither changes what the other measures.
             if (!MeasureLines(error: Math.Min(val1: error, val2: m_lineLimit), from: from, to: to)) { return Outcome.RefusedMeasure; }
+            if (!MeasureReverse(error: error, fan: fan)) { return Outcome.RefusedMeasure; }
 
             Commit(fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond);
 
