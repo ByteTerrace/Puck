@@ -32,12 +32,15 @@ namespace Puck.World;
 /// removes the children a sweep added stays undone until the row moves again.</para>
 /// <para>A child is a reading of the cells it was dealt from, so a reader is shown it as the deal would deal it from
 /// the rows that reader may read (<see cref="WorldStateDisclosure.Disclose"/>, the wire projection and a seat's console
-/// alike): a template whose row can withhold from the reader is re-dealt in the reader's row order, so the slots, positions and
-/// order it is shown carry nothing of the authority's slot history; a withheld cell is absent, or an anonymous back
-/// under <see cref="HiddenCells.Placeholder"/>; a withheld variant cell shows the template's own prototype. Because
-/// a child's physical presence would tell every body in the room what the reader is not shown, a template whose
-/// dealt or variant row can withhold from any principal, and its children, carry none of
-/// <see cref="PhysicalFacets"/>.</para>
+/// alike): a template whose row can withhold from the reader is re-dealt in the reader's row order, each child at the
+/// offset the region gives its re-dealt slot, so the slots, positions and order it is shown carry nothing of the
+/// authority's slot history; a withheld cell is absent, or an anonymous back under
+/// <see cref="HiddenCells.Placeholder"/>, and a placement authored under a child the reader is not shown is absent
+/// too; a withheld variant cell shows the template's own prototype, whether or not the dealt row withholds. Because
+/// whatever a placement under such a template carries beyond that reading acts or shows at the authority's slot, a
+/// template whose dealt or variant row can withhold from any principal, its children and every placement authored
+/// under them carry nothing outside <see cref="UndisclosingMembers"/>' disclosing set, and the template preserves no
+/// instance-owned transform (<see cref="WorldPlacementDealPreserve.Transform"/>).</para>
 /// <para>Refused alongside <see cref="WorldPlacement.Inhabit"/>, <see cref="WorldPlacement.Attach"/>,
 /// <see cref="WorldPlacement.Respond"/>, <see cref="WorldPlacement.Mirror"/>, and
 /// <see cref="WorldPlacement.FaceSources"/>; requires a <see cref="WorldPlacement.Distribution"/> whose region
@@ -126,18 +129,51 @@ public sealed record WorldPlacementDeal(
         Spatial: template.Spatial,
         Surface: template.Surface
     );
-    /// <summary>Returns <paramref name="placement"/>'s physical facets by name (<c>solid</c>, <c>grip</c>,
-    /// <c>spatial</c>, <c>region</c>, <c>emission</c>), the ones a child of a template over a row that can withhold
-    /// may not carry: a collider, a hold, a census volume, a region or a voice exists for every body in the room, so a
-    /// hidden child carrying one is an oracle no view can close.</summary>
-    /// <param name="placement">The template or child.</param>
-    public static IEnumerable<string> PhysicalFacets(WorldPlacement placement) {
-        if (placement.Solid is not null) { yield return "solid"; }
-        if (placement.Grip is not null) { yield return "grip"; }
-        if (placement.Spatial is { Count: > 0 }) { yield return "spatial"; }
-        if (placement.Region is not null) { yield return "region"; }
-        if (placement.Emission is not null) { yield return "emission"; }
+    // The placement members a template that can withhold, its dealt children and every placement authored under them
+    // may carry, by JSON name: what the re-deal already discloses (the identity and parent, the prototype the disclosed
+    // face selects, the transform the deal stamps at the re-dealt slot) and presentation that composes over that
+    // transform. Every other member, a member added to WorldPlacement later included, is refused.
+    private static readonly HashSet<string> Disclosing = new(collection: ["id", "prototypeId", "position", "yawDegrees", "scale", "parent", "dealSlot", "distribution", "mirror", "surface"], comparer: StringComparer.Ordinal);
+
+    /// <summary>Returns, by JSON name, every member <paramref name="placement"/> carries beyond what a re-deal discloses,
+    /// the members a placement under a template whose dealt or variant row can withhold may not carry. Only the
+    /// identity, parent and slot, the prototype, the transform, a distribution, a mirror and a surface projection
+    /// compose over the transform a recipient's re-deal shows; anything else (a collider, a hold, a census volume, a
+    /// region, a voice, a body, an attachment, a face source, a response, a board, a contribution, and any member the
+    /// placement model gains later) acts or shows at the authority's own slot, which hidden arrivals shape, so it is an
+    /// oracle no view can close. The members are read from the generated model shape
+    /// (<see cref="WorldModelShape"/>), so a new member is refused until it is added to the disclosing set.</summary>
+    /// <param name="placement">The template, a dealt child, or a placement authored under one.</param>
+    /// <param name="template">Whether <paramref name="placement"/> is the template itself, the one row that carries
+    /// the <c>deal</c> member.</param>
+    /// <returns>The undisclosing members' JSON names, in model order; empty when <paramref name="placement"/> carries
+    /// none.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="placement"/> is <see langword="null"/>.</exception>
+    public static IEnumerable<string> UndisclosingMembers(WorldPlacement placement, bool template) {
+        ArgumentNullException.ThrowIfNull(argument: placement);
+
+        foreach (var member in WorldModelShape.Of(type: typeof(WorldPlacement))!.Members) {
+            if ((member.Get is not { } read) || ((member.Access & WorldModelAccess.Write) == 0) || Disclosing.Contains(item: member.Name) ||
+                (template && string.Equals(a: member.Name, b: "deal", comparisonType: StringComparison.Ordinal))) {
+                continue;
+            }
+            if (Carries(value: read(arg: placement))) { yield return member.Name; }
+        }
     }
+    // Whether a member's value is set: absent, a zero or false scalar and an empty collection carry nothing; any other
+    // value, a struct this does not know included, carries something.
+    private static bool Carries(object? value) => value switch {
+        null => false,
+        bool flag => flag,
+        int number => (number != 0),
+        long number => (number != 0L),
+        float number => (number != 0f),
+        double number => (number != 0d),
+        string text => (text.Length != 0),
+        Enum flag => (Convert.ToInt64(value: flag, provider: CultureInfo.InvariantCulture) != 0L),
+        System.Collections.IEnumerable items => items.GetEnumerator().MoveNext(),
+        _ => true,
+    };
     /// <summary>Returns whether <paramref name="id"/> spells <see cref="ChildSeparator"/> at all — the shape only a deal sweep
     /// may mint.</summary>
     /// <param name="id">The placement id.</param>

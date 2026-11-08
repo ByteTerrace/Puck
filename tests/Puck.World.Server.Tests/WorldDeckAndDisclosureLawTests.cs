@@ -139,7 +139,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
         }
     }
     // A hand of three dealt into a four-slot rack: the hidden `ace` holds slot 0 and the visible `king` and `queen`
-    // slots 1 and 3 (a card that left slot 2 freed it), the king displaced half a metre up from its slot.
+    // slots 1 and 3 (a card that left slot 2 freed it).
     private static WorldDefinition Rack(HiddenCells hidden, string? solidCard = null) {
         static StateCell Card(string key, bool hidden) => StateFixtures.Cell(key: key, kind: CellKind.Bool) with { Visibility = (hidden ? new(["seat1"]) : null) };
         var template = new WorldPlacement(
@@ -157,11 +157,11 @@ public sealed class WorldDeckAndDisclosureLawTests {
                 ),
                 Fill: new WorldSequence(Name: WorldSequence.None, Offset: 0, Step: 0f)
             ),
-            Deal: new WorldPlacementDeal(Row: "hand", Preserve: new WorldPlacementDealPreserve(Transform: true))
+            Deal: new WorldPlacementDeal(Row: "hand")
         );
-        WorldPlacement Child(string key, int slot, float lift) => WorldPlacementDeal.Child(
+        WorldPlacement Child(string key, int slot) => WorldPlacementDeal.Child(
             id: WorldPlacementDeal.ChildId(template: "rack", key: key),
-            offset: new System.Numerics.Vector3(x: 0.25f * slot, y: lift, z: 0f),
+            offset: new System.Numerics.Vector3(x: 0.25f * slot, y: 0f, z: 0f),
             prototype: key,
             slot: slot,
             template: template
@@ -172,7 +172,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
                 new(Name(value: "hand"), CellKind.Bool, Cells: [Card("ace", hidden: true), Card("king", hidden: false), Card("queen", hidden: false)],
                     Capacity: 4, Visibility: new(Hidden: hidden)),
             ]),
-            PlacementRowsRaw = [template, Child("ace", slot: 0, lift: 0f), Child("king", slot: 1, lift: 0.5f), Child("queen", slot: 3, lift: 0f)],
+            PlacementRowsRaw = [template, Child("ace", slot: 0), Child("king", slot: 1), Child("queen", slot: 3)],
             Rules = [],
         };
     }
@@ -188,17 +188,17 @@ public sealed class WorldDeckAndDisclosureLawTests {
             string Layout(IReadOnlyList<WorldPlacement> placements) => string.Join(separator: "; ", values: placements.Select(selector: p =>
                 FormattableString.Invariant($"{p.Id}@{p.DealSlot}=({p.Position.X:0.##},{p.Position.Y:0.##}) {p.PrototypeId}")));
 
-            // Nothing of the authority's slots survives for the opponent: the king's half-metre displacement rides its
-            // new slot, the queen closes the gap, and the hidden ace is absent or, under Placeholder, an anonymous back.
+            // Nothing of the authority's slots survives for the opponent: the queen closes the gap, and the hidden ace is
+            // absent or, under Placeholder, an anonymous back.
             Assert.Equal(
                 expected: (policy == HiddenCells.Placeholder)
-                    ? "rack@=(0,1) back; rack/$back$0@0=(0,0) back; rack/king@1=(0.25,0.5) king; rack/queen@2=(0.5,0) queen"
-                    : "rack@=(0,1) back; rack/king@0=(0,0.5) king; rack/queen@1=(0.25,0) queen",
+                    ? "rack@=(0,1) back; rack/$back$0@0=(0,0) back; rack/king@1=(0.25,0) king; rack/queen@2=(0.5,0) queen"
+                    : "rack@=(0,1) back; rack/king@0=(0,0) king; rack/queen@1=(0.25,0) queen",
                 actual: Layout(opponent)
             );
             Assert.Equal(expected: Layout(opponent), actual: Layout(replica));
             Assert.Equal(
-                expected: "rack@=(0,1) back; rack/ace@0=(0,0) ace; rack/king@1=(0.25,0.5) king; rack/queen@2=(0.5,0) queen",
+                expected: "rack@=(0,1) back; rack/ace@0=(0,0) ace; rack/king@1=(0.25,0) king; rack/queen@2=(0.5,0) queen",
                 actual: Layout(owner)
             );
         }
