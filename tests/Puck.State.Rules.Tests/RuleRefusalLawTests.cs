@@ -247,6 +247,13 @@ public sealed class RuleRefusalLawTests {
                 name: "widens"
             )
         ),
+        // Search compilation shares the transform's enclosure check and names its own refusal through it.
+        [RuleRefusal.SearchWidensAudience] = static () => {
+            var context = VectorFixture.Context(hidden: "bank");
+            int Ordinal(string name) => context.Catalog.TryResolve(lane: StateLane.Document, name: name, handle: out var handle) ? handle.Ordinal : -1;
+            RuleCompiler.RequireEnclosedAudience(reads: [Ordinal(name: "bank")], writes: [Ordinal(name: "ranks")], ruleName: "search", context: context,
+                code: RuleRefusal.SearchWidensAudience);
+        },
         [RuleRefusal.VectorEffectNotAdmitted] = static () => Compile(
             context: VectorFixture.Context(),
             rule: RulesFixture.Rule(

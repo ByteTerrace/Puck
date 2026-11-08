@@ -21,6 +21,7 @@ internal sealed class WorldDisclosureRun : IDisposable {
     private readonly WorldDisclosureTranscript m_transcript;
     private readonly WorldDisclosureLeg m_leg;
     private readonly WorldTestRun m_run;
+    private readonly WorldServer m_server;
     private readonly WorldTickScript m_script;
     private readonly LoopbackTransport m_transport;
     private readonly List<WorldDisclosureSession> m_sessions = [];
@@ -29,9 +30,10 @@ internal sealed class WorldDisclosureRun : IDisposable {
     private readonly Dictionary<ulong, List<(WorldDisclosureSession Session, WorldDisclosureInput Action)>> m_actions = [];
     private WorldDisclosureEchoTap? m_echoes;
 
-    private WorldDisclosureRun(WorldDisclosureLeg leg, WorldTestRun run, WorldTickScript script, LoopbackTransport transport) {
+    private WorldDisclosureRun(WorldDisclosureLeg leg, WorldTestRun run, WorldServer server, WorldTickScript script, LoopbackTransport transport) {
         m_leg = leg;
         m_run = run;
+        m_server = server;
         m_script = script;
         m_transport = transport;
         m_transcript = new WorldDisclosureTranscript(clock: () => script.CompletedTick);
@@ -48,7 +50,7 @@ internal sealed class WorldDisclosureRun : IDisposable {
         var router = services.GetRequiredService<Func<InputRouter>>();
         var server = services.GetRequiredService<WorldServer>();
         var transport = services.GetRequiredService<LoopbackTransport>();
-        var run = new WorldDisclosureRun(leg: leg, run: services.GetRequiredService<WorldTestRun>(), script: script, transport: transport);
+        var run = new WorldDisclosureRun(leg: leg, run: services.GetRequiredService<WorldTestRun>(), server: server, script: script, transport: transport);
         var slots = (leg.Fuzz.Slots ?? new Dictionary<string, IReadOnlyList<string>>());
         var words = (leg.Fuzz.Words ?? []);
 
@@ -109,6 +111,17 @@ internal sealed class WorldDisclosureRun : IDisposable {
                 m_transcript.Invalidate(reason: string.Create(provider: CultureInfo.InvariantCulture,
                     handler: $"variant step at {step.At} '{step.Run}' settled at tick {tick}, after the probes began at {m_leg.From}"));
             }
+        }
+        // A recipient's document edit revalidates the whole authority, so the write boundary's verdicts are a function
+        // of disclosed rows only while the authority itself still validates whatever hidden members it holds. A variant
+        // whose steps left it otherwise would make every such edit refuse for a reason hidden state decided, which is
+        // the engine's defect, not the fixture's leak to judge.
+        try {
+            if (!WorldDefinitionValidator.TryValidateLocally(definition: m_server.ExportDefinition(), reason: out var invalid)) {
+                m_transcript.Invalidate(reason: $"variant '{m_leg.Variant}' left a live document that no longer validates: {invalid}");
+            }
+        } catch (InvalidOperationException exception) {
+            m_transcript.Invalidate(reason: $"variant '{m_leg.Variant}' left a live document that no longer validates: {exception.Message}");
         }
         Dispose();
         _ = Directory.CreateDirectory(path: directory);

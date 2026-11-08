@@ -151,11 +151,20 @@ and the source-read timing choice; these are not guarantees the current implemen
 - **Disclosure is checked at every read.** Every untrusted read and delivery
   asks the recipient view again; caching a bound address never caches
   permission. Recipient mutations and guards require whole-row admission before
-  grants or cell lookup, over every row the outcome reads: a keyed row's token
-  domain, every row a transform resolves to (`RuleCompiler.TryCollectTransformRows`),
-  and, for a spatial guard, every placement that can enter a census. A
-  `readersFrom` audience admits only while every recipient reads it whole. `cellVisibility` reserves cell-policy storage on empty rows;
-  row-level visibility alone does not, so an owner's private inbox reads whole.
+  grants or cell lookup, over the mutation's declared write footprint: the rows
+  it names, each one's token domain and every row keyed over it
+  (`StateCatalog.DependentRows`, the relation the arena's commit check and the
+  touched-row validator read too), every row an incoming declaration names
+  (`WorldRecipientView.AdmitsDeclaration`), every row a transform resolves to
+  (`RuleCompiler.TryCollectTransformRows`), a placement's parent chain and the
+  template every id on it spells as a dealt child, and, for a spatial guard,
+  every placement that can enter a census. A `readersFrom` audience admits only
+  while every recipient reads it whole. Whole-document validation and rule
+  compilation read declarations, never current members: `RuleCompiler.RequireEnclosedAudience`
+  judges row policies, and cell policies are the arena's at the firing. `cellVisibility`
+  reserves cell-policy storage on empty rows and makes the row restricted for
+  every recipient's writes; row-level visibility alone does not, so an owner's
+  private inbox reads whole ([decision 3](../../../docs/plans/disclosure.md#3-a-writer-that-cannot-read-a-row-whole-cannot-write-it)).
 
 ## Where each contract is enforced
 

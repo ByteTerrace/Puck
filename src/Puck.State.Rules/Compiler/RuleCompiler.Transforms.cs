@@ -83,13 +83,17 @@ public static partial class RuleCompiler {
     }
 
     // A transform writes what it read into rows other readers see: a sort's order spells its keys, a mean its members, an
-    // arrangement its rank. So no row it writes may be seen by a reader some row it reads withholds from, judged over
-    // the declared row and cell policies (StateVisibility.Encloses). A transform never declassifies; a rule that means
-    // to show a hidden value writes it through its own setState. Resolved dependencies include live keys, zone
-    // selectors, declared sets and writes that also read. Current cell and containing-zone restrictions are checked
-    // again by the arena before the kernel runs.
-    /// <summary>Refuses a derived result whose declared output audience exceeds any input's row or cell policy.
-    /// Transforms and searches share this compile-time boundary.</summary>
+    // arrangement its rank. So no row it writes may be seen by a reader some row it reads withholds from, judged here
+    // over the declared row policies alone (StateVisibility.Encloses). Cell policies are values: a state command sets
+    // or clears one without recompiling a rule, so a compile-time judgement over the cells seeded now would hold the
+    // document's validity hostage to its current members, and a recipient's unrelated edit, which revalidates the whole
+    // document, would read them. The arena judges every current cell and containing-zone policy before the kernel
+    // runs (StateArena.ReadAudienceEncloses) and refuses the firing by the same name. A transform never declassifies;
+    // a rule that means to show a hidden value writes it through its own setState. Resolved dependencies include live
+    // keys, zone selectors, declared sets and writes that also read.
+    /// <summary>Refuses a derived result whose declared output audience exceeds any input's declared row policy.
+    /// Transforms and searches share this compile-time boundary; current cell policies are the arena's to judge at
+    /// the firing.</summary>
     public static void RequireEnclosedAudience(IReadOnlyList<int> reads, IReadOnlyList<int> writes, string ruleName, RuleCompileContext context,
         RuleRefusal code = RuleRefusal.TransformWidensAudience) {
         foreach (var written in writes) {
@@ -102,19 +106,9 @@ public static partial class RuleCompiler {
                     continue;
                 }
 
-                var withholding = (StateVisibility.Encloses(
-                    audience: target.Visibility,
-                    policy: source.Visibility
-                )
-                    ? (source.Cells ?? []).FirstOrDefault(predicate: cell => ((cell is not null) && !StateVisibility.Encloses(
-                        audience: target.Visibility,
-                        policy: cell.Visibility
-                    )))?.Visibility
-                    : source.Visibility);
-
-                if (withholding is not null) {
+                if (!StateVisibility.Encloses(audience: target.Visibility, policy: source.Visibility)) {
                     throw new RuleException(
-                        detail: $"it writes '{target.Name}' ({DescribeAudience(visibility: target.Visibility)}) from '{source.Name}' ({DescribeAudience(visibility: withholding)}), so what it writes would show '{source.Name}' to readers it withholds from; give '{target.Name}' an audience '{source.Name}' encloses, or disclose through a rule's own write",
+                        detail: $"it writes '{target.Name}' ({DescribeAudience(visibility: target.Visibility)}) from '{source.Name}' ({DescribeAudience(visibility: source.Visibility)}), so what it writes would show '{source.Name}' to readers it withholds from; give '{target.Name}' an audience '{source.Name}' encloses, or disclose through a rule's own write",
                         refusal: code,
                         ruleName: ruleName
                     );

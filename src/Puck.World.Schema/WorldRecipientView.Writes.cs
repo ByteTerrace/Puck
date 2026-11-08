@@ -23,17 +23,43 @@ public sealed partial class WorldRecipientView {
         new(() => document, () => store ?? WorldStateReader.Arena(document), actor, WorldDisclosureTier.Replica,
             static () => true, new WorldDisclosureImages(), string.Empty, () => time ?? ArenaTime.Origin);
 
-    /// <summary>Admits a row from declared policy alone. Absent declarations carry no restriction; ordinary
-    /// composition diagnoses them. A declared set admits only if every row its expression reads admits. A row keyed
-    /// over a token domain admits only if the domain reads whole too: the transaction refuses a key outside the
-    /// domain (<see cref="StateArena.TryValidateRelations(out string)"/>), so a write's outcome reads the domain's membership.</summary>
+    /// <summary>Admits a row's declared write footprint from policy alone: the row, its token domain, and every row
+    /// keyed over it (<see cref="StateCatalog.DependentRows"/>). A write into a keyed row is refused by the transaction
+    /// when its key is outside the domain, and a write that removes a domain key is refused when a dependent row still
+    /// holds it (<see cref="StateArena.TryValidateRelations(ReadOnlySpan{bool}, out string)"/>), so the write's verdict
+    /// reads the current members of each; every one must read whole or the verdict would be an oracle over hidden
+    /// members. Absent declarations carry no restriction; ordinary composition diagnoses them. A declared set admits
+    /// only if every row its expression reads admits.</summary>
     public bool Admits(string row) {
         if (Unrestricted) { return true; }
-        if (Arena.Catalog.TryResolve(StateLane.Document, row, out var handle)) {
-            var domain = Arena.Layout[handle.Ordinal].DomainOrdinal;
-            return ReadsWhole(handle.Ordinal) && ((domain < 0) || ReadsWhole(domain));
+        if (!Arena.Catalog.TryResolve(StateLane.Document, row, out var handle)) { return AdmitsSet(row); }
+        var ordinal = handle.Ordinal;
+        var domain = Arena.Layout[ordinal].DomainOrdinal;
+        if (!ReadsWhole(ordinal) || ((domain >= 0) && !ReadsWhole(domain))) { return false; }
+        foreach (var dependent in Arena.Catalog.DependentRows(ordinal)) {
+            if (!ReadsWhole(dependent)) { return false; }
         }
-        return AdmitsSet(row);
+        return true;
+    }
+    /// <summary>Admits an incoming row declaration: the row it replaces or adds (<see cref="Admits(string)"/>) and every
+    /// row the declaration itself names (its token domain, its live audience, the token and code rows of a derived
+    /// board, the phase protocol it follows), since validating the declaration reads their current members whether or
+    /// not the row exists yet. A name that resolves to no row adds nothing; composition diagnoses it.</summary>
+    /// <param name="declaration">The submitted row.</param>
+    /// <param name="row">The first withheld row, or empty.</param>
+    public bool AdmitsDeclaration(WorldStateRow declaration, out string row) {
+        row = declaration.Name.Value;
+        if (Unrestricted) { return true; }
+        if (!Admits(row)) { return false; }
+        return AdmitsNamed(declaration.Domain is StateDomain.KeysOf keysOf ? keysOf.Row.Value : null, out row) &&
+            AdmitsNamed(declaration.Visibility?.ReadersFrom, out row) &&
+            AdmitsNamed(declaration.Inverse?.Tokens.Value, out row) &&
+            AdmitsNamed(declaration.Inverse?.Codes.Value, out row) &&
+            AdmitsNamed(declaration.PhaseOf, out row);
+    }
+    private bool AdmitsNamed(string? name, out string row) {
+        row = name ?? string.Empty;
+        return (name is null) || !Arena.Catalog.TryResolve(StateLane.Document, name, out var handle) || ReadsWhole(handle.Ordinal);
     }
     // Keep the set-name predicate's capture off successful direct-row admission, including bound guest writes.
     private bool AdmitsSet(string row) {
@@ -111,40 +137,49 @@ public sealed partial class WorldRecipientView {
         return true;
     }
 
-    /// <summary>Checks a named placement's dependencies without reading its current values. An id spelling a dealt
-    /// child (<see cref="WorldPlacementDeal.TrySplitChildId"/>) depends on its template whether or not the child exists
-    /// now, since whether it exists is the deal row's membership.</summary>
+    /// <summary>Checks a named placement's dependencies without reading its current values: the placement's own state
+    /// inputs and its parent chain's, and the template every id on that chain spells as a dealt child
+    /// (<see cref="WorldPlacementDeal.TrySplitChildId"/>), whether or not that placement exists now, since whether a
+    /// dealt child exists is the deal row's membership and composition answers a missing parent by name.</summary>
     public bool AdmitsPlacement(string id, out string row) {
         row = string.Empty;
         if (Unrestricted) { return true; }
         var visited = Writes.GetValue(this, static _ => new()).Placements;
         visited.Clear();
-        return AdmitsChain(WorldDefinitionRows.FindPlacement(Source.Placements, id), visited, out row) && AdmitsTemplateOf(id, visited, out row);
+        return AdmitsChain(id, visited, out row);
     }
-    /// <summary>Checks an incoming placement's complete state dependency declaration and its parent chain's, and the
-    /// template its id spells as a dealt child. A batch composes members without validating between them, so the chain
-    /// may close on itself; each placement is checked once and the walk ends there.</summary>
+    /// <summary>Checks an incoming placement's complete state dependency declaration, its parent chain's, and the
+    /// template its id or any parent id spells as a dealt child. A batch composes members without validating between
+    /// them, so the chain may close on itself; each id is checked once and the walk ends there.</summary>
     public bool AdmitsPlacement(WorldPlacement placement, out string row) {
         row = string.Empty;
         if (Unrestricted) { return true; }
         var visited = Writes.GetValue(this, static _ => new()).Placements;
         visited.Clear();
-        return AdmitsChain(placement, visited, out row) && AdmitsTemplateOf(placement.Id, visited, out row);
+        return visited.Add(placement.Id) && AdmitsInputs(placement, out row) && AdmitsTemplateOf(placement.Id, visited, out row) &&
+            ((placement.Parent is not { } parent) || AdmitsChain(parent, visited, out row));
     }
     private bool AdmitsTemplateOf(string id, HashSet<string> visited, out string row) {
         row = string.Empty;
-        return !WorldPlacementDeal.TrySplitChildId(id, out var template, out _) ||
-            AdmitsChain(WorldDefinitionRows.FindPlacement(Source.Placements, template), visited, out row);
+        return !WorldPlacementDeal.TrySplitChildId(id, out var template, out _) || AdmitsChain(template, visited, out row);
     }
-    private bool AdmitsChain(WorldPlacement? next, HashSet<string> visited, out string row) {
+    // Walks ids, not placements: an id that names no placement still depends on the template it spells.
+    private bool AdmitsChain(string? id, HashSet<string> visited, out string row) {
+        row = string.Empty;
+        while (id is not null && visited.Add(id)) {
+            if (!AdmitsTemplateOf(id, visited, out row)) { return false; }
+            if (WorldDefinitionRows.FindPlacement(Source.Placements, id) is not { } placement) { return true; }
+            if (!AdmitsInputs(placement, out row)) { return false; }
+            id = placement.Parent;
+        }
+        return true;
+    }
+    private bool AdmitsInputs(WorldPlacement placement, out string row) {
         row = string.Empty;
         var reads = Writes.GetValue(this, static _ => new()).Rows;
-        while (next is not null && visited.Add(next.Id)) {
-            reads.Clear();
-            WorldDefinitionFingerprint.CollectPlacementStateInputs(next, reads);
-            foreach (var name in reads) { if (!Admits(name)) { row = name; return false; } }
-            next = next.Parent is { } parent ? WorldDefinitionRows.FindPlacement(Source.Placements, parent) : null;
-        }
+        reads.Clear();
+        WorldDefinitionFingerprint.CollectPlacementStateInputs(placement, reads);
+        foreach (var name in reads) { if (!Admits(name)) { row = name; return false; } }
         return true;
     }
 

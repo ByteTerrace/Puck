@@ -122,10 +122,16 @@ scheduling a step:
   and writes require whole-row admission. A spatial guard's admission takes no region: it checks
   every placement that can enter a census (`WorldDefinitionFingerprint.EntersSpatialCensus`,
   spatial deal templates included), since which placements a region holds can depend on bound
-  state. A row keyed over a token domain admits only while the domain reads whole, and a
-  transform only while every row it resolves to does (`RuleCompiler.TryCollectTransformRows`).
-  A live audience (`readersFrom`) admits only while every recipient reads it whole. Reflow and
-  fingerprints share the placement state-dependency collector.
+  state. A row admits only with its declared write footprint: its token domain, every row keyed
+  over it (`StateCatalog.DependentRows`, the relation the arena's commit check and the touched-row
+  validator read), and for an incoming declaration every row the declaration names
+  (`WorldRecipientView.AdmitsDeclaration`); a transform only while every row it resolves to
+  does (`RuleCompiler.TryCollectTransformRows`); a placement only with its parent chain's inputs
+  and the template every id on that chain spells as a dealt child, present or absent. A live
+  audience (`readersFrom`) admits only while every recipient reads it whole. Reflow and
+  fingerprints share the placement state-dependency collector. Whole-document validation and
+  rule compilation judge declarations alone (`RuleCompiler.RequireEnclosedAudience` reads row
+  policies, never seeded cells); the arena judges current cell policies at the firing.
 - A write's outcome reaches its submitter typed, not only as an echo:
   `WorldTick.CompletePendingOp` builds a `WorldMutationOutcome` from the real
   verdict with its decision, detail and the live document version
@@ -191,6 +197,10 @@ that erase key faults) are not disclosure and stay in the
 | [high] Transform and Generate admission tests current hidden membership | Closed by declaration-only `WorldRecipientView.Admits` | 3, landed |
 | [high] Per-cell upsert and remove receipts distinguish hidden from absent for peers, addons and sessions | Closed by the same policy refusal on every key; typed and addon completions carry that actual verdict | 3, landed |
 | [medium] A seat writes under its grants alone and learns which hidden keys exist | Seats use the same recipient admission as peers, sessions and addons | 3, landed |
+| [high] Removing a public domain key is refused only when a hidden row keyed over the domain holds it (`StateArena.TryValidateRelations` at commit) | Closed: the domain's dependents are in its write footprint (`StateCatalog.DependentRows`) | 3, landed |
+| [high] A new row keyed over a hidden domain is accepted or refused by the domain's membership (`WorldDefinitionValidator.Discrete.cs`) | Closed: `WorldRecipientView.AdmitsDeclaration` admits every row an incoming declaration names | 3, landed |
+| [high] A placement under a dealt child id answers "not disclosed" when the child exists and "not a declared placement" when it does not | Closed: the parent-chain walk admits the template every id spells, present or absent | 3, landed |
+| [high] An unrelated edit recompiles every rule and `RequireEnclosedAudience` refuses by a hidden cell's current policy | Closed: compile-time audience enclosure reads declared row policies; cells are the arena's at the firing | 3, landed |
 | [high] Dealt children keep hidden-dependent slots and positions (`WorldStateDisclosure.cs:481,621`, `WorldTick.Deals.cs:426`) | The layout is authority history, shown as is | 4 |
 
 ## The decisions
@@ -347,12 +357,15 @@ before writing (`WorldAddonRuntime.Cells.cs:120-129`), so an absent key and a
 hidden one answer apart or the bid is silently lost.
 
 **Puck builds:** for a recipient and a row `ReadsWhole` denies it, every
-mutation that touches the row is refused by policy, before anything else is
-looked at and with one text whatever the key: `'<row>' is not disclosed to
-<principal>`. That covers `UpsertStateCell` (Set and Add), `RemoveStateCell`,
-`UpsertStateRow`, `TransformState` and `Generate` naming the row, a write
-into a row keyed over it as a token domain, a transform resolving to it by a
-live key, a zone's domain or a pool field, a batch holding any of them or an
+mutation whose declared write footprint holds the row is refused by policy,
+before anything else is looked at and with one text whatever the key: `'<row>'
+is not disclosed to <principal>`. That covers `UpsertStateCell` (Set and Add),
+`RemoveStateCell`, `UpsertStateRow`, `TransformState` and `Generate` naming the
+row, a write into a row keyed over it as a token domain, a write into the
+domain a row keyed over it reads, an incoming declaration naming it as its
+domain, audience, board source or phase protocol, a transform resolving to it by a
+live key, a zone's domain or a pool field, a placement whose own inputs, parent
+chain or dealt-child ids depend on it, a batch holding any of them or an
 `ExpectedCells` guard that reads it or an `ExpectedSpatialReads` guard while any
 placement a spatial read could observe depends on it, whatever the region (the
 whole batch refuses, as one member's refusal refuses a batch today), and an
@@ -369,6 +382,100 @@ forwarded submission door, replacing `ReadsThroughDisclosure`,
 `IsWithheldFromWriter`, `IsRowWithheldFromWriter`, `DisclosesStateRead`,
 `TryAdmitGuardObservation`'s Observe-only arm and `WriteStateCell`'s
 `CanReadCell`.
+
+**The write footprint closes the class.** Two rounds of point fixes each
+added a row to a forward list the admission checked, and each review found
+more of one shape: after admission the mutation flows through composition,
+whole-document validation, rule recompilation and the arena's commit checks,
+which read whatever they need, and their refusals reach the recipient through
+the ordinary completion. The reverse domain (removing a public key is refused
+only while a hidden row keyed over the domain holds it), the incoming
+declaration (a new row keyed over a hidden domain is judged by the domain's
+members), the absent parent (a placement under `tmpl/x` answers "not
+disclosed" when the dealt child exists and "not a declared placement" when it
+does not) and whole-document recompilation (an unrelated placement edit runs
+`RuleCompiler.RequireEnclosedAudience` over a hidden cell's current policy)
+were the fourth round's instances. The invariant, restated so a check can hold
+it: **a recipient's verdict, text, tick and byte count are a function of the
+mutation and the rows the recipient reads whole.** A post-admission check
+keeps that invariant in one of two ways, and every check is one or the other:
+
+- *It reads current members only inside the footprint.* The footprint of a
+  row is declared, never current: the row, its token domain, every row keyed
+  over it (`StateCatalog.DependentRows`), the ordered zones over its domain
+  and its live audience row (already inside `ReadsWhole`); for an incoming
+  declaration, every row it names (`WorldRecipientView.AdmitsDeclaration`); for a
+  transform, every row it resolves to; for a placement, its own inputs, its
+  parent chain's and the template every id on the chain spells as a dealt
+  child whether or not that placement exists. The arena's relation check at
+  commit and the touched-row validator read that same `DependentRows` table, so
+  the admission and the checks it covers share one relation rather than a list
+  one side maintains for the other. Admission requires the whole footprint to
+  read whole, so the members those checks read are members the recipient may
+  read.
+- *It reads declarations only.* Whole-document validation and rule
+  compilation run over the authority's document on every full install, and
+  they may read any row's declaration (declarations are delivered at the
+  replica tier) but no row's current members. The one compile-time check that
+  read members, `RequireEnclosedAudience` over seeded cell policies, now
+  judges row policies alone; the arena judges cell and containing-zone
+  policies at the firing (`StateArena.ReadAudienceEncloses`, through
+  `TryEncloseAudience` for transforms and `ArenaSearch` before landing). The
+  property that makes this sufficient is that the installed document
+  validates: every write that changes members is checked at its own door (the
+  relation check at commit, binding revalidation when a bound row is written),
+  so an edit that changes no member revalidates a document whose validity no
+  hidden member decides.
+
+Enforcement is the one predicate, `WorldRecipientView.Admits(mutation)`, which
+every recipient door already calls; the class was closed by widening what it
+admits from a forward list to the declared footprint and by taking the one
+member-reading compile check out of validation. What enforcement does not cover,
+stated plainly: a future validator or compile check that reads current members
+of a row outside the footprint is a defect of this class, and nothing refuses it
+at build time. Two checks make it visible rather than silent: `puck disclosure`
+marks a run INVALID when a variant's steps leave the authority's live document
+failing `WorldDefinitionValidator.TryValidateLocally` (the precondition for the
+fourth instance, which no probe write needs to hit), and `RecipientOracleLawTests`
+holds the four sequences beside the earlier ones, each run over both hidden
+variants and compared by code and text.
+
+**The options weighed.** (a) Admission computes the full read closure of every
+later stage: this is the footprint above, and it holds only because the closure
+is declared (the catalog's relations, a declaration's names, a placement's ids)
+and shared with the checks; a closure enumerated by hand per stage is the
+forward list that did not converge. (b) Post-admission stages run over the
+recipient's projection: a verdict computed over the projection is the same in
+both hidden variants by construction, but it is not the authority's verdict.
+In the reverse-domain instance the projection accepts the removal in both
+variants while the authority must refuse the one that would leave a hidden hand
+holding a key outside its domain, so either the authority installs an invalid
+state or the recipient is told "accepted" for a write that did not land, which
+its next public read exposes. The projection decides nothing the footprint does
+not already decide, and for state commands it would need the per-recipient
+arena copy decision 1 rejected; at the scale of a world per zone with thousands
+of writers it is a second whole-document validation per recipient edit. (c) A
+recipient's mutation takes only paths whose checks are functions of disclosed
+rows: this is what the two kinds above make true, without forbidding a
+recipient the document edits that need whole-document validation, which the
+engine cannot localise today. (d) One fixed outcome for every post-admission
+refusal: it narrows the text channel to one bit but cannot close the first
+instance, where the bit itself is the oracle, and it would take a builder's
+reasons away; the footprint makes it unnecessary. The ruling is (c) built from
+(a)'s declared closure, enforced at the existing predicate.
+
+**What the footprint costs.** Nothing per recipient per tick: `DependentRows`
+is computed once per catalog beside `ContainingZones`, and an admission reads
+a handful of flags. A legitimate write pays one new refusal: a recipient may
+not write a public domain while some row keyed over it is withheld from it,
+because the arena's commit check would otherwise read that row's members to
+decide the write. The games' seat writes (per-seat inboxes, request slots) sit
+in footprints of their own. The debug world's granaries board declared
+`cellVisibility: true` on its public feed rows, a mechanical conversion of an
+earlier `visibility {}` that reserved per-cell reader storage the feed never
+uses and made every seat's write to them undisclosed; the rows are plain public
+rows again. `cellVisibility: true` is a restriction a recipient's writes meet,
+never a way to publish a row.
 
 **Sealed bids are authored.** The writer writes a row it reads whole and
 nobody else does (a per-writer row with `visibility { readers [<writer>] }`),

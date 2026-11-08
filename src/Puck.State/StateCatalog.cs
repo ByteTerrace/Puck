@@ -108,6 +108,7 @@ public sealed class StateCatalog {
     private readonly CellKey[] m_ringKeys;
     private readonly int[] m_poolSlotsByKeyOrdinal;
     private readonly IReadOnlyList<int>[] m_containingZones;
+    private readonly IReadOnlyList<int>[] m_dependentRows;
     private readonly EffectiveBehavior[] m_defaultBehaviors;
     private readonly Dictionary<CellName, EffectiveBehavior>?[] m_cellBehaviors;
 
@@ -157,19 +158,29 @@ public sealed class StateCatalog {
             }
         }
         var zonesByDomain = new Dictionary<CellName, List<int>>();
+        var dependentsByDomain = new Dictionary<CellName, List<int>>();
         for (var ordinal = 0; ordinal < rows.Length; ordinal++) {
-            if (rows[ordinal].EffectiveDomain is StateDomain.KeysOf { Ordered: true } zone) {
-                if (!zonesByDomain.TryGetValue(key: zone.Row, value: out var zones)) {
+            if (rows[ordinal].EffectiveDomain is not StateDomain.KeysOf keyed) { continue; }
+            if (!dependentsByDomain.TryGetValue(key: keyed.Row, value: out var dependents)) {
+                dependents = [];
+                dependentsByDomain.Add(key: keyed.Row, value: dependents);
+            }
+            dependents.Add(item: ordinal);
+            if (keyed.Ordered) {
+                if (!zonesByDomain.TryGetValue(key: keyed.Row, value: out var zones)) {
                     zones = [];
-                    zonesByDomain.Add(key: zone.Row, value: zones);
+                    zonesByDomain.Add(key: keyed.Row, value: zones);
                 }
                 zones.Add(item: ordinal);
             }
         }
         var frozenZones = zonesByDomain.ToDictionary(keySelector: static pair => pair.Key,
             elementSelector: static pair => (IReadOnlyList<int>)Array.AsReadOnly(array: pair.Value.ToArray()));
+        var frozenDependents = dependentsByDomain.ToDictionary(keySelector: static pair => pair.Key,
+            elementSelector: static pair => (IReadOnlyList<int>)Array.AsReadOnly(array: pair.Value.ToArray()));
         m_containingZones = rows.Select(row => frozenZones.GetValueOrDefault(
             key: row.EffectiveDomain is StateDomain.KeysOf keysOf ? keysOf.Row : row.Name) ?? []).ToArray();
+        m_dependentRows = rows.Select(row => frozenDependents.GetValueOrDefault(key: row.Name) ?? []).ToArray();
         m_pools = Array.AsReadOnly(array: pools);
         m_poolsByName = pools.ToDictionary(keySelector: static pool => pool.Name.Value, comparer: StringComparer.Ordinal);
         m_poolRows = ((pools.Length == 0) ? [] : new bool[rows.Length]);
@@ -233,6 +244,13 @@ public sealed class StateCatalog {
     /// <param name="rowOrdinal">The source row's catalog ordinal.</param>
     /// <returns>The zones over the row's token domain, or an empty list.</returns>
     public IReadOnlyList<int> ContainingZones(int rowOrdinal) => (uint)rowOrdinal < (uint)m_containingZones.Length ? m_containingZones[rowOrdinal] : [];
+    /// <summary>Gets the ordinals of every row keyed over the supplied row as its token domain (<see cref="StateDomain.KeysOf"/>,
+    /// ordered or not). A write that changes the row's membership is validated against each of them
+    /// (<see cref="StateArena.TryValidateRelations(ReadOnlySpan{bool}, out string)"/>), so they are the row's declared write
+    /// footprint beside its own domain. Declarations alone decide; current members never enter it.</summary>
+    /// <param name="rowOrdinal">The domain row's catalog ordinal.</param>
+    /// <returns>The dependent rows in declaration order, or an empty list.</returns>
+    public IReadOnlyList<int> DependentRows(int rowOrdinal) => (uint)rowOrdinal < (uint)m_dependentRows.Length ? m_dependentRows[rowOrdinal] : [];
     /// <summary>Gets the compiled pools in declaration order.</summary>
     public IReadOnlyList<StatePoolDescriptor> Pools => m_pools;
     /// <summary>Gets the compiled key symbols. Runtime names are owned by <see cref="StateArena.Keys"/>.</summary>

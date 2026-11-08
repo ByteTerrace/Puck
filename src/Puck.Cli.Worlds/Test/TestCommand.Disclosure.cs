@@ -53,8 +53,9 @@ public static partial class TestCommand {
             difference is a leak, named by where the streams first part and by every door whose own answers differ.
             Exit codes are 0 when no principal can tell any variant from the first, 1 for a leak, and 2 for usage, a
             fixture or world that does not load, a leg that did not finish, a run that is INVALID (a variant step
-            refused, answered late or never, or a fixture session the world did not admit), or a control that differs
-            from the first variant (the harness cannot judge).
+            refused, answered late or never, a fixture session the world did not admit, or a variant whose steps left
+            the authority's live document failing validation), or a control that differs from the first variant (the
+            harness cannot judge).
             """);
         command.SetAction(action: parseResult => RunDisclosure(
             actions: parseResult.GetValue(option: actionsOption),

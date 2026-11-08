@@ -394,9 +394,12 @@ behavior](traits.md#remember-what-was-seen).
 A transform writes what it reads into the rows it writes: a sort's order spells
 its keys, a mean spells the members its filter kept, and an arrangement spells
 its rank. So the compiler refuses a transform that writes a row some reader may
-see while a row it reads, or a declared cell of that row, withholds from that
-reader. The refusal is `TransformWidensAudience`, and it names both rows and
-their audiences.
+see while a row it reads withholds from that reader by its declared row policy.
+The refusal is `TransformWidensAudience`, and it names both rows and their
+audiences. A cell's own policy is a value a state command sets or clears without
+recompiling, so the compiler never judges seeded cells; the arena judges every
+current cell and containing-zone policy before the kernel runs and refuses the
+firing by the same name.
 
 Each audience comes from the declarations alone
 (`StateVisibility.Encloses`). A public row encloses every audience, and a

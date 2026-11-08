@@ -643,7 +643,7 @@ membership without rewriting a row.
 
 Search never declassifies: `WorldSearchCompilation.TryPlanAll` shares
 `RuleCompiler.RequireEnclosedAudience` with transforms and refuses
-`SearchWidensAudience` when any dependency's declared row/cell audience fails
+`SearchWidensAudience` when any dependency's declared row audience fails
 to enclose an output. `ArenaSearch` repeats the check against live cell and
 containing-zone policies before advancing and landing. `ArenaSearchPlan.Dependencies`
 is the single input inventory for admission, stamps and position keys; it includes

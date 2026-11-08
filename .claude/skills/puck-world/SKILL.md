@@ -61,8 +61,13 @@ recipient mutation or guard reads state; seats are recipients too. The mutation 
 guard check live in `Puck.World.Protocol/Protocol/WorldRecipientMutations.cs`; the server's complete
 admission, composition, addon bind and typed write doors use that policy. Whole-document load,
 reload, reset and undo are authority-only at apply and operator-only on the console.
-See [mutations](references/mutations.md). A row's `cellVisibility` reserves per-cell policies
-even when empty; its row-level `visibility` alone does not.
+See [mutations](references/mutations.md). The predicate admits a mutation's declared write
+footprint (its rows, their domains, the rows keyed over them, an incoming declaration's names, a
+placement's parent chain and dealt templates), never a current member
+([decision 3](../../../docs/plans/disclosure.md#3-a-writer-that-cannot-read-a-row-whole-cannot-write-it)).
+A row's `cellVisibility` reserves per-cell policies even when empty and makes every recipient's
+write to the row undisclosed; a public row an observation or a seat writes declares neither it nor
+`visibility {}`.
 
 **Durable addon state.** `IWorldAddonHost` stages guest checkpoint decoding before
 authority adoption. Persistence, recording and history capture the same live

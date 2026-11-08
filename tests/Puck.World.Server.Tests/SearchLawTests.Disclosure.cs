@@ -78,15 +78,13 @@ public sealed partial class SearchLawTests {
     }
 
     [Theory]
-    [InlineData("pieceCell", false)]
-    [InlineData("pieceCell", true)]
-    [InlineData("turn", false)]
-    [InlineData("verdict", false)]
-    public void SearchRefusesAnOutputWiderThanItsDeclaredInputs(string input, bool cellPolicy) {
+    [InlineData("pieceCell")]
+    [InlineData("turn")]
+    [InlineData("verdict")]
+    public void SearchRefusesAnOutputWiderThanItsDeclaredInputs(string input) {
         var definition = MiniNegamaxWorld(1);
         var restricted = new StateVisibility(Readers: ["seat1"]);
         definition = definition.WithWorldState(definition.AuthoredState.Select(row => row.Name.Value != input ? row :
-            cellPolicy ? row with { CellVisibility = true, Visibility = new StateVisibility(), Cells = row.Cells!.Select(cell => cell with { Visibility = restricted }).ToArray() } :
             row with { Visibility = restricted }).ToArray());
         Assert.False(WorldDefinitionValidator.TryValidateLocally(definition, out var reason));
         Assert.Contains("SearchWidensAudience", reason);
@@ -95,6 +93,17 @@ public sealed partial class SearchLawTests {
         definition = definition.WithWorldState(definition.AuthoredState.Select(row => row.Name.Value == "best" ?
             row with { Visibility = restricted } : row).ToArray());
         Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out reason), reason);
+    }
+
+    // A cell policy is a value a state command sets or clears without recompiling, so validation judges the declared
+    // row policy alone and the search judges the live cells before landing (the law below).
+    [Fact]
+    public void ASeededCellPolicyIsTheSearchsToJudgeNotValidations() {
+        var definition = MiniNegamaxWorld(1);
+        var restricted = new StateVisibility(Readers: ["seat1"]);
+        definition = definition.WithWorldState(definition.AuthoredState.Select(row => row.Name.Value != "pieceCell" ? row :
+            row with { CellVisibility = true, Visibility = new StateVisibility(), Cells = row.Cells!.Select(cell => cell with { Visibility = restricted }).ToArray() }).ToArray());
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var reason), reason);
     }
 
     [Fact]
