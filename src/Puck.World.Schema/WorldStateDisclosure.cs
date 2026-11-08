@@ -55,7 +55,11 @@ public sealed record WorldWithheldRow(int Count, HiddenCells Policy, bool WholeR
 /// <param name="Definition">The document with every withheld cell removed from its row and every dealt placement
 /// re-dealt from what remains; the live document itself when nothing is withheld.</param>
 /// <param name="Withheld">What was withheld, keyed by row name; a row absent here is disclosed whole.</param>
-public sealed record WorldStateDisclosed(WorldDefinition Definition, IReadOnlyDictionary<string, WorldWithheldRow> Withheld);
+public sealed record WorldStateDisclosed(WorldDefinition Definition, IReadOnlyDictionary<string, WorldWithheldRow> Withheld) {
+    // The rows whose disclosed cells the disclosed placements were dealt or answered from; any other row's cells leave
+    // them as they stand.
+    internal IReadOnlySet<string> PlacementReads { get; init; } = new HashSet<string>();
+}
 /// <summary>Composes state observations for one authenticated recipient.</summary>
 /// <remarks>Every value, audience, zone membership and observation stamp is read from the live store, never from a
 /// document snapshot taken per observer: which zone holds a token decides who may read it, so a disclosure composed
@@ -171,31 +175,6 @@ public static class WorldStateDisclosure {
         }
         return new WorldWithheldRow(Count: count, Policy: (row.Visibility?.Hidden ?? HiddenCells.Omit), WholeRow: !rowReadable);
     }
-    /// <summary>Determines whether the recipient may read one cell of a named row, for a door that must answer a cell
-    /// the recipient may not read exactly as it answers an absent one.</summary>
-    /// <param name="definition">The live document, for the row declarations.</param>
-    /// <param name="arena">The live store.</param>
-    /// <param name="rowName">The name of the row carrying the cell.</param>
-    /// <param name="key">The cell's key.</param>
-    /// <param name="recipient">The recipient.</param>
-    /// <returns><see langword="true"/> when the document declares the row, generated storage included, and the
-    /// recipient may read the cell; <see langword="false"/> for an undeclared row.</returns>
-    public static bool CanReadCell(WorldDefinition definition, StateArena arena, string rowName, CellName key, Principal recipient) {
-        if (!arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: rowName)) { return false; }
-        var observer = new Observer(arena: arena, recipient: recipient);
-
-        return observer.CanRead(row: arena.Rows[handle.Ordinal], rowOrdinal: handle.Ordinal,
-            key: (arena.Keys.TryResolve(key: out var cell, name: key) ? cell : default));
-    }
-    /// <summary>Determines whether the recipient may read a named row, evaluating its reader list against the
-    /// arena on every call.</summary>
-    /// <param name="arena">The live store and its declarations.</param>
-    /// <param name="rowName">The name of the row.</param>
-    /// <param name="recipient">The recipient.</param>
-    /// <returns><see langword="true"/> when the document declares the row and its visibility admits the recipient.</returns>
-    public static bool CanReadRow(StateArena arena, string rowName, Principal recipient) =>
-        (arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: rowName) &&
-        new Observer(arena, recipient).Allows(policy: arena.Rows[handle.Ordinal].Visibility));
 
     private static bool Allows(StateArena arena, StateVisibility? policy, string? recipient) {
         if ((policy is null) || policy.Allows(recipient: recipient)) { return true; }
@@ -379,31 +358,69 @@ public static class WorldStateDisclosure {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: arena);
 
+        return DiscloseDocument(
+            arena: arena,
+            definition: definition,
+            fields: DisclosedFields.For(arena: arena, definition: definition, recipient: recipient, unrestricted: unrestricted),
+            recipient: recipient,
+            unrestricted: unrestricted
+        );
+    }
+    internal static WorldStateDisclosed DiscloseDocument(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted, DisclosedFields? fields) {
         var observer = new Observer(
             arena: arena,
             recipient: recipient,
             unrestricted: unrestricted
         );
-        var authored = definition.AuthoredState;
-        var rows = new WorldStateRow[authored.Count];
+        var rows = new WorldStateRow[definition.AuthoredState.Count];
         var withheld = new Dictionary<string, WorldWithheldRow>(comparer: StringComparer.Ordinal);
 
-        for (var index = 0; (index < authored.Count); index++) {
-            var exported = arena.ToRow(rowOrdinal: index);
-            var row = ((exported as WorldStateRow) ?? new WorldStateRow(exported, false, null));
+        for (var index = 0; (index < rows.Length); index++) {
+            rows[index] = DiscloseRow(arena: arena, fields: fields, index: index, observer: ref observer, withheld: out var record);
+            if (record is not null) { withheld[rows[index].Name.Value] = record; }
+        }
 
-            rows[index] = row;
-            if (!observer.TryRow(
-                ordinal: out var ordinal,
-                row: row
-            )) {
-                continue;
-            }
+        if (fields is not null) {
+            definition = definition with { StateRaw = definition.StateRaw! with { World = rows, Lattices = fields.Lattices } };
+        }
 
-            if (observer.ReadsWhole(rowOrdinal: ordinal)) {
-                continue;
-            }
+        if (withheld.Count == 0) {
+            return new WorldStateDisclosed(
+                Definition: definition.WithWorldState(rows: rows),
+                Withheld: withheld
+            );
+        }
 
+        var disclosed = (definition with { StateRaw = (definition.StateRaw! with { World = rows }) });
+        var reads = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        WorldStateRow? Read(string name) {
+            reads.Add(item: name);
+
+            return WorldDefinitionRows.FindStateRow(name: name, rows: rows);
+        }
+        if (DisclosePlacements(
+            definition: definition,
+            disclosedRow: Read,
+            withheld: withheld
+        ) is { } placements) {
+            disclosed = (disclosed with { PlacementRowsRaw = placements });
+        }
+
+        return new WorldStateDisclosed(
+            Definition: disclosed,
+            Withheld: withheld
+        ) { PlacementReads = reads };
+    }
+    // One authored row as the recipient's document carries it: the live export, and for a declaration that can
+    // withhold, only the readable cells. Disclose and the shared image table's row refresh both derive a row here, so a
+    // refreshed row and a whole composition agree.
+    internal static WorldStateRow DiscloseRow(StateArena arena, int index, ref Observer observer, DisclosedFields? fields, out WorldWithheldRow? withheld) {
+        var exported = arena.ToRow(rowOrdinal: index);
+        var row = ((exported as WorldStateRow) ?? new WorldStateRow(exported, false, null));
+
+        withheld = null;
+        if (observer.TryRow(ordinal: out var ordinal, row: row) && !observer.ReadsWhole(rowOrdinal: ordinal)) {
             var rowReadable = observer.Allows(policy: row.Visibility);
             var cells = (row.Cells ?? []);
             var kept = new List<StateCell>(capacity: cells.Count);
@@ -426,56 +443,49 @@ public static class WorldStateDisclosure {
                 }
             }
 
-            withheld[row.Name.Value] = new WorldWithheldRow(
+            withheld = new WorldWithheldRow(
                 Count: (cells.Count - kept.Count),
                 Policy: (row.Visibility?.Hidden ?? HiddenCells.Omit),
                 WholeRow: !rowReadable
             );
             // A row that can withhold has one shape whether zero or many cells are withheld now: its storage and cursor
             // bookkeeping is a reading of the cells withheld from it, so it goes too.
-            rows[index] = WithoutStorageMetadata(row: row) with { Cells = kept };
+            row = WithoutStorageMetadata(row: row) with { Cells = kept };
         }
 
-        // Fields are authored in state rows and physical topologies. Rebuild that part from the SAME projection
-        // presentation uses; copying the original field traits would disclose their seeds and reaction inputs.
-        if (!unrestricted && definition.FieldRegions.Count > 0 && definition.StateRaw is { } state) {
+        return (fields?.Project(row: row) ?? row);
+    }
+    // The physical-field half of a replica document. Fields are authored in state rows and physical topologies; this
+    // rebuilds that part from the same projection presentation uses, since copying the authored field traits would
+    // disclose their seeds and reaction inputs.
+    internal sealed class DisclosedFields {
+        private readonly HashSet<string> m_authored;
+        private readonly Dictionary<string, WorldStateRow> m_disclosed;
+
+        private DisclosedFields(HashSet<string> authored, Dictionary<string, WorldStateRow> disclosed, IReadOnlyList<LatticeTopology> lattices) {
+            m_authored = authored; m_disclosed = disclosed; Lattices = lattices;
+        }
+
+        // The document's topologies with its field topologies replaced by the disclosed ones.
+        public IReadOnlyList<LatticeTopology> Lattices { get; }
+
+        // Null when the document has no field to project or the reader is unrestricted.
+        public static DisclosedFields? For(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted) {
+            if (unrestricted || (definition.FieldRegions.Count == 0) || (definition.StateRaw is not { } state)) { return null; }
             var fields = WorldFieldsSection.ToStateSection(FieldProjection(definition, arena, recipient));
-            var fieldRows = (fields.World ?? []).ToDictionary(row => row.Name.Value, StringComparer.Ordinal);
-            var authoredFields = authored.Where(row => row.Field is not null).Select(row => row.Name.Value).ToHashSet(StringComparer.Ordinal);
-            var physicalRows = rows.Select(row => !authoredFields.Contains(row.Name.Value) ? row :
-                fieldRows.TryGetValue(row.Name.Value, out var field) ? row with { Field = field.Field } :
-                // Replica snapshot row ordinals must stay aligned. An undisclosed field keeps only its row name
-                // and policy, with no physical topology, trait, seed or paint that could reconstruct the field.
-                new WorldStateRow(Name: row.Name, Kind: row.Kind, Domain: StateDomain.Keys.Instance,
-                    HostOwned: true, Visibility: row.Visibility)).ToArray();
-            definition = definition with { StateRaw = state with {
-                World = physicalRows,
-                Lattices = [.. (state.Lattices ?? []).Where(topology => topology is not WorldFieldTopology), .. (fields.Lattices ?? [])]
-            } };
-            rows = physicalRows;
-        }
 
-        if (withheld.Count == 0) {
-            return new WorldStateDisclosed(
-                Definition: definition.WithWorldState(rows: rows),
-                Withheld: withheld
+            return new DisclosedFields(
+                authored: definition.AuthoredState.Where(row => row.Field is not null).Select(row => row.Name.Value).ToHashSet(StringComparer.Ordinal),
+                disclosed: (fields.World ?? []).ToDictionary(row => row.Name.Value, StringComparer.Ordinal),
+                lattices: [.. (state.Lattices ?? []).Where(topology => topology is not WorldFieldTopology), .. (fields.Lattices ?? [])]
             );
         }
-
-        var disclosed = (definition with { StateRaw = (definition.StateRaw! with { World = rows }) });
-
-        if (DisclosePlacements(
-            definition: definition,
-            rows: rows,
-            withheld: withheld
-        ) is { } placements) {
-            disclosed = (disclosed with { PlacementRowsRaw = placements });
-        }
-
-        return new WorldStateDisclosed(
-            Definition: disclosed,
-            Withheld: withheld
-        );
+        public WorldStateRow Project(WorldStateRow row) => !m_authored.Contains(row.Name.Value) ? row :
+            m_disclosed.TryGetValue(row.Name.Value, out var field) ? row with { Field = field.Field } :
+            // Replica snapshot row ordinals must stay aligned. An undisclosed field keeps only its row name and policy,
+            // with no physical topology, trait, seed or paint that could reconstruct the field; a host serves only slot
+            // and lattice shapes (StateCatalog refuses any other host-owned row), and with no topology it is a slot.
+            new WorldStateRow(Name: row.Name, Kind: row.Kind, Domain: StateDomain.Slot.Instance, HostOwned: true, Visibility: row.Visibility);
     }
     /// <summary>Removes reservation, physical slot and cursor metadata that can reveal omitted membership, preserving
     /// the declared or inferred domain; the kept cells then load into contiguous slots. A readback applies this even
@@ -515,8 +525,9 @@ public static class WorldStateDisclosure {
         return (result ?? definition.Placements);
     }
 
-    // The placement half of an explicit document export.
-    private static WorldPlacement[]? DisclosePlacements(WorldDefinition definition, WorldStateRow[] rows, Dictionary<string, WorldWithheldRow> withheld) {
+    // The placement half of an explicit document export. Every disclosed row it reads goes through disclosedRow, so
+    // Disclose names exactly the rows whose disclosed cells shaped the placements.
+    private static WorldPlacement[]? DisclosePlacements(WorldDefinition definition, Func<string, WorldStateRow?> disclosedRow, Dictionary<string, WorldWithheldRow> withheld) {
         var placements = definition.Placements;
         Dictionary<string, WorldPlacement>? templates = null;
         var responsive = false;
@@ -554,9 +565,9 @@ public static class WorldStateDisclosure {
                 var reading = WorldPlacementResponse.Disclosed(
                     placement: placement,
                     withheld: (row, key) => CellWithheld(
+                        disclosedRow: disclosedRow,
                         key: key,
                         row: row,
-                        rows: rows,
                         withheld: withheld
                     )
                 );
@@ -593,10 +604,7 @@ public static class WorldStateDisclosure {
                 withheld.ContainsKey(key: deal.Row) &&
                 !HasCell(
                 key: key,
-                row: WorldDefinitionRows.FindStateRow(
-                    name: deal.Row,
-                    rows: rows
-                )
+                row: disclosedRow(arg: deal.Row)
             )
             ) {
                 changed = true;
@@ -608,10 +616,7 @@ public static class WorldStateDisclosure {
                 (deal.Variants is { } variants) &&
                 withheld.ContainsKey(key: variants.Row)
             ) {
-                var disclosedVariants = WorldDefinitionRows.FindStateRow(
-                    name: variants.Row,
-                    rows: rows
-                );
+                var disclosedVariants = disclosedRow(arg: variants.Row);
 
                 if (
                     !HasCell(
@@ -662,17 +667,14 @@ public static class WorldStateDisclosure {
     );
     // A cell the recipient's rows do not carry, of a row that withholds from it, is withheld: the disclosed row cannot
     // tell a withheld cell from an absent one, and neither may a reading of it.
-    private static bool CellWithheld(string row, string? key, WorldStateRow[] rows, Dictionary<string, WorldWithheldRow> withheld) => (
+    private static bool CellWithheld(string row, string? key, Func<string, WorldStateRow?> disclosedRow, Dictionary<string, WorldWithheldRow> withheld) => (
         withheld.TryGetValue(
         key: row,
         value: out var withheldRow
     ) &&
         (withheldRow.WholeRow || !HasCell(
         key: (key ?? StateRow.SlotKey.Value),
-        row: WorldDefinitionRows.FindStateRow(
-            name: row,
-            rows: rows
-        )
+        row: disclosedRow(arg: row)
     ))
     );
     private static bool HasCell(WorldStateRow? row, string key) => (

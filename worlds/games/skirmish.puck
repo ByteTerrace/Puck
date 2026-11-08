@@ -84,7 +84,7 @@ template skirmishState(origin, cellSize) {
         readers [u <= 3 ? "seat1" : "seat2"]
       }
     })
-    visibility {}
+    cellVisibility: true
   }
 
   row {
@@ -119,7 +119,7 @@ template skirmishState(origin, cellSize) {
     kind: "Int"
     capacity: 2
     cells: map(range(1, 2), s => { key: $"{s}", value: 0, visibility { readers [$"seat{s}"] } })
-    visibility {}
+    cellVisibility: true
   }
 
   for s in range(1, 2) {

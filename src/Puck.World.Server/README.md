@@ -1934,7 +1934,13 @@ and placeholder metadata. Key bits skip hidden value writes; structural changes
 and the reverse index of zone and reader-list dependencies invalidate the rows
 they affect. Traveller validity compares the projection last delivered, including
 snapshot updates, rather than an authority install counter or object identity.
-`world.budget` reports shared image storage and per-tick work to the operator.
+A disclosed definition's identity digests its frame (the document less its state
+rows) beside each row's image and cell-free skeleton, so a tick that writes cells
+refreshes only the rows it changed. The whole definition is composed again only for
+a new source, a changed policy index, or a withheld row its disclosed placements
+were dealt or answered from; it is assembled as a document only for a delivery or a
+read. `world.budget` reports shared image storage and per-tick work to the operator,
+and `world.counters world.disclosure` its monotonic totals.
 
 A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`
 (`IsAdmittedPeer` reads it) so `world.population`'s census lever can never

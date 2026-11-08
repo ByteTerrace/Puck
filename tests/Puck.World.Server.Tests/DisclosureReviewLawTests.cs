@@ -27,7 +27,7 @@ public sealed class DisclosureReviewLawTests {
                 new WorldStateRow(CellName.Parse("secretTag"), CellKind.Int, Domain: StateDomain.Keys.Instance,
                     Visibility: new StateVisibility(Readers: ["seat1"]), Cells: [new StateCell(CellName.Parse("0"), CellValue.Int(1))]),
                 new WorldStateRow(CellName.Parse("publicTag"), CellKind.Int, Domain: StateDomain.Keys.Instance,
-                    Visibility: new StateVisibility(), Cells: [new StateCell(CellName.Parse("0"), CellValue.Int(1))])])
+                    CellVisibility: true, Visibility: new StateVisibility(), Cells: [new StateCell(CellName.Parse("0"), CellValue.Int(1))])])
         };
         using var fixture = Fixtures.FreshServer(definition);
         var host = fixture.Server.RuleHost;
@@ -83,10 +83,10 @@ public sealed class DisclosureReviewLawTests {
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(CellName.Parse("keys"), CellKind.Int, Domain: StateDomain.Keys.Instance, Capacity: 8,
-                    Visibility: new StateVisibility(), Cells: hiddenCell ? [new StateCell(CellName.Parse("secret"), CellValue.Int(9),
+                    CellVisibility: true, Visibility: new StateVisibility(), Cells: hiddenCell ? [new StateCell(CellName.Parse("secret"), CellValue.Int(9),
                         Visibility: new StateVisibility(Readers: ["seat1"]))] : []),
                 new WorldStateRow(CellName.Parse("slot"), CellKind.Int, Domain: StateDomain.Slot.Instance,
-                    Visibility: new StateVisibility(), Cells: [])])
+                    CellVisibility: true, Visibility: new StateVisibility(), Cells: [])])
         };
         using var fixture = Fixtures.FreshServer(definition);
         var view = View(fixture.Server, Principal.Seat(1), WorldDisclosureTier.Presentation);

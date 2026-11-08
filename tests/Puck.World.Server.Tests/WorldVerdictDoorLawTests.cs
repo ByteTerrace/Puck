@@ -28,7 +28,7 @@ public sealed class WorldVerdictDoorLawTests {
             World: [source, source with { Name = CellName.Parse(candidate: "visible") },
                 source with { Name = CellName.Parse(candidate: Witness),
                     Cells = [new StateCell(Key: CellName.Parse(candidate: "0"), Value: CellValue.Bool(value: false), Observation: new StateObservation(Tick: 0L, Visible: false))],
-                    Visibility = new StateVisibility(),
+                    CellVisibility = true, Visibility = new StateVisibility(),
                     Knowledge = new StateKnowledge(Source: "truth", Mask: "visible"), Witness = CellName.Parse(candidate: Verdict) },
                 new WorldStateRow(Name: CellName.Parse(candidate: Verdict), Kind: CellKind.Int,
                     Cells: [new StateCell(Key: CellName.Parse(candidate: "ok"), Value: CellValue.Int(value: 0L))],

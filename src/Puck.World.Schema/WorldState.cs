@@ -147,6 +147,7 @@ public sealed record WorldStateSection(
 /// <param name="ValuesFrom">See <see cref="StateRow.ValuesFrom"/>.</param>
 /// <param name="Inverse">See <see cref="StateRow.Inverse"/>.</param>
 /// <param name="Phase">See <see cref="StateRow.Phase"/>.</param>
+/// <param name="CellVisibility">See <see cref="StateRow.CellVisibility"/>.</param>
 /// <param name="Visibility">See <see cref="StateRow.Visibility"/>.</param>
 /// <param name="Knowledge">See <see cref="StateRow.Knowledge"/>.</param>
 /// <param name="PhaseOf">See <see cref="StateRow.PhaseOf"/>.</param>
@@ -185,7 +186,8 @@ public sealed record WorldStateRow(
     CellName? Enum = null,
     bool HostOwned = false,
     WorldVerdictTrait? Verdict = null,
-    CellName? Witness = null
+    CellName? Witness = null,
+    bool CellVisibility = false
 ) : StateRow(
     Name,
     Kind,
@@ -211,7 +213,8 @@ public sealed record WorldStateRow(
     HistoryCursor,
     Space,
     Enum,
-    HostOwned
+    HostOwned,
+    CellVisibility
 ) {
     /// <summary>Initializes a document row over an engine row, adding the world-only traits.</summary>
     /// <param name="row">The engine row.</param>
@@ -241,6 +244,7 @@ public sealed record WorldStateRow(
         Inverse: row.Inverse,
         Phase: row.Phase,
         Visibility: row.Visibility,
+        CellVisibility: row.CellVisibility,
         Knowledge: row.Knowledge,
         PhaseOf: row.PhaseOf,
         HistoryCursor: row.HistoryCursor,

@@ -25,7 +25,7 @@ public sealed partial class SearchLawTests {
         var definition = MiniNegamaxWorld(2, nodes: 1);
         definition = definition.WithWorldState([.. definition.AuthoredState,
             new WorldStateRow(CellName.Parse("mirror"), CellKind.Int, Domain: StateDomain.Keys.Instance,
-                Cells: [new StateCell(CellName.Parse("m"), CellValue.Int(17))], Visibility: new StateVisibility())]) with {
+                Cells: [new StateCell(CellName.Parse("m"), CellValue.Int(17))], CellVisibility: true, Visibility: new StateVisibility())]) with {
             Rules = [definition.Rules![0] with { Gate = new ActionPredicate.CompareState(
                 State: "$symmetry:reflect:cell:mirror.m:turn", Comparison: ExpressionOp.GreaterOrEqual, Value: -1) }]
         };
@@ -86,7 +86,7 @@ public sealed partial class SearchLawTests {
         var definition = MiniNegamaxWorld(1);
         var restricted = new StateVisibility(Readers: ["seat1"]);
         definition = definition.WithWorldState(definition.AuthoredState.Select(row => row.Name.Value != input ? row :
-            cellPolicy ? row with { Visibility = new StateVisibility(), Cells = row.Cells!.Select(cell => cell with { Visibility = restricted }).ToArray() } :
+            cellPolicy ? row with { CellVisibility = true, Visibility = new StateVisibility(), Cells = row.Cells!.Select(cell => cell with { Visibility = restricted }).ToArray() } :
             row with { Visibility = restricted }).ToArray());
         Assert.False(WorldDefinitionValidator.TryValidateLocally(definition, out var reason));
         Assert.Contains("SearchWidensAudience", reason);
@@ -102,7 +102,7 @@ public sealed partial class SearchLawTests {
         var definition = MiniNegamaxWorld(2, nodes: 1);
         // Reserve the optional live visibility column with a public declaration.
         definition = definition.WithWorldState(definition.AuthoredState.Select(row => row.Name.Value == "pieceCell" ?
-            row with { Visibility = new StateVisibility() } : row).ToArray());
+            row with { CellVisibility = true, Visibility = new StateVisibility() } : row).ToArray());
         using var fixture = Fixtures.FreshServer(definition);
         var server = fixture.Server;
         for (var tick = 0; tick < 3; tick++) { fixture.Step(); }

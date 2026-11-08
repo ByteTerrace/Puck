@@ -61,6 +61,9 @@ public enum AddonVerdict : byte {
     /// refusal above: this is the one outcome the door cannot predict from the wire alone, because it depends on
     /// the WHOLE document's state at apply time, not on the act's own shape or the grant table.</summary>
     Rejected = 13,
+    /// <summary>The declared disclosure policy withholds part of the addressed row. Bind and write answer alike
+    /// for every key, including an absent one.</summary>
+    NotDisclosed = 14,
 }
 /// <summary>The addon ABI's pinned allowed/denied predicate over <see cref="AddonVerdict"/>, generated beside
 /// the wire values in both languages so it cannot drift (see <c>AddonAbiRustPort</c>'s generated

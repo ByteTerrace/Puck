@@ -114,32 +114,27 @@ public sealed class QuadraticQuasicrystalIndex {
         );
     }
     private static long[] PeriodicBlock(long p, long q, long d, long r) {
-        Span<long> terms = stackalloc long[128];
+        Span<long> scratch = stackalloc long[128];
 
-        while (true) {
-            try {
-                _ = ContinuedFraction.Expand(
-                    d: d,
-                    p: p,
-                    periodLength: out var periodLength,
-                    periodStart: out var periodStart,
-                    q: q,
-                    r: r,
-                    terms: terms
-                );
-                return terms.Slice(
-                    length: periodLength,
-                    start: periodStart
-                ).ToArray();
-            } catch (ArgumentException exception) when (((exception.ParamName == nameof(terms)) && (terms.Length < int.MaxValue))) {
-                var nextLength = ((terms.Length <= (int.MaxValue / 2))
-                    ? (terms.Length * 2)
-                    : int.MaxValue
-                );
+        _ = ContinuedFraction.ExpandGrowing(
+            d: d,
+            heap: out var heap,
+            p: p,
+            periodLength: out var periodLength,
+            periodStart: out var periodStart,
+            q: q,
+            r: r,
+            scratch: scratch
+        );
+        ReadOnlySpan<long> terms = ((heap is null)
+            ? scratch
+            : heap
+        );
 
-                terms = new long[nextLength];
-            }
-        }
+        return terms.Slice(
+            length: periodLength,
+            start: periodStart
+        ).ToArray();
     }
     private ImageSelection SelectPeriodImage(
         int factorIndex,

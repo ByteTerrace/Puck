@@ -169,4 +169,6 @@ registers and coverage ratchets; completeness is checked from the current declar
 | [`content-search`](../content-search/SKILL.md) | Finding textual occurrences, candidate hand-rollings, tokens or patterns across the tree. |
 | [`symbol-analysis`](../symbol-analysis/SKILL.md) | Semantic C# questions about references, implementers, dead code, renames or deletion safety. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | Verifying a Maths change that reaches emulator code and its dedicated batteries. |
+| [`physics`](../physics/SKILL.md) | Contact, sweep, rigid, gravity and navigation kernels that consume these primitives. |
+| [`state`](../state/SKILL.md) | The rule engine's expression arithmetic, draw sites and arena hashing. |
 

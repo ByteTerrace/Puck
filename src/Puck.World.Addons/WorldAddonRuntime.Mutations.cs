@@ -316,6 +316,7 @@ public sealed partial class WorldAddonRuntime {
     // row-scoped subject; the Edit gate runs at apply, and an addon holds no row-scoped Mutate row at all), so a
     // rule arriving from them is a wiring change to make deliberately rather than a value to map by default.
     private static AddonVerdict ToWireVerdict(in WorldMutationAdmission admission) => admission.Rule switch {
+        WorldMutationAdmissionRule.NotDisclosed => AddonVerdict.NotDisclosed,
         WorldMutationAdmissionRule.SectionDenied => WorldAddonWire.FromRule(rule: admission.Verdict.Rule),
         // A hold whose mask does not cover this kind answers as attenuation — "requested more than the mask admits"
         // attenuates to nothing, exactly like an unrequested Ask. A hold with NO mask is a DIFFERENT case now and
@@ -344,7 +345,8 @@ public sealed partial class WorldAddonRuntime {
     /// <param name="addonInstanceId">The mounted addon instance token the act was decoded from.</param>
     /// <param name="actOrdinal">The addon's own output-batch ordinal the act answers.</param>
     /// <param name="applied">Whether the document-apply pipeline accepted the decoded mutation.</param>
-    public void CompleteMutation(long addonInstanceId, ushort actOrdinal, bool applied) {
+    /// <param name="refusalCode">The decided mutation refusal code.</param>
+    public void CompleteMutation(long addonInstanceId, ushort actOrdinal, bool applied, string? refusalCode = null) {
         var addon = FindMountedByInstanceId(instanceId: addonInstanceId);
 
         if (addon is null) {
@@ -356,6 +358,7 @@ public sealed partial class WorldAddonRuntime {
             ordinal: actOrdinal,
             verdict: (applied
             ? AddonVerdict.Applied
+            : refusalCode == WorldRecipientMutations.NotDisclosedCode ? AddonVerdict.NotDisclosed
             : AddonMutateRefusals.ToVerdict(reason: AddonMutateRefusal.ApplyRejected))
         );
     }

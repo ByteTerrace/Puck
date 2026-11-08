@@ -136,24 +136,6 @@ internal sealed class CommentSmellScan : ISourceAnalyzer {
 
         return builder.ToString();
     }
-    // The comment trivia of one file in source order, as the tuple the block pass and the emitter share.
-    private static List<(int StartLine, int EndLine, bool IsSingle, string Text)> CollectComments(ParsedFile parsed) {
-        var comments = new List<(int, int, bool, string)>();
-
-        foreach (var trivia in parsed.Root.DescendantTrivia()) {
-            if (!CommentSmellClassifier.IsInlineComment(trivia: trivia)) {
-                continue;
-            }
-
-            var isSingle = trivia.IsKind(kind: SyntaxKind.SingleLineCommentTrivia);
-
-            var (startLine, endLine) = ScanJsonl.LineRange(location: trivia.GetLocation());
-
-            comments.Add(item: (startLine, endLine, isSingle, trivia.ToString().Trim()));
-        }
-
-        return comments;
-    }
     private static bool IsComment(SyntaxTrivia trivia) => (trivia.Kind() is
         SyntaxKind.SingleLineCommentTrivia
         or SyntaxKind.MultiLineCommentTrivia
@@ -269,8 +251,7 @@ internal sealed class CommentSmellScan : ISourceAnalyzer {
             shaderRoot: options.ShaderRoot,
             shaderFileNames: out var shaderFileNames
         );
-        var jsonl = new StringBuilder();
-        var byFile = new Dictionary<string, List<(int Line, string Text)>>();
+        var sites = new ScanSites();
         var bucketCounts = new SortedDictionary<string, int>(comparer: StringComparer.Ordinal);
         var unresolved = 0;
         var symbolAdvisories = 0;
@@ -280,7 +261,7 @@ internal sealed class CommentSmellScan : ISourceAnalyzer {
         var essayLines = 0;
 
         foreach (var parsed in corpus.Files) {
-            var comments = CollectComments(parsed: parsed);
+            var comments = InlineComments.CollectComments(parsed: parsed);
 
             // Block sizes first: a run's length is a property of the whole run, so no record can be
             // emitted until the run it belongs to has ended.
@@ -323,38 +304,16 @@ internal sealed class CommentSmellScan : ISourceAnalyzer {
                     symbolAdvisories++;
                 }
 
-                jsonl.Append(value: '{')
-                    .Append(value: "\"file\":").Append(value: ScanJsonl.JsonString(value: parsed.Relative)).Append(value: ',')
-                    .Append(value: "\"line\":").Append(value: startLine).Append(value: ',')
-                    .Append(value: "\"endLine\":").Append(value: endLine).Append(value: ',')
-                    .Append(value: "\"kind\":").Append(value: (isSingle
-                    ? "\"single\""
-                    : "\"multi\"")).Append(value: ',')
-                    .Append(value: "\"bucket\":").Append(value: ScanJsonl.JsonString(value: bucket)).Append(value: ',')
-                    .Append(value: "\"blockSize\":").Append(value: blockSize).Append(value: ',')
-                    .Append(value: "\"text\":").Append(value: ScanJsonl.JsonString(value: text));
-
-                if (references.Length > 0) {
-                    jsonl.Append(value: ",\"references\":[").Append(value: references).Append(value: ']');
-                }
-
-                jsonl.Append(value: "}\n");
-
-                if (!byFile.TryGetValue(
-                    key: parsed.Relative,
-                    value: out var lines
-                )) {
-                    lines = [];
-                    byFile[parsed.Relative] = lines;
-                }
-
-                lines.Add(item: (startLine, text));
+                var extra = $"\"bucket\":{ScanJsonl.JsonString(value: bucket)},\"blockSize\":{blockSize}";
+                if (references.Length > 0) { extra += $",\"references\":[{references}]"; }
+                sites.Add(file: parsed.Relative, line: startLine, endLine: endLine,
+                    kind: (isSingle ? "single" : "multi"), text: text, extra: extra);
             }
         }
 
         var total = bucketCounts.Values.Sum();
 
-        Console.Error.WriteLine(value: $"scan[comment-smells]: {total} inline comments classified across {byFile.Count} files (of {corpus.FileCount} scanned).");
+        Console.Error.WriteLine(value: $"scan[comment-smells]: {total} inline comments classified across {sites.FileCount} files (of {corpus.FileCount} scanned).");
 
         foreach (var (bucket, count) in bucketCounts.OrderByDescending(keySelector: static pair => pair.Value)) {
             Console.Error.WriteLine(value: $"{count,5}  {bucket}");
@@ -364,9 +323,6 @@ internal sealed class CommentSmellScan : ISourceAnalyzer {
         Console.Error.WriteLine(value: $"{symbolAdvisories,5}  (comments citing an UPPER_SNAKE symbol absent from our sources — ADVISORY: an external SDK or hardware constant looks identical)");
         Console.Error.WriteLine(value: $"{essayLines,5}  lines in {essayBlocks} blocks of {EssayLineCount}+ consecutive comment lines");
 
-        return (jsonl.ToString(), ScanJsonl.BuildGroupedChunks(
-            byFile: byFile,
-            maxPerChunk: options.MaxPerChunk
-        ));
+        return sites.Finish(maxPerChunk: options.MaxPerChunk);
     }
 }

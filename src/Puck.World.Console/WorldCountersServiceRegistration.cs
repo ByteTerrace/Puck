@@ -27,8 +27,9 @@ public static class WorldCountersServiceRegistration {
     /// <summary>Registers the registered <see cref="WorldServer"/>'s own counters as <see cref="IWorkCounterSource"/>s:
     /// <c>state.arena</c> and <c>state.search</c> through the server's forwarders
     /// (<see cref="WorldServer.ArenaWorkSource"/>, <see cref="WorldServer.SearchWorkSource"/>), which carry a retired
-    /// instance's totals across a definition install so a reading never goes down, and <c>state.rules</c>, the rule
-    /// evaluator that lives as long as the server.</summary>
+    /// instance's totals across a definition install so a reading never goes down, <c>state.rules</c>, the rule
+    /// evaluator that lives as long as the server, and <c>world.disclosure</c>, the server's shared recipient image
+    /// table (<see cref="WorldServer.DisclosureWorkSource"/>).</summary>
     /// <param name="services">The World's service collection, which registers the <see cref="WorldServer"/>.</param>
     /// <returns><paramref name="services"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
@@ -38,6 +39,7 @@ public static class WorldCountersServiceRegistration {
         return services
             .AddSingleton<IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldServer>().ArenaWorkSource)
             .AddSingleton<IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldServer>().RuleHost.RuleWork)
-            .AddSingleton<IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldServer>().SearchWorkSource);
+            .AddSingleton<IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldServer>().SearchWorkSource)
+            .AddSingleton<IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldServer>().DisclosureWorkSource);
     }
 }

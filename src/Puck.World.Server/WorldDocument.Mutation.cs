@@ -63,7 +63,7 @@ public sealed partial class WorldDocument {
                     Host.Output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {mutation.Principal.Describe()} {reason} — {WorldServer.Describe(mutation: mutation)} dropped]");
                 }
                 Host.EchoTap?.Invoke(obj: new WorldEditEcho(
-                    Message: $"{WorldServer.Describe(mutation: mutation)} denied: {reason}",
+                    Message: m_lastMutationFailureCode == WorldRecipientMutations.NotDisclosedCode ? reason : $"{WorldServer.Describe(mutation: mutation)} denied: {reason}",
                     Rejected: true,
                     Kind: WorldEditEchoKind.Mutation,
                     Mutation: mutation,
@@ -128,8 +128,10 @@ public sealed partial class WorldDocument {
             instanceIdentity: Host.InstanceIdentity,
             candidate: out var candidate,
             reason: out reason,
-            evictedKey: out var evictedKey
+            evictedKey: out var evictedKey,
+            refusalCode: out var refusalCode
         )) {
+            m_lastMutationFailureCode = refusalCode ?? "world.mutation.refused";
             return false;
         }
 

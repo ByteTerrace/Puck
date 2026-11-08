@@ -3,6 +3,7 @@ using Puck.Assets;
 using Puck.Commands;
 using Puck.Confinement;
 using Puck.Scripting;
+using Puck.Testing;
 using Puck.World.Addons;
 using Puck.World.Protocol;
 using Xunit;
@@ -11,6 +12,92 @@ namespace Puck.World.Server.Tests;
 
 /// <summary>Regression checks for named state authority and atomic cell writes at the guest boundary.</summary>
 public sealed class AddonCellAndAskLawTests {
+    [Theory]
+    [InlineData(false, "secret", false)]
+    [InlineData(true, "secret", false)]
+    [InlineData(false, "absent", false)]
+    [InlineData(true, "absent", false)]
+    [InlineData(false, "secret", true)]
+    [InlineData(true, "secret", true)]
+    [InlineData(false, "absent", true)]
+    [InlineData(true, "absent", true)]
+    public void RestrictedCellBindsAndPreviouslyBoundWritesReturnNotDisclosedBeforeLookingUpAnyKey(bool present, string key, bool bindFirst) {
+        using var directory = new TemporaryDirectory(prefix: "puck-bind-disclosure-");
+        var wat = $$"""
+            (module
+              (memory (export "memory") 1)
+              (data (i32.const 256) "\02\00\10\00\00\00\00\00\00\00\00\00\00\00\00\00\03\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
+              (data (i32.const 12400) "hidden")
+              (data (i32.const 12432) "{{key}}")
+              (global $stage (mut i32) (i32.const 0))
+              (func (export "puck_abi_version") (result i32) (i32.const 1))
+              (func (export "puck_channels_ptr") (result i32) (i32.const 256))
+              (func (export "puck_channels_count") (result i32) (i32.const 2))
+              (func (export "puck_out_ptr") (result i32) (i32.const 4096))
+              (func (export "puck_out_cap") (result i32) (i32.const 1))
+              (func (export "puck_in_ptr") (result i32) (i32.const 8192))
+              (func (export "puck_in_cap") (result i32) (i32.const 8))
+              (func (export "puck_on_tick") (param $count i32) (result i32)
+                (local $i i32) (local $p i32) (local $answered i32)
+                (if (i32.eq (global.get $stage) (i32.const 3)) (then (return (i32.const 0))))
+                (if (global.get $stage) (then
+                  (loop $answers
+                    (local.set $p (i32.add (i32.const 8192) (i32.mul (local.get $i) (i32.const 32))))
+                    (if (i32.and (i32.eq (i32.load8_u (local.get $p)) (i32.const 2))
+                          (i32.eqz (i32.load16_u offset=2 (local.get $p))))
+                      (then
+                        (local.set $answered (i32.const 1))
+                        (if (i32.ne (i32.load8_u offset=8 (local.get $p))
+                          (select (i32.const {{(int)AddonVerdict.Applied}}) (i32.const {{(int)AddonVerdict.NotDisclosed}})
+                            (i32.and (i32.const {{(bindFirst ? 1 : 0)}}) (i32.eq (global.get $stage) (i32.const 1))))) (then unreachable))))
+                    (local.set $i (i32.add (local.get $i) (i32.const 1)))
+                    (br_if $answers (i32.lt_u (local.get $i) (local.get $count))))
+                  (if (i32.eqz (local.get $answered)) (then unreachable))
+                  (if (i32.and (i32.const {{(bindFirst ? 1 : 0)}}) (i32.eq (global.get $stage) (i32.const 1))) (then
+                    (global.set $stage (i32.const 2))
+                    (i32.store8 (i32.const 4096) (i32.const 1))
+                    (i32.store16 (i32.const 4100) (i32.const 1))
+                    (i32.store16 (i32.const 4102) (i32.const 15))
+                    (i64.store (i32.const 4104) (i64.const 5))
+                    (i64.store (i32.const 4112) (i64.const 0))
+                    (return (i32.const 1))))
+                  (global.set $stage (i32.const 3))
+                  (return (i32.const 0))))
+                (global.set $stage (i32.const 1))
+                (i32.store (i32.const 12288) (i32.const 12400))
+                (i32.store (i32.const 12292) (i32.const 12432))
+                (i32.store16 (i32.const 12296) (i32.const 6))
+                (i32.store16 (i32.const 12298) (i32.const {{key.Length}}))
+                (i32.store8 (i32.const 4096) (i32.const 1))
+                (i32.store16 (i32.const 4102) (i32.const 14))
+                (i64.store (i32.const 4104) (i64.const 12288))
+                (i64.store (i32.const 4112) (i64.const 1))
+                (i32.const 1)))
+            """;
+        var bytes = Encoding.UTF8.GetBytes(wat);
+        var path = directory.PathOf("guest.wat").Replace('\\', '/');
+        File.WriteAllBytes(path, bytes);
+        var definition = Fixtures.BuildDocument().WithWorldState([
+            new WorldStateRow(CellName.Parse("hidden"), CellKind.Int, Capacity: 4, CellVisibility: !bindFirst,
+                Cells: present ? [new StateCell(CellName.Parse("secret"), CellValue.Int(7), Visibility: bindFirst ? null : new StateVisibility(Readers: ["seat1"]))] : [])
+        ]) with {
+            AddonsRaw = [new WorldAddonRow("bind", path, "sha256/" + Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)), 1000000UL, true)],
+        };
+        using var fixture = Fixtures.FreshServer(definition);
+        using var runtime = WorldAddonRuntime.Create(fixture.Server.Definition, fixture.Server);
+        fixture.Step();
+        if (bindFirst) {
+            Assert.True(fixture.Server.TryApplyMutation(new WorldMutation.UpsertStateRow(Principal.Console,
+                definition.State[0] with { CellVisibility = true }), fixture.Server.CompletedTick,
+                fixture.Server.CompletedEngineTicks, SubmissionEnvelope.LocalConnectionId, 0, false));
+        }
+        fixture.Step();
+        fixture.Step();
+        var cost = Assert.Single(runtime.DescribeCost());
+        Assert.True(cost.State == AddonState.Enabled, cost.FaultDetail);
+        Assert.Equal(0UL, cost.TotalAnswersDropped);
+    }
+
     [Fact]
     public void ReusedRowDecodesKeepJournalCellsImmutableAndStillRejectDuplicateMembers() {
         var ordinal = WorldMutationKindCatalog.All().Single(predicate: entry => (entry.Type == typeof(WorldMutation.UpsertStateRow))).Ordinal;

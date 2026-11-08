@@ -1,5 +1,4 @@
 
-using Puck.Maths;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -37,25 +36,24 @@ public sealed partial class WorldDocument {
     }
     private bool TryStateMembers(WorldMutation mutation, in ArenaTime time, out string reason, out CellName? evicted) {
         reason = string.Empty; evicted = null;
+        if (!mutation.Principal.IsAuthority) {
+            var view = Host.ReadView(mutation.Principal);
+            if (!view.Admits(mutation, out var withheld)) {
+                m_lastMutationFailureCode = WorldRecipientMutations.NotDisclosedCode;
+                reason = view.Refusal("mutation", withheld);
+                return false;
+            }
+        }
         switch (mutation) {
             case WorldMutation.Generate generate:
-                if (!DisclosesStateRead(name: generate.Row, principal: generate.Principal)) { reason = "draw site is not disclosed"; return false; }
                 return TryGenerateState(mutation: generate, reason: out reason, time: in time);
             case WorldMutation.TransformState transform:
-                foreach (var subject in transform.Transform.Subjects()) {
-                    if ((transform.Principal == Puck.Commands.Principal.World) || (transform.Principal == Puck.Commands.Principal.Console)) { continue; }
-                    if (!DisclosesStateRead(name: subject.Name, principal: transform.Principal)) { reason = "state operation is not disclosed"; return false; }
-                }
                 return WorldArenaTransforms.TryApply(definition: m_definition, transform: transform.Transform, actor: transform.Principal,
                     tick: time.Tick, engineTick: time.EngineTick, instance: Host.InstanceIdentity, candidate: out _, reason: out reason, guard: transform.Guard, live: Host.Arena);
             case WorldMutation.UpsertStateRow replace:
                 var existing = WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: replace.Row.Name.Value);
                 if (StateRows.IsGeneratedRowName(name: replace.Row.Name.Value, rows: m_definition.State)) {
                     reason = $"state row '{replace.Row.Name}' is generated storage; mutate its owning declaration or use a typed instance effect";
-                    return false;
-                }
-                if (ReadsThroughDisclosure(principal: replace.Principal) && !WorldStateDisclosure.CanReadRow(arena: Host.Arena, rowName: replace.Row.Name.Value, recipient: replace.Principal)) {
-                    reason = $"state row '{replace.Row.Name}' is not writable by {replace.Principal.Describe()}";
                     return false;
                 }
                 if (existing is { Inverse: { } existingInverse }) {
@@ -94,52 +92,6 @@ public sealed partial class WorldDocument {
             default: reason = "the command is not a state batch"; return false;
         }
     }
-    private bool DisclosesStateRead(string name, Puck.Commands.Principal principal) {
-        var arena = Host.Arena;
-
-        if (!arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: name)) {
-            if (m_definition.Sets.FirstOrDefault(predicate: set => (set.Name.Value == name)) is not { } declared) { return false; }
-            m_setReadOrdinals.Clear();
-            RuleCompiler.CollectCellSetReads(WorldFactsCompiler.Context(definition: m_definition), declared, m_setReadOrdinals);
-            foreach (var ordinal in m_setReadOrdinals) {
-                if (!DisclosesStateRead(name: arena.Catalog.Descriptors[ordinal].Name, principal: principal)) { return false; }
-            }
-            return true;
-        }
-        if (!WorldStateDisclosure.CanReadRow(arena: arena, recipient: principal, rowName: name)) { return false; }
-        var cursor = 0;
-
-        while (arena.TryNextCell(handle.Ordinal, ref cursor, out var key)) {
-            if (!WorldStateDisclosure.CanReadCell(m_definition, arena, name, arena.Keys[key], principal)) { return false; }
-        }
-        return true;
-    }
-    private bool CheckStateExpectations(WorldMutation.Batch batch, in ArenaTime time, out string reason) {
-        reason = string.Empty;
-        // Fingerprint guards are explicit preview/edit boundaries; ordinary state batches export nothing.
-        if ((batch.ExpectedDefinition is not null) || (batch.ExpectedInputs is not null) || (batch.ExpectedSpatialReads is { Count: > 0 })) {
-            var current = Host.MaterializeArena();
-
-            if ((batch.ExpectedDefinition is { } expected) && (expected != WorldDefinitionFingerprint.Compute(definition: current, stateRows: batch.ExpectedStateRows))) {
-                reason = "the proposal is stale: its base definition changed; preview again"; return false;
-            }
-            if ((batch.ExpectedInputs is { } inputs) && (inputs.Fingerprint != WorldDefinitionFingerprint.ComputeInputs(definition: current, placementIds: inputs.PlacementIds, stateRows: inputs.StateRows))) {
-                reason = "the proposal is stale: its named inputs changed; preview again"; return false;
-            }
-            foreach (var spatial in (batch.ExpectedSpatialReads ?? [])) {
-                if (spatial.Fingerprint != WorldDefinitionFingerprint.ComputeSpatial(definition: current, region: spatial.Region)) {
-                    reason = "the proposal is stale: its spatial read changed; preview again"; return false;
-                }
-            }
-        }
-        foreach (var cell in (batch.ExpectedCells ?? [])) {
-            if (!WorldStateReader.TryRead(definition: m_definition, arena: Host.Arena, rowName: cell.Row, key: cell.Key,
-                tick: time.Tick, engineTick: time.EngineTick, row: out var row, rawValue: out var raw, text: out var text) ||
-                (raw is not { } value) || ((cell.Kind is { } kind) && (row.Kind != kind)) || ((cell.Text is not null) && (text != cell.Text)) ||
-                ((row.Kind != CellKind.Text) && (cell.Kind != CellKind.Text) && !cell.Comparison.Holds(value: FixedQ4816.FromRawBits(value: value), expected: FixedQ4816.FromRawBits(value: cell.Value)))) {
-                reason = $"the proposal is stale: state '{cell.Row}' changed; preview again"; return false;
-            }
-        }
-        return true;
-    }
+    private bool CheckStateExpectations(WorldMutation.Batch batch, in ArenaTime time, out string reason) =>
+        Host.ReadView(batch.Principal).CheckGuards(batch, out reason);
 }

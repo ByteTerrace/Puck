@@ -1,5 +1,6 @@
 using Puck.Abstractions.Machines;
 using Puck.Maths;
+using Puck.World.Protocol;
 
 namespace Puck.World;
 
@@ -16,7 +17,7 @@ public static partial class WorldDefinitionValidator {
             comparisonType: StringComparison.Ordinal
         ));
     // The audio host-section defaults: the master gain rides the shared ceiling, the coalescing radius/fade are
-    // physical, the curve token is v1's one recognized value, the listener policy resolves (focus | seat:<n> |
+    // physical, the curve token is v1's one recognized value, the listener policy resolves (focus | seat<n> |
     // a declared camera name), and every cue-table row resolves (a published engine event or rule-emitted token, a
     // live patch id, the gain ceiling in thousandths, and a placement whose emitter form names a declared speaker).
     private static void ValidateAudioDefaults(WorldAudioDefaults audio, HashSet<string> cameras, HashSet<string> patchIds, HashSet<string> speakerNames, IReadOnlyList<WorldRule>? rules, int localSeats, List<string> errors) {
@@ -45,31 +46,33 @@ public static partial class WorldDefinitionValidator {
         var listener = audio.Listener;
 
         if (string.IsNullOrWhiteSpace(value: listener)) {
-            errors.Add(item: "audio.listener is required ('focus', 'seat:<n>', or a declared camera name).");
+            errors.Add(item: "audio.listener is required ('focus', 'seat<n>', or a declared camera name).");
         } else if (
             !string.Equals(
             a: listener,
             b: WorldAudioDefaults.ListenerFocus,
             comparisonType: StringComparison.Ordinal
         ) &&
-            !cameras.Contains(item: listener)
+            (PrincipalTokens.TryParseSeat(
+            number: out _,
+            token: listener
+        ) || !cameras.Contains(item: listener))
         ) {
             if (listener.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: WorldAudioDefaults.ListenerSeatPrefix
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: PrincipalTokens.SeatPrefix
             )) {
                 if (
-                    !int.TryParse(
-                    s: listener.AsSpan(start: WorldAudioDefaults.ListenerSeatPrefix.Length),
-                    result: out var seat
+                    !PrincipalTokens.TryParseSeat(
+                    number: out var seat,
+                    token: listener
                 ) ||
-                    (seat < 1) ||
                     (seat > localSeats)
                 ) {
-                    errors.Add(item: $"audio.listener '{listener}' names no seat (expected seat:1..seat:{localSeats}).");
+                    errors.Add(item: $"audio.listener '{listener}' names no seat (expected seat1..seat{localSeats}).");
                 }
             } else {
-                errors.Add(item: $"audio.listener '{listener}' is not 'focus', 'seat:<n>', or a declared camera name.");
+                errors.Add(item: $"audio.listener '{listener}' is not 'focus', 'seat<n>', or a declared camera name.");
             }
         }
 

@@ -132,6 +132,10 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
 
 ## Workflow
 
+Post's small ARM probe ROMs share `ArmProbeAssembler` for instruction emission,
+branch fixups and ROM finishing. `AsmLiteralPool.Resolve` remains the literal-pool
+resolver; `MicroRoms` and `OracleProbes` author only their probe programs.
+
 1. Identify the affected machine and capability: shared SM83 compatibility in
    `Puck.HumbleGamingBrick`, or native ARM7TDMI GBA in
    `Puck.AdvancedGamingBrick`.
@@ -235,5 +239,6 @@ so CPU suites cover the self-contained stages (and the cores they check). The
 | [`puck-world`](../puck-world/SKILL.md) | Integrating an emulator into world/session behavior beyond the emulator-host seam. |
 | [`rendering`](../rendering/SKILL.md) | The renderer, SDF and shaders that present a machine's framebuffer; the emulator itself has no GPU path. |
 | [`input`](../input/SKILL.md) | The host side of a machine's buttons: bindings, input modes, the Menu tap that becomes an engaged machine's Start. |
+| [`media`](../media/SKILL.md) | The host side of a machine's sound: the mixer, speaker rows that bind a machine's audio, the output device. |
 | [`rom-forge`](../rom-forge/SKILL.md) | Authoring or compiling the cartridge under test — `puck.cartridge.v1`, the `.puck` DSL, or the native CGB/AGB compilers, rather than the emulator core executing it. |
 | [`verification`](../verification/SKILL.md) | The landing bar, building before testing, and reading a flaky versus failing leg. |

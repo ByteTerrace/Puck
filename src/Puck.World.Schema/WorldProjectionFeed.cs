@@ -55,7 +55,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
 
     private WorldProjectionDocument? m_held;
     private JsonObject? m_tree;
-    private WorldDefinition? m_recipientSource;
+    private ContentPin? m_recipientIdentity;
 
     /// <summary>Compares a traveller's current projection with its last delivery, retaining its clock anchors and
     /// sequence for the comparison. A hidden install cannot change this identity.</summary>
@@ -66,14 +66,14 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
     /// reuse the shared row images; a read of the same view cannot seed this feed.</summary>
     public WorldProjectionDelivery Compose(WorldRecipientView view, WorldDeliveryCursor cursor) {
         if (!view.Observes) { return WorldProjectionDelivery.Nothing; }
-        var source = view.Images.Definition(view);
-        if (ReferenceEquals(source, m_recipientSource) && m_held is not null) {
+        var identity = view.Images.DefinitionIdentity(view);
+        if ((identity == m_recipientIdentity) && m_held is not null) {
             // State-clock sources need not cross as observations. Even an unchanged disclosed document can owe
             // an anchor correction, including administrative writes before another simulation tick.
             var time = view.Time;
             return Step(view, cursor, time.Tick, time.EngineTick);
         }
-        m_recipientSource = source;
+        m_recipientIdentity = identity;
         var projection = view.Project(m_anchors, m_held?.Provenance.Revision ?? 0)!;
         var payload = WorldProjection.SerializeCompact(projection);
         var tree = WorldProjectionDelta.Tree(payload);
@@ -269,7 +269,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
         m_anchors.Release();
         m_held = null;
         m_tree = null;
-        m_recipientSource = null;
+        m_recipientIdentity = null;
     }
 
     private WorldProjectionDelivery Partial(WorldProjectionDocument projection, JsonObject delta, bool valuesOnly) {

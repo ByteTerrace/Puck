@@ -714,14 +714,11 @@ thread-safe**.
 - **Surface-attach query**—`FixedSurfaceQuery`, `FixedSurfaceAttachCandidate`,
   `FixedSurfaceColliderSource`.
 - **Rigid solver**—`FixedRigidWorld`, `FixedRigidManifold`, `FixedRigidContacts`,
-  `FixedPairManifoldSlotTable`, `FixedTwoBodyKernel`.
+  `FixedTwoBodyContact`, `FixedPairManifoldSlotTable`, `FixedTwoBodyKernel`.
 - **Navigation kernel**—`NavigationRuntime`, `NavigationRuntime.Domain`,
   `NavigationDomainInput`, `NavigationCapacity`, `NavigationSharing`,
   `INavigationMediumField`, `NavigationStatus`, `NavigationSharedCheckpoint`,
   `NavigationTreeCheckpoint`, `NavigationTreeNode`.
-- **Multi-body coupling**—`FixedTwoBodyKernel`, `FixedTwoBodyContact`,
-  `FixedPairManifoldSlotTable`, `FixedRigidWorld` (shape only, not wired into
-  any World tick).
 
 ## Verification
 

@@ -56,6 +56,14 @@ retarget them, and read the references' mentions of them as prior art
 
 ## Live state reads and writes
 
+**The write boundary.** `WorldRecipientView.Admits` decides from declared policy before any
+recipient mutation or guard reads state; seats are recipients too. The mutation adapter and shared
+guard check live in `Puck.World.Protocol/Protocol/WorldRecipientMutations.cs`; the server's complete
+admission, composition, addon bind and typed write doors use that policy. Whole-document load,
+reload, reset and undo are authority-only at apply and operator-only on the console.
+See [mutations](references/mutations.md). A row's `cellVisibility` reserves per-cell policies
+even when empty; its row-level `visibility` alone does not.
+
 **Durable addon state.** `IWorldAddonHost` stages guest checkpoint decoding before
 authority adoption. Persistence, recording and history capture the same live
 memory and retained pinned module sources; arming never restarts guests. The silo
@@ -363,7 +371,8 @@ rule. Grammar, units and the compile/lint verbs belong to `puck-dsl`.
 
 | Project | Owns |
 |---|---|
-| `src/Puck.State` (+ `.Generators`, `.Topology`, `.Rules`, `.Search`, `.Vectors`) | The state and rule engine beneath the document, with no world concept: sections, rows, cells, the expression IR, `StateArena`, the rule compiler |
+| `src/Puck.State` (+ `.Generators`, `.Topology`, `.Rules`, `.Search`, `.Vectors`) | The state and rule engine beneath the document, with no world concept: sections, rows, cells, the expression IR, `StateArena`, the rule compiler (the `state` skill) |
+| `src/Puck.Physics` | Contact, sweeps, the rigid solver, gravity, navigation, field lattices and the motion-program core that `WorldBody` executes (the `physics` skill) |
 | `src/Puck.World.Schema` | What a world is: `WorldDefinition` and its section records, `WorldDefinitionValidator`, serialization, document-embedded wire vocabulary (`PlayerIntent`, `WorldGrant`) |
 | `src/Puck.World.Protocol` | What a world says: `WorldCommand`, `WorldMutation`, `SubmissionEnvelope`, `WorldSnapshot`, `IServerLink`, `WorldStateMirror` (every presentation read of state), the adjacency family |
 | `src/Puck.Networking` | The wire substrate: `FrameCodec`, `WireReader`/`WireWriter` |
@@ -458,63 +467,10 @@ composition of existing verbs expresses. The debug world's `places.puck`
 bindability or audience of a C# verb owes `puck verbs` (regenerates the
 catalog `puck compile --validate` checks authored commands against).
 
-**A rule fault is in the value.** `RuleExpressions.Evaluate(ref frame, ...)` answers an `Outcome` (a number, an
-absence, or a `Domain` or `Forever` fault) and nothing else carries it: `RuleEvaluation.Decide(ref frame, gate)` answers
-a `Verdict` (`Faulted`, `Closed`, `Open`), `RuleEvaluator.EvaluateBindings` a `BindingsResult`, `IArenaSearchJudge.Judge`
-a `JudgeOutcome` and `RuleEvaluator.Evaluate` a `RuleOutcome` (`Faulted` over `Refused` over `Fired` over `Idle`). The
-deciding place reads what it was handed: a rule's judgement holds its latch on a fault, a group trigger neither runs nor
-re-arms and a fixpoint pass counts no progress, a decision keeps its choice, a search step lands nothing and restarts. An
-effect that meets a fault refuses its firing by name, so a firing that proposes is one no fault touched. Local code may
-drop a value but never the fault: firing evaluations use `EvaluationFrame`; `RuleExpressions.EvaluateDetached`
-enters the same interpreter only from the constant folder, a flock's affinity and browser read-back, as
-`OutcomeDetachedAllowlist` specifies. Each consumer handles the cases of what it gets back.
-`Absent` is a value each consumer answers, never a fault
-([expressions](../../../docs/reference/state/expressions.md#constant-folding-and-faults)).
-An operand read answers a `Fact` (an `Outcome`, a case of `Faulted`, `Finite`, `Absent` or `Forever`, beside its cell
-kind) and an address resolves to a `Resolved<T>`; both default to the faulted case and give their value only through
-`TryFinite` or `TryNamed`. An operand declares the addresses it reads through (`IRuleOperand.Addresses`) and reads
-through what the interpreter resolved (`Read(reader, keys)`, `RuleExpressions.ReadOperand`): an address a program
-computes (a `cards[<expression>]` key, a `$zones[<expression>]` row, a ring age) is tokens of the enclosing program
-that `RuleCompiler`'s lowering puts in front of the operand's own, so an operand never evaluates an expression and a
-computed address is priced as the tokens it is; a pattern's per-token program is `IWordFoldOperand.WordProgram`, run
-once per token by `RuleExpressions.FoldWord`, which `world.match` spells its word through as well. A new operand that
-reads through a computed address declares it in `Addresses` and receives it in `keys`; it never calls
-`RuleExpressions.Evaluate`.
-A firing is one journal scope. `RuleEvaluator.FireProposal` (a rule) and `FireEffects` (a host's decision effects) open it,
-write the edge bit through `RuleLatch.SetHeld` (and a host's own state through an `IFiringPrelude`), propose the effects,
-and close it through the one door, `RuleEvaluator.Commit`, which switches on a `FiringDecision` (`Faulted` and `Refused`
-rewind, `Closed` and `Held` commit the bookkeeping alone, `Fires` commits and delivers). A store that is simulation state
-beside the arena's columns implements `IJournalParticipant` and records what it overwrites through
-`ArenaJournal.RecordParticipant` before writing (it throws with no scope open); `StateArena.Rewind` hands the records back
-newest first. `RuleLatch`'s lifecycle writers (`Restore`, `Clear`, `ClearRule`, `Prune`) take the arena's journal, no default,
-and refuse inside a scope, since only a firing's writes are recorded; `EndSweep`, `Forget` and `Reset` record what they remove
-when a scope is open. A decision's common and option effects are one firing: `FireEffects` proposes the common effects, then
-the `IFiringContinuation`'s effects into the same scope, and the `IFiringPrelude`'s binding rewinds with both; a decision's
-no-choice effects are one firing with the binding they clear the same way. The continuation is handed the arms the common
-effects queued and skips the option when the population a reconcile of the firing's proposal produces no longer holds its
-pair: the queued document rows compose against the proposed document, and `WorldPopulation.ReconcileKeeps` runs the
-install's own reconcile (structural when `WorldDocument.RebuildsPopulation` says the unit rebuilds the population, then the
-cell-driven counts from the open arena, then the census re-clamp) over a scratch slot table. The reconcile is written once,
-generic over the slot table, so a new retire rule in it reaches the forecast. A decision reads every gate and score before it writes its binding, so a fault writes nothing. A queued arm
-keeps the host bindings it was queued under (`IEffectHost.CaptureBinding`, `ApplyBinding`) for its preflight and delivery.
-An arm that fires outside the arena evaluates nothing itself: it declares `IRuleEffect.Sources` (a key read as an index, an
-expression program, an operand) and `RuleEvaluator.ProposeEffects` reads them during queued preflight, after the
-reversible effects and continuation, so a source that faults is a `Faulted`
-firing and an absence is a value the arm answers. The values reach the arm through `EffectFiring.Values`, by the position
-it declared them at, and are the same at the preflight and at the delivery after the commit. A write's destination key
-answers a typed `WriteKey` (`Resolved`, `Faulted`, `Refused`), never a reason to compare. The state transaction's input
-resynchronisation is two phases: `ValidateStateTransaction` prepares each owner's selection (`WorldInputRuntime.TryPrepareBodies`
-and `TryPrepareAll`) while the journal can still rewind, and `CommitStateTransaction` applies them (`ApplyPrepared*`), which cannot
-refuse.
-
-`OutcomeAnalyzer` in `Puck.Analyzers` enforces `OUTCOME001`–`OUTCOME004` as Roslyn build errors outside xUnit v3
-assemblies: dropped outcomes, unchecked `TryFinite`/`TryNamed` and one-case verdict comparisons, unlisted detached
-evaluation, and an operand resolving its own address. Holding declared addresses for read sets and costs is allowed.
-`OutcomeDiscardAllowlist` names the host bool entries; the analyzer cannot prove a stored bool is read or an explicit
-fault arm is correct. See [the outcome and host contract](../../../docs/reference/state/hosting.md#outcomes-analyzer)
-and [the behavior examples](../../../docs/reference/state/rules.md#rule-fault-examples). The
-[remaining work](../../../docs/plans/rule-faults.md) includes body-target generations, proposal-owned host scratch
-and the source-read timing choice; these are not guarantees the current implementation makes.
+**Rule faults and firings belong to the `state` skill.** An `Outcome` carries a fault to the deciding
+place, an operand never evaluates an expression, a firing is one journal scope closed through
+`RuleEvaluator.Commit`, and `OutcomeAnalyzer` holds the rest at build time; the
+[state skill](../state/SKILL.md#faults-firings-and-the-one-door) owns the full contract.
 
 **Narrate through the hub.** Server never writes to `System.Console`; every line
 is a `WorldOutputHub.Narrate` call, bound to stderr (or stdout for answers) by
@@ -919,6 +875,10 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 |---|---|
 | `puck-dsl` | `.puck` grammar, modules, units, the compile/lint/format verbs, PUCKnnn diagnostics. |
 | `input` | Channels, input modes, timed ingress, input patterns (tap, hold, sequences), bindings and overlays, the always-active plane, devices. |
+| `state` | The arena, journal scopes, rule compiler and evaluator, faults, transforms, search, draws and analysis beneath `state`, `rules` and `search`. |
+| `physics` | Contact providers and sweeps, the body step, step-up and snap, rigid, tether, gravity, navigation and field-lattice kernels. |
+| `media` | Speakers, cues, music, voices and HUD speech, `audio.*` verbs, `capture.*` clips and the recording document. |
+| `platform` | Native windows, displays, precision waits, camera and desktop capture services, probes. |
 | `sdf-authoring` | Creation shapes, materials and rigs. |
 | `rendering` | The renderer and SDF VM the frame source feeds. |
 | `gaming-bricks`, `rom-forge` | Emulators behind engaged screens; cartridges. |
