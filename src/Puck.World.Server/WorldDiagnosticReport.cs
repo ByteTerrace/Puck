@@ -89,8 +89,8 @@ public sealed record WorldDiagnosticCoverage(int Tested, int Eligible, IReadOnly
     /// bodies it would have covered: a headless host composes no renderer, so it holds no drawn mesh to compare. They
     /// are neither clean nor unknown, and a host that composes what they need makes them.</summary>
     public IReadOnlyDictionary<string, int> Excluded { get; init; } = new Dictionary<string, int>();
-    /// <summary>Gets how many colliders a report that ran out of time left unread, which a later report resumes; zero for
-    /// a whole report.</summary>
+    /// <summary>Gets unfinished work: unread colliders when the witness pass counts them, or one pending analysis
+    /// phase. Zero for a whole report. Completed witness reads can be reused by a later report.</summary>
     public int Pending { get; init; }
 }
 /// <summary>Mutually exclusive outcomes of sampled witnesses for one comparison.</summary>
