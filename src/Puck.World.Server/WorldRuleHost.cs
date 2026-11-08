@@ -637,14 +637,14 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         rowOrdinal: bodyRef.RowOrdinal
     );
     // The one resolution of a body reference for the evaluation in flight, or -1. A cell reference whose key names
-    // no interned key resolves no body.
+    // no interned key or no live value resolves no body.
     private int ResolveBody(CompiledBodyRefKind kind, int index, int rowOrdinal, CellKey key, IReadOnlyList<int>? placementOrdinals) => (kind switch {
         CompiledBodyRefKind.Literal => index,
         CompiledBodyRefKind.Binding => BoundIndex(key: ((BoundKey)index)),
-        CompiledBodyRefKind.Cell => ((key.IsValid && (IntegerOf(value: Host.ReadArenaCell(
+        CompiledBodyRefKind.Cell => ((key.IsValid && Host.ReadArenaCell(
             key: key,
             rowOrdinal: rowOrdinal
-        )) is var cellIndex) && (cellIndex >= 0) && (cellIndex < Host.Population.Capacity))
+        ).TryFinite(raw: out var raw) && ((raw >> FixedQ4816.FractionBitCount) is var cellIndex) && (cellIndex >= 0) && (cellIndex < Host.Population.Capacity))
         ? ((int)cellIndex)
         : -1),
         // 'placement:$each' names the placement whose id is the iterated key, which is what the compile-time
