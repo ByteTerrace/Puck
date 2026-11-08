@@ -547,7 +547,10 @@ local field may refuse the body's move. Support-selected descents are tagged by
 `IFixedContactStep.SweepSupport` through `WorldBody.BodyContactStep` and
 `IEntityContactField.ResolveEntitySupportSweep`. Unless the local landing itself
 grounds, the neighbour's entire landing displacement is admitted from the local
-stationary answer, including the descent and landing depth. A shortened landing
+stationary answer, including the descent and landing depth. A step-up carries
+its original integrated endpoint as `responseOrigin`, so neighbour support must
+also pay for the entire lift; its raised probe is never an admission baseline.
+A shortened landing
 does not claim neighbour ground and the snap is rejected. Ordinary local support
 keeps its own landing. `IWorldAdjacencyNeighbourContact` hands out `IContactField`;
 the delivered document still compiles it through `WorldSolidField.TryBuild`.
@@ -567,6 +570,24 @@ local body per tick:
   reports therefore comes from the body's own motion; a neighbour can push a
   still body up to its face but not across it.
 
+`WorldPopulation.BeginAdjacencyContacts` opens one pinned image and budget for
+the tick before its mutation drain. A mapped continuum arrival between ticks
+opens the upcoming tick's same image and allowance; ordinary advance does not
+replenish it. `WorldBody.FollowCarrier` names its population-bound slot even
+before its first rigid advance. Its local block retains the ordinary carry
+response; every propagated neighbour block goes through the same admission
+door again for the carrier's own position, velocity and remaining allowance.
+
+`WorldAdjacencyContactField.ResolveCore` composes every eligible projection in
+order from the admitted answer. A rejected push contributes no ground or
+obstruction, and a zero admitted displacement cannot steer velocity. Local
+ground normals survive composition; accepted neighbour normals map into the
+source frame. `WorldAdjacencyPath.MapDisplacementIntoSource` keeps exact length
+from growing at each quantized mapping stage, so honest contact at the budget
+does not lose grounding to a rounding-only clamp. The budget itself remains
+exact, without an admission tolerance. These cases are exercised by
+`WorldAdjacencyCorrectionLawTests`.
+
 When incoming velocity retreats from an owned face, that same door admits no
 correction toward the face and no reduction in retreat speed. Repeated phantom
 bodies or sweep refusals therefore cannot cancel the body's own retreat; no
@@ -577,8 +598,10 @@ does not retreat.
 
 Body contacts are settled by one responder per authority pair
 (`WorldCrossAuthoritySettlement.LocalResponds`), from this authority's identity
-and the identity the neighbour's link settled on at its first frozen image, so
-respawning bodies under new generations cannot choose who yields.
+and the identity the neighbour's authored link settled on before its first
+projection is exposed. `WorldAdjacencyFields.LinkAuthority` survives observation
+handle replacement, generation changes and transient resolution failures, so
+neither respawning bodies nor refreshing an observation chooses who yields.
 `WorldBodyWork.AdjacencyCorrectionClamps` counts shortened, rejected or slowed
 responses in `world.counters physics.bodies`; its class is pacing until
 neighbour inputs are taped. The fixed arithmetic is deterministic for the same

@@ -60,11 +60,11 @@ stops. Where nothing enforces one yet, the build step that adds it is named.
 |---|---|---|---|
 | I1 | An identity document holds only what the identity template authors plus what the player and admitted worlds write to it; no host world's sections. | `WorldOwnedWorlds.Seed` takes its template from the account's configured template only; the `IdentityBase` door that returns the host world is deleted, so the host world is not in scope where an identity is seeded (step H1). | An author can still write a large template. |
 | I2 | One account store per host process; every authority in it reads and writes identities through that one object. | `WorldInstanceHost` is handed the one `WorldOwnedWorlds` for the state root; `WorldInstanceHost.OwnedWorldsDirectory` is deleted, so no second catalog path exists to open (H2). Across processes, an OS file lock on the account directory: a second process opens it read-only and says so. | Two machines offline on one cloud account each write their own copy; the existing stale-writer refusal of `WorldOwnedWorldSync` refuses the second push, and the player chooses. |
-| I3 | An identity is embodied by at most one seat at a time. | One claim door on the account (the roster's identity assignment calls it, and so does an arrival). Across hosts, the identity's title and custody records follow [the custody protocol](companion-redesign.md#1-vocabulary), whose rule is the engine's for any owned traveller (H14). | Until H14, a partition between hosts is not covered: a remote custodian unreachable holds the character until it answers. |
-| I4 | A foreign document writes an identity only through the identity's own grants, and only in its own package's namespace. | `WorldOwnedWorlds.Decide`, the one door every durable write and delivery passes (`WorldOwnedWorlds.cs:284`); the namespace check joins it (H9). | Reads are not namespaced: any world the projection reaches sees every fact the identity carries, as today. |
+| I3 | An identity is embodied by at most one seat at a time. | One claim door on the account (the roster's identity assignment calls it, and so does an arrival). Across hosts, the identity's title and custody records follow [the custody protocol](companion-redesign.md#1-vocabulary), whose rule is the engine's for any owned traveller (H14). | Until H14, a partition between hosts is not covered: a remote custodian unreachable holds the character until it answers. Across hostile homes, one seat per identity holds only where a settlement domain keeps the active seat as its own right ([the decision](../decisions/worlds-and-federation.md#bodies-move-under-custody-and-the-active-seat-is-the-domains-right)). |
+| I4 | A foreign document writes an identity only through the identity's own grants, only in its own package's namespace, and never a home-scoped class. | One authorisation, keyed by the executing world's document and package, on both doors that write an identity: `WorldOwnedWorlds.Decide` (`WorldOwnedWorlds.cs:284`) and `WorldOwnedWorlds.TrySetFact`, which rule effects reach through `WorldRuleHost.PersistIdentityFact` and the console through `identity.fact.set` without consulting `Decide`; `WorldIdentity.TryAdopt` applies the same rule to a body carried home from another host (H9; [the decision](../decisions/worlds-and-federation.md#what-a-visited-world-may-write)). | Reads are not namespaced: any world the projection reaches sees every fact the identity carries, as today. Across machines the rule binds a package to an authority only once write-back is signed ([remote home adoption](records-and-pools.md#remote-home-adoption)). |
 | I5 | A binding moves only the seat that pressed it, out of the world it stands in, to a destination that world offers or to `hub`. | `player.travel` resolves its one argument against the current authority's `destinations` rows marked as offered, plus the reserved `hub`; it takes no source, traveller or path (H3). | A world may still move its own inhabitants anywhere its own rules and portals reach; that is the world's authority (invariant 6 of [the model](../architecture/worlds.md#invariants)). |
 | I6 | Nothing a document authors ends the host process. | `quit` stays `CommandBindability.Unbindable`, and `CommandRegistry.CheckAuthored` keeps authored commands to bindable verbs; the authored menu reaches quitting only by opening the host escape (H3, H5). | Closing the window remains the host's. |
-| I7 | The host escape opens from every input state. | The host's always-active plane (`IAlwaysActiveInputBindings`) answers the reserved gestures before page resolution; the binding vocabulary gate refuses a document that names the reserved pair as a chord (H5). | A hardware or OS overlay that swallows the input first (a platform's own guide menu) is outside Puck. |
+| I7 | The host escape opens from every input state. | The host's always-active plane (`IAlwaysActiveInputBindings`) answers the reserved gestures before page resolution; the binding vocabulary gate refuses a document that binds a reserved gesture, Menu on a pad (H5). | A hardware or OS overlay that swallows the input first (a platform's own guide menu) is outside Puck. |
 | I8 | Start opens the menu unless an engaged overlay declares Start. | The existing overlay resolution ([an overlay replaces only what it declares](../decisions/input-channels.md#an-overlay-replaces-only-what-it-declares)); no new routing code (H4). | An overlay that declares Start and offers no way out still leaves the host escape. |
 | I9 | Only a solo session holds; a hold never outlives solo or the menu that asked for it. | One derived value per frame in `WorldInstanceHost`: held exactly when a local seat's menu requests a hold and `Solo` holds; no latched flag (H6). | A solo player's own in-process services that count wall time (none in simulation) are not held. |
 | I10 | A hold never changes simulation state. | The hold acts only on each instance's accumulator, through the lever `world.rate pause` already uses; ticks are counted in steps, so a held span inserts none (H6). | Presentation clocks are held by policy, not by this invariant. |
@@ -312,8 +312,12 @@ host's images of global worlds sit beside it. Nothing here rewrites a source:
 A character's progress in a world lives on the character, in that world's
 package namespace. The template's visitor policy lets each package write only
 durable slots and facts it qualifies with its own namespace, as an aliased
-import already qualifies a state row's name; `Decide` checks the namespace
-against the source document's package (H9). Worlds of one package (rulepush's
+import already qualifies a state row's name; one authorisation on `Decide` and
+on `WorldOwnedWorlds.TrySetFact` (the door rule effects and `identity.fact.set`
+share, which never consults `Decide`) checks the namespace against the
+executing document's package and refuses a class the template marks
+home-scoped (H9; [the decision](../decisions/worlds-and-federation.md#what-a-visited-world-may-write)).
+Worlds of one package (rulepush's
 overworld and levels, `experimental/worlds/rulepush/rulepush.puck:47`) share
 one namespace, which is what lets an overworld gate read its levels' wins.
 
@@ -541,11 +545,10 @@ today answers only the console key (`TerminalInputBindings`):
 - on a keyboard, the reserved chord `SourceFocus` already holds (Control and
   Alt held, Escape pressed), which already means "back to the host" while a
   passthrough source has focus;
-- on a pad, View and Menu (Select and Start) held together for one second,
-  recognised by the existing chord tracker (`BindingChordTracker`) inside the
-  plane rather than by a second hold detector.
+- on a pad, the Menu (Start) button itself, with no chord (the owner's ruling,
+  [play decisions](../decisions/play.md)).
 
-A page may still bind Start or Select alone; only the held pair is reserved.
+A page may still bind View (Select); only Menu is reserved on a pad.
 The pad's guide button is rejected because the platform overlays (Steam,
 Game Bar) take it first.
 
@@ -989,22 +992,31 @@ plan's tree; "tree" means it waits for the UI plan's steps 3 and 4.
 | H2 | One account per process; the stand-in deleted; the read-only second process | 2, 5 | Fresh state root: `identity.list` shows one minted identity and `world.players` no `seat1`; `world.instance.status` names one owned-worlds directory for the boot row and the garden; a fact set in the garden reads back in the boot row with no adoption; after a rule in the boot world writes a second fact, a `world.history` seek of the boot world to before that write leaves the fact on the character; a second World on the root reports read-only | The garden and the hub read one character | none |
 | H3 | `player.travel`, `player.escape`, offered destinations, the reserved `hub`, boot as travel | 8, 9 | Headless: a bound `player.travel garden` refuses until the row is offered, then lands; `player.travel hub` from the garden lands in the boot world; an authored command naming `quit` still refuses at `CheckAuthored`; an addon principal's `player.escape` refuses | Leaving the garden without walking back through its frame | interim |
 | H4 | Start opens the menu wheel; the engagement family and the `machine` overlay move into the standard | 11, 13 | Injected `gamepad.start` on the resting page opens the `menu` ring (wheel read-back); engaged at a device, the same press reaches the machine's start and no ring opens; an unmapped pad's Start joins | Start at a device starts the game; Start elsewhere opens the menu | interim |
-| H5 | The host escape and its reserved gestures | 12 | With the board overlay engaged and a test overlay binding every pad source, View and Menu held one second opens the escape (read-back) and its Exit to hub lands in the boot world; Control, Alt and Escape does the same; a document naming the reserved pair as a chord is refused at the vocabulary gate | Exit to the hub from a seated board game | interim |
+| H5 | The host escape and its reserved gestures | 12 | With the board overlay engaged and a test overlay binding every pad source, Menu pressed opens the escape (read-back) and its Exit to hub lands in the boot world; Control, Alt and Escape does the same; a document binding Menu is refused at the vocabulary gate | Exit to the hub from a seated board game | interim |
 | H6 | `Solo` and the derived hold | 10 | Solo: the menu open holds every instance (`world.instance.status`); `player.join 2` lifts it with the menu still open; a second World joined over `host.listen` never holds; a scenario with a mid-run menu pause gives the same state hash as without (`puck test --reproduce`) | The debug world freezes behind the menu alone, never in company | none |
-| H7 | Durable images on the desktop, in five steps H7a to H7e ([durable images](#steps)): identity and store, the restore ladder over a two-phase restore core, durable rows across a changed source, cadence and quit, the embedded documents out of the codec | 6 | The checks of each step, and together: set a row in the garden, quit, reboot on the same root, travel to the garden: the row is restored; edit the garden's source between the runs and it still is; two characters hold two images of a `user`-scoped test place; an ephemeral row writes none; killed after a cadence image, the garden restores to it | The garden as you left it, through an edit | none |
+| H7 | Durable images on the desktop, in five steps H7a to H7e ([durable images](#steps)): identity and store, the restore ladder over a two-phase restore core, durable rows across a changed source, cadence and quit, the embedded documents out of the codec; and a durable crossing log on any desktop that is a destination (`WorldServer.InstallCrossingLog`, which only the silo calls today), persisting allocated ids, authority incarnation, arrivals, departures, terminal outcomes and consumed epochs and acknowledging only after the durable write, with a qualified generation identity once a host both restores images and spawns resolver instances (the MMO round's step 7, [the decision](../decisions/worlds-and-federation.md#epochs-survive-restart)) | 6 | The checks of each step, and together: set a row in the garden, quit, reboot on the same root, travel to the garden: the row is restored; edit the garden's source between the runs and it still is; two characters hold two images of a `user`-scoped test place; an ephemeral row writes none; killed after a cadence image, the garden restores to it. The log: cross the garden seam and restart after each durable step, retrying the same operation: one terminal outcome per operation, a monotonic epoch, no duplicate credit; commit a traveller into a desktop destination, kill it, resend the same reservation and commit: refused as consumed | The garden as you left it, through an edit | none |
 | H8 | Battery RAM in images; machine modes; cores without file I/O ([batteries](#batteries-h8)) | 7 | A committed homebrew cartridge with battery RAM on a debug-world device writes its RAM; after quit and reboot it reads it back in `battery` and resumes in `resume`; a search finds no file I/O in the four engines' hosting; `puck test --reproduce` over a run that starts from saved RAM; an edited source around the cabinet keeps the battery | A handheld game's save surviving a restart | none |
-| H9 | Package namespaces for facts and durable slots in `Decide` | 6 | The night field's rule writes its namespaced fact and the hall door opens on return; a rule in a world of a second package writing a debug-package fact is refused by name (the night field and the garden are one package, so they share a namespace) | The port row's fact-gated door | none |
+| H9 | The one write door: package namespaces and home-scoped classes for facts and durable slots, one authorisation on `Decide` and `WorldOwnedWorlds.TrySetFact` keyed by the executing world's document and package, with `TryAdopt` applying it to a carried projection from another host (the MMO round's step 4) | 6 | Rules authored first (neither `night.puck` nor `garden.puck` authors a `rules` or `state` block today) and a second package: the night field's rule writes its namespaced fact and the hall door opens on return; a rule in a world of the second package writing a debug-package fact onto a visitor is refused by name at the tick it fires, and its own-namespace fact is admitted (the night field and the garden are one package, so they share a namespace); a garden rule decrementing a currency fact the standard template marks home-scoped is refused at the tick it fires and reads unchanged on return | The port row's fact-gated door | none |
 | H10 | The avatar claim, admit policies and the arrival install | 4 | A character claiming the Moth arrives in the garden (standard `accept`) as the Moth; a test world with `substitute` seats its walker; a claimed speed above the envelope reads clamped in `identity.show`'s `moveEffective`; the garden visit's replay reproduces with the account directory removed | The Moth as a character's own avatar, carried by claim | none |
 | H11 | The character place: `identity.new`, `identity.avatar`, `identity.rename`, the pavilion's plinth, pedestals and picker ring | 2, 3 | Headless: pose at the plinth and press the context button, and `identity.list` grows; at a pedestal the claim changes (`identity.show`); in the ring the stick cycles and `world.players` shows the confirmed choice | Making and choosing characters in the studio pavilion | interim (names wait for text fields) |
 | H12 | The world list from three sources; the standard `hub` module; player hubs | 14 | An owned place appears as a frame in the painting wing; a hub built from the module is entered by seat 2 in process and by a second World over `host.listen` | The painting wing as the release's world list | none |
 | H13 | The menu and the escape on the UI tree; the wheel ring deleted | 12, 13 | `world.ui` reads per-seat menu nodes; the drive verbs navigate to Exit to hub; in split screen one seat's menu covers only its own view | The menu as the standard's styled surface | tree |
 | H14 | A character's title and custody across hosts; exit to hub as recall | 3, 8 | The custody model gains the identity title first, as the protocol's rule requires; then two Worlds on loopback, partitioned: exit to hub re-embodies at the hub and the stale copy retires on reconnect | Leaving a lost remote world without losing the character | none |
 | H15 | Automatic account sync | 5 | Two state roots on one test container: progress made on one appears on the other after quit and launch; a stale push is refused by name | none | none |
+| H16 | The durable award commit and write-through as earned (step 5): award id, credited effect and outcome in one durable write; a receipt that distinguishes applied, durably accepted, pending and uncertain, where `Decide` today answers `Accepted: true` after `Persist` narrates a failed save; a progress award submitted home at the tick it is earned; a settled class waits for the settlement door and goes there, with home holding the receipt | 6 | Travel to the garden, let a rule award a fact, inject a save refusal, kill the process before return, relaunch: the receipt named the award uncertain, not accepted, and the relaunch resolves it one way; without the fault the fact is present, and a replayed submission returns the prior award id with the count at one. In process only; across machines it is [remote home adoption](records-and-pools.md#remote-home-adoption) | Progress earned in the garden survives a crash | none |
+| H17 | Identity recomposition, per-row admission and the conversion surface (step 6): the stored identity recomposed against the current standard identity template on load, the image ladder's row-by-row admission applied to identities in place of setting the whole file aside into `unloadable/`, and an authored conversion keyed by the template version that runs before admission drops the rows it reads; a refund of a settled class is a settlement operation keyed by (identity, conversion id) | 1, 6 | A character whose template carries a tunable value, quit, edit the value, relaunch: `identity.state <id> <row>` reads the new value and the identity file's bytes are unchanged; an identity holding a row the template no longer declares loads with that row dropped by name and `unloadable/` empty; the garden renames a row and ships a conversion: the new row holds the mapped value, the narration names the conversion, a second relaunch applies nothing, and `puck test --reproduce` agrees | A character that survives the author retuning it | none |
 
 H1 precedes H2, and H2 precedes every step after it. H3 precedes H4, H5 and
 H11. H7a to H7d land in order; H7e follows H7d, and H8 follows H7c. H10
 precedes H11. H13 waits for the UI plan's steps 3 and 4, and H14 for the
 custody protocol's step 7 ([build plan](companion-redesign.md#9-build-plan)).
+H9, H16 and H17 come from [the MMO round's order of work](mmo-foundations/synthesis.md#6-the-order-of-work)
+and go ahead of H7, because every write-back check needs the door and
+write-through closes the larger visible loss with a smaller change than the
+log: H9 follows H2, H16 follows H9, and H17 follows H1 and admits rows
+through the arena's own door (`StateArena.TryValidateLoad`), the one H7c uses
+for images; H16's settled classes and H17's refunds wait for
+[the settlement door](open-items.md#settlement-trust-roles-and-revocation).
 
 ## Questions for other lanes
 
@@ -1020,24 +1032,20 @@ lanes before the steps that need them:
 
 ## Owner calls
 
-- **Local co-op.** Several local seats with no remote player is not solo under
-  the ruling's words, so the menu would not pause. Many games pause for the
-  whole couch. The memo follows the words until the owner says otherwise.
-- **The first character.** The memo mints a default character on first launch
-  and sends the player to the character place to change it. The alternative
-  is to require creation before the first world.
-- **The reserved gestures.** View and Menu held one second on a pad, and
-  Control, Alt and Escape on a keyboard, are the memo's choice of feel.
-- **Saved state over an edited source.** The memo carries a saved row over an
-  edit that keeps the row's declaration, so a player's score survives an
-  author re-tuning the row's default, and the author resets with
-  `world.image.discard`. The alternative is a clean start on any source
-  change, with the image set aside.
-- **Custody an inexact image holds.** When the exact continuation cannot
-  apply and the image holds titles abroad or transfers in doubt, the memo
-  starts the row from its durable rows and narrates the loss by name, leaving
-  recovery to the custody protocol's recall. The alternative is to refuse the
-  activation until the author discards the image or restores the source.
+None remain open. The owner ruled local co-op, the first character and the
+reserved gestures ([play decisions](../decisions/play.md#the-game)); where a
+step above still describes a different gesture, the ruling holds. The MMO
+foundations round decided the last two:
+
+- **Saved state over an edited source.** A saved row carries over an edit that
+  keeps its declaration, and a row whose meaning changed takes an authored
+  conversion (H17); whether a world resets at an edit is its author's choice
+  ([the decision](../decisions/worlds-and-federation.md#player-state-across-author-edits)).
+- **Custody an inexact image holds.** The row starts from its durable rows and
+  narrates the loss by name, never asserts custody from the image, asks the
+  title authority for current rights, and starts with the affected value doors
+  frozen until it has them; refusing the activation is the stopgap
+  ([the decision](../decisions/worlds-and-federation.md#an-unreachable-title-authority-a-crash-and-an-inexact-image)).
 
 ## Review dispositions
 

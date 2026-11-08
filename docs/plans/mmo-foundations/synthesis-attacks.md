@@ -8,8 +8,12 @@ claims, the classes-of-value table, hidden layer moves, neutral witnesses for
 contested places, revocation snapshots, and what a player host may be. Every
 world is treated as possibly hostile, including a peer that is both client and
 server, two player-hosted authorities in direct contact, a dishonest settlement
-issuer and an operator restoring old state. It decides nothing; the memo's
-author answers each finding, and the owner rules after.
+issuer and an operator restoring old state. It decides nothing; the memo
+answers each finding in [its review answers](synthesis.md#9-review-answers).
+The owner call numbers below are the first revision's fifteen, plus the
+sixteenth F8 asked for. Each reference links where that question was settled:
+a decision in [the register](../../decisions/worlds-and-federation.md), or one
+of the three calls the owner deferred ([section 7](synthesis.md#7-owner-calls)).
 
 Labels follow the records. **[opened]** means the words are pasted from the
 code or document at this tree, with the `file:line` the tool printed (a lead at
@@ -108,7 +112,8 @@ answer it. Attacks are grouped by the component the brief names.
 #### B1. The sock-puppet settlement domain
 
 - **Memo section:** [decision 3](synthesis.md#decision-3-custody-of-owned-things),
-  owner call 5; [section 3, Settlement](synthesis.md#3-abstractions-not-providers).
+  owner call 5 ([now decided](../../decisions/worlds-and-federation.md#neutrality-is-a-vouched-role));
+  [section 3, Settlement](synthesis.md#3-abstractions-not-providers).
 - **Attacker and control:** a party holding a few platform accounts, under
   owner call 5's third option ("any community that names one"). It controls
   a settlement world's key, its storage and its build.
@@ -136,7 +141,8 @@ answer it. Attacks are grouped by the component the brief names.
   settlement domain ever be accepted in another, and through which of lane B's
   three mechanisms. Owner call 5 as phrased ("who may be an issuer") hides it;
   the owner's question is whether Puck has one economy, many sealed economies,
-  or exchange between them. The engineering follows from that answer.
+  or exchange between them. The engineering follows from that answer. (The
+  world model's invariant 5 settled it: [domains are sealed](../../decisions/worlds-and-federation.md#settlement-domains-are-sealed).)
 
 #### B2. The dishonest settlement issuer equivocates or restores
 
@@ -186,7 +192,8 @@ answer it. Attacks are grouped by the component the brief names.
   currency row.
 - **Attacker and control:** any world that may award currency or stackable
   goods to a visitor and submit the award to settlement: a player-hosted zone
-  under 10b, or any zone under owner call 5's wider options. It controls what
+  under 10b, or any zone under owner call 5's wider options
+  ([decided](../../decisions/worlds-and-federation.md#neutrality-is-a-vouched-role)). It controls what
   it awards and the ids it mints.
 - **Steps:** award the same kill a thousand times with a thousand fresh ids;
   or award once per tick. Each is a new operation id; deduplication by id
@@ -250,7 +257,9 @@ answer it. Attacks are grouped by the component the brief names.
   "no seat controls the dealer" is a fact no reader can check, and the
   settlement door's acceptance of a hand outcome rests on it.
 - **Severity:** **[high]**, critical under owner calls 10 to 12 beyond
-  table-local score. 6b's whole guarantee is this predicate.
+  table-local score (10 and 11 are the [deferred casino and dealing calls](synthesis.md#7-owner-calls);
+  12, mucked hands, is [decided](../../decisions/worlds-and-federation.md#the-tables)).
+  6b's whole guarantee is this predicate.
 - **Answer:** neutrality is not a property of a world; it is a grant from the
   settlement domain. The composition states that the settlement door accepts
   a hand's terminal decision only from a table authority the domain itself
@@ -258,7 +267,8 @@ answer it. Attacks are grouped by the component the brief names.
   names that authority before the hand (lane D's frozen roster already lists
   "rules identity and recovery policy"; the dealer's identity joins it). The
   same vouching covers C1's referee world and C2's witness. Who may be vouched
-  is then owner call 5's question, which is why call 5 is the largest call and
+  is then owner call 5's question ([decided](../../decisions/worlds-and-federation.md#neutrality-is-a-vouched-role)),
+  which is why call 5 is the largest call and
   should say so: it decides who may deal, referee and witness, not only who may
   mint. A table that no vouched authority runs is table-local score by
   construction, whatever its fiction.
@@ -325,7 +335,8 @@ answer it. Attacks are grouped by the component the brief names.
 
 #### B8. Levels and experience as every world's claim
 
-- **Memo section:** owner call 8: "are levels and experience a signed claim
+- **Memo section:** owner call 8 ([now decided](../../decisions/worlds-and-federation.md#what-a-visited-world-may-write)):
+  "are levels and experience a signed claim
   from the world that granted them, or the player's own number?"
 - **Attacker and control:** any world the player visits, including their own.
 - **Steps:** grant level 60.
@@ -451,7 +462,8 @@ answer it. Attacks are grouped by the component the brief names.
 #### B11. The hop stamp lives on the attacker's record
 
 - **Memo section:** [decision 5](synthesis.md#decision-5-seams), S1: "a
-  last-hop stamp on the mobility record"; owner call 9.
+  last-hop stamp on the mobility record"; owner call 9 (how a layer move
+  feels, [deferred](synthesis.md#7-owner-calls)).
 - **Attacker and control:** a player whose home is the source authority of
   their mobility record, where layers are worlds of another authority (a
   silo's population layers visited from a player host), or a party of N
@@ -479,7 +491,8 @@ answer it. Attacks are grouped by the component the brief names.
 #### B12. The C2 witness has no step
 
 - **Memo section:** [order of work](synthesis.md#6-the-order-of-work) step 14:
-  "C2 as a bounded prototype ... Needs owner call 13 and step 9's witness";
+  "C2 as a bounded prototype ... Needs owner call 13 and step 9's witness"
+  (call 13 is [decided](../../decisions/worlds-and-federation.md#contested-places-and-fights-between-player-hosts));
   [decision 8](synthesis.md#decision-8-where-a-contested-place-runs),
   "Strongest case against C1 ... two friends on a LAN cannot duel without it.
   C2 is the answer for that case".
@@ -535,7 +548,7 @@ answer it. Attacks are grouped by the component the brief names.
 #### B10. The snapshot's three edges
 
 - **Memo section:** [decision 9](synthesis.md#decision-9-revocation-below-expiry),
-  favoured 9a plus 9b; owner call 14.
+  favoured 9a plus 9b; owner call 14 ([now decided](../../decisions/worlds-and-federation.md#revocation-below-expiry)).
 - **Attacker and control:** (a) anyone who can delay a snapshot's delivery to a
   world (a partition, a hosting outage, the root itself); (b) the thief of a
   key the root later revokes, who controls the clock on the claims it signed;
@@ -561,7 +574,8 @@ answer it. Attacks are grouped by the component the brief names.
 - **Answer:** a revocation entry carries a not-after instant, and a claim's
   acceptance time is the receiver's recorded tick-boundary decision, never the
   claim's own date (the memo's "recorded decision at a tick boundary" already
-  gives the receiver's side). Owner call 14 is re-phrased as the trade it is:
+  gives the receiver's side). Owner call 14 is re-phrased as the trade it is
+  (now a per-domain setting, [decided](../../decisions/worlds-and-federation.md#revocation-below-expiry)):
   how long a world may run on a stale snapshot before it refuses new valuable
   actions (not all actions), knowing that the snapshot's delivery is then a
   single point of denial for every world in the domain.
@@ -572,7 +586,7 @@ answer it. Attacks are grouped by the component the brief names.
 
 - **Memo section:** [decision 10](synthesis.md#decision-10-what-a-player-host-may-be),
   favoured 10b: "nothing a stranger would fight over is decided there"; owner
-  call 15.
+  call 15 ([now decided](../../decisions/worlds-and-federation.md#what-a-player-host-may-be)).
 - **Attacker and control:** none needed; this is the composition's own
   consequence.
 - **Steps:** a player-hosted world grants a visitor a clear in its own
@@ -616,7 +630,8 @@ answer it. Attacks are grouped by the component the brief names.
 - **What stops it, or the gap:** 10a's log is the attacker's file (the first
   catalogue said so); 10b makes the body economically worthless at the host,
   which is exactly why the recall's "possible second body" costs nothing
-  under the favoured composition. Owner call 6 was phrased for companions
+  under the favoured composition. Owner call 6
+  ([now decided](../../decisions/worlds-and-federation.md#recall-after-a-missed-lease)) was phrased for companions
   under the unbuilt A15 fence; under 10b the trade is one-sided, and under
   "wait forever" with a `*` row it is a critical griefing attack.
 - **Severity:** **[high]** under "wait forever" with open admission; the
@@ -755,13 +770,24 @@ when an accepted issuer cheats or loses all state? | Owner defines liability,
 issuer removal and treatment of existing assets". The memo's fifteen calls do
 not carry it, and B2 makes it concrete: once equivocation is detectable, who
 bears the loss and whether the issuer's outstanding records survive its
-removal are product calls. **Answer:** owner call 16.
+removal are product calls. **Answer:** owner call 16, since settled by the
+world model's invariant 5 ([a failed or cheating issuer](../../decisions/worlds-and-federation.md#a-failed-or-cheating-issuer)).
 
 #### F9. The missing decision: value across domains
 
 **[high]** Covered by [B1](#b1-the-sock-puppet-settlement-domain).
 
 #### F10. Owner calls that hide an engineering call or a one-sided trade
+
+Every call below is now settled in [the register](../../decisions/worlds-and-federation.md)
+except call 11, which the owner deferred ([section 7](synthesis.md#7-owner-calls)):
+call 5 under [neutrality](../../decisions/worlds-and-federation.md#neutrality-is-a-vouched-role)
+and [sealed domains](../../decisions/worlds-and-federation.md#settlement-domains-are-sealed),
+calls 6 and 7 under [the lease-missed recall](../../decisions/worlds-and-federation.md#recall-after-a-missed-lease),
+call 8 under [what a visited world may write](../../decisions/worlds-and-federation.md#what-a-visited-world-may-write),
+call 14 under [revocation](../../decisions/worlds-and-federation.md#revocation-below-expiry),
+call 15 under [what a player host may be](../../decisions/worlds-and-federation.md#what-a-player-host-may-be)
+and call 3 under [an inexact image](../../decisions/worlds-and-federation.md#an-unreachable-title-authority-a-crash-and-an-inexact-image).
 
 - Call 5 decides who may deal, referee and witness, not only who may mint
   ([B3](#b3-the-table-authority-settles-the-hand)), and whether domains
@@ -815,7 +841,7 @@ keep abstract (a host data path, never a provider's feed), and the memo's
 | C1 for contested places | Survives | The referee is a vouched role (B3) |
 | C2 prototype | Survives, honestly bounded | A witness step or an agreed draw on stall (B12) |
 | 9a plus 9b | Survive | A not-after per revoked key; the receiver's acceptance time is the one that counts (B10) |
-| 10a plus 10b | Survive | Owner call 15 states what a player host may grant (B15); the recall is engineering (B16) |
+| 10a plus 10b | Survive | Owner call 15 ([decided](../../decisions/worlds-and-federation.md#what-a-player-host-may-be)) states what a player host may grant (B15); the recall is engineering (B16) |
 
 ## 5. The first catalogue under the composition
 

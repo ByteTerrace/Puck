@@ -211,8 +211,12 @@ public sealed partial class WorldBody {
             var sweptPosition = desiredPosition;
             var sweptVelocity = (desiredPosition - previousPosition);
 
-            var resolution = SweepContact(
-                entityIndex: m_entityIndex,
+            var resolution = ((field is IEntityContactField entityField)
+                ? entityField.ResolveCarriedSweep(entityIndex: EntityIndex, carrier: carrier,
+                    previousPosition: in previousPosition, position: ref sweptPosition, velocity: ref sweptVelocity,
+                    orientation: in m_orientation, volumes: volumes, up: FixedVector3.UnitY)
+                : SweepContact(
+                entityIndex: EntityIndex,
                 field: field,
                 orientation: in m_orientation,
                 position: ref sweptPosition,
@@ -220,7 +224,7 @@ public sealed partial class WorldBody {
                 up: FixedVector3.UnitY,
                 velocity: ref sweptVelocity,
                 volumes: volumes
-            );
+            ));
 
             if (resolution.Refusal != ContactRefusal.None) {
                 NoteSweepRefusal(refusal: resolution.Refusal);
@@ -237,6 +241,7 @@ public sealed partial class WorldBody {
             // physical block, and hands the carrier nothing, the same as a refusal.
             if (
                 (blockCorrection != FixedVector3.Zero) &&
+                (field is not IEntityContactField) &&
                 !resolution.Unproved
             ) {
                 // The carried body's OWN position already took the full sweep correction above — it is never left
@@ -245,22 +250,27 @@ public sealed partial class WorldBody {
                 // object itself (a carried body posed — or otherwise placed — already embedded in geometry, so the
                 // very first sweep reports a one-shot depenetration spanning most of the gap) would otherwise hand
                 // the carrier a shove sized by that embedding depth rather than by contact, launching it.
-                var correctionCeiling = RigidBoundingRadius;
-
-                if (correctionCeiling > FixedQ4816.Zero) {
-                    blockCorrection = blockCorrection.ClampLength(maximum: correctionCeiling);
-                }
-
-                if (carrier.IsRigid) {
-                    carrier.ApplyRigidPositionalCorrection(correction: blockCorrection);
-                } else {
-                    carrier.ApplyDynamicContact(correction: blockCorrection);
-                }
+                carrier.ApplyCarryBlock(correction: blockCorrection, ceiling: RigidBoundingRadius);
             }
         }
 
         m_position = desiredPosition;
         m_rigidVelocity = carrier.ApproximateWorldVelocity();
         m_angularVelocity = FixedVector3.Zero;
+    }
+    internal int EntityIndex => ((m_population is null) ? m_entityIndex : m_populationIndex);
+    internal void ApplyCarryBlock(FixedVector3 correction, FixedQ4816 ceiling) {
+        if (ceiling > FixedQ4816.Zero) { correction = correction.ClampLength(maximum: ceiling); }
+        if (IsRigid) { ApplyRigidPositionalCorrection(correction: correction); }
+        else { ApplyDynamicContact(correction: correction); }
+    }
+    internal void ApplyAdmittedContactResponse(FixedVector3 position, FixedVector3 velocity) {
+        if ((position == m_position) && (velocity == ApproximateWorldVelocity())) { return; }
+        WakeUp();
+        m_position = position;
+        if (IsRigid) {
+            m_rigidVelocity = velocity;
+            InvalidateRigidRest();
+        } else { SplitVelocity(velocity: velocity, resetVerticalRemainder: true); }
     }
 }

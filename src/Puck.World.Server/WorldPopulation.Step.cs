@@ -820,7 +820,7 @@ public sealed partial class WorldPopulation {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
         SimulatedBodyVisits = 0;
         m_rigidTickStepTicks = stepTicks;
-        BeginAdjacencyContacts();
+        BeginAdjacencyContacts(tick: tick);
 
         AutonomyStatistics = default;
 
@@ -1059,6 +1059,7 @@ public sealed partial class WorldPopulation {
             }
         }
         if (continuum is { } trajectory) {
+            BeginAdjacencyContacts();
             body.ApplyContinuumTrajectory(
                 destinationCompletedEngineTick: destinationCompletedEngineTick,
                 entityIndex: slot,
@@ -1101,6 +1102,7 @@ public sealed partial class WorldPopulation {
     /// <summary>Applies entity-directed effect outputs after every body has advanced, then exposes player-keyed durable
     /// writes for the completed tick.</summary>
     public void CompleteStep(ulong tick) {
+        m_adjacencyTick = tick + 1;
         foreach (var output in m_effectOutputs) {
             if (
                 (((uint)output.TargetIndex) < ((uint)m_entries.Length)) &&

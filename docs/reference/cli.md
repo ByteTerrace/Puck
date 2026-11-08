@@ -303,13 +303,13 @@ puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
 puck world prepare <primary-world> --output <directory>
 puck world release prepare <package-directory> --silo <silo.json> [--output <manifest>] --label <label> --source-revision <sha> --engine-image-digest <sha256:digest> --persistence-contract <name> --peer-protocol-contract <name>
-puck world release status [group-file] [--json]
-puck world release finalize
-puck world release resume
-puck world release deploy <package-directory> [--operation <id>]
-puck world release rollback [--operation <id>]
-puck world release checkpoint [--request <guid>]
-puck world release restore <recovery-point> [--operation <guid>] [--discard-progress]
+puck world release status [group-file] [--json] [--host <installed-host>]
+puck world release finalize [--host <installed-host>]
+puck world release resume [--host <installed-host>]
+puck world release deploy <package-directory> [--operation <id>] [--host <installed-host>]
+puck world release rollback [--operation <id>] [--host <installed-host>]
+puck world release checkpoint [--request <guid>] [--host <installed-host>]
+puck world release restore <recovery-point> [--operation <guid>] [--discard-progress] [--host <installed-host>]
 puck azure prepare-world-release [--output <package-directory>]
 puck world release qualify <source-manifest> <target-manifest> <fixture-directory> --source-image <image> --target-image <image> --output <evidence-directory> [--steps <count>]
 puck world probe <host> <port> <public-key-file>
@@ -366,8 +366,10 @@ support, including receipt-aware qualification and closed-group rewind enforceme
 Official preparation and bootstrap read composed published definitions, allowing
 unfilled boot draws. Bootstrap retries compare exact published bytes, without
 running those draws or comparing them with a newly initialized world.
-`world release status` reads the managed group for the world silo
-named in the existing Azure deployment outputs. It reports the active and previous
+Release operations select an installed `WorldReleaseHost` with `--host`, or require
+exactly one installed host when no key is supplied. `Puck.Cli.Azure` contributes
+the `azure` host and its `puck azure` command tree; see [deployment setup](../development/ci.md#azure-production-deployment).
+`world release status` reads the managed group selected by that host. It reports the active and previous
 releases, admission, rollback eligibility, pending phase, recovery scope, and next
 operator action. Supply a saved group file for offline inspection; add `--json`
 for the complete validated record plus the next action. A deployment without a
@@ -3685,8 +3687,8 @@ formatter for every source kind.
 ```text
 puck compile [<source.puck|document.world.json>...] [--output <out.json-or-directory>] [--tree <root> [--written <report>] [--check]] [--validate] [--measure] [--strict] [--watch] [--update-assets]
 puck decompile <source.json> [--output <out.puck>] [--overwrite] [--embeddings <file.embeddings.json>]
-puck embed lock <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
-puck embed probe <path> <text> [--space <name>] [--top <n>] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--timeout-seconds <n>]
+puck embed lock <path> [--check] [--provider <installed-type>] [--settings <json-file>] [--batch-size <n>]
+puck embed probe <path> <text> [--space <name>] [--top <n>] [--provider <installed-type>] [--settings <json-file>]
 puck lint <path> [--strict]
 puck lsp
 puck migrate <name> <path> [--check]
@@ -3862,7 +3864,13 @@ to this.
 `embed` resolves all authored `embed(...)` text expressions and vector table literals in a
 `.puck` file or directory into committed `.embeddings.json` lock files. Pass `--check` in CI to verify
 that all locked vectors are present and fresh without network calls. Use `puck embed probe <path> <text>`
-to query a locked world's vector tables and rank matching keys by cosine similarity offline.
+to query a locked world's vector tables and rank matching keys by cosine similarity. Generating a missing
+vector selects an installed `WorldExtensionEmbeddingProviderType` with `--provider`; when exactly one is
+installed it is selected by default. `--settings` supplies its JSON settings object; model, revision and
+dimensions come from the authored space. Provider-specific endpoint, authentication and request options
+belong in that object. Install `Puck.World.Embeddings` for `embedding.fixture`, or `Puck.World.Azure` for
+`embedding.azure-openai`, as described under [extensions](extensions.md). A check or an already locked
+query requires no embedding provider.
 
 `migrate` applies one registered rewrite—a `PuckMigration`, written against
 `Puck.Transpiler.Rewriting.PuckSyntaxRewriter`—to every `.puck` source under a

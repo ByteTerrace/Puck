@@ -210,7 +210,7 @@ public sealed class PuckArchitectureGate : Task {
     /// provider-neutral project.</summary>
     public string Provider { get; set; } = "";
     /// <summary>Provider SDKs: <c>Include</c> is the provider, <c>Assemblies</c> a semicolon list of assembly-name prefixes that
-    /// belong to it. A provider-neutral ranked project's resolved references must hold none of them.</summary>
+    /// belong to it. A provider-neutral project's resolved references must hold none of them, except tests.</summary>
     public ITaskItem[] ProviderAssemblies { get; set; } = Array.Empty<ITaskItem>();
     /// <summary>This project's full path, used for provenance and for the diagnostic's file position.</summary>
     public string ProjectFile { get; set; } = "";
@@ -248,18 +248,18 @@ public sealed class PuckArchitectureGate : Task {
 
         ok &= CheckBackendQuarantine(closure: closure, kinds: kinds);
         ok &= CheckProfile(closure: closure);
-        ok &= CheckProviders(closure: closure, kinds: kinds);
+        ok &= CheckProviders(closure: closure);
 
         return ok;
     }
 
     /// <summary>
-    /// Provider independence: a ranked project that declares no provider (or another one) holds no provider project and
-    /// no provider SDK assembly in its resolved closure. A terminal kind composes and is exempt, as it is from the rank
-    /// rule: a test exercises a provider, and a tool deploys to one.
+    /// Provider independence: a project that declares no provider (or another one) holds no provider project and
+    /// no provider SDK assembly in its resolved closure. Only tests compose providers by reference; tools select
+    /// installed extensions through provider-neutral contributions.
     /// </summary>
-    private bool CheckProviders(List<ProjectFacts> closure, Dictionary<string, bool> kinds) {
-        if (kinds.TryGetValue(key: Kind, value: out var ranked) && !ranked) {
+    private bool CheckProviders(List<ProjectFacts> closure) {
+        if (string.Equals(a: Kind, b: TestKind, comparisonType: StringComparison.OrdinalIgnoreCase)) {
             return true;
         }
 

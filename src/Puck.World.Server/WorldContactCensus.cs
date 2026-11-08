@@ -9,7 +9,9 @@ namespace Puck.World.Server;
 internal interface IEntityContactField : IContactField {
     ContactResolution ResolveEntitySweep(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
         ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up);
-    ContactResolution ResolveEntitySupportSweep(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
+    ContactResolution ResolveEntitySupportSweep(int entityIndex, in FixedVector3 previousPosition, in FixedVector3 responseOrigin, ref FixedVector3 position,
+        ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up);
+    ContactResolution ResolveCarriedSweep(int entityIndex, WorldBody carrier, in FixedVector3 previousPosition, ref FixedVector3 position,
         ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up);
 }
 

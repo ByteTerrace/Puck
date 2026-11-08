@@ -270,7 +270,11 @@ Step by step:
    described in [Make a firing atomic](#make-a-firing-atomic).
 
 `EvaluateRule` returns a `RuleOutcome` for the rule as a whole: `Fired` when a
-firing committed, `Refused` when any firing rewound, and `Idle` otherwise. A
+firing committed, `Refused` when an effect refused, `Faulted` when an evaluation
+faulted, and `Idle` otherwise. When several bindings contribute, the aggregate
+priority is `Faulted`, then `Refused`, then `Fired`, then `Idle`. A staged
+group's `Skip` policy skips a refusal but holds on a fault; a faulted fixpoint
+pass counts no progress. A
 host that owns a rule kind the library doesn't know, such as a world's
 `decision` rule, implements `IRuleOwner` and runs each evaluation back through
 `EvaluateOnce`, so the latch, trace, and refusal ledger stay shared.
@@ -450,6 +454,29 @@ rewinds and the coins are back. The evaluator counts one refusal naming the
 effect that refused, and the rule reports `Refused`. You don't need a special
 construct for this; it's how every rule runs.
 
+The scope includes bookkeeping beside the cells. `RuleLatch.SetHeld`, the
+decision binding and group progress record their prior state through
+`IJournalParticipant` and `ArenaJournal.RecordParticipant`.
+`StateArena.Rewind` restores participant records with the cells, newest first,
+including when a parent scope rewinds a child firing. `RuleEvaluator.Commit`
+is the one door that closes a firing's proposal: `Faulted` and `Refused`
+rewind and discard queued arms, `Closed` and `Held` commit bookkeeping alone,
+and `Fires` commits before installing and delivering arms. A faulting effect
+therefore leaves an Edge crossing unconsumed.
+
+A host's decision uses `RuleEvaluator.FireEffects` with `IFiringPrelude` for
+its binding and `IFiringContinuation` for the option effects. Common and
+option effects share one scope; no-choice effects share the scope that clears
+the binding. Gates and scores are gathered before writing the binding, so a
+fault keeps the choice and interrupt edge and runs no no-choice arm. Between
+common and option effects, the continuation checks the pair against the
+[forecast of the proposed population](hosting.md#the-install-boundary).
+
+Lifecycle restoration is distinct from a firing: `RuleLatch.Restore`,
+`Clear`, `ClearRule` and `Prune` take the journal and refuse while a scope is
+open. `EndSweep`, `Forget` and `Reset` record removals when a scope is open.
+`ArenaJournal.RecordParticipant` itself refuses with no open scope.
+
 Some outcomes aren't refusals. An effect whose source is `forever` is skipped.
 A remove of a cell the row doesn't hold is skipped outside a transaction. A write
 that leaves its cell unchanged is admitted and reports that nothing moved. In a
@@ -479,6 +506,16 @@ what the earlier arms of the same firing would leave, so removing the same
 placement twice refuses the firing before it commits, while removing a placement
 an earlier arm creates is admitted.
 
+Arms declare `IRuleEffect.Sources`; `RuleEvaluator.ProposeEffects` reads those
+sources once during the queued preflight loop, after the reversible effects
+and continuation have run. Thus a source sees later reversible writes in
+that firing. Each arm's captured host binding is restored for preflight and
+delivery, and `EffectFiring.Values` carries the same outcomes at both calls.
+The arm evaluates no expression at delivery. A source fault rewinds the whole
+firing before commit; an absent source is a value the arm handles. The
+[remaining rule-fault work](../../plans/rule-faults.md) records the unresolved
+choice between this timing and reading sources at the arm's authored position.
+
 The following sequence shows one firing that queued arms:
 
 ```mermaid
@@ -503,7 +540,7 @@ sequenceDiagram
 
 `Preflighting` tells the host a sequence of checks is starting.
 `PrepareTransactional` and `CommitTransactional` run only when the firing queued
-a transactional arm. If anything throws out of an effect, a check, or the host,
+a transactional arm. If anything throws before commit out of an effect, a check, or the host,
 the scope rewinds and the queue is discarded before the exception propagates.
 What the host does at each of these calls is described in [Host and extend the
 state engine](hosting.md#implement-the-mutation-boundary).
@@ -516,6 +553,32 @@ firing can't read its result. The compiler refuses that with
 `if` or `transaction` that holds one stays inside the firing's scope, so the
 check follows arms into branches: a later sibling that reads what a branch's
 arm writes is refused, and so is a later effect inside the same branch.
+
+### Rule-fault examples
+
+[The debug rule-fault fixture](../../../worlds/debug/rule-faults-tests.puck)
+contains authored controls beside each faulting case. Its test names carry
+the witness IDs below; W13 is a C# law because it reads population counters.
+
+| Witness | Behavior |
+|---|---|
+| W1 | A faulting remove key rewinds earlier writes in its firing. |
+| W2 | Vector, board, symmetry, pattern and text addresses fault before reading. |
+| W3 | Faulting dynamic keys and ring ages remain faults under negation. |
+| W4 | A fault holds the Edge latch and the decision's last choice. |
+| W5 | Computed body keys resolve; a valid key retains its body and a fault refuses the firing. |
+| W6 | Faulting, absent and zero token letters remain distinct. |
+| W7 | An absent left comparison source never hides a faulting right source. |
+| W8 | A successful nested fold cannot erase a subsequent fault. |
+| W9 | Delivery after a document install evaluates no program. |
+| W10 | An effect fault leaves the Edge crossing available to a later successful firing. |
+| W11 | Option, no-choice and neighbour faults rewind decision state; liveness reads the proposed population. |
+| W12 | A candidate whose search judge faults lands no answer. |
+| W13 | `FlockLawTests.AFaultingAffinityIsACountedFailureThatWeighsNothing` in [the flock laws](../../../tests/Puck.World.Server.Tests/FlockLawTests.cs) counts a failed affinity and gives it zero weight. |
+| W14, W15 | Common and option effects rewind together when either half faults. |
+
+`LatchAndTriggerLawTests.ARewoundScopeRestoresTheEdgeCrossingAChildFiringConsumed`
+also covers a parent scope rewinding a child's latch write.
 
 ## Recover from a refused step
 
@@ -722,7 +785,7 @@ rule revealLast {
 | Operation on an absent read | Result |
 |---|---|
 | Compare it in a gate or condition | No comparison holds, including `NotEqual`: the conjunct reads false, and `not` turns it true. A fault on the comparison's other side still faults the gate. |
-| Use it in an expression | The expression faults, naming the same two operations. In a local, the evaluation stops; in an effect source, the firing rewinds. |
+| Use it in an expression | `isAbsent` and `??` answer it; truth operators convert it to false; other consuming operations return `Outcome.Absent`. An absent local closes the evaluation; an absent numeric effect source refuses and rewinds the firing. |
 | Copy it with `fromState` | The copy is refused and the firing rewinds. |
 | Write to the cell it names | The write addresses no cell and is skipped. |
 | Use it as a transform's dynamic key | The transform refuses and the firing rewinds. |

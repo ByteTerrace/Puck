@@ -10,9 +10,9 @@ public static class AnyAddressBindAllowlist {
     /// <summary>Gets every allowlisted site.</summary>
     public static IReadOnlyList<AnyAddressBindEntry> Entries { get; } = [
         new(
-            Assembly: "Puck.Cli.Release",
+            Assembly: "Puck.Cli.Azure",
             Member: "DeploymentListenAddress",
-            Path: "src/Puck.Cli.Release/Azure/AzureWorld.cs",
+            Path: "src/Puck.Cli.Azure/Azure/AzureWorld.cs",
             Reason: "The address an Azure world deployment and its container smoke test write into the world's host.listen and the silo's lifecycle.healthAddress: the load balancer probes and forwards to the virtual machine's interface, and Docker forwards a published port to the container's interface, so neither reaches a loopback listener."
         ),
         new(

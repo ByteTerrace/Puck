@@ -472,7 +472,7 @@ Lane E owns the code; these are the facts this lane read.
   door (`src/Puck.World.Schema/WorldIdentity.Records.cs:121-152`) [opened]. The
   architecture page narrows this: "Remote round trips do not adopt: a remote
   incarnation claim is unauthenticated ... Remote home adoption remains deferred"
-  (`docs/architecture/worlds.md:804-806`) [opened]. So A2 is live today for
+  (`docs/architecture/worlds.md:819-821`) [opened]. So A2 is live today for
   crossings within one process and deferred, not closed, across federation.
 - **No authored reset epoch exists.** A search of `src/` for reset-epoch names
   finds only session epochs restored with grants

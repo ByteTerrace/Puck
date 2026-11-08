@@ -104,9 +104,8 @@ A key names a cell inside a row. Inside brackets:
 - A binding token reads the key bound for this evaluation: `$each` in a
   `forEach` rule, `$left` and `$right` in pairwise evaluation, and `$token` and
   `$previous` in a pattern's value expression.
-- Any other expression computes the key: `board[(from + 1)]`. The compiler turns
-  it into an implicit local evaluated before the gate and counts it against the
-  local ceiling.
+- Any other expression computes the key: `board[(from + 1)]`. Its tokens run
+  immediately before the operand that consumes the address; it uses no local slot.
 - A local used as a key is written as the call `local(move)`, since a bare name
   in brackets is a literal key.
 
@@ -281,9 +280,13 @@ an absent value:
 - `isAbsent(operand)` produces 1 when the read is absent and 0 otherwise.
 - `operand ?? fallback` produces the fallback when the read is absent.
 
-Every other operation that consumes an absent value fails the expression with
-the `Absent` fault. What a failed expression does to a gate or a firing is
-explained in [Rules and firing](rules.md).
+Truth operators convert absence to false: `not` of an absence is true, and
+`and`/`or` use that conversion before short-circuiting. Other operations
+consuming absence return `Outcome.Absent` from that program. Absence is a
+value, never an arithmetic fault. At a comparison, both source programs run;
+an absent left source cannot hide a fault in the right source
+(`RuleEvaluation.Decide`). See W3 and W7 in
+[the rule-fault examples](../../../worlds/debug/rule-faults-tests.puck).
 
 ## Constant folding and faults
 
@@ -302,21 +305,55 @@ arm. This warning covers that common trap, not every possible domain or overflow
 fault. Use an `if`/`else` effect or `and`/`or` short-circuiting to guard an operation.
 Work budgets price the program after folding.
 
-An expression that fails reports one of these `ExpressionFault` values:
+`Outcome` carries the answer as one of four `FaultCase` cases. Its default is
+`Faulted` with `ExpressionFault.Domain`; a number is available only through
+`Outcome.TryFinite`. `Fact` carries an outcome beside its cell kind, and
+`Resolved<T>` carries an address resolution with `TryNamed` as its value access.
 
-| Fault | Cause |
+| Case | Meaning |
 |---|---|
-| `Domain` | Overflow, division by zero, a function argument outside its domain, or an invalid stack result, including one in a read's own address: a dynamic key (`cards[1 / a]`), a live row index, or a history ring's age. Such a read faults; it is never the absent value. |
-| `Absent` | An operand's dynamic key named no cell, or a table read named a key the table doesn't carry. |
-| `Forever` | An operand produced a fact that carries no number. |
+| `Finite` | A number in the carrier's encoding. |
+| `Absent` | A dynamic address names nothing, or a table lacks the requested key. Each consumer answers absence where it occurs. |
+| `Forever` | Positive infinity as a fact, which may be compared directly. Computing numerically with it returns `Faulted` with `ExpressionFault.Forever`. |
+| `Faulted` | `ExpressionFault.Domain` for overflow, division by zero, an argument outside its domain, or an invalid stack result; `ExpressionFault.Forever` for numeric use of infinity. Faulting key, live-row-index, and ring-age arithmetic faults the read rather than producing absence. |
 
-`Domain` and `Forever` are faults, and a fault is a case of the answer: the
+`ExpressionFault.Domain` and `ExpressionFault.Forever` describe faults, and a fault is a case of the answer: the
 interpreter returns an `Outcome` (`RuleExpressions.Evaluate`), a nested call or
 fold member's outcome is a value its caller combines, and a gate's verdict
 (`RuleEvaluation.Decide`) is `Faulted` when any conjunct faulted. A rule's
 judgement, a decision, a group trigger and a search step each read the outcome
 or verdict in hand and decide nothing when it faulted. `Absent` is a value, not
 a fault: each consumer answers it where it sits.
+
+### One interpreter and resolved addresses
+
+`RuleExpressions.Run` is the single token interpreter. Its framed entry is
+`RuleExpressions.Evaluate`; `EvaluationFrame` names the reader and refuses a
+default frame at runtime. Nested calls and folds return their own outcomes,
+so a successful child cannot clear an outer fault. A fault ends the program
+before negation or disjunction can recover it. Skipped short-circuit operands
+do not run. W8 in [the examples](../../../worlds/debug/rule-faults-tests.puck)
+shows a nested success followed by a fault.
+
+`IRuleOperand.Addresses` declares every address an operand reads.
+`RuleExpressions.AppendFeeds` lowers computed keys, live-row indices and ring
+ages into tokens before the operand; `RuleExpressions.ReadOperand` resolves
+them and hands `IRuleOperand.Read` a span of `ResolvedKey` values. An address
+that faults ends the read before the operand runs; one naming nothing reaches
+the operand as unnamed. Operands evaluate no programs themselves. Computed
+address tokens are priced once by `RuleWorkBudget.ExpressionCost`, including
+the work a complex key actually runs. W2 and W3 exercise these read paths.
+A pattern's per-token program uses the same interpreter through
+`RuleExpressions.FoldWord`; see [Patterns](patterns.md#where-a-patterns-values-come-from).
+
+`RuleExpressions.EvaluateDetached` is an entry to that same loop for consumers
+outside a firing. `OutcomeDetachedAllowlist` names the permitted files and
+their fault handling: the constant folder leaves a non-finite subtree
+unfolded, a flock affinity counts failure and contributes zero weight, and the
+browser refuses a non-finite read. Search scoring uses a framed evaluation
+and returns its outcome to the search, rather than evaluating detached.
+The [host reference](hosting.md#outcomes-analyzer) describes the build errors
+that enforce these boundaries.
 
 Arithmetic never wraps. Int addition, subtraction, and multiplication compute
 the exact result and fail if it doesn't fit 64 bits. Int division truncates

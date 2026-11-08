@@ -458,9 +458,9 @@ a `JudgeOutcome` and `RuleEvaluator.Evaluate` a `RuleOutcome` (`Faulted` over `R
 deciding place reads what it was handed: a rule's judgement holds its latch on a fault, a group trigger neither runs nor
 re-arms and a fixpoint pass counts no progress, a decision keeps its choice, a search step lands nothing and restarts. An
 effect that meets a fault refuses its firing by name, so a firing that proposes is one no fault touched. Local code may
-drop a value but never the fault: a new place that evaluates rule expressions builds an `EvaluationFrame` over its
-reader (or calls `RuleExpressions.EvaluateDetached`: the constant folder, a flock's affinity, the console and browser
-read-backs) and matches on every case of what it gets back.
+drop a value but never the fault: firing evaluations use `EvaluationFrame`; `RuleExpressions.EvaluateDetached`
+enters the same interpreter only from the constant folder, a flock's affinity and browser read-back, as
+`OutcomeDetachedAllowlist` specifies. Each consumer handles the cases of what it gets back.
 `Absent` is a value each consumer answers, never a fault
 ([expressions](../../../docs/reference/state/expressions.md#constant-folding-and-faults)).
 An operand read answers a `Fact` (an `Outcome`, a case of `Faulted`, `Finite`, `Absent` or `Forever`, beside its cell
@@ -491,13 +491,23 @@ cell-driven counts from the open arena, then the census re-clamp) over a scratch
 generic over the slot table, so a new retire rule in it reaches the forecast. A decision reads every gate and score before it writes its binding, so a fault writes nothing. A queued arm
 keeps the host bindings it was queued under (`IEffectHost.CaptureBinding`, `ApplyBinding`) for its preflight and delivery.
 An arm that fires outside the arena evaluates nothing itself: it declares `IRuleEffect.Sources` (a key read as an index, an
-expression program, an operand) and the evaluator reads them with the firing, so a source that faults is a `Faulted`
+expression program, an operand) and `RuleEvaluator.ProposeEffects` reads them during queued preflight, after the
+reversible effects and continuation, so a source that faults is a `Faulted`
 firing and an absence is a value the arm answers. The values reach the arm through `EffectFiring.Values`, by the position
 it declared them at, and are the same at the preflight and at the delivery after the commit. A write's destination key
 answers a typed `WriteKey` (`Resolved`, `Faulted`, `Refused`), never a reason to compare. The state transaction's input
 resynchronisation is two phases: `ValidateStateTransaction` prepares each owner's selection (`WorldInputRuntime.TryPrepareBodies`
 and `TryPrepareAll`) while the journal can still rewind, and `CommitStateTransaction` applies them (`ApplyPrepared*`), which cannot
 refuse.
+
+`OutcomeAnalyzer` in `Puck.Analyzers` enforces `OUTCOME001`–`OUTCOME004` as Roslyn build errors outside xUnit v3
+assemblies: dropped outcomes, unchecked `TryFinite`/`TryNamed` and one-case verdict comparisons, unlisted detached
+evaluation, and an operand resolving its own address. Holding declared addresses for read sets and costs is allowed.
+`OutcomeDiscardAllowlist` names the host bool entries; the analyzer cannot prove a stored bool is read or an explicit
+fault arm is correct. See [the outcome and host contract](../../../docs/reference/state/hosting.md#outcomes-analyzer)
+and [the behavior examples](../../../docs/reference/state/rules.md#rule-fault-examples). The
+[remaining work](../../../docs/plans/rule-faults.md) includes body-target generations, proposal-owned host scratch
+and the source-read timing choice; these are not guarantees the current implementation makes.
 
 **Narrate through the hub.** Server never writes to `System.Console`; every line
 is a `WorldOutputHub.Narrate` call, bound to stderr (or stdout for answers) by

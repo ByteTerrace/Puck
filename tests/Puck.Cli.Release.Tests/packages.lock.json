@@ -44,15 +44,6 @@
         "resolved": "22.1.0",
         "contentHash": "mTdHWGsNCWpKyQxqyNcSS+q4BtBTSOUfhdG+Lwo6eAOznCLSwrZQ5VKtDG2G8VrUp1ul4DwWHefoBS1umjO/VQ=="
       },
-      "Azure.AI.OpenAI": {
-        "type": "Transitive",
-        "resolved": "2.9.0-beta.1",
-        "contentHash": "CgIYDuCSOFx+yPuCdK7iz71OW2envfVeIE/YoNYK+mhr6bxgIJV6jfBF+mV9aHDQ6KVQjeSL6OZ7x90XrvsoRg==",
-        "dependencies": {
-          "Azure.Core": "1.51.1",
-          "OpenAI": "2.9.1"
-        }
-      },
       "Azure.Core": {
         "type": "Transitive",
         "resolved": "1.60.0",
@@ -222,15 +213,6 @@
         "type": "Transitive",
         "resolved": "10.11.0",
         "contentHash": "h4DX/TdJU4fk1GGaf19n6Kujkj6VXbGeL4UEOsQ8+ZJC5fVApPauokCtvBP684BYbczUYZQNfo1mbmyHG4WVSg=="
-      },
-      "Microsoft.Extensions.AI.OpenAI": {
-        "type": "Transitive",
-        "resolved": "10.11.0",
-        "contentHash": "p8fJdcPOrwaUPRrag5dY9SLohaouutY+bqg1Lw+8OOEFqMXvCHGNWQXv2GcUUNPBCkTR4mcBEHoP9LAV2RtxzA==",
-        "dependencies": {
-          "Microsoft.Extensions.AI.Abstractions": "10.11.0",
-          "OpenAI": "2.14.0"
-        }
       },
       "Microsoft.Extensions.Configuration": {
         "type": "Transitive",
@@ -747,14 +729,6 @@
         "resolved": "13.0.4",
         "contentHash": "pdgNNMai3zv51W5aq268sujXUyx7SNdE2bj1wZcWjAQrKMFZV260lbqYop1d2GM67JI1huLRwxo9ZqnfF/lC6A=="
       },
-      "OpenAI": {
-        "type": "Transitive",
-        "resolved": "2.14.0",
-        "contentHash": "AeyC3GxbrJ7KRoWDyFeNSUOQQWD9AnNvM7LYQijCcXcqjyr53aGRcf5GBLExcSBzIs0RWYHe+NbzPrHTeuU5zA==",
-        "dependencies": {
-          "System.ClientModel": "1.15.0"
-        }
-      },
       "Parlot": {
         "type": "Transitive",
         "resolved": "2.2.1",
@@ -788,10 +762,10 @@
       },
       "System.ClientModel": {
         "type": "Transitive",
-        "resolved": "1.15.0",
-        "contentHash": "y6zQLInrpX+oGL1gXM04DrUSu1O1esWxt4rD/zrujTnzIFChn/noD1OiVVpTrU8ZvglwqO2Uw038svUR3SiAOg==",
+        "resolved": "1.14.0",
+        "contentHash": "yhIJHDW3Hh5kcvhHv3ww1T8qvya06Nlwo/SR/rke4/fHXtyKiqQV/9b/VDhnVI7QUcMnpfvh4pIEFhNsTDLeKQ==",
         "dependencies": {
-          "System.Memory.Data": "10.0.9"
+          "System.Memory.Data": "10.0.3"
         }
       },
       "System.CommandLine": {
@@ -1224,6 +1198,14 @@
           "Parlot": "[2.*, )"
         }
       },
+      "puck.cli.azure": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
+          "Puck.Cli.Release": "[1.0.0, )",
+          "Puck.Storage.Azure": "[1.0.0, )"
+        }
+      },
       "puck.cli.core": {
         "type": "Project",
         "dependencies": {
@@ -1268,7 +1250,6 @@
           "Puck.Cli.Source": "[1.0.0, )",
           "Puck.Cli.Worlds": "[1.0.0, )",
           "Puck.Mcp": "[1.0.0, )",
-          "Puck.Storage.Azure": "[1.0.0, )",
           "Puck.World.Silo": "[1.0.0, )"
         }
       },
@@ -1316,20 +1297,10 @@
           "Puck.Cli.Format": "[1.0.0, )",
           "Puck.Cli.Harness": "[1.0.0, )",
           "Puck.Cli.Shaders": "[1.0.0, )",
-          "Puck.Embeddings.Azure": "[1.0.0, )",
           "Puck.World.Client": "[1.0.0, )",
           "Puck.World.Machines": "[1.0.0, )",
           "Puck.World.Server": "[1.0.0, )",
           "Puck.World.Vocabulary": "[1.0.0, )"
-        }
-      },
-      "puck.embeddings.azure": {
-        "type": "Project",
-        "dependencies": {
-          "Azure.AI.OpenAI": "[2.9.0-beta.1, )",
-          "Azure.Identity": "[1.21.0, )",
-          "ByteTerrace.Puck.Embeddings": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.AI.OpenAI": "[10.*, )"
         }
       },
       "puck.launcher": {

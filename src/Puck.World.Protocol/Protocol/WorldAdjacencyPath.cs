@@ -27,6 +27,10 @@ public static class WorldAdjacencyPath {
             value: value
         );
     }
+    private readonly struct DisplacementStageMap : IFrameStageMap {
+        public static FixedVector3 Map(FixedVector3 value, in WorldFaceFrame source, in WorldFaceFrame destination) =>
+            WorldFrameIsometry.MapVector(value: value, source: in source, destination: in destination).ClampLength(maximum: value);
+    }
 
     // The one path walk every point and vector mapping shares. TStage is a struct type argument so the per-stage
     // primitive stays a direct call, not a delegate.
@@ -93,6 +97,13 @@ public static class WorldAdjacencyPath {
         path: path,
         value: value
     );
+    /// <summary>Maps a response displacement into the source without length growth from quantized frame bases.
+    /// Each stage rounds inward only if its exact squared length grew; admission still owns the entire budget.</summary>
+    /// <param name="value">The neighbour's displacement.</param>
+    /// <param name="path">The reciprocal frame path.</param>
+    /// <returns>The mapped displacement, no longer than the input.</returns>
+    public static FixedVector3 MapDisplacementIntoSource(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) =>
+        MapAlong<DisplacementStageMap>(value: value, path: path, intoNeighbour: false);
     /// <summary>Maps an orientation from this world's frame into the neighbour's own frame.</summary>
     /// <param name="value">The orientation, in this world's frame.</param>
     /// <param name="path">The projection's path.</param>

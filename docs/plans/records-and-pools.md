@@ -170,7 +170,22 @@ identity adopts through `TryAdopt` only what the owner accepts. A remote arrival
 without that proof stays a peer admission and adopts nothing. The tape, the
 crossing log and the checkpoint keep recording the projection the arrival bound.
 
+The shape is decided ([what a visited world may write](../decisions/worlds-and-federation.md#what-a-visited-world-may-write);
+the MMO round's step 14): write-back is a signed submission over (authority,
+package, fact), never the unsigned adoption colocated seats use, and the
+reader's issuer policy maps an authority namespace to the packages it may
+write, refusing by name a package no authority is mapped to; in process the
+map is the identity. A settled class never comes home this way: it goes to the
+settlement door, and home holds the receipt. Needs the hub plan's write door
+(H9, whose rule `TryAdopt` applies to what a body carries), its durable award
+commit (H16), and the identity abstraction
+([settlement packet](open-items.md#settlement-trust-roles-and-revocation),
+step 10).
+
 **Check:** a law over two real authorities that a badge a parlor writes onto a
 visitor's record is on the owned identity after the visitor walks home across a
 federation link, and that a forged claim and an unsigned carried write adopt
-nothing; replay of the arrival reproduces the bound projection.
+nothing; replay of the arrival reproduces the bound projection. With the
+authority-to-packages map: a federated garden signs an award under the night
+field's package name, the reader maps the garden's authority to the garden
+package only, and the award is refused by name.

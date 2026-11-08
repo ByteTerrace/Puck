@@ -249,7 +249,7 @@ In this worktree, Puck divides outbound filtering across three mechanisms:
 
 ### Question 5a & the Seam Hypothesis: Which boundaries are visible portals and which are hidden?
 
-**The hypothesis under test** (`docs/plans/mmo-foundations.md:118` **[opened]**):
+**The hypothesis under test** (`docs/plans/mmo-foundations.md:76` **[opened]**):
 > `"Seams: hidden for shards and layers, visible where the fiction is travel."`
 
 #### Option S1: Strict fiction-aligned split — visible portals for travel and scope changes, `WorldAdjacency` for continuous spatial shards, and unobservability-gated cohort transfer for population layers
