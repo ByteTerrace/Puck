@@ -63,6 +63,8 @@ public sealed class WorldDisclosureImages {
         public long Revision { get; set; } = revision;
         public byte[] Digests { get; } = digests;
         public ContentPin Identity { get; private set; } = ContentPin.Compute(digests);
+        // The frame slot is written once, at composition: rows refresh only their own slots.
+        public ContentPin Frame { get; } = ContentPin.FromDigest(digests.AsSpan(0, SHA256.HashSizeInBytes));
         public WorldDefinition? Disclosed { get; set; }
         public bool Dirty { get; set; }
 
@@ -247,6 +249,9 @@ public sealed class WorldDisclosureImages {
     // The content identity of the recipient's disclosed definition. Two documents that disclose the same frame, rows and
     // row observations share it; work follows the rows that changed since the audience's last read.
     internal ContentPin DefinitionIdentity(WorldRecipientView view) => Current(view).Identity;
+    // The content identity of the recipient's disclosed document less its state rows: placements and every other
+    // section a row snapshot does not carry. A value-only delivery owes the document again exactly when it moved.
+    internal ContentPin FrameIdentity(WorldRecipientView view) => Current(view).Frame;
     // The recipient's disclosed definition, assembled from its current rows only after its identity moved.
     internal WorldDefinition Definition(WorldRecipientView view) {
         var entry = Current(view);
