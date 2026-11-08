@@ -39,7 +39,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
     private readonly bool m_temporal;
     // Per frame slot, the tables the slot's pass set was written against.
     private readonly SdfWorldTables?[] m_portTables;
-    private readonly (nint ColorRead, nint SurfaceRead, nint ColorWrite, nint SurfaceWrite)[] m_portHistory;
+    private readonly (nint Lit, nint ColorRead, nint SurfaceRead, nint ColorWrite, nint SurfaceWrite)[] m_portHistory;
 
     private SdfWorldView m_view;
     private bool m_disposed;
@@ -50,7 +50,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         m_view = view;
         m_temporal = owner.FragmentOf(instance: context.Instance)!.Resources.Any(predicate: static resource => resource.History);
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
-        m_portHistory = new (nint, nint, nint, nint)[context.InFlightFrames];
+        m_portHistory = new (nint, nint, nint, nint, nint)[context.InFlightFrames];
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: SdfKernel.Resolve).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
     }
@@ -98,13 +98,15 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
     public void Submitted() => m_owner.MarkSampleRendered(instance: m_context.Instance);
 
     // Ordinary ports follow the slot. History follows its writer, so refresh cached bindings whenever the resolved
-    // history handles change, even on a slot whose tables stay the same.
+    // history handles change, even on a slot whose tables stay the same. The color input follows the glass shading pass's
+    // output, which stands for the opaque image while no glass is in view, so its handle is part of the key too.
     private void BindPorts(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
         var slot = recording.Slot;
+        var lit = recording.Inputs[0].Image.ImageViewHandle;
         var history = (m_temporal
-            ? (recording.Inputs[(Inputs.Length + 2)].Image.ImageViewHandle, recording.Inputs[(Inputs.Length + 3)].Buffer!.BufferHandle,
+            ? (lit, recording.Inputs[(Inputs.Length + 2)].Image.ImageViewHandle, recording.Inputs[(Inputs.Length + 3)].Buffer!.BufferHandle,
                 recording.Outputs[2].Image.ImageViewHandle, recording.Outputs[3].Buffer!.BufferHandle)
-            : default);
+            : (lit, (nint)0, (nint)0, (nint)0, (nint)0));
 
         if (ReferenceEquals(objA: m_portTables[slot], objB: tables) && (m_portHistory[slot] == history)) {
             return;

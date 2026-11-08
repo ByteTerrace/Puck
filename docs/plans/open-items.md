@@ -65,11 +65,16 @@ milestone. The owner requested its baseline and implementation plan, which
    (3.0 to 5.0 ms, of which the probe gather is 1.1 to 1.3 ms by `world.indirect
    off` and the remaining 2.95 ms is the same indoors and out, the plain
    kernel's base), then the split far cascade (1.1 to 2.2), the resolve (1.2),
-   the near cascade (1.1 to 1.6), the composite (0.6) and the glass trio
-   (about 0.5 ms a frame at stops with no glass in view: the sums clear, a
-   glass raster with no kept draw and a glass-shade that reads the empty
-   sums; a glass-shade that answers `DrewNothing` when no glass draw's box
-   meets the frustum would recover it). With the
+   the near cascade (1.1 to 1.6) and the composite (0.6). The glass trio no
+   longer runs at a stop where no glass draw's box meets the view's frustum
+   (`SdfWorldPasses.GlassSeen`, the glass pass's own `SdfMeshCull.Keeps` test
+   over the staged glass draws): the clear and the raster skip and the shading
+   pass answers `DrewNothing`, leaving its lit image standing for the opaque
+   one, so its timed cost fell from about 0.5 ms to 0.00 on the RTX 4070 at the
+   meadow looking up (clear 0.13, raster 0.26 to 0.50 and shade 0.12 to 0.35 where
+   glass meets the frustum). A frustum that meets a box a wall hides still runs
+   the trio; the glass pass's occlusion culling lies on the GPU, past this
+   host test. With the
    resolve's history surface planar it no longer saturates L2 and costs about
    1 ms at 1280×720. Next: read the views pass's time now that a
    frame with no active program (the debug world's default, the lever on
