@@ -684,7 +684,7 @@ state {
     // left, the last pointed square, this tick's presses (the *Edge and step keys) and last tick's buttons (*Down),
     // whether the held piece was lifted by the press still down, whether a put-down awaits its verdict, and the piece
     // being put back or the arrangement being restored this tick.
-    table play {
+    table play capacity(25) {
       cursor = 11
       held = -1
       from = -1

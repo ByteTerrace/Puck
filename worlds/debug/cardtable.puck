@@ -389,6 +389,7 @@ state {
     row {
       name: "kCardNo"
       kind: "Int"
+      capacity: 52
       cells: map(range(0, 52), k => { key: $"kCard{k}", value: k })
     }
     row {

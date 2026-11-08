@@ -6832,6 +6832,7 @@ state {
     row {
       name: "dashPose"
       kind: "Fixed"
+      capacity: 1
       cells [{ key: "0", value: "0", dynamics { row: "flight-pose" } }]
     }
     row {
@@ -6844,6 +6845,7 @@ state {
           value: "0"
         }
       ]
+      capacity: 1
       kind: "Fixed"
       name: "airPose"
     }
@@ -6870,13 +6872,14 @@ state {
           value: "0"
         }
       ]
+      capacity: 1
       kind: "Fixed"
       name: "bootBoost"
     }
     table bootBoostEnd {
       "0" = 0
     }
-    table blink {
+    table blink capacity(1) {
       "0" = 0
     }
     table blinkAt {

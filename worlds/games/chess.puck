@@ -173,7 +173,7 @@ template chessGameState(settleTicks) {
     name: "plan"
   }
 
-  table ai {
+  table ai capacity(6) {
     evaluation = 0
     metadata = -1
     pending = 0
@@ -193,6 +193,7 @@ template chessGameState(settleTicks) {
   row {
     name: "pieceOrdinal"
     kind: "Int"
+    capacity: 32
     cells: map(range(0, 32), i => { key: $"piece{i}", value: i })
   }
   row {
@@ -261,6 +262,7 @@ template chessGameState(settleTicks) {
   row {
     name: "historyAges"
     kind: "Int"
+    capacity: 75
     cells: map(range(0, 75), i => { key: $"{i}", value: 2 * (i + 1) })
   }
 
