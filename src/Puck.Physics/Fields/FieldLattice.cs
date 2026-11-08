@@ -1825,13 +1825,14 @@ public sealed class FieldLattice {
     /// (construction, restore, or a primer snapshot).</summary>
     /// <param name="full">Whether to send every cell rather than the pending deltas.</param>
     /// <param name="isFull">Whether the returned set covers every cell.</param>
-    /// <returns>The deltas.</returns>
-    public Delta[] TakeDeltas(bool full, out bool isFull) {
+    /// <returns>The deltas, in the lattice's own scratch, which the next take overwrites: a caller copies what it
+    /// keeps.</returns>
+    public ReadOnlySpan<Delta> TakeDeltas(bool full, out bool isFull) {
         if (
             full ||
             m_fullResync
         ) {
-            var all = new Delta[(FieldCount * CellCount)];
+            var all = Taken(count: (FieldCount * CellCount));
             var index = 0;
 
             for (var field = 0; (field < FieldCount); field++) {
@@ -1861,7 +1862,7 @@ public sealed class FieldLattice {
             return [];
         }
 
-        var taken = new Delta[m_deltas.Count];
+        var taken = Taken(count: m_deltas.Count);
 
         for (var index = 0; (index < m_deltas.Count); index++) {
             var key = m_deltas[index];
@@ -1878,6 +1879,12 @@ public sealed class FieldLattice {
         ClearDeltas();
 
         return taken;
+    }
+    private Delta[] m_taken = [];
+    // The take's scratch, grown to hold count deltas.
+    private Span<Delta> Taken(int count) {
+        if (m_taken.Length < count) { m_taken = new Delta[(int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)count)]; }
+        return m_taken.AsSpan(start: 0, length: count);
     }
     /// <summary>Resolves the cell a BODY couples to for the <see cref="FieldReactionInput.Emit"/>/
     /// <see cref="FieldReactionInput.Expose"/> reactions: the column under the body, with Y admitted up to the

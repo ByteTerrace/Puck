@@ -59,6 +59,8 @@ public sealed class WorldDeliveryCursor {
         }
     }
     internal IReadOnlyList<WorldRowReplacement> Advance(WorldRecipientView view, ReadOnlySpan<int> rows) {
+        // Nothing changed and no primer is owed: no row can need a replacement, so the audience is not composed.
+        if (rows.IsEmpty && (m_metadataPrimers.Count == 0)) { return []; }
         var result = new List<WorldRowReplacement>();
         var audience = view.Images.Audience(view);
         foreach (var row in view.Images.Affected(view, rows).Concat(m_metadataPrimers).Distinct().Order().ToArray()) {

@@ -200,13 +200,16 @@ public sealed class WorldDisclosureImages {
     internal string Audience(WorldRecipientView view) {
         Prepare(view);
         var observer = view.Observer;
-        return string.Create(m_policies.Length + 2, (m_policies, observer, view.Observes, view.Ceiling, view.Unrestricted), static (span, state) => {
-            span[0] = state.Observes ? (char)('1' + (int)state.Ceiling) : '0';
-            // An authority reads storage bookkeeping even on a declaration that can withhold cells. A recipient
-            // admitted by every current policy still does not, so their definition caches cannot share a class.
-            span[1] = state.Unrestricted ? '1' : '0';
-            for (var index = 0; index < state.m_policies.Length; index++) { span[index + 2] = state.observer.Allows(state.m_policies[index]) ? '1' : '0'; }
-        });
+        var length = (m_policies.Length + 2);
+        var key = ((length <= 512) ? stackalloc char[length] : new char[length]);
+        key[0] = view.Observes ? (char)('1' + (int)view.Ceiling) : '0';
+        // An authority reads storage bookkeeping even on a declaration that can withhold cells. A recipient
+        // admitted by every current policy still does not, so their definition caches cannot share a class.
+        key[1] = view.Unrestricted ? '1' : '0';
+        for (var index = 0; index < m_policies.Length; index++) { key[index + 2] = observer.Allows(m_policies[index]) ? '1' : '0'; }
+        // The key is a function of the answers alone, so a view whose answers stand keeps the string it was handed.
+        if ((view.AudienceKey is { } held) && key.SequenceEqual(held)) { return held; }
+        return view.AudienceKey = new string(key);
     }
     internal WorldRecipientImage Image(WorldRecipientView view, int row) => Image(view, row, Audience(view));
     internal WorldRecipientImage Image(WorldRecipientView view, int row, string audience) {

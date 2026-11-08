@@ -848,7 +848,7 @@ public sealed class FieldLatticeLawTests {
         var deltas = lattice.TakeDeltas(
             full: false,
             isFull: out var full
-        );
+        ).ToArray();
 
         Assert.False(condition: full);
         var delta = Assert.Single(collection: deltas);
@@ -883,11 +883,11 @@ public sealed class FieldLatticeLawTests {
         var primer = lattice.TakeDeltas(
             full: true,
             isFull: out var primerFull
-        );
+        ).ToArray();
         var incremental = lattice.TakeDeltas(
             full: false,
             isFull: out var incrementalFull
-        );
+        ).ToArray();
 
         Assert.True(condition: primerFull);
         Assert.Single(collection: primer);
