@@ -85,22 +85,18 @@ public sealed partial class SdfWorldTables {
             return;
         }
 
-        var words = GrowCapacity(m_programWordCapacity, requiredWords, (int.MaxValue / sizeof(uint)));
-        var instances = GrowCapacity(m_instanceCapacity, program.Instances.Count, SdfProgramBuilder.MaxInstances);
+        var words = (int)GpuCapacity.Grown(current: m_programWordCapacity, required: requiredWords, ceiling: (int.MaxValue / sizeof(uint)), divisor: 2);
+        var instances = (int)GpuCapacity.Grown(current: m_instanceCapacity, required: program.Instances.Count, ceiling: SdfProgramBuilder.MaxInstances, divisor: 2);
 
         if (words != m_programWordCapacity) {
             var bytes = checked(((long)words) * sizeof(uint));
 
             // Retirement allocates nothing once the region has changed.
-            m_retired.EnsureCapacity(capacity: checked((m_retired.Count + 1)));
+            m_retired.Reserve();
             Retire(replaced: m_programRegion.Grow(byteCount: bytes));
         }
         m_programWordCapacity = words;
         m_instanceCapacity = instances;
         m_bindingRevision++;
-    }
-    private static int GrowCapacity(int current, int required, int ceiling) {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(required, ceiling);
-        return ((required <= current) ? current : (int)Math.Max(val1: required, val2: Math.Min(val1: ceiling, val2: (((long)current) + Math.Max(val1: 1, val2: (current / 2))))));
     }
 }

@@ -36,7 +36,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
         m_sceneRegion ??= m_tables.CreateProbeSceneRegion(sizeof(uint), SdfGpuWork.SlotCount);
         m_sceneRegion.Shadow(chunk, sizeof(uint));
         if (export.Words * 4L > m_sceneRegion.ByteCount) {
-            m_sceneCarry = m_sceneRegion.Grow(Math.Min(GpuRegion.MaxByteCount, (export.Words + export.Words / 8L) * sizeof(uint)));
+            m_sceneCarry = m_sceneRegion.Grow(sizeof(uint) * GpuCapacity.Headroom(required: export.Words, ceiling: (GpuRegion.MaxByteCount / sizeof(uint)), divisor: 8));
         }
         if (chunk.Word == 0) { m_sceneRegion.Write(0, MemoryMarshal.AsBytes(chunk.Words.AsSpan(0, chunk.Count))); }
         else { m_sceneRegion.OweSourced(chunk.Word * 4L, chunk.Count * 4L); }

@@ -52,12 +52,12 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private int m_slot;
     private readonly SdfPortalSight? m_sight;
     private readonly SightSlot[] m_sightSlots;
+    // Each slot's sight copy, read only once the node proves that slot complete, which precedes the slot's next Stage.
+    private readonly RenderGraphSlotResults<SightSlot> m_sightCopies;
 
     private sealed class SightSlot {
         internal readonly SdfPortalSight.Query?[] Queries = new SdfPortalSight.Query?[SdfPortalSight.Capacity];
         internal IGpuReadbackBuffer? Buffer;
-        internal IGpuSubmissionFence? Fence;
-        internal bool Recorded;
         internal long Epoch;
     }
 
@@ -71,38 +71,38 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         m_part = part;
         m_sight = sight;
         m_sightSlots = Enumerable.Range(0, slots).Select(static _ => new SightSlot()).ToArray();
+        m_sightCopies = new RenderGraphSlotResults<SightSlot>(slots: slots, complete: ReadSight);
         sight?.Attach(this);
     }
 
     // The candidates staged for the frame.
     public uint CandidateCount => m_count;
 
-    internal void Submitted(int slot, IGpuSubmissionFence fence) {
-        var pending = m_sightSlots[slot];
-        if (pending.Recorded) {
-            pending.Recorded = false;
-            pending.Fence = fence;
+    internal void Submitted(int slot) => m_sightCopies.Submitted(slot: slot);
+    // The node proved the slot's previous submission complete: one queue completed every earlier submission too, so the
+    // buffers a recording into this slot replaced are read by nothing left and are disposed, and its sight copy is read.
+    internal void Completed(int slot) {
+        foreach (var buffer in m_retired[slot]) {
+            // A recording that never submitted left its seed uncopied; the visible set starts cleared instead.
+            if (ReferenceEquals(objA: buffer, objB: m_seedVisible)) { m_seedVisible = null; }
+            buffer.Dispose();
         }
+        m_retired[slot].Clear();
+        m_sightCopies.Completed(slot: slot);
     }
-    internal void PollSight() {
-        if (m_sight is null) { return; }
+    private void ReadSight(SightSlot slot) {
         Span<byte> bytes = stackalloc byte[(int)CountsBytes];
-        foreach (var slot in m_sightSlots) {
-            if (slot.Fence is not { IsSignaled: true }) { continue; }
-            slot.Fence = null;
-            slot.Buffer!.Read(bytes);
-            m_sight.Complete(slot.Epoch, slot.Queries, System.Runtime.InteropServices.MemoryMarshal.Cast<byte, uint>(bytes)[SdfKernelInterfaces.MeshSightCountBase..]);
-        }
+
+        slot.Buffer!.Read(bytes);
+        m_sight!.Complete(slot.Epoch, slot.Queries, System.Runtime.InteropServices.MemoryMarshal.Cast<byte, uint>(bytes)[SdfKernelInterfaces.MeshSightCountBase..]);
     }
 
     // Each pass uploads constant-sized controls. The residency already uploaded each changed draw once.
     // A cascade that draws one layer of a split refresh (skipsDepth, skipsExit) emits and counts commands for that layer
     // alone, so its counted draws and vertices are the work it draws.
     public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false, bool skipsDepth = false, bool skipsExit = false, Puck.Abstractions.Cameras.CameraSnapshot camera = default, uint receiverWidth = 0, uint receiverHeight = 0, System.Numerics.Vector2 jitter = default) {
-        // The recording slot's fence has completed before Stage. Retire replacements only on its next reuse, after all
-        // preceding submissions and this slot's history copy have completed.
-        foreach (var buffer in m_retired[slot]) { buffer.Dispose(); }
-        m_retired[slot].Clear();
+        // The node completed this slot before its recording (Completed): replacements made here retire at its next
+        // completion, after this slot's history copy and every preceding submission.
         m_slot = slot;
         m_count = count;
         m_width = Math.Max(val1: width, val2: 1u);
@@ -112,10 +112,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         m_receivers = splitExit && occlude;
         m_receiverWidth = receiverWidth;
         m_receiverHeight = receiverHeight;
-        PollSight();
         var sightSlot = m_sightSlots[slot];
-        sightSlot.Recorded = false;
-        sightSlot.Fence = null;
         Span<System.Numerics.Vector4> rows = stackalloc System.Numerics.Vector4[SdfKernelInterfaces.MeshSightRow + (4 * SdfPortalSight.Capacity)];
         rows.Clear();
         if (occlude && m_sight is not null) { sightSlot.Epoch = m_sight.Capture(rows[SdfKernelInterfaces.MeshSightRow..], sightSlot.Queries, in camera); }
@@ -281,7 +278,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
                 sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
                 destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host);
             Ready(buffer: m_counts, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.TransferRead, sourceStage: GpuStage.Transfer);
-            slot.Recorded = true;
+            m_sightCopies.Record(slot: m_slot, result: slot);
         }
         ToIndirect(commandBuffer: commandBuffer, recorder: recorder);
         recorder.TransitionImageLayout(
@@ -346,13 +343,16 @@ internal sealed class SdfMeshOcclusion : IDisposable {
                 usage: GpuBufferUsage.Storage
             );
         }
-        if ((m_visible is null) || (m_visible.SizeBytes < ((((ulong)capacity) * 4) * sizeof(uint)))) {
+        const ulong VisibleBytes = (4 * sizeof(uint));
+        var visibleRecords = ((m_visible?.SizeBytes ?? 0UL) / VisibleBytes);
+
+        if ((m_visible is null) || (visibleRecords < capacity)) {
             m_seedVisible = m_visible;
             if (m_visible is { } previous) { m_retired[m_slot].Add(item: previous); }
             m_visible = null;
             m_visible = m_buffers.CreateDeviceLocal(
                 name: Name(detail: "occlusion visible"),
-                sizeBytes: ((((ulong)System.Numerics.BitOperations.RoundUpToPowerOf2(value: capacity)) * 4) * sizeof(uint)),
+                sizeBytes: (((ulong)GpuCapacity.Grown(current: ((long)visibleRecords), required: capacity, ceiling: uint.MaxValue, divisor: 1)) * VisibleBytes),
                 usage: GpuBufferUsage.Storage
             );
             m_visibleCleared = false;
@@ -360,7 +360,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         if ((m_draws is null) || (m_capacity < capacity)) {
             if (m_draws is { } previous) { m_retired[m_slot].Add(item: previous); }
             m_draws = null;
-            m_capacity = System.Numerics.BitOperations.RoundUpToPowerOf2(value: capacity);
+            m_capacity = (uint)GpuCapacity.Grown(current: m_capacity, required: capacity, ceiling: uint.MaxValue, divisor: 1);
             m_draws = m_buffers.CreateDeviceLocal(
                 name: Name(detail: "occlusion draws"),
                 sizeBytes: ((((ulong)m_argumentPhases) * m_capacity) * GpuDrawIndirectCommand.StrideBytes),

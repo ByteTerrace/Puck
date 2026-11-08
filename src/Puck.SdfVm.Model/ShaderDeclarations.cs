@@ -12,7 +12,7 @@ public sealed record ShaderDeclaration(string Path, Func<string> Generate);
 /// <c>puck shaders generate</c> both run: <c>sdf-isa.hlsli</c> (<see cref="SdfIsaHlsl"/>) and <c>sdf-render.hlsli</c>
 /// (<see cref="SdfRenderHlsl"/>), the sky's kind table
 /// (<c>sdf-sky-kinds.hlsli</c> and <c>sky/sdf-sky-kind-table.hlsli</c>, <see cref="SdfSkyKindsHlsl"/>), the R2 dither's
-/// increments (<see cref="ShaderLowDiscrepancyHlsl"/>), the instruction
+/// increments (<see cref="ShaderLowDiscrepancyHlsl"/>), the Y'CbCr and Rec. 709 luma weights (<see cref="ShaderLumaHlsl"/>), the instruction
 /// set's recorded
 /// fingerprint (<see cref="SdfIsaHlsl.FingerprintSourcePath"/>), and every generated shader interface
 /// (<see cref="ShaderInterfaceHlsl"/>) the model declares: each engine package's with pass-group members, found by its
@@ -111,6 +111,7 @@ public static class ShaderDeclarations {
             new ShaderDeclaration(Generate: SdfSkyKindsHlsl.Generate, Path: $"{SdfKernelInterfaces.KernelDirectory}/isa/{SdfSkyKindsHlsl.FileName}"),
             new ShaderDeclaration(Generate: SdfSkyKindsHlsl.GenerateTable, Path: $"{SdfKernelInterfaces.KernelDirectory}/sky/{SdfSkyKindsHlsl.TableFileName}"),
             new ShaderDeclaration(Generate: ShaderLowDiscrepancyHlsl.Generate, Path: ShaderLowDiscrepancyHlsl.Path),
+            new ShaderDeclaration(Generate: ShaderLumaHlsl.Generate, Path: ShaderLumaHlsl.Path),
             .. owned.Values,
         ];
     }

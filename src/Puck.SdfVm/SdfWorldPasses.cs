@@ -183,8 +183,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                 view: view
             );
         } catch {
-            Unhold(residency: view.Residency);
-            view.Residency.Release();
+            Leave(view: view);
 
             throw;
         }
@@ -482,6 +481,28 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     // Holds a residency the package tells of a device loss.
     internal void Hold(SdfWorldResidency residency) =>
         m_residencies[residency] = (m_residencies.GetValueOrDefault(key: residency) + 1);
+    // Moves a recorder to the view its instance resolved this frame, when that is another than the one it records: the
+    // package decided the pass can record it as built (CanFollow). The retain and the hold move with the view to another
+    // residency. Returns whether the residency changed, so the recorder rebinds what it declared for the old one.
+    internal bool Follow(string instance, ref SdfWorldView view) {
+        if ((ViewOf(instance: instance) is not { } current) || (current == view)) { return false; }
+        var previous = view.Residency;
+        var moved = !ReferenceEquals(objA: previous, objB: current.Residency);
+
+        if (moved) {
+            current.Residency.Retain();
+            Hold(residency: current.Residency);
+            Unhold(residency: previous);
+            previous.Release();
+        }
+        view = current;
+        return moved;
+    }
+    // Gives back the hold and the retain a recorder keeps on the view it records, as it is released.
+    internal void Leave(SdfWorldView view) {
+        Unhold(residency: view.Residency);
+        view.Residency.Release();
+    }
     // Gives back a hold; the package forgets a residency no one holds.
     internal void Unhold(SdfWorldResidency residency) {
         if (!m_residencies.TryGetValue(

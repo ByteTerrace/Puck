@@ -109,20 +109,11 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
                 float4 data1 = asfloat(sdfProgramWord(dataOffset + SDF_INSTRUCTION_DATA_VECTORS * domainIndex + 1u));
                 uint axis = SDF_INSTRUCTION_SHAPE(domain);
                 if (axis >= 3u) { parent = sdfIsaErrorHit(); return; }
-                float rawT = (data0.z - localPosition[axis]) * data0.w;
-                float t = saturate(rawT);
-                float rawS = data1.y + data0.x * t + data0.y * sin(SDF_PI * t);
-                float scale = max(rawS, SDF_FLARE_MIN_SCALE);
-                float invScale = 1.0 / scale;
-                [unroll] for (uint component = 0u; component < 3u; component++) {
-                    if (component != axis) localPosition[component] *= invScale;
-                }
-                distanceScale *= data1.x;
+                distanceScale *= sdfAxialProfile(localPosition, axis, data0, data1);
             } else if (SDF_INSTRUCTION_OP(domain) == SDF_OP_SHEAR) {
                 uint target = SDF_INSTRUCTION_SHAPE(domain), driver = SDF_INSTRUCTION_BLEND(domain);
                 if (target >= 3u || driver >= 3u) { parent = sdfIsaErrorHit(); return; }
-                float t = localPosition[driver];
-                localPosition[target] += ((data0.z * t + data0.y) * t + data0.x) * t;
+                sdfShear(localPosition, target, driver, data0.xyz);
             }
         }
 

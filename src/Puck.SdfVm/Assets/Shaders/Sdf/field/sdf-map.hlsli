@@ -580,36 +580,22 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     localPosition[v] = -sn * pu + c * pv;
                     break;
                 }
-                // Radial flare warp (KEEP IN SYNC with SdfProgramBuilder.AxialProfile and SdfFieldEvaluator.WarpPoint): data0 = (amount, bulge, top,
-                // 1/span), data1.x = the host-baked 1/max(s) size correction over t in [0, 1]. t folds toward the far
-                // end of the span; s(t) is floored at SDF_FLARE_MIN_SCALE so a parameter combination that drives it
-                // non-positive still warps finitely. distanceScale takes the size correction here, the same channel
-                // SDF_OP_SCALE/SDF_OP_LOG_SPHERE use; the residual shear from the y-varying scale is bounded
-                // separately by SdfProgram.AnalyzeLipschitz's chain step clamp, not corrected per candidate.
+                // Radial flare warp (sdfAxialProfile): distanceScale takes the size correction, the same channel
+                // SDF_OP_SCALE/SDF_OP_LOG_SPHERE use.
                 case SDF_OP_AXIAL_PROFILE: {
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;
                     uint axis = SDF_INSTRUCTION_SHAPE(instructionHeader);
                     if (axis >= 3u) { return sdfIsaErrorHit(); }
-                    float rawT = (data0.z - localPosition[axis]) * data0.w;
-                    float t = saturate(rawT);
-                    float rawS = data1.y + data0.x * t + data0.y * sin(SDF_PI * t);
-                    float scale = max(rawS, SDF_FLARE_MIN_SCALE);
-                    float invScale = 1.0 / scale;
-                    [unroll] for (uint component = 0u; component < 3u; component++) {
-                        if (component != axis) { localPosition[component] *= invScale; }
-                    }
-                    distanceScale *= data1.x;
+                    distanceScale *= sdfAxialProfile(localPosition, axis, data0, data1);
                     break;
                 }
-                // Polynomial shear (KEEP IN SYNC with SdfProgramBuilder.Shear): only X moves, by an exact
-                // (not small-angle) polynomial of Y — data0 = (linear, quadratic).
+                // Polynomial shear (sdfShear).
                 case SDF_OP_SHEAR: {
                     SDF_VM_LOAD_DATA0;
                     uint target = SDF_INSTRUCTION_SHAPE(instructionHeader), driver = SDF_INSTRUCTION_BLEND(instructionHeader);
                     if (target >= 3u || driver >= 3u) { return sdfIsaErrorHit(); }
-                    float t = localPosition[driver];
-                    localPosition[target] += ((data0.z * t + data0.y) * t + data0.x) * t;
+                    sdfShear(localPosition, target, driver, data0.xyz);
                     break;
                 }
                 // Gaussian domain push (KEEP IN SYNC with SdfProgramBuilder.GaussianPush): always a HEAD+TAIL pair —

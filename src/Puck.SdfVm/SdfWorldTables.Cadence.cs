@@ -91,8 +91,8 @@ public sealed partial class SdfWorldTables {
 
         lighting.Add(value: m_lightingSignature);
         // Submit records the environment before signatures are read; a sub-code candidate keeps this revision.
-        lighting.Add(value: unchecked((ulong)m_skyEnvironment.Renders));
-        lighting.Add(value: unchecked((ulong)m_screenEmission.Renders));
+        lighting.Add(value: unchecked((ulong)m_skyEnvironment.Publication.Renders));
+        lighting.Add(value: unchecked((ulong)m_screenEmission.Publication.Renders));
         lighting.Add(value: m_shadowSignature);
         lighting.Add(values: block);
         var shadow = Fnv1aHash.Create();
@@ -234,8 +234,8 @@ public sealed partial class SdfWorldTables {
             value: in m_tablesSignature
         );
         hash.Add(values: tables);
-        hash.Add(value: unchecked((ulong)m_skyEnvironment.Renders));
-        hash.Add(value: unchecked((ulong)m_screenEmission.Renders));
+        hash.Add(value: unchecked((ulong)m_skyEnvironment.Publication.Renders));
+        hash.Add(value: unchecked((ulong)m_screenEmission.Publication.Renders));
         hash.Add(values: block);
         hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Views[view].Quality.SkyFieldFraction));
         var bloom = frame.Views[view].Bloom;
