@@ -457,15 +457,15 @@ public sealed class CliLeaseTests : IDisposable {
         Assert.Equal(expected: 2, actual: await CliRoot.InvokeAsync(args: ["lease", "gpu", "--holder", "agents-slim", "--", "agents-slim-missing-executable"], root: command));
         Assert.False(condition: Directory.Exists(path: Path.Combine(path1: m_root, path2: "gpu")));
     }
-    // Law: puck lease heavy and gpu wait on the host admission once they hold their lease, as a heavy suite and a device
-    // step respectively, bounded by what --wait left; a refusal starts nothing and releases the lease. The build lease and
+    // Law: heavy admission holds its lease; GPU admission waits unreserved before queuing and reserves only with
+    // its lease held, bounded by what --wait left. A refusal starts nothing and releases the lease. The build lease and
     // the quiet window (which settles on the same readings) take no admission of their own.
     [Fact]
     public async Task HeavyAndGpuLeasesAdmitThroughTheHostAdmissionHoldingTheLeaseAndARefusalStartsNothing() {
-        var asked = new List<(string Step, bool Device, bool Heavy, bool Held, TimeSpan? Bound, HostStartKind Kind)>();
+        var asked = new List<(string Step, bool Device, bool Heavy, bool Held, bool Reserve, TimeSpan? Bound, HostStartKind Kind)>();
         var refuse = false;
-        HostAdmit admit = (_, step, device, heavySuite, kind, bound, _, _, _) => {
-            asked.Add(item: (step, device, heavySuite, Directory.Exists(path: Path.Combine(path1: m_root, path2: (device ? "gpu" : "heavy"))), bound, kind));
+        HostAdmit admit = (_, step, device, heavySuite, kind, bound, reserve, _, _, _) => {
+            asked.Add(item: (step, device, heavySuite, Directory.Exists(path: Path.Combine(path1: m_root, path2: (device ? "gpu" : "heavy"))), reserve, bound, kind));
 
             return Task.FromResult(result: !refuse);
         };
@@ -476,12 +476,13 @@ public sealed class CliLeaseTests : IDisposable {
         Assert.Equal(expected: 0, actual: await CliRoot.InvokeAsync(args: ["lease", "gpu", "--holder", "agents-slim", "--", .. args], root: command));
         Assert.Equal(expected: 0, actual: await CliRoot.InvokeAsync(args: ["lease", "gpu", "--holder", "agents-slim", "--kind", "Step", "--", .. args], root: command));
         Assert.Equal(expected: 0, actual: await CliRoot.InvokeAsync(args: ["lease", "build", "--holder", "agents-slim", "--", .. args], root: command));
-        Assert.Equal(expected: 3, actual: asked.Count);
+        Assert.Equal(expected: 5, actual: asked.Count);
         Assert.Equal(expected: ("lease heavy agents-slim", false, true, true), actual: (asked[0].Step, asked[0].Device, asked[0].Heavy, asked[0].Held));
-        Assert.Equal(expected: [HostStartKind.HeavySuite, HostStartKind.WindowedWorld, HostStartKind.Step], actual: [asked[0].Kind, asked[1].Kind, asked[2].Kind]);
+        Assert.Equal(expected: [HostStartKind.HeavySuite, HostStartKind.WindowedWorld, HostStartKind.WindowedWorld, HostStartKind.Step, HostStartKind.Step], actual: asked.Select(item => item.Kind).ToArray());
         Assert.InRange(actual: asked[0].Bound!.Value, low: TimeSpan.FromSeconds(seconds: 50), high: TimeSpan.FromSeconds(seconds: 60));
-        Assert.Equal(expected: ("lease gpu agents-slim", true, false, true, TimeSpan.Zero), actual: (asked[1].Step, asked[1].Device, asked[1].Heavy, asked[1].Held, asked[1].Bound!.Value));
+        Assert.Equal(expected: ("lease gpu agents-slim", true, false, false, TimeSpan.Zero), actual: (asked[1].Step, asked[1].Device, asked[1].Heavy, asked[1].Held, asked[1].Bound!.Value));
         Assert.Equal(expected: (true, false, true), actual: (asked[2].Device, asked[2].Heavy, asked[2].Held));
+        Assert.Equal(expected: [true, false, true, false, true], actual: asked.Select(item => item.Reserve).ToArray());
 
         refuse = true;
         var marker = Path.Combine(path1: m_root, path2: "ran");

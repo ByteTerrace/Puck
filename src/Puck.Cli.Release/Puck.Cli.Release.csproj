@@ -9,6 +9,7 @@
         <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     </PropertyGroup>
     <ItemGroup>
+        <Compile Include="../../build/CandidateCliInstall.cs" Link="NuGet/CandidateCliInstall.cs" />
         <ProjectReference Include="../Puck.Cli.Core/Puck.Cli.Core.csproj" />
         <ProjectReference Include="../Puck.Cli.Runs/Puck.Cli.Runs.csproj" />
         <ProjectReference Include="../Puck.Cli.Source/Puck.Cli.Source.csproj" />

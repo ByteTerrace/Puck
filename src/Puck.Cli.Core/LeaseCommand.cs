@@ -30,7 +30,7 @@ public static class LeaseCommand {
         var named = parse.GetValue(option: lane);
         var bound = TimeSpan.FromSeconds(seconds: seconds);
         var started = clock.GetTimestamp();
-        var held = new List<CliLease>();
+        var held = new List<IDisposable>();
 
         try {
             if (settleWait is not null) {
@@ -38,18 +38,12 @@ public static class LeaseCommand {
             }
             // One wait bounds the whole acquisition: each lease gets what the earlier ones left.
             foreach (var name in (settleWait is null ? names : [])) {
-                var remaining = (bound - clock.GetElapsedTime(startingTimestamp: started));
-
-                held.Add(item: await CliLease.AcquireAsync(ancestor: ProcessInspection.IsAncestor, checkout: (RepositoryPaths.FindRoot() ?? Environment.CurrentDirectory), lane: named, root: directory, name: name, holder: parse.GetValue(option: holder)!, wait: ((remaining > TimeSpan.Zero) ? remaining : TimeSpan.Zero), clock: clock, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false));
-
-                // Admission follows the lease, in the queue's order: the one holder of a heavy or GPU lease is the only run
-                // judging the machine, so two starts never read the same headroom and both take it.
-                if (admit is not null) {
-                    var left = (bound - clock.GetElapsedTime(startingTimestamp: started));
-                    var admitted = await admit(checkout: Environment.CurrentDirectory, step: $"{verb} {parse.GetValue(option: holder)}", device: (name == "gpu"), heavySuite: (name == "heavy"), kind: (selectedKind ?? ((name == "gpu") ? HostStartKind.WindowedWorld : ((name == "heavy") ? HostStartKind.HeavySuite : HostStartKind.Step))), bound: ((left > TimeSpan.Zero) ? left : TimeSpan.Zero), progress: Console.Error, stage: null, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-
-                    if (!admitted) { return CliExit.Refuse(verb: verb, what: "host admission", why: "the machine had no memory, commit or disk headroom (or its GPU stayed busy) within --wait, so the command did not start and the lease is released."); }
-                }
+                var remaining = TimeSpan.FromTicks( Math.Max(val1: 0, val2: (bound - clock.GetElapsedTime(startingTimestamp: started)).Ticks));
+                held.Add(item: await LeasedAdmission.AcquireAsync(
+                    acquire: async (left, token) => await CliLease.AcquireAsync(ancestor: ProcessInspection.IsAncestor, checkout: (RepositoryPaths.FindRoot() ?? Environment.CurrentDirectory), lane: named, root: directory, name: name, holder: parse.GetValue(option: holder)!, wait: (left ?? TimeSpan.Zero), clock: clock, cancellationToken: token).ConfigureAwait(false),
+                    admit: admit, checkout: Environment.CurrentDirectory, step: $"{verb} {parse.GetValue(option: holder)}", device: name == "gpu", heavySuite: name == "heavy",
+                    kind: (selectedKind ?? (name == "gpu" ? HostStartKind.WindowedWorld : name == "heavy" ? HostStartKind.HeavySuite : HostStartKind.Step)),
+                    clock: clock, bound: remaining, progress: Console.Error, stage: null, cancellationToken: cancellationToken).ConfigureAwait(false));
             }
 
             if ((settleWait is not null) && (settled > 0)) {
@@ -149,7 +143,7 @@ public static class LeaseCommand {
     /// <param name="clock">The CLI clock.</param>
     /// <param name="leaseRoot">An explicit lease directory, or null for the main checkout's shared directory.</param>
     /// <param name="settleWait">How <c>puck lease quiet</c> tells the machine is idle (the host load sampler, which lives above this assembly); null leaves the quiet command out.</param>
-    /// <param name="admit">The host admission <c>puck lease heavy</c> and <c>puck lease gpu</c> wait on once they hold their lease and before they run the command; null admits at once.</param>
+    /// <param name="admit">The host admission <c>puck lease heavy</c> and <c>puck lease gpu</c> wait on through <see cref="LeasedAdmission"/> before they run the command; null admits at once.</param>
     /// <returns>The lease command.</returns>
     public static Command Create(TimeProvider clock, string? leaseRoot = null, LeaseSettle? settleWait = null, HostAdmit? admit = null) {
         var root = new Command(description: "Run a command under an exclusive World-build, GPU or heavy-work lease, or all three once the machine is idle.", name: "lease");

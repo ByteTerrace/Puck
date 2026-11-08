@@ -17,22 +17,10 @@ public static class PackagesCommand {
         .. PackableProjects.Discover(root: repositoryRoot)
             .Select(selector: static project => new PackageEntry(Id: (PackableProjects.Property(document: project.Document, name: "PackageId") ?? Path.GetFileNameWithoutExtension(path: project.File))))
             .OrderBy(keySelector: static package => package.Id, comparer: StringComparer.Ordinal),
-    ];    private static string LeadingWhitespace(string text, int index) {
-        var start = index;
-
-        while (
-            (start > 0) &&
-            (text[(start - 1)] is ' ' or '\t')
-        ) {
-            --start;
-        }
-
-        return text[start..index];
-    }
-    private static string RenderSection(IReadOnlyList<PackageEntry> packages, string indent) {
+    ];    private static string RenderSection(IReadOnlyList<PackageEntry> packages, string indent) {
         var builder = new StringBuilder();
 
-        _ = builder.Append(value: GeneratedBegin).Append(value: '\n');
+
         _ = builder.Append(value: indent).Append(value: "<p class=\"libs\">\n");
         _ = builder.Append(value: indent).Append(value: "  NuGet packages:\n");
 
@@ -46,7 +34,7 @@ public static class PackagesCommand {
         }
 
         _ = builder.Append(value: indent).Append(value: "</p>\n");
-        _ = builder.Append(value: indent).Append(value: GeneratedEnd);
+        _ = builder.Append(value: indent);
 
         return builder.ToString();
     }
@@ -63,16 +51,11 @@ public static class PackagesCommand {
 
         var text = File.ReadAllText(path: fullPath).ReplaceLineEndings(replacementText: "\n");
 
-        if (!TryLocateSection(beginIndex: out var beginIndex, endIndex: out var endIndex, text: text)) {
+        var packages = Discover(repositoryRoot: repositoryRoot);
+        if (!CliGeneratedSection.TryReplace(text: text, begin: GeneratedBegin + "\n", end: GeneratedEnd,
+            render: indent => RenderSection(indent: indent, packages: packages), generated: out var generated)) {
             return CliExit.Refuse(verb: "packages", what: Page, why: $"carries no '{GeneratedBegin}' … '{GeneratedEnd}' section.");
         }
-
-        var packages = Discover(repositoryRoot: repositoryRoot);
-        var generated = string.Concat(
-            str0: text[..beginIndex],
-            str1: RenderSection(indent: LeadingWhitespace(index: beginIndex, text: text), packages: packages),
-            str2: text[endIndex..]
-        );
 
         return (CliGeneratedFile.WriteOrCheck(
             check: check,
@@ -83,38 +66,7 @@ public static class PackagesCommand {
             text: generated,
             verb: "packages"
         ) ? CliExit.Success : CliExit.Failed);
-    }    private static bool TryLocateSection(string text, out int beginIndex, out int endIndex) {
-        var begin = text.IndexOf(
-            comparisonType: StringComparison.Ordinal,
-            value: GeneratedBegin
-        );
-
-        if (begin < 0) {
-            beginIndex = 0;
-            endIndex = 0;
-
-            return false;
-        }
-
-        var end = text.IndexOf(
-            comparisonType: StringComparison.Ordinal,
-            startIndex: begin,
-            value: GeneratedEnd
-        );
-
-        if (end < 0) {
-            beginIndex = 0;
-            endIndex = 0;
-
-            return false;
-        }
-
-        beginIndex = begin;
-        endIndex = (end + GeneratedEnd.Length);
-
-        return true;
-    }
-    public static Command Create() => CliOptions.CheckVerb(
+    }    public static Command Create() => CliOptions.CheckVerb(
         checkDescription: $"Regenerate the GENERATED package section of {Page} in memory and compare it; write nothing, and exit 1 naming the first differing line.",
         description: $"Write the published ByteTerrace.Puck.* NuGet package list into {Page}, or check it.",
         detail: $"""
