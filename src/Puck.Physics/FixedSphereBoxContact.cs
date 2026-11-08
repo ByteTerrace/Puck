@@ -9,29 +9,16 @@ internal static class FixedSphereBoxContact {
     internal static bool TryPush(FixedVector3 sphereCenter, FixedQ4816 radius, FixedVector3 boxCenter,
         FixedQuaternion boxRotation, FixedVector3 halfExtents, out FixedContactPush push) {
         var local = boxRotation.RotateInverse(vector: (sphereCenter - boxCenter));
-        var closest = FixedVector3.Clamp(maximum: halfExtents, minimum: -halfExtents, value: local);
-        var delta = (local - closest);
+        var (point, normal, distance) = FixedRoundedBoxContact.Nearest(halfExtents: halfExtents, point: local);
 
-        if (delta == FixedVector3.Zero) {
-            var (normal, _, gap) = FixedAxisMath.BoxInteriorExit(halfExtents: halfExtents, local: local);
-            push = new FixedContactPush(
-                Normal: boxRotation.Rotate(vector: normal),
-                Penetration: (radius + gap)
-            );
-            return (push.Penetration > FixedQ4816.Zero);
-        }
-
-        // Length uses the full-width raw square sum; a sub-millimetre distance must not round to zero before sqrt.
-        var distance = delta.Length;
-
+        // An interior center reads a negative distance, its exit gap, so its push is the radius plus that gap.
         if (distance >= radius) {
             push = default;
             return false;
         }
-
         push = new FixedContactPush(
-            Normal: boxRotation.Rotate(vector: (delta / distance)),
-            IsEdge: FixedRoundedBoxContact.IsEdge(delta: delta),
+            Normal: boxRotation.Rotate(vector: normal),
+            IsEdge: FixedRoundedBoxContact.IsEdge(delta: (local - point)),
             Penetration: (radius - distance)
         );
         return true;

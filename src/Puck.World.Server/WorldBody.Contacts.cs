@@ -287,17 +287,13 @@ public sealed partial class WorldBody {
         WakeUp();
 
         m_position += correction;
-        var normal = correction.Normalize();
         var velocity = ComposedVelocity();
-        var inward = FixedVector3.Dot(
-            left: velocity,
-            right: normal
-        );
+        var separating = velocity.LimitAlong(maximum: FixedQ4816.Zero, unitAxis: -correction.Normalize());
 
-        if (inward < FixedQ4816.Zero) {
+        if (separating != velocity) {
             SplitVelocity(
                 resetVerticalRemainder: true,
-                velocity: (velocity - (normal * inward))
+                velocity: separating
             );
         }
     }
