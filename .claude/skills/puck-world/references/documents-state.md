@@ -738,7 +738,10 @@ axes follow that frame's position/yaw; surface probes remain vertical. `world.na
 origin/yaw. A domain retains its workspace only after matching tuning, capacity, and the complete fixed cell/edge
 bake against the replacement query, which it then uses for future checks. Medium retention also requires the same
 field provider and synchronized revision. Unproved domains rebuild; do not infer tile-level SDF invalidation.
-Dealt placement instances carry reserved `dealSlot` identities independently of their transforms. Each carries its
+Dealt placement instances carry reserved `dealSlot` identities independently of their transforms. A recipient is
+shown a template whose dealt row can withhold re-dealt in its own row order, with `$back$<slot>` placeholders under
+`hidden: Placeholder` (`WorldStateDisclosure.DisclosedPlacements`), and such a template and its children may carry
+no `solid`, `grip`, `spatial`, `region` or `emission` ([decision 4](../../../../docs/plans/disclosure.md#4-the-physical-layout-follows-the-hidden-policy)). Each carries its
 template's `scale` as it carries the prototype; its region offset is metres in the template's frame, never scaled
 (a placement parent is otherwise unit-scale). `deal.preserve`
 selects instance-owned transforms, prototypes, and facets. Spatial volumes distinguish occupation, shared clearance,

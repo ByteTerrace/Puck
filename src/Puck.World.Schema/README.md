@@ -3272,11 +3272,13 @@ for what was withheld, so no receiving consumer changed type. Because `state` is
 one of the withheld sections, `Compose` sends a FLAT document—every
 `state.<row>[.<key>]` value answered from the composing authority's own state and
 the reference dropped—and `TryToDefinition` refuses a peer that still names a
-cell. Placements cross as `WorldStateDisclosure.Disclose` deals them to the
-recipient: a dealt child is a reading of the cells it was dealt from, so one whose
-variant cell the recipient may not read shows the template's own prototype, and one
-whose dealt cell it may not read is absent—the child the deal sweep would deal
-from the recipient's own rows. A responsive placement whose `respond` conditions
+cell. Placements cross as `WorldStateDisclosure.DisclosedPlacements` reads them
+for the recipient: a dealt child is a reading of the cells it was dealt from, so a
+template whose dealt row can withhold is re-dealt in the recipient's row order
+(slots `0..n-1`, each child keeping only its displacement from the authority's
+slot), a child whose dealt cell the recipient may not read is absent, or an
+anonymous `$back$<slot>` under `hidden: Placeholder`, and one whose variant cell
+it may not read shows the template's own prototype. A responsive placement whose `respond` conditions
 read a row withholding a cell from the recipient crosses with its `holding` mask
 cleared of every entry that reads a withheld cell, so it shows the first entry that
 holds over what the recipient may read, else its authored prototype; a field entry

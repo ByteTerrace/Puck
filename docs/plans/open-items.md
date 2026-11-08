@@ -3821,13 +3821,6 @@ brief's priorities ([security review](../development/security-review.md)).
     and step 0b's principals (a socket peer, Observe revoked and regranted, a
     federated traveller, a mounted addon). The harness green over the fixtures
     and the fuzzer is the definition of done.
-  - Step 4, the layout ([decision 4](disclosure.md#4-the-physical-layout-follows-the-hidden-policy)):
-    [high] dealt children keep hidden-dependent slots and positions
-    (`src/Puck.World.Schema/WorldStateDisclosure.cs:481,621`,
-    `src/Puck.World.Server/WorldTick.Deals.cs:426,544-552,561`), printed by
-    `world.placements` (`WorldTick.Deals.cs:102`); [high] a restricted
-    template's `Solid`, `Grip`, `Spatial`, `Region` and `Emission` facets act on
-    the world for every body (`WorldTick.Deals.cs:558-571`).
   - Steps 5 and 6, the compiler and the deletion of every other predicate
     ([decision 6](disclosure.md#6-the-compiler-holds-the-line)): the authority
     `internal` to `Puck.World.Server` (`WorldServer.RuleHostSeam.cs:8,23` are
