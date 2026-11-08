@@ -81,11 +81,12 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             UnifiedMemory: true
         );
 
-        // Eleven per-frame tables; mesh and shadow handoffs are staged. The other nine each use one aperture
-        // buffer per ring slot, and a transform move copies nothing.
+        // Twelve per-frame tables; mesh and shadow handoffs are staged. The other ten (program, transforms, screen
+        // surfaces and mappings, volumes, decals, lights, sky, sky layers, frame-sampled) each use one aperture buffer
+        // per ring slot, and a transform move copies nothing.
         using (var rig = new Rig(profile: discrete, slots: 40)) {
             rig.Warm();
-            Assert.Equal(expected: (9 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
+            Assert.Equal(expected: (10 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
             rig.Move(slot: 3);
             rig.Render(time: 0f);
             Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
