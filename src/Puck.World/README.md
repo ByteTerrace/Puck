@@ -1260,8 +1260,9 @@ host's named machine declarations are written into `machines`, and every
 advancing `state` row/cell settles to its live value with its projected epoch
 reset to 0, so a reload resumes exactly where the save observed it instead of
 reading frozen. The live document itself is never touched. A world with a
-`basis` or `imports` saves as a delta over them. `world.status` reports source,
-counts, drift, and the journal length. `world.imports` reads back the whole
+`basis` or `imports` saves as a delta over them. `world.status` reports the
+caller's disclosed counts and parameters; source, process accounting, sleeping
+count, machine faults, drift and journal length are operator-only. `world.imports` reads back the whole
 basis-and-imports composition graph in merge order, each import with the alias
 it composed under (see
 [`Puck.World.Schema`](../Puck.World.Schema/README.md)'s document-composition

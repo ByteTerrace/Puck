@@ -117,6 +117,7 @@ public sealed partial class WorldStateCommandModule {
         );
         yield return CommandDefinition.WithWireArgs(
             name: "world.patterns",
+            audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             description: "Echoes every compiled pattern language: kind, refined letters, machine states against the row's budget, and the attribute row a zone source reads.",
             routing: CommandRouting.Immediate,
@@ -135,6 +136,7 @@ public sealed partial class WorldStateCommandModule {
         );
         yield return CommandDefinition.WithWireArgs(
             name: "world.tables",
+            audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             description: "Echoes every static lookup table the document references: name, value kind, and entry count.",
             routing: CommandRouting.Immediate,
@@ -153,6 +155,7 @@ public sealed partial class WorldStateCommandModule {
         );
         yield return CommandDefinition.WithWireArgs(
             name: "world.topology",
+            audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             description: $"Lists a discrete topology's point-group elements, and with a cell key, that cell's image under each: {WorldTopologyForms.Spelling}.",
             forms: WorldTopologyForms,

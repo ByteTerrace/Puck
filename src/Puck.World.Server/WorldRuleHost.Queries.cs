@@ -129,6 +129,9 @@ public sealed partial class WorldRuleHost {
     /// <param name="principal">The querying principal.</param>
     /// <returns>The answer, or its refusal.</returns>
     public QueryAnswer AnswerSubmittedQuery(WorldQuery query, Principal principal) {
+        if (query is WorldQuery.Interactions && !principal.IsAuthority) {
+            return new QueryAnswer(Text: "[world.interactions: refused — an operator query]", Refused: true);
+        }
         if (
             (principal.Kind == PrincipalKind.Session) &&
             !Host.AllowsSessionQuery(query: query, session: principal)
@@ -162,6 +165,9 @@ public sealed partial class WorldRuleHost {
             principal: principal,
             row: observation.Row
         );
+        }
+        if (query is WorldQuery.Properties properties) {
+            return new QueryAnswer(Text: Host.DescribeProperties(properties.BodyIndex, principal));
         }
         if (query is WorldQuery.ReflowPreview or WorldQuery.ReflowStatus or WorldQuery.ReflowCancel) {
             return Host.AnswerReflowQuery(
@@ -555,7 +561,7 @@ public sealed partial class WorldRuleHost {
             Text: $"[world.contacts: body {contacts.Index} is inactive — see world.population]",
             Refused: true
         ),
-            WorldQuery.Properties properties => new QueryAnswer(Text: Host.DescribeProperties(bodyIndex: properties.BodyIndex)),
+            WorldQuery.Properties properties => new QueryAnswer(Text: Host.DescribeProperties(bodyIndex: properties.BodyIndex, principal: Principal.Console)),
             WorldQuery.Interactions => new QueryAnswer(Text: Host.DescribeInteractions()),
             WorldQuery.GrantAllows allows => AnswerGrantAllows(query: allows),
             WorldQuery.GrantHandleMint mint => AnswerGrantHandleMint(query: mint),

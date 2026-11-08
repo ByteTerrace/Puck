@@ -42,7 +42,7 @@ while the console addresses another instance (`WorldConsoleAddressLawTests`).
 The `Puck.World`-resident desktop modules still take the boot link, which is
 safe only because the desktop's authority always resolves boot.
 
-`world.explain` is an Immediate observational one-shot request on the acting
+`world.explain` is an Operator, Immediate observational one-shot request on the acting
 seat or pane's existing GPU picker. It suspends that picker's ordinary hover
 demand until the exact surfaced answer's fence completes, and settles on route
 loss, supersession or shutdown, answering the pixel's material.
@@ -752,8 +752,12 @@ cleanup in the disclosure plan. It never reads authority state separately.
 What a view cannot reconstruct is the operator's (`Principal.IsAuthority`): the
 authority diagnostics, `world.debug-view report` and `goto` (a mode stays
 bindable, since it only selects the shared screen's presentation),
-`world.save`, and `world.status`'s `session-drift` and `dirty`, which a
-recipient's status omits.
+`world.save`, compiled interaction/field/pattern/table/topology and rule-hazard
+diagnostics, flock/navigation work, and `world.status`'s provenance, process
+document accounting, sleeping count, machine faults, `session-drift` and `dirty`.
+A recipient's status omits those; its gravity summary reads only authored view
+parameters. `world.properties` carries the stamped principal through the query
+door and evaluates property cells through `WorldStateReadView`.
 Placements come from the view; restricted dealt slots are still step 4's work.
 `world.state`,
 `world.row`, `world.tabletop`, `world.hud.template` and `world.placements` read through it; `world.match`

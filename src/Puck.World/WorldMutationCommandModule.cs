@@ -521,8 +521,11 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return refusal;
                 }
 
-                var definition = server.ReadView(context).Definition;
-                var source = definitionSource.SourcePath;
+                var view = server.ReadView(context);
+                if (!view.Observes) { return new CommandResult(Output: "[world.status: not disclosed]"); }
+                var definition = view.Definition;
+                var isOperator = context.Principal.IsAuthority;
+                var source = isOperator ? Puck.Abstractions.PuckPaths.Normalize(definitionSource.SourcePath) : string.Empty;
                 // The journal and the save snapshot are the authority's edit history: the journal's length moves with
                 // an operator's hidden-only edit, so a recipient's status carries neither.
                 var journal = (context.Principal.IsAuthority
@@ -561,34 +564,36 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     )
                     : "none"
                 );
-                var basis = ((WorldDefinitionFileSource.TryPeekBasis(
+                var basis = ((isOperator && WorldDefinitionFileSource.TryPeekBasis(
                     basisPath: out var basisPath,
                     path: source,
                     reason: out var unusedPeekReason
                 ) && (basisPath is { }))
-                    ? basisPath
+                    ? Puck.Abstractions.PuckPaths.Normalize(basisPath)
                     : "none"
                 );
                 // The process's document accounting sits beside `source` and `basis` because it is a fact about the
                 // documents this process merged, not about the world one of them describes: `shared` counts the
                 // reaches answered from a document already composed here, which is what a shard's four neighbours
                 // and its own basis all naming one island turns into.
-                var documents = string.Create(
+                var documents = isOperator ? string.Create(
                     provider: CultureInfo.InvariantCulture,
                     handler: $"composed {WorldBootWork.Current.Read(kind: WorldBootWork.Compositions)} shared {WorldBootWork.Current.Read(kind: WorldBootWork.CompositionsShared)} held {WorldDefinitionFileSource.ComposedDocumentsHeld} ({WorldDefinitionFileSource.ComposedDocumentBytes} bytes)"
-                );
+                ) : string.Empty;
                 var journalDepth = definition.Host.JournalDepth;
                 var journalDepthText = ((journalDepth > 0)
                     ? journalDepth.ToString(provider: CultureInfo.InvariantCulture)
                     : "unbounded"
                 );
 
-                var machineFaults = string.Concat(server.Machines.InstanceNames.Select(name => server.Machines.InstanceState(name))
-                    .Where(state => state?.Fault is not null).Select(state => $" machine {state!.Value.Name} {state.Value.Status}: {state.Value.Fault}"));
+                var machineFaults = isOperator ? string.Concat(server.Machines.InstanceNames.Select(name => server.Machines.InstanceState(name))
+                    .Where(state => state?.Fault is not null).Select(state => $" machine {state!.Value.Name} {state.Value.Status}: {state.Value.Fault}")) : string.Empty;
+                var provenance = isOperator ? $" source {source} basis {basis} documents {documents}" : string.Empty;
+                var sleeping = isOperator ? $" sleeping {server.Population.SleepingCount}" : string.Empty;
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"[world.status: source {source} basis {basis} documents {documents} schema {definition.Schema} rate {definition.SimulationRateHz}Hz kits {definition.Kits.Count} body-programs {definition.BodyMotionPrograms.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} maxSmoothError {definition.Motion.MaxSmoothError:0.###} medium {medium} audio-curve {definition.Audio.DefaultCurve} half-radius-gain {halfRadiusGain:0.#####} sleeping {server.Population.SleepingCount}{journal} journal-depth {journalDepthText}{machineFaults}]"
+                    handler: $"[world.status:{provenance} schema {definition.Schema} rate {definition.SimulationRateHz}Hz kits {definition.Kits.Count} body-programs {definition.BodyMotionPrograms.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} maxSmoothError {definition.Motion.MaxSmoothError:0.###} medium {medium} audio-curve {definition.Audio.DefaultCurve} half-radius-gain {halfRadiusGain:0.#####}{sleeping}{journal} journal-depth {journalDepthText}{machineFaults}]"
                 ));
             }
         );

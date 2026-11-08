@@ -891,6 +891,13 @@ public static class WorldProjection {
             return false;
         }
 
+        if (observed.Domain is not (StateDomain.Slot or StateDomain.Keys) ||
+            (observed.Domain is StateDomain.Slot && observed.Capacity is not null) ||
+            observed.Capacity is < 1 or > StateCapacity.MaxCellsPerRow) {
+            reason = $"projection observation row '{observed.Name}' carries no valid slot/keyed storage shape and capacity";
+            return false;
+        }
+
         if ((observed.Min is { } min) && (observed.Max is { } max) && (min > max)) {
             reason = $"projection observation row '{observed.Name}' carries an envelope whose min {min} exceeds its max {max}";
 
@@ -985,8 +992,10 @@ public static class WorldProjection {
 
         row = new WorldStateRow(
             Advance: slotTrait?.Advance,
+            Capacity: observed.Capacity,
             Cells: cells,
             Cycle: slotTrait?.Cycle,
+            Domain: observed.Domain,
             Dynamics: slotTrait?.Dynamics,
             Kind: observed.Kind,
             Max: observed.Max,

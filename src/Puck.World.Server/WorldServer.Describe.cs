@@ -8,10 +8,11 @@ namespace Puck.World.Server;
 public sealed partial class WorldServer {
     // The `world.properties` read-back: with no body index, the declared vocabulary; with one, which registered
     // properties are currently ON for that carrier (a nonzero cell at key=<bodyIndex>) — resolved through
-    // WorldStateReader.TryRead, the SAME (row, key) read a rule's gate and world.state itself run, so this cannot
-    // report a tag the engine would not have read.
-    public string DescribeProperties(int? bodyIndex) {
-        var names = (m_document.Definition.Properties?.Names ?? []);
+    // the caller's live view, including its observation ceiling and live policy, just like world.state.
+    public string DescribeProperties(int? bodyIndex, Principal principal) {
+        var view = WorldStateReadView.Of(this, principal);
+        var definition = view.Definition;
+        var names = (definition.Properties?.Names ?? []);
 
         if (bodyIndex is not { } index) {
             return ((names.Count == 0)
@@ -25,29 +26,24 @@ public sealed partial class WorldServer {
 
         if (
             (index < 0) ||
-            (index >= m_document.Definition.Population.Capacity)
+            (index >= definition.Population.Capacity)
         ) {
-            return $"[world.properties {index}: outside 0..{(m_document.Definition.Population.Capacity - 1)} for the authored population capacity]";
+            return $"[world.properties {index}: outside 0..{(definition.Population.Capacity - 1)} for the authored population capacity]";
         }
 
-        var tick = (NextInputTick - 1UL);
         var key = IndexKeyCache.Get(index: index);
         var tags = new List<string>();
 
         foreach (var name in names) {
             if (
-                WorldStateReader.TryRead(arena: m_arena,
-                definition: m_document.Definition,
+                view.TryReadValue(
                 key: key,
-                rawValue: out var raw,
+                value: out var value,
                 row: out _,
-                rowName: name,
-                text: out _,
-                tick: tick,
-                engineTick: CompletedEngineTicks
+                rowName: name
             ) &&
-                (raw is { } value) &&
-                (value != 0)
+                value.HasValue &&
+                (value.Raw != 0)
             ) {
                 tags.Add(item: name);
             }
