@@ -31,15 +31,18 @@ public sealed class FixedColliderField(IFieldEvaluator field, FixedQ4816 gradien
         : throw new ArgumentOutOfRangeException(paramName: nameof(gradientStep), message: "A field's gradient step must be positive."));
     /// <summary>Gets whether the collider's extent bounds the surface.</summary>
     public bool Bounded { get; } = bounded;
+
     /// <summary>Gets certified bounds on every answer <see cref="Field"/> gives over a box, read in the same frame, or
     /// <see langword="null"/>: the one proof of clearance. A box whose bounds stay above zero holds no point of the
     /// field's solid, so a body inside it is clear; without bounds no body is proved clear, only in contact or
     /// unproved.</summary>
     public IFieldBounds? Bounds { get; init; }
+
     /// <summary>Gets the analytic colliders whose surfaces the field relieves, in world space at the collider's pose
     /// when it was compiled, which a diagnostic samples witnesses from before projecting them onto the field; empty when
     /// none are known.</summary>
     public IReadOnlyList<FixedStaticCollider> Bases { get; init; } = [];
+
     /// <summary>Gets the field's hard-union pieces and carve boxes, which narrow a query confined to a box to one exact
     /// analytic collider, or to none of the solid (<see cref="FixedStaticCollider.TryGetPush"/>); <see langword="null"/>
     /// when the field has no such structure, and every query reads the field.</summary>
@@ -106,6 +109,7 @@ public static class FixedFieldColliderContact {
     // The rays one projection casts (the first and one re-aimed), and the core-to-surface alternations of one capsule.
     private const int AimRounds = 2;
     private const int PairRounds = 3;
+
     // The width, in metres, of the bracket a contact's surface point is accepted from: 32 raws, under a millimetre. A
     // measurement (a probe, a projection an attachment or a diagnostic reads) narrows its bracket to two raws.
     private static readonly FixedQ4816 Tolerance = FixedQ4816.FromRawBits(value: 32L);
@@ -124,6 +128,7 @@ public static class FixedFieldColliderContact {
     private ref struct Sampler(FixedColliderField field, FixedQ4816 width) {
         public readonly FixedColliderField Field = field;
         public readonly FixedQ4816 Width = width;
+
         public int Samples;
         public int Bounds;
 
@@ -190,6 +195,7 @@ public static class FixedFieldColliderContact {
             crossing = FixedQ4816.Zero;
 
             var outside = (value > FixedQ4816.Zero);
+
             var (low, lowReading) = (FixedQ4816.Zero, FixedQ4816.Abs(value: value));
             var high = FixedQ4816.Zero;
             var highReading = FixedQ4816.Zero;
@@ -350,7 +356,12 @@ public static class FixedFieldColliderContact {
     }
     private static FixedColliderField Field(in FixedStaticCollider collider) =>
         (collider.Field ?? throw new InvalidOperationException(message: "A field collider carries no field."));
-    private static FixedVector3 ToLocal(in FixedStaticCollider collider, FixedVector3 world) =>
+
+    /// <summary>Converts a world point to the exact fixed-point frame used by a field collider's reads and bounds.</summary>
+    /// <param name="collider">The field collider.</param>
+    /// <param name="world">The world point.</param>
+    /// <returns>The point in the field's frame.</returns>
+    public static FixedVector3 ToLocal(in FixedStaticCollider collider, FixedVector3 world) =>
         collider.Rotation.RotateInverse(vector: (world - collider.Center));
 
     // One core sample of a capsule's proof: its fraction along the core, the half-length of the piece it centres, as a
@@ -376,9 +387,9 @@ public static class FixedFieldColliderContact {
         var count = 1;
 
         if (length > FixedQ4816.Zero) {
-            count = (int)((radius > FixedQ4816.Zero)
+            count = ((int)((radius > FixedQ4816.Zero)
                 ? Math.Clamp(value: ((length.Value + (radius.Value - 1L)) / radius.Value), min: 1L, max: MaximumCorePieces)
-                : MaximumCorePieces);
+                : MaximumCorePieces));
         }
 
         Span<CoreSample> pieces = stackalloc CoreSample[MaximumCorePieces];
@@ -448,8 +459,8 @@ public static class FixedFieldColliderContact {
             if (
                 !proved[piece] &&
                 ((length * FixedQ4816.Abs(value: (candidate.T - seed.T))) > radius) &&
-                ((piece == 0) || (candidate.Value < pieces[piece - 1].Value)) &&
-                (((piece + 1) == count) || (candidate.Value < pieces[piece + 1].Value)) &&
+                ((piece == 0) || (candidate.Value < pieces[(piece - 1)].Value)) &&
+                (((piece + 1) == count) || (candidate.Value < pieces[(piece + 1)].Value)) &&
                 (!found || (candidate.Value < other.Value))
             ) {
                 (other, found) = (candidate, true);
@@ -708,17 +719,31 @@ public static class FixedFieldColliderContact {
         var local = ToLocal(collider: in collider, world: point);
 
         normal = FixedVector3.Zero;
-        if (!sampler.Field.Field.TryDistance(distance: out var value, material: out material, position: FixedPosition.FromLocal(local: local))) {
-            distance = FixedQ4816.Zero;
-            return false;
-        }
-
-        distance = (value * sampler.Field.BoundScale);
+        if (!TryReadValue(distance: out distance, field: sampler.Field, local: local, material: out material)) { return false; }
         if (sampler.TryDirection(direction: out var direction, length: out _, local: local)) {
             normal = collider.Rotation.Rotate(vector: direction);
         }
         return true;
     }
+    /// <summary>Reads a field collider's signed scalar without evaluating unused gradient taps.</summary>
+    /// <param name="collider">The field collider.</param>
+    /// <param name="point">The world point.</param>
+    /// <param name="distance">The scaled signed reading on success.</param>
+    /// <param name="material">The material on success.</param>
+    /// <returns>Whether the field answers the point.</returns>
+    public static bool TryReadValue(in FixedStaticCollider collider, FixedVector3 point, out FixedQ4816 distance, out int material) {
+        var field = Field(collider: in collider);
+
+        return TryReadValue(field, ToLocal(collider: in collider, world: point), out distance, out material);
+    }
+
+    private static bool TryReadValue(FixedColliderField field, FixedVector3 local, out FixedQ4816 distance, out int material) {
+        var answered = field.Field.TryDistance(FixedPosition.FromLocal(local: local), out var value, out material);
+
+        distance = (answered ? (value * field.BoundScale) : FixedQ4816.Zero);
+        return answered;
+    }
+
     /// <summary>Projects a world point onto a field collider's surface by the surface solve.</summary>
     /// <param name="collider">The field collider.</param>
     /// <param name="probe">The world-space point to project.</param>
@@ -737,6 +762,7 @@ public static class FixedFieldColliderContact {
         FixedStaticContactWork.Process.CountField(bounds: sampler.Bounds, samples: sampler.Samples, unproved: !measured);
         return measured;
     }
+
     // A point's signed measured distance, outward normal and surface point, in the collider's frame.
     private static bool Measure(ref Sampler sampler, FixedVector3 local, out FixedQ4816 distance, out FixedVector3 normal, out FixedVector3 surface) {
         distance = FixedQ4816.Zero;

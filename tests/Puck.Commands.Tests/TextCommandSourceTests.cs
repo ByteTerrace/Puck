@@ -494,7 +494,6 @@ public sealed class TextCommandSourceTests {
             ]
         );
     }
-
     // Law: a session that settles nothing (a piped script) still hears a refusing release report, which a held pick's
     // timeout relies on; a successful report and a hold with no report add no line.
     [Fact]
@@ -548,6 +547,22 @@ public sealed class TextCommandSourceTests {
             expected: [("hold plain", false), ("hold plain", true)]
         );
     }
+    [Fact]
+    public void APendingStdinAnswerCanPublishItsSuccessfulReleaseBeforeTheNextLine() {
+        var held = true;
+        var published = new List<(string Line, string Output)>();
+        var source = new TextCommandSource(new CommandRegistry([new HoldModule(held: () => held), new ProbeModule()]));
+        using var session = source.CreateSession(principal: Principal.Console,
+            onResult: (line, result) => published.Add(item: (line, result.Output)));
+
+        session.Enqueue(line: "hold publish");
+        session.Enqueue(line: "probe after");
+        source.Collect();
+        Assert.Equal(actual: published, expected: [("hold publish", "[hold: armed]")]);
+        held = false;
+        source.Collect();
+        Assert.Equal(actual: published, expected: [("hold publish", "[hold: armed]"), ("hold publish", "[hold: released]"), ("probe after", "")]);
+    }
 
     // hold report arms a hold that reports its release; hold plain arms one with no report.
     private sealed class HoldModule(Func<bool> held) : ICommandModule {
@@ -561,9 +576,10 @@ public sealed class TextCommandSourceTests {
                         hold: held,
                         released: args[0].ToString() switch {
                             "refuse" => static _ => CommandResult.Error(output: "[hold: refused]"),
-                            "report" => static deadlinePassed => (deadlinePassed ? CommandResult.Error(output: "[hold: answer due]") : new CommandResult(Output: "[hold: released]")),
+                            "report" or "publish" => static deadlinePassed => (deadlinePassed ? CommandResult.Error(output: "[hold: answer due]") : new CommandResult(Output: "[hold: released]")),
                             _ => null,
-                        }
+                        },
+                        publishResult: args.Is(index: 0, value: "publish")
                     );
 
                     return new CommandResult(Output: "[hold: armed]");
