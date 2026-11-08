@@ -18,19 +18,85 @@ public sealed class WorldStateDocumentValuesLawTests {
 
     private static DocumentIdentifier Bound(string reference = "state.label") =>
         JsonSerializer.Deserialize<DocumentIdentifier>(json: JsonSerializer.Serialize(value: reference))!;
-    private static WorldDefinition Source() => new(
+    private static WorldStateRow TextRow(string name, string text) => new(
+        Name: CellName.Parse(candidate: name),
+        Kind: CellKind.Text,
+        Cells: [new StateCell(
+                Key: WorldStateRow.SlotKey,
+                Value: CellValue.Text(value: text)
+            )]
+    );
+    private static WorldDefinition Source(string spot = "[1,2,3]") => new(
         Simulation: new WorldSimulationDefaults(RateHz: 240),
         StateRaw: new WorldStateSection(World: [
-            new WorldStateRow(
-                Name: CellName.Parse(candidate: "label"),
-                Kind: CellKind.Text,
-                Cells: [new StateCell(
-                        Key: WorldStateRow.SlotKey,
-                        Value: CellValue.Text(value: "resolved")
-                    )]
-            ),
+            TextRow(name: "label", text: "resolved"),
+            TextRow(name: "spot", text: spot),
         ])
     );
+    // A document with one placement whose position reads the spot cell and one whose position is a literal.
+    private static WorldDefinition Placed(string spot = "[1,2,3]") => Source(spot: spot) with {
+        PlacementsRaw = new WorldPlacementsSection(Rows: [
+            new WorldPlacement(Id: "bound", PrototypeId: "p", Position: JsonSerializer.Deserialize<DocumentVector3>(json: "\"state.spot\"", options: DocumentJsonOptions.Shared)!, YawDegrees: 0f, Scale: 1f),
+            new WorldPlacement(Id: "literal", PrototypeId: "p", Position: new DocumentVector3(x: 1f, y: 2f, z: 3f), YawDegrees: 0f, Scale: 1f),
+        ]),
+    };
+
+    [Fact]
+    public void BindingCopiesOnlyThePathToEachReferenceAndKeepsWhatItAlreadyBound() {
+        var definition = Placed();
+        var live = new WorldLiveValues(clock: static () => ArenaTime.Origin) { Arena = WorldStateReader.Seed(definition: definition) };
+        var bound = WorldStateDocumentValues.BindLive(definition: definition, live: live);
+
+        Assert.NotSame(expected: definition.Placements[0], actual: bound.Placements[0]);
+        Assert.Same(expected: definition.Placements[1], actual: bound.Placements[1]);
+        Assert.Same(expected: definition.StateRaw, actual: bound.StateRaw);
+        Assert.Same(expected: live, actual: bound.Placements[0].Position.Binder);
+        Assert.Null(@object: definition.Placements[0].Position.Binder);
+        Assert.Equal(expected: new System.Numerics.Vector3(x: 1f, y: 2f, z: 3f), actual: bound.Placements[0].Position.Value);
+
+        var again = WorldStateDocumentValues.BindLive(definition: bound, live: live);
+
+        Assert.NotSame(expected: bound, actual: again);
+        Assert.Same(expected: bound.PlacementsRaw, actual: again.PlacementsRaw);
+    }
+    [Fact]
+    public void ARewriteRebuildsEveryShapeOnThePathAndRefusesAClassItCannotCopy() {
+        var bound = Bound();
+        object[] graphs = [
+            new Pair<Boxed[], int>(Left: [new Boxed(Value: bound)], Right: 0),
+            new Pair<List<DocumentIdentifier>, int>(Left: [new DocumentIdentifier(value: "kept"), bound], Right: 0),
+            new Pair<Dictionary<string, DocumentIdentifier>, int>(Left: new(comparer: StringComparer.Ordinal) { ["key"] = bound }, Right: 0),
+            new Pair<object, int>(Left: new Boxed(Value: bound), Right: 0),
+        ];
+
+        foreach (var graph in graphs) {
+            Assert.True(
+                condition: WorldStateDocumentValues.TryFlatten(flattened: out var flattened, graph: graph, reason: out var reason, source: Source()),
+                userMessage: reason
+            );
+            Assert.False(condition: WorldStateDocumentValues.HasReference(graph: flattened));
+            Assert.True(condition: WorldStateDocumentValues.HasReference(graph: graph));
+        }
+
+        var refused = Assert.Throws<NotSupportedException>(testCode: () => WorldStateDocumentValues.TryFlatten<Pair<Base, int>>(
+            flattened: out _,
+            graph: new Pair<Base, int>(Left: new Derived(value: bound), Right: 0),
+            reason: out _,
+            source: Source()
+        ));
+
+        Assert.Contains(expectedSubstring: "left", actualString: refused.Message);
+    }
+    [Fact]
+    public void ABoundValueReadsTheArenaItsServerHoldsWhenItIsRead() {
+        var first = Placed(spot: "[1,2,3]");
+        var live = new WorldLiveValues(clock: static () => ArenaTime.Origin) { Arena = WorldStateReader.Seed(definition: first) };
+        var position = WorldStateDocumentValues.BindLive(definition: first, live: live).Placements[0].Position;
+
+        Assert.Equal(expected: new System.Numerics.Vector3(x: 1f, y: 2f, z: 3f), actual: position.Value);
+        live.Arena = WorldStateReader.Seed(definition: Placed(spot: "[4,5,6]"));
+        Assert.Equal(expected: new System.Numerics.Vector3(x: 4f, y: 5f, z: 6f), actual: position.Value);
+    }
 
     [Fact]
     public void CachedShapesDoNotCacheMutableContentsAndCyclesTerminate() {
@@ -64,20 +130,24 @@ public sealed class WorldStateDocumentValuesLawTests {
 
         Assert.True(
             condition: WorldStateDocumentValues.TryFlatten(
+                flattened: out var flattened,
                 source: Source(),
                 graph: graph,
                 reason: out var reason
             ),
             userMessage: reason
         );
+        var resolved = ((Boxed)flattened.Left).Value;
+
         Assert.Equal(
             expected: "resolved",
-            actual: bound.Value
+            actual: resolved.Value
         );
-        Assert.Null(@object: bound.Reference);
+        Assert.Null(@object: resolved.Reference);
+        Assert.Same(expected: literal, actual: flattened.Right);
         Assert.Equal(
-            expected: "untouched",
-            actual: literal.Value
+            expected: "state.label",
+            actual: bound.Reference
         );
 
         var missing = new Pair<int, DocumentIdentifier>(
@@ -86,6 +156,7 @@ public sealed class WorldStateDocumentValuesLawTests {
         );
 
         Assert.False(condition: WorldStateDocumentValues.TryFlatten(
+            flattened: out var unflattened,
             source: Source(),
             graph: missing,
             reason: out reason
@@ -127,6 +198,7 @@ public sealed class WorldStateDocumentValuesLawTests {
         Assert.False(condition: WorldStateDocumentValues.TryResolveGraph(
             graph: graph,
             reason: out var reason,
+            resolved: out var unresolved,
             source: Source()
         ));
         Assert.Contains(
@@ -187,21 +259,25 @@ public sealed class WorldStateDocumentValuesLawTests {
 
         Assert.True(
             condition: WorldStateDocumentValues.TryResolveGraph(
+                resolved: out var resolvedGraph,
                 source: Source(),
                 graph: graph,
                 reason: out var reason
             ),
             userMessage: reason
         );
+        var resolved = ((Boxed)resolvedGraph.Left).Value;
+
         Assert.Equal(
             expected: "resolved",
-            actual: bound.Value
+            actual: resolved.Value
         );
         Assert.Equal(
             expected: "state.label",
-            actual: bound.Reference
+            actual: resolved.Reference
         );
-        Assert.True(condition: WorldStateDocumentValues.HasReference(graph: graph));
+        Assert.True(condition: WorldStateDocumentValues.HasReference(graph: resolvedGraph));
+        Assert.Throws<InvalidOperationException>(testCode: () => bound.Value);
 
         var missing = new Pair<int, DocumentIdentifier>(
             Left: 0,
@@ -209,6 +285,7 @@ public sealed class WorldStateDocumentValuesLawTests {
         );
 
         Assert.False(condition: WorldStateDocumentValues.TryResolveGraph(
+            resolved: out var unresolvedMissing,
             source: Source(),
             graph: missing,
             reason: out reason
@@ -223,10 +300,11 @@ public sealed class WorldStateDocumentValuesLawTests {
         var graph = new IgnoredValues();
 
         Assert.False(condition: WorldStateDocumentValues.HasReference(graph: graph));
-        graph.Optional = Bound();
+        graph = (graph with { Optional = Bound() });
         Assert.True(condition: WorldStateDocumentValues.HasReference(graph: graph));
         Assert.True(
             condition: WorldStateDocumentValues.TryFlatten(
+                flattened: out var flattened,
                 source: Source(),
                 graph: graph,
                 reason: out var reason
@@ -235,9 +313,10 @@ public sealed class WorldStateDocumentValuesLawTests {
         );
         Assert.Equal(
             expected: "resolved",
-            actual: graph.Optional.Value
+            actual: flattened.Optional!.Value
         );
-        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: graph));
+        Assert.False(condition: WorldStateDocumentValues.HasReference(graph: flattened));
+        Assert.True(condition: WorldStateDocumentValues.HasReference(graph: graph));
     }
 
     private sealed record Pair<TLeft, TRight>(TLeft Left, TRight Right);
@@ -259,11 +338,11 @@ public sealed class WorldStateDocumentValuesLawTests {
         public Node? Next { get; set; }
         public object? Value { get; set; }
     }
-    private sealed class IgnoredValues {
+    private sealed record IgnoredValues {
         [JsonIgnore]
         public DocumentIdentifier Derived => throw new InvalidOperationException(message: "Derived data must not be visited.");
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public DocumentIdentifier? Optional { get; set; }
+        public DocumentIdentifier? Optional { get; init; }
     }
     private sealed class DifferentEnumerations(DocumentIdentifier value) : IEnumerable<int> {
         IEnumerator IEnumerable.GetEnumerator() => new[] { value }.GetEnumerator();

@@ -47,8 +47,7 @@ public sealed class WorldPlacementSpatialLawTests {
             options: DocumentJsonOptions.Shared
         )!;
 
-        value.Bind(read: read);
-        return value;
+        return (DocumentVector3)value.Bound(binder: read, read: read);
     }
     private static WorldPlacement[] ReachDocument(Func<string?> reach) {
         var provider = Placement(

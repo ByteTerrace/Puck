@@ -242,12 +242,13 @@ public sealed class SpatialGuardLawTests {
 
             Assert.True(
                 condition: WorldStateDocumentValues.TryResolve(
-                    definition,
-                    out var reason
+                    definition: definition,
+                    reason: out var reason,
+                    resolved: out var resolved
                 ),
                 userMessage: reason
             );
-            return definition;
+            return resolved;
         }
         var before = BoundBox(extent: "[0.5, 0.5, 0.5]");
         var after = BoundBox(extent: "[0.75, 0.5, 0.5]");

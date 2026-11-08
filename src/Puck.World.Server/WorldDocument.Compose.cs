@@ -1,6 +1,4 @@
 using Puck.Commands;
-using System.Text.Json;
-using System.Text.Json.Serialization.Metadata;
 using System.Collections.Immutable;
 
 using Puck.World.Protocol;
@@ -343,49 +341,22 @@ public sealed partial class WorldDocument {
     };
 
     // A submitted row whose document carries `state.` references, resolved against the current definition's state
-    // before anything in its compose arm reads a bound value. The copy is private (the row's own JSON round trip
-    // through the same JsonTypeInfo the console and the wire parse it with): a submitter's row can share value
-    // holders with the installed document — a sculpt carries unchanged shapes forward by reference — and resolving
-    // those in place against a candidate that is then rejected would leak the rejected state into the live world,
-    // the same reason WorldStateDocumentValues.TryRehydrate copies a whole definition. A row carrying no reference
-    // is handed back untouched.
-    private static bool TryResolveSubmittedRow<TRow>(WorldDefinition current, TRow row, JsonTypeInfo<TRow> typeInfo, string kind, string id, out TRow resolved, out string reason) where TRow : class {
-        if (!WorldStateDocumentValues.HasReference(graph: row)) {
-            resolved = row;
-            reason = string.Empty;
-
-            return true;
-        }
-
-        TRow copy;
-
-        try {
-            copy = (JsonSerializer.Deserialize(
-                jsonTypeInfo: typeInfo,
-                utf8Json: JsonSerializer.SerializeToUtf8Bytes(
-                    jsonTypeInfo: typeInfo,
-                    value: row
-                )
-            ) ?? throw new InvalidOperationException(message: $"{kind} '{id}' deserialized to null."));
-        } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
-            resolved = row;
-            reason = $"{kind} '{id}': {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
-            return false;
-        }
-
+    // before anything in its compose arm reads a bound value. A submitter's row can share value holders with the
+    // installed document (a sculpt carries unchanged shapes forward by reference); the resolution puts resolved copies
+    // on copied paths and leaves those holders as they are, so a candidate that is then rejected leaks nothing into
+    // the live world. A row carrying no reference is handed back as it is.
+    private static bool TryResolveSubmittedRow<TRow>(WorldDefinition current, TRow row, string kind, string id, out TRow resolved, out string reason) where TRow : class {
         if (!WorldStateDocumentValues.TryResolveGraph(
-            graph: copy,
+            graph: row,
             reason: out var resolveReason,
+            resolved: out resolved,
             source: current
         )) {
-            resolved = row;
             reason = $"{kind} '{id}': {resolveReason}";
 
             return false;
         }
 
-        resolved = copy;
         reason = string.Empty;
 
         return true;
@@ -487,12 +458,11 @@ public sealed partial class WorldDocument {
             }
         } else if (
             // The mirror of the state-write refresh above: a row write that introduces a bound value (a creation
-            // whose shapes read `state.` cells, a placement whose position names one) resolves it against the
-            // candidate's own state through the same whole-candidate rehydration, so validation and every derived
-            // rebuild read a resolved holder. A mutation carrying no reference pays one cached-shape walk over its
-            // own payload and nothing more.
+            // whose shapes read `state.` cells, a placement whose position names one) resolves the candidate's values
+            // against its own state, so validation and every derived rebuild read a resolved holder. A mutation
+            // carrying no reference pays one cached-shape walk over its own payload and nothing more.
             WorldStateDocumentValues.HasReference(graph: mutation) &&
-            !WorldStateDocumentValues.TryRehydrate(
+            !WorldStateDocumentValues.TryRefresh(
             definition: candidate,
             reason: out reason,
             refreshed: out candidate
@@ -745,16 +715,15 @@ public sealed partial class WorldDocument {
                 return true;
             case WorldMutation.UpsertCreation m: {
                     // The canonicalizer reads bound values (a shape's pose, a driver's cadence) ahead of the
-                    // whole-candidate rehydration TryCompose runs after this arm, so a submitted document carrying
-                    // `state.` references resolves against the current definition's state here, on a private copy.
+                    // whole-candidate resolution TryCompose runs after this arm, so a submitted document carrying
+                    // `state.` references resolves against the current definition's state here.
                     if (!TryResolveSubmittedRow(
                         current: current,
                         id: m.Creation.Id,
                         kind: "creation",
                         reason: out reason,
                         resolved: out var creation,
-                        row: m.Creation,
-                        typeInfo: WorldJsonContext.Default.WorldPrototype
+                        row: m.Creation
                     )) {
                         candidate = current;
 

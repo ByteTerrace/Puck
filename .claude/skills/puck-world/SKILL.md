@@ -437,7 +437,13 @@ toast. `world.hud toast` reads the toast store in any shape
 
 **One pipeline for change.** A `WorldMutation` buffers through the ordered
 domain, drains FIFO at the tick boundary, composes a candidate, revalidates the
-whole document, capacity-checks, swaps atomically, journals and delivers. Rule
+whole document, capacity-checks, swaps atomically, journals and delivers. The
+install rebuilds only what the candidate changed: `WorldDocument.InstallKindOf`
+answers value, presentation (a creation edit that changes shading alone keeps the
+arena, the rules and the population) or full, once per prepared mutation
+([what an install rebuilds](../../../src/Puck.World.Server/README.md#what-an-install-rebuilds)).
+Document values never change once built; binding, resolving and flattening copy
+only the paths to the references they replace (`WorldStateDocumentValues`). Rule
 effects write the tick's `StateArena` and publish once at the end of the tick.
 Rendering derives from the delivered definition. The step order and the
 add-a-kind procedure: [references/mutations.md](references/mutations.md).

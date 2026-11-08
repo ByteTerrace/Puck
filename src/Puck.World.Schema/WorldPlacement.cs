@@ -74,6 +74,55 @@ public sealed record WorldPrototype(
     /// <see cref="Document"/> fails the canonicalizer's validation.</exception>
     [JsonIgnore]
     public string Hash => (HashRaw ?? CanonicalHash);
+
+    /// <summary>Returns whether <paramref name="other"/> differs from this row only in what shading reads: its
+    /// palette's colours and materials, with the palette keeping its length and every slot its glass, so nothing a
+    /// simulation, a collider, a contact field or a bake's geometry reads differs.</summary>
+    /// <remarks>Every member but the palette is compared by the bytes of its normalized engine-frame form
+    /// (<see cref="EngineDocument"/>), with the mesh and identifier, so a row a field edit rebuilt from JSON compares
+    /// equal to the one it replaced. A document the normalizer refuses differs.</remarks>
+    /// <param name="other">The replacement row.</param>
+    /// <returns><see langword="true"/> when only shading differs.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
+    public bool DiffersInShadingAlone(WorldPrototype other) {
+        ArgumentNullException.ThrowIfNull(argument: other);
+
+        if (
+            (UnshadedDigest(row: this) is not { } before) ||
+            (UnshadedDigest(row: other) is not { } after) ||
+            !before.AsSpan().SequenceEqual(other: after)
+        ) {
+            return false;
+        }
+
+        var left = (EngineDocument.Palette ?? []);
+        var right = (other.EngineDocument.Palette ?? []);
+
+        if (left.Count != right.Count) {
+            return false;
+        }
+
+        for (var index = 0; (index < left.Count); index++) {
+            if (left[index].IsGlass != right[index].IsGlass) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // The digest of a row with its palette removed, once per row; null for a row the normalizer refuses.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldPrototype, byte[]?[]> UnshadedDigests = new();
+    private static byte[]? UnshadedDigest(WorldPrototype row) => UnshadedDigests.GetValue(key: row, createValueCallback: static row => {
+        try {
+            return [System.Security.Cryptography.SHA256.HashData(source: JsonSerializer.SerializeToUtf8Bytes(
+                jsonTypeInfo: WorldJsonContext.Default.WorldPrototype,
+                value: (row with { Document = (row.EngineDocument with { Palette = null }), HashRaw = null })
+            ))];
+        } catch (Exception exception) when (exception is DocumentValidationException or InvalidOperationException) {
+            return [null];
+        }
+    })[0];
 }
 /// <summary>A prototype's mesh: an indexed triangle list in its creation's author frame, the frame
 /// <see cref="WorldPrototype.Document"/>'s shapes are authored in. Each triangle is three entries of

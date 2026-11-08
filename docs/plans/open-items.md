@@ -138,8 +138,8 @@ milestone. The owner requested its baseline and implementation plan, which
     the meadow (lane 9) now; then the second seat, the authored passes and the
     quilt, each ahead of the job-system step it proves.
 18. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
-    the boot's JSON round trip in `BindLive`, then a reboot for an edit outside
-    `PuckHotReload`; measure the cold and warm builds.
+    what a shading edit still allocates (its whole-document validation), then a
+    reboot for an edit outside `PuckHotReload`; measure the cold and warm builds.
 19. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
     meter), with steps 2, 3, 6 and step 4's bound fix in parallel.
 20. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
@@ -1599,10 +1599,36 @@ before the layers migrate. Three product calls wait on the owner under
 
 ### Edit to running, hot reload and boot
 
-Owner: hot-reload follow-up (boot and build) · ordinary · Next: the boot's
-JSON round trip in `BindLive`, then a reboot for an edit outside
-`PuckHotReload`, then the windowed C# loop timed on a quiet machine and the cold
-and warm builds measured.
+Owner: hot-reload follow-up (boot and build) · ordinary · Next: what a shading
+edit still allocates, then a reboot for an edit outside `PuckHotReload`, then
+the windowed C# loop timed on a quiet machine and the cold and warm builds
+measured.
+
+A live edit installs what it changed (`WorldDocument.InstallKindOf`, the server
+README's [What an install rebuilds](../../src/Puck.World.Server/README.md#what-an-install-rebuilds)):
+a shading-only creation edit keeps the arena, the rules and the population, and
+document values bind by copying only the paths to their references
+(`WorldStateDocumentValues.BindLive`). What is left:
+
+- A shading edit still runs the whole validator over its candidate (rule
+  compilation for validation, the work-budget analysis, every section), and
+  canonicalizes and digests the edited creation twice. A `dotnet-trace`
+  allocation capture of the edit iteration names what it still allocates beyond
+  a quiet tick's; then narrow the validation as `TryValidateTouchedStateRows`
+  narrows a state write, to the edited row and the checks that read a palette.
+- Every other mutation composes over `MaterializeArena`, which exports every
+  document row anew, so its candidate carries a new state section: the client
+  mirror (`WorldDocumentStateView.Shape`) builds a fresh arena, the validator's
+  seed view (`WorldStateReader.Seed`, built once per state section) builds one,
+  and a full install prepares a replacement arena even when the catalog is the
+  one the live arena holds (`StateCatalog.HasSameShape` is still unused).
+  Compose a non-state edit over the installed seeds, export only the rows whose
+  arena version moved since the document last agreed with the arena (a version
+  table that publication does not overwrite), and reload a same-catalog arena in
+  place rather than replacing it.
+- A bound document value read by the in-process client reads the server's arena
+  from the presentation thread (`WorldLiveValues`); its memo is swapped whole,
+  but the arena read itself is not synchronized with the tick.
 
 - [high] `world.reload` cannot reload the debug world: it is refused with
   `PayloadTooLarge: Rebuild payload is 21701488 bytes; cap is 16777216`
@@ -1610,10 +1636,6 @@ and warm builds measured.
   ships the whole composed definition. Decide: a reload that sends what changed
   (the edit-to-running bar wants that anyway) or a chunked rebuild; never a
   larger cap alone. Found in the lead's verification window.
-- `WorldStateDocumentValues.BindLive` (and `TryRehydrate`) copy the whole
-  definition by serializing and parsing it, the boot's only full serialize, so
-  a warm boot's main thread pays every write path's JIT too. Copy only the
-  mutable value holders the document walker reaches.
 - The boot's `System.Text.Json` JIT is the source-generated context's own
   generic instantiations (`WorldJsonSourceContext` behind `WorldJsonContext`),
   not reflection: its metadata instantiates the serializer's generics once per

@@ -1146,7 +1146,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.state.hash",
-            description: $"Reads an operator-only live deterministic state hash (Immediate): {WorldStateHashForms.Spelling}. The default capture scope matches capture manifests; authoritative includes rule latches, body and identity action state, and field-lattice cells.",
+            description: $"Reads an operator-only live deterministic state hash (Immediate): {WorldStateHashForms.Spelling}. The default capture scope matches capture manifests; authoritative includes rule latches, body and identity action state, and field-lattice cells; components reads each authoritative component's own digest, which names the component two runs disagree in.",
             forms: WorldStateHashForms,
             handler: (context, args) => authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.state.hash")
                 ? DescribeHash(server: server, args: args) : error,

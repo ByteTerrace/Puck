@@ -118,6 +118,7 @@ internal static class WorldBenchmarks {
             stepTicks: stepTicks
         );
         MeasureCellBurst(rows: rows, server: server, stepTicks: stepTicks);
+        MeasureShadingEdit(rows: rows, server: server, stepTicks: stepTicks);
         MeasureResponseChange(rows: rows, server: server, stepTicks: stepTicks);
         MeasureSceneEmission(path: path, rows: rows, server: server, stepTicks: stepTicks);
         MeasureMachines(
@@ -366,6 +367,55 @@ internal static class WorldBenchmarks {
         rows.Add(item: ("world: scene emission after a hall light change (median)", $"{MedianMilliseconds(samples: changed):F3} ms, {changedBytes[(Samples / 2)]:N0} bytes"));
         rows.Metric(name: "scene-emission-steady", unit: "ms", value: MedianMilliseconds(samples: steady));
         rows.Metric(name: "scene-emission-changed", unit: "ms", value: MedianMilliseconds(samples: changed));
+    }
+    // A live creation edit that changes shading alone, as world.row.set of a palette slot's roughness submits it: the
+    // tick that drains it, timed and metered. The creation is the one with the most shapes, so the edit carries the
+    // cost a large body's edit does.
+    private const int ShadingEditSamples = 8;
+
+    private static void MeasureShadingEdit(Puck.World.Server.WorldServer server, ulong stepTicks, BenchRows rows) {
+        var creation = server.Definition.Creations
+            .Where(predicate: static candidate => (candidate.Document.Palette is { Count: > 0 }))
+            .OrderByDescending(keySelector: static candidate => (candidate.Document.Shapes?.Count ?? 0))
+            .FirstOrDefault();
+
+        if (creation is null) {
+            rows.Add(item: ("world: shading edit", "no creation with a palette"));
+
+            return;
+        }
+
+        var allocationSamples = new long[ShadingEditSamples];
+        var elapsedTicksSamples = new long[ShadingEditSamples];
+
+        for (var sample = 0; (sample < (ShadingEditSamples + 1)); sample++) {
+            var installed = server.Definition.Creations.First(predicate: candidate => (candidate.Id.Value == creation.Id.Value));
+            var palette = installed.Document.Palette!.ToArray();
+
+            palette[0] = (palette[0] with { Roughness = (((sample % 2) == 0) ? 0.4f : 0.6f) });
+            server.EnqueueMutation(mutation: new Puck.World.Protocol.WorldMutation.UpsertCreation(
+                Creation: (installed with { Document = (installed.Document with { Palette = palette }), HashRaw = null }),
+                Principal: Puck.Commands.Principal.World
+            ));
+
+            var timestampBefore = Stopwatch.GetTimestamp();
+            var allocated = AllocationWindow.Total(window: () => server.Advance(stepTicks: stepTicks));
+            var elapsed = (Stopwatch.GetTimestamp() - timestampBefore);
+
+            // The first edit warms the compile and canonicalization paths the later ones share.
+            if (sample == 0) {
+                continue;
+            }
+
+            allocationSamples[(sample - 1)] = allocated;
+            elapsedTicksSamples[(sample - 1)] = elapsed;
+        }
+
+        Array.Sort(array: allocationSamples);
+        rows.Add(item: ($"world: shading edit tick (median, creation '{creation.Id.Value}')", $"{MedianMilliseconds(samples: elapsedTicksSamples):F3} ms"));
+        rows.Metric(name: "shading-edit-tick", unit: "ms", value: MedianMilliseconds(samples: elapsedTicksSamples));
+        rows.Add(item: ("world: shading edit tick allocation (median)", $"{allocationSamples[(allocationSamples.Length / 2)]:N0} bytes"));
+        rows.Metric(name: "shading-edit-allocation", unit: "bytes", value: allocationSamples[(allocationSamples.Length / 2)]);
     }
     // An authored whole-row edit that moves one cell's value: the tick that drains it, timed and metered beside
     // the arena versions and installed rows it replaces. Bound addon writes use the separate typed burst above.

@@ -21,11 +21,15 @@ public sealed partial class WorldDocument {
             return TryApplyStateCommand(connectionId: connectionId, correlationId: correlationId, derived: derived,
             engineTick: engineTick, mutation: mutation, preMetered: preMetered, tick: tick);
         }
-        var current = Host.MaterializeArena();
+        // An edit of a creation's shading neither reads nor writes state and its install keeps the arena, so it
+        // composes over the installed document and exports nothing; every other mutation composes over the arena's
+        // values, since its install may seed a replacement arena from what it composed.
+        var shading = EditsShadingAlone(mutation: mutation, previous: m_definition);
+        var current = (shading ? m_definition : Host.MaterializeArena());
 
         m_lastMutationFailureDetail = null;
 
-        if (!TryPrepareMutation(
+        var admitted = TryPrepareMutation(
             current: current,
             denied: out var denied,
             engineTick: engineTick,
@@ -34,7 +38,24 @@ public sealed partial class WorldDocument {
             prepared: out var prepared,
             reason: out var reason,
             tick: tick
-        )) {
+        );
+
+        // The composed candidate decides the install: one composed over the installed seeds that installs otherwise
+        // is composed again over the arena's values, its dispatch already charged.
+        if (admitted && shading && (prepared.Kind != WorldInstallKind.Presentation)) {
+            prepared.Dispose();
+            admitted = TryPrepareMutation(
+                current: Host.MaterializeArena(),
+                denied: out denied,
+                engineTick: engineTick,
+                mutation: mutation,
+                preMetered: true,
+                prepared: out prepared,
+                reason: out reason,
+                tick: tick
+            );
+        }
+        if (!admitted) {
             if (denied) {
                 m_lastMutationFailureDetail = reason;
 
@@ -115,17 +136,20 @@ public sealed partial class WorldDocument {
         }
 
         candidate = WorldContributionState.Declare(definition: candidate);
-        var installsArena = (RequiresFullInstall(
+        var kind = InstallKindOf(
             candidate: candidate,
             mutation: mutation,
             previous: current
-        ));
+        );
+        var installsArena = (kind == WorldInstallKind.Full);
         // Pool snapshots include generated storage rows that cannot be admitted through the ordinary row-import
         // door. Prepare their replacement arena before commit even when the mutation keeps every compiled product.
+        // A presentation install writes no state at all, so it loads nothing.
         var replacesArena = (
             installsArena ||
+            ((kind == WorldInstallKind.Value) && (
             (candidate.StateRaw?.Pools is { Count: > 0 }) ||
-            (candidate.StateRaw?.PairPools is { Count: > 0 })
+            (candidate.StateRaw?.PairPools is { Count: > 0 })))
         );
         StateArena? arena = null;
 
@@ -187,9 +211,11 @@ public sealed partial class WorldDocument {
 
         WorldRuleCompilation? compilation;
 
+        // Only a full install installs compiled rules, so only its validation keeps what it compiled.
         if (ReferenceEquals(objA: candidate, objB: validated)) {
             compilation = validatedCompilation;
-        } else if (!TryValidateMutationCandidate(candidate: candidate, current: current, mutation: mutation, reason: out reason, compilation: out compilation)) {
+        } else if (!TryValidateMutationCandidate(candidate: candidate, current: current, mutation: mutation, reason: out reason, compilation: out compilation,
+            retainCompilation: installsArena)) {
             return false;
         }
         if (!Host.Input.TryValidateDefinition(candidate, arena, out reason)) { return false; }
@@ -244,7 +270,8 @@ public sealed partial class WorldDocument {
         // a refusal rather than a constructor throw at install. Only a solid-affecting mutation rebuilds it;
         // otherwise the live field carries forward untouched.
         var solids = m_solids;
-        var solidAffecting = AffectsSolidField(mutation: mutation);
+        // Shading never reaches the contact field.
+        var solidAffecting = ((kind != WorldInstallKind.Presentation) && AffectsSolidField(mutation: mutation));
 
         if (solidAffecting) {
             // A SetCollision edit touches only the collision tuning row, so the compiled SDF program is
@@ -327,6 +354,7 @@ public sealed partial class WorldDocument {
                 compilation: compilation,
                 engineTick: engineTick,
                 evictedKey: evictedKey,
+                kind: kind,
                 machinePlan: machinePlan,
                 mutation: mutation,
                 solidAffecting: solidAffecting,
@@ -378,24 +406,26 @@ public sealed partial class WorldDocument {
                 m_solidRevision++;
             }
 
-            // A scalar state write keeps the compiled rules, catalog, groups and machines only while the candidate
-            // still carries the state catalog identity the rules were compiled against. A document-value refresh or
-            // a slot-to-keyed reshape mints a new one, and a look-assignment rebind needs the population rebuild,
-            // so those take the full install like every other mutation.
-            if (prepared.Arena is null) {
-                InstallRuntimeStateValue(definition: candidate, mutation: mutation);
-            } else if (!RequiresFullInstall(candidate: candidate, mutation: mutation, previous: previous)) {
-                InstallRuntimeStateValue(definition: candidate, mutation: mutation, arena: prepared.Arena);
-            } else {
-                Install(
-                    arena: prepared.Arena,
-                    definition: candidate,
-                    compilation: prepared.Compilation,
-                    rebuildPopulation: RecompilesPopulation(
-                    candidate: candidate,
-                    mutation: mutation
-                )
-                );
+            // The kind the prepare step decided against the document the candidate was composed over
+            // (InstallKindOf); a value install carries a prepared arena only for pool storage.
+            switch (prepared.Kind) {
+                case WorldInstallKind.Value:
+                    InstallRuntimeStateValue(definition: candidate, mutation: mutation, arena: prepared.Arena);
+                    break;
+                case WorldInstallKind.Presentation:
+                    InstallPresentation(definition: candidate);
+                    break;
+                default:
+                    Install(
+                        arena: prepared.Arena,
+                        definition: candidate,
+                        compilation: prepared.Compilation,
+                        rebuildPopulation: RecompilesPopulation(
+                        candidate: candidate,
+                        mutation: mutation
+                    )
+                    );
+                    break;
             }
 
             // Whatever moved a lattice row's draw pass — a Generate, or a whole-row upsert that re-authored its
@@ -515,11 +545,11 @@ public sealed partial class WorldDocument {
     /// <param name="previous">The document it composes over.</param>
     /// <returns><see langword="true"/> when the install rebuilds the population.</returns>
     internal bool RebuildsPopulation(WorldMutation mutation, WorldDefinition candidate, WorldDefinition previous) => (
-        RequiresFullInstall(
+        (InstallKindOf(
             candidate: candidate,
             mutation: mutation,
             previous: previous
-        ) &&
+        ) == WorldInstallKind.Full) &&
         RecompilesPopulation(
             candidate: candidate,
             mutation: mutation
@@ -534,9 +564,69 @@ public sealed partial class WorldDocument {
         ) ||
         (AffectsSolidField(mutation: mutation) && WorldContactSelection.RequiresField(collision: candidate.Collision))
     );
-    private bool RequiresFullInstall(WorldDefinition candidate, WorldMutation mutation, WorldDefinition previous) => !(
-        IsValueMutation(candidate: candidate, mutation: mutation, previous: previous) &&
-        ReferenceEquals(objA: candidate.StateCatalog, objB: previous.StateCatalog) &&
-        !RefreshesLookAssignment(candidate: candidate, mutation: mutation)
-    );
+    /// <summary>Returns what installing <paramref name="mutation"/>, composed into <paramref name="candidate"/> over
+    /// <paramref name="previous"/>, rebuilds: the one classification the prepare step, the install and the population
+    /// forecast read.</summary>
+    /// <remarks>A state-value mutation keeps every compiled product only while the candidate carries the state catalog
+    /// identity the rules were compiled against and rebinds no population look. A creation edit that changes shading
+    /// alone keeps the arena, the rules and the population. Every other mutation takes the full install.</remarks>
+    /// <param name="mutation">The mutation.</param>
+    /// <param name="candidate">The document the mutation composes.</param>
+    /// <param name="previous">The document it composes over.</param>
+    /// <returns>The install kind.</returns>
+    internal WorldInstallKind InstallKindOf(WorldMutation mutation, WorldDefinition candidate, WorldDefinition previous) {
+        if (
+            IsValueMutation(candidate: candidate, mutation: mutation, previous: previous) &&
+            ReferenceEquals(objA: candidate.StateCatalog, objB: previous.StateCatalog) &&
+            !RefreshesLookAssignment(candidate: candidate, mutation: mutation)
+        ) {
+            return WorldInstallKind.Value;
+        }
+
+        return ((
+            ReferenceEquals(objA: candidate.StateCatalog, objB: previous.StateCatalog) &&
+            (mutation is WorldMutation.UpsertCreation upsert) &&
+            (WorldDefinitionRows.FindCreation(creations: candidate.Creations, id: upsert.Creation.Id.Value) is { } after) &&
+            EditsShadingAlone(mutation: mutation, previous: previous, replacement: after)
+        )
+            ? WorldInstallKind.Presentation
+            : WorldInstallKind.Full);
+    }
+    // Whether a creation upsert replaces an installed row with one that differs from it only in what shading reads
+    // (WorldPrototype.DiffersInShadingAlone): the submitted row itself before composition, or the composed one after.
+    // A row whose values are still unresolved references is not judged before composition resolves it.
+    private static bool EditsShadingAlone(WorldMutation mutation, WorldDefinition previous, WorldPrototype? replacement = null) {
+        if (
+            (mutation is not WorldMutation.UpsertCreation upsert) ||
+            (WorldDefinitionRows.FindCreation(creations: previous.Creations, id: upsert.Creation.Id.Value) is not { } before)
+        ) {
+            return false;
+        }
+
+        var after = (replacement ?? upsert.Creation);
+
+        return (
+            ((replacement is not null) || !WorldStateDocumentValues.HasReference(graph: after)) &&
+            before.DiffersInShadingAlone(other: after)
+        );
+    }
+    // A presentation install changes only what a client draws: the definition is adopted as this server's projection
+    // and delivered whole; the arena, every compiled product, the solid field and the population stay as they are.
+    private void InstallPresentation(WorldDefinition definition) {
+        WorldBootWork.Count(kind: WorldBootWork.PresentationInstalls);
+        MarkDefinitionDeliveryPending();
+        Host.AdoptBound(definition: definition);
+    }
+}
+/// <summary>What installing a prepared mutation rebuilds (<see cref="WorldDocument.InstallKindOf"/>).</summary>
+internal enum WorldInstallKind {
+    /// <summary>State values moved alone: the arena loads the rows the write replaced and every compiled product
+    /// stays.</summary>
+    Value,
+    /// <summary>Only what presentation reads changed: the definition is adopted and delivered, and the arena, every
+    /// compiled product and the population stay.</summary>
+    Presentation,
+    /// <summary>The rules, the arena, the fields, the screens and, when the mutation reaches them, the population are
+    /// rebuilt against the candidate.</summary>
+    Full,
 }

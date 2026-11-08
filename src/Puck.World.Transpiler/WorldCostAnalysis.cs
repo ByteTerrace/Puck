@@ -24,10 +24,10 @@ public static class WorldCostAnalysis {
             throw new InvalidOperationException(message: "Cost analysis requires the complete composed document, not a source with unresolved basis or imports.");
         }
         if (!WorldDrawBootResolver.TryResolve(definition: definition, instanceIdentity: WorldDefinitionLoader.BootInstanceName, reason: out reason, resolved: out var drawn)
-            || !WorldStateDocumentValues.TryResolve(drawn, out reason)) {
+            || !WorldStateDocumentValues.TryResolve(definition: drawn, reason: out reason, resolved: out var resolved)) {
             throw new InvalidOperationException(message: reason);
         }
-        return Attach(report: WorldCostReport.Generate(drawn), sourceMap: compilation.SourceMap);
+        return Attach(report: WorldCostReport.Generate(resolved), sourceMap: compilation.SourceMap);
     }
     /// <summary>Resolves contributor pointers through the source map for the exact document already analyzed.
     /// This does not recompile or reprice programs.</summary>

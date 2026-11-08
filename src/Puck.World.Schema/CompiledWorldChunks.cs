@@ -292,13 +292,14 @@ public sealed class DefinitionChunk : ICompiledWorldChunk {
 
         if (!WorldStateDocumentValues.TryResolve(
             definition: drawn!,
-            reason: out var referenceReason
+            reason: out var referenceReason,
+            resolved: out var referenced
         )) {
             reason = $"{context.SourceName} could not resolve a state reference in its compiled definition: {referenceReason}";
             return false;
         }
 
-        context.Drawn = (drawn! with { DocumentDirectory = context.DocumentDirectory });
+        context.Drawn = (referenced with { DocumentDirectory = context.DocumentDirectory });
         return true;
     }
 }

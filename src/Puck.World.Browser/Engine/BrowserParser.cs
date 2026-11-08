@@ -65,11 +65,11 @@ public static class BrowserParser {
             errors.Add(item: drawReason);
             return false;
         }
-        if (!WorldStateDocumentValues.TryResolve(definition: drawn, reason: out var spatialReason)) {
+        if (!WorldStateDocumentValues.TryResolve(definition: drawn, reason: out var spatialReason, resolved: out var resolved)) {
             errors.Add(item: spatialReason);
             return false;
         }
-        definition = drawn;
+        definition = resolved;
         return true;
     }
 
