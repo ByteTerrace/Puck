@@ -496,9 +496,13 @@ population forecast all read that answer:
   candidate as the server's projection and delivers it. The arena, the rules, the
   solid field and the population stay as they are, and such an edit composes over
   the installed document, so it exports no state section either.
-- **Full**: everything else recompiles the rules, installs a prepared arena and
-  reconciles fields and screens, rebuilding the population when the mutation
-  reaches it (`RecompilesPopulation`).
+- **Full**: everything else recompiles the rules and reconciles fields and
+  screens, rebuilding the population when the mutation reaches it
+  (`RecompilesPopulation`). A mutation that leaves the state section alone (the
+  candidate holds the very section it was composed over, compiled to the catalog
+  the arena stores: `WorldServer.KeepsArena`) installs the live arena itself, so
+  its key ordinals, its scoped replays' recordings and every value stay; any
+  other installs a replacement arena prepared from the candidate.
 
 `world.boot.full-installs`, `value-installs` and `presentation-installs` count each
 kind, and `world.boot.arena-builds` counts every arena a world builds from a state

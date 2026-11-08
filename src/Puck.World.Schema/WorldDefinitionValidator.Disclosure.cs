@@ -149,7 +149,10 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"state row '{row.Name}': {KnowledgeShape}");
         }
     }
-    // The live audience row is keyed text: each cell's text is one canonical token, and a rule rewrites it.
+    // The live audience row is keyed text: each cell's text is one canonical token, and a rule rewrites it. Every
+    // recipient reads it whole (no row, cell or containing-zone policy can withhold a member), since who it admits
+    // is otherwise a function of cells some recipient cannot see. WorldStateDisclosure.Allows admits no one through
+    // an audience that is not, so this refusal names a shape the runtime would silently close.
     private static void ValidateReadersFrom(WorldDefinition definition, StateVisibility? visibility, string name, List<string> errors) {
         if (visibility?.ReadersFrom is not { } source) {
             return;
@@ -164,10 +167,24 @@ public static partial class WorldDefinitionValidator {
             (row.Kind != CellKind.Text) ||
             !row.IsKeyed ||
             (row.Visibility is not null) ||
+            ArenaLayout.DeclaresCellVisibility(row: row) ||
+            RestrictedByZone(definition: definition, row: row) ||
             (row.Name.Value == name)
         ) {
-            errors.Add(item: $"state row '{name}': visibility.readersFrom must name a distinct public keyed text row.");
+            errors.Add(item: $"state row '{name}': visibility.readersFrom must name a distinct keyed text row every recipient reads whole (no row, cell or containing-zone visibility).");
         }
+    }
+    // Mirrors StateCatalog's ordered-zone containment: a zone keyed over the row's own key domain (or over the row).
+    private static bool RestrictedByZone(WorldDefinition definition, WorldStateRow row) {
+        var domain = (row.EffectiveDomain is StateDomain.KeysOf keys) ? keys.Row : row.Name;
+
+        foreach (var zone in definition.State) {
+            if ((zone?.EffectiveDomain is StateDomain.KeysOf { Ordered: true } ordered) && (ordered.Row == domain) &&
+                (((zone.Visibility is { } policy) && !policy.IsPublic) || ArenaLayout.DeclaresCellVisibility(row: zone))) {
+                return true;
+            }
+        }
+        return false;
     }
     private static void ValidateVisibility(StateVisibility? visibility, string name, List<string> errors) {
         if (visibility?.Readers is not { } readers) {

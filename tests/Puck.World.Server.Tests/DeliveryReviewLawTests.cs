@@ -12,7 +12,7 @@ public sealed class DeliveryReviewLawTests {
         Mode: WorldAdmissionTrustMode.FederatedAuthority,
         Grants: [new WorldAdmissionGrant(Capability: WorldCapability.Observe, Subject: GrantSubject.All, Budget: 100)]);
     private static WorldStateRow Row(long value = 3, HiddenCells hidden = HiddenCells.Omit, bool secret = true) => new(
-        Name: CellName.Parse("hand"), Kind: CellKind.Int, Visibility: new StateVisibility(Hidden: hidden),
+        Name: CellName.Parse("hand"), Kind: CellKind.Int, Visibility: new StateVisibility(Hidden: hidden), CellVisibility: true,
         Cells: new[] { new StateCell(CellName.Parse("pub"), CellValue.Int(value)) }
             .Concat(secret ? [new StateCell(CellName.Parse("secret"), CellValue.Int(7), Visibility: new StateVisibility(Readers: ["seat1"]))] : []).ToArray());
     private static WorldDefinition Document(WorldStateRow? row = null, WorldDisclosureTier tier = WorldDisclosureTier.Replica) =>
@@ -142,7 +142,7 @@ public sealed class DeliveryReviewLawTests {
 
     [Fact]
     public void WholeReplicaRowsKeepTheirStorageMetadata() {
-        var row = Row() with { Visibility = null, Domain = new StateDomain.Ring(Capacity: 8),
+        var row = Row() with { Visibility = null, CellVisibility = false, Domain = new StateDomain.Ring(Capacity: 8),
             Cells = [new StateCell(CellName.Parse("0"), CellValue.Int(3))], HistoryCursor = 12 };
         using var fixture = Fixtures.FreshServer(Document(row));
         var view = View(fixture, new WorldDisclosureImages());

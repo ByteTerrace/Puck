@@ -142,16 +142,19 @@ public sealed partial class WorldDocument {
             previous: current
         );
         var installsArena = (kind == WorldInstallKind.Full);
+        // A full install whose mutation left the state section alone installs the live arena itself: replacing it
+        // with one seeded from the candidate would move state the mutation was not asked to change.
+        var keepsArena = (installsArena && Host.KeepsArena(candidate: candidate, current: current));
         // Pool snapshots include generated storage rows that cannot be admitted through the ordinary row-import
         // door. Prepare their replacement arena before commit even when the mutation keeps every compiled product.
         // A presentation install writes no state at all, so it loads nothing.
         var replacesArena = (
-            installsArena ||
+            (installsArena && !keepsArena) ||
             ((kind == WorldInstallKind.Value) && (
             (candidate.StateRaw?.Pools is { Count: > 0 }) ||
             (candidate.StateRaw?.PairPools is { Count: > 0 })))
         );
-        StateArena? arena = null;
+        var arena = (keepsArena ? Host.Arena : null);
 
         // A malformed declaration must be named by the validator before StateCatalog or StateArena construction
         // can throw while preparing it. Settling can replace derived cells and clocks; a settlement that replaces
@@ -233,6 +236,7 @@ public sealed partial class WorldDocument {
         // a rule commit closes the same unchanged scope, so the following TryLoad has the same admission inputs.
         if (
             !replacesArena &&
+            !keepsArena &&
             !Host.Arena.TryValidateLoad(
             rows: Host.ReplacedRows(definition: candidate, previous: current),
             reason: out reason

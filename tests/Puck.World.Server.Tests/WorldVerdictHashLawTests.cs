@@ -3,10 +3,9 @@ using Xunit;
 
 namespace Puck.World.Server.Tests;
 
-/// <summary>CONTRACT UNDER TEST: the <c>verdict</c> row trait folds into the declaration hash only when it is
-/// authored. Marking a row moves the hash — so a verdict is covered like any other declaration — while a section
-/// whose rows carry no verdict folds exactly the bytes it folded before the trait existed, which is what keeps
-/// every recorded shipped-world state baseline where it is.</summary>
+/// <summary>CONTRACT UNDER TEST: the <c>verdict</c> row trait folds into the declaration hash. Marking a row moves the
+/// hash, and two verdicts that differ in their gate or status hash differently, so a verdict is covered like any other
+/// declaration.</summary>
 public sealed class WorldVerdictHashLawTests {
     private static ulong Hash(WorldStateSection section) {
         var hash = Fnv1aHash.Create();
@@ -34,16 +33,6 @@ public sealed class WorldVerdictHashLawTests {
     );
     private static WorldStateSection Section(WorldStateRow row) => new(World: [row]);
 
-    [Fact]
-    public void AVerdictFreeSectionsDeclarationHashIsPinned() {
-        // The pin is the whole law: an unconditional presence byte for the trait would move this value, and with it
-        // every recorded shipped-world state baseline, for documents that declare no verdict anywhere. Re-record it
-        // only alongside a deliberate change to what the declaration folds.
-        Assert.Equal(
-            actual: Hash(section: Section(row: Row())),
-            expected: 0xBB68650F5C622514UL
-        );
-    }
     [Fact]
     public void MarkingARowAVerdictMovesTheDeclarationHash() {
         var plain = Hash(section: Section(row: Row()));

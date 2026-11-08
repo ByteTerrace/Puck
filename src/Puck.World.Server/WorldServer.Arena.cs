@@ -304,6 +304,19 @@ public sealed partial class WorldServer {
         (definition.StateCatalog.Pools.Count == 0)
     );
 
+    /// <summary>Returns whether a full install of <paramref name="candidate"/>, composed over
+    /// <paramref name="current"/>, installs the live arena as it stands: the candidate carries the very state section
+    /// of the document it was composed over, compiled to the catalog the arena stores, so the mutation moved no state
+    /// declaration or value and every compiled product binds to the arena's handles.</summary>
+    /// <param name="candidate">The composed document.</param>
+    /// <param name="current">The document it was composed over.</param>
+    /// <returns><see langword="true"/> when the install keeps the live arena, its key ordinals and every runtime
+    /// binding keyed by its identity.</returns>
+    internal bool KeepsArena(WorldDefinition candidate, WorldDefinition current) => (
+        ReferenceEquals(objA: candidate.StateRaw, objB: current.StateRaw) &&
+        ReferenceEquals(objA: candidate.StateCatalog, objB: m_arenaCatalog)
+    );
+
     // Re-seeds the arena from an installed document. A document whose catalog is the same instance keeps its
     // columns and reloads their values. Any other document is installed whole: its rows are the truth the install
     // loads, so nothing is carried from the replaced layout but the runtime key ledger and the participant and

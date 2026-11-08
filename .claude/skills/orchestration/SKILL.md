@@ -995,6 +995,12 @@ could change the result and follows `AGENTS.md` and skills more literally, so an
 Astra brief states its authority and finish line outright. The owner's own Codex Desktop thread holds a writer lock while it is
 open, so the lead never resumes it with `codex exec resume`; the lead and that
 thread talk through the owner, or through a file both read.
+OpenAI's cybersecurity filter can end a Codex session mid-run ("flagged for
+possible cybersecurity risk") when a trust-boundary review builds and runs its
+own attack probes; it ended the disclosure step 3 review before its report. A
+Codex review brief asks the lane to write its findings file as it goes, not
+only at the end, and a session the filter ends hands its probes and log to a
+Claude lane rather than a rerun of the same brief.
 
 Antigravity is the third family, running Gemini 4 Argon (Google's flagship;
 an Antigravity lane launches as above). It

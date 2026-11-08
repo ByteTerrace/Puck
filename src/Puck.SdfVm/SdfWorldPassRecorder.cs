@@ -764,7 +764,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                     System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(step, 1u);
                     recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, data: step, offset: 0,
                         pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
-                    recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: Math.Max(1u, tiles.CeilingDivide(divisor: 64u)), groupCountY: 1, groupCountZ: 1);
+                    recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: Math.Clamp(tiles.CeilingDivide(divisor: 64u), 1u, 65535u), groupCountY: 1, groupCountZ: 1);
                     return;
                 }
             default: {

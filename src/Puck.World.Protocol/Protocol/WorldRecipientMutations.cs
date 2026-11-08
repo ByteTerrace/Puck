@@ -26,6 +26,7 @@ public static class WorldRecipientMutations {
                     if (!view.Admits(subject.Name)) { row = subject.Name; return false; }
                 }
                 if (transform.Guard is { } guard && !view.Admits(guard.Row)) { row = guard.Row; return false; }
+                if (!view.AdmitsTransform(transform.Transform, out row)) { return false; }
                 break;
             case WorldMutation.Batch batch:
                 if (!batch.TryValidateShape(out _)) { return true; }
@@ -37,9 +38,7 @@ public static class WorldRecipientMutations {
                     if (!view.AdmitsDefinition(inputs.StateRows, out row)) { return false; }
                     foreach (var id in inputs.PlacementIds) { if (!view.AdmitsPlacement(id, out row)) { return false; } }
                 }
-                foreach (var spatial in batch.ExpectedSpatialReads ?? []) {
-                    if (!view.AdmitsSpatial(spatial.Region, out row)) { return false; }
-                }
+                if (batch.ExpectedSpatialReads is { Count: > 0 } && !view.AdmitsSpatial(out row)) { return false; }
                 foreach (var member in batch.Mutations) { if (!view.Admits(member, out row)) { return false; } }
                 return true;
         }

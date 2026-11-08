@@ -101,6 +101,7 @@ public static partial class PuckParser {
         SkipWhiteSpace(context: context);
 
         ExpressionNode? nameExpression = null;
+        var nameQuoted = false;
         var name = string.Empty;
 
         // `rule $"flip-{i}" { }`: the name is not known until lowering, so it rides the node as an expression
@@ -118,7 +119,9 @@ public static partial class PuckParser {
                 throw CreateException(context: context, message: "Expected an interpolated name after 'rule'");
             }
             nameExpression = ruleName.Expression;
-        } else if (!TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out _, text: out name)) {
+        } else if (TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out var nameSpelling, text: out name)) {
+            nameQuoted = nameSpelling.Quoted;
+        } else {
             var (nLine, nCol) = GetLineAndColumn(
                 buffer: context.Scanner.Buffer,
                 offset: cursor.Offset
@@ -266,7 +269,7 @@ public static partial class PuckParser {
             PoolBinding: poolBinding,
             PoolForEach: poolForEach,
             Statements: statements
-        );
+        ) { NameQuoted = nameQuoted };
     }
     // Whether a rule-body statement fires something: an effect, a decision, or a compile-time `for` whose body
     // does. A loop over an empty sequence still counts, since only lowering knows the sequence.

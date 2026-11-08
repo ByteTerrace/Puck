@@ -1295,12 +1295,12 @@ public static partial class DocumentLowering {
 
         return JsonValue.Create(value: numVal);
     }
-    // A block whose NAME is a template parameter takes the bound value as its name, so one template can declare a
-    // differently named row per invocation.
+    // A block whose bare NAME is a template parameter takes the bound value as its name, so one template can declare a
+    // differently named row per invocation. A quoted name is a literal and is never looked up.
     private static StatementNode Rename(StatementNode statement, DocumentScope scope) {
         var written = (statement switch {
-            BlockNode block => block.Name,
-            RuleBlockNode rule => rule.Name,
+            BlockNode { NameQuoted: false } block => block.Name,
+            RuleBlockNode { NameQuoted: false } rule => rule.Name,
             _ => null,
         });
 

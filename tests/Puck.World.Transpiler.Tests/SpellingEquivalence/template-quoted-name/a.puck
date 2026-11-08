@@ -1,0 +1,20 @@
+// A quoted block name is never a parameter reference, even when a parameter bears the same word.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+template slab(top, base) {
+  shape Box "top" {
+    scale: top
+  }
+  shape Box base {
+    scale [0.1, 0.1, 0.1]
+  }
+}
+
+prototypes {
+  prototype "p" {
+    document {
+      slab(top: [0.5, 0.5, 0.5], base: "foot")
+    }
+  }
+}

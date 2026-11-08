@@ -288,6 +288,13 @@ public sealed partial class ArenaLayout {
     /// <param name="column">The column.</param>
     public static bool IsOptional(ArenaColumn column) => column is ArenaColumn.CellCapacity or ArenaColumn.NextSlot or ArenaColumn.PreviousSlot or ArenaColumn.HeadSlot or ArenaColumn.TailSlot or ArenaColumn.Text or ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet or ArenaColumn.Behavior or ArenaColumn.Visibility or ArenaColumn.Observation or ArenaColumn.DrawCursor or ArenaColumn.PhaseSequence;
 
+    /// <summary>Returns whether a declaration lets its cells carry their own audience restriction: the row declares
+    /// cellVisibility or a seed cell declares a policy, and the row is not host-owned. The one answer behind
+    /// <see cref="StateArena.DeclaresCellVisibility"/> for a loaded row and a validator's for a document row.</summary>
+    /// <param name="row">The declaration.</param>
+    /// <returns><see langword="true"/> when a cell of the row may carry its own audience restriction.</returns>
+    public static bool DeclaresCellVisibility(StateRow row) => (((ColumnsOf(row: row) & (1UL << (int)ArenaColumn.Visibility)) != 0UL) &&
+        !row.HostOwned);
     /// <summary>Returns the optional columns declared by a row and its seed cells.</summary>
     /// <param name="row">The declaration.</param>
     public static ulong ColumnsOf(StateRow row) {
