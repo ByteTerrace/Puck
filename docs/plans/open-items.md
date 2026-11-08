@@ -1582,6 +1582,12 @@ JSON round trip in `BindLive`, then a reboot for an edit outside
 `PuckHotReload`, then the windowed C# loop timed on a quiet machine and the cold
 and warm builds measured.
 
+- [high] `world.reload` cannot reload the debug world: it is refused with
+  `PayloadTooLarge: Rebuild payload is 21701488 bytes; cap is 16777216`
+  (`WorldFrameCodec.MaxPayloadBytes` for `WorldSubmissionKind.Rebuild`); reload
+  ships the whole composed definition. Decide: a reload that sends what changed
+  (the edit-to-running bar wants that anyway) or a chunked rebuild; never a
+  larger cap alone. Found in the lead's verification window.
 - `WorldStateDocumentValues.BindLive` (and `TryRehydrate`) copy the whole
   definition by serializing and parsing it, the boot's only full serialize, so
   a warm boot's main thread pays every write path's JIT too. Copy only the
@@ -4163,6 +4169,12 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [medium] A measurement's readiness probe gives up before a cold first frame:
+  `world.wait ready 1` with a 10 s exec budget (`SweepWorld`, `src/Puck.Cli.Runs/Sweep/SweepWorld.cs`)
+  failed both views-live-state requests, whose World stopped after
+  `[world.warm] prepared ...` with no bake start (inference: a cold driver compile
+  of the new views shader on the first frame blocks the pump). Time warm to first
+  bake on a frozen build, then size the probe from it.
 - [high] A `puck measure run` drain holds the machine's quiet priority with no
   time bound: one window drained queued requests for over three hours, and every
   other lane's leased build or test queued behind it (a lead law run gave up
