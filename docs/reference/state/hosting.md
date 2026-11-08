@@ -134,6 +134,73 @@ doesn't serve shows up as a counted refusal.
 > unit in `PrepareTransactional`, where the firing can still rewind. That's what
 > lets transactional arms share the firing's all-or-nothing promise.
 
+### The install boundary
+
+`RuleEvaluator.ProposeEffects` completes reversible effects, arm source reads,
+preflight, `PrepareTransactional` and `PrepareStateCommit` before
+`RuleEvaluator.Commit` closes the scope. Host arms declare `IRuleEffect.Sources`
+and receive the evaluated outcomes through `EffectFiring.Values`; preflight
+and delivery use the same values. A host never evaluates an arm's expressions
+again after commit. A write key answers `WriteKey`, with separate resolved,
+faulted and refused cases, through `IRuleKey.ResolveForWrite`.
+
+Puck.World's `WorldServer.ValidateStateTransaction` prepares input selection
+with `WorldInputRuntime.TryPrepareBodies` or `TryPrepareAll` while refusal can
+still rewind. `WorldServer.CommitStateTransaction` commits the arena and
+applies those selections with `ApplyPreparedBodies` or `ApplyPreparedAll`;
+application cannot refuse. `WorldRuleHost.CommitTransactional` installs the
+prepared document before the delivered arms run. A delivery refusal counts
+and undoes nothing; a throw after the arena commit is an authority defect,
+outside the journal's rollback guarantee. W9 in
+[the fixture](../../../worlds/debug/rule-faults-tests.puck) exercises delivery
+across an install.
+
+A decision's `DecisionContinuation.Next` runs between common and option
+effects in the same firing. `WorldRuleHost.ProposedPairLive` first checks the
+pair's generations, composes only the document rows actually queued by the
+common effects against the proposed document, then asks
+`WorldPopulation.ReconcileKeeps` whether the pair survives. The forecast reads
+cell-driven counts from the open arena. `WorldDocument.RebuildsPopulation`
+decides whether it also runs structural reconciliation, just as installation
+does. `WorldPopulation.Reconcile` is one implementation generic over a slot
+table: the live table applies changes, and the forecast records them on scratch
+slots. Structural retirement, counts and census re-clamping therefore share
+their implementation; an added retirement rule reaches both paths.
+
+If the pair does not survive, the option is skipped and the common effects
+stand. The forecast precedes the option's own effects, whose consequences
+remain its own. It treats cell-driven counts as settled at commit; with no
+row or with a full install that does not rebuild population, actual settling
+waits until tick publication, so a later firing can restore a count it judged
+retired. Custody holds are read as they stand. W11's liveness cases in the
+fixture and `ReconcileForecastLawTests` exercise this boundary.
+
+Proposals run serially on the tick thread under the authority gate and never
+straddle snapshot publication. Host preflight scratch remains host-owned;
+queued arms retain source values and host bindings but do not yet retain a
+body target's population generation. These limits and the source-read timing
+choice remain in [the open rule-fault work](../../plans/rule-faults.md).
+
+### Outcomes analyzer
+
+`OutcomeAnalyzer` in `Puck.Analyzers` is a Roslyn analyzer, with error
+diagnostics enabled by default. It uses compiler symbols, including aliases
+and method groups, rather than a text scan or a separately invoked gate.
+Assemblies referencing xUnit v3 are exempt. `OutcomeAnalyzerTests` exercises
+the diagnostics.
+
+| Diagnostic | Refuses |
+|---|---|
+| `OUTCOME001` | An expression statement or discard assignment/declaration dropping `Outcome`, `Resolved<T>`, `Verdict` or `RuleOutcome`. Assignments retain their answers; a catch that rethrows and the host entries in `OutcomeDiscardAllowlist` are exempt. |
+| `OUTCOME002` | Dropping the bool from `TryFinite` or `TryNamed`; comparing `Verdict` or `FiringDecision` with `==`, `!=` or an `is` constant pattern to a case other than `Faulted`. Handle all cases with a switch, or explicitly handle `Faulted`. |
+| `OUTCOME003` | Calling `RuleExpressions.EvaluateDetached` outside a file named by `OutcomeDetachedAllowlist`, whose entries state their fault handling. |
+| `OUTCOME004` | An `IRuleOperand` member resolving a `CompiledCellRef`, `LiveRow` or `IRuleKey` against the reader. Operands may hold declarations to build read sets, costs and `Addresses`; they read through the interpreter's resolved keys. |
+
+These diagnostics do not prove semantic correctness. A bool stored and never
+read, an operand's hand-written arena read under a literal key, or incorrect
+handling of a detached fault remains review territory. `EvaluationFrame`
+likewise refuses a default frame at runtime rather than making it unforgeable.
+
 ## Publish arena changes in one place
 
 During a tick, the arena is the authoritative state. Some parts of your
@@ -273,7 +340,8 @@ There are two families, each a class hierarchy a host can extend.
 | `IRuleOperand` | `StateCellOperand`, `LocalOperand`, `TableOperand`, `TickOperand`, `ReductionOperand`, `SymmetryOperand`, `BoardOperand`, `PhaseOperand`, `PatternOperand`, `HistoryOperand`, `InstanceFieldOperand`, `StaticInstanceFieldOperand`, `VectorCallOperand`, `SearchPlyOperand` |
 | `IRuleEffect` | `WriteEffect`, `GenerateEffect`, `RemoveStateCellEffect`, `ScheduleStateEffect`, `TransactionEffect`, `TransformStateEffect`, `PushStateEffect`, `IfEffect`, `RewindGroupEffect`, `ClaimEffect`, `ReleaseEffect`, `ClaimPairEffect`, `ForEachPoolEffect`, `InstanceFieldWriteEffect`, `StaticInstanceFieldWriteEffect`, `InstanceFieldScheduleEffect`, `InstanceFieldVectorWriteEffect`, and the vector effects (`VectorCopyEffect`, `VectorMixEffect`, `VectorMeanEffect`, `VectorNearestEffect`, `VectorRememberEffect`) |
 
-Operands implement `Read(IStateReader)` and report what they read through
+Operands declare `IRuleOperand.Addresses`, implement
+`Read(IStateReader, ReadOnlySpan<ResolvedKey>)` and report what they read through
 `CollectReads`. Effects report what they read and write through `CollectReads`
 and `CollectWrites`. Both report a `Cost`, and every access is a `CellAccess`. Key resolution has a third, smaller family,
 `IRuleKey`, with the core cases `LocalKeyFact` and `ZoneEndKey`.
@@ -324,11 +392,12 @@ public interface IBodyPositions : IFacet {
 
 // The compiled fact. Its type argument is its facet, so RuleNeeds records IBodyPositions.
 public sealed class BodyDistanceFact(int bodyA, int bodyB) : OperandFact<IBodyPositions>(valueKind: CellKind.Fixed), IRuleOperand {
+    public ReadOnlySpan<OperandAddress> Addresses => default;
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     public override Fact Read(IStateReader reader, IBodyPositions facet) => Fact.Finite(value: facet.Distance(bodyA: bodyA, bodyB: bodyB));
 
     // Admission proved the host serves the facet before any rule naming it ran.
-    Fact IRuleOperand.Read(IStateReader reader) => Read(reader: reader, facet: (IBodyPositions)reader);
+    Fact IRuleOperand.Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) => Read(reader: reader, facet: (IBodyPositions)reader);
 }
 
 public enum DistanceRefusal : byte {

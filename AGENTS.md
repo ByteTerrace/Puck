@@ -2,6 +2,19 @@
 
 Puck defines worlds in documents; `Puck.World` composes simulation, presentation and hosted machines. Every agent reads this one rules file. The [manual](docs/README.md) owns concepts, [development](docs/development/README.md) procedures, and `.claude/skills/` code maps, contracts and execution. Load the owning skill (rule 7); [evaluate its benefit](docs/development/documentation.md#evaluate-an-agent-skill). Rule 2 applies here too.
 
+## Puck's purpose
+
+The owner's words: "Puck exists to make it possible, eventually, to build an
+MMO at the scale of World of Warcraft that redefines the genre the way WoW did.
+The emulators and the screen-within-a-screen work were envisioned as seamless
+parts of that MMO." The card and board tables serve the casino fantasy, and
+portals are meant to solve many of an MMO's hard problems. Every design round
+weighs its question at that scale: it asks what each established answer becomes
+when every zone, character and server is a world with its authority placed per
+world ([the world model](docs/architecture/worlds.md#the-idea-in-plain-terms)),
+and records what it settled in [the MMO foundations memo](docs/plans/mmo-foundations/synthesis.md)'s
+manner: options, evidence, the attacks each closes, and the ruling it rests on.
+
 ## Puck is pre-release
 
 Nothing has shipped, and nothing outside this repository depends on Puck. Every
