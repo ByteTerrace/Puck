@@ -1317,6 +1317,16 @@ commit, as machine readings are not a repository baseline.
   of moles, a whisper between two other seats, a line in the den and two
   other seats' votes: its hidden changes are rule writes into per-cell and
   per-seat rows that move nothing a crew seat or a session is delivered.
+- The world seed is two things at once. A presentation recipient rebuilds its
+  document without it (`WorldProjection.TryToDefinition` builds no
+  `Generation`), so every noise or scatter placement, and now a noise or
+  scatter deal template's children, lays out at seed 0 there; the replica tier
+  carries it, and it is a rung of every draw's seed ladder
+  (`GeneratorEngine.ComputeSeedState`) beside a fixed boot instance name, so a
+  replica peer may predict hidden draws (unverified). No shipped deal uses a
+  seeded region (every deal in `worlds/debug` is a lattice). Decided: separate
+  a layout seed, disclosed to every tier, from the draw seed, which stays the
+  authority's; check first whether a replica can predict a draw today.
 - Whether `world.identify` hashes the recipient's view or becomes operator-only
   (decided here: the view; the owner may prefer one QR per world).
 - Body disclosure (`WorldOutputHub.Redact`) joins the recipient view: the MMO

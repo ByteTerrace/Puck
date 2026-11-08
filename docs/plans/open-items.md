@@ -1854,6 +1854,17 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [medium · parented frames] Two consumers read a parented placement's
+  `position` as world space instead of composing its frame
+  (`WorldPlacementFrameCompilation.Compose`): an animated placement with a
+  parent draws at its stored position (`WorldCreationInstances`, the animated
+  instance path), and `world.nudge` with a captured reference frame
+  (`WorldEditorCommandModule.Placement`). Both predate the dealt-displacement
+  change and now cover dealt children too. Route both through the one resolver.
+- [low · deal slot count] `WorldPlacementDeal.InstanceCount` counts scatter
+  slots with `ScatterInstanceCeiling`, while the sweep and the re-deal count
+  `WorldPlacementDeal.Offsets(...).Length`; they agree in the one law case.
+  Make one count.
 - [low · bake identity] A group's `Outcome` text (`SdfMeshPathBake`'s
   "no surface, as baked before", "contour refused" and the rest) is a string
   literal in the bake's code closure that only the done line's `empty=[...]`
