@@ -38,7 +38,7 @@ internal static class MicroRoms {
     // Timer0 (prescaler ÷1) cascades into Timer1 (count-up); Timer1 raises the IRQ. Probes the synchronous
     // in-cycle cascade + the cascade-timer overflow→IRQ path.
     private static byte[] CascadeIrq() {
-        var a = new Asm();
+        var a = new ArmProbeAssembler();
 
         a.LdrConst(
             rd: 0,
@@ -127,7 +127,7 @@ internal static class MicroRoms {
     }
     // Shared tail of the two link ROMs: record the final SIOCNT (id bits + cleared start), the IF-observation count,
     // and the completion marker, then hang.
-    private static void EmitLinkEpilogue(Asm a) {
+    private static void EmitLinkEpilogue(ArmProbeAssembler a) {
         a.Ldrh(
             imm8: 0x28,
             rd: 1,
@@ -170,7 +170,7 @@ internal static class MicroRoms {
     // IF is pre-pended with a timer0 request while IME is left 0, then IME is enabled mid-stream: the IRQ must be
     // recognised one instruction after the IME store (the ime[1]→ime[0] pipeline), not on the store itself.
     private static byte[] ImeDelay() {
-        var a = new Asm();
+        var a = new ArmProbeAssembler();
 
         a.LdrConst(
             rd: 0,
@@ -256,7 +256,7 @@ internal static class MicroRoms {
         return a.Finish();
     }
     private static byte[] LinkChild() {
-        var a = new Asm();
+        var a = new ArmProbeAssembler();
 
         a.LdrConst(
             rd: 0,
@@ -325,7 +325,7 @@ internal static class MicroRoms {
             rn: 1
         );                        // the parent's round landed?
         a.B(
-            cond: Asm.CondEq,
+            cond: ArmProbeAssembler.CondEq,
             label: "round"
         );
         a.Mov(
@@ -405,7 +405,7 @@ internal static class MicroRoms {
             rn: 6
         );
         a.B(
-            cond: Asm.CondNe,
+            cond: ArmProbeAssembler.CondNe,
             label: "round"
         );
 
@@ -423,7 +423,7 @@ internal static class MicroRoms {
     // (parent word k-1) XOR LinkChildTransformMask after that — each reply after the first is derived from data that
     // crossed the cable the round before, so the recorded slots prove a real two-way exchange, not idle lines.
     private static byte[] LinkParent() {
-        var a = new Asm();
+        var a = new ArmProbeAssembler();
 
         a.LdrConst(
             rd: 0,
@@ -495,7 +495,7 @@ internal static class MicroRoms {
             rn: 1
         );                        // serial request?
         a.B(
-            cond: Asm.CondEq,
+            cond: ArmProbeAssembler.CondEq,
             label: "wait"
         );
         a.Mov(
@@ -554,7 +554,7 @@ internal static class MicroRoms {
             rn: 6
         );
         a.B(
-            cond: Asm.CondNe,
+            cond: ArmProbeAssembler.CondNe,
             label: "round"
         );
 
@@ -565,7 +565,7 @@ internal static class MicroRoms {
     // Timer0 overflows and raises an IRQ; the handler acks it and returns. The main loop counts in r4, so the
     // exact instruction at which the IRQ is recognised is observable. (reload, control) parameterise the cadence.
     private static byte[] TimerIrq(uint reload, uint control) {
-        var a = new Asm();
+        var a = new ArmProbeAssembler();
 
         a.LdrConst(
             rd: 0,
@@ -646,7 +646,7 @@ internal static class MicroRoms {
     // timing, with the slow-ROM bus-cost attribution noise removed. The loop body is two opcodes written straight
     // into IWRAM (position-independent: `add r4,r4,#1` then `b .-4`), then we jump there with `ldr pc, =0x03000000`.
     private static byte[] TimerIrqIwram(uint reload, uint control) {
-        var a = new Asm();
+        var a = new ArmProbeAssembler();
 
         a.LdrConst(
             rd: 0,
@@ -769,97 +769,4 @@ internal static class MicroRoms {
         _ => throw new ArgumentException(message: $"unknown micro-rom kind '{kind}' (timer-irq | timer-irq-iwram | cascade-irq | ime-delay | link-parent | link-child)"),
     };
 
-    // A minimal ARM assembler: emits little-endian words, resolves PC-relative literal loads through a dedup pool
-    // appended after the code, and resolves backward branch targets and labels. Enough for these micro-ROMs.
-    private sealed class Asm {
-        private const uint RomBase = 0x08000000u;
-        private const int RomSizeBytes = 0x8000; // pad so the cartridge/oracle see a sane game-pak
-
-        public const uint CondAl = 0xEu;
-        public const uint CondEq = 0x0u;
-        public const uint CondNe = 0x1u;
-
-        private readonly List<(int instr, string label, uint cond)> m_branches = new();
-        private readonly List<uint> m_code = new();
-        private readonly List<(int instr, int rd, uint value, string? label)> m_loads = new();
-        private readonly Dictionary<string, int> m_labels = new();
-
-        public void Add(int rd, int rn, uint imm8) =>
-            m_code.Add(item: 0xE2800000u | (((uint)rn) << 16) | (((uint)rd) << 12) | (imm8 & 0xFFu));
-        public void AddReg(int rd, int rn, int rm) =>
-            m_code.Add(item: 0xE0800000u | (((uint)rn) << 16) | (((uint)rd) << 12) | ((uint)rm));
-        // A (conditional) branch to a label, forward or backward; the offset is fixed up in Finish once every label
-        // is known.
-        public void B(string label, uint cond = CondAl) {
-            m_branches.Add(item: (m_code.Count, label, cond));
-            m_code.Add(item: 0);
-        }
-        // Branch back to the instruction `instructions` slots before this one (1 = the immediately preceding one).
-        public void BBack(int instructions) {
-            var idx = m_code.Count;
-            var off = ((idx - instructions) - (idx + 2)); // ARM PC is 2 instructions (8 bytes) ahead
-
-            m_code.Add(item: 0xEA000000u | (((uint)off) & 0xFFFFFFu));
-        }
-        public void Bx(int rn) => m_code.Add(item: 0xE12FFF10u | ((uint)rn));
-        public void Cmp(int rn, uint imm8) => m_code.Add(item: 0xE3500000u | (((uint)rn) << 16) | (imm8 & 0xFFu));
-        public void EorReg(int rd, int rn, int rm) =>
-            m_code.Add(item: 0xE0200000u | (((uint)rn) << 16) | (((uint)rd) << 12) | ((uint)rm));
-        public byte[] Finish() {
-            foreach (var (instr, label, cond) in m_branches) {
-                var off = (m_labels[label] - (instr + 2)); // ARM PC is 2 instructions (8 bytes) ahead
-
-                m_code[instr] = (cond << 28) | 0x0A000000u | (((uint)off) & 0xFFFFFFu);
-            }
-
-            var poolBase = m_code.Count;
-            var pool = AsmLiteralPool.Resolve(
-                code: m_code,
-                labels: m_labels,
-                loads: m_loads,
-                poolBase: poolBase,
-                romBase: RomBase
-            );
-
-            var words = new List<uint>(collection: m_code);
-
-            words.AddRange(collection: pool);
-
-            var bytes = new byte[RomSizeBytes];
-
-            for (var i = 0; (i < words.Count); ++i) {
-                BitConverter.TryWriteBytes(
-                    destination: bytes.AsSpan(start: (i * 4)),
-                    value: words[i]
-                );
-            }
-
-            return bytes;
-        }
-        public void Label(string name) => m_labels[name] = m_code.Count;
-        public void Ldr(int rd, int rn, uint imm12) =>
-            m_code.Add(item: 0xE5900000u | (((uint)rn) << 16) | (((uint)rd) << 12) | (imm12 & 0xFFFu));
-        public void LdrConst(int rd, uint value) {
-            m_loads.Add(item: (m_code.Count, rd, value, null));
-            m_code.Add(item: 0);
-        }
-        public void LdrLabel(int rd, string label) {
-            m_loads.Add(item: (m_code.Count, rd, 0, label));
-            m_code.Add(item: 0);
-        }
-        // LDRH/STRH split their 8-bit offset into two nibbles (addressing mode 3).
-        public void Ldrh(int rd, int rn, uint imm8) =>
-            m_code.Add(item: 0xE1D000B0u | (((uint)rn) << 16) | (((uint)rd) << 12) | ((imm8 & 0xF0u) << 4) | (imm8 & 0x0Fu));
-        // MOV rd, rm, LSL #shift / LSR #shift — the register-shift-by-immediate movs.
-        public void LslImm(int rd, int rm, int shift) =>
-            m_code.Add(item: 0xE1A00000u | (((uint)rd) << 12) | (((uint)shift) << 7) | ((uint)rm));
-        public void LsrImm(int rd, int rm, int shift) =>
-            m_code.Add(item: 0xE1A00020u | (((uint)rd) << 12) | (((uint)shift) << 7) | ((uint)rm));
-        public void Mov(int rd, uint imm8) => m_code.Add(item: 0xE3A00000u | (((uint)rd) << 12) | (imm8 & 0xFFu));
-        public void Str(int rd, int rn, uint imm12) =>
-            m_code.Add(item: 0xE5800000u | (((uint)rn) << 16) | (((uint)rd) << 12) | (imm12 & 0xFFFu));
-        public void Strh(int rd, int rn, uint imm8) =>
-            m_code.Add(item: 0xE1C000B0u | (((uint)rn) << 16) | (((uint)rd) << 12) | ((imm8 & 0xF0u) << 4) | (imm8 & 0x0Fu));
-        public void Tst(int rn, uint imm8) => m_code.Add(item: 0xE3100000u | (((uint)rn) << 16) | (imm8 & 0xFFu));
-    }
 }

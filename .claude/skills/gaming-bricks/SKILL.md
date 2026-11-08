@@ -132,6 +132,10 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
 
 ## Workflow
 
+Post's small ARM probe ROMs share `ArmProbeAssembler` for instruction emission,
+branch fixups and ROM finishing. `AsmLiteralPool.Resolve` remains the literal-pool
+resolver; `MicroRoms` and `OracleProbes` author only their probe programs.
+
 1. Identify the affected machine and capability: shared SM83 compatibility in
    `Puck.HumbleGamingBrick`, or native ARM7TDMI GBA in
    `Puck.AdvancedGamingBrick`.

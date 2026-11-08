@@ -18,7 +18,7 @@ public sealed class SweepWorld : IDisposable {
     private const string AttachmentLine = "[world.control: operator attachment ";
     private const string CapabilityPattern = "puck-control-*.json";
 
-    private readonly SweepBudget m_budget;
+    private readonly SuiteBudget m_budget;
     private readonly string m_attachment;
     private readonly WorldProcess? m_process;
 
@@ -26,7 +26,7 @@ public sealed class SweepWorld : IDisposable {
     // is unknown; the World lives on, so the next call attaches a session of its own (see Reattach).
     private LocalControlClient m_client;
 
-    private SweepWorld(string attachment, LocalControlClient client, WorldProcess? process, string leg, SweepBudget budget) {
+    private SweepWorld(string attachment, LocalControlClient client, WorldProcess? process, string leg, SuiteBudget budget) {
         m_attachment = attachment;
         m_budget = budget;
         m_client = client;
@@ -42,7 +42,7 @@ public sealed class SweepWorld : IDisposable {
     /// <summary>Gets whether the sweep booted this World, and so stops it.</summary>
     public bool Owned => (m_process is not null);
     /// <summary>Gets the budget every call of this World honours.</summary>
-    public SweepBudget Budget => m_budget;
+    public SuiteBudget Budget => m_budget;
     /// <summary>Gets whether the attachment has closed for good: the World exited, or a call failed and no new session
     /// could be opened. A call that passes its own deadline leaves the World attached through a new session.</summary>
     public bool Gone => (m_client.IsClosed || (m_process?.HasExited ?? false));
@@ -53,7 +53,7 @@ public sealed class SweepWorld : IDisposable {
     /// <param name="session">The attached World.</param>
     /// <param name="error">Why no World was attached.</param>
     /// <returns><see langword="true"/> when a World was attached.</returns>
-    public static bool TryAttach(string world, SweepBudget budget, out SweepWorld? session, out string error) {
+    public static bool TryAttach(string world, SuiteBudget budget, out SweepWorld? session, out string error) {
         session = null;
 
         var path = (File.Exists(path: world) ? Path.GetFullPath(path: world) : Find(world: world));
@@ -75,7 +75,7 @@ public sealed class SweepWorld : IDisposable {
     /// <param name="session">The booted World.</param>
     /// <param name="error">Why no World was booted.</param>
     /// <returns><see langword="true"/> when the World booted and attached.</returns>
-    public static bool TryBoot(WorldLaunchRequest request, string logDirectory, TimeSpan bootTimeout, SweepBudget budget, out SweepWorld? session, out string error) {
+    public static bool TryBoot(WorldLaunchRequest request, string logDirectory, TimeSpan bootTimeout, SuiteBudget budget, out SweepWorld? session, out string error) {
         WorldProcess? process = null;
         var attached = false;
 
@@ -105,7 +105,7 @@ public sealed class SweepWorld : IDisposable {
     }
     /// <summary>Waits for and attaches to an already-started process. The caller keeps ownership of the process;
     /// disposing this attachment closes only its control session, on success or failure.</summary>
-    public static bool TryAttach(WorldProcess process, TimeSpan bootTimeout, SweepBudget budget, out SweepWorld? session, out string error) {
+    public static bool TryAttach(WorldProcess process, TimeSpan bootTimeout, SuiteBudget budget, out SweepWorld? session, out string error) {
         ArgumentNullException.ThrowIfNull(process);
         try {
             return TryAttachPublished(process: process, ownedProcess: null, bootTimeout: bootTimeout,
@@ -117,7 +117,7 @@ public sealed class SweepWorld : IDisposable {
         }
     }
     private static bool TryAttachPublished(WorldProcess process, WorldProcess? ownedProcess,
-        TimeSpan bootTimeout, SweepBudget budget, out SweepWorld? session, out string error) {
+        TimeSpan bootTimeout, SuiteBudget budget, out SweepWorld? session, out string error) {
         session = null;
         var line = process.WaitFor(
             accept: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: AttachmentLine),
@@ -216,7 +216,7 @@ public sealed class SweepWorld : IDisposable {
         }
     }
 
-    private static bool TryConnect(string path, WorldProcess? process, SweepBudget budget, out SweepWorld? session, out string error) {
+    private static bool TryConnect(string path, WorldProcess? process, SuiteBudget budget, out SweepWorld? session, out string error) {
         LocalControlClient client;
 
         session = null;
@@ -272,7 +272,7 @@ public sealed class SweepWorld : IDisposable {
     private static bool IsAttachmentFailure(Exception exception) => (exception is IOException or InvalidDataException or System.Text.Json.JsonException or ObjectDisposedException or OperationCanceledException or InvalidOperationException);
     // The call's deadline in milliseconds: at most the attachment's ceiling, and at most what the sweep has left.
     private int Milliseconds(int seconds) => Milliseconds(budget: m_budget, seconds: seconds);
-    private static int Milliseconds(int seconds, SweepBudget budget) => ((int)Math.Clamp(max: 120_000d, min: 1d, value: Math.Min(val1: (seconds * 1000d), val2: budget.Remaining.TotalMilliseconds)));
+    private static int Milliseconds(int seconds, SuiteBudget budget) => ((int)Math.Clamp(max: 120_000d, min: 1d, value: Math.Min(val1: (seconds * 1000d), val2: budget.Remaining.TotalMilliseconds)));
     private static string? Find(string world) {
         foreach (var file in Directory.EnumerateFiles(path: Path.GetTempPath(), searchPattern: CapabilityPattern)) {
             LocalEndpointInfo info;

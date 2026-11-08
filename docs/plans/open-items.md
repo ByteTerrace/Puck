@@ -4300,12 +4300,11 @@ Launch and process lifecycles:
   `world.wait` forms (`src/Puck.World.Console/WorldWaitCommandModule.cs:253`),
   so admission over-reserves. Have the World print its own readiness line once
   ready, and set the flag after the write.
-- [low] The sweep's budget pause exists twice and canary has neither:
-  `SweepBudget.Pause` (`src/Puck.Cli.Runs/Sweep/SweepBudget.cs:41-52`) and
-  `WorldOffscreenLeg.Pause` (`src/Puck.Cli.Harness/WorldOffscreenLeg.cs:229-235`)
-  stop a clock while a leg queues for a lease, while canary's budget
-  (`CanaryCommand.cs`, `CanaryLegRun.BudgetExpired`) still counts queueing, so a
-  later leg can read `BudgetExpired`. Keep one pausable clock; delete
+- [low] Canary's concurrent leg budget (`CanaryCommand.CanaryBudget`,
+  `CanaryLegRun.BudgetExpired`) still counts external lease queueing, so a later
+  leg can read `BudgetExpired`. Sweep and offscreen legs now share
+  `SuiteBudget.Pause`; canary needs accounting that excludes external queueing
+  without stopping its budget while another leg runs. Delete
   `SweepCommand.SamePath` (`src/Puck.Cli.Runs/Sweep/SweepCommand.cs:294`), which
   nothing calls.
 - [low · plausible, Linux only] `FileLock.TryAcquireForDeletion`
@@ -4501,8 +4500,6 @@ Monitor hook check remain supporting work alongside the landscape priority.
   Low:
   - Mentioning a counter counts as persisting it.
   - `exact-keys` reports a tolerant `Matches` as exact.
-  - `CommentSmellScan.cs:326` is a second line-site writer beside
-    `ScanSites`.
 
   The `ArenaSearch.cs:557` suppression is justified.
 
