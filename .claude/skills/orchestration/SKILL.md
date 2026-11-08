@@ -1162,7 +1162,14 @@ and not a spiral:
   every owed reading in one quiet window before relaunching. When to weave a
   window in is the lead's call alone, never an owner question (the owner's
   ruling: deciding when to weave those passes in "is literally your job as the
-  orchestrator"). The default is to let the running wave land, launch nothing,
+  orchestrator"). Size a measurement to the decision it serves: a binary bar
+  (a cold bake under 60 s) needs one or two samples of the candidate, not
+  same-build A/B pairs; a per-pass GPU question (does binning pay) is a
+  same-World lever toggle read from `world.gpu-timing` at a few stops, which
+  CPU lanes barely disturb, so it needs only the GPU lease; the full quiet A/B
+  window is for frame-time or CPU timing claims where noise could flip the
+  verdict. A window that would idle the lanes for hours to sharpen a decision
+  already clear is cut, not run. The default is to let the running wave land, launch nothing,
   and measure with the machine to itself; interleaving slices with running
   lanes only stalls their builds and tests behind the quiet lease for as long
   as it saves, and invites lease tangles. Bounded `--window-seconds` slices
