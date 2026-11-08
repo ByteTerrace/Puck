@@ -156,25 +156,10 @@ checked, which does not establish the surrounding claims.
 - **Severity:** High
 - **Memo section:** `§3.4` ([`docs/plans/author-shaders.md:507-527`](../../../docs/plans/author-shaders.md)), `§3.6` ([`docs/plans/author-shaders.md:569-586`](../../../docs/plans/author-shaders.md)), `§3.8` ([`docs/plans/author-shaders.md:627-632`](../../../docs/plans/author-shaders.md))
 - **Code citations:**
-  - [`src/Puck.SdfVm/SdfKernelSet.cs:24-39`](../../../src/Puck.SdfVm/SdfKernelSet.cs#L24-L39):
-    ```csharp
-    public SdfKernelSet(IReadOnlyList<ReadOnlyMemory<byte>> bytecode) {
-        ArgumentNullException.ThrowIfNull(argument: bytecode);
-
-        if (bytecode.Count != Kernels.Count) {
-            throw new ArgumentException(
-                message: $"A kernel set holds one bytecode per kernel, {Kernels.Count}; {bytecode.Count} were given.",
-                paramName: nameof(bytecode)
-            );
-        }
-
-        m_bytecode = [.. bytecode];
-        m_contentKey = Puck.Abstractions.Gpu.GpuPipelineCacheStore.ContentKeyOf(parts: m_bytecode);
-    }
-
-    /// <summary>Gets every kernel, in pipeline order.</summary>
-    public static IReadOnlyList<SdfKernel> Kernels { get; } = Enum.GetValues<SdfKernel>();
-    ```
+  - `SdfKernelSet`'s constructor, as reviewed, took one bytecode per kernel and keyed
+    the set by that bytecode alone; tier 2 has since added each kernel's source
+    (`SdfKernelSource`) to the set and its identity, so the quotation the review
+    pasted no longer matches the file.
   - [`src/Puck.SdfVm/SdfWorldResidency.ShaderReload.cs:111-118`](../../../src/Puck.SdfVm/SdfWorldResidency.ShaderReload.cs#L111-L118), [`236-247`](../../../src/Puck.SdfVm/SdfWorldResidency.ShaderReload.cs#L236-L247):
   - [`src/Puck.SdfVm/SdfWorldTables.Pipelines.cs:112-115`](../../../src/Puck.SdfVm/SdfWorldTables.Pipelines.cs#L112-L115):
     ```csharp
