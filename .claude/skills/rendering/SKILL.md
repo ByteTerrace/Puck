@@ -231,11 +231,17 @@ selection, never entry visibility. They execute after entry depth is final.
 Never use an earlier exit/peel image to reject a caster.
 
 A receiver-conditioned cascade retains a coverage identity with each submitted
-layer: geometry, camera, sample grid and jitter, excluding the light. The far rate
-can hold or split while both layers cover those same receiver inputs; a changed
-coverage identity refreshes both. This is conservative equality, not a proof that
-different receiver sets are spatially contained. Readers use each layer's committed
-light camera. The graph keeps the sampling barrier, while the package projects its
+layer (`SdfWorldPasses.ReceiverSignatureOf`): the sample grid its receivers were
+classified on (cull level, detail, extent, scale, cut, bindings), excluding the
+light, the camera, the geometry and the jitter. The far rate can hold or split
+while both layers cover that grid; a changed grid refreshes both. The hold's own
+camera tolerances and the receiver cells' neighbouring-cell margin cover the
+drift the identity leaves out; a receiver a moving caster uncovers lags by the
+same refresh its shadow does. Hashing the geometry signature or the jitter here
+ends the hold on every frame anything moves, so a receiver-conditioned cascade
+then pays a whole refresh each frame (`sdf.rates` shows `rendered` on every
+frame and no `split` or `held`). Readers use each layer's committed light
+camera. The graph keeps the sampling barrier, while the package projects its
 cadence dependency onto the consumed receiver inputs, so unrelated mesh writes do
 not invalidate it. `world.cull camera` removes the receiver input and disables cascade
 depth occlusion, retaining the original far rate and camera occlusion. Count held
@@ -1034,8 +1040,9 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   shows `.split` on every frame; one that shows `.rendered` on every frame pays
   a whole refresh each frame. The hold tolerates the light turning by
   `SdfUpdateRateTiers.ShadowFarLightTurnRadians` (a day clock's sun turns every
-  frame); a timed refresh where two frames fit in the 30 Hz period draws the
-  depth on one frame and the exit layer on the next (`SdfFarLayers`). The pass
+  frame); a timed refresh always draws the depth on one frame and the exit
+  layer on the next (`SdfFarLayers`), so no frame draws both layers for the
+  rate's sake and a slow frame is never held slow by its own cascade. The pass
   asks `SdfWorldPasses.RecordFar`, which answers both for a layer its graph has
   not drawn, and `SubmittedFar` commits each drawn layer's camera; the surface
   pass reads the exit layer through the pass block's fourth camera. Compare
