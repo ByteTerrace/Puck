@@ -614,7 +614,11 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `shade/sdf-sky-reflection.hlsli`, then `sdfMeshReflection`, the sky alone where
   `probes.share` is zero), the light walk (`sdfLightResponse`, uncascaded, probe
   shadowing) for its highlights and the light its medium receives, and the flow
-  layer (`sdfShadeFlow`). A medium (`SdfGlass.Scatter`, `Scattering`, material row
+  layer (`sdfShadeFlow`). The glass, sky and resolve recorders get the common
+  frame values (`SdfWorldPackage.Values`) only by copy from
+  `SdfFrameBlock.WriteInto`, which writes the irradiance volume beside the frame:
+  a common value it leaves out reads zero in those passes (the glass gather once
+  read the volume as off that way). A medium (`SdfGlass.Scatter`, `Scattering`, material row
   31) and a contact (`ContactReach`, `ContactCoverage`, row 20.w's halves) are
   functions of the thickness, `opaque - t` and that light alone: the pass reads
   the lit image once (`sdfGlassLitAt`, or the frost's disc). The handbook's

@@ -100,6 +100,7 @@ public static class VulkanPresenterServiceRegistration {
                 TimestampFactory = new VulkanGpuTimestampFactory(deviceContext: deviceContext, naming: naming),
                 PipelineFactory = new VulkanGpuPipelineFactory(
                 allocator: allocator,
+                capturesStatistics: nameObjects,
                 computePipelineApi: computePipelineApi,
                 deviceContext: deviceContext,
                 graphicsPipelineApi: graphicsPipelineApi,

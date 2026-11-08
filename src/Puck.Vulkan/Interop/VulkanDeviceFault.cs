@@ -4,7 +4,9 @@ using Puck.Vulkan.Bindings;
 namespace Puck.Vulkan.Interop;
 
 /// <summary>Retrieves and retains one lost device's driver diagnostics without submitting more GPU work: the fault
-/// report and, when the device records them, its breadcrumbs (<see cref="VulkanDeviceCheckpoints"/>).</summary>
+/// report, with the objects each faulting address falls in when the device reports its address bindings
+/// (<see cref="VulkanDeviceAddressBindings"/>), and, when the device records them, its breadcrumbs
+/// (<see cref="VulkanDeviceCheckpoints"/>).</summary>
 public sealed unsafe class VulkanDeviceFault {
     /// <summary>The optional device extension.</summary>
     public const string ExtensionName = "VK_EXT_device_fault";
@@ -16,6 +18,7 @@ public sealed unsafe class VulkanDeviceFault {
     private readonly Lock m_lock = new();
     private readonly string? m_unavailable;
     private readonly VulkanDeviceCheckpoints? m_checkpoints;
+    private readonly VulkanDeviceAddressBindings? m_addressBindings;
 
     private string? m_report;
 
@@ -28,9 +31,12 @@ public sealed unsafe class VulkanDeviceFault {
     /// <param name="procedures">The device's procedure resolver.</param>
     /// <param name="enabled">Whether device creation enabled the extension and feature.</param>
     /// <param name="checkpoints">The device's breadcrumbs, read after the fault report, or <see langword="null"/>.</param>
-    public VulkanDeviceFault(nint device, VulkanProcResolver procedures, bool enabled, VulkanDeviceCheckpoints? checkpoints = null) {
+    /// <param name="addressBindings">The address record that names the objects each fault address falls in, or
+    /// <see langword="null"/>.</param>
+    public VulkanDeviceFault(nint device, VulkanProcResolver procedures, bool enabled, VulkanDeviceCheckpoints? checkpoints = null, VulkanDeviceAddressBindings? addressBindings = null) {
         m_device = device;
         m_checkpoints = checkpoints;
+        m_addressBindings = addressBindings;
         if (enabled) {
             m_query = ((delegate* unmanaged[Cdecl]<nint, VkDeviceFaultCountsExt*, VkDeviceFaultInfoExt*, VkResult>)procedures.ResolveOptionalDeviceProc(
                 deviceHandle: device, functionName: "vkGetDeviceFaultInfoEXT"u8));
@@ -86,6 +92,9 @@ public sealed unsafe class VulkanDeviceFault {
                 };
 
                 report.Append(handler: $"\n  address[{index}]: {kind} (type {entry.AddressType}), address=0x{entry.ReportedAddress:x16}, precision=0x{entry.AddressPrecision:x}");
+                if ((m_addressBindings is not null) && (entry.AddressType is >= 1 and <= 3)) {
+                    report.Append(value: m_addressBindings.Describe(address: entry.ReportedAddress, precision: entry.AddressPrecision));
+                }
             }
             for (var index = 0; (index < Math.Min(val1: counts.VendorInfoCount, val2: ((uint)vendors.Length))); index++) {
                 report.Append(handler: $"\n  vendor[{index}]: {Description(value: vendor[index].Description)}, code=0x{vendor[index].VendorFaultCode:x16}, data=0x{vendor[index].VendorFaultData:x16}");

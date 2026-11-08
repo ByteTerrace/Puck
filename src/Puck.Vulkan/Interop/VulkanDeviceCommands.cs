@@ -221,7 +221,10 @@ public sealed unsafe class VulkanDeviceCommands {
     /// <param name="drawIndirectCountEnabled">Whether the device was created with <see cref="DrawIndirectCountExtension"/>;
     /// <see cref="CmdDrawIndirectCountKhr"/> resolves only then.</param>
     /// <param name="multiDrawIndirectEnabled">Whether the device enabled <c>multiDrawIndirect</c>.</param>
-    public VulkanDeviceCommands(nint deviceHandle, VulkanProcResolver procedures, GpuDeviceMemoryWork? memory = null, bool deviceFaultEnabled = false, bool checkpointsEnabled = false, bool drawIndirectCountEnabled = false, bool multiDrawIndirectEnabled = false) {
+    /// <param name="addressBindings">The instance's address record, when the device was created with
+    /// <see cref="VulkanDeviceAddressBindings.ExtensionName"/>; its loss report names the objects its fault addresses fall
+    /// in.</param>
+    public VulkanDeviceCommands(nint deviceHandle, VulkanProcResolver procedures, GpuDeviceMemoryWork? memory = null, bool deviceFaultEnabled = false, bool checkpointsEnabled = false, bool drawIndirectCountEnabled = false, bool multiDrawIndirectEnabled = false, VulkanDeviceAddressBindings? addressBindings = null) {
         ArgumentNullException.ThrowIfNull(argument: procedures);
 
         VulkanArgument.RequireHandle(
@@ -233,7 +236,8 @@ public sealed unsafe class VulkanDeviceCommands {
         Handle = deviceHandle;
         MultiDrawIndirectEnabled = multiDrawIndirectEnabled;
         Checkpoints = new VulkanDeviceCheckpoints(device: deviceHandle, enabled: checkpointsEnabled, procedures: procedures);
-        Fault = new VulkanDeviceFault(checkpoints: Checkpoints, device: deviceHandle, enabled: deviceFaultEnabled, procedures: procedures);
+        AddressBindings = addressBindings;
+        Fault = new VulkanDeviceFault(addressBindings: addressBindings, checkpoints: Checkpoints, device: deviceHandle, enabled: deviceFaultEnabled, procedures: procedures);
         Timestamps = new VulkanTimestampCommands(deviceHandle: deviceHandle, procedures: procedures);
         Memory = memory;
         AcquireNextImageKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult>)procedures.ResolveOptionalDeviceProc(
@@ -610,6 +614,9 @@ public sealed unsafe class VulkanDeviceCommands {
     public VulkanDeviceFault Fault { get; }
     /// <summary>Gets the device's per-pass breadcrumbs, which its device-loss report reads.</summary>
     public VulkanDeviceCheckpoints Checkpoints { get; }
+    /// <summary>Gets the instance's address record this device reports its bindings to, which its device-loss report and
+    /// its object names feed, or <see langword="null"/> when the device reports none.</summary>
+    public VulkanDeviceAddressBindings? AddressBindings { get; }
     /// <summary>Gets the device's memory counts this table's allocations and frees join, device-local and host-visible
     /// alike, or <see langword="null"/> when it counts none.</summary>
     public GpuDeviceMemoryWork? Memory { get; }

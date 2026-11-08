@@ -75,7 +75,11 @@ until the next writer, shape or case arrives.
   to zero kept its last hits, and the glass shading pass read their draw and
   triangle, losing the Vulkan device. The mesh part and the cascades skip only
   while `SdfWorldPassRecorder.TargetsHoldClear` says every target instance holds
-  a clear (set by `RecordMesh`, the one writer, on submission); the glass
+  a clear (set by `RecordMesh`, the one writer, on submission). A render pass
+  clears only its area, and a view's render grid can grow within its target's
+  allocation without a new graph, so the frame that certifies a clear clears the
+  whole allocation; certifying a grid-sized clear left the pixels outside it
+  holding old hits for the next larger grid to read. The glass
   passes skip only together with the shading pass that reads them
   (`SdfWorldPasses.GlassSeen`).
 - The cascades' exit layer assumes a caster encloses a solid

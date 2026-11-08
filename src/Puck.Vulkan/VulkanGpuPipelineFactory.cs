@@ -26,7 +26,9 @@ namespace Puck.Vulkan;
 /// <param name="graphicsPipelineApi">The graphics pipeline API.</param>
 /// <param name="allocator">The unmanaged allocator that marshals a planned layout's bindings.</param>
 /// <param name="naming">The naming every created pipeline is handed to.</param>
-public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext, IVulkanComputePipelineApi computePipelineApi, IVulkanGraphicsPipelineApi graphicsPipelineApi, IAllocator allocator, GpuObjectNaming naming) : IGpuPipelineFactory {
+/// <param name="capturesStatistics">Whether compute pipelines keep their driver statistics: the device reports through
+/// its debug layers or a capture tool, the diagnostic mode in which they are reported.</param>
+public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext, IVulkanComputePipelineApi computePipelineApi, IVulkanGraphicsPipelineApi graphicsPipelineApi, IAllocator allocator, GpuObjectNaming naming, bool capturesStatistics = false) : IGpuPipelineFactory {
     private const uint BlendFactorOne = 1;
     private const uint BlendFactorZero = 0;
     private const uint BlendOpAdd = 0;
@@ -101,10 +103,8 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
         return pipeline;
     }
 
-    // A compute pipeline keeps its driver statistics while the device names its objects (debug layers or a capture tool),
-    // the diagnostic mode in which they are reported.
     private bool CapturesStatistics(VulkanDeviceCommands device) =>
-        (naming.IsEnabled && VulkanPipelineStatistics.IsAvailable(device: device));
+        (capturesStatistics && VulkanPipelineStatistics.IsAvailable(device: device));
 
     private VulkanGpuComputePipeline CreateCompute(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
         ArgumentNullException.ThrowIfNull(computeShaderModule);

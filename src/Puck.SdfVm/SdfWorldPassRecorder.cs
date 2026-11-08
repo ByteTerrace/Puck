@@ -944,13 +944,17 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             }
         }
 
-        var area = new GpuPixelRect(
-            // A cascade covers its whole depth, whatever the view's render extent.
-            Height: (IsShadowCascade ? ((uint)cascadeTexels) : recording.Height),
-            Width: (IsShadowCascade ? ((uint)cascadeTexels) : recording.Width),
-            X: 0,
-            Y: 0
-        );
+        // A frame holding none of the part's draws certifies its target clear (m_recordedClear), so later empty frames
+        // skip: it clears the whole allocation, since the render grid can later grow within it and a render pass clears
+        // only its area. A cascade covers its whole depth, whatever the view's render extent.
+        var area = ((PartDrawCount(tables: tables) == 0)
+            ? new GpuPixelRect(Height: target.Height, Width: target.Width, X: 0, Y: 0)
+            : new GpuPixelRect(
+                Height: (IsShadowCascade ? ((uint)cascadeTexels) : recording.Height),
+                Width: (IsShadowCascade ? ((uint)cascadeTexels) : recording.Width),
+                X: 0,
+                Y: 0
+            ));
 
         if (drawsDepth) {
             recorder.BeginRenderPass(

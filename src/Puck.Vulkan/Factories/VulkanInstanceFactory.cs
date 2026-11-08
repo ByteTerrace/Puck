@@ -128,10 +128,13 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
         }
 
         nint debugMessengerHandle = 0;
+        VulkanDeviceAddressBindings? addressBindings = null;
 
         // From here the instance is live and no owner holds it yet: whatever fails destroys what this call created,
-        // messenger first, before the failure propagates.
+        // messengers first, before the failure propagates.
         try {
+            // Whatever the validation level, a lost device's fault addresses name the objects they fall in.
+            addressBindings = VulkanDeviceAddressBindings.Create(instance: instance);
             // With validation on, register the debug-utils messenger so validation messages reach the console — parity
             // with the Direct3D 12 info-queue drain. Best-effort: a zero handle just means no messenger.
             debugMessengerHandle = ((validation != GpuValidation.Off)
@@ -161,8 +164,11 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
                 enabledLayers: request.LayerNames,
                 instanceApi: m_instanceApi,
                 instance: instance
-            );
+            ) {
+                AddressBindings = addressBindings,
+            };
         } catch {
+            addressBindings?.Dispose();
             m_instanceApi.DestroyDebugMessenger(
                 instance: instance,
                 messengerHandle: debugMessengerHandle

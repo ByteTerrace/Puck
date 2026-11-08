@@ -97,14 +97,16 @@ public static partial class SdfFrameBlock {
         Source: Offset(member: member.Name),
         Destination: ((int)layout.BlockOffsetOf(member: member.Name)),
         Length: checked((int)(member.Type!.Value.SizeBytes() * (member.Length ?? 1)))))];
-    // Writes a view's common frame values into a pass block of another layout: the frame, the instance's temporal sample
-    // and the preceding view, laid out by this one writer and copied by name, so every pass reads them as the world passes do.
+    // Writes a view's common frame values into a pass block of another layout: the frame, the residency's irradiance volume,
+    // the instance's temporal sample and the preceding view, laid out by this one writer and copied by name, so every pass
+    // reads them as the world passes do.
     internal static void WriteInto(Span<byte> passBlock, ReadOnlySpan<Copy> copies, in SdfPassValues tables, SdfFrame frame, int view,
-        uint width, uint height, SdfTemporalHistory temporal, bool temporalEnabled) {
+        uint width, uint height, SdfTemporalHistory temporal, bool temporalEnabled, SdfWorldResidency residency) {
         Span<byte> block = stackalloc byte[SizeBytes];
 
         block.Clear();
         Write(block: block, tables: tables, frame: frame, view: view, width: width, height: height);
+        WriteMeshIrradiance(block: block, volume: residency.MeshIrradianceParameters, measuring: (residency.IndirectTier != Puck.SignedDistance.SdfIndirectTier.Off));
         WriteTemporal(block: block, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: temporalEnabled);
         WritePreviousView(block: block, view: temporal.PreviousView, valid: temporal.HasPreviousView);
         foreach (var copy in copies) {

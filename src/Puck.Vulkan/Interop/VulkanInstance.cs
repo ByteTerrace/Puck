@@ -31,6 +31,9 @@ public sealed class VulkanInstance : IDisposable {
     /// <summary>Gets whether the instance runs under the validation layer and its debug messenger reports the layer's
     /// messages.</summary>
     public bool ReportsValidation => ((0 != m_debugMessengerHandle) && EnabledLayers.Contains(value: VulkanInstanceCreateChain.ValidationLayer));
+    /// <summary>Gets the record of the instance's devices' address bindings, which the instance owns and disposes before
+    /// itself, or <see langword="null"/> when the instance cannot report them.</summary>
+    public VulkanDeviceAddressBindings? AddressBindings { get; init; }
 
     /// <summary>Initializes a new instance of the <see cref="VulkanInstance"/> class, taking ownership of an existing native instance.</summary>
     /// <param name="instance">The command table of the native instance to own.</param>
@@ -71,7 +74,8 @@ public sealed class VulkanInstance : IDisposable {
             return;
         }
 
-        // The messenger must go before the instance it reports for.
+        // The messengers must go before the instance they report for.
+        AddressBindings?.Dispose();
         m_instanceApi.DestroyDebugMessenger(
             instance: Commands,
             messengerHandle: m_debugMessengerHandle
