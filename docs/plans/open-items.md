@@ -1925,15 +1925,10 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
     `Space` seventeen times (first `tests/Puck.Maths.Tests/Subjects.FixedVectors.cs:13`),
     and a `FaultingDevice` five times (first
     `tests/Puck.SdfVm.Tests/SdfWorldResidencyBuildRefusalLawTests.cs:339`).
-- Make `GpuRegion.Grow` the only way to grow a GPU region, and enforce the uniform
-  view limit there (one lane):
-  - [low] `GpuRegion.Grow` keeps the policy a region was created with, so
-    `SdfWorldTables.EnsureProgramCapacity` grows the program region through it
-    only while `GpuResidency.Select` still picks that policy, and replaces the
-    region from its host copy when a size crosses the ring's share of the
-    aperture. Let `Grow` reselect the policy itself so that branch goes.
+- Enforce the uniform view limit where `GpuRegion` grows (`Grow` already reselects a
+  profile-created region's policy):
   - [medium · owner: rendering] Uniform region growth accepts an unbindable size
-    (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs:688`, `Grow`, uniform-size
+    (`GpuRegion.Grow`, uniform-size
     check): a 65,536-byte uniform ring can grow to 65,792 bytes, since the check
     accepts any multiple of 256 below the storage-region maximum. Binding the
     whole result exceeds Direct3D 12's 4,096 float4 constant-buffer elements
@@ -2106,7 +2101,54 @@ file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
      lowers it verbatim for `HexColor` to refuse `[medium]`. Decide one grammar.
    - Probe shaders: `AccumulateScale`, `MaxAccumulateScale` and the group
      accumulators are copied into each of `Puck.Shaders/Assets/Probes/average.hlsl`,
-     `faerie.hlsl`, `ir-blob.hlsl` and `ir-marker.hlsl`; one shared include.
+     `faerie.hlsl`, `ir-blob.hlsl` and `ir-marker.hlsl`. A shared include is refused
+     today: `PuckCompileDirect3D11Kernels` (`build/PuckBuildTasks.cs`) rejects any
+     probe kernel containing `#include`, because each compiles alone through
+     `D3DCompile` with no include handler. Merging needs that compile to resolve an
+     engine header (and key its incremental check on the header) first; the group
+     accumulators differ per kernel, so only the two-line scale helper is shared.
+
+Rendering duplicates the dup-render audit found (paths under `src/`):
+
+- [medium · owner: author shaders] The generated light phase recomputes what
+  `sdfLightResponse` just computed: `sdfShadeLightPhase`
+  (`SdfShadeHlsl.Invocation.cs`, written into `isa/sdf-shade.hlsli`) calls
+  `sdfLightResponse`, then evaluates `sdfMeshLightVisibility`, `sdfLightVisibility`
+  (always, even when the probe share replaces it) and `sdfPointReach` again, and
+  restates the probe-or-cascade visibility choice that `sdfLightResponse` makes
+  in `shade/sdf-light.hlsli`. The copies already disagree for a point light: the
+  response scales by ambient occlusion times the probe share, while the phase's
+  `light.visibility` is either the slot search's answer (ambient occlusion for an
+  unslotted light) or the probe share alone, never their product. One light-geometry
+  function (direction, reach, visibility, probe share) in `sdf-light.hlsli`, read
+  by both, removes the second evaluation and the drift.
+- [medium] Three per-slot readback state machines (recorded, submitted with a
+  fence, poll `IsSignaled`, read): `SdfWorldPickReadback`, the occlusion sight
+  slots (`SdfMeshOcclusion.SightSlot`, `Submitted`, `PollSight`), and
+  `SdfShadeSlots`. The first two poll the reusable slot fence, which
+  `SdfShadeSubmissions` documents as reading signaled after an abandoned
+  submission and a device loss's drain, so they can read a readback that never
+  ran. One slot-readback type in `Puck.Shaders` beside
+  `IRenderGraphPackageReadback`, completed by the node's `Completed(slot)` proof
+  rather than a fence poll, serves all three.
+- [low] Retiring a GPU object after its last reader is written five ways, each
+  with its own key: `SdfWorldTables` (upload sequence, `Retire`),
+  `SdfMeshOcclusion.m_retired` (per slot), `LeaseRetireList` (per slot, leases),
+  `ShaderPipelineRenderNode.Retirement` (`RetiredGraph`, fence and submission)
+  and `DirectXSurfaceUpload` (fence value). A fence-value retirement queue in
+  `Puck.Abstractions/Gpu` could hold them; decide the key with the next
+  lifetime change.
+- [low] The next capacity of a growing table is chosen in six places with five
+  factors: `SdfWorldTables.GrowCapacity` (half again), the frame-sampled table's
+  inline half again (`SdfWorldTables.FrameSampled.cs`), `MeshRegionGrownBytes`
+  (an eighth to a granule), `SdfMeshRegionArena.GrownCapacity`,
+  `SdfMeshOcclusion.EnsureBuffers` (power of two) and the probe scene's eighth
+  (`SdfMeshProbeGpuWork.Scene.cs`). One growth helper with the factor as a
+  parameter.
+- [low] Rec. 709 luminance weights are written as literals beside the
+  generated `SDF_LUMINANCE` (`SdfPhotometry`): `Shared/bloom-filter.hlsli`
+  (`bloomSelected`) and `Puck.Overlays/Assets/Shaders/overlay-unified.frag.hlsl`.
+  `Puck.Shaders.Generator` could emit one shared constant both layers include.
 
 Duplicates the survey left to the lanes that own their areas:
 
