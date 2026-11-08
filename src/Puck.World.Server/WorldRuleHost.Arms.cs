@@ -802,29 +802,4 @@ public sealed partial class WorldRuleHost {
             refusal: out refusal
         ));
     }
-    private int ResolveWorldBodyRef(WorldBodyRef bodyRef) => (bodyRef.Kind switch {
-        CompiledBodyRefKind.Literal => bodyRef.Index,
-        CompiledBodyRefKind.Binding => BoundIndex(key: ((BoundKey)bodyRef.Index)),
-        CompiledBodyRefKind.Cell => (((IntegerOf(value: Host.ReadArenaCell(
-        key: bodyRef.Key,
-        rowOrdinal: bodyRef.RowOrdinal
-    )) is var cellIndex) && (cellIndex >= 0L) && (cellIndex < Host.Population.Capacity))
-        ? ((int)cellIndex)
-        : -1),
-        CompiledBodyRefKind.Placement => ((bodyRef.PlacementOrdinals is not null)
-        ? Host.Population.BodyForPlacementOrdinal(ordinal: Host.PlacementOrdinalOf(id: (Host.Arena.Keys.TryGetName(
-            key: BoundEachKey,
-            name: out var placementName
-        )
-            ? placementName.Value
-            : string.Empty)))
-        : Host.Population.BodyForPlacementOrdinal(ordinal: bodyRef.Index)),
-        _ => Host.ResolveArgBodyOrdinal(
-        filterRowOrdinal: -1,
-        op: ((bodyRef.Kind == CompiledBodyRefKind.ArgMax)
-        ? StateReduceOp.Max
-        : StateReduceOp.Min),
-        rowOrdinal: bodyRef.RowOrdinal
-    ),
-    });
 }

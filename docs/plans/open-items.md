@@ -4351,7 +4351,10 @@ Monitor hook check remain supporting work alongside the landscape priority.
   physics and contact (`src/Puck.Physics`, mentioned only inside puck-world's
   document references), the dashboard (`src/Puck.Dashboard`), platform
   windowing and transports (`src/Puck.Platform.*`), recording and capture
-  (`src/Puck.Recording`). The duplication audit's map gaps join this list; one
+  (`src/Puck.Recording`), and the state system (`Puck.State` and its `.Rules`,
+  `.Search`, `.Topology`, `.Vectors`, `.Generators` siblings, covered only by
+  `docs/reference/state/` and one puck-world row; the state audit's capability
+  table is the starting point). The duplication audit's map gaps join this list; one
   lane writes the skills by capability after the audit lands.
 - [high, edit-to-running] A fresh landscape World artifact builds for minutes
   before boot, against the owner's 30-second edit bar; an incremental CLI build

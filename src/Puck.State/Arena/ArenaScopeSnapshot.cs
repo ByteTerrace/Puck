@@ -10,30 +10,12 @@ public sealed partial class StateArena {
     public ArenaScopeSnapshot CaptureScope(IReadOnlySet<int> rows) {
         if (Journal.Scopes != 0) { throw new InvalidOperationException(message: "Cannot capture an open state transaction."); }
         RequireScopeRows(rows: rows);
-        var numbers = new List<ArenaNumberImage>();
-        var text = new List<ArenaTextImage>();
-        var visibility = new List<ArenaVisibilityImage>();
-        var observations = new List<ArenaObservationImage>();
-
-        foreach (var (column, index) in ScopeColumns(layout: m_layout, rows: rows)) {
-            switch (column) {
-                case ArenaColumn.Text:
-                    if (ReadReferenceRaw(column: column, index: index) is string value) { text.Add(item: new(Index: index, Value: value)); }
-                    break;
-                case ArenaColumn.Visibility:
-                    if (ReadReferenceRaw(column: column, index: index) is StateVisibility policy) { visibility.Add(item: new(Index: index, Value: policy)); }
-                    break;
-                case ArenaColumn.Observation:
-                    if (ReadReferenceRaw(column: column, index: index) is StateObservation observation) { observations.Add(item: new(Index: index, Value: observation)); }
-                    break;
-                default: numbers.Add(item: new(Column: column, Index: index, Value: ReadNumberRaw(column: column, index: index))); break;
-            }
-        }
+        var image = CaptureImage(positions: ImagePositions(layout: m_layout, rows: rows), omitDefaults: false);
         var selected = rows.Order().ToArray();
 
         return new(selected, selected.Select(selector: row => m_layout[row].CellCapacity).ToArray(),
             selected.Select(selector: row => m_layout[row].CellStart).ToArray(), selected.Select(selector: row => m_layout[row].MaskWordStart).ToArray(),
-            numbers.ToArray(), text.ToArray(), visibility.ToArray(), observations.ToArray());
+            image.Numbers, image.Text, image.Visibility, image.Observations);
     }
 
     /// <summary>Returns why a set of declared document rows cannot form one replay scope, one reason per refusal. A
@@ -84,17 +66,6 @@ public sealed partial class StateArena {
         }
     }
 
-    private static IEnumerable<(ArenaColumn Column, int Index)> ScopeColumns(ArenaLayout layout, IReadOnlySet<int> rows) {
-        for (var ordinal = 0; ordinal < ArenaColumns.All.Length; ordinal++) {
-            var column = ArenaColumns.All[ordinal];
-            if (column is ArenaColumn.CellCapacity or ArenaColumn.Vector) { continue; }
-            for (var index = 0; (index < layout.Size(column: column)); index++) {
-                var row = layout.RowOf(column: column, index: index);
-
-                if (rows.Contains(item: row) && layout.HasColumn(column: column, row: row)) { yield return (column, index); }
-            }
-        }
-    }
     /// <summary>Checks the complete scope image before any live column is changed.</summary>
     public void ValidateScope(ArenaScopeSnapshot image) => _ = PrepareScope(image: image);
 
@@ -107,27 +78,31 @@ public sealed partial class StateArena {
         var rows = image.Rows.ToHashSet();
         RequireScopeRows(rows: rows);
         var layout = SnapshotLayout(capacities: image.Capacities, rows: image.Rows);
-        var expected = ScopeColumns(layout: layout, rows: rows).Count(entry => entry.Column is not (ArenaColumn.Text or ArenaColumn.Visibility or ArenaColumn.Observation));
+        var expected = ImagePositions(layout: layout, rows: rows).Count(entry => entry.Column is not (ArenaColumn.Text or ArenaColumn.Visibility or ArenaColumn.Observation));
         var numbers = new HashSet<(ArenaColumn Column, int Index)>();
 
         foreach (var entry in image.Numbers) {
+            var position = ScopePosition(image, entry.Column, entry.Index, layout);
             if ((entry.Column is ArenaColumn.CellCapacity or ArenaColumn.Vector or ArenaColumn.Text or ArenaColumn.Visibility or ArenaColumn.Observation) ||
-                !numbers.Add(item: (entry.Column, ScopePosition(image, entry.Column, entry.Index, layout)))) {
+                !numbers.Add(item: (entry.Column, position))) {
                 throw new InvalidOperationException(message: "Invalid scope numeric column inventory.");
             }
+            RequireImagePosition(layout: layout, column: entry.Column, index: position, number: entry.Value, reference: null, what: "scope image");
         }
         if (numbers.Count != expected) { throw new InvalidOperationException(message: "Incomplete scope numeric column inventory."); }
-        ValidateReferences(indices: image.Text.Select(selector: entry => ScopePosition(image, ArenaColumn.Text, entry.Index, layout)));
-        ValidateReferences(indices: image.Visibility.Select(selector: entry => ScopePosition(image, ArenaColumn.Visibility, entry.Index, layout)));
-        ValidateReferences(indices: image.Observations.Select(selector: entry => ScopePosition(image, ArenaColumn.Observation, entry.Index, layout)));
+        ValidateReferences(image: image, layout: layout, column: ArenaColumn.Text, entries: image.Text.Select(selector: entry => (entry.Index, (object)entry.Value)));
+        ValidateReferences(image: image, layout: layout, column: ArenaColumn.Visibility, entries: image.Visibility.Select(selector: entry => (entry.Index, (object)entry.Value)));
+        ValidateReferences(image: image, layout: layout, column: ArenaColumn.Observation, entries: image.Observations.Select(selector: entry => (entry.Index, (object)entry.Value)));
         return layout;
     }
 
-    private static void ValidateReferences(IEnumerable<int> indices) {
+    private void ValidateReferences(ArenaScopeSnapshot image, ArenaLayout layout, ArenaColumn column, IEnumerable<(int Index, object Value)> entries) {
         var seen = new HashSet<int>();
 
-        foreach (var index in indices) {
-            if (!seen.Add(item: index)) { throw new InvalidOperationException(message: "Duplicate scope reference column."); }
+        foreach (var (index, value) in entries) {
+            var position = ScopePosition(image, column, index, layout);
+            if (!seen.Add(item: position)) { throw new InvalidOperationException(message: "Duplicate scope reference column."); }
+            RequireImagePosition(layout: layout, column: column, index: position, number: 0L, reference: value, what: "scope image");
         }
     }
 
